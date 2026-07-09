@@ -1,0 +1,17 @@
+# Local/editor noise
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# Dependency/build folders, if this prototype later grows into a packaged app
+node_modules/
+dist/
+build/
+coverage/
+.vercel/
+
+# Environment files
+.env
+.env.*
+

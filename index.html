@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reelay Canvas</title>
+    <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="top-bar">
+        <img class="brand-mark" src="./assets/reelay-logo.png" alt="" />
+        <div class="project-title-wrap">
+          <div class="file-name" id="projectTitle" tabindex="0" title="双击重命名">Untitled</div>
+        </div>
+      </header>
+
+      <aside class="left-rail" aria-label="画布工具">
+        <button class="rail-button active" id="railAddNodeBtn" type="button" title="添加生成节点">+</button>
+        <button class="rail-button" id="railLibraryBtn" type="button" title="素材库">
+          <span class="rail-library-icon" aria-hidden="true"></span>
+        </button>
+        <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人">
+          <span class="avatar-dot" aria-hidden="true"></span>
+          <span class="avatar-credit-badge" id="avatarCreditBadge">3000</span>
+        </button>
+
+        <div class="profile-menu hidden" id="profileMenu">
+          <div class="profile-card">
+            <div class="profile-avatar">T</div>
+            <div class="profile-identity">
+              <div class="profile-name">Tianmaochao</div>
+              <div class="profile-email">w***@reelay.com</div>
+            </div>
+          </div>
+          <div class="credit-card">
+            <div class="credit-label"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i><span>可用积分</span></div>
+            <div class="credit-value" id="profileCreditAvailable">3000</div>
+            <div class="credit-sub">累计消耗 <span id="profileCreditConsumed">0</span> 积分</div>
+          </div>
+          <div class="profile-menu-list">
+            <button class="profile-menu-item" type="button" data-profile-action="organization">
+              <i data-lucide="building-2" aria-hidden="true"></i>
+              <span>进入组织</span>
+            </button>
+            <button class="profile-menu-item" type="button" data-profile-action="account">
+              <i data-lucide="settings" aria-hidden="true"></i>
+              <span>账号设置</span>
+            </button>
+            <button class="profile-menu-item" type="button" data-profile-action="appearance">
+              <i data-lucide="sun" aria-hidden="true"></i>
+              <span>外观</span>
+              <small id="themeCurrentLabel">深色</small>
+              <i data-lucide="chevron-right" aria-hidden="true"></i>
+            </button>
+            <button class="profile-menu-item" type="button" data-profile-action="help">
+              <i data-lucide="book-open" aria-hidden="true"></i>
+              <span>帮助中心</span>
+            </button>
+            <button class="profile-menu-item danger" type="button" data-profile-action="logout">
+              <i data-lucide="log-out" aria-hidden="true"></i>
+              <span>退出登录</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+      <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="素材库">
+        <header class="asset-library-header">
+          <div>
+            <div class="asset-library-title">素材库</div>
+            <div class="asset-library-context" id="assetLibraryContext">管理当前项目的媒体素材</div>
+          </div>
+          <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起素材库" aria-label="收起素材库">
+            <i data-lucide="panel-left-close" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div class="asset-library-actions">
+          <button class="asset-library-upload" id="assetLibraryUploadBtn" type="button">
+            <i data-lucide="upload" aria-hidden="true"></i>
+            <span>上传素材</span>
+          </button>
+          <span class="asset-library-count" id="assetLibraryCount">0 项</span>
+        </div>
+        <div class="asset-library-tabs" role="tablist" aria-label="素材类型">
+          <button class="active" type="button" data-library-filter="all">全部</button>
+          <button type="button" data-library-filter="image">图片</button>
+          <button type="button" data-library-filter="video">视频</button>
+          <button type="button" data-library-filter="audio">音频</button>
+        </div>
+        <div class="asset-library-grid" id="assetLibraryGrid"></div>
+      </aside>
+      <div class="theme-popover hidden" id="themeSubmenu">
+        <button class="theme-option" type="button" data-theme-choice="light">
+          <i data-lucide="sun" aria-hidden="true"></i>
+          <span>浅色模式</span>
+          <span class="theme-check">✓</span>
+        </button>
+        <button class="theme-option" type="button" data-theme-choice="dark">
+          <i data-lucide="moon" aria-hidden="true"></i>
+          <span>深色模式</span>
+          <span class="theme-check">✓</span>
+        </button>
+        <button class="theme-option" type="button" data-theme-choice="system">
+          <i data-lucide="monitor" aria-hidden="true"></i>
+          <span>跟随系统</span>
+          <span class="theme-check">✓</span>
+        </button>
+      </div>
+
+      <section class="canvas-shell" id="canvasShell">
+        <div class="canvas-grid" id="canvasGrid" aria-hidden="true"></div>
+        <div class="canvas-stage" id="canvasStage">
+          <div class="node-layer" id="nodeLayer"></div>
+        </div>
+        <div class="selection-box hidden" id="selectionBox"></div>
+        <div class="selection-toolbar hidden" id="selectionToolbar">
+          <button class="icon-toolbar-button" type="button" data-selection-action="group" aria-label="创建组">
+            <i data-lucide="folder-plus" aria-hidden="true"></i>
+            <span class="toolbar-tip">创建组</span>
+          </button>
+          <div class="toolbar-menu-wrap">
+            <button class="icon-toolbar-button" type="button" data-selection-action="toggle-sort" aria-label="布局">
+              <i data-lucide="layout-grid" aria-hidden="true"></i>
+              <i data-lucide="chevron-down" aria-hidden="true"></i>
+              <span class="toolbar-tip">布局</span>
+            </button>
+            <div class="toolbar-dropdown hidden" id="selectionSortMenu">
+              <button type="button" data-sort-layout="grid"><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
+              <button type="button" data-sort-layout="horizontal"><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
+              <button type="button" data-sort-layout="vertical"><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="empty-state" id="emptyState">
+          <button class="empty-create" id="emptyCreateBtn" type="button" title="添加生成节点">+</button>
+          <div class="empty-title">双击画布开始创作</div>
+          <div class="empty-subtitle">或使用左侧面板添加节点</div>
+        </div>
+        <div class="canvas-tools" id="canvasTools">
+          <div class="canvas-tool-popover shortcuts-popover hidden" id="shortcutsPanel" data-canvas-popover="shortcuts">
+            <div class="popover-title">快捷键</div>
+            <div class="shortcut-list">
+              <div class="shortcut-row"><span>空格 + 拖动</span><kbd>平移画布</kbd></div>
+              <div class="shortcut-row"><span>鼠标滚轮</span><kbd>平移画布</kbd></div>
+              <div class="shortcut-row"><span>Ctrl/Cmd + 滚轮</span><kbd>缩放</kbd></div>
+              <div class="shortcut-row"><span>双击画布</span><kbd>新建节点</kbd></div>
+              <div class="shortcut-row"><span>拖拽空白</span><kbd>框选</kbd></div>
+              <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
+              <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
+              <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销删除</kbd></div>
+            </div>
+          </div>
+          <div class="canvas-tool-popover minimap-popover hidden" id="minimapPanel" data-canvas-popover="minimap">
+            <div class="minimap-surface" id="minimapSurface" aria-label="画布小地图"></div>
+          </div>
+          <div class="canvas-tool-popover zoom-popover hidden" id="zoomPanel" data-canvas-popover="zoom">
+            <button class="zoom-menu-item" type="button" data-zoom-action="in"><span>放大</span><kbd>Ctrl++</kbd></button>
+            <button class="zoom-menu-item" type="button" data-zoom-action="out"><span>缩小</span><kbd>Ctrl+-</kbd></button>
+            <button class="zoom-menu-item" type="button" data-zoom-value="0.5"><span>缩放至 50%</span></button>
+            <button class="zoom-menu-item" type="button" data-zoom-value="1"><span>缩放至 100%</span><kbd>Ctrl+0</kbd></button>
+            <button class="zoom-menu-item" type="button" data-zoom-value="2"><span>缩放至 200%</span></button>
+          </div>
+          <div class="canvas-tool-row">
+            <button class="canvas-tool-button" type="button" data-canvas-tool="shortcuts" aria-label="快捷键">
+              <i data-lucide="keyboard" aria-hidden="true"></i>
+              <span class="canvas-tool-tip">快捷键</span>
+            </button>
+            <button class="canvas-tool-button" type="button" data-canvas-tool="minimap" aria-label="小地图">
+              <i data-lucide="map" aria-hidden="true"></i>
+              <span class="canvas-tool-tip">小地图</span>
+            </button>
+            <button class="canvas-tool-button zoom-tool" id="zoomToolBtn" type="button" data-canvas-tool="zoom" aria-label="画布比例">
+              <span id="zoomChip">100%</span>
+              <span class="canvas-tool-tip">画布比例</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="agent-dock collapsed" id="agentDock" style="--agent-width: 420px">
+        <button class="agent-launcher" id="agentLauncher" type="button" aria-label="展开 Reelay Agent">
+          <span class="agent-tooltip">Reelay Agent</span>
+          <span class="agent-logo" aria-hidden="true">
+            <img src="./assets/reelay-logo.png" alt="" />
+          </span>
+        </button>
+
+        <section class="agent-panel" id="agentPanel" aria-label="Agent 对话栏">
+          <div class="agent-resize-handle" id="agentResizeHandle" aria-hidden="true"></div>
+          <header class="agent-header">
+            <div class="agent-title" id="agentConversationTitle">新对话</div>
+            <div class="agent-actions">
+              <div class="agent-new-group" aria-label="对话操作">
+                <button class="agent-icon-button new-chat-button" id="agentNewChatBtn" type="button" title="新建对话">
+                  <i data-lucide="square-plus" aria-hidden="true"></i>
+                </button>
+                <button class="agent-icon-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话">
+                  <i data-lucide="chevron-down" aria-hidden="true"></i>
+                </button>
+              </div>
+              <button class="agent-icon-button close-chat-button" id="agentCloseBtn" type="button" title="关闭聊天">
+                <i data-lucide="panel-right-close" aria-hidden="true"></i>
+              </button>
+            </div>
+          </header>
+
+          <div class="agent-history-menu hidden" id="agentHistoryMenu">
+            <div class="history-title">历史对话</div>
+            <label class="history-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="agentHistorySearch" type="search" placeholder="请输入搜索关键词" />
+            </label>
+            <div class="history-section-label">新对话</div>
+            <div class="history-list" id="agentHistoryList">
+              <button class="history-item active" type="button" data-chat-id="new">新对话</button>
+              <button class="history-item" type="button" data-chat-id="seedance">你有多了解 Seedance2.0 创作视频...</button>
+              <button class="history-item" type="button" data-chat-id="assets">素材整理与生成节点规划</button>
+            </div>
+          </div>
+
+          <div class="agent-messages" id="agentMessages">
+            <div class="agent-start-state">
+              <div class="agent-start-brand">Reelay 立画</div>
+              <div class="agent-start-title">开始创作</div>
+              <div class="agent-start-subtitle">描述你想要生成的内容</div>
+            </div>
+          </div>
+
+          <div class="agent-composer">
+            <textarea id="agentInput" placeholder='Start with an idea, or type "@" to mention'></textarea>
+            <div class="agent-composer-bar">
+              <button class="agent-add-button" type="button" title="添加">
+                <i data-lucide="plus" aria-hidden="true"></i>
+              </button>
+              <button class="agent-mode" type="button" title="Agent 模式">
+                <i data-lucide="bot" aria-hidden="true"></i>
+                <span>Agent</span>
+                <i data-lucide="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="agent-composer-spacer"></div>
+              <div class="agent-model-wrap">
+                <button class="agent-model-button" id="agentModelBtn" type="button" title="当前模型：GPT Image" aria-label="当前模型：GPT Image">
+                  <i data-lucide="sparkles" aria-hidden="true"></i>
+                </button>
+                <div class="agent-model-menu hidden" id="agentModelMenu"></div>
+              </div>
+              <button class="agent-send" type="button" title="发送">
+                <i data-lucide="send-horizontal" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <div class="undo-toast hidden" id="undoToast">
+        <span>已删除节点</span>
+        <button id="undoDeleteBtn" type="button">撤销</button>
+      </div>
+    </main>
+    <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="./data/model-catalog.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
