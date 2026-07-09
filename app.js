@@ -412,6 +412,38 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
   applyTransform();
 }
 
+function fitCanvasToContent() {
+  closeCanvasPanel();
+  if (!state.nodes.length) {
+    state.scale = 1;
+    state.tx = 0;
+    state.ty = 0;
+    applyTransform();
+    return;
+  }
+
+  const bounds = getNodesContentBounds(state.nodes);
+  if (!bounds) return;
+  const rect = shell.getBoundingClientRect();
+  const leftInset = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
+    ? assetLibraryPanel.getBoundingClientRect().width
+    : 0;
+  const rightInset = state.agentOpen ? state.agentWidth : 0;
+  const padding = 72;
+  const availableWidth = Math.max(240, rect.width - leftInset - rightInset - padding * 2);
+  const availableHeight = Math.max(180, rect.height - padding * 2);
+  const nextScale = clamp(
+    Math.min(availableWidth / Math.max(bounds.width, 1), availableHeight / Math.max(bounds.height, 1)),
+    canvasScaleLimits.min,
+    canvasScaleLimits.max,
+  );
+
+  state.scale = nextScale;
+  state.tx = leftInset + padding + (availableWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale;
+  state.ty = padding + (availableHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale;
+  applyTransform();
+}
+
 function centerCanvasOnWorld(worldX, worldY) {
   const rect = shell.getBoundingClientRect();
   state.tx = rect.width / 2 - worldX * state.scale;
@@ -1743,16 +1775,52 @@ function hasDraggedLibraryAsset(event) {
 
 function render() {
   syncGroups();
-  nodeLayer.innerHTML = "";
+  const liveGroupIds = new Set(state.groups.map((group) => group.id));
+  const liveNodeIds = new Set(state.nodes.map((node) => node.id));
+
+  nodeLayer.querySelectorAll(".group-frame").forEach((element) => {
+    if (!liveGroupIds.has(element.dataset.groupId)) element.remove();
+  });
+  nodeLayer.querySelectorAll(".canvas-node").forEach((element) => {
+    if (!liveNodeIds.has(element.dataset.id)) element.remove();
+  });
+
   for (const group of state.groups) {
-    const frame = createGroupFrameElement(group);
-    if (frame) nodeLayer.appendChild(frame);
+    const signature = getGroupRenderSignature(group);
+    let frame = nodeLayer.querySelector(`.group-frame[data-group-id="${group.id}"]`);
+    if (!frame || frame.dataset.renderSignature !== signature) {
+      const nextFrame = createGroupFrameElement(group);
+      if (!nextFrame) continue;
+      nextFrame.dataset.renderSignature = signature;
+      if (frame) {
+        frame.replaceWith(nextFrame);
+      } else {
+        nodeLayer.appendChild(nextFrame);
+      }
+      frame = nextFrame;
+    } else {
+      syncGroupFrameElement(frame, group);
+    }
   }
+
   for (const node of state.nodes) {
     if (node.kind === "generator") {
       node.credits = getCost(node);
     }
-    nodeLayer.appendChild(createNodeElement(node));
+    const signature = getNodeRenderSignature(node);
+    let element = nodeLayer.querySelector(`.canvas-node[data-id="${node.id}"]`);
+    if (!element || element.dataset.renderSignature !== signature) {
+      const nextElement = createNodeElement(node);
+      nextElement.dataset.renderSignature = signature;
+      if (element) {
+        element.replaceWith(nextElement);
+      } else {
+        nodeLayer.appendChild(nextElement);
+      }
+      element = nextElement;
+    } else {
+      syncCanvasNodeElement(element, node);
+    }
   }
   updateEmptyState();
   renderSelectionToolbar();
@@ -1760,6 +1828,43 @@ function render() {
   renderAssetLibrary();
   refreshIcons();
   requestAnimationFrame(syncPromptPanelLayouts);
+}
+
+function getNodeRenderSignature(node) {
+  const renderState = Object.fromEntries(
+    Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId"].includes(key)),
+  );
+  return JSON.stringify(renderState);
+}
+
+function getGroupRenderSignature(group) {
+  const renderState = Object.fromEntries(
+    Object.entries(group).filter(([key]) => !["x", "y", "width", "height", "z", "nodeIds"].includes(key)),
+  );
+  return JSON.stringify(renderState);
+}
+
+function syncCanvasNodeElement(element, node) {
+  element.style.left = `${node.x}px`;
+  element.style.top = `${node.y}px`;
+  element.style.zIndex = String(node.z);
+  element.classList.toggle("selected", state.selectedIds.has(node.id));
+  element.classList.toggle("grouped", Boolean(node.groupId));
+  syncNodeVisualLayout(node, element);
+}
+
+function syncGroupFrameElement(element, group) {
+  const bounds = getGroupBounds(group);
+  const nodes = getGroupNodes(group);
+  if (!bounds) return;
+  element.style.left = `${bounds.left}px`;
+  element.style.top = `${bounds.top}px`;
+  element.style.width = `${bounds.width}px`;
+  element.style.height = `${bounds.height}px`;
+  element.style.zIndex = String(
+    nodes.length ? Math.max(0, Math.min(...nodes.map((node) => node.z || 1)) - 1) : group.z || 1,
+  );
+  element.classList.toggle("selected", state.activeGroupId === group.id);
 }
 
 function createGroupFrameElement(group) {
@@ -1847,6 +1952,8 @@ function bindGroupFrameEvents(el, group) {
           width: bounds.width,
           height: bounds.height,
         },
+        origins: getGroupNodes(group).map((node) => ({ id: node.id, x: node.x, y: node.y })),
+        groups: state.groups.map((item) => cloneGroupState(item)),
         captureTarget: shell,
       };
       setActiveGroup(group.id);
@@ -1866,6 +1973,7 @@ function bindGroupFrameEvents(el, group) {
       startClientY: event.clientY,
       groupOrigin: bounds ? { x: bounds.left, y: bounds.top } : { x: group.x || 0, y: group.y || 0 },
       origins: nodes.map((node) => ({ id: node.id, x: node.x, y: node.y })),
+      groups: state.groups.map((item) => cloneGroupState(item)),
     };
     shell.setPointerCapture(event.pointerId);
     render();
@@ -2303,17 +2411,21 @@ function selectElementText(element) {
 }
 
 function renameMediaNode(node, value) {
+  const before = cloneNodeState(node);
   const cleaned = value.trim().replace(/\s+/g, " ");
   if (node.kind === "asset") {
     const asset = getActiveAsset(node);
     if (asset) {
       asset.displayName = cleaned || getAssetDisplayName(asset);
     }
-    return;
+  } else if (node.preview) {
+    node.name = cleaned || defaultGeneratedName(node);
   }
 
-  if (node.preview) {
-    node.name = cleaned || defaultGeneratedName(node);
+  if (JSON.stringify(before) !== JSON.stringify(node)) {
+    before.panel = null;
+    pushUndoAction({ type: "node-update", node: before });
+    showUndoToast();
   }
 }
 
@@ -2741,6 +2853,8 @@ function paramButton(node, action, value) {
 
 function handleAction(node, action, value) {
   if (node.kind !== "generator") return;
+  const undoableActions = new Set(["count", "model", "aspect", "duration", "quality", "resolution"]);
+  const before = undoableActions.has(action) ? cloneNodeState(node) : null;
 
   switch (action) {
     case "toggle-large":
@@ -2825,6 +2939,11 @@ function handleAction(node, action, value) {
     default:
       return;
   }
+  if (before && JSON.stringify(before) !== JSON.stringify(node)) {
+    before.panel = null;
+    pushUndoAction({ type: "node-update", node: before });
+    showUndoToast();
+  }
   render();
 }
 
@@ -2889,6 +3008,7 @@ function handleNodePointerDown(event, nodeId) {
     startClientX: event.clientX,
     startClientY: event.clientY,
     origins: selectedNodes.map((item) => ({ id: item.id, x: item.x, y: item.y })),
+    groups: state.groups.map((group) => cloneGroupState(group)),
   };
   shell.setPointerCapture(event.pointerId);
   render();
@@ -2899,7 +3019,7 @@ function addNodeAt(clientX, clientY, mode = "image") {
   const node = defaultGeneratorNode(0, 0, state.lastPreset.mode || mode);
   applyPreset(node, state.lastPreset);
   const layout = getNodeLayout(node);
-  const totalHeight = layout.mediaHeight + layout.panelGap + layout.panelHeight;
+  const totalHeight = layout.mediaHeight + layoutRules.panelGap + layout.panelHeight;
   node.x = world.x - layout.nodeWidth / 2;
   node.y = world.y - totalHeight / 2;
   collapseAllGeneratorPanels();
@@ -2924,6 +3044,12 @@ function cloneGroupState(group) {
     nodeIds: [...group.nodeIds],
     layoutMenuOpen: false,
   };
+}
+
+function pushUndoAction(action) {
+  if (!action) return;
+  state.undoStack.push(action);
+  if (state.undoStack.length > 50) state.undoStack.shift();
 }
 
 function deleteSelectedNodes(confirmed = false) {
@@ -2954,7 +3080,7 @@ function deleteSelectedNodes(confirmed = false) {
     .map((group) => cloneGroupState(group));
 
   if (!deleted.length) return;
-  state.undoStack.push({ type: "delete", deleted, deletedGroups });
+  pushUndoAction({ type: "delete", deleted, deletedGroups });
   state.nodes = state.nodes.filter((node) => !state.selectedIds.has(node.id));
   state.groups = state.groups.filter((group) => !deletedGroups.some((item) => item.id === group.id));
   clearSelection();
@@ -2963,23 +3089,66 @@ function deleteSelectedNodes(confirmed = false) {
   showUndoToast();
 }
 
-function undoLastDelete() {
-  const lastDeleteIndex = state.undoStack.map((item) => item.type).lastIndexOf("delete");
-  if (lastDeleteIndex === -1) return;
-  const action = state.undoStack.splice(lastDeleteIndex, 1)[0];
-  const restored = action.deleted
-    .slice()
-    .sort((a, b) => a.index - b.index)
-    .map((item) => cloneNodeState(item.node));
+function restoreGroupSnapshot(groups) {
+  state.groups = (groups || []).map((group) => cloneGroupState(group));
+  const membership = new Map();
+  state.groups.forEach((group) => {
+    group.nodeIds.forEach((nodeId) => membership.set(nodeId, group.id));
+  });
+  state.nodes.forEach((node) => {
+    const groupId = membership.get(node.id);
+    if (groupId) {
+      node.groupId = groupId;
+    } else {
+      delete node.groupId;
+    }
+  });
+}
 
-  for (const item of action.deleted.slice().sort((a, b) => a.index - b.index)) {
-    state.nodes.splice(Math.min(item.index, state.nodes.length), 0, cloneNodeState(item.node));
+function undoLastAction() {
+  const action = state.undoStack.pop();
+  if (!action) return;
+
+  if (action.type === "delete") {
+    const restored = action.deleted
+      .slice()
+      .sort((a, b) => a.index - b.index)
+      .map((item) => cloneNodeState(item.node));
+    for (const item of action.deleted.slice().sort((a, b) => a.index - b.index)) {
+      state.nodes.splice(Math.min(item.index, state.nodes.length), 0, cloneNodeState(item.node));
+    }
+    const restoredGroups = (action.deletedGroups || []).map((group) => cloneGroupState(group));
+    const restoredGroupIds = new Set(restoredGroups.map((group) => group.id));
+    state.groups = state.groups.filter((group) => !restoredGroupIds.has(group.id));
+    state.groups.push(...restoredGroups);
+    setSelection(restored.map((node) => node.id), restored[0]?.id || null);
   }
-  const restoredGroups = (action.deletedGroups || []).map((group) => cloneGroupState(group));
-  const restoredGroupIds = new Set(restoredGroups.map((group) => group.id));
-  state.groups = state.groups.filter((group) => !restoredGroupIds.has(group.id));
-  state.groups.push(...restoredGroups);
-  setSelection(restored.map((node) => node.id), restored[0]?.id || null);
+
+  if (action.type === "move") {
+    action.positions.forEach((position) => {
+      const node = state.nodes.find((item) => item.id === position.id);
+      if (!node) return;
+      node.x = position.x;
+      node.y = position.y;
+    });
+    restoreGroupSnapshot(action.groups);
+    setSelection(action.positions.map((position) => position.id), action.positions[0]?.id || null);
+  }
+
+  if (action.type === "node-update") {
+    const index = state.nodes.findIndex((node) => node.id === action.node.id);
+    if (index !== -1) {
+      state.nodes[index] = cloneNodeState(action.node);
+      setSelection([action.node.id], action.node.id);
+    }
+  }
+
+  if (action.type === "project-rename") {
+    state.projectName = action.name;
+    projectTitle.textContent = action.name;
+    document.title = `${action.name} · Reelay Canvas`;
+  }
+
   hideUndoToast();
   render();
 }
@@ -3299,12 +3468,17 @@ function beginProjectRename() {
 
 function commitProjectRename() {
   if (!projectTitle || projectTitle.contentEditable !== "true") return;
+  const previousName = state.projectName;
   const nextName = projectTitle.textContent.trim() || "Untitled";
   state.projectName = nextName;
   projectTitle.textContent = nextName;
   projectTitle.contentEditable = "false";
   projectTitle.classList.remove("editing");
   document.title = `${nextName} · Reelay Canvas`;
+  if (previousName !== nextName) {
+    pushUndoAction({ type: "project-rename", name: previousName });
+    showUndoToast();
+  }
 }
 
 function groupSelectedNodes() {
@@ -3625,6 +3799,8 @@ function promoteDragCandidate(action, event) {
     startClientX: action.startClientX,
     startClientY: action.startClientY,
     origins,
+    groups: action.groups,
+    isDuplicate: action.altKey,
   };
   shell.classList.add("dragging");
   moveDraggedNodes(state.action, event);
@@ -3633,6 +3809,7 @@ function promoteDragCandidate(action, event) {
 function moveDraggedNodes(action, event) {
   const dx = (event.clientX - action.startClientX) / state.scale;
   const dy = (event.clientY - action.startClientY) / state.scale;
+  action.moved = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
 
   for (const origin of action.origins) {
     const node = state.nodes.find((item) => item.id === origin.id);
@@ -3664,6 +3841,7 @@ function promoteGroupDrag(action, event) {
     startClientY: action.startClientY,
     groupOrigin: action.groupOrigin,
     origins: action.origins,
+    groups: action.groups,
   };
   shell.classList.add("dragging");
   moveGroupNodes(state.action, event);
@@ -3672,6 +3850,7 @@ function promoteGroupDrag(action, event) {
 function moveGroupNodes(action, event) {
   const dx = (event.clientX - action.startClientX) / state.scale;
   const dy = (event.clientY - action.startClientY) / state.scale;
+  action.moved = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
   const group = getGroupById(action.groupId);
   if (group && action.groupOrigin) {
     group.x = action.groupOrigin.x + dx;
@@ -3692,6 +3871,7 @@ function resizeGroupFrame(action, event) {
 
   const dx = (event.clientX - action.startClientX) / state.scale;
   const dy = (event.clientY - action.startClientY) / state.scale;
+  action.moved = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
   const handle = action.handle || "";
   let nextX = action.origin.x;
   let nextY = action.origin.y;
@@ -3869,8 +4049,16 @@ function finishPointerInteraction(event) {
     render();
   } else if (action.type === "drag-nodes") {
     updateDraggedNodeGroupMembership(action.ids);
+    if (action.moved && !action.isDuplicate) {
+      pushUndoAction({ type: "move", positions: action.origins, groups: action.groups });
+      showUndoToast();
+    }
     render();
   } else if (action.type === "drag-group" || action.type === "resize-group") {
+    if (action.moved) {
+      pushUndoAction({ type: "move", positions: action.origins || [], groups: action.groups });
+      showUndoToast();
+    }
     render();
   }
 
@@ -3948,7 +4136,7 @@ window.addEventListener("keydown", (event) => {
   if (isTyping) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
-    undoLastDelete();
+    undoLastAction();
     return;
   }
 
@@ -4179,6 +4367,10 @@ canvasTools?.addEventListener("pointerdown", (event) => {
 canvasToolButtons.forEach((button) => {
   button.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (button.dataset.canvasTool === "fit") {
+      fitCanvasToContent();
+      return;
+    }
     setCanvasPanel(button.dataset.canvasTool);
   });
 });
@@ -4200,7 +4392,7 @@ zoomPanel?.addEventListener("click", (event) => {
 });
 
 undoDeleteBtn?.addEventListener("click", () => {
-  undoLastDelete();
+  undoLastAction();
 });
 
 projectTitle?.addEventListener("dblclick", beginProjectRename);

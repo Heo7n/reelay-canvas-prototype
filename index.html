@@ -24,9 +24,9 @@
       </aside>
 
       <div class="top-actions" id="topActions">
-        <button class="share-button" id="shareProjectBtn" type="button" title="分享项目">
+        <button class="share-button" id="shareProjectBtn" type="button" aria-label="分享项目">
           <i data-lucide="share-2" aria-hidden="true"></i>
-          <span>分享</span>
+          <span class="action-tip">分享</span>
         </button>
         <div class="profile-anchor">
           <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人">
@@ -100,27 +100,30 @@
             <button type="button" data-library-scope="official">
               <i data-lucide="badge-check" aria-hidden="true"></i>
               <span>官方公用库</span>
+              <small>音效</small>
             </button>
             <button type="button" data-library-scope="organization">
               <i data-lucide="users-round" aria-hidden="true"></i>
               <span>组织空间</span>
             </button>
           </nav>
-          <div class="asset-library-actions">
-            <button class="asset-library-upload" id="assetLibraryUploadBtn" type="button">
-              <i data-lucide="upload" aria-hidden="true"></i>
-              <span>上传素材</span>
-            </button>
-            <span class="asset-library-count" id="assetLibraryCount">0 项</span>
-          </div>
-          <div class="asset-library-tabs" role="tablist" aria-label="素材类型">
-            <button class="active" type="button" data-library-filter="all">全部</button>
-            <button type="button" data-library-filter="image">图片</button>
-            <button type="button" data-library-filter="video">视频</button>
-            <button type="button" data-library-filter="audio">音频</button>
-          </div>
-          <div id="assetLibraryContext" class="asset-library-context" style="display:none"></div>
-          <div class="asset-library-grid" id="assetLibraryGrid"></div>
+          <section class="asset-library-content">
+            <div class="asset-library-actions">
+              <button class="asset-library-upload" id="assetLibraryUploadBtn" type="button">
+                <i data-lucide="upload" aria-hidden="true"></i>
+                <span>上传素材</span>
+              </button>
+              <span class="asset-library-count" id="assetLibraryCount">0 项</span>
+            </div>
+            <div class="asset-library-tabs" role="tablist" aria-label="素材类型">
+              <button class="active" type="button" data-library-filter="all">全部</button>
+              <button type="button" data-library-filter="image">图片</button>
+              <button type="button" data-library-filter="video">视频</button>
+              <button type="button" data-library-filter="audio">音频</button>
+            </div>
+            <div id="assetLibraryContext" class="asset-library-context" style="display:none"></div>
+            <div class="asset-library-grid" id="assetLibraryGrid"></div>
+          </section>
         </div>
       </aside>
       <div class="theme-popover hidden" id="themeSubmenu">
@@ -181,7 +184,7 @@
               <div class="shortcut-row"><span>拖拽空白</span><kbd>框选</kbd></div>
               <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
               <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
-              <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销删除</kbd></div>
+              <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销上一步</kbd></div>
             </div>
           </div>
           <div class="canvas-tool-popover minimap-popover hidden" id="minimapPanel" data-canvas-popover="minimap">
@@ -202,6 +205,10 @@
             <button class="canvas-tool-button" type="button" data-canvas-tool="minimap" aria-label="小地图">
               <i data-lucide="map" aria-hidden="true"></i>
               <span class="canvas-tool-tip">小地图</span>
+            </button>
+            <button class="canvas-tool-button" type="button" data-canvas-tool="fit" aria-label="适应视图">
+              <i data-lucide="scan" aria-hidden="true"></i>
+              <span class="canvas-tool-tip">适应视图</span>
             </button>
             <button class="canvas-tool-button zoom-tool" id="zoomToolBtn" type="button" data-canvas-tool="zoom" aria-label="画布比例">
               <span id="zoomChip">100%</span>
@@ -287,7 +294,7 @@
       </aside>
 
       <div class="undo-toast hidden" id="undoToast">
-        <span>已删除节点</span>
+        <span>已更新画布</span>
         <button id="undoDeleteBtn" type="button">撤销</button>
       </div>
     </main>
