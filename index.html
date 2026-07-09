@@ -16,55 +16,64 @@
         </div>
       </header>
 
-      <aside class="left-rail" aria-label="资产与个人">
+      <aside class="left-rail" aria-label="资产">
         <button class="rail-button asset-library-button" id="railLibraryBtn" type="button" title="资产库">
           <i data-lucide="folders" aria-hidden="true"></i>
           <span>资产库</span>
         </button>
-        <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人">
-          <span class="avatar-dot" aria-hidden="true"></span>
-          <span class="avatar-credit-badge" id="avatarCreditBadge">3000</span>
-        </button>
+      </aside>
 
-        <div class="profile-menu hidden" id="profileMenu">
-          <div class="profile-card">
-            <div class="profile-avatar">T</div>
-            <div class="profile-identity">
-              <div class="profile-name">Tianmaochao</div>
-              <div class="profile-email">w***@reelay.com</div>
+      <div class="top-actions" id="topActions">
+        <button class="share-button" id="shareProjectBtn" type="button" title="分享项目">
+          <i data-lucide="share-2" aria-hidden="true"></i>
+          <span>分享</span>
+        </button>
+        <div class="profile-anchor">
+          <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人">
+            <span class="avatar-dot" aria-hidden="true"></span>
+            <span class="avatar-credit-badge" id="avatarCreditBadge">3000</span>
+          </button>
+
+          <div class="profile-menu hidden" id="profileMenu">
+            <div class="profile-card">
+              <div class="profile-avatar">T</div>
+              <div class="profile-identity">
+                <div class="profile-name">Tianmaochao</div>
+                <div class="profile-email">w***@reelay.com</div>
+              </div>
+            </div>
+            <div class="credit-card">
+              <div class="credit-label"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i><span>可用积分</span></div>
+              <div class="credit-value" id="profileCreditAvailable">3000</div>
+              <div class="credit-sub">累计消耗 <span id="profileCreditConsumed">0</span> 积分</div>
+            </div>
+            <div class="profile-menu-list">
+              <button class="profile-menu-item" type="button" data-profile-action="organization">
+                <i data-lucide="building-2" aria-hidden="true"></i>
+                <span>进入组织</span>
+              </button>
+              <button class="profile-menu-item" type="button" data-profile-action="account">
+                <i data-lucide="settings" aria-hidden="true"></i>
+                <span>账号设置</span>
+              </button>
+              <button class="profile-menu-item" type="button" data-profile-action="appearance">
+                <i data-lucide="sun" aria-hidden="true"></i>
+                <span>外观</span>
+                <small id="themeCurrentLabel">深色</small>
+                <i data-lucide="chevron-right" aria-hidden="true"></i>
+              </button>
+              <button class="profile-menu-item" type="button" data-profile-action="help">
+                <i data-lucide="book-open" aria-hidden="true"></i>
+                <span>帮助中心</span>
+              </button>
+              <button class="profile-menu-item danger" type="button" data-profile-action="logout">
+                <i data-lucide="log-out" aria-hidden="true"></i>
+                <span>退出登录</span>
+              </button>
             </div>
           </div>
-          <div class="credit-card">
-            <div class="credit-label"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i><span>可用积分</span></div>
-            <div class="credit-value" id="profileCreditAvailable">3000</div>
-            <div class="credit-sub">累计消耗 <span id="profileCreditConsumed">0</span> 积分</div>
-          </div>
-          <div class="profile-menu-list">
-            <button class="profile-menu-item" type="button" data-profile-action="organization">
-              <i data-lucide="building-2" aria-hidden="true"></i>
-              <span>进入组织</span>
-            </button>
-            <button class="profile-menu-item" type="button" data-profile-action="account">
-              <i data-lucide="settings" aria-hidden="true"></i>
-              <span>账号设置</span>
-            </button>
-            <button class="profile-menu-item" type="button" data-profile-action="appearance">
-              <i data-lucide="sun" aria-hidden="true"></i>
-              <span>外观</span>
-              <small id="themeCurrentLabel">深色</small>
-              <i data-lucide="chevron-right" aria-hidden="true"></i>
-            </button>
-            <button class="profile-menu-item" type="button" data-profile-action="help">
-              <i data-lucide="book-open" aria-hidden="true"></i>
-              <span>帮助中心</span>
-            </button>
-            <button class="profile-menu-item danger" type="button" data-profile-action="logout">
-              <i data-lucide="log-out" aria-hidden="true"></i>
-              <span>退出登录</span>
-            </button>
-          </div>
         </div>
-      </aside>
+      </div>
       <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库">
         <header class="asset-library-header">
           <div>

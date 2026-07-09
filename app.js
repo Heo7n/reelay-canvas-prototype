@@ -13,6 +13,7 @@ const zoomChip = document.querySelector("#zoomChip");
 const projectTitle = document.querySelector("#projectTitle");
 const railLibraryBtn = document.querySelector("#railLibraryBtn");
 const railProfileBtn = document.querySelector("#railProfileBtn");
+const shareProjectBtn = document.querySelector("#shareProjectBtn");
 const profileMenu = document.querySelector("#profileMenu");
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
@@ -82,6 +83,12 @@ const imageResolutionCost = {
   "1K": 3,
   "2K": 5,
   "4K": 9,
+};
+
+const imageQualityMultiplier = {
+  低: 0.7,
+  中: 1,
+  高: 1.8,
 };
 
 const videoQualityCost = {
@@ -297,6 +304,7 @@ const state = {
   libraryTargetNodeId: null,
   themeMode: localStorage.getItem("reelay-theme-mode") || "dark",
   canvasPanel: null,
+  overlaySyncTimer: null,
 };
 
 function clamp(value, min, max) {
@@ -343,6 +351,8 @@ function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
   updateCanvasGrid();
   syncPromptPanelLayouts();
+  window.clearTimeout(state.overlaySyncTimer);
+  state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
   if (zoomChip) zoomChip.textContent = `${Math.round(state.scale * 100)}%`;
   renderSelectionToolbar();
   renderMinimap();
@@ -352,6 +362,14 @@ function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id=
   if (!element) return;
   const layout = getNodeLayout(node);
   element.style.width = `${layout.nodeWidth}px`;
+  const mediaToolbar = element.querySelector("[data-media-toolbar]");
+  if (mediaToolbar) {
+    mediaToolbar.style.setProperty("--toolbar-scale", layout.toolbarScale.toFixed(4));
+    mediaToolbar.style.setProperty("--toolbar-nudge", "0px");
+    const toolbarRect = mediaToolbar.getBoundingClientRect();
+    const nudge = toolbarRect.top < 8 ? (8 - toolbarRect.top) / state.scale : 0;
+    mediaToolbar.style.setProperty("--toolbar-nudge", `${nudge.toFixed(2)}px`);
+  }
   const promptPanel = element.querySelector(".prompt-panel");
   if (!promptPanel) return;
   promptPanel.style.width = `${layout.panelWidth}px`;
@@ -362,9 +380,7 @@ function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id=
 
 function syncPromptPanelLayouts() {
   for (const node of state.nodes) {
-    if (node.kind === "generator" && node.expanded) {
-      syncNodeVisualLayout(node);
-    }
+    syncNodeVisualLayout(node);
   }
 }
 
@@ -491,7 +507,7 @@ function normalizeNodeParameters(node) {
   for (const [field, capabilityKey] of Object.entries(fieldMap)) {
     const values = getCapabilityValues(node, capabilityKey);
     if (values.length && !values.includes(node[field])) {
-      node[field] = values[0];
+      node[field] = model.defaults?.[field] || values[0];
     }
   }
 
@@ -505,7 +521,8 @@ function normalizeNodeParameters(node) {
 function getCost(node) {
   if (node.kind !== "generator") return 0;
   if (node.mode === "image") {
-    return (imageResolutionCost[node.resolution] || 5) * node.count;
+    const qualityMultiplier = imageQualityMultiplier[node.quality] || 1;
+    return Math.ceil((imageResolutionCost[node.resolution] || 5) * qualityMultiplier) * node.count;
   }
   if (node.mode === "audio") {
     const seconds = Number.parseInt(node.duration, 10) || 30;
@@ -524,7 +541,8 @@ function getParamLabel(node) {
   if (node.mode === "video") {
     return `${node.aspect} · ${node.quality} · ${node.duration}`;
   }
-  return `${node.aspect} · ${node.resolution}`;
+  const quality = getCapabilityValues(node, "qualities").length ? ` · ${node.quality}` : "";
+  return `${node.aspect} · ${node.resolution}${quality}`;
 }
 
 function aspectStringToRatio(aspect) {
@@ -582,6 +600,7 @@ function getMediaSize(ratio) {
 function getNodeLayout(node) {
   const ratio = getMediaRatio(node);
   const { mediaWidth, mediaHeight } = getMediaSize(ratio);
+  const toolbarScale = clamp(1 / state.scale, 0.5, 2.2);
 
   if (node.kind === "asset") {
     return {
@@ -591,6 +610,7 @@ function getNodeLayout(node) {
       panelHeight: 0,
       nodeWidth: mediaWidth,
       nodeHeight: mediaHeight,
+      toolbarScale,
     };
   }
 
@@ -602,7 +622,8 @@ function getNodeLayout(node) {
         layoutRules.largePanelMaxHeight,
       )
     : layoutRules.normalPanelHeight;
-  const promptScale = clamp(1 / state.scale, 0.78, 1.55);
+  const targetScreenWidth = clamp(mediaWidth * state.scale + 72, 500, 760);
+  const promptScale = clamp(targetScreenWidth / (panelWidth * state.scale), 0.5, 2.2);
   const nodeWidth = Math.max(mediaWidth, panelWidth);
   const nodeHeight = mediaHeight + (node.expanded ? layoutRules.panelGap + panelHeight * promptScale : 0);
 
@@ -612,6 +633,7 @@ function getNodeLayout(node) {
     panelWidth,
     panelHeight,
     promptScale,
+    toolbarScale,
     nodeWidth,
     nodeHeight,
   };
@@ -1056,12 +1078,19 @@ function defaultGeneratedName(node) {
 
 function getGeneratedResolution(node) {
   if (node.model === "gpt-image-2") {
-    const sizes = {
-      "1:1": { width: 1024, height: 1024 },
-      "2:3": { width: 1024, height: 1536 },
-      "3:2": { width: 1536, height: 1024 },
+    const targetPixels = {
+      "1K": 1024 * 1024,
+      "2K": 2048 * 2048,
+      "4K": 3840 * 2160,
     };
-    return sizes[node.aspect] || sizes["1:1"];
+    const ratio = aspectStringToRatio(node.aspect);
+    const area = targetPixels[node.resolution] || targetPixels["2K"];
+    let width = Math.sqrt(area * ratio);
+    let height = Math.sqrt(area / ratio);
+    const edgeScale = Math.min(1, 3840 / Math.max(width, height));
+    width = Math.max(16, Math.floor((width * edgeScale) / 16) * 16);
+    height = Math.max(16, Math.floor((height * edgeScale) / 16) * 16);
+    return { width, height };
   }
   const longEdgeByResolution = {
     "1024px": 1024,
@@ -1175,7 +1204,7 @@ function mediaEditToolbar(node, layout) {
   const showLabels = preference.showLabels && layout.mediaWidth >= 440;
   const unpinned = mediaToolsByType[type].filter((tool) => !preference.tools.includes(tool));
   return `
-    <div class="media-edit-toolbar ${showLabels ? "show-labels" : "compact"}" data-media-toolbar="true">
+    <div class="media-edit-toolbar ${showLabels ? "show-labels" : "compact"}" data-media-toolbar="true" style="--toolbar-scale: ${layout.toolbarScale}">
       <div class="media-tool-primary">
         ${preference.tools.map((tool) => mediaToolButton(tool, type, showLabels)).join("")}
       </div>
@@ -1730,6 +1759,7 @@ function render() {
   renderMinimap();
   renderAssetLibrary();
   refreshIcons();
+  requestAnimationFrame(syncPromptPanelLayouts);
 }
 
 function createGroupFrameElement(group) {
@@ -2680,6 +2710,9 @@ function paramPanel(node) {
           node.mode === "video"
             ? parameterSection(node, "画质", "quality", getCapabilityValues(node, "qualities"))
             : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
+          node.mode === "image" && getCapabilityValues(node, "qualities").length
+            ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
+            : "",
           node.mode === "video"
             ? parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))
             : "",
@@ -3203,7 +3236,7 @@ function positionThemeSubmenu() {
   const trigger = profileMenu?.querySelector("[data-profile-action='appearance']");
   if (!trigger || !themeSubmenu) return;
   const rect = trigger.getBoundingClientRect();
-  themeSubmenu.style.left = `${rect.right + 8}px`;
+  themeSubmenu.style.left = `${Math.max(8, rect.left - 162)}px`;
   themeSubmenu.style.top = `${rect.top - 2}px`;
   themeSubmenu.style.bottom = "auto";
 }
@@ -3211,11 +3244,13 @@ function positionThemeSubmenu() {
 function setAgentWidth(width) {
   state.agentWidth = clamp(width, 340, 640);
   agentDock?.style.setProperty("--agent-width", `${state.agentWidth}px`);
+  appShell?.style.setProperty("--agent-width", `${state.agentWidth}px`);
 }
 
 function setAgentOpen(open) {
   state.agentOpen = open;
   if (!agentDock) return;
+  appShell?.classList.toggle("agent-open", open);
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
   if (!open) {
@@ -3226,6 +3261,28 @@ function setAgentOpen(open) {
 function addNodeAtViewportCenter() {
   const rect = shell.getBoundingClientRect();
   return addNodeAt(rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
+
+async function shareProject() {
+  const shareData = {
+    title: `${state.projectName} · Reelay Canvas`,
+    text: "查看这个 Reelay Canvas 创作项目",
+    url: window.location.href,
+  };
+  if (navigator.share) {
+    try {
+      await navigator.share(shareData);
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(shareData.url);
+    showActionToast("分享链接已复制");
+  } catch {
+    showActionToast("暂时无法复制分享链接");
+  }
 }
 
 function beginProjectRename() {
@@ -3408,6 +3465,7 @@ function shouldBypassCanvasWheel(target) {
         ".material-panel",
         ".asset-library-panel",
         ".top-bar",
+        ".top-actions",
         ".left-rail",
         ".agent-dock",
         ".prompt-panel",
@@ -4042,6 +4100,8 @@ assetLibraryGrid?.addEventListener("dragstart", (event) => {
   event.dataTransfer.setData("text/plain", assetId);
 });
 
+shareProjectBtn?.addEventListener("click", shareProject);
+
 railProfileBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
   closeAssetLibrary();
@@ -4231,7 +4291,7 @@ document.addEventListener("click", (event) => {
     agentHistoryMenu?.classList.add("hidden");
     agentModelMenu?.classList.add("hidden");
   }
-  if (!target?.closest(".left-rail, #themeSubmenu")) {
+  if (!target?.closest(".top-actions, #themeSubmenu")) {
     profileMenu?.classList.add("hidden");
     themeSubmenu?.classList.add("hidden");
     profileMenu?.querySelector("[data-profile-action='appearance']")?.classList.remove("active");

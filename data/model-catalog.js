@@ -9,9 +9,15 @@ window.REELAY_MODEL_CATALOG = Object.freeze(
       icon: "GI",
       badge: "30s",
       capabilities: {
-        aspects: ["1:1", "2:3", "3:2"],
-        resolutions: ["1024px"],
+        aspects: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        resolutions: ["1K", "2K", "4K"],
+        qualities: ["低", "中", "高"],
         counts: [1, 2, 4],
+      },
+      defaults: {
+        aspect: "1:1",
+        resolution: "2K",
+        quality: "中",
       },
     },
     {
@@ -108,7 +114,7 @@ window.REELAY_MODEL_CATALOG = Object.freeze(
       badge: "15s",
       capabilities: {
         aspects: ["16:9", "9:16", "4:3", "3:4", "21:9"],
-        qualities: ["480p", "720p", "1080p"],
+        qualities: ["720p", "1080p", "4K"],
         durations: ["4s", "8s", "12s", "15s"],
         counts: [1, 2, 4],
       },
@@ -123,7 +129,7 @@ window.REELAY_MODEL_CATALOG = Object.freeze(
       badge: "10s",
       capabilities: {
         aspects: ["16:9", "9:16", "4:3", "3:4", "21:9"],
-        qualities: ["480p", "720p", "1080p"],
+        qualities: ["480p", "720p"],
         durations: ["4s", "8s", "12s", "15s"],
         counts: [1, 2, 4],
       },

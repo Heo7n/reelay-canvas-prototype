@@ -27,18 +27,18 @@
 
 `data/model-catalog.js` 已为每个模型声明 `capabilities`，节点参数面板根据该字段动态生成，不再共用一套虚构参数。
 
-- GPT Image 2：只提供官方固定尺寸对应的 `1:1`、`2:3`、`3:2`，不显示 2K/4K。
+- GPT Image 2：官方支持满足约束的任意尺寸；原型提供十种常用比例、`1K / 2K / 4K` 与低/中/高生成质量。
 - Nano Banana Pro / Nano Banana 2：提供官方支持的完整常用画幅与 `1K / 2K / 4K`。
 - Midjourney V8.1：提供原生 `1K / 2K`；V7 与 Niji 7 只显示原生 `1K`，2K 放大保留为媒体编辑能力。
 - Seedream 5.0 Lite：只显示已确认的高分辨率 `2K / 4K`。
-- Seedance 2.0 / Fast：`480p / 720p / 1080p`；Mini 仅 `480p / 720p`；时长均限制在 4 至 15 秒的产品范围内。
+- Seedance 2.0：`720p / 1080p / 4K`；Fast 与 Mini：`480p / 720p`；时长均限制在 4 至 15 秒的产品范围内。火山引擎当前页面对 4K 同时存在模型直出与 MediaKit 后处理口径，真实 API 接入时必须以端点能力响应为准。
 - Veo 3.1：`720p` 支持 4/6/8 秒；选择 `1080p` 或 `4K` 时自动限制为 8 秒；单次只生成 1 个视频。
 - Kling Video 3.0 系列：`720p / 1080p`，时长在官方 3 至 15 秒范围内。
 - Suno v5.5：最长 8 分钟；Eleven Music v2 最长 5 分钟；Eleven Sound Effects v2 最长 30 秒；Stable Audio 最长 3 分钟。
 
 ## 主要来源
 
-- [OpenAI GPT Image 2](https://developers.openai.com/api/docs/models/gpt-image-2)
+- [OpenAI GPT Image 2 输出尺寸与质量](https://developers.openai.com/api/docs/guides/image-generation#customize-image-output)
 - [Google Nano Banana 图像生成参数](https://ai.google.dev/gemini-api/docs/image-generation)
 - [Midjourney 版本与 HD 能力](https://docs.midjourney.com/hc/en-us/articles/32199405667853-Version)
 - [Midjourney 图片尺寸](https://docs.midjourney.com/hc/en-us/articles/33329374594957-Image-Size-Resolution)
