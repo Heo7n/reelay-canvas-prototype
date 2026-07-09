@@ -9,21 +9,49 @@
 - 同系列速度 / 成本变体保留明确后缀，例如 Fast、Mini、Lite。
 - Omni 按官方拼写，不使用 `Omini`。
 
-## 本轮关键判断
+## 当前收录
 
 - OpenAI 当前图像 API 模型使用 `GPT Image 2`。
 - Google 图像模型收录 `Nano Banana Pro` 和 `Nano Banana 2`。
 - Midjourney 当前默认版本为 `V8.1`，同时保留 `V7` 和动漫方向的 `Niji 7`。
 - 字节跳动正式发布的是 `Seedream 5.0 Lite`；未收录无法从官方资料核实的 `Seedream 5.0 Pro`。
 - Seedance 收录 `2.0`、`2.0 Fast`、`2.0 Mini` 三档。
-- 可灵收录 `Video 3.0` 与 `Video 3.0 Omni`，并收录对应图片系列。
+- 可灵收录 `Video 3.0` 与 `Video 3.0 Omni`。
 - Suno 正式模型名是 `v5.5`；Pro 是订阅层级。
-- ElevenLabs 收录 `Music v2`、`Sound Effects v2` 与 `Multilingual v2`。
+- ElevenLabs收录 `Music v2` 与 `Sound Effects v2`。
 - Sora 2 未收录，因为 OpenAI 官方页面标注该产品已于 2026-04-26 停止提供。
 
-## 产品实现提醒
+当前共 17 个模型：图片 7 个、视频 6 个、音频 4 个。
 
-当前模型目录只驱动展示和类型切换。真实接入时必须补充：
+## 参数校验
+
+`data/model-catalog.js` 已为每个模型声明 `capabilities`，节点参数面板根据该字段动态生成，不再共用一套虚构参数。
+
+- GPT Image 2：只提供官方固定尺寸对应的 `1:1`、`2:3`、`3:2`，不显示 2K/4K。
+- Nano Banana Pro / Nano Banana 2：提供官方支持的完整常用画幅与 `1K / 2K / 4K`。
+- Midjourney V8.1：提供原生 `1K / 2K`；V7 与 Niji 7 只显示原生 `1K`，2K 放大保留为媒体编辑能力。
+- Seedream 5.0 Lite：只显示已确认的高分辨率 `2K / 4K`。
+- Seedance 2.0 / Fast：`480p / 720p / 1080p`；Mini 仅 `480p / 720p`；时长均限制在 4 至 15 秒的产品范围内。
+- Veo 3.1：`720p` 支持 4/6/8 秒；选择 `1080p` 或 `4K` 时自动限制为 8 秒；单次只生成 1 个视频。
+- Kling Video 3.0 系列：`720p / 1080p`，时长在官方 3 至 15 秒范围内。
+- Suno v5.5：最长 8 分钟；Eleven Music v2 最长 5 分钟；Eleven Sound Effects v2 最长 30 秒；Stable Audio 最长 3 分钟。
+
+## 主要来源
+
+- [OpenAI GPT Image 2](https://developers.openai.com/api/docs/models/gpt-image-2)
+- [Google Nano Banana 图像生成参数](https://ai.google.dev/gemini-api/docs/image-generation)
+- [Midjourney 版本与 HD 能力](https://docs.midjourney.com/hc/en-us/articles/32199405667853-Version)
+- [Midjourney 图片尺寸](https://docs.midjourney.com/hc/en-us/articles/33329374594957-Image-Size-Resolution)
+- [火山引擎 Seedance 2.0](https://www.volcengine.com/activity/seedance2)
+- [Google Veo 3.1 参数](https://ai.google.dev/gemini-api/docs/video)
+- [可灵 3.0 用户指南](https://app.klingai.com/cn/quickstart/klingai-video-3-model-user-guide)
+- [Suno v5.5](https://about.suno.com/release-notes/introducing-v5-5-voices-custom-models-and-my-taste)
+- [ElevenLabs Music v2](https://elevenlabs.io/docs/eleven-creative/products/music)
+- [ElevenLabs Sound Effects](https://elevenlabs.io/docs/overview/capabilities/sound-effects)
+
+## 真实接入提醒
+
+当前能力表服务于前端原型。真实接入仍必须补充：
 
 - 输入模态。
 - 输出模态。
@@ -37,4 +65,4 @@
 - 服务状态。
 - 下线日期。
 
-这些字段应进入 `ModelDefinition` schema，节点参数面板应根据 schema 生成。
+其中输入模态、参考素材条件和供应商实时服务状态会进一步影响参数组合，应由后端能力接口覆盖前端静态目录。

@@ -25,7 +25,7 @@ git switch -c feature/<task-name>
 | `index.html` | 应用骨架与固定面板 |
 | `styles.css` | 主题、画布、节点、Agent 和浮层样式 |
 | `app.js` | 当前所有交互状态与画布逻辑 |
-| `data/model-catalog.js` | 模型目录与展示元数据 |
+| `data/model-catalog.js` | 模型目录、展示元数据与参数能力表 |
 | `docs/current-product-spec.md` | 已实现产品行为 |
 | `docs/product-expansion-plan.md` | 未实现页面规划 |
 | `docs/model-catalog-notes.md` | 模型命名和来源说明 |
@@ -63,7 +63,7 @@ python -m http.server 5174 --bind 127.0.0.1
 - 项目名。
 - Agent 会话。
 - 测试积分。
-- 项目素材库。
+- 分层资产库（项目素材、画布文件、个人、官方公用库、组织空间）。
 - 当前主题和面板状态。
 
 ### 独立目录
@@ -74,7 +74,8 @@ python -m http.server 5174 --bind 127.0.0.1
 2. 指定 `type`：`image`、`video` 或 `audio`。
 3. 保留正式产品名，不把订阅层级写进模型名。
 4. 描述保持一行，说明最有差异的能力。
-5. 不在画布逻辑中加入供应商特例。
+5. 为 `capabilities` 补齐真实画幅、分辨率/画质、时长和数量。
+6. 参数存在组合约束时使用能力映射，不在参数面板中硬编码供应商特例。
 
 ## 6. 已知工程风险
 
@@ -82,7 +83,7 @@ python -m http.server 5174 --bind 127.0.0.1
 - 画布状态与 DOM 渲染紧耦合。
 - 每次 `render()` 会重建节点 DOM，媒体播放和输入焦点需要特别保护。
 - 撤销只覆盖部分删除行为，不是通用命令历史。
-- 模型参数仍按媒体类型写死，尚未由模型能力 schema 驱动。
+- 模型能力表仍是前端静态快照，尚未由供应商或后端能力服务实时同步。
 - 资产和会话没有持久化。
 - 外部示例媒体依赖网络可用性。
 
@@ -123,8 +124,8 @@ python -m http.server 5174 --bind 127.0.0.1
 
 ### `feature/model-service`
 
-- 把模型目录升级为能力 schema。
-- 负责供应商、参数和计费映射。
+- 将现有能力 schema 接入后端模型服务。
+- 负责供应商状态、参数组合、地区可用性和计费映射。
 
 ## 8. 合并边界
 

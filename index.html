@@ -16,10 +16,10 @@
         </div>
       </header>
 
-      <aside class="left-rail" aria-label="画布工具">
-        <button class="rail-button active" id="railAddNodeBtn" type="button" title="添加生成节点">+</button>
-        <button class="rail-button" id="railLibraryBtn" type="button" title="素材库">
-          <span class="rail-library-icon" aria-hidden="true"></span>
+      <aside class="left-rail" aria-label="资产与个人">
+        <button class="rail-button asset-library-button" id="railLibraryBtn" type="button" title="资产库">
+          <i data-lucide="folders" aria-hidden="true"></i>
+          <span>资产库</span>
         </button>
         <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人">
           <span class="avatar-dot" aria-hidden="true"></span>
@@ -65,16 +65,41 @@
           </div>
         </div>
       </aside>
-      <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="素材库">
+      <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库">
         <header class="asset-library-header">
           <div>
-            <div class="asset-library-title">素材库</div>
+            <div class="asset-library-title">资产库</div>
             <div class="asset-library-context" id="assetLibraryContext">管理当前项目的媒体素材</div>
           </div>
-          <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起素材库" aria-label="收起素材库">
+          <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起资产库" aria-label="收起资产库">
             <i data-lucide="panel-left-close" aria-hidden="true"></i>
           </button>
         </header>
+        <nav class="asset-library-scopes" aria-label="资产范围">
+          <div class="asset-scope-label">项目</div>
+          <button class="active" type="button" data-library-scope="project">
+            <i data-lucide="panel-top" aria-hidden="true"></i>
+            <span>项目素材</span>
+          </button>
+          <button type="button" data-library-scope="canvas">
+            <i data-lucide="files" aria-hidden="true"></i>
+            <span>画布文件</span>
+          </button>
+          <div class="asset-scope-label">空间</div>
+          <button type="button" data-library-scope="personal">
+            <i data-lucide="user-round" aria-hidden="true"></i>
+            <span>个人</span>
+          </button>
+          <button type="button" data-library-scope="official">
+            <i data-lucide="badge-check" aria-hidden="true"></i>
+            <span>官方公用库</span>
+            <small>音效</small>
+          </button>
+          <button type="button" data-library-scope="organization">
+            <i data-lucide="users-round" aria-hidden="true"></i>
+            <span>组织空间</span>
+          </button>
+        </nav>
         <div class="asset-library-actions">
           <button class="asset-library-upload" id="assetLibraryUploadBtn" type="button">
             <i data-lucide="upload" aria-hidden="true"></i>
@@ -135,7 +160,7 @@
         <div class="empty-state" id="emptyState">
           <button class="empty-create" id="emptyCreateBtn" type="button" title="添加生成节点">+</button>
           <div class="empty-title">双击画布开始创作</div>
-          <div class="empty-subtitle">或使用左侧面板添加节点</div>
+          <div class="empty-subtitle">也可将本地媒体直接拖入画布</div>
         </div>
         <div class="canvas-tools" id="canvasTools">
           <div class="canvas-tool-popover shortcuts-popover hidden" id="shortcutsPanel" data-canvas-popover="shortcuts">

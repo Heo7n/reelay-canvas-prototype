@@ -1,3 +1,4 @@
+const appShell = document.querySelector(".app-shell");
 const shell = document.querySelector("#canvasShell");
 const appFavicon = document.querySelector("#appFavicon");
 const canvasGrid = document.querySelector("#canvasGrid");
@@ -10,7 +11,6 @@ const minimapSurface = document.querySelector("#minimapSurface");
 const zoomPanel = document.querySelector("#zoomPanel");
 const zoomChip = document.querySelector("#zoomChip");
 const projectTitle = document.querySelector("#projectTitle");
-const railAddNodeBtn = document.querySelector("#railAddNodeBtn");
 const railLibraryBtn = document.querySelector("#railLibraryBtn");
 const railProfileBtn = document.querySelector("#railProfileBtn");
 const profileMenu = document.querySelector("#profileMenu");
@@ -61,10 +61,15 @@ function syncFaviconContrast() {
     canvas.height = size;
     const context = canvas.getContext("2d");
     if (!context) return;
-    const isDarkBrowser = !systemThemeQuery.matches;
     context.clearRect(0, 0, size, size);
-    context.filter = isDarkBrowser ? "invert(1)" : "none";
-    context.drawImage(source, 6, 6, 52, 52);
+    context.beginPath();
+    context.arc(size / 2, size / 2, 28, 0, Math.PI * 2);
+    context.fillStyle = "#ffffff";
+    context.fill();
+    context.lineWidth = 4;
+    context.strokeStyle = "#15171b";
+    context.stroke();
+    context.drawImage(source, 10, 10, 44, 44);
     appFavicon.href = canvas.toDataURL("image/png");
   };
   source.src = "./assets/reelay-logo.png";
@@ -73,6 +78,7 @@ function syncFaviconContrast() {
 const models = window.REELAY_MODEL_CATALOG || [];
 
 const imageResolutionCost = {
+  "1024px": 3,
   "1K": 3,
   "2K": 5,
   "4K": 9,
@@ -82,13 +88,7 @@ const videoQualityCost = {
   "480p": 8,
   "720p": 12,
   "1080p": 18,
-};
-
-const audioDurationCost = {
-  "4s": 3,
-  "8s": 5,
-  "12s": 8,
-  "15s": 10,
+  "4K": 36,
 };
 
 const simulationAssets = {
@@ -120,6 +120,19 @@ const simulationAssets = {
   },
 };
 
+const officialLibraryAssets = [
+  {
+    id: "official-sfx-roar",
+    type: "audio",
+    name: "Cinematic creature roar.mp3",
+    displayName: "电影感生物低吼",
+    url: "https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3",
+    duration: 0,
+    aspectRatio: 16 / 9,
+    source: "official",
+  },
+];
+
 const mediaToolDefinitions = {
   enhance: { icon: "badge-hd", label: "HD 增强" },
   crop: { icon: "crop", label: "裁剪" },
@@ -130,7 +143,7 @@ const mediaToolDefinitions = {
   trim: { icon: "scissors", label: "裁剪片段" },
   interpolate: { icon: "gauge", label: "提升帧率" },
   denoise: { icon: "audio-waveform", label: "降噪" },
-  "add-library": { icon: "folder-plus", label: "加入素材库" },
+  "add-library": { icon: "folder-plus", label: "加入资产库" },
 };
 
 const mediaToolsByType = {
@@ -277,7 +290,10 @@ const state = {
   },
   mediaToolPreferences: loadMediaToolPreferences(),
   libraryAssets: [],
+  personalLibraryAssets: [],
+  organizationLibraryAssets: [],
   libraryFilter: "all",
+  libraryScope: "project",
   libraryTargetNodeId: null,
   themeMode: localStorage.getItem("reelay-theme-mode") || "dark",
   canvasPanel: null,
@@ -394,7 +410,7 @@ function nextZ() {
 }
 
 function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
-  return {
+  const node = {
     id: crypto.randomUUID(),
     kind: "generator",
     x,
@@ -421,6 +437,8 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     assets: [],
     activeAssetId: null,
   };
+  normalizeNodeParameters(node);
+  return node;
 }
 
 function defaultAssetNode(x, y, asset) {
@@ -443,13 +461,55 @@ function getModel(node) {
   return models.find((item) => item.id === node.model) || models[0];
 }
 
+function getModelCapabilities(node) {
+  return getModel(node)?.capabilities || {};
+}
+
+function getCapabilityValues(node, key) {
+  const capabilities = getModelCapabilities(node);
+  if (key === "durations" && capabilities.durationsByQuality?.[node.quality]) {
+    return capabilities.durationsByQuality[node.quality];
+  }
+  return capabilities[key] || [];
+}
+
+function normalizeNodeParameters(node) {
+  if (!node || node.kind !== "generator") return node;
+  let model = models.find((item) => item.id === node.model);
+  if (!model || model.type !== node.mode) {
+    node.model = firstModelId(node.mode);
+    model = getModel(node);
+  }
+  node.mode = model.type;
+
+  const fieldMap = {
+    aspect: "aspects",
+    resolution: "resolutions",
+    quality: "qualities",
+    duration: "durations",
+  };
+  for (const [field, capabilityKey] of Object.entries(fieldMap)) {
+    const values = getCapabilityValues(node, capabilityKey);
+    if (values.length && !values.includes(node[field])) {
+      node[field] = values[0];
+    }
+  }
+
+  const counts = getCapabilityValues(node, "counts");
+  if (counts.length && !counts.includes(node.count)) {
+    node.count = counts[0];
+  }
+  return node;
+}
+
 function getCost(node) {
   if (node.kind !== "generator") return 0;
   if (node.mode === "image") {
     return (imageResolutionCost[node.resolution] || 5) * node.count;
   }
   if (node.mode === "audio") {
-    return (audioDurationCost[node.duration] || 5) * node.count;
+    const seconds = Number.parseInt(node.duration, 10) || 30;
+    return Math.max(3, Math.ceil(seconds / 30) * 5) * node.count;
   }
 
   const seconds = Number.parseInt(node.duration, 10) || 4;
@@ -845,6 +905,7 @@ function applyPreset(node, preset) {
   node.duration = preset.duration;
   node.count = preset.count;
   node.modelFilter = preset.mode;
+  normalizeNodeParameters(node);
 }
 
 function cloneNode(source) {
@@ -994,7 +1055,16 @@ function defaultGeneratedName(node) {
 }
 
 function getGeneratedResolution(node) {
+  if (node.model === "gpt-image-2") {
+    const sizes = {
+      "1:1": { width: 1024, height: 1024 },
+      "2:3": { width: 1024, height: 1536 },
+      "3:2": { width: 1536, height: 1024 },
+    };
+    return sizes[node.aspect] || sizes["1:1"];
+  }
   const longEdgeByResolution = {
+    "1024px": 1024,
     "1K": 1024,
     "2K": 2048,
     "4K": 4096,
@@ -1194,10 +1264,48 @@ function cloneAsset(asset, source = asset.source) {
   };
 }
 
-function registerLibraryAssets(assets) {
+function getCanvasLibraryAssets() {
+  const assets = state.nodes.flatMap((node) => {
+    const attached = node.assets || [];
+    return node.generatedAsset ? [...attached, node.generatedAsset] : attached;
+  });
+  const unique = new Map();
   for (const asset of assets) {
-    if (!state.libraryAssets.some((item) => item.id === asset.id)) {
-      state.libraryAssets.push(asset);
+    if (!asset) continue;
+    unique.set(asset.url || asset.id, asset);
+  }
+  return [...unique.values()];
+}
+
+function getLibraryAssetsForScope(scope = state.libraryScope) {
+  if (scope === "canvas") return getCanvasLibraryAssets();
+  if (scope === "personal") return state.personalLibraryAssets;
+  if (scope === "official") return officialLibraryAssets;
+  if (scope === "organization") return state.organizationLibraryAssets;
+  return state.libraryAssets;
+}
+
+function findLibraryAsset(assetId) {
+  const pools = [
+    state.libraryAssets,
+    state.personalLibraryAssets,
+    officialLibraryAssets,
+    state.organizationLibraryAssets,
+    getCanvasLibraryAssets(),
+  ];
+  return pools.flat().find((asset) => asset.id === assetId) || null;
+}
+
+function registerLibraryAssets(assets, scope = state.libraryScope) {
+  const target =
+    scope === "personal"
+      ? state.personalLibraryAssets
+      : scope === "organization"
+        ? state.organizationLibraryAssets
+        : state.libraryAssets;
+  for (const asset of assets) {
+    if (!target.some((item) => item.id === asset.id)) {
+      target.push(asset);
     }
   }
   renderAssetLibrary();
@@ -1205,26 +1313,43 @@ function registerLibraryAssets(assets) {
 
 function renderAssetLibrary() {
   if (!assetLibraryGrid) return;
-  const visibleAssets = state.libraryAssets.filter(
+  const scopeAssets = getLibraryAssetsForScope();
+  const visibleAssets = scopeAssets.filter(
     (asset) => state.libraryFilter === "all" || asset.type === state.libraryFilter,
   );
   const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId && node.kind === "generator");
+  const scopeMeta = {
+    project: ["项目素材", "当前项目中沉淀的可复用资产"],
+    canvas: ["画布文件", "当前画布上的全部媒体文件"],
+    personal: ["个人资产", "跨项目使用的个人全局资产"],
+    official: ["官方公用库", "由 Reelay 提供的公共音效资产"],
+    organization: ["组织空间", "同一组织成员共享的资产"],
+  };
+  const [scopeTitle, scopeContext] = scopeMeta[state.libraryScope] || scopeMeta.project;
 
   if (assetLibraryCount) assetLibraryCount.textContent = `${visibleAssets.length} 项`;
   if (assetLibraryContext) {
-    assetLibraryContext.textContent = targetNode ? "选择素材引用到当前生成节点" : "双击素材，或拖入画布";
+    assetLibraryContext.textContent = targetNode ? "选择资产引用到当前生成节点" : scopeContext;
   }
+  const title = assetLibraryPanel?.querySelector(".asset-library-title");
+  if (title) title.textContent = scopeTitle;
+  document.querySelectorAll("[data-library-scope]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.libraryScope === state.libraryScope);
+  });
   document.querySelectorAll("[data-library-filter]").forEach((button) => {
     button.classList.toggle("active", button.dataset.libraryFilter === state.libraryFilter);
   });
+  if (assetLibraryUploadBtn) {
+    assetLibraryUploadBtn.classList.toggle("hidden", ["canvas", "official"].includes(state.libraryScope));
+  }
 
   if (!visibleAssets.length) {
     assetLibraryGrid.innerHTML = `
       <div class="asset-library-empty">
         <div>
           <i data-lucide="images" aria-hidden="true"></i>
-          <strong>${state.libraryAssets.length ? "此分类暂无素材" : "还没有素材"}</strong>
-          <span>${state.libraryAssets.length ? "切换分类查看其他素材" : "上传图片、视频或音频，随后可加入画布或生成节点"}</span>
+          <strong>${scopeAssets.length ? "此分类暂无资产" : "这里还没有资产"}</strong>
+          <span>${scopeAssets.length ? "切换分类查看其他资产" : state.libraryScope === "canvas" ? "拖入媒体或完成一次生成后会出现在这里" : "上传图片、视频或音频，随后可加入画布或生成节点"}</span>
         </div>
       </div>
     `;
@@ -1254,6 +1379,7 @@ function renderAssetLibrary() {
 function openAssetLibrary(targetNodeId = null) {
   state.libraryTargetNodeId = targetNodeId;
   assetLibraryPanel?.classList.remove("hidden");
+  appShell?.classList.add("asset-library-open");
   railLibraryBtn?.classList.add("active");
   profileMenu?.classList.add("hidden");
   themeSubmenu?.classList.add("hidden");
@@ -1264,6 +1390,7 @@ function openAssetLibrary(targetNodeId = null) {
 function closeAssetLibrary() {
   state.libraryTargetNodeId = null;
   assetLibraryPanel?.classList.add("hidden");
+  appShell?.classList.remove("asset-library-open");
   railLibraryBtn?.classList.remove("active");
 }
 
@@ -1301,7 +1428,7 @@ function addLibraryAssetToCanvas(sourceAsset, clientX, clientY) {
 }
 
 function useLibraryAsset(assetId, clientX, clientY) {
-  const sourceAsset = state.libraryAssets.find((asset) => asset.id === assetId);
+  const sourceAsset = findLibraryAsset(assetId);
   if (!sourceAsset) return;
   const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId);
   if (targetNode?.kind === "generator") {
@@ -1500,7 +1627,7 @@ function addFilesToGeneratorNode(node, files) {
   const accepted = createAssetsFromFiles(files);
   if (!accepted.length) return;
 
-  registerLibraryAssets(accepted);
+  registerLibraryAssets(accepted, "project");
   node.assets.push(...accepted);
   node.activeAssetId = accepted[0].id;
   accepted.forEach((asset) => hydrateAssetMetadata(asset, node.id));
@@ -1515,7 +1642,7 @@ function addMediaNodesFromFiles(files, clientX, clientY) {
   const accepted = createAssetsFromFiles(files);
   if (!accepted.length) return [];
 
-  registerLibraryAssets(accepted);
+  registerLibraryAssets(accepted, "project");
   const world = screenToWorld(clientX, clientY);
   const createdNodes = accepted.map((asset, index) => {
     const node = defaultAssetNode(0, 0, asset);
@@ -1949,16 +2076,19 @@ function addEditableMediaToLibrary(node) {
     (item) => item.id === sourceId || item.librarySourceId === sourceId,
   );
   if (exists) {
-    showActionToast("该媒体已在素材库中");
+    showActionToast("该媒体已在项目资产中");
     return;
   }
-  registerLibraryAssets([
-    {
-      ...cloneAsset(asset, "generated"),
-      librarySourceId: sourceId,
-    },
-  ]);
-  showActionToast("已加入素材库");
+  registerLibraryAssets(
+    [
+      {
+        ...cloneAsset(asset, "generated"),
+        librarySourceId: sourceId,
+      },
+    ],
+    "project",
+  );
+  showActionToast("已加入项目资产");
 }
 
 function enhanceEditableMedia(node) {
@@ -2541,52 +2671,33 @@ function materialPanel() {
 }
 
 function paramPanel(node) {
-  const isVideo = node.mode === "video";
-  const isAudio = node.mode === "audio";
+  normalizeNodeParameters(node);
+  const sections =
+    node.mode === "audio"
+      ? [parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))]
+      : [
+          parameterSection(node, "比例", "aspect", getCapabilityValues(node, "aspects")),
+          node.mode === "video"
+            ? parameterSection(node, "画质", "quality", getCapabilityValues(node, "qualities"))
+            : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
+          node.mode === "video"
+            ? parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))
+            : "",
+        ];
   return `
     <div class="panel-popover param-panel">
       <div class="panel-title">参数</div>
-      <div class="param-section">
-        ${
-          isAudio
-            ? `<div class="param-heading">时长</div>
-               <div class="segmented four">
-                 ${paramButton(node, "duration", "4s")}
-                 ${paramButton(node, "duration", "8s")}
-                 ${paramButton(node, "duration", "12s")}
-                 ${paramButton(node, "duration", "15s")}
-               </div>`
-            : `<div class="param-heading">比例</div>
-               <div class="segmented four">
-                 ${paramButton(node, "aspect", "16:9")}
-                 ${paramButton(node, "aspect", "9:16")}
-                 ${paramButton(node, "aspect", "1:1")}
-                 ${paramButton(node, "aspect", "4:3")}
-               </div>
-               ${
-                 isVideo
-            ? `<div class="param-heading">画质</div>
-               <div class="segmented three">
-                 ${paramButton(node, "quality", "480p")}
-                 ${paramButton(node, "quality", "720p")}
-                 ${paramButton(node, "quality", "1080p")}
-               </div>
-               <div class="param-heading">时长</div>
-               <div class="segmented four">
-                 ${paramButton(node, "duration", "4s")}
-                 ${paramButton(node, "duration", "8s")}
-                 ${paramButton(node, "duration", "12s")}
-                 ${paramButton(node, "duration", "15s")}
-               </div>`
-            : `<div class="param-heading">分辨率</div>
-               <div class="segmented three">
-                 ${paramButton(node, "resolution", "1K")}
-                 ${paramButton(node, "resolution", "2K")}
-                 ${paramButton(node, "resolution", "4K")}
-               </div>`
-               }`
-        }
-      </div>
+      <div class="param-section">${sections.join("")}</div>
+    </div>
+  `;
+}
+
+function parameterSection(node, label, action, values) {
+  if (!values?.length) return "";
+  return `
+    <div class="param-heading">${label}</div>
+    <div class="segmented" style="grid-template-columns: repeat(${Math.min(values.length, 5)}, minmax(0, 1fr))">
+      ${values.map((value) => paramButton(node, action, value)).join("")}
     </div>
   `;
 }
@@ -2648,7 +2759,11 @@ function handleAction(node, action, value) {
       startSimulatedGeneration(node);
       break;
     case "count":
-      node.count = node.count === 1 ? 2 : node.count === 2 ? 4 : 1;
+      {
+        const counts = getCapabilityValues(node, "counts");
+        const currentIndex = counts.indexOf(node.count);
+        node.count = counts[(currentIndex + 1) % counts.length] || 1;
+      }
       rememberPreset(node);
       break;
     case "model": {
@@ -2657,6 +2772,7 @@ function handleAction(node, action, value) {
       const previousDefaultName = defaultGeneratedName(node);
       node.model = selected.id;
       node.mode = selected.type;
+      normalizeNodeParameters(node);
       if (node.preview && (!node.name || node.name === previousDefaultName)) {
         node.name = defaultGeneratedName(node);
       }
@@ -2670,6 +2786,7 @@ function handleAction(node, action, value) {
     case "quality":
     case "resolution":
       node[action] = value;
+      normalizeNodeParameters(node);
       rememberPreset(node);
       break;
     default:
@@ -2746,8 +2863,12 @@ function handleNodePointerDown(event, nodeId) {
 
 function addNodeAt(clientX, clientY, mode = "image") {
   const world = screenToWorld(clientX, clientY);
-  const node = defaultGeneratorNode(world.x - 360, world.y - 210, state.lastPreset.mode || mode);
+  const node = defaultGeneratorNode(0, 0, state.lastPreset.mode || mode);
   applyPreset(node, state.lastPreset);
+  const layout = getNodeLayout(node);
+  const totalHeight = layout.mediaHeight + layout.panelGap + layout.panelHeight;
+  node.x = world.x - layout.nodeWidth / 2;
+  node.y = world.y - totalHeight / 2;
   collapseAllGeneratorPanels();
   state.nodes.push(node);
   bringNodesToFront([node]);
@@ -3845,7 +3966,7 @@ window.addEventListener("drop", (event) => {
   if (libraryAssetId) {
     event.preventDefault();
     shell.classList.remove("file-dragging");
-    const sourceAsset = state.libraryAssets.find((asset) => asset.id === libraryAssetId);
+    const sourceAsset = findLibraryAsset(libraryAssetId);
     const targetNode = getNodeFromElement(event.target);
     if (targetNode?.kind === "generator") {
       addAssetToGeneratorNode(targetNode, sourceAsset);
@@ -3869,10 +3990,6 @@ window.addEventListener("drop", (event) => {
   addMediaNodesFromFiles(files, event.clientX, event.clientY);
 });
 
-railAddNodeBtn?.addEventListener("click", () => {
-  addNodeAtViewportCenter();
-});
-
 emptyCreateBtn?.addEventListener("click", () => {
   addNodeAtViewportCenter();
 });
@@ -3891,6 +4008,13 @@ assetLibraryPanel?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 assetLibraryPanel?.addEventListener("click", (event) => {
+  const scope = event.target.closest("[data-library-scope]")?.dataset.libraryScope;
+  if (scope) {
+    state.libraryScope = scope;
+    state.libraryFilter = scope === "official" ? "audio" : "all";
+    renderAssetLibrary();
+    return;
+  }
   const filter = event.target.closest("[data-library-filter]")?.dataset.libraryFilter;
   if (filter) {
     state.libraryFilter = filter;
@@ -4141,11 +4265,11 @@ syncCreditDisplay();
 applyTheme(state.themeMode);
 syncFaviconContrast();
 systemThemeQuery.addEventListener("change", () => {
-  syncFaviconContrast();
   if (state.themeMode === "system") {
     applyTheme("system");
   }
 });
+officialLibraryAssets.forEach((asset) => hydrateAssetMetadata(asset, null));
 document.title = `${state.projectName} · Reelay Canvas`;
 applyTransform();
 render();
