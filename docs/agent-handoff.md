@@ -11,7 +11,12 @@
 - 无构建工具链。
 - 无自动化测试框架。
 
-当前目录还不是 Git 仓库。需要分支协作时，应先由项目负责人初始化仓库并创建基线提交，再让各 Agent 从同一基线开分支。
+当前目录已经初始化为 Git 仓库，默认分支为 `main`，基线提交为 `0cf1483`。其他 Agent 应从 `main` 创建独立分支，不要直接在基线上并行修改。
+
+```powershell
+git switch main
+git switch -c feature/<task-name>
+```
 
 ## 2. 文件职责
 
