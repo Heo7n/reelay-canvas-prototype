@@ -1984,8 +1984,7 @@ function createAssetNodeElement(node) {
   const selected = state.selectedIds.has(node.id);
   const el = document.createElement("article");
   el.className = `canvas-node generator-node asset-node ${asset?.type || "media"}-source ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
-  el.style.left = `${node.x}px`;
-  el.style.top = `${node.y}px`;
+  el.style.transform = `translate(${node.x}px, ${node.y}px)`;
   el.style.width = `${layout.nodeWidth}px`;
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
@@ -2008,8 +2007,7 @@ function createGeneratorNodeElement(node) {
   const selected = state.selectedIds.has(node.id);
   const el = document.createElement("article");
   el.className = `canvas-node generator-node ${node.mode}-mode ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
-  el.style.left = `${node.x}px`;
-  el.style.top = `${node.y}px`;
+  el.style.transform = `translate(${node.x}px, ${node.y}px)`;
   el.style.width = `${layout.nodeWidth}px`;
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
@@ -3667,8 +3665,7 @@ function moveDraggedNodes(action, event) {
     node.y = origin.y + dy;
     const nodeElement = nodeLayer.querySelector(`[data-id="${node.id}"]`);
     if (nodeElement) {
-      nodeElement.style.left = `${node.x}px`;
-      nodeElement.style.top = `${node.y}px`;
+      nodeElement.style.transform = `translate(${node.x}px, ${node.y}px)`;
       nodeElement.style.zIndex = String(node.z);
     }
   }
