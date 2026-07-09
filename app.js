@@ -3929,7 +3929,21 @@ shell.addEventListener("pointerdown", (event) => {
   beginMarquee(event);
 });
 
-window.addEventListener("pointermove", handlePointerMove);
+// Pointer-capture-aware: listen on both shell and window, dedup by pointerId+timeStamp
+const _handledMoves = new Map();
+function handlePointerMoveDedup(event) {
+  const key = event.pointerId + ":" + event.timeStamp;
+  if (_handledMoves.get(key)) return;
+  _handledMoves.set(key, true);
+  // Flush old entries to avoid memory leak
+  if (_handledMoves.size > 8) {
+    const first = _handledMoves.keys().next().value;
+    _handledMoves.delete(first);
+  }
+  handlePointerMove(event);
+}
+shell.addEventListener("pointermove", handlePointerMoveDedup);
+window.addEventListener("pointermove", handlePointerMoveDedup);
 shell.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointercancel", finishPointerInteraction);

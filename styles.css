@@ -996,6 +996,7 @@ html[data-theme="light"] .asset-lib-tooltip {
   inset: 0;
   overflow: hidden;
   cursor: default;
+  touch-action: none;
 }
 
 .canvas-grid {
@@ -1028,8 +1029,9 @@ html[data-theme="light"] .asset-lib-tooltip {
   z-index: 2;
   top: 0;
   left: 0;
-  width: 1px;
-  height: 1px;
+  width: 0;
+  height: 0;
+  overflow: visible;
   transform-origin: 0 0;
 }
 
@@ -1037,6 +1039,8 @@ html[data-theme="light"] .asset-lib-tooltip {
   position: absolute;
   top: 0;
   left: 0;
+  width: 0;
+  height: 0;
   overflow: visible;
 }
 
@@ -1376,6 +1380,7 @@ html[data-theme="light"] .asset-lib-tooltip {
   bottom: 18px;
   z-index: 40;
   pointer-events: auto;
+  background: transparent;
 }
 
 
@@ -1384,6 +1389,9 @@ html[data-theme="light"] .asset-lib-tooltip {
   display: flex;
   align-items: center;
   gap: 2px;
+  background: transparent;
+  border: 0;
+  padding: 0;
 }
 
 .canvas-tool-button {
