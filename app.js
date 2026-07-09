@@ -412,6 +412,33 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
   applyTransform();
 }
 
+
+function fitToView() {
+  if (!state.nodes.length) {
+    state.tx = 0;
+    state.ty = 0;
+    state.scale = 1;
+    applyTransform();
+    return;
+  }
+  const bounds = getNodesContentBounds(state.nodes);
+  if (!bounds) return;
+  const rect = shell.getBoundingClientRect();
+  const padding = 96;
+  const availableWidth = rect.width - padding * 2;
+  const availableHeight = rect.height - padding * 2;
+  if (availableWidth <= 0 || availableHeight <= 0) return;
+  const scaleX = availableWidth / bounds.width;
+  const scaleY = availableHeight / bounds.height;
+  const nextScale = clamp(Math.min(scaleX, scaleY), canvasScaleLimits.min, canvasScaleLimits.max);
+  const centerX = bounds.left + bounds.width / 2;
+  const centerY = bounds.top + bounds.height / 2;
+  state.scale = nextScale;
+  state.tx = rect.width / 2 - centerX * nextScale;
+  state.ty = rect.height / 2 - centerY * nextScale;
+  applyTransform();
+}
+
 function centerCanvasOnWorld(worldX, worldY) {
   const rect = shell.getBoundingClientRect();
   state.tx = rect.width / 2 - worldX * state.scale;
@@ -2591,9 +2618,8 @@ function modelPanel(node) {
   const types = [
     { id: "image", label: "图片" },
     { id: "video", label: "视频" },
-    { id: "audio", label: "音频" },
   ];
-  const activeType = node.modelFilter || node.mode;
+  const activeType = (node.modelFilter === "audio" ? "image" : node.modelFilter) || node.mode;
   const activeIndex = Math.max(0, types.findIndex((type) => type.id === activeType));
   const sections = types
     .map((type) => {
@@ -2624,7 +2650,7 @@ function modelPanel(node) {
   return `
     <div class="panel-popover model-panel">
       <div class="panel-title">选择模型</div>
-      <div class="mode-tabs" style="--active-index: ${activeIndex}">
+      <div class="mode-tabs mode-tabs-2" style="--active-index: ${activeIndex}">
         <span class="mode-tab-indicator" aria-hidden="true"></span>
         ${types
           .map(
@@ -2644,7 +2670,7 @@ function bindModelPanelEvents(element, node) {
   const tabs = panel?.querySelector(".mode-tabs");
   if (!panel || !list || !tabs) return;
 
-  const types = ["image", "video", "audio"];
+  const types = ["image", "video"];
   const setActiveType = (type) => {
     const index = Math.max(0, types.indexOf(type));
     node.modelFilter = types[index];
@@ -3968,6 +3994,11 @@ window.addEventListener("keydown", (event) => {
       setCanvasZoom(1);
       return;
     }
+    if (event.key === "1") {
+      event.preventDefault();
+      fitToView();
+      return;
+    }
   }
 
   if (event.code === "Space") {
@@ -4098,6 +4129,12 @@ assetLibraryGrid?.addEventListener("dragstart", (event) => {
   event.dataTransfer.effectAllowed = "copy";
   event.dataTransfer.setData("application/x-reelay-asset", assetId);
   event.dataTransfer.setData("text/plain", assetId);
+});
+
+document.querySelector("[data-canvas-tool='fit']")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  fitToView();
+  closeCanvasPanel();
 });
 
 shareProjectBtn?.addEventListener("click", shareProject);

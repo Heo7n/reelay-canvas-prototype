@@ -17,17 +17,18 @@
       </header>
 
       <aside class="left-rail" aria-label="资产">
-        <button class="rail-button asset-library-button" id="railLibraryBtn" type="button" title="资产库">
+        <button class="asset-library-trigger" id="railLibraryBtn" type="button" aria-label="资产库">
           <i data-lucide="folders" aria-hidden="true"></i>
-          <span>资产库</span>
+          <span class="asset-lib-tooltip">资产库</span>
         </button>
       </aside>
 
       <div class="top-actions" id="topActions">
-        <button class="share-button" id="shareProjectBtn" type="button" title="分享项目">
+        <button class="share-button icon-only" id="shareProjectBtn" type="button" aria-label="分享项目">
           <i data-lucide="share-2" aria-hidden="true"></i>
-          <span>分享</span>
+          <span class="share-tooltip">分享</span>
         </button>
+        <span class="top-actions-sep" aria-hidden="true"></span>
         <div class="profile-anchor">
           <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人">
             <span class="avatar-dot" aria-hidden="true"></span>
@@ -76,53 +77,52 @@
       </div>
       <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库">
         <header class="asset-library-header">
-          <div>
-            <div class="asset-library-title">资产库</div>
-            <div class="asset-library-context" id="assetLibraryContext">管理当前项目的媒体素材</div>
-          </div>
-          <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起资产库" aria-label="收起资产库">
+          <div class="asset-library-title">素材库</div>
+          <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起" aria-label="收起素材库">
             <i data-lucide="panel-left-close" aria-hidden="true"></i>
           </button>
         </header>
-        <nav class="asset-library-scopes" aria-label="资产范围">
-          <div class="asset-scope-label">项目</div>
-          <button class="active" type="button" data-library-scope="project">
-            <i data-lucide="panel-top" aria-hidden="true"></i>
-            <span>项目素材</span>
-          </button>
-          <button type="button" data-library-scope="canvas">
-            <i data-lucide="files" aria-hidden="true"></i>
-            <span>画布文件</span>
-          </button>
-          <div class="asset-scope-label">空间</div>
-          <button type="button" data-library-scope="personal">
-            <i data-lucide="user-round" aria-hidden="true"></i>
-            <span>个人</span>
-          </button>
-          <button type="button" data-library-scope="official">
-            <i data-lucide="badge-check" aria-hidden="true"></i>
-            <span>官方公用库</span>
-            <small>音效</small>
-          </button>
-          <button type="button" data-library-scope="organization">
-            <i data-lucide="users-round" aria-hidden="true"></i>
-            <span>组织空间</span>
-          </button>
-        </nav>
-        <div class="asset-library-actions">
-          <button class="asset-library-upload" id="assetLibraryUploadBtn" type="button">
-            <i data-lucide="upload" aria-hidden="true"></i>
-            <span>上传素材</span>
-          </button>
-          <span class="asset-library-count" id="assetLibraryCount">0 项</span>
+        <div class="asset-library-body">
+          <nav class="asset-library-scopes" aria-label="资产范围">
+            <div class="asset-scope-label">项目</div>
+            <button class="active" type="button" data-library-scope="project">
+              <i data-lucide="panel-top" aria-hidden="true"></i>
+              <span>项目素材</span>
+            </button>
+            <button type="button" data-library-scope="canvas">
+              <i data-lucide="files" aria-hidden="true"></i>
+              <span>画布文件</span>
+            </button>
+            <div class="asset-scope-label">空间</div>
+            <button type="button" data-library-scope="personal">
+              <i data-lucide="user-round" aria-hidden="true"></i>
+              <span>个人</span>
+            </button>
+            <button type="button" data-library-scope="official">
+              <i data-lucide="badge-check" aria-hidden="true"></i>
+              <span>官方公用库</span>
+            </button>
+            <button type="button" data-library-scope="organization">
+              <i data-lucide="users-round" aria-hidden="true"></i>
+              <span>组织空间</span>
+            </button>
+          </nav>
+          <div class="asset-library-actions">
+            <button class="asset-library-upload" id="assetLibraryUploadBtn" type="button">
+              <i data-lucide="upload" aria-hidden="true"></i>
+              <span>上传素材</span>
+            </button>
+            <span class="asset-library-count" id="assetLibraryCount">0 项</span>
+          </div>
+          <div class="asset-library-tabs" role="tablist" aria-label="素材类型">
+            <button class="active" type="button" data-library-filter="all">全部</button>
+            <button type="button" data-library-filter="image">图片</button>
+            <button type="button" data-library-filter="video">视频</button>
+            <button type="button" data-library-filter="audio">音频</button>
+          </div>
+          <div id="assetLibraryContext" class="asset-library-context hidden"></div>
+          <div class="asset-library-grid" id="assetLibraryGrid"></div>
         </div>
-        <div class="asset-library-tabs" role="tablist" aria-label="素材类型">
-          <button class="active" type="button" data-library-filter="all">全部</button>
-          <button type="button" data-library-filter="image">图片</button>
-          <button type="button" data-library-filter="video">视频</button>
-          <button type="button" data-library-filter="audio">音频</button>
-        </div>
-        <div class="asset-library-grid" id="assetLibraryGrid"></div>
       </aside>
       <div class="theme-popover hidden" id="themeSubmenu">
         <button class="theme-option" type="button" data-theme-choice="light">
@@ -183,6 +183,7 @@
               <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
               <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
               <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销删除</kbd></div>
+              <div class="shortcut-row"><span>Ctrl + 1</span><kbd>适应视图</kbd></div>
             </div>
           </div>
           <div class="canvas-tool-popover minimap-popover hidden" id="minimapPanel" data-canvas-popover="minimap">
@@ -196,6 +197,11 @@
             <button class="zoom-menu-item" type="button" data-zoom-value="2"><span>缩放至 200%</span></button>
           </div>
           <div class="canvas-tool-row">
+            <button class="canvas-tool-button" type="button" data-canvas-tool="fit" aria-label="适应视图">
+              <i data-lucide="scan" aria-hidden="true"></i>
+              <span class="canvas-tool-tip">适应视图</span>
+            </button>
+            <div class="canvas-tool-divider" aria-hidden="true"></div>
             <button class="canvas-tool-button" type="button" data-canvas-tool="shortcuts" aria-label="快捷键">
               <i data-lucide="keyboard" aria-hidden="true"></i>
               <span class="canvas-tool-tip">快捷键</span>
