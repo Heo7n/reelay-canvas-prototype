@@ -412,33 +412,6 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
   applyTransform();
 }
 
-
-function fitToView() {
-  if (!state.nodes.length) {
-    state.tx = 0;
-    state.ty = 0;
-    state.scale = 1;
-    applyTransform();
-    return;
-  }
-  const bounds = getNodesContentBounds(state.nodes);
-  if (!bounds) return;
-  const rect = shell.getBoundingClientRect();
-  const padding = 96;
-  const availableWidth = rect.width - padding * 2;
-  const availableHeight = rect.height - padding * 2;
-  if (availableWidth <= 0 || availableHeight <= 0) return;
-  const scaleX = availableWidth / bounds.width;
-  const scaleY = availableHeight / bounds.height;
-  const nextScale = clamp(Math.min(scaleX, scaleY), canvasScaleLimits.min, canvasScaleLimits.max);
-  const centerX = bounds.left + bounds.width / 2;
-  const centerY = bounds.top + bounds.height / 2;
-  state.scale = nextScale;
-  state.tx = rect.width / 2 - centerX * nextScale;
-  state.ty = rect.height / 2 - centerY * nextScale;
-  applyTransform();
-}
-
 function centerCanvasOnWorld(worldX, worldY) {
   const rect = shell.getBoundingClientRect();
   state.tx = rect.width / 2 - worldX * state.scale;
@@ -1894,19 +1867,7 @@ function bindGroupFrameEvents(el, group) {
       groupOrigin: bounds ? { x: bounds.left, y: bounds.top } : { x: group.x || 0, y: group.y || 0 },
       origins: nodes.map((node) => ({ id: node.id, x: node.x, y: node.y })),
     };
-    (function attachGroupDrag(pid) {
-      function onGMove(evt) { if (evt.pointerId !== pid) return; handlePointerMove(evt); }
-      function onGEnd(evt) {
-        if (evt.pointerId !== pid) return;
-        document.removeEventListener("pointermove", onGMove);
-        document.removeEventListener("pointerup",   onGEnd);
-        document.removeEventListener("pointercancel", onGEnd);
-        finishPointerInteraction(evt);
-      }
-      document.addEventListener("pointermove", onGMove);
-      document.addEventListener("pointerup",   onGEnd);
-      document.addEventListener("pointercancel", onGEnd);
-    })(event.pointerId);
+    shell.setPointerCapture(event.pointerId);
     render();
   });
 
@@ -2630,8 +2591,9 @@ function modelPanel(node) {
   const types = [
     { id: "image", label: "图片" },
     { id: "video", label: "视频" },
+    { id: "audio", label: "音频" },
   ];
-  const activeType = (node.modelFilter === "audio" ? "image" : node.modelFilter) || node.mode;
+  const activeType = node.modelFilter || node.mode;
   const activeIndex = Math.max(0, types.findIndex((type) => type.id === activeType));
   const sections = types
     .map((type) => {
@@ -2662,7 +2624,7 @@ function modelPanel(node) {
   return `
     <div class="panel-popover model-panel">
       <div class="panel-title">选择模型</div>
-      <div class="mode-tabs mode-tabs-2" style="--active-index: ${activeIndex}">
+      <div class="mode-tabs" style="--active-index: ${activeIndex}">
         <span class="mode-tab-indicator" aria-hidden="true"></span>
         ${types
           .map(
@@ -2682,7 +2644,7 @@ function bindModelPanelEvents(element, node) {
   const tabs = panel?.querySelector(".mode-tabs");
   if (!panel || !list || !tabs) return;
 
-  const types = ["image", "video"];
+  const types = ["image", "video", "audio"];
   const setActiveType = (type) => {
     const index = Math.max(0, types.indexOf(type));
     node.modelFilter = types[index];
@@ -2928,22 +2890,7 @@ function handleNodePointerDown(event, nodeId) {
     startClientY: event.clientY,
     origins: selectedNodes.map((item) => ({ id: item.id, x: item.x, y: item.y })),
   };
-  // Use dedicated document-level listeners so drag works regardless of
-  // pointer capture behaviour differences across browsers.
-  function onDragMove(evt) {
-    if (evt.pointerId !== event.pointerId) return;
-    handlePointerMove(evt);
-  }
-  function onDragEnd(evt) {
-    if (evt.pointerId !== event.pointerId) return;
-    document.removeEventListener("pointermove", onDragMove);
-    document.removeEventListener("pointerup",   onDragEnd);
-    document.removeEventListener("pointercancel", onDragEnd);
-    finishPointerInteraction(evt);
-  }
-  document.addEventListener("pointermove",   onDragMove);
-  document.addEventListener("pointerup",     onDragEnd);
-  document.addEventListener("pointercancel", onDragEnd);
+  shell.setPointerCapture(event.pointerId);
   render();
 }
 
@@ -3956,21 +3903,7 @@ shell.addEventListener("pointerdown", (event) => {
   beginMarquee(event);
 });
 
-// Pointer-capture-aware: listen on both shell and window, dedup by pointerId+timeStamp
-const _handledMoves = new Map();
-function handlePointerMoveDedup(event) {
-  const key = event.pointerId + ":" + event.timeStamp;
-  if (_handledMoves.get(key)) return;
-  _handledMoves.set(key, true);
-  // Flush old entries to avoid memory leak
-  if (_handledMoves.size > 8) {
-    const first = _handledMoves.keys().next().value;
-    _handledMoves.delete(first);
-  }
-  handlePointerMove(event);
-}
-shell.addEventListener("pointermove", handlePointerMoveDedup);
-window.addEventListener("pointermove", handlePointerMoveDedup);
+window.addEventListener("pointermove", handlePointerMove);
 shell.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointercancel", finishPointerInteraction);
@@ -4033,11 +3966,6 @@ window.addEventListener("keydown", (event) => {
     if (event.key === "0") {
       event.preventDefault();
       setCanvasZoom(1);
-      return;
-    }
-    if (event.key === "1") {
-      event.preventDefault();
-      fitToView();
       return;
     }
   }
@@ -4170,12 +4098,6 @@ assetLibraryGrid?.addEventListener("dragstart", (event) => {
   event.dataTransfer.effectAllowed = "copy";
   event.dataTransfer.setData("application/x-reelay-asset", assetId);
   event.dataTransfer.setData("text/plain", assetId);
-});
-
-document.querySelector("[data-canvas-tool='fit']")?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  fitToView();
-  closeCanvasPanel();
 });
 
 shareProjectBtn?.addEventListener("click", shareProject);
