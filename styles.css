@@ -209,6 +209,10 @@ html[data-theme="light"] .brand-mark {
   transition: opacity 0.14s ease;
 }
 
+.app-shell.asset-library-open .canvas-tools {
+  left: 458px;
+}
+
 .top-actions {
   position: fixed;
   z-index: 44;
@@ -1381,6 +1385,7 @@ html[data-theme="light"] .asset-lib-tooltip {
   z-index: 40;
   pointer-events: auto;
   background: transparent;
+  transition: left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 
@@ -1405,6 +1410,9 @@ html[data-theme="light"] .asset-lib-tooltip {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: 0;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
