@@ -1894,7 +1894,19 @@ function bindGroupFrameEvents(el, group) {
       groupOrigin: bounds ? { x: bounds.left, y: bounds.top } : { x: group.x || 0, y: group.y || 0 },
       origins: nodes.map((node) => ({ id: node.id, x: node.x, y: node.y })),
     };
-    shell.setPointerCapture(event.pointerId);
+    (function attachGroupDrag(pid) {
+      function onGMove(evt) { if (evt.pointerId !== pid) return; handlePointerMove(evt); }
+      function onGEnd(evt) {
+        if (evt.pointerId !== pid) return;
+        document.removeEventListener("pointermove", onGMove);
+        document.removeEventListener("pointerup",   onGEnd);
+        document.removeEventListener("pointercancel", onGEnd);
+        finishPointerInteraction(evt);
+      }
+      document.addEventListener("pointermove", onGMove);
+      document.addEventListener("pointerup",   onGEnd);
+      document.addEventListener("pointercancel", onGEnd);
+    })(event.pointerId);
     render();
   });
 
@@ -1984,7 +1996,8 @@ function createAssetNodeElement(node) {
   const selected = state.selectedIds.has(node.id);
   const el = document.createElement("article");
   el.className = `canvas-node generator-node asset-node ${asset?.type || "media"}-source ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
-  el.style.transform = `translate(${node.x}px, ${node.y}px)`;
+  el.style.left = `${node.x}px`;
+  el.style.top = `${node.y}px`;
   el.style.width = `${layout.nodeWidth}px`;
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
@@ -2007,7 +2020,8 @@ function createGeneratorNodeElement(node) {
   const selected = state.selectedIds.has(node.id);
   const el = document.createElement("article");
   el.className = `canvas-node generator-node ${node.mode}-mode ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
-  el.style.transform = `translate(${node.x}px, ${node.y}px)`;
+  el.style.left = `${node.x}px`;
+  el.style.top = `${node.y}px`;
   el.style.width = `${layout.nodeWidth}px`;
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
@@ -2914,7 +2928,22 @@ function handleNodePointerDown(event, nodeId) {
     startClientY: event.clientY,
     origins: selectedNodes.map((item) => ({ id: item.id, x: item.x, y: item.y })),
   };
-  shell.setPointerCapture(event.pointerId);
+  // Use dedicated document-level listeners so drag works regardless of
+  // pointer capture behaviour differences across browsers.
+  function onDragMove(evt) {
+    if (evt.pointerId !== event.pointerId) return;
+    handlePointerMove(evt);
+  }
+  function onDragEnd(evt) {
+    if (evt.pointerId !== event.pointerId) return;
+    document.removeEventListener("pointermove", onDragMove);
+    document.removeEventListener("pointerup",   onDragEnd);
+    document.removeEventListener("pointercancel", onDragEnd);
+    finishPointerInteraction(evt);
+  }
+  document.addEventListener("pointermove",   onDragMove);
+  document.addEventListener("pointerup",     onDragEnd);
+  document.addEventListener("pointercancel", onDragEnd);
   render();
 }
 
@@ -3665,7 +3694,8 @@ function moveDraggedNodes(action, event) {
     node.y = origin.y + dy;
     const nodeElement = nodeLayer.querySelector(`[data-id="${node.id}"]`);
     if (nodeElement) {
-      nodeElement.style.transform = `translate(${node.x}px, ${node.y}px)`;
+      nodeElement.style.left = `${node.x}px`;
+      nodeElement.style.top = `${node.y}px`;
       nodeElement.style.zIndex = String(node.z);
     }
   }

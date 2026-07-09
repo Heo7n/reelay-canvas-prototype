@@ -1686,13 +1686,10 @@ html[data-theme="light"] .group-resize-handle {
 .canvas-node,
 .generator-node {
   position: absolute;
-  top: 0;
-  left: 0;
   width: var(--node-w);
   min-height: 0;
   user-select: none;
   pointer-events: none;
-  will-change: transform;
 }
 
 .media-frame {
