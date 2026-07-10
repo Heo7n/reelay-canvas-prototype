@@ -2427,7 +2427,6 @@ function renameMediaNode(node, value) {
   if (JSON.stringify(before) !== JSON.stringify(node)) {
     before.panel = null;
     pushUndoAction({ type: "node-update", node: before });
-    showUndoToast();
   }
 }
 
@@ -2955,7 +2954,6 @@ function handleAction(node, action, value) {
   if (before && JSON.stringify(before) !== JSON.stringify(node)) {
     before.panel = null;
     pushUndoAction({ type: "node-update", node: before });
-    showUndoToast();
   }
   render();
 }
@@ -3077,7 +3075,14 @@ function pushUndoAction(action) {
 
 function deleteSelectedNodes(confirmed = false) {
   if (state.activeGroupId && !state.selectedIds.size) {
-    ungroup(state.activeGroupId);
+    const group = getGroupById(state.activeGroupId);
+    if (!group) return;
+    showConfirmDialog({
+      title: "解组确认",
+      body: `将取消「${group.name || "新建组"}」的组框，但保留组内所有节点。\n可通过 Ctrl+Z 恢复最近一次解组。`,
+      confirmText: "解组",
+      onConfirm: () => ungroup(group.id),
+    });
     return;
   }
 
@@ -3158,6 +3163,11 @@ function undoLastAction() {
     setSelection(action.positions.map((position) => position.id), action.positions[0]?.id || null);
   }
 
+  if (action.type === "group-update") {
+    restoreGroupSnapshot(action.groups);
+    setActiveGroup(action.activeGroupId || null);
+  }
+
   if (action.type === "node-update") {
     const index = state.nodes.findIndex((node) => node.id === action.node.id);
     if (index !== -1) {
@@ -3176,8 +3186,10 @@ function undoLastAction() {
   render();
 }
 
-function showUndoToast() {
+function showUndoToast(message = "已删除，可撤销") {
   if (!undoToast) return;
+  const label = undoToast.querySelector("span");
+  if (label) label.textContent = message;
   undoToast.classList.remove("hidden");
   window.clearTimeout(showUndoToast.timeoutId);
   showUndoToast.timeoutId = window.setTimeout(() => {
@@ -3527,7 +3539,6 @@ function commitProjectRename() {
   document.title = `${nextName} · Reelay Canvas`;
   if (previousName !== nextName) {
     pushUndoAction({ type: "project-rename", name: previousName });
-    showUndoToast();
   }
 }
 
@@ -3621,11 +3632,13 @@ function arrangeGroup(group, layout = "grid") {
 function ungroup(groupId) {
   const group = getGroupById(groupId);
   if (!group) return;
+  const groupsBefore = state.groups.map((item) => cloneGroupState(item));
   for (const node of getGroupNodes(group)) {
     if (node.groupId === groupId) delete node.groupId;
   }
   state.groups = state.groups.filter((item) => item.id !== groupId);
   state.activeGroupId = null;
+  pushUndoAction({ type: "group-update", groups: groupsBefore, activeGroupId: groupId });
   render();
 }
 
@@ -4101,13 +4114,11 @@ function finishPointerInteraction(event) {
     updateDraggedNodeGroupMembership(action.ids);
     if (action.moved && !action.isDuplicate) {
       pushUndoAction({ type: "move", positions: action.origins, groups: action.groups });
-      showUndoToast();
     }
     render();
   } else if (action.type === "drag-group" || action.type === "resize-group") {
     if (action.moved) {
       pushUndoAction({ type: "move", positions: action.origins || [], groups: action.groups });
-      showUndoToast();
     }
     render();
   }
