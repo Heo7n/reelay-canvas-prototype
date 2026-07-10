@@ -283,11 +283,13 @@ const state = {
   agentModelId: "gpt-image-2",
   agentModelIds: ["gpt-image-2"],
   agentModelTab: "image",
+  agentModelAuto: false,
   account: {
     credits: 3000,
     consumedCredits: 0,
   },
   mediaToolPreferences: loadMediaToolPreferences(),
+  mediaToolbarNodeId: null,
   libraryAssets: [],
   personalLibraryAssets: [],
   organizationLibraryAssets: [],
@@ -974,6 +976,9 @@ function setSelection(ids, activeId = null, options = {}) {
   const uniqueIds = ids.filter((id, index) => ids.indexOf(id) === index);
   state.selectedIds = new Set(uniqueIds);
   state.activeId = activeId && state.selectedIds.has(activeId) ? activeId : uniqueIds[uniqueIds.length - 1] || null;
+  if (uniqueIds.length !== 1 || !state.selectedIds.has(state.mediaToolbarNodeId)) {
+    state.mediaToolbarNodeId = null;
+  }
   state.nodes.forEach((node) => {
     if (uniqueIds.length !== 1 || node.id !== state.activeId) {
       node.mediaMenuOpen = false;
@@ -1010,6 +1015,16 @@ function collapseAllGeneratorPanels() {
     node.expanded = false;
     node.panel = null;
   }
+}
+
+function closeMediaToolbarState() {
+  let changed = Boolean(state.mediaToolbarNodeId);
+  state.mediaToolbarNodeId = null;
+  state.nodes.forEach((node) => {
+    if (node.mediaMenuOpen) changed = true;
+    node.mediaMenuOpen = false;
+  });
+  return changed;
 }
 
 function escapeHtml(value) {
@@ -1192,6 +1207,15 @@ function getNodeMediaType(node) {
   return getEditableMedia(node)?.type || node.mode || "image";
 }
 
+function shouldShowMediaEditToolbar(node) {
+  return Boolean(
+    getEditableMedia(node) &&
+      state.selectedIds.size === 1 &&
+      state.selectedIds.has(node.id) &&
+      state.mediaToolbarNodeId === node.id,
+  );
+}
+
 function getMediaToolLabel(toolId, type) {
   if (toolId !== "enhance") return mediaToolDefinitions[toolId]?.label || toolId;
   if (type === "audio") return "音质增强";
@@ -1212,7 +1236,7 @@ function mediaToolButton(toolId, type, showLabel) {
 
 function mediaEditToolbar(node, layout) {
   const asset = getEditableMedia(node);
-  if (!asset || state.selectedIds.size !== 1 || !state.selectedIds.has(node.id)) return "";
+  if (!asset || !shouldShowMediaEditToolbar(node)) return "";
   const type = getNodeMediaType(node);
   const preference = state.mediaToolPreferences[type] || defaultMediaToolPreferences[type];
   const showLabels = preference.showLabels && layout.mediaWidth >= 440;
@@ -1811,6 +1835,7 @@ function getNodeRenderSignature(node) {
   const renderState = Object.fromEntries(
     Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId"].includes(key)),
   );
+  renderState.mediaToolbarVisible = shouldShowMediaEditToolbar(node);
   return JSON.stringify(renderState);
 }
 
@@ -2953,9 +2978,16 @@ function handleNodePointerDown(event, nodeId) {
   const isControl = target.closest("button, textarea, input, [contenteditable='true'], .panel-popover, .material-panel, .asset-card, audio, .media-title, .media-spec");
   if (isControl) {
     state.activeId = nodeId;
+    const hadMediaToolbar = state.mediaToolbarNodeId === node.id;
+    if (target.closest(".media-spec") && getEditableMedia(node)) {
+      state.mediaToolbarNodeId = node.id;
+    }
     bringNodesToFront([node]);
     const nodeElement = target.closest(".canvas-node");
     if (nodeElement) nodeElement.style.zIndex = String(node.z);
+    if (!hadMediaToolbar && state.mediaToolbarNodeId === node.id && !target.closest(".media-edit-toolbar")) {
+      render();
+    }
     return;
   }
 
@@ -2974,6 +3006,9 @@ function handleNodePointerDown(event, nodeId) {
 
   setSelection(nextSelection, nodeId);
   collapseInactiveNodes(nodeId);
+
+  const editableMediaClicked = Boolean(target.closest(".media-frame") && getEditableMedia(node));
+  state.mediaToolbarNodeId = editableMediaClicked ? node.id : null;
 
   if (node.kind === "generator" && target.closest(".media-frame")) {
     node.expanded = true;
@@ -3293,7 +3328,7 @@ function renderAgentModelMenu() {
     const active = selectedIds.has(model.id);
     return `
       <button class="agent-model-option ${active ? "active" : ""}" type="button" data-agent-model="${model.id}" aria-pressed="${active}">
-        <span class="agent-model-provider"><i data-lucide="aperture" aria-hidden="true"></i></span>
+        <span class="agent-model-provider">${escapeHtml(model.icon)}</span>
         <span class="agent-model-copy">
           <span class="agent-model-title">${escapeHtml(model.name)}</span>
           <span class="agent-model-detail">${escapeHtml(model.desc)}</span>
@@ -3310,26 +3345,31 @@ function renderAgentModelMenu() {
         <div class="agent-model-menu-title">模型偏好</div>
         <label class="agent-auto-toggle">
           <span>自动</span>
-          <input type="checkbox" />
+          <input type="checkbox" data-agent-auto ${state.agentModelAuto ? "checked" : ""} />
           <i aria-hidden="true"></i>
         </label>
       </div>
-      <div class="agent-model-tabs" role="tablist" aria-label="模型类型">
-        <button class="${activeTab === "image" ? "active" : ""}" type="button" data-agent-model-tab="image">Image</button>
-        <button class="${activeTab === "video" ? "active" : ""}" type="button" data-agent-model-tab="video">Video</button>
+      <div class="agent-model-tabs" style="--active-index: ${activeTab === "video" ? 1 : 0}" role="tablist" aria-label="模型类型">
+        <span class="agent-model-tab-indicator" aria-hidden="true"></span>
+        <button class="${activeTab === "image" ? "active" : ""}" type="button" data-agent-model-tab="image">图片</button>
+        <button class="${activeTab === "video" ? "active" : ""}" type="button" data-agent-model-tab="video">视频</button>
       </div>
     </div>
     <div class="agent-model-scroll">
-      <div class="agent-model-section ${activeTab === "image" ? "" : "hidden"}" data-agent-model-section="image">
-        <div class="agent-model-section-label">Image</div>
+      <div class="agent-model-section" data-agent-model-section="image">
+        <div class="agent-model-section-label">图片模型</div>
         <div class="agent-model-list">${imageModels.map(renderOption).join("")}</div>
       </div>
-      <div class="agent-model-section ${activeTab === "video" ? "" : "hidden"}" data-agent-model-section="video">
-        <div class="agent-model-section-label">Video</div>
+      <div class="agent-model-section" data-agent-model-section="video">
+        <div class="agent-model-section-label">视频模型</div>
         <div class="agent-model-list">${videoModels.map(renderOption).join("")}</div>
       </div>
     </div>
   `;
+  const scroll = agentModelMenu.querySelector(".agent-model-scroll");
+  scroll?.addEventListener("scroll", syncAgentModelTabFromScroll, { passive: true });
+  scroll?.addEventListener("wheel", () => requestAnimationFrame(syncAgentModelTabFromScroll), { passive: true });
+  updateAgentModelTabUi(activeTab);
   refreshIcons();
 }
 
@@ -3356,14 +3396,36 @@ function toggleAgentModel(modelId) {
 function setAgentModelTab(tab) {
   if (!agentModelMenu) return;
   state.agentModelTab = tab === "video" ? "video" : "image";
-  agentModelMenu.querySelectorAll("[data-agent-model-tab]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.agentModelTab === state.agentModelTab);
-  });
-  agentModelMenu.querySelectorAll("[data-agent-model-section]").forEach((section) => {
-    section.classList.toggle("hidden", section.dataset.agentModelSection !== state.agentModelTab);
-  });
   const scroll = agentModelMenu.querySelector(".agent-model-scroll");
-  if (scroll) scroll.scrollTop = 0;
+  const section = agentModelMenu.querySelector(`[data-agent-model-section="${state.agentModelTab}"]`);
+  updateAgentModelTabUi(state.agentModelTab);
+  if (scroll && section) {
+    scroll.scrollTo({
+      top: section.offsetTop - scroll.offsetTop,
+      behavior: "smooth",
+    });
+  }
+}
+
+function updateAgentModelTabUi(tab = state.agentModelTab) {
+  if (!agentModelMenu) return;
+  const nextTab = tab === "video" ? "video" : "image";
+  state.agentModelTab = nextTab;
+  agentModelMenu.querySelector(".agent-model-tabs")?.style.setProperty("--active-index", nextTab === "video" ? "1" : "0");
+  agentModelMenu.querySelectorAll("[data-agent-model-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.agentModelTab === nextTab);
+  });
+}
+
+function syncAgentModelTabFromScroll() {
+  if (!agentModelMenu) return;
+  const scroll = agentModelMenu.querySelector(".agent-model-scroll");
+  const videoSection = agentModelMenu.querySelector('[data-agent-model-section="video"]');
+  if (!scroll || !videoSection) return;
+  const scrollRect = scroll.getBoundingClientRect();
+  const videoRect = videoSection.getBoundingClientRect();
+  const switchLine = scrollRect.top + Math.min(96, scrollRect.height * 0.34);
+  updateAgentModelTabUi(videoRect.top <= switchLine ? "video" : "image");
 }
 
 function getResolvedTheme(mode = state.themeMode) {
@@ -4452,6 +4514,12 @@ agentModelMenu?.addEventListener("click", (event) => {
   if (!option) return;
   toggleAgentModel(option.dataset.agentModel);
 });
+agentModelMenu?.addEventListener("change", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const autoInput = target?.closest("[data-agent-auto]");
+  if (!autoInput) return;
+  state.agentModelAuto = autoInput.checked;
+});
 agentResizeHandle?.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -4486,12 +4554,8 @@ document.addEventListener("click", (event) => {
   if (!target?.closest(".group-frame")) {
     closeGroupLayoutMenus();
   }
-  if (!target?.closest(".media-edit-toolbar")) {
-    const openMediaMenus = state.nodes.filter((node) => node.mediaMenuOpen);
-    if (openMediaMenus.length) {
-      openMediaMenus.forEach((node) => {
-        node.mediaMenuOpen = false;
-      });
+  if (!target?.closest(".media-edit-toolbar, .media-frame")) {
+    if (closeMediaToolbarState()) {
       render();
     }
   }
