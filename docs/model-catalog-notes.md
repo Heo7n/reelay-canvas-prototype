@@ -17,11 +17,9 @@
 - 字节跳动正式发布的是 `Seedream 5.0 Lite`；未收录无法从官方资料核实的 `Seedream 5.0 Pro`。
 - Seedance 收录 `2.0`、`2.0 Fast`、`2.0 Mini` 三档。
 - 可灵收录 `Video 3.0` 与 `Video 3.0 Omni`。
-- Suno 正式模型名是 `v5.5`；Pro 是订阅层级。
-- ElevenLabs收录 `Music v2` 与 `Sound Effects v2`。
 - Sora 2 未收录，因为 OpenAI 官方页面标注该产品已于 2026-04-26 停止提供。
 
-当前共 17 个模型：图片 7 个、视频 6 个、音频 4 个。
+当前共 13 个模型：图片 7 个、视频 6 个。音频暂不提供生成模型，只保留画布素材上传、播放与编辑能力。
 
 ## 参数校验
 
@@ -34,7 +32,6 @@
 - Seedance 2.0：`720p / 1080p / 4K`；Fast 与 Mini：`480p / 720p`；时长均限制在 4 至 15 秒的产品范围内。火山引擎当前页面对 4K 同时存在模型直出与 MediaKit 后处理口径，真实 API 接入时必须以端点能力响应为准。
 - Veo 3.1：`720p` 支持 4/6/8 秒；选择 `1080p` 或 `4K` 时自动限制为 8 秒；单次只生成 1 个视频。
 - Kling Video 3.0 系列：`720p / 1080p`，时长在官方 3 至 15 秒范围内。
-- Suno v5.5：最长 8 分钟；Eleven Music v2 最长 5 分钟；Eleven Sound Effects v2 最长 30 秒；Stable Audio 最长 3 分钟。
 
 ## 主要来源
 
@@ -45,9 +42,6 @@
 - [火山引擎 Seedance 2.0](https://www.volcengine.com/activity/seedance2)
 - [Google Veo 3.1 参数](https://ai.google.dev/gemini-api/docs/video)
 - [可灵 3.0 用户指南](https://app.klingai.com/cn/quickstart/klingai-video-3-model-user-guide)
-- [Suno v5.5](https://about.suno.com/release-notes/introducing-v5-5-voices-custom-models-and-my-taste)
-- [ElevenLabs Music v2](https://elevenlabs.io/docs/eleven-creative/products/music)
-- [ElevenLabs Sound Effects](https://elevenlabs.io/docs/overview/capabilities/sound-effects)
 
 ## 真实接入提醒
 

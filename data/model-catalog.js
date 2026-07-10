@@ -199,58 +199,6 @@ window.REELAY_MODEL_CATALOG = Object.freeze(
         counts: [1],
       },
     },
-    {
-      id: "suno-v5-5",
-      type: "audio",
-      provider: "Suno",
-      name: "Suno v5.5",
-      desc: "完整歌曲、Voices、个性化与丰富编曲",
-      icon: "SU",
-      badge: "8m",
-      capabilities: {
-        durations: ["30s", "60s", "120s", "240s", "480s"],
-        counts: [1, 2],
-      },
-    },
-    {
-      id: "eleven-music-v2",
-      type: "audio",
-      provider: "ElevenLabs",
-      name: "Eleven Music v2",
-      desc: "长篇分段作曲、多语言与局部重组",
-      icon: "EM",
-      badge: "5m",
-      capabilities: {
-        durations: ["30s", "60s", "120s", "300s"],
-        counts: [1, 2],
-      },
-    },
-    {
-      id: "eleven-sfx-v2",
-      type: "audio",
-      provider: "ElevenLabs",
-      name: "Eleven Sound Effects v2",
-      desc: "可控时长、循环与影视级声音设计",
-      icon: "SFX",
-      badge: "30s",
-      capabilities: {
-        durations: ["4s", "8s", "15s", "30s"],
-        counts: [1, 2, 4],
-      },
-    },
-    {
-      id: "stable-audio",
-      type: "audio",
-      provider: "Stability AI",
-      name: "Stable Audio",
-      desc: "音乐、音效与声音氛围生成",
-      icon: "AU",
-      badge: "3m",
-      capabilities: {
-        durations: ["30s", "60s", "120s", "180s"],
-        counts: [1, 2, 4],
-      },
-    },
   ].map((model) =>
     Object.freeze({
       ...model,

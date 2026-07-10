@@ -117,14 +117,6 @@ const simulationAssets = {
     height: 720,
     aspectRatio: 16 / 9,
   },
-  audio: {
-    type: "audio",
-    name: "Reelay simulated audio",
-    displayName: "Generated audio",
-    url: "https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3",
-    duration: 0,
-    aspectRatio: 16 / 9,
-  },
 };
 
 const officialLibraryAssets = [
@@ -458,13 +450,14 @@ function nextZ() {
 }
 
 function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
+  const generationMode = mode === "video" ? "video" : "image";
   const node = {
     id: crypto.randomUUID(),
     kind: "generator",
     x,
     y,
-    mode,
-    model: firstModelId(mode),
+    mode: generationMode,
+    model: firstModelId(generationMode),
     aspect: "16:9",
     resolution: "2K",
     quality: "480p",
@@ -480,7 +473,7 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     promptInputHeight: layoutRules.largePromptMinHeight,
     mediaMenuOpen: false,
     panel: null,
-    modelFilter: mode,
+    modelFilter: generationMode,
     z: nextZ(),
     assets: [],
     activeAssetId: null,
@@ -556,20 +549,12 @@ function getCost(node) {
     const qualityMultiplier = imageQualityMultiplier[node.quality] || 1;
     return Math.ceil((imageResolutionCost[node.resolution] || 5) * qualityMultiplier) * node.count;
   }
-  if (node.mode === "audio") {
-    const seconds = Number.parseInt(node.duration, 10) || 30;
-    return Math.max(3, Math.ceil(seconds / 30) * 5) * node.count;
-  }
-
   const seconds = Number.parseInt(node.duration, 10) || 4;
   const durationMultiplier = Math.ceil(seconds / 4);
   return (videoQualityCost[node.quality] || 8) * durationMultiplier * node.count;
 }
 
 function getParamLabel(node) {
-  if (node.mode === "audio") {
-    return node.duration;
-  }
   if (node.mode === "video") {
     return `${node.aspect} · ${node.quality} · ${node.duration}`;
   }
@@ -595,7 +580,6 @@ function getMediaRatio(node) {
     return layoutRules.defaultRatio;
   }
 
-  if (node.mode === "audio") return layoutRules.audioRatio;
   return aspectStringToRatio(node.aspect);
 }
 
@@ -951,15 +935,15 @@ function rememberPreset(node) {
 }
 
 function applyPreset(node, preset) {
-  node.mode = preset.mode;
+  node.mode = preset.mode === "video" ? "video" : "image";
   node.model = preset.model;
   node.aspect = preset.aspect;
   node.resolution = preset.resolution;
   node.quality = preset.quality;
   node.duration = preset.duration;
   node.count = preset.count;
-  node.modelFilter = preset.mode;
   normalizeNodeParameters(node);
+  node.modelFilter = node.mode;
 }
 
 function cloneNode(source) {
@@ -1104,7 +1088,6 @@ function getAssetDisplayName(asset) {
 }
 
 function defaultGeneratedName(node) {
-  if (node.mode === "audio") return "未命名音频";
   return node.mode === "video" ? "未命名视频" : "未命名图片";
 }
 
@@ -1172,7 +1155,6 @@ function getMediaSpec(node, asset = getActiveAsset(node)) {
   }
 
   if (!node.preview) return "";
-  if (node.generatedAsset?.type === "audio") return formatDuration(node.generatedAsset.duration);
   if (node.mode === "video") return node.quality;
   if (node.generatedAsset?.width && node.generatedAsset?.height) return formatMediaSize(node.generatedAsset.width, node.generatedAsset.height);
   const size = getGeneratedResolution(node);
@@ -1555,7 +1537,7 @@ function createGeneratedAsset(node) {
   const generated = {
     ...base,
     id: crypto.randomUUID(),
-    displayName: node.mode === "video" ? "Generated video" : node.mode === "audio" ? "Generated audio" : "Generated image",
+    displayName: node.mode === "video" ? "Generated video" : "Generated image",
   };
 
   if (node.mode === "image") {
@@ -1568,11 +1550,6 @@ function createGeneratedAsset(node) {
 
   if (node.mode === "video") {
     generated.aspectRatio = aspectStringToRatio(node.aspect);
-  }
-
-  if (node.mode === "audio") {
-    generated.duration = Number.parseInt(node.duration, 10) || 4;
-    generated.aspectRatio = layoutRules.audioRatio;
   }
 
   return generated;
@@ -2703,9 +2680,13 @@ function modelPanel(node) {
   const types = [
     { id: "image", label: "图片" },
     { id: "video", label: "视频" },
-    { id: "audio", label: "音频" },
   ];
-  const activeType = node.modelFilter || node.mode;
+  const requestedType = node.modelFilter || node.mode;
+  const activeType = types.some((type) => type.id === requestedType)
+    ? requestedType
+    : node.mode === "video"
+      ? "video"
+      : "image";
   const activeIndex = Math.max(0, types.findIndex((type) => type.id === activeType));
   const sections = types
     .map((type) => {
@@ -2735,8 +2716,8 @@ function modelPanel(node) {
 
   return `
     <div class="panel-popover model-panel">
-      <div class="panel-title">选择模型</div>
-      <div class="mode-tabs" style="--active-index: ${activeIndex}">
+      <div class="panel-title">模型</div>
+      <div class="mode-tabs" style="--active-index: ${activeIndex}; --tab-count: ${types.length}">
         <span class="mode-tab-indicator" aria-hidden="true"></span>
         ${types
           .map(
@@ -2756,7 +2737,7 @@ function bindModelPanelEvents(element, node) {
   const tabs = panel?.querySelector(".mode-tabs");
   if (!panel || !list || !tabs) return;
 
-  const types = ["image", "video", "audio"];
+  const types = ["image", "video"];
   const setActiveType = (type) => {
     const index = Math.max(0, types.indexOf(type));
     node.modelFilter = types[index];
@@ -2814,24 +2795,20 @@ function materialPanel() {
 
 function paramPanel(node) {
   normalizeNodeParameters(node);
-  const sections =
-    node.mode === "audio"
-      ? [parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))]
-      : [
-          parameterSection(node, "比例", "aspect", getCapabilityValues(node, "aspects")),
-          node.mode === "video"
-            ? parameterSection(node, "画质", "quality", getCapabilityValues(node, "qualities"))
-            : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
-          node.mode === "image" && getCapabilityValues(node, "qualities").length
-            ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
-            : "",
-          node.mode === "video"
-            ? parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))
-            : "",
-        ];
+  const sections = [
+    parameterSection(node, "比例", "aspect", getCapabilityValues(node, "aspects")),
+    node.mode === "video"
+      ? parameterSection(node, "画质", "quality", getCapabilityValues(node, "qualities"))
+      : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
+    node.mode === "image" && getCapabilityValues(node, "qualities").length
+      ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
+      : "",
+    node.mode === "video"
+      ? parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))
+      : "",
+  ];
   return `
     <div class="panel-popover param-panel">
-      <div class="panel-title">参数</div>
       <div class="param-section">${sections.join("")}</div>
     </div>
   `;
@@ -2839,16 +2816,27 @@ function paramPanel(node) {
 
 function parameterSection(node, label, action, values) {
   if (!values?.length) return "";
+  const columns = values.length > 7 ? Math.ceil(values.length / 2) : values.length;
   return `
-    <div class="param-heading">${label}</div>
-    <div class="segmented" style="grid-template-columns: repeat(${Math.min(values.length, 5)}, minmax(0, 1fr))">
+    <section class="parameter-group parameter-${action}">
+      <div class="param-heading">${label}</div>
+      <div class="segmented ${action}-segmented" style="--option-columns: ${columns}">
       ${values.map((value) => paramButton(node, action, value)).join("")}
-    </div>
+      </div>
+    </section>
   `;
 }
 
 function paramButton(node, action, value) {
-  return `<button class="${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" type="button">${value}</button>`;
+  const aspectIcon = action === "aspect" ? renderAspectIcon(value) : "";
+  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" type="button">${aspectIcon}<span>${value}</span></button>`;
+}
+
+function renderAspectIcon(value) {
+  const ratio = aspectStringToRatio(value);
+  const width = ratio >= 1 ? 16 : Math.max(6, Math.round(16 * ratio));
+  const height = ratio >= 1 ? Math.max(6, Math.round(16 / ratio)) : 16;
+  return `<i class="aspect-option-icon" style="--aspect-width: ${width}px; --aspect-height: ${height}px" aria-hidden="true"></i>`;
 }
 
 function handleAction(node, action, value) {
