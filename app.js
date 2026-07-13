@@ -8,20 +8,32 @@ const canvasTools = document.querySelector("#canvasTools");
 const canvasToolButtons = document.querySelectorAll("[data-canvas-tool]");
 const canvasToolPopovers = document.querySelectorAll("[data-canvas-popover]");
 const minimapSurface = document.querySelector("#minimapSurface");
-const zoomPanel = document.querySelector("#zoomPanel");
-const zoomChip = document.querySelector("#zoomChip");
-const projectTitle = document.querySelector("#projectTitle");
+const zoomSlider = document.querySelector("#zoomSlider");
+const projectNameEls = document.querySelectorAll("[data-project-name]");
+const canvasNameEls = document.querySelectorAll("[data-canvas-name]");
+const projectMenu = document.querySelector("#projectMenu");
+const canvasMenu = document.querySelector("#canvasMenu");
+const canvasMenuList = document.querySelector("#canvasMenuList");
+const canvasMoreMenu = document.querySelector("#canvasMoreMenu");
 const railLibraryBtn = document.querySelector("#railLibraryBtn");
 const railProfileBtn = document.querySelector("#railProfileBtn");
 const shareProjectBtn = document.querySelector("#shareProjectBtn");
 const profileMenu = document.querySelector("#profileMenu");
+const profileCreditCard = document.querySelector("#profileCreditCard");
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
-const assetLibraryUploadBtn = document.querySelector("#assetLibraryUploadBtn");
 const assetLibraryGrid = document.querySelector("#assetLibraryGrid");
 const assetLibraryCount = document.querySelector("#assetLibraryCount");
 const assetLibraryContext = document.querySelector("#assetLibraryContext");
-const themeSubmenu = document.querySelector("#themeSubmenu");
+const assetLibrarySearchInput = document.querySelector("#assetLibrarySearchInput");
+const assetLibraryTabs = document.querySelector("#assetLibraryTabs");
+const assetLibraryModeTabs = document.querySelector("#assetLibraryModeTabs");
+const assetLibraryProjectName = document.querySelector("#assetLibraryProjectName");
+const assetLibraryGlobalBtn = document.querySelector("#assetLibraryGlobalBtn");
+const assetLibraryResizeHandle = document.querySelector("#assetLibraryResizeHandle");
+const profileHelpSubmenu = document.querySelector("#profileHelpSubmenu");
+const themeModeIcon = document.querySelector("#themeModeIcon");
+const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
 const avatarCreditBadge = document.querySelector("#avatarCreditBadge");
 const profileCreditAvailable = document.querySelector("#profileCreditAvailable");
@@ -31,7 +43,10 @@ const emptyCreateBtn = document.querySelector("#emptyCreateBtn");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
 const selectionToolbar = document.querySelector("#selectionToolbar");
+let profileMenuCloseTimer = null;
+const selectionCount = document.querySelector("#selectionCount");
 const selectionSortMenu = document.querySelector("#selectionSortMenu");
+const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
 const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
 const agentPanel = document.querySelector("#agentPanel");
@@ -71,7 +86,11 @@ function syncFaviconContrast() {
     context.strokeStyle = "#15171b";
     context.stroke();
     context.drawImage(source, 10, 10, 44, 44);
-    appFavicon.href = canvas.toDataURL("image/png");
+    try {
+      appFavicon.href = canvas.toDataURL("image/png");
+    } catch {
+      appFavicon.href = "./assets/reelay-logo.png";
+    }
   };
   source.src = "./assets/reelay-logo.png";
 }
@@ -240,7 +259,7 @@ const layoutRules = {
 };
 
 const canvasScaleLimits = {
-  min: 0.38,
+  min: 0.2,
   max: 2,
 };
 
@@ -279,6 +298,9 @@ const state = {
   agentOpen: false,
   agentWidth: 420,
   projectName: "Untitled",
+  canvases: [],
+  activeCanvasId: null,
+  canvasMoreTargetId: null,
   activeConversationId: "new",
   agentModelId: "gpt-image-2",
   agentModelIds: ["gpt-image-2"],
@@ -293,9 +315,14 @@ const state = {
   libraryAssets: [],
   personalLibraryAssets: [],
   organizationLibraryAssets: [],
+  libraryView: "canvas",
+  librarySearch: "",
   libraryFilter: "all",
   libraryScope: "project",
   libraryTargetNodeId: null,
+  libraryCollapsedGroups: new Set(),
+  globalLibraryDisplay: "preview",
+  assetLibraryWidth: 440,
   themeMode: localStorage.getItem("reelay-theme-mode") || "dark",
   canvasPanel: null,
   overlaySyncTimer: null,
@@ -305,8 +332,85 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function setAssetLibraryWidth(width) {
+  state.assetLibraryWidth = clamp(width, 380, Math.min(780, window.innerWidth - 96));
+  appShell?.style.setProperty("--asset-panel-width", `${Math.round(state.assetLibraryWidth)}px`);
+  renderMinimap();
+}
+
 function firstModelId(type) {
   return models.find((item) => item.type === type)?.id || models[0].id;
+}
+
+function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    nodes: [],
+    groups: [],
+    tx: 0,
+    ty: 0,
+    scale: 1,
+    zCounter: 1,
+  };
+}
+
+function getActiveCanvas() {
+  return state.canvases.find((canvas) => canvas.id === state.activeCanvasId) || state.canvases[0] || null;
+}
+
+function saveActiveCanvasState() {
+  const canvas = getActiveCanvas();
+  if (!canvas) return;
+  canvas.nodes = state.nodes;
+  canvas.groups = state.groups;
+  canvas.tx = state.tx;
+  canvas.ty = state.ty;
+  canvas.scale = state.scale;
+  canvas.zCounter = state.zCounter;
+}
+
+function loadCanvasState(canvas) {
+  if (!canvas) return;
+  state.nodes = canvas.nodes;
+  state.groups = canvas.groups;
+  state.tx = canvas.tx;
+  state.ty = canvas.ty;
+  state.scale = canvas.scale;
+  state.zCounter = canvas.zCounter;
+  state.selectedIds = new Set();
+  state.activeId = null;
+  state.activeGroupId = null;
+  state.mediaToolbarNodeId = null;
+  closeCanvasPanel();
+  closeMediaToolbarState();
+  applyTransform();
+  render();
+}
+
+function syncProjectNavigation() {
+  const canvas = getActiveCanvas();
+  projectNameEls.forEach((element) => {
+    if (element.textContent !== state.projectName) element.textContent = state.projectName;
+  });
+  canvasNameEls.forEach((element) => {
+    const nextName = canvas?.name || "画布 1";
+    if (element.textContent !== nextName) element.textContent = nextName;
+  });
+  document.title = `${state.projectName} · Reelay Canvas`;
+}
+
+function initializeCanvases() {
+  const initialCanvas = createCanvasRecord("画布 1");
+  initialCanvas.nodes = state.nodes;
+  initialCanvas.groups = state.groups;
+  initialCanvas.tx = state.tx;
+  initialCanvas.ty = state.ty;
+  initialCanvas.scale = state.scale;
+  initialCanvas.zCounter = state.zCounter;
+  state.canvases = [initialCanvas];
+  state.activeCanvasId = initialCanvas.id;
+  syncProjectNavigation();
 }
 
 function screenToWorld(clientX, clientY) {
@@ -343,11 +447,16 @@ function updateCanvasGrid() {
 
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
+  saveActiveCanvasState();
   updateCanvasGrid();
   syncPromptPanelLayouts();
   window.clearTimeout(state.overlaySyncTimer);
   state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
-  if (zoomChip) zoomChip.textContent = `${Math.round(state.scale * 100)}%`;
+  if (zoomSlider) {
+    const zoomValue = String(Math.round(state.scale * 100));
+    zoomSlider.value = zoomValue;
+    zoomSlider.setAttribute("aria-valuetext", `${zoomValue}%`);
+  }
   renderSelectionToolbar();
   renderMinimap();
 }
@@ -406,6 +515,107 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
   applyTransform();
 }
 
+function getCanvasFitFrame() {
+  const rect = shell.getBoundingClientRect();
+  const leftInset = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
+    ? assetLibraryPanel.getBoundingClientRect().width
+    : 0;
+  const rightInset = state.agentOpen ? state.agentWidth : 0;
+  const padding = 72;
+  return {
+    leftInset,
+    padding,
+    availableWidth: Math.max(240, rect.width - leftInset - rightInset - padding * 2),
+    availableHeight: Math.max(180, rect.height - padding * 2),
+  };
+}
+
+function applyFitBounds(bounds, options = {}) {
+  if (!bounds) return;
+  const frame = getCanvasFitFrame();
+  const fitScale = Math.min(
+    frame.availableWidth / Math.max(bounds.width, 1),
+    frame.availableHeight / Math.max(bounds.height, 1),
+  );
+  const minScale = Number.isFinite(options.minScale) ? options.minScale : canvasScaleLimits.min;
+  const nextScale = clamp(Math.max(fitScale, minScale), canvasScaleLimits.min, canvasScaleLimits.max);
+
+  state.scale = nextScale;
+  state.tx = frame.leftInset + frame.padding + (frame.availableWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale;
+  state.ty = frame.padding + (frame.availableHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale;
+  applyTransform();
+}
+
+function getBoundsFitScale(bounds) {
+  if (!bounds) return canvasScaleLimits.max;
+  const frame = getCanvasFitFrame();
+  return Math.min(
+    frame.availableWidth / Math.max(bounds.width, 1),
+    frame.availableHeight / Math.max(bounds.height, 1),
+  );
+}
+
+function distanceBetweenBounds(a, b) {
+  const gapX = Math.max(0, Math.max(a.left - b.right, b.left - a.right));
+  const gapY = Math.max(0, Math.max(a.top - b.bottom, b.top - a.bottom));
+  return Math.hypot(gapX, gapY);
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function getPrimaryContentCluster(nodes) {
+  if (nodes.length <= 2) return nodes;
+  const entries = nodes.map((node) => ({ node, bounds: getNodeBounds(node) }));
+  const medianSpan = median(entries.map(({ bounds }) => Math.max(bounds.width, bounds.height)));
+  const joinDistance = clamp(medianSpan * 2.6, 520, 1600);
+  const visited = new Set();
+  const clusters = [];
+
+  entries.forEach((entry, index) => {
+    if (visited.has(index)) return;
+    const stack = [index];
+    const cluster = [];
+    visited.add(index);
+    while (stack.length) {
+      const currentIndex = stack.pop();
+      const current = entries[currentIndex];
+      cluster.push(current);
+      entries.forEach((candidate, candidateIndex) => {
+        if (visited.has(candidateIndex)) return;
+        if (distanceBetweenBounds(current.bounds, candidate.bounds) > joinDistance) return;
+        visited.add(candidateIndex);
+        stack.push(candidateIndex);
+      });
+    }
+    clusters.push(cluster);
+  });
+
+  clusters.sort((a, b) => {
+    if (b.length !== a.length) return b.length - a.length;
+    const aBounds = getNodesContentBounds(a.map((entry) => entry.node));
+    const bBounds = getNodesContentBounds(b.map((entry) => entry.node));
+    const aArea = (aBounds?.width || 0) * (aBounds?.height || 0);
+    const bArea = (bBounds?.width || 0) * (bBounds?.height || 0);
+    if (bArea !== aArea) return bArea - aArea;
+    return Math.max(...b.map((entry) => entry.node.z || 0)) - Math.max(...a.map((entry) => entry.node.z || 0));
+  });
+  return clusters[0]?.map((entry) => entry.node) || nodes;
+}
+
+function getSmartFitNodes() {
+  const selectedNodes = state.nodes.filter((node) => state.selectedIds.has(node.id));
+  if (selectedNodes.length) return selectedNodes;
+  const allBounds = getNodesContentBounds(state.nodes);
+  const readableScale = 0.32;
+  if (!allBounds || getBoundsFitScale(allBounds) >= readableScale || state.nodes.length <= 2) return state.nodes;
+  return getPrimaryContentCluster(state.nodes);
+}
+
 function fitCanvasToContent() {
   closeCanvasPanel();
   if (!state.nodes.length) {
@@ -416,26 +626,12 @@ function fitCanvasToContent() {
     return;
   }
 
-  const bounds = getNodesContentBounds(state.nodes);
-  if (!bounds) return;
-  const rect = shell.getBoundingClientRect();
-  const leftInset = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
-    ? assetLibraryPanel.getBoundingClientRect().width
-    : 0;
-  const rightInset = state.agentOpen ? state.agentWidth : 0;
-  const padding = 72;
-  const availableWidth = Math.max(240, rect.width - leftInset - rightInset - padding * 2);
-  const availableHeight = Math.max(180, rect.height - padding * 2);
-  const nextScale = clamp(
-    Math.min(availableWidth / Math.max(bounds.width, 1), availableHeight / Math.max(bounds.height, 1)),
-    canvasScaleLimits.min,
-    canvasScaleLimits.max,
-  );
-
-  state.scale = nextScale;
-  state.tx = leftInset + padding + (availableWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale;
-  state.ty = padding + (availableHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale;
-  applyTransform();
+  const targetNodes = getSmartFitNodes();
+  const bounds = getNodesContentBounds(targetNodes);
+  const selectedActive = state.selectedIds.size > 0;
+  applyFitBounds(bounds, {
+    minScale: selectedActive || targetNodes.length === state.nodes.length ? canvasScaleLimits.min : 0.32,
+  });
 }
 
 function centerCanvasOnWorld(worldX, worldY) {
@@ -448,6 +644,8 @@ function centerCanvasOnWorld(worldX, worldY) {
 function nextZ() {
   const currentTop = Math.max(state.zCounter, ...state.nodes.map((node) => node.z || 0));
   state.zCounter = currentTop + 1;
+  const canvas = getActiveCanvas();
+  if (canvas) canvas.zCounter = state.zCounter;
   return state.zCounter;
 }
 
@@ -1035,13 +1233,113 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
-function refreshIcons() {
-  if (!window.lucide) return;
-  window.lucide.createIcons({
-    attrs: {
-      "stroke-width": 1.8,
-    },
+const fallbackIconPaths = {
+  "align-horizontal-space-around": '<path d="M4 18V6"/><path d="M20 18V6"/><path d="M8 12h8"/><path d="m14 9 3 3-3 3"/><path d="m10 9-3 3 3 3"/>',
+  "align-vertical-space-around": '<path d="M6 4h12"/><path d="M6 20h12"/><path d="M12 8v8"/><path d="m9 14 3 3 3-3"/><path d="m9 10 3-3 3 3"/>',
+  "archive": '<path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M4 4h16v3H4z"/><path d="M9 11h6"/>',
+  "arrow-up": '<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>',
+  "audio-lines": '<path d="M4 10v4"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 8v8"/><path d="M20 10v4"/>',
+  "audio-waveform": '<path d="M3 12h2"/><path d="M7 9v6"/><path d="M11 5v14"/><path d="M15 8v8"/><path d="M19 10v4"/><path d="M21 12h-1"/>',
+  "badge-check": '<path d="M12 3 14.1 5.1 17 4.4 17.8 7.2 20.6 8 19.9 10.9 22 13 19.9 15.1 20.6 18 17.8 18.8 17 21.6 14.1 20.9 12 23 9.9 20.9 7 21.6 6.2 18.8 3.4 18 4.1 15.1 2 13 4.1 10.9 3.4 8 6.2 7.2 7 4.4 9.9 5.1z"/><path d="m8.5 12.5 2.3 2.3 4.9-5"/>',
+  "badge-hd": '<path d="M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><path d="M7 10v4"/><path d="M10 10v4"/><path d="M7 12h3"/><path d="M14 10v4h2.2a2 2 0 0 0 0-4z"/>',
+  "book-open": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v15h-3a5 5 0 0 0-5 3z"/><path d="M12 6.5V22"/>',
+  "bot": '<path d="M12 8V4"/><path d="M8 4h8"/><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M9 17h6"/>',
+  "building-2": '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18"/><path d="M4 22h16"/><path d="M9 6h1"/><path d="M14 6h1"/><path d="M9 10h1"/><path d="M14 10h1"/><path d="M9 14h1"/><path d="M14 14h1"/>',
+  "check": '<path d="m5 12 4 4 10-10"/>',
+  "chevron-down": '<path d="m6 9 6 6 6-6"/>',
+  "chevron-right": '<path d="m9 6 6 6-6 6"/>',
+  "circle": '<circle cx="12" cy="12" r="8"/>',
+  "circle-dollar-sign": '<circle cx="12" cy="12" r="9"/><path d="M12 6v12"/><path d="M15.5 8.5c-.8-.6-1.8-1-3.1-1-1.7 0-3 .8-3 2.1 0 3 6.1 1.5 6.1 4.8 0 1.4-1.4 2.3-3.2 2.3-1.4 0-2.6-.4-3.6-1.2"/>',
+  "combine": '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/><path d="M13 17H9a2 2 0 0 1-2-2v-4"/>',
+  "crop": '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/><path d="M14 14 20 8"/>',
+  "download": '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  "ellipsis": '<path d="M5 12h.01"/><path d="M12 12h.01"/><path d="M19 12h.01"/>',
+  "eraser": '<path d="m7 21-4-4 9.5-9.5a3 3 0 0 1 4.2 0l1.8 1.8a3 3 0 0 1 0 4.2L11 21z"/><path d="m9 12 6 6"/><path d="M7 21h12"/>',
+  "filter-x": '<path d="M4 5h16l-6 7v5l-4 2v-7z"/><path d="m16 16 4 4"/><path d="m20 16-4 4"/>',
+  "focus": '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
+  "folder": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/>',
+  "folder-plus": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M12 10v6"/><path d="M9 13h6"/>',
+  "folders": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1"/><path d="M5 10a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/>',
+  "gauge": '<path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 14 16 9"/><path d="M5 20h14"/>',
+  "grid-3x3": '<path d="M4 4h16v16H4z"/><path d="M4 9.3h16"/><path d="M4 14.7h16"/><path d="M9.3 4v16"/><path d="M14.7 4v16"/>',
+  "image": '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-4 4-2-2-5 5"/>',
+  "images": '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M3 17V7a4 4 0 0 1 4-4h10"/><path d="m19 15-4-4-3 3-1.5-1.5L7 16"/>',
+  "keyboard": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01"/><path d="M11 10h.01"/><path d="M15 10h.01"/><path d="M7 14h10"/>',
+  "layers-3": '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+  "layout-grid": '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
+  "list": '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+  "log-out": '<path d="M10 17v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2"/><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/>',
+  "map": '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
+  "maximize-2": '<path d="M15 3h6v6"/><path d="m14 10 7-7"/><path d="M9 21H3v-6"/><path d="m10 14-7 7"/>',
+  "minimize-2": '<path d="M4 14h6v6"/><path d="m10 14-7 7"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/>',
+  "monitor": '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/>',
+  "moon": '<path d="M21 13.2A7.5 7.5 0 1 1 10.8 3 6 6 0 0 0 21 13.2z"/>',
+  "more-horizontal": '<path d="M5 12h.01"/><path d="M12 12h.01"/><path d="M19 12h.01"/>',
+  "mouse-pointer-click": '<path d="m4 4 7 17 2-7 7-2z"/><path d="M15 4h5"/><path d="M18 2v5"/>',
+  "panel-left-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 9-3 3 3 3"/>',
+  "panel-right-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="m8 9 3 3-3 3"/>',
+  "paperclip": '<path d="m21 8.5-9.5 9.5a5 5 0 0 1-7.1-7.1l10-10a3.3 3.3 0 0 1 4.7 4.7L9.5 15a1.7 1.7 0 0 1-2.4-2.4L16 3.8"/>',
+  "pause": '<path d="M8 5v14"/><path d="M16 5v14"/>',
+  "pin": '<path d="M12 17v5"/><path d="M6 17h12"/><path d="m8 3 8 8"/><path d="M9 3h6l-1 5 4 4-3 3-4-4-5 1z"/>',
+  "pin-off": '<path d="m2 2 20 20"/><path d="M12 17v5"/><path d="M6 17h12"/><path d="M9 3h6l-1 5 4 4-2 2"/><path d="M8 12l-2 .5 5-5"/>',
+  "play": '<path d="m8 5 12 7-12 7z"/>',
+  "play-square": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
+  "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  "rotate-cw": '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
+  "scan": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/>',
+  "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 8.6 19 19"/><path d="M8.6 15.4 19 5"/>',
+  "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  "send-horizontal": '<path d="M3 12 21 4l-5 16-4-7z"/><path d="M12 13 21 4"/>',
+  "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/>',
+  "settings-2": '<path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/>',
+  "share-2": '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4"/><path d="m8.6 13.5 6.8 4"/>',
+  "sliders-horizontal": '<path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/>',
+  "sparkles": '<path d="m12 3 1.7 5.1L19 10l-5.3 1.9L12 17l-1.7-5.1L5 10l5.3-1.9z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/>',
+  "square-plus": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/>',
+  "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
+  "trash-2": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
+  "ungroup": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 4h3a3 3 0 0 1 3 3v3"/><path d="M10 20H7a3 3 0 0 1-3-3v-3"/>',
+  "user-round": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  "users-round": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
+  "video": '<path d="M15 10.5 21 7v10l-6-3.5z"/><rect x="3" y="6" width="12" height="12" rx="2"/>',
+  "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+};
+
+function createFallbackIcon(name, sourceIcon) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.8");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", sourceIcon?.getAttribute("aria-hidden") || "true");
+  svg.classList.add("lucide", `lucide-${name}`);
+  svg.dataset.fallbackIcon = name;
+  svg.innerHTML = fallbackIconPaths[name] || fallbackIconPaths.circle;
+  return svg;
+}
+
+function renderFallbackIcons() {
+  document.querySelectorAll("i[data-lucide]").forEach((icon) => {
+    icon.replaceWith(createFallbackIcon(icon.dataset.lucide || "circle", icon));
   });
+}
+
+function refreshIcons() {
+  if (window.lucide) {
+    try {
+      window.lucide.createIcons({
+        attrs: {
+          "stroke-width": 1.8,
+        },
+      });
+    } catch {
+      renderFallbackIcons();
+      return;
+    }
+  }
+  renderFallbackIcons();
 }
 
 function formatCredit(value) {
@@ -1050,7 +1348,10 @@ function formatCredit(value) {
 
 function syncCreditDisplay() {
   const credits = formatCredit(state.account.credits);
-  if (avatarCreditBadge) avatarCreditBadge.textContent = credits;
+  if (avatarCreditBadge) {
+    avatarCreditBadge.textContent = credits;
+    avatarCreditBadge.setAttribute("aria-label", `可用积分 ${credits}`);
+  }
   if (profileCreditAvailable) profileCreditAvailable.textContent = credits;
   if (profileCreditConsumed) profileCreditConsumed.textContent = formatCredit(state.account.consumedCredits);
 }
@@ -1352,6 +1653,593 @@ function getLibraryAssetsForScope(scope = state.libraryScope) {
   return state.libraryAssets;
 }
 
+function getActiveAssetLibraryScope() {
+  return state.libraryView === "global" ? state.libraryScope : "project";
+}
+
+function ensureGlobalLibraryScope() {
+  if (!["personal", "organization", "official"].includes(state.libraryScope)) {
+    state.libraryScope = "personal";
+  }
+}
+
+function normalizeLibrarySearch(value = state.librarySearch) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function assetMatchesLibrarySearch(asset, query = normalizeLibrarySearch()) {
+  if (!query) return true;
+  return [
+    getAssetDisplayName(asset),
+    asset.name,
+    assetTypeLabel(asset.type),
+    asset.source,
+    getAssetOriginLabel(asset),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
+}
+
+function createCanvasNodeLibraryItem(node, parentGroupId = null) {
+  const asset = getEditableMedia(node) || getActiveAsset(node);
+  const mediaType = asset?.type || node.mode || "image";
+  const model = node.kind === "generator" ? getModel(node) : null;
+  const fallbackTitle =
+    node.kind === "generator"
+      ? `${node.mode === "video" ? "视频生成" : "图片生成"}节点`
+      : `${assetTypeLabel(mediaType)}素材`;
+  return {
+    id: node.id,
+    kind: "node",
+    nodeKind: node.kind,
+    type: node.kind === "generator" ? "generator" : mediaType,
+    parentGroupId,
+    icon: node.kind === "generator" ? "sparkles" : mediaIconName(mediaType),
+    title: getMediaTitle(node, asset) || fallbackTitle,
+    subtitle: node.kind === "generator" ? model?.name || "生成节点" : assetTypeLabel(mediaType),
+    meta: node.kind === "generator" ? getParamLabel(node) : getMediaSpec(node, asset),
+    asset,
+  };
+}
+
+function getCanvasElementItems() {
+  const groupedNodeIds = new Set();
+  const groupItems = state.groups
+    .map((group) => {
+      const nodes = getGroupNodes(group);
+      const bounds = getGroupBounds(group);
+      if (!bounds) return null;
+      nodes.forEach((node) => groupedNodeIds.add(node.id));
+      return {
+        id: group.id,
+        kind: "group",
+        type: "group",
+        icon: "layers-3",
+        title: group.name || "新建组",
+        subtitle: `${nodes.length} 个节点`,
+        meta: `${Math.round(bounds.width)} × ${Math.round(bounds.height)}`,
+        collapsed: state.libraryCollapsedGroups.has(group.id),
+        children: nodes.map((node) => createCanvasNodeLibraryItem(node, group.id)),
+      };
+    })
+    .filter(Boolean);
+
+  const ungroupedNodeItems = state.nodes
+    .filter((node) => !groupedNodeIds.has(node.id))
+    .map((node) => createCanvasNodeLibraryItem(node));
+
+  return [...groupItems, ...ungroupedNodeItems];
+}
+
+function canvasItemMatchesLibraryFilter(item) {
+  if (state.libraryFilter === "all") return true;
+  if (state.libraryFilter === "generator") return item.nodeKind === "generator";
+  return item.type === state.libraryFilter;
+}
+
+function canvasItemMatchesLibrarySearch(item, query = normalizeLibrarySearch()) {
+  if (!query) return true;
+  return [item.title, item.subtitle, item.meta, item.type]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
+}
+
+function filterCanvasElementTree(items, query = normalizeLibrarySearch()) {
+  return items
+    .map((item) => {
+      if (item.kind !== "group") {
+        return canvasItemMatchesLibraryFilter(item) && canvasItemMatchesLibrarySearch(item, query) ? item : null;
+      }
+
+      const matchesSelf = canvasItemMatchesLibraryFilter(item) && canvasItemMatchesLibrarySearch(item, query);
+      const visibleChildren = (item.children || []).filter(
+        (child) => canvasItemMatchesLibraryFilter(child) && canvasItemMatchesLibrarySearch(child, query),
+      );
+
+      if (state.libraryFilter === "group") {
+        return matchesSelf ? { ...item, children: [] } : null;
+      }
+
+      if (matchesSelf || visibleChildren.length) {
+        return {
+          ...item,
+          children: matchesSelf && !query && state.libraryFilter === "all" ? item.children : visibleChildren,
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function countCanvasElementRows(items) {
+  return items.reduce((count, item) => count + 1 + (item.collapsed ? 0 : item.children?.length || 0), 0);
+}
+
+const assetCategoryFilters = [
+  ["character", "角色"],
+  ["scene", "场景"],
+  ["prop", "道具"],
+  ["material", "素材"],
+];
+
+const assetCategoryLabels = Object.fromEntries(assetCategoryFilters);
+
+function getAssetCategory(asset) {
+  if (!asset) return "material";
+  if (asset.category && assetCategoryLabels[asset.category]) return asset.category;
+  if (asset.type === "audio") return "material";
+  const text = [asset.displayName, asset.name, asset.source, asset.type].filter(Boolean).join(" ").toLowerCase();
+  if (/角色|人物|人像|模特|机器人|character|portrait|person|avatar|model/.test(text)) return "character";
+  if (/场景|城市|街道|风景|scene|city|street|landscape|environment/.test(text)) return "scene";
+  if (/道具|物品|产品|prop|object|product|item/.test(text)) return "prop";
+  return "material";
+}
+
+function countAssetsByCategory(assets) {
+  return assetCategoryFilters.reduce((result, [id]) => {
+    result[id] = assets.filter((asset) => getAssetCategory(asset) === id).length;
+    return result;
+  }, {});
+}
+
+function getPreferredAssetFilter(assets = []) {
+  if (assetCategoryLabels[state.libraryFilter]) return state.libraryFilter;
+  const counts = countAssetsByCategory(assets);
+  return assetCategoryFilters.find(([id]) => counts[id] > 0)?.[0] || assetCategoryFilters[0][0];
+}
+
+function renderAssetLibraryModeTabs({ canvasTotal, projectAssetTotal, scopeTotals, isGlobalView }) {
+  if (!assetLibraryModeTabs) return;
+  const tabs = isGlobalView
+    ? [
+        ["personal", "个人空间", scopeTotals.personal || 0, "user-round"],
+        ["organization", "组织空间", scopeTotals.organization || 0, "users-round"],
+        ["official", "官方空间", scopeTotals.official || 0, "badge-check"],
+      ]
+    : [
+        ["canvas", "画布", canvasTotal, "layers-3"],
+        ["assets", "资产", projectAssetTotal, "folder"],
+      ];
+
+  assetLibraryModeTabs.innerHTML = tabs
+    .map(([id, label, count, icon]) => {
+      const active = isGlobalView ? state.libraryScope === id : state.libraryView === id;
+      const attr = isGlobalView ? `data-library-scope="${id}"` : `data-library-view="${id}"`;
+      return `
+        <button class="${active ? "active" : ""}" type="button" ${attr}>
+          <i data-lucide="${icon}" aria-hidden="true"></i>
+          <span>${label}</span>
+          <small>${count}</small>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function syncGlobalLibraryButton(isGlobalView) {
+  if (!assetLibraryGlobalBtn) return;
+  assetLibraryGlobalBtn.classList.toggle("active", isGlobalView);
+  assetLibraryGlobalBtn.title = isGlobalView ? "返回项目资产库" : "全局资产库";
+  assetLibraryGlobalBtn.setAttribute("aria-label", isGlobalView ? "返回项目资产库" : "全局资产库");
+  assetLibraryGlobalBtn.innerHTML = `<i data-lucide="${isGlobalView ? "panel-left-close" : "book-open"}" aria-hidden="true"></i>`;
+}
+
+function renderLibraryFilterTabs() {
+  if (!assetLibraryTabs) return;
+  if (state.libraryView === "global") {
+    const displayMode = state.globalLibraryDisplay === "list" ? "list" : "preview";
+    assetLibraryTabs.innerHTML = `
+      <div class="global-display-toggle" role="group" aria-label="全局资产显示方式">
+        <button class="${displayMode === "preview" ? "active" : ""}" type="button" data-global-library-display="preview" title="预览">
+          <i data-lucide="layout-grid" aria-hidden="true"></i>
+        </button>
+        <button class="${displayMode === "list" ? "active" : ""}" type="button" data-global-library-display="list" title="列表">
+          <i data-lucide="list" aria-hidden="true"></i>
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  const filters =
+    state.libraryView === "canvas"
+      ? [
+          ["all", "全部"],
+          ["generator", "生成"],
+          ["image", "图片"],
+          ["video", "视频"],
+          ["audio", "音频"],
+          ["group", "组"],
+        ]
+      : assetCategoryFilters;
+
+  if (state.libraryView === "canvas" && !filters.some(([id]) => id === state.libraryFilter)) {
+    state.libraryFilter = "all";
+  }
+
+  if (state.libraryView !== "canvas") {
+    const scopeAssets = getLibraryAssetsForScope(getActiveAssetLibraryScope());
+    state.libraryFilter = getPreferredAssetFilter(scopeAssets);
+    const counts = countAssetsByCategory(scopeAssets);
+    assetLibraryTabs.innerHTML = `
+      <div class="asset-category-tabs">
+        ${filters
+          .map(
+            ([id, label]) => `
+              <button class="${state.libraryFilter === id ? "active" : ""}" type="button" data-library-filter="${id}">
+                <span>${label}</span>
+                <small>${counts[id] || 0}</small>
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+    `;
+    return;
+  }
+
+  const activeLabel = filters.find(([id]) => id === state.libraryFilter)?.[1] || "全部";
+  assetLibraryTabs.innerHTML = `
+    <button class="asset-filter-trigger" type="button" data-library-filter-toggle aria-expanded="false">
+      <span>${activeLabel}</span>
+      <i data-lucide="chevron-down" aria-hidden="true"></i>
+    </button>
+    <div class="asset-filter-menu hidden">
+      ${filters
+        .map(
+          ([id, label]) => `
+            <button class="${state.libraryFilter === id ? "active" : ""}" type="button" data-library-filter="${id}">
+              <span>${label}</span>
+              ${state.libraryFilter === id ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderCanvasLibraryList(items, allItems) {
+  if (!items.length) {
+    const hasAny = Boolean(countCanvasElementRows(allItems));
+    return `
+      <div class="asset-library-empty">
+        <div>
+          <i data-lucide="${hasAny ? "filter-x" : "mouse-pointer-click"}" aria-hidden="true"></i>
+          <strong>${hasAny ? "没有匹配的画布元素" : "画布还没有元素"}</strong>
+          <span>${hasAny ? "调整搜索或筛选条件" : "双击画布创建生成节点，或拖入图片、视频、音频素材"}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  return items.map((item) => renderCanvasLibraryItem(item)).join("");
+}
+
+function renderCanvasLibraryItem(item) {
+  if (item.kind === "group") {
+    const selected = state.activeGroupId === item.id;
+    const collapsed = Boolean(item.collapsed);
+    return `
+      <div class="library-group-block ${collapsed ? "collapsed" : ""}">
+        <button class="library-list-item canvas-element-item group-row ${selected ? "active" : ""}" type="button" data-canvas-item="${item.id}" data-canvas-kind="group" title="定位到组">
+          <span class="library-group-caret" data-library-group-toggle="${item.id}">
+            <i data-lucide="chevron-down" aria-hidden="true"></i>
+          </span>
+          <span class="library-list-thumb group">
+            <i data-lucide="${item.icon}" aria-hidden="true"></i>
+          </span>
+          <span class="library-list-info">
+            <strong>${escapeHtml(item.title)}</strong>
+            <small>${escapeHtml(item.subtitle || "")}</small>
+          </span>
+          ${item.meta ? `<span class="library-list-meta">${escapeHtml(item.meta)}</span>` : ""}
+        </button>
+        ${
+          collapsed || !item.children?.length
+            ? ""
+            : `<div class="library-group-children">${item.children.map((child) => renderCanvasLibraryItem(child)).join("")}</div>`
+        }
+      </div>
+    `;
+  }
+
+  const thumb = item.asset
+    ? assetPreview(item.asset)
+    : `<span class="library-item-icon"><i data-lucide="${item.icon}" aria-hidden="true"></i></span>`;
+  const selected = state.selectedIds.has(item.id);
+  return `
+    <button class="library-list-item canvas-element-item child-row ${selected ? "active" : ""}" type="button" data-canvas-item="${item.id}" data-canvas-kind="node" title="定位到画布元素">
+      <span class="library-list-thumb ${item.asset ? item.asset.type : item.type}">${thumb}</span>
+      <span class="library-list-info">
+        <strong>${escapeHtml(item.title)}</strong>
+        <small>${escapeHtml(item.subtitle || "")}</small>
+      </span>
+      ${item.meta ? `<span class="library-list-meta">${escapeHtml(item.meta)}</span>` : ""}
+    </button>
+  `;
+}
+
+function renderAssetLibraryList(assets, allAssets, targetNode) {
+  if (!assets.length) {
+    const hasAny = Boolean(allAssets.length);
+    return `
+      <div class="asset-library-empty">
+        <div>
+          <i data-lucide="${hasAny ? "filter-x" : "images"}" aria-hidden="true"></i>
+          <strong>${hasAny ? "没有匹配的资产" : "这里还没有资产"}</strong>
+          <span>${hasAny ? "调整搜索或筛选条件" : state.libraryScope === "official" ? "官方库会逐步补充可复用素材" : "上传图片、视频或音频，随后可加入画布或生成节点"}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  return assets
+    .map(
+      (asset) => `
+        <article class="asset-card-item" data-library-asset="${asset.id}" tabindex="0" draggable="true" title="双击${targetNode ? "引用到生成节点" : "添加到画布"}">
+          <div class="asset-card-preview ${asset.type}">${assetPreview(asset)}</div>
+          <div class="asset-card-info">
+            <strong>${escapeHtml(getAssetDisplayName(asset))}</strong>
+            <small>${escapeHtml(assetCategoryLabels[getAssetCategory(asset)] || "素材")} · ${escapeHtml(getAssetOriginLabel(asset))}</small>
+          </div>
+          <button class="asset-card-add" type="button" data-library-add="${asset.id}" title="${targetNode ? "引用到生成节点" : "添加到画布"}" aria-label="${targetNode ? "引用到生成节点" : "添加到画布"}">
+            <i data-lucide="${targetNode ? "paperclip" : "plus"}" aria-hidden="true"></i>
+          </button>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function getGlobalLibraryScopeDetails() {
+  return {
+    personal: {
+      icon: "user-round",
+      title: "个人空间",
+      body: "跨项目保存自己的常用角色、参考图、声音与风格素材。",
+    },
+    organization: {
+      icon: "users-round",
+      title: "组织空间",
+      body: "团队共享的品牌资产、项目通用角色与制作标准素材。",
+    },
+    official: {
+      icon: "badge-check",
+      title: "官方空间",
+      body: "由 Reelay 提供的公共示例、官方素材包和后续工作流模板。",
+    },
+  };
+}
+
+function buildGlobalAssetFolders(allAssets = []) {
+  const audioAssets = allAssets.filter((asset) => asset.type === "audio");
+  const visualAssets = allAssets.filter((asset) => asset.type !== "audio");
+  const generatedAssets = allAssets.filter((asset) => asset.source === "generated");
+  const sourceAssets = allAssets.filter((asset) => asset.source !== "generated");
+
+  const foldersByScope = {
+    personal: [
+      {
+        id: "personal-library",
+        icon: "folder",
+        title: "个人常用",
+        body: "自己跨项目复用的图片、视频、音频与参考素材。",
+        assets: allAssets,
+      },
+      {
+        id: "personal-generated",
+        icon: "folder",
+        title: "生成沉淀",
+        body: "从画布结果保存来的可复用生成资产。",
+        assets: generatedAssets,
+      },
+      {
+        id: "personal-inbox",
+        icon: "folder",
+        title: "待整理",
+        body: "稍后再归档的临时资产入口。",
+        assets: [],
+      },
+    ],
+    organization: [
+      {
+        id: "organization-shared",
+        icon: "folder",
+        title: "团队共享",
+        body: "同组织成员共用的项目素材与规范资产。",
+        assets: allAssets,
+      },
+      {
+        id: "organization-brand",
+        icon: "folder",
+        title: "品牌资料",
+        body: "后续用于沉淀品牌视觉、字体、产品图和标准片段。",
+        assets: sourceAssets.filter((asset) => asset.type !== "audio"),
+      },
+      {
+        id: "organization-audio",
+        icon: "folder",
+        title: "声音资料",
+        body: "后续用于管理组织内共享音效与旁白素材。",
+        assets: audioAssets,
+      },
+    ],
+    official: [
+      {
+        id: "official-starters",
+        icon: "folder",
+        title: "官方示例包",
+        body: "官方提供的可直接拖入画布的视觉素材包。",
+        assets: visualAssets,
+      },
+      {
+        id: "official-sound",
+        icon: "folder",
+        title: "声音与氛围",
+        body: "官方公共音效、氛围声与后续音乐素材入口。",
+        assets: audioAssets,
+      },
+      {
+        id: "official-workflows",
+        icon: "folder",
+        title: "工作流模板",
+        body: "后续承载官方推荐的素材组合与生成流程。",
+        assets: [],
+      },
+    ],
+  };
+
+  return foldersByScope[state.libraryScope] || foldersByScope.personal;
+}
+
+function folderMatchesLibrarySearch(folder, query) {
+  if (!query) return true;
+  return [folder.title, folder.body]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
+}
+
+function renderGlobalFolderAsset(asset, targetNode, mode = "preview") {
+  const addTitle = targetNode ? "引用到生成节点" : "添加到画布";
+  return `
+    <article class="global-folder-file ${mode}" data-library-asset="${asset.id}" tabindex="0" draggable="true" title="双击${addTitle}">
+      <div class="global-folder-file-preview ${asset.type}">${assetPreview(asset)}</div>
+      <div class="global-folder-file-info">
+        <strong>${escapeHtml(getAssetDisplayName(asset))}</strong>
+        <small>${escapeHtml(assetTypeLabel(asset.type))} · ${escapeHtml(getAssetOriginLabel(asset))}</small>
+      </div>
+      <button class="asset-card-add global-add" type="button" data-library-add="${asset.id}" title="${addTitle}" aria-label="${addTitle}">
+        <i data-lucide="${targetNode ? "paperclip" : "plus"}" aria-hidden="true"></i>
+      </button>
+    </article>
+  `;
+}
+
+function renderGlobalFolderFiles(folder, targetNode, displayMode) {
+  const assets = folder.assets || [];
+  if (!assets.length) {
+    return `
+      <div class="global-folder-empty">
+        <i data-lucide="archive" aria-hidden="true"></i>
+        <span>这个文件夹暂时为空</span>
+      </div>
+    `;
+  }
+
+  if (displayMode === "list") {
+    return `
+      <div class="global-folder-files list">
+        ${assets.map((asset) => renderGlobalFolderAsset(asset, targetNode, "list")).join("")}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="global-folder-files preview">
+      ${assets.map((asset) => renderGlobalFolderAsset(asset, targetNode, "preview")).join("")}
+    </div>
+  `;
+}
+
+function renderGlobalAssetLibrary(assets, allAssets, targetNode) {
+  const scopeDetails = getGlobalLibraryScopeDetails();
+  const scope = scopeDetails[state.libraryScope] || scopeDetails.personal;
+  const query = normalizeLibrarySearch();
+  const displayMode = state.globalLibraryDisplay === "list" ? "list" : "preview";
+  const folders = buildGlobalAssetFolders(allAssets)
+    .map((folder) => {
+      const matchesFolder = folderMatchesLibrarySearch(folder, query);
+      const folderAssets = query && !matchesFolder
+        ? folder.assets.filter((asset) => assets.some((visibleAsset) => visibleAsset.id === asset.id))
+        : folder.assets;
+      return { ...folder, assets: folderAssets, matchesFolder };
+    })
+    .filter((folder) => !query || folder.matchesFolder || folder.assets.length);
+
+  const folderCards = folders
+    .map(
+      (folder) => `
+        <article class="global-folder-card ${displayMode}">
+          <header class="global-folder-head">
+            <span class="global-folder-icon"><i data-lucide="${folder.icon}" aria-hidden="true"></i></span>
+            <div>
+              <strong>${escapeHtml(folder.title)}</strong>
+              <p>${escapeHtml(folder.body)}</p>
+            </div>
+            <small>${folder.assets.length} 项</small>
+          </header>
+          ${renderGlobalFolderFiles(folder, targetNode, displayMode)}
+        </article>
+      `,
+    )
+    .join("");
+
+  return `
+    <section class="global-library-space-card">
+      <div class="global-library-identity">
+        <span><i data-lucide="${scope.icon}" aria-hidden="true"></i></span>
+        <div>
+          <strong>${scope.title}</strong>
+          <p>${scope.body}</p>
+        </div>
+      </div>
+      <small>${allAssets.length} 项资产 · ${folders.length} 个文件夹</small>
+    </section>
+    <section class="global-folder-section ${displayMode}">
+      ${
+        folderCards ||
+        `<div class="global-library-empty">
+          <i data-lucide="archive" aria-hidden="true"></i>
+          <strong>${allAssets.length ? "没有匹配的文件夹" : "这个空间还没有资产"}</strong>
+          <span>${state.libraryScope === "official" ? "官方库会逐步补充可直接拖入画布的素材包。" : "后续从画布保存素材后，可在这里跨项目复用。"}</span>
+        </div>`
+      }
+    </section>
+  `;
+}
+function getAssetOriginLabel(asset) {
+  if (!asset) return "";
+  if (asset.source === "local") return "本地上传";
+  if (asset.source === "generated") return "生成结果";
+  if (asset.source === "official") return "官方公用库";
+  if (asset.source === "library") return "资产引用";
+  const scopeLabels = {
+    project: "项目素材",
+    personal: "个人资产",
+    organization: "组织空间",
+    official: "官方公用库",
+  };
+  return scopeLabels[getActiveAssetLibraryScope()] || "项目素材";
+}
+
 function findLibraryAsset(assetId) {
   const pools = [
     state.libraryAssets,
@@ -1380,77 +2268,130 @@ function registerLibraryAssets(assets, scope = state.libraryScope) {
 
 function renderAssetLibrary() {
   if (!assetLibraryGrid) return;
-  const scopeAssets = getLibraryAssetsForScope();
-  const visibleAssets = scopeAssets.filter(
-    (asset) => state.libraryFilter === "all" || asset.type === state.libraryFilter,
-  );
+  if (state.libraryView === "global") ensureGlobalLibraryScope();
+  const isCanvasView = state.libraryView === "canvas";
+  const isGlobalView = state.libraryView === "global";
+  const isProjectAssetView = state.libraryView === "assets";
+  const query = isProjectAssetView ? "" : normalizeLibrarySearch();
   const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId && node.kind === "generator");
+  const canvasItems = getCanvasElementItems();
+  const visibleCanvasItems = filterCanvasElementTree(canvasItems, query);
+  const activeAssetScope = getActiveAssetLibraryScope();
+  const scopeAssets = getLibraryAssetsForScope(activeAssetScope);
+  if (isProjectAssetView) {
+    state.libraryFilter = getPreferredAssetFilter(scopeAssets);
+  }
+  const visibleAssets = scopeAssets.filter(
+    (asset) =>
+      (!isProjectAssetView || getAssetCategory(asset) === state.libraryFilter) &&
+      assetMatchesLibrarySearch(asset, query),
+  );
   const scopeMeta = {
     project: ["项目素材", "当前项目中沉淀的可复用资产"],
-    canvas: ["画布文件", "当前画布上的全部媒体文件"],
     personal: ["个人资产", "跨项目使用的个人全局资产"],
     official: ["官方公用库", "由 Reelay 提供的公共音效资产"],
     organization: ["组织空间", "同一组织成员共享的资产"],
   };
-  const [scopeTitle, scopeContext] = scopeMeta[state.libraryScope] || scopeMeta.project;
+  const [scopeTitle, scopeContext] = scopeMeta[activeAssetScope] || scopeMeta.project;
+  const viewContext = isCanvasView
+    ? "当前画布中的节点、组与媒体文件"
+    : isGlobalView
+      ? scopeContext
+      : "当前项目中沉淀的可复用资产";
+  const canvasTotal = countCanvasElementRows(canvasItems);
+  const projectAssetTotal = getLibraryAssetsForScope("project").length;
+  const scopeTotals = {
+    personal: getLibraryAssetsForScope("personal").length,
+    organization: getLibraryAssetsForScope("organization").length,
+    official: getLibraryAssetsForScope("official").length,
+  };
 
-  if (assetLibraryCount) assetLibraryCount.textContent = `${visibleAssets.length} 项`;
+  assetLibraryPanel?.setAttribute("data-library-mode", state.libraryView);
+  renderAssetLibraryModeTabs({ canvasTotal, projectAssetTotal, scopeTotals, isGlobalView });
+  syncGlobalLibraryButton(isGlobalView);
+  renderLibraryFilterTabs();
+  if (assetLibrarySearchInput && assetLibrarySearchInput.value !== state.librarySearch) {
+    assetLibrarySearchInput.value = state.librarySearch;
+  }
+  if (assetLibrarySearchInput) {
+    assetLibrarySearchInput.placeholder = isCanvasView ? "搜索画布" : isGlobalView ? "搜索全局资产" : "搜索资产";
+    assetLibrarySearchInput.closest(".asset-library-search")?.classList.toggle("hidden", isProjectAssetView);
+  }
+  if (assetLibraryProjectName) assetLibraryProjectName.textContent = state.projectName || "Untitled";
+  if (assetLibraryCount) {
+    const visibleCount = isCanvasView ? countCanvasElementRows(visibleCanvasItems) : visibleAssets.length;
+    const totalCount = isCanvasView ? canvasTotal : scopeAssets.length;
+    const noun = isCanvasView ? "节点" : "项";
+    const hasQuery = !isProjectAssetView && Boolean(state.librarySearch);
+    const hasFilter = isCanvasView ? state.libraryFilter !== "all" : isProjectAssetView && visibleCount !== totalCount;
+    assetLibraryCount.textContent =
+      hasQuery || hasFilter
+        ? `${visibleCount} / ${totalCount} ${noun}`
+        : `共 ${totalCount} ${noun}`;
+  }
   if (assetLibraryContext) {
-    assetLibraryContext.textContent = targetNode ? "选择资产引用到当前生成节点" : scopeContext;
+    assetLibraryContext.textContent = targetNode ? "选择资产引用到当前生成节点" : viewContext;
   }
-  const title = assetLibraryPanel?.querySelector(".asset-library-title");
-  if (title) title.textContent = scopeTitle;
-  document.querySelectorAll("[data-library-scope]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.libraryScope === state.libraryScope);
-  });
-  document.querySelectorAll("[data-library-filter]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.libraryFilter === state.libraryFilter);
-  });
-  if (assetLibraryUploadBtn) {
-    assetLibraryUploadBtn.classList.toggle("hidden", ["canvas", "official"].includes(state.libraryScope));
-  }
+  assetLibraryGrid.className = `asset-library-grid ${
+    isCanvasView
+      ? "canvas-list"
+      : isGlobalView
+        ? `global-library-grid ${state.globalLibraryDisplay === "list" ? "global-list-view" : "global-preview-view"}`
+        : "asset-card-grid"
+  }`;
+  assetLibraryGrid.innerHTML = isCanvasView
+    ? renderCanvasLibraryList(visibleCanvasItems, canvasItems)
+    : isGlobalView
+      ? renderGlobalAssetLibrary(visibleAssets, scopeAssets, targetNode)
+      : renderAssetLibraryList(visibleAssets, scopeAssets, targetNode);
+  refreshIcons();
+}
 
-  if (!visibleAssets.length) {
-    assetLibraryGrid.innerHTML = `
-      <div class="asset-library-empty">
-        <div>
-          <i data-lucide="images" aria-hidden="true"></i>
-          <strong>${scopeAssets.length ? "此分类暂无资产" : "这里还没有资产"}</strong>
-          <span>${scopeAssets.length ? "切换分类查看其他资产" : state.libraryScope === "canvas" ? "拖入媒体或完成一次生成后会出现在这里" : "上传图片、视频或音频，随后可加入画布或生成节点"}</span>
-        </div>
-      </div>
-    `;
-    refreshIcons();
+function focusWorldBounds(bounds) {
+  if (!bounds) return;
+  const rect = shell.getBoundingClientRect();
+  const leftInset =
+    assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
+      ? assetLibraryPanel.getBoundingClientRect().width
+      : 0;
+  const rightInset = state.agentOpen ? state.agentWidth : 0;
+  const viewWidth = Math.max(260, rect.width - leftInset - rightInset);
+  const centerX = (bounds.left + bounds.right) / 2;
+  const centerY = (bounds.top + bounds.bottom) / 2;
+  state.tx = leftInset + viewWidth / 2 - centerX * state.scale;
+  state.ty = rect.height / 2 - centerY * state.scale;
+  applyTransform();
+}
+
+function focusCanvasLibraryItem(id, kind = "node") {
+  if (kind === "group") {
+    const group = getGroupById(id);
+    const bounds = getGroupBounds(group);
+    if (!group || !bounds) return;
+    setActiveGroup(group.id);
+    focusWorldBounds(bounds);
+    render();
     return;
   }
 
-  assetLibraryGrid.innerHTML = visibleAssets
-    .map(
-      (asset) => `
-        <article class="library-item" data-library-asset="${asset.id}" tabindex="0" draggable="true" title="双击${targetNode ? "引用到生成节点" : "添加到画布"}">
-          <div class="library-item-preview">${assetPreview(asset)}</div>
-          <div class="library-item-info">
-            <span class="library-item-name">${escapeHtml(getAssetDisplayName(asset))}</span>
-            <span class="library-item-kind">${assetTypeLabel(asset.type)}</span>
-          </div>
-          <button class="library-item-add" type="button" data-library-add="${asset.id}" title="${targetNode ? "引用到生成节点" : "添加到画布"}" aria-label="${targetNode ? "引用到生成节点" : "添加到画布"}">
-            <i data-lucide="${targetNode ? "paperclip" : "plus"}" aria-hidden="true"></i>
-          </button>
-        </article>
-      `,
-    )
-    .join("");
-  refreshIcons();
+  const node = state.nodes.find((item) => item.id === id);
+  if (!node) return;
+  collapseInactiveNodes(node.id);
+  bringNodesToFront([node]);
+  setSelection([node.id], node.id);
+  focusWorldBounds(getNodeBounds(node));
+  render();
 }
 
 function openAssetLibrary(targetNodeId = null) {
   state.libraryTargetNodeId = targetNodeId;
+  if (targetNodeId) {
+    state.libraryView = "assets";
+  }
   assetLibraryPanel?.classList.remove("hidden");
   appShell?.classList.add("asset-library-open");
   railLibraryBtn?.classList.add("active");
-  profileMenu?.classList.add("hidden");
-  themeSubmenu?.classList.add("hidden");
-  railProfileBtn?.classList.remove("active");
+  closeProfileMenu();
   renderAssetLibrary();
 }
 
@@ -1775,6 +2716,7 @@ function hasDraggedLibraryAsset(event) {
 }
 
 function render() {
+  saveActiveCanvasState();
   syncGroups();
   const liveGroupIds = new Set(state.groups.map((group) => group.id));
   const liveNodeIds = new Set(state.nodes.map((node) => node.id));
@@ -1824,6 +2766,7 @@ function render() {
     }
   }
   updateEmptyState();
+  syncProjectNavigation();
   renderSelectionToolbar();
   renderMinimap();
   renderAssetLibrary();
@@ -2044,9 +2987,11 @@ function renderSelectionToolbar() {
   if (!bounds) {
     selectionToolbar.classList.add("hidden");
     selectionSortMenu?.classList.add("hidden");
+    selectionDownloadMenu?.classList.add("hidden");
     return;
   }
 
+  if (selectionCount) selectionCount.textContent = `${getSelectedNodes().length} 个节点`;
   const shellRect = shell.getBoundingClientRect();
   const topLeft = worldToScreen(bounds.left, bounds.top);
   const topRight = worldToScreen(bounds.right, bounds.top);
@@ -2188,7 +3133,18 @@ async function downloadMediaAsset(node) {
     showActionToast("当前媒体暂无可下载内容");
     return;
   }
-  const fileName = `${getMediaTitle(node, asset) || `reelay-${asset.type}`}.${asset.type === "image" ? "jpg" : asset.type === "video" ? "mp4" : "mp3"}`;
+  const fileName = `${getMediaTitle(node, asset) || `reelay-${asset.type}`}.${getAssetDownloadExtension(asset)}`;
+  await downloadAssetFile(asset, fileName);
+}
+
+function getAssetDownloadExtension(asset) {
+  if (asset.type === "image") return "jpg";
+  if (asset.type === "video") return "mp4";
+  return "mp3";
+}
+
+async function downloadAssetFile(asset, fileName = `${getAssetDisplayName(asset) || `reelay-${asset.type}`}.${getAssetDownloadExtension(asset)}`) {
+  if (!asset?.url) return false;
   try {
     const response = await fetch(asset.url);
     if (!response.ok) throw new Error("Download failed");
@@ -2206,6 +3162,7 @@ async function downloadMediaAsset(node) {
     anchor.rel = "noopener";
     anchor.click();
   }
+  return true;
 }
 
 function addEditableMediaToLibrary(node) {
@@ -3178,8 +4135,7 @@ function undoLastAction() {
 
   if (action.type === "project-rename") {
     state.projectName = action.name;
-    projectTitle.textContent = action.name;
-    document.title = `${action.name} · Reelay Canvas`;
+    syncProjectNavigation();
   }
 
   hideUndoToast();
@@ -3457,19 +4413,48 @@ function applyTheme(mode = state.themeMode) {
     dark: "深色",
     system: "跟随系统",
   };
+  const themeIcons = {
+    light: "sun",
+    dark: "moon",
+    system: "monitor",
+  };
+  const themeIndexes = {
+    light: 0,
+    dark: 1,
+    system: 2,
+  };
   if (themeCurrentLabel) themeCurrentLabel.textContent = themeLabels[mode] || "深色";
-  themeSubmenu?.querySelectorAll("[data-theme-choice]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.themeChoice === mode);
-  });
+  if (themeModeIcon) {
+    themeModeIcon.innerHTML = `<i data-lucide="${themeIcons[mode] || "moon"}" aria-hidden="true"></i>`;
+  }
+  if (themeInlineSwitch) {
+    themeInlineSwitch.style.setProperty("--theme-index", themeIndexes[mode] ?? 1);
+    themeInlineSwitch.querySelectorAll("[data-theme-inline]").forEach((button) => {
+      const active = button.dataset.themeInline === mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  }
+  refreshIcons();
 }
 
-function positionThemeSubmenu() {
-  const trigger = profileMenu?.querySelector("[data-profile-action='appearance']");
-  if (!trigger || !themeSubmenu) return;
+function positionProfileSubmenu(submenu, actionName, width) {
+  const trigger = profileMenu?.querySelector(`[data-profile-action='${actionName}']`);
+  if (!trigger || !submenu) return;
   const rect = trigger.getBoundingClientRect();
-  themeSubmenu.style.left = `${Math.max(8, rect.left - 162)}px`;
-  themeSubmenu.style.top = `${rect.top - 2}px`;
-  themeSubmenu.style.bottom = "auto";
+  submenu.style.left = `${Math.max(8, rect.left - width)}px`;
+  submenu.style.top = `${rect.top - 2}px`;
+  submenu.style.bottom = "auto";
+}
+
+function positionProfileHelpSubmenu() {
+  positionProfileSubmenu(profileHelpSubmenu, "help", 190);
+}
+
+function closeProfileSubmenus() {
+  profileHelpSubmenu?.classList.add("hidden");
+  profileMenu?.querySelector("[data-profile-action='appearance']")?.classList.remove("active");
+  profileMenu?.querySelector("[data-profile-action='help']")?.classList.remove("active");
 }
 
 function setAgentWidth(width) {
@@ -3516,29 +4501,257 @@ async function shareProject() {
   }
 }
 
-function beginProjectRename() {
-  if (!projectTitle) return;
-  projectTitle.contentEditable = "true";
-  projectTitle.classList.add("editing");
-  projectTitle.focus();
+function selectEditableText(element) {
   const range = document.createRange();
-  range.selectNodeContents(projectTitle);
+  range.selectNodeContents(element);
   const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(range);
 }
 
-function commitProjectRename() {
-  if (!projectTitle || projectTitle.contentEditable !== "true") return;
+function beginInlineRename(element) {
+  if (!element) return;
+  element.dataset.beforeEdit = element.textContent || "";
+  element.contentEditable = "true";
+  element.classList.add("editing");
+  element.focus();
+  selectEditableText(element);
+}
+
+function finishInlineRename(element, commit = true) {
+  if (!element || element.contentEditable !== "true") return;
+  const type = element.dataset.projectName !== undefined ? "project" : "canvas";
+  const previousText = element.dataset.beforeEdit || "";
+  const nextText = commit ? element.textContent.trim() : previousText;
+  if (type === "project") {
+    commitProjectRename(nextText || "Untitled");
+  } else {
+    commitCanvasRename(nextText || getActiveCanvas()?.name || "画布 1");
+  }
+  element.contentEditable = "false";
+  element.classList.remove("editing");
+  delete element.dataset.beforeEdit;
+  element.blur();
+  syncProjectNavigation();
+}
+
+function commitProjectRename(nextName) {
   const previousName = state.projectName;
-  const nextName = projectTitle.textContent.trim() || "Untitled";
-  state.projectName = nextName;
-  projectTitle.textContent = nextName;
-  projectTitle.contentEditable = "false";
-  projectTitle.classList.remove("editing");
-  document.title = `${nextName} · Reelay Canvas`;
-  if (previousName !== nextName) {
+  state.projectName = String(nextName || "Untitled").trim() || "Untitled";
+  syncProjectNavigation();
+  if (previousName !== state.projectName) {
     pushUndoAction({ type: "project-rename", name: previousName });
+  }
+}
+
+function commitCanvasRename(nextName) {
+  const canvas = getActiveCanvas();
+  if (!canvas) return;
+  canvas.name = String(nextName || canvas.name || "画布 1").trim() || "画布 1";
+  syncProjectNavigation();
+  renderCanvasMenu();
+}
+
+function positionMenu(menu, anchor, options = {}) {
+  if (!menu || !anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const width = options.width || menu.offsetWidth || 190;
+  const left = clamp(options.alignRight ? rect.right - width : rect.left, 8, window.innerWidth - width - 8);
+  const top = clamp(rect.bottom + (options.gap ?? 8), 8, window.innerHeight - 60);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.right = "auto";
+  menu.style.bottom = "auto";
+}
+
+function closeProjectMenus() {
+  projectMenu?.classList.add("hidden");
+  canvasMenu?.classList.add("hidden");
+  canvasMoreMenu?.classList.add("hidden");
+}
+
+function renderCanvasMenu() {
+  if (!canvasMenuList) return;
+  const activeId = state.activeCanvasId;
+  canvasMenuList.innerHTML = state.canvases
+    .map(
+      (canvas) => `
+        <div class="canvas-menu-row ${canvas.id === activeId ? "active" : ""}" data-canvas-id="${canvas.id}">
+          <button class="canvas-menu-switch" type="button" data-canvas-switch="${canvas.id}">
+            <span>${escapeHtml(canvas.name)}</span>
+            ${canvas.id === activeId ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
+          </button>
+          <button class="canvas-menu-more-button" type="button" data-canvas-more="${canvas.id}" title="画布操作" aria-label="画布操作">
+            <i data-lucide="more-horizontal" aria-hidden="true"></i>
+          </button>
+        </div>
+      `,
+    )
+    .join("");
+  refreshIcons();
+}
+
+function openProjectMenu(anchor) {
+  closeCanvasPanel();
+  canvasMenu?.classList.add("hidden");
+  canvasMoreMenu?.classList.add("hidden");
+  projectMenu?.classList.toggle("hidden");
+  if (!projectMenu?.classList.contains("hidden")) {
+    positionMenu(projectMenu, anchor, { width: 190 });
+  }
+}
+
+function openCanvasMenu(anchor) {
+  closeCanvasPanel();
+  projectMenu?.classList.add("hidden");
+  canvasMoreMenu?.classList.add("hidden");
+  renderCanvasMenu();
+  canvasMenu?.classList.toggle("hidden");
+  if (!canvasMenu?.classList.contains("hidden")) {
+    positionMenu(canvasMenu, anchor, { width: 220 });
+  }
+}
+
+function addCanvas() {
+  saveActiveCanvasState();
+  const canvas = createCanvasRecord(`画布 ${state.canvases.length + 1}`);
+  state.canvases.push(canvas);
+  state.activeCanvasId = canvas.id;
+  loadCanvasState(canvas);
+  showActionToast("已添加画布");
+}
+
+function switchCanvas(canvasId) {
+  if (canvasId === state.activeCanvasId) return;
+  const nextCanvas = state.canvases.find((canvas) => canvas.id === canvasId);
+  if (!nextCanvas) return;
+  saveActiveCanvasState();
+  state.activeCanvasId = canvasId;
+  loadCanvasState(nextCanvas);
+}
+
+function duplicateCanvas(canvasId) {
+  const source = state.canvases.find((canvas) => canvas.id === canvasId);
+  if (!source) return;
+  saveActiveCanvasState();
+  const duplicate = {
+    id: crypto.randomUUID(),
+    name: `${source.name} 副本`,
+    nodes: source.nodes.map((node) => cloneNodeState(node)),
+    groups: source.groups.map((group) => cloneGroupState(group)),
+    tx: source.tx,
+    ty: source.ty,
+    scale: source.scale,
+    zCounter: source.zCounter,
+  };
+  state.canvases.push(duplicate);
+  state.activeCanvasId = duplicate.id;
+  loadCanvasState(duplicate);
+  showActionToast("已复制画布");
+}
+
+function deleteCanvas(canvasId) {
+  if (state.canvases.length <= 1) {
+    showActionToast("至少保留一个画布");
+    return;
+  }
+  const canvas = state.canvases.find((item) => item.id === canvasId);
+  if (!canvas) return;
+  showConfirmDialog({
+    title: "删除画布",
+    body: `将删除「${canvas.name}」及其中的节点。此操作当前原型不可撤销。`,
+    confirmText: "删除",
+    danger: true,
+    onConfirm: () => {
+      const index = state.canvases.findIndex((item) => item.id === canvasId);
+      state.canvases.splice(index, 1);
+      if (state.activeCanvasId === canvasId) {
+        const nextCanvas = state.canvases[Math.max(0, index - 1)] || state.canvases[0];
+        state.activeCanvasId = nextCanvas.id;
+        loadCanvasState(nextCanvas);
+      } else {
+        renderCanvasMenu();
+      }
+      showActionToast("画布已删除");
+    },
+  });
+}
+
+function getVisibleNameElement(kind) {
+  const elements = kind === "project" ? projectNameEls : canvasNameEls;
+  return [...elements].find((element) => element.offsetParent !== null) || elements[0] || null;
+}
+
+function resetPrototypeProject() {
+  state.projectName = "Untitled";
+  state.nodes = [];
+  state.groups = [];
+  state.selectedIds = new Set();
+  state.activeId = null;
+  state.activeGroupId = null;
+  state.mediaToolbarNodeId = null;
+  state.tx = 0;
+  state.ty = 0;
+  state.scale = 1;
+  state.zCounter = 1;
+  state.librarySearch = "";
+  state.libraryFilter = "all";
+  state.libraryCollapsedGroups = new Set();
+  initializeCanvases();
+  applyTransform();
+  render();
+}
+
+function handleProjectMenuAction(action) {
+  closeProjectMenus();
+  if (action === "home" || action === "all") {
+    showActionToast("项目首页将在正式工作台中打开");
+    return;
+  }
+  if (action === "create") {
+    showConfirmDialog({
+      title: "创建新项目",
+      body: "当前前端原型没有持久化保存。继续后会重置为一个新的空白项目。",
+      confirmText: "创建",
+      onConfirm: () => {
+        resetPrototypeProject();
+        showActionToast("已创建新项目");
+      },
+    });
+    return;
+  }
+  if (action === "delete") {
+    showConfirmDialog({
+      title: "删除项目",
+      body: "当前项目会在原型中被清空并回到初始状态。此操作当前不可撤销。",
+      confirmText: "删除",
+      danger: true,
+      onConfirm: () => {
+        resetPrototypeProject();
+        showActionToast("项目已删除");
+      },
+    });
+  }
+}
+
+function handleCanvasMoreAction(action) {
+  const canvasId = state.canvasMoreTargetId || state.activeCanvasId;
+  closeProjectMenus();
+  if (action === "open") {
+    showActionToast("多窗口画布将在正式工作台中打开");
+    return;
+  }
+  if (action === "rename") {
+    switchCanvas(canvasId);
+    requestAnimationFrame(() => beginInlineRename(getVisibleNameElement("canvas")));
+    return;
+  }
+  if (action === "duplicate") {
+    duplicateCanvas(canvasId);
+    return;
+  }
+  if (action === "delete") {
+    deleteCanvas(canvasId);
   }
 }
 
@@ -3617,6 +4830,62 @@ function sortSelectedNodes(layout = "grid") {
   arrangeNodes(selectedNodes, layout);
   bringNodesToFront(selectedNodes);
   render();
+}
+
+function getSelectedMediaEntries() {
+  return getSelectedNodes()
+    .map((node) => ({ node, asset: getEditableMedia(node) }))
+    .filter((entry) => entry.asset);
+}
+
+function sanitizeFileName(value) {
+  return String(value || "reelay-media")
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "-")
+    .replace(/\s+/g, " ")
+    .slice(0, 96) || "reelay-media";
+}
+
+function addSelectedMediaToLibrary() {
+  const entries = getSelectedMediaEntries();
+  if (!entries.length) {
+    showActionToast("选中的节点还没有可保存素材");
+    return;
+  }
+  const additions = [];
+  for (const { asset } of entries) {
+    const sourceId = asset.librarySourceId || asset.id;
+    const exists = state.libraryAssets.some(
+      (item) =>
+        item.id === sourceId ||
+        item.librarySourceId === sourceId ||
+        (asset.url && item.url === asset.url),
+    );
+    if (exists) continue;
+    additions.push({
+      ...cloneAsset(asset, asset.source || "library"),
+      librarySourceId: sourceId,
+    });
+  }
+  if (!additions.length) {
+    showActionToast("选中素材已在项目资产中");
+    return;
+  }
+  registerLibraryAssets(additions, "project");
+  showActionToast(`已保存 ${additions.length} 个素材`);
+}
+
+async function downloadSelectedMedia(packageMode = false) {
+  const entries = getSelectedMediaEntries().filter(({ asset }) => asset?.url);
+  if (!entries.length) {
+    showActionToast("选中的节点暂无可下载内容");
+    return;
+  }
+  for (const [index, { node, asset }] of entries.entries()) {
+    const title = sanitizeFileName(getMediaTitle(node, asset) || getAssetDisplayName(asset) || `reelay-${index + 1}`);
+    await downloadAssetFile(asset, `${title}.${getAssetDownloadExtension(asset)}`);
+  }
+  showActionToast(packageMode ? "原型中以逐个文件模拟打包下载" : `已开始下载 ${entries.length} 个素材`);
 }
 
 function arrangeGroup(group, layout = "grid") {
@@ -3714,7 +4983,7 @@ function shouldBypassCanvasWheel(target) {
         ".agent-history-menu",
         ".agent-model-menu",
         ".profile-menu",
-        ".theme-popover",
+        ".profile-help-popover",
         ".canvas-tool-popover",
         ".toolbar-dropdown",
         ".selection-toolbar",
@@ -4094,6 +5363,11 @@ function handlePointerMove(event) {
     return;
   }
 
+  if (action.type === "resize-asset-library") {
+    setAssetLibraryWidth(action.startWidth + event.clientX - action.startClientX);
+    return;
+  }
+
   if (action.type === "resize-agent") {
     setAgentWidth(action.startWidth + action.startClientX - event.clientX);
   }
@@ -4121,6 +5395,8 @@ function finishPointerInteraction(event) {
       pushUndoAction({ type: "move", positions: action.origins || [], groups: action.groups });
     }
     render();
+  } else if (action.type === "resize-asset-library") {
+    syncPromptPanelLayouts();
   }
 
   state.action = null;
@@ -4249,7 +5525,7 @@ localAssetInput.addEventListener("change", (event) => {
     if (node) addFilesToGeneratorNode(node, files);
   } else if (state.pendingUploadMode === "library") {
     const accepted = createAssetsFromFiles(files);
-    registerLibraryAssets(accepted);
+    registerLibraryAssets(accepted, state.libraryView === "global" ? state.libraryScope : "project");
     accepted.forEach((asset) => hydrateAssetMetadata(asset, null));
     openAssetLibrary();
   }
@@ -4310,16 +5586,64 @@ railLibraryBtn?.addEventListener("click", () => {
 });
 
 assetLibraryCloseBtn?.addEventListener("click", closeAssetLibrary);
-assetLibraryUploadBtn?.addEventListener("click", openLibraryUploadPicker);
+assetLibraryResizeHandle?.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  state.action = {
+    type: "resize-asset-library",
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startWidth: assetLibraryPanel?.getBoundingClientRect().width || state.assetLibraryWidth,
+    captureTarget: assetLibraryResizeHandle,
+  };
+  assetLibraryResizeHandle.setPointerCapture(event.pointerId);
+});
 assetLibraryPanel?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
+assetLibrarySearchInput?.addEventListener("input", (event) => {
+  state.librarySearch = event.currentTarget.value;
+  renderAssetLibrary();
+});
 assetLibraryPanel?.addEventListener("click", (event) => {
+  if (event.target.closest("#assetLibraryGlobalBtn")) {
+    if (state.libraryView === "global") {
+      state.libraryView = "assets";
+    } else {
+      state.libraryView = "global";
+      ensureGlobalLibraryScope();
+    }
+    state.libraryFilter = "all";
+    renderAssetLibrary();
+    return;
+  }
+  const view = event.target.closest("[data-library-view]")?.dataset.libraryView;
+  if (view) {
+    state.libraryView = view === "assets" ? "assets" : "canvas";
+    state.libraryFilter = "all";
+    renderAssetLibrary();
+    return;
+  }
   const scope = event.target.closest("[data-library-scope]")?.dataset.libraryScope;
   if (scope) {
+    state.libraryView = "global";
     state.libraryScope = scope;
-    state.libraryFilter = scope === "official" ? "audio" : "all";
+    state.libraryFilter = "all";
     renderAssetLibrary();
+    return;
+  }
+  const display = event.target.closest("[data-global-library-display]")?.dataset.globalLibraryDisplay;
+  if (display) {
+    state.globalLibraryDisplay = display === "list" ? "list" : "preview";
+    renderAssetLibrary();
+    return;
+  }
+  const filterToggle = event.target.closest("[data-library-filter-toggle]");
+  if (filterToggle) {
+    const menu = assetLibraryTabs?.querySelector(".asset-filter-menu");
+    const willOpen = menu?.classList.contains("hidden");
+    menu?.classList.toggle("hidden", !willOpen);
+    filterToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
     return;
   }
   const filter = event.target.closest("[data-library-filter]")?.dataset.libraryFilter;
@@ -4328,8 +5652,25 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     renderAssetLibrary();
     return;
   }
+  const groupToggle = event.target.closest("[data-library-group-toggle]")?.dataset.libraryGroupToggle;
+  if (groupToggle) {
+    if (state.libraryCollapsedGroups.has(groupToggle)) {
+      state.libraryCollapsedGroups.delete(groupToggle);
+    } else {
+      state.libraryCollapsedGroups.add(groupToggle);
+    }
+    renderAssetLibrary();
+    return;
+  }
   const assetId = event.target.closest("[data-library-add]")?.dataset.libraryAdd;
-  if (assetId) useLibraryAsset(assetId);
+  if (assetId) {
+    useLibraryAsset(assetId);
+    return;
+  }
+  const canvasItem = event.target.closest("[data-canvas-item]");
+  if (canvasItem) {
+    focusCanvasLibraryItem(canvasItem.dataset.canvasItem, canvasItem.dataset.canvasKind);
+  }
 });
 assetLibraryGrid?.addEventListener("dblclick", (event) => {
   if (event.target.closest("[data-library-add]")) return;
@@ -4338,8 +5679,17 @@ assetLibraryGrid?.addEventListener("dblclick", (event) => {
 });
 assetLibraryGrid?.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
+  const canvasItem = event.target.closest("[data-canvas-item]");
+  if (canvasItem) {
+    event.preventDefault();
+    focusCanvasLibraryItem(canvasItem.dataset.canvasItem, canvasItem.dataset.canvasKind);
+    return;
+  }
   const assetId = event.target.closest("[data-library-asset]")?.dataset.libraryAsset;
-  if (assetId) useLibraryAsset(assetId);
+  if (assetId) {
+    event.preventDefault();
+    useLibraryAsset(assetId);
+  }
 });
 assetLibraryGrid?.addEventListener("dragstart", (event) => {
   const assetId = event.target.closest("[data-library-asset]")?.dataset.libraryAsset;
@@ -4351,30 +5701,100 @@ assetLibraryGrid?.addEventListener("dragstart", (event) => {
 
 shareProjectBtn?.addEventListener("click", shareProject);
 
+function clearProfileMenuCloseTimer() {
+  window.clearTimeout(profileMenuCloseTimer);
+  profileMenuCloseTimer = null;
+}
+
+function setProfileCreditDetailsVisible(visible) {
+  profileCreditCard?.classList.toggle("hidden", !visible);
+}
+
+function openProfileMenu({ showCredit = false, preserveCredit = false } = {}) {
+  clearProfileMenuCloseTimer();
+  profileMenu?.classList.remove("hidden");
+  railProfileBtn?.classList.add("active");
+  if (showCredit) {
+    setProfileCreditDetailsVisible(true);
+  } else if (!preserveCredit) {
+    setProfileCreditDetailsVisible(false);
+  }
+  closeProfileSubmenus();
+}
+
+function closeProfileMenu() {
+  clearProfileMenuCloseTimer();
+  profileMenu?.classList.add("hidden");
+  railProfileBtn?.classList.remove("active");
+  setProfileCreditDetailsVisible(false);
+  closeProfileSubmenus();
+}
+
+function scheduleCloseProfileMenu() {
+  clearProfileMenuCloseTimer();
+  profileMenuCloseTimer = window.setTimeout(closeProfileMenu, 180);
+}
+
 railProfileBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  closeAssetLibrary();
-  const willOpen = profileMenu?.classList.contains("hidden");
-  profileMenu?.classList.toggle("hidden", !willOpen);
-  themeSubmenu?.classList.add("hidden");
-  profileMenu?.querySelector("[data-profile-action='appearance']")?.classList.remove("active");
-  railProfileBtn.classList.toggle("active", Boolean(willOpen));
+  openProfileMenu({ showCredit: false });
+});
+
+railProfileBtn?.addEventListener("pointerenter", () => {
+  openProfileMenu({ preserveCredit: true });
+});
+
+railProfileBtn?.addEventListener("pointerleave", scheduleCloseProfileMenu);
+
+railProfileBtn?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  event.stopPropagation();
+  openProfileMenu({ showCredit: false });
+});
+
+avatarCreditBadge?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  openProfileMenu({ showCredit: true });
+});
+
+avatarCreditBadge?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  event.stopPropagation();
+  openProfileMenu({ showCredit: true });
 });
 
 profileMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 
-themeSubmenu?.addEventListener("pointerdown", (event) => {
+profileMenu?.addEventListener("pointerenter", clearProfileMenuCloseTimer);
+profileMenu?.addEventListener("pointerleave", scheduleCloseProfileMenu);
+
+profileHelpSubmenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 
 profileMenu?.addEventListener("click", (event) => {
-  const action = event.target.closest("[data-profile-action]")?.dataset.profileAction;
+  const inlineTheme = event.target.closest("[data-theme-inline]")?.dataset.themeInline;
+  if (inlineTheme) {
+    event.stopPropagation();
+    closeProfileSubmenus();
+    applyTheme(inlineTheme);
+    return;
+  }
+  const actionItem = event.target.closest("[data-profile-action]");
+  const action = actionItem?.dataset.profileAction;
   if (action === "appearance") {
-    positionThemeSubmenu();
-    themeSubmenu?.classList.toggle("hidden");
-    event.target.closest("[data-profile-action]")?.classList.toggle("active", !themeSubmenu?.classList.contains("hidden"));
+    closeProfileSubmenus();
+    return;
+  }
+  if (action === "help") {
+    positionProfileHelpSubmenu();
+    closeProfileSubmenus();
+    profileHelpSubmenu?.classList.remove("hidden");
+    actionItem?.classList.add("active");
     return;
   }
   if (action === "logout") {
@@ -4396,13 +5816,61 @@ profileMenu?.addEventListener("click", (event) => {
   }
 });
 
-themeSubmenu?.addEventListener("click", (event) => {
-  const option = event.target.closest("[data-theme-choice]");
-  if (!option) return;
-  applyTheme(option.dataset.themeChoice);
-  themeSubmenu.classList.add("hidden");
-  profileMenu?.querySelector("[data-profile-action='appearance']")?.classList.remove("active");
-});
+function bindProfileSubmenuPreview(actionName, submenu, positionFn) {
+  const trigger = profileMenu?.querySelector(`[data-profile-action='${actionName}']`);
+  if (!trigger || !submenu) return;
+  let closeTimer = null;
+  const open = () => {
+    clearProfileMenuCloseTimer();
+    window.clearTimeout(closeTimer);
+    closeProfileSubmenus();
+    positionFn();
+    submenu.classList.remove("hidden");
+    trigger.classList.add("active");
+  };
+  const closeSoon = () => {
+    window.clearTimeout(closeTimer);
+    closeTimer = window.setTimeout(() => {
+      submenu.classList.add("hidden");
+      trigger.classList.remove("active");
+    }, 160);
+  };
+  trigger.addEventListener("pointerenter", open);
+  trigger.addEventListener("pointerleave", closeSoon);
+  trigger.addEventListener("focus", open);
+  trigger.addEventListener("blur", closeSoon);
+  submenu.addEventListener("pointerenter", () => {
+    clearProfileMenuCloseTimer();
+    window.clearTimeout(closeTimer);
+  });
+  submenu.addEventListener("pointerleave", () => {
+    closeSoon();
+    scheduleCloseProfileMenu();
+  });
+}
+
+bindProfileSubmenuPreview("help", profileHelpSubmenu, positionProfileHelpSubmenu);
+
+function bindSelectionToolbarMenuPreview(selector, menu) {
+  const wrap = selectionToolbar?.querySelector(selector);
+  if (!wrap || !menu) return;
+  let closeTimer = null;
+  const open = () => {
+    window.clearTimeout(closeTimer);
+    menu.classList.remove("hidden");
+  };
+  const closeSoon = () => {
+    window.clearTimeout(closeTimer);
+    closeTimer = window.setTimeout(() => menu.classList.add("hidden"), 180);
+  };
+  wrap.addEventListener("pointerenter", open);
+  wrap.addEventListener("pointerleave", closeSoon);
+  menu.addEventListener("pointerenter", open);
+  menu.addEventListener("pointerleave", closeSoon);
+}
+
+bindSelectionToolbarMenuPreview('[data-toolbar-menu="layout"]', selectionSortMenu);
+bindSelectionToolbarMenuPreview('[data-toolbar-menu="download"]', selectionDownloadMenu);
 
 selectionToolbar?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -4416,9 +5884,33 @@ selectionToolbar?.addEventListener("click", (event) => {
     sortSelectedNodes(layout);
     return;
   }
+  const downloadAction = event.target.closest("[data-download-action]")?.dataset.downloadAction;
+  if (downloadAction) {
+    selectionDownloadMenu?.classList.add("hidden");
+    downloadSelectedMedia(downloadAction === "archive");
+    return;
+  }
   const action = event.target.closest("[data-selection-action]")?.dataset.selectionAction;
-  if (action === "group") groupSelectedNodes();
-  if (action === "toggle-sort") selectionSortMenu?.classList.toggle("hidden");
+  if (action === "group") {
+    groupSelectedNodes();
+    return;
+  }
+  if (action === "add-library") {
+    addSelectedMediaToLibrary();
+    return;
+  }
+  if (action === "delete") {
+    deleteSelectedNodes();
+    return;
+  }
+  if (action === "toggle-sort") {
+    selectionDownloadMenu?.classList.add("hidden");
+    selectionSortMenu?.classList.toggle("hidden");
+  }
+  if (action === "toggle-download") {
+    selectionSortMenu?.classList.add("hidden");
+    selectionDownloadMenu?.classList.toggle("hidden");
+  }
 });
 
 canvasTools?.addEventListener("pointerdown", (event) => {
@@ -4438,41 +5930,132 @@ canvasToolButtons.forEach((button) => {
 
 minimapSurface?.addEventListener("pointerdown", beginMinimapDrag);
 
-zoomPanel?.addEventListener("click", (event) => {
+zoomSlider?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
-  const item = event.target.closest("[data-zoom-action], [data-zoom-value]");
-  if (!item) return;
-  if (item.dataset.zoomAction === "in") {
-    setCanvasZoom(state.scale * 1.12);
-  } else if (item.dataset.zoomAction === "out") {
-    setCanvasZoom(state.scale / 1.12);
-  } else if (item.dataset.zoomValue) {
-    setCanvasZoom(Number(item.dataset.zoomValue));
-  }
+});
+
+zoomSlider?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+zoomSlider?.addEventListener("input", (event) => {
+  event.stopPropagation();
   closeCanvasPanel();
+  const nextValue = Number(event.currentTarget.value) / 100;
+  setCanvasZoom(nextValue);
 });
 
 undoDeleteBtn?.addEventListener("click", () => {
   undoLastAction();
 });
 
-projectTitle?.addEventListener("dblclick", beginProjectRename);
-projectTitle?.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
+document.querySelectorAll("[data-project-menu-button]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openProjectMenu(button);
+  });
+});
+
+document.querySelectorAll("[data-canvas-menu-button]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (event.detail > 1) return;
+    openCanvasMenu(button);
+  });
+  button.addEventListener("dblclick", (event) => {
     event.preventDefault();
-    commitProjectRename();
-    projectTitle.blur();
+    event.stopPropagation();
+    closeProjectMenus();
+    beginInlineRename(button.querySelector("[data-canvas-name]"));
+  });
+});
+
+projectNameEls.forEach((element) => {
+  element.addEventListener("dblclick", (event) => {
+    event.stopPropagation();
+    beginInlineRename(element);
+  });
+  element.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finishInlineRename(element, true);
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finishInlineRename(element, false);
+    }
+  });
+  element.addEventListener("blur", () => finishInlineRename(element, true));
+});
+
+canvasNameEls.forEach((element) => {
+  element.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    beginInlineRename(element);
+  });
+  element.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finishInlineRename(element, true);
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finishInlineRename(element, false);
+    }
+  });
+  element.addEventListener("blur", () => finishInlineRename(element, true));
+});
+
+[projectMenu, canvasMenu, canvasMoreMenu].forEach((menu) => {
+  menu?.addEventListener("pointerdown", (event) => event.stopPropagation());
+});
+
+projectMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const action = event.target.closest("[data-project-action]")?.dataset.projectAction;
+  if (action) handleProjectMenuAction(action);
+});
+
+canvasMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const addAction = event.target.closest("[data-canvas-action='add']");
+  if (addAction) {
+    addCanvas();
+    renderCanvasMenu();
+    return;
   }
-  if (event.key === "Escape") {
-    event.preventDefault();
-    projectTitle.textContent = state.projectName;
-    commitProjectRename();
-    projectTitle.blur();
+  const moreButton = event.target.closest("[data-canvas-more]");
+  if (moreButton) {
+    state.canvasMoreTargetId = moreButton.dataset.canvasMore;
+    canvasMoreMenu?.classList.remove("hidden");
+    if (!canvasMoreMenu?.classList.contains("hidden")) {
+      positionMenu(canvasMoreMenu, moreButton, { width: 178, gap: 4 });
+    }
+    return;
+  }
+  const switchButton = event.target.closest("[data-canvas-switch]");
+  if (switchButton) {
+    switchCanvas(switchButton.dataset.canvasSwitch);
+    closeProjectMenus();
   }
 });
-projectTitle?.addEventListener("blur", commitProjectRename);
 
-agentLauncher?.addEventListener("click", () => setAgentOpen(true));
+canvasMoreMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const action = event.target.closest("[data-canvas-more-action]")?.dataset.canvasMoreAction;
+  if (action) handleCanvasMoreAction(action);
+});
+
+agentLauncher?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setAgentOpen(true);
+});
+agentLauncher?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  setAgentOpen(true);
+});
 agentCloseBtn?.addEventListener("click", () => setAgentOpen(false));
 agentNewChatBtn?.addEventListener("click", () => {
   setAgentConversation("new");
@@ -4550,17 +6133,22 @@ document.addEventListener("click", (event) => {
     agentHistoryMenu?.classList.add("hidden");
     agentModelMenu?.classList.add("hidden");
   }
-  if (!target?.closest(".top-actions, #themeSubmenu")) {
-    profileMenu?.classList.add("hidden");
-    themeSubmenu?.classList.add("hidden");
-    profileMenu?.querySelector("[data-profile-action='appearance']")?.classList.remove("active");
-    railProfileBtn?.classList.remove("active");
+  if (!target?.closest(".top-actions, #profileHelpSubmenu")) {
+    closeProfileMenu();
+  }
+  if (!target?.closest(".project-nav, .project-menu, .canvas-menu, .canvas-more-menu")) {
+    closeProjectMenus();
+  }
+  if (!target?.closest("#assetLibraryTabs")) {
+    assetLibraryTabs?.querySelector(".asset-filter-menu")?.classList.add("hidden");
+    assetLibraryTabs?.querySelector("[data-library-filter-toggle]")?.setAttribute("aria-expanded", "false");
   }
   if (!target?.closest("#canvasTools")) {
     closeCanvasPanel();
   }
   if (!target?.closest("#selectionToolbar")) {
     selectionSortMenu?.classList.add("hidden");
+    selectionDownloadMenu?.classList.add("hidden");
   }
   if (!target?.closest(".group-frame")) {
     closeGroupLayoutMenus();
@@ -4572,6 +6160,13 @@ document.addEventListener("click", (event) => {
   }
 });
 
+window.addEventListener("resize", () => {
+  setAssetLibraryWidth(state.assetLibraryWidth);
+  syncPromptPanelLayouts();
+  renderMinimap();
+});
+
+setAssetLibraryWidth(state.assetLibraryWidth);
 setAgentWidth(state.agentWidth);
 setAgentOpen(false);
 setAgentConversation(state.activeConversationId);
@@ -4585,6 +6180,6 @@ systemThemeQuery.addEventListener("change", () => {
   }
 });
 officialLibraryAssets.forEach((asset) => hydrateAssetMetadata(asset, null));
-document.title = `${state.projectName} · Reelay Canvas`;
+initializeCanvases();
 applyTransform();
 render();
