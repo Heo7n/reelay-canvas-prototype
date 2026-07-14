@@ -4,7 +4,8 @@ Before changing this prototype, read:
 
 1. `docs/current-product-spec.md`
 2. `docs/agent-handoff.md`
-3. `docs/product-expansion-plan.md` for new-page work
+3. `docs/engineering-guardrails.md`
+4. `docs/product-expansion-plan.md` for new-page work
 
 Keep these boundaries:
 

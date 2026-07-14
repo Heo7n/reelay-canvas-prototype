@@ -29,6 +29,7 @@ git switch -c feature/<task-name>
 | `docs/current-product-spec.md` | 已实现产品行为 |
 | `docs/product-expansion-plan.md` | 未实现页面规划 |
 | `docs/model-catalog-notes.md` | 模型命名和来源说明 |
+| `docs/engineering-guardrails.md` | 下一阶段开发的工程护栏 |
 
 ## 3. 运行方式
 
@@ -168,7 +169,8 @@ python -m http.server 5174 --bind 127.0.0.1
 
 1. `AGENTS.md`
 2. `docs/current-product-spec.md`
-3. `docs/product-expansion-plan.md`
-4. 本文
+3. `docs/engineering-guardrails.md`
+4. `docs/product-expansion-plan.md`
+5. 本文
 
 如果任务是新页面，遵循产品扩展规划；如果任务是画布修复，以当前产品说明的交互约束为准。
