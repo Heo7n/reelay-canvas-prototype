@@ -9,15 +9,21 @@ Reelay Canvas 是一个 AIGC 创作平台的无限画布前端原型。当前阶
 ```text
 .
 ├─ index.html                       页面结构
-├─ styles.css                       视觉样式与主题
+├─ styles.css                       样式入口
+├─ styles/
+│  └─ app.css                       当前原型完整视觉样式与主题
 ├─ app.js                           画布、节点、素材、Agent 交互逻辑
 ├─ AGENTS.md                         Agent 接力开发约束
 ├─ data/
 │  └─ model-catalog.js              图片、视频生成模型目录
+├─ src/
+│  └─ config/
+│     └─ prototype-config.js        静态原型配置
 └─ docs/
    ├─ current-product-spec.md       当前产品与实现说明
    ├─ product-expansion-plan.md     其他页面与产品架构规划
    ├─ agent-handoff.md              工程交接与分支边界
+   ├─ engineering-guardrails.md     工程护栏
    └─ model-catalog-notes.md        模型命名与来源判断
 ```
 
@@ -48,7 +54,7 @@ http://127.0.0.1:5174/
 
 ## 工程状态
 
-当前代码适合作为高保真前端原型继续迭代，还不属于生产工程。已经具备清晰的静态页面入口、主题变量、核心交互状态和产品说明文档，但生产化前仍需要补齐：
+当前代码适合作为高保真前端原型继续迭代，还不属于生产工程。本轮已开始把样式入口、模型目录和静态原型配置从主逻辑中分离，但生产化前仍需要补齐：
 
 - 模块拆分：将画布、生成节点、媒体节点、Agent、主题和历史状态拆成独立模块。
 - 工程工具链：引入格式化、lint、类型检查、构建流程和基础自动化测试。

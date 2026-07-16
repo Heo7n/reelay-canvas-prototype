@@ -12,7 +12,7 @@
 ## 2. 不可继续扩大的位置
 
 - 不要继续把新页面、工作台、资产中心、任务中心写进 `app.js`。
-- 不要把新的大型页面样式继续堆进 `styles.css`。
+- 不要把新的大型页面样式继续堆进 `styles/app.css`。
 - 不要把模型目录、参数能力、计费规则散落在 UI 事件函数里。
 - 不要把未实现页面写进 `current-product-spec.md`，规划内容只写进 `product-expansion-plan.md`。
 
@@ -21,6 +21,7 @@
 | 改动类型 | 应放位置 |
 | --- | --- |
 | 模型条目、参数能力 | `data/model-catalog.js` |
+| 静态原型配置、模拟素材、布局常量 | `src/config/prototype-config.js` |
 | 已实现画布行为 | `docs/current-product-spec.md` |
 | 新页面/工作台规划 | `docs/product-expansion-plan.md` |
 | Agent/画布交接约束 | `docs/agent-handoff.md` |
@@ -50,6 +51,7 @@
 
 - `node --check app.js`
 - `node --check data/model-catalog.js`
+- `node --check src/config/prototype-config.js`
 - CSS 大括号结构检查。
 - `git diff --check`
 - 浅色/深色各检查一次。

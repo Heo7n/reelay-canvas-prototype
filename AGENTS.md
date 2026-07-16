@@ -18,6 +18,7 @@ Keep these boundaries:
 Minimum verification:
 
 - Run JavaScript syntax checks.
+- Run the prototype config syntax check.
 - Check CSS structure.
 - Test light and dark themes.
 - Check the browser console.
