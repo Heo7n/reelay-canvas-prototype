@@ -39,7 +39,6 @@ const avatarCreditBadge = document.querySelector("#avatarCreditBadge");
 const profileCreditAvailable = document.querySelector("#profileCreditAvailable");
 const profileCreditConsumed = document.querySelector("#profileCreditConsumed");
 const emptyState = document.querySelector("#emptyState");
-const emptyCreateBtn = document.querySelector("#emptyCreateBtn");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
 const selectionToolbar = document.querySelector("#selectionToolbar");
@@ -4334,11 +4333,6 @@ function setAgentOpen(open) {
   }
 }
 
-function addNodeAtViewportCenter() {
-  const rect = shell.getBoundingClientRect();
-  return addNodeAt(rect.left + rect.width / 2, rect.top + rect.height / 2);
-}
-
 async function shareProject() {
   const shareData = {
     title: `${state.projectName} · Reelay Canvas`,
@@ -5431,10 +5425,6 @@ window.addEventListener("drop", (event) => {
   }
 
   addMediaNodesFromFiles(files, event.clientX, event.clientY);
-});
-
-emptyCreateBtn?.addEventListener("click", () => {
-  addNodeAtViewportCenter();
 });
 
 railLibraryBtn?.addEventListener("click", () => {

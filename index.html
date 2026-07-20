@@ -39,9 +39,7 @@
         </button>
         <div class="profile-anchor">
           <span class="avatar-credit-badge" id="avatarCreditBadge" role="button" tabindex="0" aria-label="可用积分 3000">3000</span>
-          <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人">
-            <span class="avatar-dot" aria-hidden="true"></span>
-          </button>
+          <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人"></button>
 
           <div class="profile-menu hidden" id="profileMenu">
             <div class="profile-card">
@@ -248,9 +246,11 @@
           </button>
         </div>
         <div class="empty-state" id="emptyState">
-          <button class="empty-create" id="emptyCreateBtn" type="button" title="添加生成节点">+</button>
-          <div class="empty-title">双击画布开始创作</div>
-          <div class="empty-subtitle">也可将本地媒体直接拖入画布</div>
+          <div class="empty-create" aria-hidden="true">
+            <i data-lucide="mouse-pointer-click" aria-hidden="true"></i>
+          </div>
+          <div class="empty-title">双击开始自由创作</div>
+          <div class="empty-subtitle">可拖入本地素材文件至画布</div>
         </div>
         <div class="canvas-tools" id="canvasTools">
           <div class="canvas-tool-popover minimap-popover hidden" id="minimapPanel" data-canvas-popover="minimap">

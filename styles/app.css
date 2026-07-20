@@ -4,10 +4,10 @@
   --app-gradient-start: #060708;
   --app-gradient-end: #050608;
   --grid-dot-color: rgba(255, 255, 255, 0.34);
-  --empty-title-color: rgba(255, 255, 255, 0.66);
-  --empty-subtitle-color: rgba(255, 255, 255, 0.36);
-  --empty-ring-color: rgba(255, 255, 255, 0.11);
-  --empty-ring-hover: rgba(255, 255, 255, 0.22);
+  --empty-title-color: rgba(255, 255, 255, 0.48);
+  --empty-subtitle-color: rgba(255, 255, 255, 0.28);
+  --empty-ring-color: rgba(255, 255, 255, 0.1);
+  --empty-glyph-bg: rgba(255, 255, 255, 0.035);
   --surface: #111214;
   --surface-2: #191a1d;
   --surface-3: #242528;
@@ -66,10 +66,10 @@ html[data-theme="light"] {
   --app-gradient-start: #ffffff;
   --app-gradient-end: #edf0f4;
   --grid-dot-color: rgba(17, 24, 39, 0.26);
-  --empty-title-color: rgba(17, 18, 20, 0.64);
-  --empty-subtitle-color: rgba(17, 18, 20, 0.42);
-  --empty-ring-color: rgba(17, 24, 39, 0.12);
-  --empty-ring-hover: rgba(17, 24, 39, 0.22);
+  --empty-title-color: rgba(17, 18, 20, 0.48);
+  --empty-subtitle-color: rgba(17, 18, 20, 0.34);
+  --empty-ring-color: rgba(17, 24, 39, 0.11);
+  --empty-glyph-bg: rgba(17, 24, 39, 0.035);
   --surface: #ffffff;
   --surface-2: #f2f3f6;
   --surface-3: #e7e9ee;
@@ -501,10 +501,10 @@ html[data-theme="dark"] .project-logo-button img {
   gap: 8px;
   width: auto;
   height: 42px;
-  padding: 0 6px 0 10px;
+  padding: 0 5px 0 9px;
   border: 1px solid var(--floating-line);
-  border-radius: 12px;
-  background: var(--floating-bg);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--floating-bg) 92%, transparent);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(18px);
 }
@@ -592,41 +592,55 @@ html[data-theme="light"] .asset-lib-tooltip {
 }
 
 .avatar-button {
+  width: 32px;
+  height: 32px;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   background:
-    radial-gradient(circle at 50% 34%, var(--floating-text) 0 4px, transparent 5px),
-    radial-gradient(circle at 50% 78%, var(--floating-text) 0 8px, transparent 9px),
-    transparent;
+    linear-gradient(145deg, color-mix(in srgb, var(--text) 96%, var(--bg)), color-mix(in srgb, var(--text) 78%, var(--bg))),
+    var(--text);
+  color: var(--bg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg) 16%, transparent);
+}
+
+.avatar-button::before {
+  content: "T";
+  color: currentColor;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.avatar-button::after {
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 16%, transparent), transparent 52%);
+  content: "";
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .avatar-button:hover,
 .avatar-button.active {
   background:
-    radial-gradient(circle at 50% 34%, var(--bg) 0 4px, transparent 5px),
-    radial-gradient(circle at 50% 78%, var(--bg) 0 8px, transparent 9px),
+    linear-gradient(145deg, color-mix(in srgb, var(--text) 100%, var(--bg)), color-mix(in srgb, var(--text) 86%, var(--bg))),
     var(--text);
-}
-
-.avatar-dot {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--good);
-  box-shadow: 0 0 0 2px rgba(24, 25, 28, 0.9);
+  color: var(--bg);
+  transform: translateY(-1px);
 }
 
 .avatar-credit-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
-  min-width: 54px;
+  height: 25px;
+  min-width: 58px;
   padding: 0 9px;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--floating-text);
   box-shadow: none;
   font-size: 12px;
@@ -2639,36 +2653,36 @@ html[data-theme="light"] .asset-lib-tooltip {
 .empty-create {
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 16px;
-  border: 1px dashed var(--empty-ring-color);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--surface) 10%, transparent);
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  border: 1px solid var(--empty-ring-color);
+  border-radius: 16px;
+  background: var(--empty-glyph-bg);
   color: var(--empty-subtitle-color);
-  font-size: 38px;
-  font-weight: 200;
-  cursor: pointer;
-  pointer-events: auto;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
+  cursor: default;
+  opacity: 0.82;
+  pointer-events: none;
 }
 
-.empty-create:hover {
-  border-color: var(--empty-ring-hover);
-  background: color-mix(in srgb, var(--surface) 26%, transparent);
-  color: var(--empty-title-color);
+.empty-create svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.7;
 }
 
 .empty-title {
   color: var(--empty-title-color);
-  font-size: 18px;
-  font-weight: 760;
+  font-size: 15px;
+  font-weight: 680;
 }
 
 .empty-subtitle {
-  margin-top: 10px;
+  margin-top: 7px;
   color: var(--empty-subtitle-color);
-  font-size: 13px;
-  font-weight: 620;
+  font-size: 12px;
+  font-weight: 560;
 }
 
 .canvas-tools {
