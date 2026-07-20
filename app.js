@@ -9,6 +9,8 @@ const canvasToolButtons = document.querySelectorAll("[data-canvas-tool]");
 const canvasToolPopovers = document.querySelectorAll("[data-canvas-popover]");
 const minimapSurface = document.querySelector("#minimapSurface");
 const zoomSlider = document.querySelector("#zoomSlider");
+const zoomControl = document.querySelector(".canvas-zoom-control");
+const zoomValueTip = document.querySelector("#zoomValueTip");
 const projectNameEls = document.querySelectorAll("[data-project-name]");
 const canvasNameEls = document.querySelectorAll("[data-canvas-name]");
 const projectMenu = document.querySelector("#projectMenu");
@@ -165,6 +167,7 @@ const state = {
   undoStack: [],
   agentOpen: false,
   agentWidth: 420,
+  zoomTipTimer: 0,
   projectName: "Untitled",
   canvases: [],
   activeCanvasId: null,
@@ -303,7 +306,7 @@ function updateCanvasGrid() {
   const baseSize = 24;
   const size = baseSize * state.scale;
   const fade = clamp((state.scale - 0.62) / 0.68, 0, 1);
-  const opacity = fade * clamp((state.scale - 0.38) / 0.52, 0, 1) * 0.58;
+  const opacity = fade * clamp((state.scale - 0.38) / 0.52, 0, 1) * 0.72;
   const offsetX = ((state.tx % size) + size) % size;
   const offsetY = ((state.ty % size) + size) % size;
 
@@ -313,6 +316,27 @@ function updateCanvasGrid() {
   canvasGrid.style.setProperty("--grid-opacity", opacity.toFixed(3));
 }
 
+function syncZoomControl() {
+  const zoomValue = String(Math.round(state.scale * 100));
+  if (zoomSlider) {
+    zoomSlider.value = zoomValue;
+    zoomSlider.setAttribute("aria-valuetext", `${zoomValue}%`);
+  }
+  if (zoomValueTip) {
+    zoomValueTip.textContent = `${zoomValue}%`;
+  }
+}
+
+function showZoomValueTip() {
+  if (!zoomControl) return;
+  syncZoomControl();
+  zoomControl.classList.add("value-visible");
+  window.clearTimeout(state.zoomTipTimer);
+  state.zoomTipTimer = window.setTimeout(() => {
+    zoomControl.classList.remove("value-visible");
+  }, 900);
+}
+
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
   saveActiveCanvasState();
@@ -320,11 +344,7 @@ function applyTransform() {
   syncPromptPanelLayouts();
   window.clearTimeout(state.overlaySyncTimer);
   state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
-  if (zoomSlider) {
-    const zoomValue = String(Math.round(state.scale * 100));
-    zoomSlider.value = zoomValue;
-    zoomSlider.setAttribute("aria-valuetext", `${zoomValue}%`);
-  }
+  syncZoomControl();
   renderSelectionToolbar();
   renderMinimap();
 }
@@ -381,6 +401,7 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
   state.tx = clientX - rect.left - before.x * state.scale;
   state.ty = clientY - rect.top - before.y * state.scale;
   applyTransform();
+  showZoomValueTip();
 }
 
 function getCanvasFitFrame() {

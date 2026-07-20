@@ -247,10 +247,12 @@
         </div>
         <div class="empty-state" id="emptyState">
           <div class="empty-create" aria-hidden="true">
-            <i data-lucide="mouse-pointer-click" aria-hidden="true"></i>
+            <span class="empty-create-icon">
+              <i data-lucide="mouse-pointer-click" aria-hidden="true"></i>
+            </span>
+            <span class="empty-create-main">双击画布</span>
+            <span class="empty-create-sub">自由生成节点</span>
           </div>
-          <div class="empty-title">双击开始自由创作</div>
-          <div class="empty-subtitle">可拖入本地素材文件至画布</div>
         </div>
         <div class="canvas-tools" id="canvasTools">
           <div class="canvas-tool-popover minimap-popover hidden" id="minimapPanel" data-canvas-popover="minimap">
@@ -267,7 +269,7 @@
             </button>
             <label class="canvas-zoom-control" aria-label="放大/缩小画布">
               <input id="zoomSlider" type="range" min="20" max="200" step="1" value="100" aria-label="放大/缩小画布，20% 到 200%" />
-              <span class="canvas-tool-tip">放大/缩小画布 (Ctrl/⌘ + 🖱️)</span>
+              <span class="canvas-zoom-value" id="zoomValueTip" aria-hidden="true">100%</span>
             </label>
           </div>
         </div>
