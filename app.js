@@ -1217,6 +1217,7 @@ const fallbackIconPaths = {
   "book-open": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v15h-3a5 5 0 0 0-5 3z"/><path d="M12 6.5V22"/>',
   "book-open-check": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v8"/><path d="M12 6.5V22"/><path d="m15 18 2 2 4-5"/>',
   "bot": '<path d="M12 8V4"/><path d="M8 4h8"/><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M9 17h6"/>',
+  "box": '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
   "building-2": '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18"/><path d="M4 22h16"/><path d="M9 6h1"/><path d="M14 6h1"/><path d="M9 10h1"/><path d="M14 10h1"/><path d="M9 14h1"/><path d="M14 14h1"/>',
   "check": '<path d="m5 12 4 4 10-10"/>',
   "chevron-down": '<path d="m6 9 6 6 6-6"/>',
@@ -3789,7 +3790,7 @@ function modelPanel(node) {
         .map(
           (item) => `
             <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" type="button">
-              <span class="model-icon"><i data-lucide="box" aria-hidden="true"></i></span>
+              <span class="model-icon">${item.icon}</span>
               <span>
                 <span class="model-name">${item.name}</span>
                 <span class="model-desc">${item.desc}</span>
@@ -4577,7 +4578,7 @@ function renderAgentModelMenu() {
     const active = selectedIds.has(model.id);
     return `
       <button class="agent-model-option ${active ? "active" : ""}" type="button" data-agent-model="${model.id}" aria-pressed="${active}">
-        <span class="agent-model-provider"><i data-lucide="box" aria-hidden="true"></i></span>
+        <span class="agent-model-provider">${escapeHtml(model.icon)}</span>
         <span class="agent-model-copy">
           <span class="agent-model-title">${escapeHtml(model.name)}</span>
           <span class="agent-model-detail">${escapeHtml(model.desc)}</span>

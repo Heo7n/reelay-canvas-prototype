@@ -36,8 +36,9 @@ test("a successful result locks its generator node to one media modality", () =>
   assert.match(appSource, /已生成\$\{lockedMode === "image" \? "图片" : "视频"\}，此节点仅可继续使用/);
   assert.doesNotMatch(appSource, /如需切换类型，请新建节点/);
   assert.match(appSource, /class="chip-icon"><i data-lucide="box"/);
-  assert.match(appSource, /class="model-icon"><i data-lucide="box"/);
-  assert.match(appSource, /class="agent-model-provider"><i data-lucide="box"/);
+  assert.match(appSource, /class="model-icon">\$\{item\.icon\}/);
+  assert.match(appSource, /class="agent-model-provider">\$\{escapeHtml\(model\.icon\)\}/);
+  assert.match(appSource, /"box":\s*'<path/);
   assert.match(html, /id="agentModelBtn"[\s\S]*?data-lucide="box"/);
   assert.match(appSource, /commitGenerationUndoBoundary\(canvas, node\.id\)/);
   assert.match(appSource, /action\.type === "node-update" && action\.node\?\.id === nodeId/);
