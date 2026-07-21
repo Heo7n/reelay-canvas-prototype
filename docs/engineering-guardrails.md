@@ -30,6 +30,8 @@
 
 高保真静态原型新增页面时，至少先建立独立入口、独立样式 / 脚本目录和可逆 route contract；不要用新的浮层或隐藏容器假装完成页面结构。真实账号、持久化或生产部署开始前，必须再完成 runtime / router 决策并建立正式应用壳。
 
+Phase 0B 的暂定 runtime、Workspace 路由和 legacy canvas 迁移边界记录在 `docs/adr/0001-application-runtime-and-migration.md`。它是可重新评审的决策，不得把 React 组件结构误当成领域模型，也不得绕过 Membership 只用前端 Workspace 类型推断权限。
+
 ## 4. 原型代码清理规则
 
 每次替换一个交互或面板时，必须同步删除：

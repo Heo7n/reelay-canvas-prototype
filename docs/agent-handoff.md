@@ -21,6 +21,8 @@
 
 涉及新页面、路由、持久化、资产归属、生成任务、积分或跨项目 Agent 时，还必须读 `docs/product-expansion-plan.md`。
 
+进入正式应用壳、runtime、router、Workspace / Membership 或 legacy canvas 迁移时，还必须读 `docs/adr/0001-application-runtime-and-migration.md`。
+
 ## 3. 运行方式
 
 ```powershell
@@ -54,6 +56,7 @@ http://127.0.0.1:5174/
 | `docs/current-product-spec.md` | 已实现产品行为 |
 | `docs/product-expansion-plan.md` | 未实现页面规划 |
 | `docs/engineering-guardrails.md` | 下一阶段工程边界 |
+| `docs/adr/0001-application-runtime-and-migration.md` | Phase 0B 暂定 runtime、路由、领域边界和 legacy canvas 迁移决策 |
 
 ## 5. 改动边界
 

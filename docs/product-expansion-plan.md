@@ -19,8 +19,8 @@ Reelay 不应只是一块无限画布，也不应演变成把大量后台页面�
 - 每个用户先拥有一个个人 Workspace；组织空间以后使用同一套归属模型扩展，避免把“个人版”写成另一套数据结构。
 - 可跨项目复用的 Asset 归 Workspace 所有，Project 和 Node 只保存 AssetReference。尚未保存的生成结果仍是 GenerationResult，不会自动污染全局资产中心。
 - 首期按 Reelay 统一提供模型服务设计，但 ProviderConnection 保留扩展边界；不在首期同时建设 BYOK 的密钥、配额和故障处理体系。
-- 分享与只读访问先于实时多人协作。数据模型保留成员和权限边界，但首期不引入实时光标和冲突合并。
-- 前端框架不是产品架构本身。先定义 route contract、领域对象和存储接口；真正实现应用壳与路由前设置技术决策门，根据页面复杂度、鉴权、部署与测试要求一次选定 runtime / router。现有画布通过 adapter 接入，不因框架选择被整体重写。
+- 同一组织下的成员身份、Membership 和组织项目可见性先于外部分享与实时协作。首期先演示多个账号在同一组织范围内使用项目，不引入分享链接、实时光标和冲突合并。
+- 前端框架不是产品架构本身。先定义 route contract、领域对象和存储接口；Phase 0B 暂按 `docs/adr/0001-application-runtime-and-migration.md` 采用 React + TypeScript + Vite + React Router，答案或运行证据反驳时重新评审。现有画布通过 adapter 接入，不因框架选择被整体重写。
 
 任何一项假设改变时，都必须同时复核路由、权限、资产归属、计费和迁移策略。
 
@@ -412,9 +412,10 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-- 高保真静态原型可以先建立可逆的多入口 route contract，验证信息架构与跨页面主链路；进入真实账号、持久化和生产部署前，再完成 runtime / router 技术决策记录并建立正式应用壳。现有画布始终作为受保护的独立入口接入，不整体重写。
+- 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
-- 建立 Project、CanvasDocument、Asset、GenerationTask、CreditLedger 的 repository / service 边界。
+- 优先建立 Session、Workspace、Membership、Project 和 CanvasDocument 的 repository / service 边界，让个人空间与组织空间都由显式 actor scope 驱动。
+- 为 Asset、GenerationTask、GenerationResult 和 CreditLedger 先定义核心不变量；真实生成接入前再补足 repository 和事务边界。
 - 本地草稿与 Blob 使用 IndexedDB；localStorage 仅保存主题等设备偏好。
 - 建立通用通知、确认、菜单、对话框和焦点管理组件。
 
@@ -437,7 +438,7 @@ sequenceDiagram
 - 模板中心。
 - 模型与服务。
 - 完整个人设置。
-- 组织成员与基础权限。
+- 组织成员管理、邀请、细粒度权限与策略；基础 Membership 和组织项目可见性已经在 Phase 0B 建立。
 
 ### Phase 3：协作与规模化
 
@@ -467,6 +468,6 @@ Phase 0B 可以按 1.1 节的可逆假设推进，但在进入相应产品功能
 3. Asset 归 Workspace，Project / Node 保存 AssetReference；项目内的临时数组不是正式所有权模型。
 4. GenerationResult 默认不自动进入资产中心，必须显式保存或经过可解释的产品规则晋升。
 5. 模板首期仅限内部或私有复用，公开发布与市场化另行评估。
-6. 分享与只读权限先于真实多人协作；实时状态、冲突合并和审批留到主链路稳定后。
+6. 组织成员身份与共享组织项目可见性先于外部分享和实时协作；分享链接、实时状态、冲突合并和审批留到主链路稳定后。
 
 这些假设不是文档权威。调研、用户反馈或实现证据一旦反驳其中任意一项，应先修订路线和数据模型，再继续编码。
