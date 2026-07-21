@@ -5,8 +5,8 @@
 ## 1. 当前定位
 
 - 这是静态高保真前端原型，不是生产应用。
-- 无后端、无真实账号、无真实模型 API、无项目持久化，也尚无 bundler、生产构建和部署链路；login / home / canvas 目前通过三个静态入口串联，不是正式 router。
-- 已有零依赖的 Node 检查与契约测试基线，统一入口为 `npm run check`。
+- 无后端、无真实账号、无真实模型 API、无项目持久化和部署链路；login / home / canvas 目前仍通过三个静态入口串联，不是正式 router。
+- Phase 0B 已建立隔离的 React + TypeScript + Vite 应用壳、browser route contract、Vitest 和 legacy canvas host；它尚未接管现有三页。旧原型检查与新壳类型 / 单元检查的统一入口仍是 `npm run check`。
 - `prototype-shell-baseline-2026-07-14` 是历史原型壳层标签，不代表最新已验证工作区。
 - 接手时用 `git branch --show-current` 和 `git status --short` 确认实际分支与未提交改动，不依赖文档中的静态分支名。
 
@@ -52,7 +52,10 @@ http://127.0.0.1:5174/
 | `src/home/index.js` / `src/config/home-prototype-config.js` | 主页、项目库页面状态交互与 mock 数据；项目库界面使用“个人 / 协作项目”，最近项目从全部项目数据按近期混排派生，协作卡显示多人标识 |
 | `data/model-catalog.js` | 图片/视频模型目录与参数能力 |
 | `src/config/prototype-config.js` | 模拟媒体、布局常量、工具栏与示例会话等静态原型配置 |
-| `package.json` / `scripts/` / `tests/` | 零依赖检查入口、静态契约与回归测试 |
+| `package.json` / `scripts/` / `tests/` | 旧原型静态契约、新应用壳类型 / 单元检查与统一验证入口 |
+| `app-shell.html` / `vite.shell.config.ts` / `tsconfig.shell.json` | Phase 0B 隔离应用壳入口、构建和严格类型检查 |
+| `src/app/` / `src/pages/` / `src/domain/` / `src/application/` | 正式路由壳、迁移页面、领域对象与 repository ports |
+| `src/legacy-canvas/` | 带版本校验的旧画布宿主与消息协议；不得复制权限和 repository 逻辑 |
 | `docs/current-product-spec.md` | 已实现产品行为 |
 | `docs/product-expansion-plan.md` | 未实现页面规划 |
 | `docs/engineering-guardrails.md` | 下一阶段工程边界 |

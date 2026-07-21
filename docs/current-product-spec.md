@@ -20,7 +20,7 @@ Reelay Canvas 是面向 AIGC 创作流程的无限画布原型。它不是传统
 
 - 没有真实 AIGC API。
 - 没有真实账号鉴权、项目存储、云端素材库。
-- 没有打包、部署、生产路由和后端服务；当前只有 `login.html`、`home.html` 与 `index.html` 之间的可逆静态入口契约。
+- 没有部署、已接管产品页面的生产路由或后端服务；当前用户主链路仍是 `login.html`、`home.html` 与 `index.html` 之间的可逆静态入口契约。Phase 0B 已另建隔离的 React + TypeScript + Vite 应用壳、browser route contract 和 legacy canvas host，尚未替换这三个入口。
 - 所有节点数据都存在浏览器当前运行内存中，刷新后会丢失。
 - “生成”是模拟行为，用于验证生成后的媒体状态、标题和规格展示。
 
@@ -526,6 +526,18 @@ src/home/index.js
 
 data/model-catalog.js
   保存图片和视频生成模型目录、展示元数据与参数能力表。
+
+app-shell.html / vite.shell.config.ts / tsconfig.shell.json
+  定义 Phase 0B 的隔离应用壳入口、Vite 构建和严格 TypeScript 检查；当前尚未接管现有产品页面。
+
+src/app / src/pages
+  定义正式 browser route contract、过渡重定向和 legacy canvas 路由宿主。
+
+src/domain / src/application
+  定义不依赖 React、DOM 或持久化实现的 Session、Workspace、Membership、Project 与 CanvasDocument 边界。
+
+src/legacy-canvas
+  定义版本化同源消息协议和旧画布隔离宿主；当前旧画布尚未消费该上下文。
 ```
 
 核心状态在 `state` 对象中：
@@ -558,8 +570,8 @@ data/model-catalog.js
 - 主要交互逻辑仍集中在 `app.js`，继续扩大后会难以维护。
 - 当前完整样式仍集中在 `styles/app.css`，已经有入口层但还未按区域拆分。
 - 没有组件拆分和模块边界。
-- 已有零依赖的 JavaScript、配置、CSS、HTML 检查和 Node 契约测试，统一入口为 `npm run check`；关键画布手势仍需浏览器运行验证。
-- 没有 bundler、生产构建、代码格式化配置和类型检查。
+- 旧静态原型已有 JavaScript、配置、CSS、HTML 检查和 Node 契约测试；Phase 0B 新壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
+- 暂无代码格式化、lint 和端到端测试；这些工具应随新壳代码量和稳定主链路增加，不恢复与当前源码脱节的旧配置。
 - 数据没有持久化。
 - 没有真实服务接口抽象。
 - 全局可变状态仍缺少统一 action/store 边界，撤销也还不是覆盖全部操作的命令系统。

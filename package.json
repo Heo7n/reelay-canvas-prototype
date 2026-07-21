@@ -4,14 +4,35 @@
   "private": true,
   "description": "Reelay Canvas static prototype validation baseline",
   "scripts": {
+    "dev:shell": "vite --config vite.shell.config.ts",
+    "build:shell": "tsc -p tsconfig.shell.json --noEmit && vite build --config vite.shell.config.ts",
+    "test:shell": "vitest run --config vitest.shell.config.ts",
+    "check:shell": "tsc -p tsconfig.shell.json --noEmit && npm run test:shell",
     "check:js": "node scripts/check-js.mjs",
     "check:config": "node scripts/check-config.mjs",
     "check:css": "node scripts/check-css.mjs",
     "check:html": "node scripts/check-html.mjs",
-    "test": "node --test",
-    "check": "npm run check:js && npm run check:config && npm run check:css && npm run check:html && npm test"
+    "test": "node --test tests/model-config.test.mjs tests/static-contracts.test.mjs",
+    "check": "npm run check:js && npm run check:config && npm run check:css && npm run check:html && npm test && npm run check:shell"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^29.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
   }
 }
