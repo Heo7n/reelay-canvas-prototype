@@ -4172,6 +4172,19 @@ html[data-theme="light"] .group-resize-handle {
   color: #fff;
 }
 
+.mode-tab:disabled {
+  color: rgba(255, 255, 255, 0.22);
+  cursor: not-allowed;
+}
+
+.model-mode-lock {
+  margin: 0 18px 10px;
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
 .model-list {
   max-height: 330px;
   padding: 0 12px 16px;
@@ -4343,6 +4356,14 @@ html[data-theme="light"] .segmented {
 html[data-theme="light"] .mode-tab,
 html[data-theme="light"] .segmented button {
   color: rgba(17, 24, 39, 0.48);
+}
+
+html[data-theme="light"] .mode-tab:disabled {
+  color: rgba(17, 24, 39, 0.25);
+}
+
+html[data-theme="light"] .model-mode-lock {
+  color: rgba(17, 24, 39, 0.5);
 }
 
 html[data-theme="light"] .mode-tab.active,

@@ -71,6 +71,7 @@ const undoDeleteBtn = document.querySelector("#undoDeleteBtn");
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
+const homeLaunchIntentKey = "reelay-home-launch-intent";
 
 function syncFaviconContrast() {
   if (!appFavicon) return;
@@ -149,7 +150,7 @@ function loadMediaToolPreferences() {
 function normalizeThemeMode(mode) {
   if (mode === "light" || mode === "dark") return mode;
   if (mode === "system") return systemThemeQuery.matches ? "light" : "dark";
-  return "dark";
+  return "light";
 }
 
 function loadThemeMode() {
@@ -157,7 +158,7 @@ function loadThemeMode() {
     const savedMode = localStorage.getItem("reelay-theme-mode");
     return normalizeThemeMode(savedMode);
   } catch {
-    return "dark";
+    return "light";
   }
 }
 
@@ -232,6 +233,21 @@ function setAssetLibraryWidth(width) {
 
 function firstModelId(type) {
   return models.find((item) => item.type === type)?.id || models[0].id;
+}
+
+function normalizeGeneratorMode(mode) {
+  return mode === "image" || mode === "video" ? mode : null;
+}
+
+function getNodeLockedMode(node) {
+  if (!node || node.kind !== "generator") return null;
+  return normalizeGeneratorMode(node.lockedMode)
+    || normalizeGeneratorMode(node.generatedAsset?.type);
+}
+
+function canUseModelForNode(node, model) {
+  const lockedMode = getNodeLockedMode(node);
+  return Boolean(model) && (!lockedMode || model.type === lockedMode);
 }
 
 function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
@@ -583,6 +599,7 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     preview: false,
     generating: false,
     generatedAsset: null,
+    lockedMode: null,
     expanded: true,
     promptLarge: false,
     promptInputHeight: layoutRules.largePromptMinHeight,
@@ -631,12 +648,15 @@ function getCapabilityValues(node, key) {
 
 function normalizeNodeParameters(node) {
   if (!node || node.kind !== "generator") return node;
+  const lockedMode = getNodeLockedMode(node);
+  const expectedMode = lockedMode || normalizeGeneratorMode(node.mode) || "image";
+  if (lockedMode) node.lockedMode = lockedMode;
   let model = models.find((item) => item.id === node.model);
-  if (!model || model.type !== node.mode) {
-    node.model = firstModelId(node.mode);
+  if (!model || model.type !== expectedMode) {
+    node.model = firstModelId(expectedMode);
     model = getModel(node);
   }
-  node.mode = model.type;
+  node.mode = lockedMode || model.type;
 
   const fieldMap = {
     aspect: "aspects",
@@ -3061,7 +3081,7 @@ function createGeneratorNodeElement(node) {
         <textarea class="prompt-input" style="${node.promptLarge ? `height: ${node.promptInputHeight}px;` : ""}" placeholder="描述你想生成的画面，也可以先添加参考素材" ${generationInputsDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
           <button class="control-chip model-chip ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
-            <span class="chip-icon">${model.icon}</span><span>${model.name}</span><span>⌃</span>
+            <span class="chip-icon"><i data-lucide="box" aria-hidden="true"></i></span><span>${model.name}</span><span>⌃</span>
           </button>
           <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>${getParamLabel(node)} ⌃</button>
           <div class="control-spacer"></div>
@@ -3639,6 +3659,15 @@ function cancelGenerationTasks(predicate, resetNodes = true) {
   }
 }
 
+function commitGenerationUndoBoundary(canvas, nodeId) {
+  if (!canvas || !nodeId) return;
+  const nextUndoStack = (canvas.undoStack || []).filter(
+    (action) => !(action.type === "node-update" && action.node?.id === nodeId),
+  );
+  canvas.undoStack = nextUndoStack;
+  if (canvas.id === state.activeCanvasId) state.undoStack = nextUndoStack;
+}
+
 function completeSimulatedGeneration(taskId) {
   const task = state.generationTasks.get(taskId);
   if (!task) return;
@@ -3649,9 +3678,20 @@ function completeSimulatedGeneration(taskId) {
   if (node.kind !== "generator" || node.generationTaskId !== task.id) return;
   node.generating = false;
   delete node.generationTaskId;
+  const outputMode = normalizeGeneratorMode(task.parameterSnapshot.mode);
+  const lockedMode = getNodeLockedMode(node);
+  if (!outputMode || (lockedMode && lockedMode !== outputMode)) {
+    if (canvas.id === state.activeCanvasId) {
+      showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
+      render();
+    }
+    return;
+  }
+  node.lockedMode = outputMode;
   node.preview = true;
   node.generatedAsset = createGeneratedAsset({ id: node.id, ...task.parameterSnapshot });
   node.name = node.name || node.generatedAsset.displayName || defaultGeneratedName(node);
+  commitGenerationUndoBoundary(canvas, node.id);
   if (canvas.id === state.activeCanvasId) render();
 }
 
@@ -3731,21 +3771,25 @@ function modelPanel(node) {
     { id: "image", label: "图片" },
     { id: "video", label: "视频" },
   ];
-  const requestedType = node.modelFilter || node.mode;
+  const lockedMode = getNodeLockedMode(node);
+  const visibleTypes = lockedMode
+    ? types.filter((type) => type.id === lockedMode)
+    : types;
+  const requestedType = lockedMode || node.modelFilter || node.mode;
   const activeType = types.some((type) => type.id === requestedType)
     ? requestedType
     : node.mode === "video"
       ? "video"
       : "image";
   const activeIndex = Math.max(0, types.findIndex((type) => type.id === activeType));
-  const sections = types
+  const sections = visibleTypes
     .map((type) => {
       const options = models
         .filter((item) => item.type === type.id)
         .map(
           (item) => `
             <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" type="button">
-              <span class="model-icon">${item.icon}</span>
+              <span class="model-icon"><i data-lucide="box" aria-hidden="true"></i></span>
               <span>
                 <span class="model-name">${item.name}</span>
                 <span class="model-desc">${item.desc}</span>
@@ -3771,11 +3815,14 @@ function modelPanel(node) {
         <span class="mode-tab-indicator" aria-hidden="true"></span>
         ${types
           .map(
-            (type) =>
-              `<button class="mode-tab ${activeType === type.id ? "active" : ""}" data-model-jump="${type.id}" type="button">${type.label}</button>`,
+            (type) => {
+              const disabled = Boolean(lockedMode && type.id !== lockedMode);
+              return `<button class="mode-tab ${activeType === type.id ? "active" : ""}" data-model-jump="${type.id}" type="button" ${disabled ? `disabled aria-disabled="true" title="此节点已锁定为${lockedMode === "image" ? "图片" : "视频"}生成"` : ""}>${type.label}</button>`;
+            },
           )
           .join("")}
       </div>
+      ${lockedMode ? `<p class="model-mode-lock" role="status">已生成${lockedMode === "image" ? "图片" : "视频"}，此节点仅可继续使用${lockedMode === "image" ? "图片" : "视频"}模型</p>` : ""}
       <div class="model-list">${sections}</div>
     </div>
   `;
@@ -3788,7 +3835,10 @@ function bindModelPanelEvents(element, node) {
   if (!panel || !list || !tabs) return;
 
   const types = ["image", "video"];
+  const lockedMode = getNodeLockedMode(node);
+  const visibleTypes = lockedMode ? [lockedMode] : types;
   const setActiveType = (type) => {
+    if (lockedMode && type !== lockedMode) return;
     const index = Math.max(0, types.indexOf(type));
     node.modelFilter = types[index];
     tabs.style.setProperty("--active-index", String(index));
@@ -3809,22 +3859,22 @@ function bindModelPanelEvents(element, node) {
 
   tabs.addEventListener("click", (event) => {
     const button = event.target.closest("[data-model-jump]");
-    if (!button) return;
+    if (!button || button.disabled) return;
     event.stopPropagation();
     jumpTo(button.dataset.modelJump);
   });
 
   list.addEventListener("scroll", () => {
     const marker = list.scrollTop + Math.min(160, list.clientHeight * 0.48);
-    let visibleType = types[0];
-    for (const type of types) {
+    let visibleType = visibleTypes[0];
+    for (const type of visibleTypes) {
       const section = list.querySelector(`[data-model-section="${type}"]`);
       if (section && section.offsetTop - list.offsetTop <= marker) visibleType = type;
     }
     if (visibleType !== node.modelFilter) setActiveType(visibleType);
   });
 
-  requestAnimationFrame(() => jumpTo(node.mode, false));
+  requestAnimationFrame(() => jumpTo(lockedMode || node.mode, false));
 }
 
 function materialPanel() {
@@ -3970,6 +4020,11 @@ function handleAction(node, action, value) {
     case "model": {
       const selected = models.find((item) => item.id === value);
       if (!selected) return;
+      if (!canUseModelForNode(node, selected)) {
+        const lockedMode = getNodeLockedMode(node);
+        showActionToast(`此节点已锁定为${lockedMode === "video" ? "视频" : "图片"}生成，请新建节点切换类型`);
+        return;
+      }
       const previousDefaultName = defaultGeneratedName(node);
       node.model = selected.id;
       node.mode = selected.type;
@@ -4091,6 +4146,20 @@ function addNodeAt(clientX, clientY, mode = "image") {
   setSelection([node.id], node.id);
   render();
   return node;
+}
+
+function consumeHomeLaunchIntent() {
+  let prompt = "";
+  try {
+    prompt = sessionStorage.getItem(homeLaunchIntentKey)?.trim() || "";
+    sessionStorage.removeItem(homeLaunchIntentKey);
+  } catch {
+    return;
+  }
+  if (!prompt) return;
+  const node = addNodeAt(window.innerWidth / 2, window.innerHeight / 2);
+  node.prompt = prompt;
+  node.expanded = true;
 }
 
 function cloneNodeState(node) {
@@ -4508,7 +4577,7 @@ function renderAgentModelMenu() {
     const active = selectedIds.has(model.id);
     return `
       <button class="agent-model-option ${active ? "active" : ""}" type="button" data-agent-model="${model.id}" aria-pressed="${active}">
-        <span class="agent-model-provider">${escapeHtml(model.icon)}</span>
+        <span class="agent-model-provider"><i data-lucide="box" aria-hidden="true"></i></span>
         <span class="agent-model-copy">
           <span class="agent-model-title">${escapeHtml(model.name)}</span>
           <span class="agent-model-detail">${escapeHtml(model.desc)}</span>
@@ -4969,8 +5038,12 @@ function resetPrototypeProject() {
 
 function handleProjectMenuAction(action) {
   closeProjectMenus();
-  if (action === "home" || action === "all") {
-    showActionToast("项目首页将在正式工作台中打开");
+  if (action === "home") {
+    window.location.assign("./home.html");
+    return;
+  }
+  if (action === "all") {
+    window.location.assign("./home.html#all-projects");
     return;
   }
   if (action === "create") {
@@ -6079,10 +6152,10 @@ profileMenu?.addEventListener("click", (event) => {
   }
   if (action === "logout") {
     showConfirmDialog({
-      title: "退出登录",
-      body: "当前是前端原型，退出登录暂未接入真实账号系统。",
-      confirmText: "知道了",
-      showCancel: false,
+      title: "退出演示账号",
+      body: "当前没有真实登录会话。继续后将返回账户密码流程样机。",
+      confirmText: "返回登录页",
+      onConfirm: () => window.location.assign("./login.html"),
     });
     return;
   }
@@ -6436,4 +6509,5 @@ syncFaviconContrast();
 officialLibraryAssets.forEach((asset) => hydrateAssetMetadata(asset, null));
 initializeCanvases();
 applyTransform();
+consumeHomeLaunchIntent();
 render();

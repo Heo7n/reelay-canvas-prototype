@@ -66,6 +66,8 @@ function checkStructure(css, source = "combined styles") {
 }
 
 const css = await readStyle("styles.css");
+const homeCss = await readStyle("styles/home.css");
+const loginCss = await readStyle("styles/login.css");
 
 for (const selector of [
   ":root",
@@ -79,5 +81,26 @@ for (const selector of [
   assert.ok(css.includes(selector), `Required selector ${selector} is missing.`);
 }
 
-assert.ok(visited.size >= 2, "The stylesheet entry must resolve its imported application CSS.");
+for (const selector of [
+  ".home-shell",
+  ".home-header",
+  ".hero-carousel",
+  ".creation-composer",
+  ".project-grid",
+  'html[data-theme="dark"]',
+]) {
+  assert.ok(homeCss.includes(selector), `Required home selector ${selector} is missing.`);
+}
+
+for (const selector of [
+  ".login-shell",
+  ".login-visual",
+  ".login-form-panel",
+  ".login-submit",
+  'html[data-theme="dark"]',
+]) {
+  assert.ok(loginCss.includes(selector), `Required login selector ${selector} is missing.`);
+}
+
+assert.ok(visited.size >= 4, "The stylesheet entries must resolve the canvas, home, and login styles.");
 console.log(`CSS structure check passed (${visited.size} files).`);
