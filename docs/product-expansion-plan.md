@@ -12,6 +12,18 @@ Reelay 不应只是一块无限画布，也不应演变成把大量后台页面�
 - 项目画布负责沉浸式创作、节点组织和 Agent 协作。
 - 两种状态共享账号、积分、模型、生成任务和素材数据，但使用不同的信息密度与导航方式。
 
+### 1.1 当前工作假设
+
+以下是为了让基础开发可以前进而采用的可逆假设，不是不可更改的产品结论：
+
+- 每个用户先拥有一个个人 Workspace；组织空间以后使用同一套归属模型扩展，避免把“个人版”写成另一套数据结构。
+- 可跨项目复用的 Asset 归 Workspace 所有，Project 和 Node 只保存 AssetReference。尚未保存的生成结果仍是 GenerationResult，不会自动污染全局资产中心。
+- 首期按 Reelay 统一提供模型服务设计，但 ProviderConnection 保留扩展边界；不在首期同时建设 BYOK 的密钥、配额和故障处理体系。
+- 分享与只读访问先于实时多人协作。数据模型保留成员和权限边界，但首期不引入实时光标和冲突合并。
+- 前端框架不是产品架构本身。先定义 route contract、领域对象和存储接口；真正实现应用壳与路由前设置技术决策门，根据页面复杂度、鉴权、部署与测试要求一次选定 runtime / router。现有画布通过 adapter 接入，不因框架选择被整体重写。
+
+任何一项假设改变时，都必须同时复核路由、权限、资产归属、计费和迁移策略。
+
 核心价值链：
 
 ```mermaid
@@ -21,8 +33,9 @@ flowchart LR
   Asset["资产中心"] --> Canvas
   Template["模板中心"] --> Canvas
   Canvas --> Task["生成任务"]
-  Task --> Result["媒体结果"]
-  Result --> Asset
+  Task --> Result["GenerationResult"]
+  Result --> Promote["显式保存 / 产品规则"]
+  Promote --> Asset
   Result --> Canvas
   Agent["Reelay Agent"] --> Canvas
   Agent --> Task
@@ -46,7 +59,7 @@ flowchart TD
   Generations --> Canvas
   Templates --> Canvas
 
-  Canvas --> ProjectAssets["项目素材"]
+  Canvas --> ProjectAssets["项目资产引用"]
   Canvas --> ProjectAgent["项目 Agent"]
   Canvas --> ProjectHistory["项目版本与记录"]
 ```
@@ -126,7 +139,7 @@ flowchart TD
 
 ### 关键交互
 
-- 双击项目进入画布。
+- 单击项目卡或按 Enter 进入画布；双击只能作为桌面增强，不能是唯一入口。
 - 卡片菜单支持重命名、复制、移动、归档、删除。
 - 删除进入回收站，不直接永久删除。
 - 支持列表与网格视图，但默认使用信息密度较高的网格。
@@ -171,7 +184,7 @@ flowchart TD
 ### 关键交互
 
 - 拖入上传。
-- 批量加入项目。
+- 批量加入项目（创建 AssetReference，不复制 Asset 所有权）。
 - 打开素材所在画布并定位节点。
 - 查看生成提示词和模型参数。
 - 删除前检查引用关系。
@@ -314,6 +327,8 @@ flowchart TD
 
 独立 Agent 不应替代画布，而是负责跨页面、跨项目的操作编排。
 
+Agent 不直接调用页面 DOM 或原型事件函数。跨项目写操作必须通过 application service / command，经过权限检查、显式确认、幂等 command id、审计记录和可恢复策略；Conversation 必须记录 workspace / project scope 与可访问资源。
+
 ## 5. 核心数据对象
 
 | 对象 | 责任 |
@@ -329,7 +344,7 @@ flowchart TD
 | GenerationResult | 任务输出，可转为 Asset |
 | ModelDefinition | 模型能力、参数模式和计费规则 |
 | CreditLedger | 积分增加、冻结、扣减和退回记录 |
-| Conversation | Agent 会话与项目关联 |
+| Conversation | Agent 会话、Workspace / Project scope 与可访问资源 |
 | Template | 可实例化的画布结构 |
 
 ## 6. 跨页面核心流程
@@ -348,9 +363,11 @@ sequenceDiagram
   H->>C: 加载画布文档
   U->>C: 配置节点并执行生成
   C->>T: 创建任务与参数快照
-  T-->>C: 返回进度和结果
-  C->>A: 将结果登记为资产
-  U->>A: 跨项目复用结果
+  T-->>C: 返回任务状态与进度
+  T-->>C: 返回 GenerationResult
+  U->>C: 显式保存结果
+  C->>A: 创建 Workspace Asset 与项目 AssetReference
+  U->>A: 通过新的 AssetReference 跨项目复用
 ```
 
 ### 6.2 从资产中心回到节点
@@ -370,17 +387,30 @@ sequenceDiagram
 - 卡片只用于项目、资产、模板等重复对象，不把整页章节做成浮动卡片。
 - 所有图标按钮提供 tooltip 和 `aria-label`。
 - 删除、批量执行、积分扣减等高影响操作必须有清晰确认与可恢复机制。
+- 延期的是完整移动端画布编辑，不是基础响应式和可访问性；工作台与抽屉至少要在 320 / 360 / 768px 下保持关键入口可达，并支持键盘焦点、触控目标和 reduced-motion。
 
 ## 8. 开发顺序
 
-### Phase 0：产品基础
+### Phase 0A：原型稳定化
 
-- 路由与应用壳。
-- 数据模型和 schema 版本。
+- 修复生成任务、撤销历史、项目资产和模型参数的跨画布 / 跨项目边界。
+- 为当前画布交互建立特征测试，清理确认不可达的旧代码和重复静态数据。
+- 建立可复现的检查和回归测试入口；正式构建随 Phase 0B 的 runtime 决策落地。
+
+### Phase 0B：可迁移基础
+
+- 先完成 runtime / router 技术决策记录，再建立路由与应用壳；把现有画布作为受保护的独立入口接入，不整体重写。
+- 定义数据模型、schema 版本和迁移机制。
+- 建立 Project、CanvasDocument、Asset、GenerationTask、CreditLedger 的 repository / service 边界。
+- 本地草稿与 Blob 使用 IndexedDB；localStorage 仅保存主题等设备偏好。
+- 建立通用通知、确认、菜单、对话框和焦点管理组件。
+
+### Phase 0C：真实主链路
+
 - 项目保存与加载。
-- 资产持久化。
-- 生成任务状态机。
-- 通用通知、确认、菜单、对话框组件。
+- 资产持久化与显式 AssetReference。
+- 生成任务状态机、参数快照、幂等扣费与失败退款。
+- 真实生成结果先登记为 GenerationResult，由用户或产品规则显式提升为 Asset。
 
 ### Phase 1：核心工作台
 
@@ -402,7 +432,7 @@ sequenceDiagram
 - 评论与审批。
 - 项目版本。
 - 团队模型策略。
-- 真实积分账本与账单。
+- 团队额度、用量归集与账单展示（真实积分账本必须在首次接入真实生成前已经存在）。
 
 ## 9. 当前不建议立即开发
 
@@ -415,13 +445,15 @@ sequenceDiagram
 
 这些功能不是没有价值，而是当前无法增强“项目到生成结果再到复用”的主链路。
 
-## 10. 待产品确认
+## 10. 需要验证或推翻的工作假设
 
-1. 产品首先服务个人创作者，还是团队与商业制作？
-2. 模型服务由 Reelay 统一提供，还是允许用户绑定自己的供应商账号？
-3. 资产默认属于个人空间、组织空间，还是项目？
-4. 生成结果是否自动进入资产中心？
-5. 模板是否允许外部公开发布？
-6. 首期是否需要真实多人协作，还是先做分享与只读权限？
+Phase 0B 可以按 1.1 节的可逆假设推进，但在进入相应产品功能前必须完成验证：
 
-上述答案会直接影响路由、权限、积分归属和数据模型，应在新页面编码前确认。
+1. 个人创作者作为首期主用户；团队与商业制作复用 Workspace 模型扩展，而不是另起一套产品结构。
+2. Reelay 统一提供模型服务；BYOK 只保留 ProviderConnection 边界，不在首期同时实现。
+3. Asset 归 Workspace，Project / Node 保存 AssetReference；项目内的临时数组不是正式所有权模型。
+4. GenerationResult 默认不自动进入资产中心，必须显式保存或经过可解释的产品规则晋升。
+5. 模板首期仅限内部或私有复用，公开发布与市场化另行评估。
+6. 分享与只读权限先于真实多人协作；实时状态、冲突合并和审批留到主链路稳定后。
+
+这些假设不是文档权威。调研、用户反馈或实现证据一旦反驳其中任意一项，应先修订路线和数据模型，再继续编码。

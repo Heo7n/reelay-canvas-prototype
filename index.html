@@ -26,7 +26,7 @@
       </header>
 
       <aside class="left-rail" aria-label="资产">
-        <button class="rail-button asset-library-trigger" id="railLibraryBtn" type="button" aria-label="资产库">
+        <button class="rail-button asset-library-trigger" id="railLibraryBtn" type="button" aria-label="资产库" aria-expanded="false">
           <i data-lucide="folders" aria-hidden="true"></i>
           <span class="asset-lib-tooltip">资产库</span>
         </button>
@@ -82,11 +82,39 @@
                 </div>
                 <small id="themeCurrentLabel" class="sr-only">深色</small>
               </div>
-              <button class="profile-menu-item" type="button" data-profile-action="help">
-                <i data-lucide="book-open" aria-hidden="true"></i>
-                <span>帮助</span>
-                <i data-lucide="chevron-right" aria-hidden="true"></i>
-              </button>
+              <div class="profile-help-inline">
+                <button class="profile-menu-item profile-help-trigger" type="button" aria-label="帮助" aria-expanded="false" aria-controls="profileHelpPanel">
+                  <i data-lucide="circle-help" aria-hidden="true"></i>
+                  <span>帮助</span>
+                  <i data-lucide="chevron-right" aria-hidden="true"></i>
+                </button>
+                <div class="profile-help-inline-panel" id="profileHelpPanel" aria-label="帮助">
+                  <button class="profile-help-link profile-help-shortcuts" type="button" data-help-action="shortcuts">
+                    <i data-lucide="keyboard" aria-hidden="true"></i>
+                    <span>快捷键</span>
+                  </button>
+                  <a class="profile-help-link" href="https://reelay.tech.jetsentv.com/manual" target="_blank" rel="noopener noreferrer">
+                    <i data-lucide="book-open-check" aria-hidden="true"></i>
+                    <span>使用教程</span>
+                  </a>
+                  <a class="profile-help-link" href="https://ycndvyll62ov.feishu.cn/share/base/form/shrcnCSKgzknYF8PZuoMdw8uLGd" target="_blank" rel="noopener noreferrer">
+                    <i data-lucide="send-horizontal" aria-hidden="true"></i>
+                    <span>反馈问题</span>
+                  </a>
+                  <div class="profile-shortcut-sheet" id="profileShortcutSheet" aria-label="快捷键说明">
+                    <div class="shortcut-list">
+                      <div class="shortcut-row"><span>空格 + 拖动</span><kbd>平移画布</kbd></div>
+                      <div class="shortcut-row"><span>鼠标滚轮</span><kbd>平移画布</kbd></div>
+                      <div class="shortcut-row"><span>Ctrl/Cmd + 滚轮</span><kbd>缩放</kbd></div>
+                      <div class="shortcut-row"><span>双击画布</span><kbd>新建节点</kbd></div>
+                      <div class="shortcut-row"><span>拖拽空白</span><kbd>框选</kbd></div>
+                      <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
+                      <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
+                      <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销上一步</kbd></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button class="profile-menu-item danger" type="button" data-profile-action="logout">
                 <i data-lucide="log-out" aria-hidden="true"></i>
                 <span>退出登录</span>
@@ -95,7 +123,7 @@
           </div>
         </div>
       </div>
-      <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库">
+      <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库" aria-hidden="true" inert>
         <header class="asset-library-header">
           <div class="project-nav" data-project-nav="asset">
             <button class="project-logo-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单">
@@ -115,16 +143,7 @@
           </button>
         </header>
         <div class="asset-library-mode" role="tablist" aria-label="项目内容层级">
-          <div class="asset-library-local-tabs" id="assetLibraryModeTabs">
-            <button class="active" type="button" data-library-view="canvas">
-              <span>画布</span>
-              <small>0</small>
-            </button>
-            <button type="button" data-library-view="assets">
-              <span>资产</span>
-              <small>0</small>
-            </button>
-          </div>
+          <div class="asset-library-local-tabs" id="assetLibraryModeTabs"></div>
           <button class="asset-library-global-button" id="assetLibraryGlobalBtn" type="button" title="全局资产库" aria-label="全局资产库">
             <i data-lucide="book-open" aria-hidden="true"></i>
           </button>
@@ -138,7 +157,6 @@
               </label>
               <div class="asset-library-tabs" id="assetLibraryTabs" role="listbox" aria-label="素材类型"></div>
             </div>
-            <div id="assetLibraryContext" class="asset-library-context" style="display:none"></div>
             <div class="asset-library-grid" id="assetLibraryGrid"></div>
             <div class="asset-library-footer">
               <span class="asset-library-count" id="assetLibraryCount">共 0 项</span>
@@ -147,32 +165,6 @@
         </div>
         <div class="asset-library-resize-handle" id="assetLibraryResizeHandle" role="separator" aria-orientation="vertical" title="调整资产库宽度"></div>
       </aside>
-      <div class="profile-help-popover hidden" id="profileHelpSubmenu">
-        <button class="profile-help-link profile-help-shortcuts" type="button" data-help-action="shortcuts">
-          <i data-lucide="keyboard" aria-hidden="true"></i>
-          <span>快捷键</span>
-          <i data-lucide="chevron-right" aria-hidden="true"></i>
-        </button>
-        <a class="profile-help-link" href="https://reelay-test.tech.jetsentv.com/manual" target="_blank" rel="noopener noreferrer">
-          <i data-lucide="book-open-check" aria-hidden="true"></i>
-          <span>使用教程</span>
-          <i data-lucide="external-link" aria-hidden="true"></i>
-        </a>
-        <div class="profile-shortcut-sheet" id="profileShortcutSheet" aria-label="快捷键说明">
-          <div class="popover-title"><i data-lucide="keyboard" aria-hidden="true"></i><span>快捷键</span></div>
-          <div class="shortcut-list">
-            <div class="shortcut-row"><span>空格 + 拖动</span><kbd>平移画布</kbd></div>
-            <div class="shortcut-row"><span>鼠标滚轮</span><kbd>平移画布</kbd></div>
-            <div class="shortcut-row"><span>Ctrl/Cmd + 滚轮</span><kbd>缩放</kbd></div>
-            <div class="shortcut-row"><span>双击画布</span><kbd>新建节点</kbd></div>
-            <div class="shortcut-row"><span>拖拽空白</span><kbd>框选</kbd></div>
-            <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
-            <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
-            <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销上一步</kbd></div>
-          </div>
-        </div>
-      </div>
-
       <div class="project-menu hidden" id="projectMenu">
         <button type="button" data-project-action="home">回到主页</button>
         <button type="button" data-project-action="all">全部项目</button>
@@ -276,14 +268,14 @@
       </section>
 
       <aside class="agent-dock collapsed" id="agentDock" style="--agent-width: 420px">
-        <button class="agent-launcher" id="agentLauncher" type="button" aria-label="展开 Reelay Agent">
+        <button class="agent-launcher" id="agentLauncher" type="button" aria-label="展开 Reelay Agent" aria-expanded="false">
           <span class="agent-tooltip">Reelay Agent</span>
           <span class="agent-logo" aria-hidden="true">
             <img src="./assets/reelay-logo.png" alt="" />
           </span>
         </button>
 
-        <section class="agent-panel" id="agentPanel" aria-label="Agent 对话栏">
+        <section class="agent-panel" id="agentPanel" aria-label="Agent 对话栏" aria-hidden="true" inert>
           <div class="agent-resize-handle" id="agentResizeHandle" aria-hidden="true"></div>
           <header class="agent-header">
             <div class="agent-title" id="agentConversationTitle">新对话</div>
@@ -309,20 +301,10 @@
               <input id="agentHistorySearch" type="search" placeholder="请输入搜索关键词" />
             </label>
             <div class="history-section-label">新对话</div>
-            <div class="history-list" id="agentHistoryList">
-              <button class="history-item active" type="button" data-chat-id="new">新对话</button>
-              <button class="history-item" type="button" data-chat-id="seedance">你有多了解 Seedance 2.0 创作视频...</button>
-              <button class="history-item" type="button" data-chat-id="assets">素材整理与生成节点规划</button>
-            </div>
+            <div class="history-list" id="agentHistoryList"></div>
           </div>
 
-          <div class="agent-messages" id="agentMessages">
-            <div class="agent-start-state">
-              <div class="agent-start-brand">Reelay 绔嬬敾</div>
-              <div class="agent-start-title">开始创作</div>
-              <div class="agent-start-subtitle">描述你想要生成的内容</div>
-            </div>
-          </div>
+          <div class="agent-messages" id="agentMessages"></div>
 
           <div class="agent-composer">
             <textarea id="agentInput" placeholder='Start with an idea, or type "@" to mention'></textarea>
@@ -356,7 +338,7 @@
       </div>
     </main>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="https://unpkg.com/lucide@1.25.0/dist/umd/lucide.min.js"></script>
     <script src="./data/model-catalog.js?v=20260710-undo-feedback"></script>
     <script src="./src/config/prototype-config.js?v=20260716-foundation-modularization"></script>
     <script src="./app.js?v=20260716-foundation-modularization"></script>

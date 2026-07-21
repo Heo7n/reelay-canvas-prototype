@@ -1,4 +1,7 @@
 const appShell = document.querySelector(".app-shell");
+const topBar = document.querySelector(".top-bar");
+const leftRail = document.querySelector(".left-rail");
+const topActions = document.querySelector("#topActions");
 const shell = document.querySelector("#canvasShell");
 const appFavicon = document.querySelector("#appFavicon");
 const canvasGrid = document.querySelector("#canvasGrid");
@@ -26,14 +29,12 @@ const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
 const assetLibraryGrid = document.querySelector("#assetLibraryGrid");
 const assetLibraryCount = document.querySelector("#assetLibraryCount");
-const assetLibraryContext = document.querySelector("#assetLibraryContext");
 const assetLibrarySearchInput = document.querySelector("#assetLibrarySearchInput");
 const assetLibraryTabs = document.querySelector("#assetLibraryTabs");
 const assetLibraryModeTabs = document.querySelector("#assetLibraryModeTabs");
 const assetLibraryProjectName = document.querySelector("#assetLibraryProjectName");
 const assetLibraryGlobalBtn = document.querySelector("#assetLibraryGlobalBtn");
 const assetLibraryResizeHandle = document.querySelector("#assetLibraryResizeHandle");
-const profileHelpSubmenu = document.querySelector("#profileHelpSubmenu");
 const themeModeIcon = document.querySelector("#themeModeIcon");
 const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
@@ -67,6 +68,8 @@ const agentModelMenu = document.querySelector("#agentModelMenu");
 const undoToast = document.querySelector("#undoToast");
 const undoDeleteBtn = document.querySelector("#undoDeleteBtn");
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
+const narrowViewportInertState = new Map();
 
 function syncFaviconContrast() {
   if (!appFavicon) return;
@@ -107,13 +110,14 @@ const {
   mediaToolDefinitions = {},
   mediaToolsByType = { image: [], video: [], audio: [] },
   defaultMediaToolPreferences = { image: { tools: [], showLabels: true }, video: { tools: [], showLabels: true }, audio: { tools: [], showLabels: true } },
-  agentConversations = [{ id: "new", title: "新对话", messages: [] }],
+  agentConversations: seedAgentConversations = [{ id: "new", title: "新对话", messages: [] }],
   layoutRules = {},
   canvasScaleLimits = { min: 0.2, max: 2 },
   groupFrameRules = {},
   assetCategoryFilters = [["material", "素材"]],
 } = prototypeConfig;
 const assetCategoryLabels = Object.fromEntries(assetCategoryFilters);
+const agentConversations = structuredClone(seedAgentConversations);
 
 function loadMediaToolPreferences() {
   try {
@@ -141,6 +145,15 @@ function loadMediaToolPreferences() {
   return structuredClone(defaultMediaToolPreferences);
 }
 
+function loadThemeMode() {
+  try {
+    const savedMode = localStorage.getItem("reelay-theme-mode");
+    return ["light", "dark", "system"].includes(savedMode) ? savedMode : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
 const state = {
   tx: 0,
   ty: 0,
@@ -162,12 +175,13 @@ const state = {
   },
   action: null,
   pendingUploadNodeId: null,
-  pendingUploadMode: null,
   isSpaceDown: false,
   undoStack: [],
+  generationTasks: new Map(),
   agentOpen: false,
   agentWidth: 420,
   zoomTipTimer: 0,
+  projectId: crypto.randomUUID(),
   projectName: "Untitled",
   canvases: [],
   activeCanvasId: null,
@@ -194,7 +208,7 @@ const state = {
   libraryCollapsedGroups: new Set(),
   globalLibraryDisplay: "preview",
   assetLibraryWidth: 440,
-  themeMode: localStorage.getItem("reelay-theme-mode") || "dark",
+  themeMode: loadThemeMode(),
   canvasPanel: null,
   overlaySyncTimer: null,
 };
@@ -223,6 +237,7 @@ function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
     ty: 0,
     scale: 1,
     zCounter: 1,
+    undoStack: [],
   };
 }
 
@@ -239,6 +254,7 @@ function saveActiveCanvasState() {
   canvas.ty = state.ty;
   canvas.scale = state.scale;
   canvas.zCounter = state.zCounter;
+  canvas.undoStack = state.undoStack;
 }
 
 function loadCanvasState(canvas) {
@@ -249,10 +265,12 @@ function loadCanvasState(canvas) {
   state.ty = canvas.ty;
   state.scale = canvas.scale;
   state.zCounter = canvas.zCounter;
+  state.undoStack = canvas.undoStack || [];
   state.selectedIds = new Set();
   state.activeId = null;
   state.activeGroupId = null;
   state.mediaToolbarNodeId = null;
+  state.libraryTargetNodeId = null;
   closeCanvasPanel();
   closeMediaToolbarState();
   applyTransform();
@@ -279,6 +297,7 @@ function initializeCanvases() {
   initialCanvas.ty = state.ty;
   initialCanvas.scale = state.scale;
   initialCanvas.zCounter = state.zCounter;
+  initialCanvas.undoStack = state.undoStack;
   state.canvases = [initialCanvas];
   state.activeCanvasId = initialCanvas.id;
   syncProjectNavigation();
@@ -620,8 +639,13 @@ function normalizeNodeParameters(node) {
   };
   for (const [field, capabilityKey] of Object.entries(fieldMap)) {
     const values = getCapabilityValues(node, capabilityKey);
-    if (values.length && !values.includes(node[field])) {
-      node[field] = model.defaults?.[field] || values[0];
+    if (!values.length) {
+      delete node[field];
+      continue;
+    }
+    if (!values.includes(node[field])) {
+      const defaultValue = model.defaults?.[field];
+      node[field] = values.includes(defaultValue) ? defaultValue : values[0];
     }
   }
 
@@ -634,13 +658,47 @@ function normalizeNodeParameters(node) {
 
 function getCost(node) {
   if (node.kind !== "generator") return 0;
-  if (node.mode === "image") {
-    const qualityMultiplier = imageQualityMultiplier[node.quality] || 1;
-    return Math.ceil((imageResolutionCost[node.resolution] || 5) * qualityMultiplier) * node.count;
+  const model = getModel(node);
+  const capabilities = model?.capabilities || {};
+  const counts = capabilities.counts || [];
+  const count = counts.includes(node.count) ? node.count : counts[0] || 1;
+
+  if (model?.type === "image") {
+    const resolutions = capabilities.resolutions || [];
+    const resolution = resolutions.includes(node.resolution) ? node.resolution : resolutions[0];
+    const baseCost = Number(imageResolutionCost[resolution]);
+    if (!resolution || !Number.isFinite(baseCost)) return null;
+
+    const qualities = capabilities.qualities || [];
+    const quality = qualities.includes(node.quality) ? node.quality : qualities[0];
+    const configuredMultiplier = quality ? Number(imageQualityMultiplier[quality]) : 1;
+    const qualityMultiplier = Number.isFinite(configuredMultiplier) ? configuredMultiplier : 1;
+    return Math.ceil(baseCost * qualityMultiplier) * count;
   }
-  const seconds = Number.parseInt(node.duration, 10) || 4;
+
+  const qualities = capabilities.qualities || [];
+  const quality = qualities.includes(node.quality) ? node.quality : qualities[0];
+  const baseCost = Number(videoQualityCost[quality]);
+  if (!quality || !Number.isFinite(baseCost)) return null;
+  const durations = capabilities.durationsByQuality?.[quality] || capabilities.durations || [];
+  const duration = durations.includes(node.duration) ? node.duration : durations[0];
+  const seconds = Number.parseInt(duration, 10);
+  if (!duration || !Number.isFinite(seconds)) return null;
   const durationMultiplier = Math.ceil(seconds / 4);
-  return (videoQualityCost[node.quality] || 8) * durationMultiplier * node.count;
+  return baseCost * durationMultiplier * count;
+}
+
+function getGenerationAvailability(node) {
+  const cost = getCost(node);
+  const hasValidPrice = Number.isFinite(cost) && cost > 0;
+  const hasPrompt = Boolean(node.prompt.trim());
+  const canGenerate = hasPrompt && !node.generating && hasValidPrice;
+  return {
+    cost,
+    hasValidPrice,
+    canGenerate,
+    tooltip: canGenerate ? "生成" : !hasValidPrice ? "当前模型暂不可计价" : hasPrompt ? "生成中" : "请输入提示词",
+  };
 }
 
 function getParamLabel(node) {
@@ -864,10 +922,6 @@ function syncGroups() {
   }
 }
 
-function getActiveGroup() {
-  return getGroupById(state.activeGroupId);
-}
-
 function setActiveGroup(groupId) {
   state.activeGroupId = groupId;
   setSelection([], null, { keepGroup: true });
@@ -1038,7 +1092,7 @@ function applyPreset(node, preset) {
 function cloneNode(source) {
   const assets = (source.assets || []).map((asset) => ({ ...asset, id: crypto.randomUUID() }));
   const activeAssetIndex = (source.assets || []).findIndex((asset) => asset.id === source.activeAssetId);
-  return {
+  const clone = {
     ...source,
     id: crypto.randomUUID(),
     x: source.x,
@@ -1053,6 +1107,8 @@ function cloneNode(source) {
     groupId: undefined,
     z: nextZ(),
   };
+  delete clone.generationTaskId;
+  return clone;
 }
 
 function getActiveNode() {
@@ -1132,6 +1188,7 @@ const fallbackIconPaths = {
   "badge-check": '<path d="M12 3 14.1 5.1 17 4.4 17.8 7.2 20.6 8 19.9 10.9 22 13 19.9 15.1 20.6 18 17.8 18.8 17 21.6 14.1 20.9 12 23 9.9 20.9 7 21.6 6.2 18.8 3.4 18 4.1 15.1 2 13 4.1 10.9 3.4 8 6.2 7.2 7 4.4 9.9 5.1z"/><path d="m8.5 12.5 2.3 2.3 4.9-5"/>',
   "badge-hd": '<path d="M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><path d="M7 10v4"/><path d="M10 10v4"/><path d="M7 12h3"/><path d="M14 10v4h2.2a2 2 0 0 0 0-4z"/>',
   "book-open": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v15h-3a5 5 0 0 0-5 3z"/><path d="M12 6.5V22"/>',
+  "book-open-check": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v8"/><path d="M12 6.5V22"/><path d="m15 18 2 2 4-5"/>',
   "bot": '<path d="M12 8V4"/><path d="M8 4h8"/><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M9 17h6"/>',
   "building-2": '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18"/><path d="M4 22h16"/><path d="M9 6h1"/><path d="M14 6h1"/><path d="M9 10h1"/><path d="M14 10h1"/><path d="M9 14h1"/><path d="M14 14h1"/>',
   "check": '<path d="m5 12 4 4 10-10"/>',
@@ -1139,6 +1196,7 @@ const fallbackIconPaths = {
   "chevron-right": '<path d="m9 6 6 6-6 6"/>',
   "circle": '<circle cx="12" cy="12" r="8"/>',
   "circle-dollar-sign": '<circle cx="12" cy="12" r="9"/><path d="M12 6v12"/><path d="M15.5 8.5c-.8-.6-1.8-1-3.1-1-1.7 0-3 .8-3 2.1 0 3 6.1 1.5 6.1 4.8 0 1.4-1.4 2.3-3.2 2.3-1.4 0-2.6-.4-3.6-1.2"/>',
+  "circle-help": '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4"/><path d="M12 17h.01"/>',
   "combine": '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/><path d="M13 17H9a2 2 0 0 1-2-2v-4"/>',
   "crop": '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/><path d="M14 14 20 8"/>',
   "download": '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
@@ -1215,7 +1273,14 @@ function renderFallbackIcons() {
   });
 }
 
+function renderCustomFallbackIcons() {
+  document.querySelectorAll('i[data-lucide="badge-hd"]').forEach((icon) => {
+    icon.replaceWith(createFallbackIcon("badge-hd", icon));
+  });
+}
+
 function refreshIcons() {
+  renderCustomFallbackIcons();
   if (window.lucide) {
     try {
       window.lucide.createIcons({
@@ -2166,18 +2231,6 @@ function renderAssetLibrary() {
       (!isProjectAssetView || getAssetCategory(asset) === state.libraryFilter) &&
       assetMatchesLibrarySearch(asset, query),
   );
-  const scopeMeta = {
-    project: ["项目素材", "当前项目中沉淀的可复用资产"],
-    personal: ["个人资产", "跨项目使用的个人全局资产"],
-    official: ["官方公用库", "由 Reelay 提供的公共音效资产"],
-    organization: ["组织空间", "同一组织成员共享的资产"],
-  };
-  const [scopeTitle, scopeContext] = scopeMeta[activeAssetScope] || scopeMeta.project;
-  const viewContext = isCanvasView
-    ? "当前画布中的节点、组与媒体文件"
-    : isGlobalView
-      ? scopeContext
-      : "当前项目中沉淀的可复用资产";
   const canvasTotal = countCanvasElementRows(canvasItems);
   const projectAssetTotal = getLibraryAssetsForScope("project").length;
   const scopeTotals = {
@@ -2208,9 +2261,6 @@ function renderAssetLibrary() {
       hasQuery || hasFilter
         ? `${visibleCount} / ${totalCount} ${noun}`
         : `共 ${totalCount} ${noun}`;
-  }
-  if (assetLibraryContext) {
-    assetLibraryContext.textContent = targetNode ? "选择资产引用到当前生成节点" : viewContext;
   }
   assetLibraryGrid.className = `asset-library-grid ${
     isCanvasView
@@ -2263,27 +2313,89 @@ function focusCanvasLibraryItem(id, kind = "node") {
   render();
 }
 
+function setNarrowViewportInertTargets(targets) {
+  const nextTargets = new Set(targets.filter(Boolean));
+  for (const [element, previousInert] of narrowViewportInertState) {
+    if (nextTargets.has(element)) continue;
+    element.inert = previousInert;
+    narrowViewportInertState.delete(element);
+  }
+  for (const element of nextTargets) {
+    if (!narrowViewportInertState.has(element)) {
+      narrowViewportInertState.set(element, element.inert);
+    }
+    element.inert = true;
+  }
+}
+
+function focusNarrowViewportPanel(mode) {
+  const activeElement = document.activeElement;
+  if (mode === "asset") {
+    const assetLayerElements = [assetLibraryPanel, projectMenu, canvasMenu, canvasMoreMenu];
+    if (assetLayerElements.some((element) => element?.contains(activeElement))) return;
+    const target = [assetLibrarySearchInput, assetLibraryCloseBtn].find(
+      (element) => element && !element.disabled && element.getClientRects().length,
+    );
+    target?.focus();
+    return;
+  }
+  if (mode === "agent" && !agentDock?.contains(activeElement)) {
+    agentInput?.focus();
+  }
+}
+
+function syncNarrowViewportIsolation({ focusPanel = false } = {}) {
+  const assetOpen = Boolean(assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden"));
+  const agentOpen = Boolean(state.agentOpen && agentDock?.classList.contains("open"));
+  if (!narrowViewportQuery.matches || (!assetOpen && !agentOpen)) {
+    setNarrowViewportInertTargets([]);
+    return;
+  }
+
+  const mode = assetOpen ? "asset" : "agent";
+  const targets = mode === "asset"
+    ? [topBar, leftRail, topActions, shell, agentDock, undoToast]
+    : [topBar, leftRail, topActions, shell, assetLibraryPanel, projectMenu, canvasMenu, canvasMoreMenu, undoToast];
+  setNarrowViewportInertTargets(targets);
+  if (focusPanel) focusNarrowViewportPanel(mode);
+}
+
 function openAssetLibrary(targetNodeId = null) {
+  if (narrowViewportQuery.matches && state.agentOpen) setAgentOpen(false);
   state.libraryTargetNodeId = targetNodeId;
   if (targetNodeId) {
     state.libraryView = "assets";
   }
   assetLibraryPanel?.classList.remove("hidden");
+  if (assetLibraryPanel) {
+    assetLibraryPanel.inert = false;
+    assetLibraryPanel.setAttribute("aria-hidden", "false");
+  }
   appShell?.classList.add("asset-library-open");
   railLibraryBtn?.classList.add("active");
+  railLibraryBtn?.setAttribute("aria-expanded", "true");
   closeProfileMenu();
   renderAssetLibrary();
+  syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
 }
 
 function closeAssetLibrary() {
+  const shouldRestoreFocus = Boolean(assetLibraryPanel?.contains(document.activeElement));
   state.libraryTargetNodeId = null;
   assetLibraryPanel?.classList.add("hidden");
+  if (assetLibraryPanel) {
+    assetLibraryPanel.inert = true;
+    assetLibraryPanel.setAttribute("aria-hidden", "true");
+  }
   appShell?.classList.remove("asset-library-open");
   railLibraryBtn?.classList.remove("active");
+  railLibraryBtn?.setAttribute("aria-expanded", "false");
+  syncNarrowViewportIsolation();
+  if (shouldRestoreFocus) railLibraryBtn?.focus();
 }
 
 function addAssetToGeneratorNode(node, sourceAsset) {
-  if (!node || node.kind !== "generator" || !sourceAsset) return;
+  if (!node || node.kind !== "generator" || node.generating || !sourceAsset) return;
   const asset = cloneAsset(sourceAsset, "library");
   node.assets.push(asset);
   node.activeAssetId = asset.id;
@@ -2375,6 +2487,20 @@ function audioWaveformBars(repeat = 1) {
     .flatMap(() => heights)
     .map((height, index) => `<i style="--h: ${height}px; --d: ${index * 36}ms"></i>`)
     .join("");
+}
+
+function createGenerationParameterSnapshot(node) {
+  return {
+    mode: node.mode,
+    model: node.model,
+    prompt: node.prompt,
+    aspect: node.aspect,
+    resolution: node.resolution,
+    quality: node.quality,
+    duration: node.duration,
+    count: node.count,
+    assetIds: (node.assets || []).map((asset) => asset.id),
+  };
 }
 
 function createGeneratedAsset(node) {
@@ -2506,7 +2632,7 @@ function assetShelf(node) {
 }
 
 function addFilesToGeneratorNode(node, files) {
-  if (node.kind !== "generator") return;
+  if (node.kind !== "generator" || node.generating) return;
   const accepted = createAssetsFromFiles(files);
   if (!accepted.length) return;
 
@@ -2545,7 +2671,7 @@ function addMediaNodesFromFiles(files, clientX, clientY) {
 }
 
 function addVirtualAsset(node, source) {
-  if (node.kind !== "generator") return;
+  if (node.kind !== "generator" || node.generating) return;
   const type = source === "canvas" ? "video" : "image";
   const name = source === "canvas" ? "画布素材" : "资产库素材";
   const asset = {
@@ -2567,16 +2693,8 @@ function addVirtualAsset(node, source) {
 }
 
 function openLocalAssetPicker(node) {
-  if (node.kind !== "generator") return;
+  if (node.kind !== "generator" || node.generating) return;
   state.pendingUploadNodeId = node.id;
-  state.pendingUploadMode = "generator";
-  localAssetInput.value = "";
-  localAssetInput.click();
-}
-
-function openLibraryUploadPicker() {
-  state.pendingUploadNodeId = null;
-  state.pendingUploadMode = "library";
   localAssetInput.value = "";
   localAssetInput.click();
 }
@@ -2628,7 +2746,8 @@ function render() {
 
   for (const node of state.nodes) {
     if (node.kind === "generator") {
-      node.credits = getCost(node);
+      normalizeNodeParameters(node);
+      node.credits = getCost(node) ?? 0;
     }
     const signature = getNodeRenderSignature(node);
     let element = nodeLayer.querySelector(`.canvas-node[data-id="${node.id}"]`);
@@ -2914,6 +3033,7 @@ function createGeneratorNodeElement(node) {
   const model = getModel(node);
   const layout = getNodeLayout(node);
   const selected = state.selectedIds.has(node.id);
+  const generationAvailability = getGenerationAvailability(node);
   const el = document.createElement("article");
   el.className = `canvas-node generator-node ${node.mode}-mode ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
   el.style.left = `${node.x}px`;
@@ -2921,25 +3041,25 @@ function createGeneratorNodeElement(node) {
   el.style.width = `${layout.nodeWidth}px`;
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
-  const canGenerate = Boolean(node.prompt.trim()) && !node.generating;
+  const generationInputsDisabled = node.generating ? "disabled" : "";
 
   const promptPanel = node.expanded
     ? `
       <section class="prompt-panel ${node.promptLarge ? "large" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px;">
-        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" type="button"><span>+</span><span>素材</span></button>
+        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" type="button" ${generationInputsDisabled}><span>+</span><span>素材</span></button>
         <button class="expand-corner ${node.promptLarge ? "active" : ""}" data-action="toggle-large" type="button" title="${node.promptLarge ? "收起输入区" : "展开输入区"}">
           <i data-lucide="${node.promptLarge ? "minimize-2" : "maximize-2"}" aria-hidden="true"></i>
         </button>
         ${assetShelf(node)}
-        <textarea class="prompt-input" style="${node.promptLarge ? `height: ${node.promptInputHeight}px;` : ""}" placeholder="描述你想生成的画面，也可以先添加参考素材">${escapeHtml(node.prompt)}</textarea>
+        <textarea class="prompt-input" style="${node.promptLarge ? `height: ${node.promptInputHeight}px;` : ""}" placeholder="描述你想生成的画面，也可以先添加参考素材" ${generationInputsDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
-          <button class="control-chip model-chip ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button">
+          <button class="control-chip model-chip ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
             <span class="chip-icon">${model.icon}</span><span>${model.name}</span><span>⌃</span>
           </button>
-          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button">${getParamLabel(node)} ⌃</button>
+          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>${getParamLabel(node)} ⌃</button>
           <div class="control-spacer"></div>
-          <button class="control-chip count-chip" data-action="count" type="button">${node.count}x</button>
-          <button class="generate-button ${canGenerate ? "" : "disabled"}" data-action="generate" data-tooltip="${canGenerate ? "生成" : "请输入提示词"}" aria-disabled="${canGenerate ? "false" : "true"}" type="button">
+          <button class="control-chip count-chip" data-action="count" type="button" ${generationInputsDisabled}>${node.count}x</button>
+          <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
             <span class="credit-mark">▰ ${node.credits}</span>
             <span class="send-arrow"><i data-lucide="arrow-up" aria-hidden="true"></i></span>
           </button>
@@ -3484,26 +3604,62 @@ function bindAudioEvents(el) {
   updateAudioProgress();
 }
 
-function completeSimulatedGeneration(nodeId) {
-  const node = state.nodes.find((item) => item.id === nodeId);
-  if (!node || node.kind !== "generator") return;
+function getGenerationTaskTarget(task) {
+  if (!task || task.projectId !== state.projectId) return null;
+  const canvas = state.canvases.find((item) => item.id === task.canvasId);
+  if (!canvas) return null;
+  const node = canvas.nodes.find((item) => item.id === task.nodeId);
+  return node ? { canvas, node } : null;
+}
+
+function cancelGenerationTask(taskId, resetNode = true) {
+  const task = state.generationTasks.get(taskId);
+  if (!task) return;
+  window.clearTimeout(task.timeoutId);
+  if (resetNode) {
+    const target = getGenerationTaskTarget(task);
+    if (target?.node.generationTaskId === task.id) {
+      target.node.generating = false;
+      delete target.node.generationTaskId;
+    }
+  }
+  state.generationTasks.delete(taskId);
+}
+
+function cancelGenerationTasks(predicate, resetNodes = true) {
+  for (const task of [...state.generationTasks.values()]) {
+    if (predicate(task)) cancelGenerationTask(task.id, resetNodes);
+  }
+}
+
+function completeSimulatedGeneration(taskId) {
+  const task = state.generationTasks.get(taskId);
+  if (!task) return;
+  state.generationTasks.delete(taskId);
+  const target = getGenerationTaskTarget(task);
+  if (!target) return;
+  const { canvas, node } = target;
+  if (node.kind !== "generator" || node.generationTaskId !== task.id) return;
   node.generating = false;
+  delete node.generationTaskId;
   node.preview = true;
-  node.generatedAsset = createGeneratedAsset(node);
+  node.generatedAsset = createGeneratedAsset({ id: node.id, ...task.parameterSnapshot });
   node.name = node.name || node.generatedAsset.displayName || defaultGeneratedName(node);
-  render();
+  if (canvas.id === state.activeCanvasId) render();
 }
 
 function syncGenerateButton(button, node) {
   if (!button || !node) return;
-  const canGenerate = Boolean(node.prompt.trim()) && !node.generating;
-  button.classList.toggle("disabled", !canGenerate);
-  button.setAttribute("aria-disabled", canGenerate ? "false" : "true");
-  button.dataset.tooltip = canGenerate ? "生成" : "请输入提示词";
+  const availability = getGenerationAvailability(node);
+  button.classList.toggle("disabled", !availability.canGenerate);
+  button.setAttribute("aria-disabled", availability.canGenerate ? "false" : "true");
+  button.dataset.tooltip = availability.tooltip;
 }
 
 function startSimulatedGeneration(node, options = {}) {
   const { charge = true } = options;
+  if (node.generating) return false;
+  normalizeNodeParameters(node);
   if (!node.prompt.trim()) {
     showConfirmDialog({
       title: "缺少提示词",
@@ -3515,6 +3671,15 @@ function startSimulatedGeneration(node, options = {}) {
   }
 
   const cost = getCost(node);
+  if (!Number.isFinite(cost) || cost <= 0) {
+    showConfirmDialog({
+      title: "当前模型暂不可用",
+      body: "该模型的参数或积分价格配置不完整，请选择其他模型或联系管理员。",
+      confirmText: "知道了",
+      showCancel: false,
+    });
+    return false;
+  }
   if (charge && !hasEnoughCredits(cost)) {
     showConfirmDialog({
       title: "积分不足",
@@ -3525,15 +3690,32 @@ function startSimulatedGeneration(node, options = {}) {
     return false;
   }
 
+  const canvas = getActiveCanvas();
+  if (!canvas) return false;
   if (charge) chargeCredits(cost);
+  if (node.generationTaskId) cancelGenerationTask(node.generationTaskId);
+  const task = {
+    id: crypto.randomUUID(),
+    projectId: state.projectId,
+    canvasId: canvas.id,
+    nodeId: node.id,
+    parameterSnapshot: createGenerationParameterSnapshot(node),
+    cost,
+    timeoutId: 0,
+  };
   node.generating = true;
+  node.generationTaskId = task.id;
   node.preview = false;
   node.generatedAsset = null;
   node.panel = null;
   node.expanded = false;
   node.name = "";
   render();
-  window.setTimeout(() => completeSimulatedGeneration(node.id), 900 + Math.round(Math.random() * 700));
+  state.generationTasks.set(task.id, task);
+  task.timeoutId = window.setTimeout(
+    () => completeSimulatedGeneration(task.id),
+    900 + Math.round(Math.random() * 700),
+  );
   return true;
 }
 
@@ -3700,8 +3882,24 @@ function renderAspectIcon(value) {
   return `<i class="aspect-option-icon" style="--aspect-width: ${width}px; --aspect-height: ${height}px" aria-hidden="true"></i>`;
 }
 
+const generationLockedActions = new Set([
+  "material-panel",
+  "material",
+  "remove-material",
+  "focus-asset",
+  "model-panel",
+  "param-panel",
+  "count",
+  "model",
+  "aspect",
+  "duration",
+  "quality",
+  "resolution",
+]);
+
 function handleAction(node, action, value) {
   if (node.kind !== "generator") return;
+  if (node.generating && generationLockedActions.has(action)) return;
   const undoableActions = new Set(["count", "model", "aspect", "duration", "quality", "resolution"]);
   const before = undoableActions.has(action) ? cloneNodeState(node) : null;
 
@@ -3845,7 +4043,7 @@ function handleNodePointerDown(event, nodeId) {
   const editableMediaClicked = Boolean(target.closest(".media-frame") && getEditableMedia(node));
   state.mediaToolbarNodeId = editableMediaClicked ? node.id : null;
 
-  if (node.kind === "generator" && target.closest(".media-frame")) {
+  if (node.kind === "generator" && !node.generating && target.closest(".media-frame")) {
     node.expanded = true;
     node.panel = null;
     rememberPreset(node);
@@ -3896,12 +4094,55 @@ function cloneNodeState(node) {
   };
 }
 
+function cloneUndoNodeState(node) {
+  const snapshot = cloneNodeState(node);
+  snapshot.generating = false;
+  delete snapshot.generationTaskId;
+  return snapshot;
+}
+
 function cloneGroupState(group) {
   return {
     ...group,
     nodeIds: [...group.nodeIds],
     layoutMenuOpen: false,
   };
+}
+
+function cloneCanvasContent(source) {
+  const nodeIdMap = new Map(source.nodes.map((node) => [node.id, crypto.randomUUID()]));
+  const groupIdMap = new Map(source.groups.map((group) => [group.id, crypto.randomUUID()]));
+  const nodes = source.nodes.map((sourceNode) => {
+    const node = cloneNodeState(sourceNode);
+    const assetIdMap = new Map();
+    node.id = nodeIdMap.get(sourceNode.id);
+    node.assets = (sourceNode.assets || []).map((asset) => {
+      const id = crypto.randomUUID();
+      assetIdMap.set(asset.id, id);
+      return { ...asset, id };
+    });
+    node.activeAssetId = assetIdMap.get(sourceNode.activeAssetId) || node.assets[0]?.id || null;
+    node.generatedAsset = sourceNode.generatedAsset
+      ? { ...sourceNode.generatedAsset, id: crypto.randomUUID() }
+      : null;
+    const groupId = groupIdMap.get(sourceNode.groupId);
+    if (groupId) {
+      node.groupId = groupId;
+    } else {
+      delete node.groupId;
+    }
+    node.generating = false;
+    delete node.generationTaskId;
+    node.panel = null;
+    node.mediaMenuOpen = false;
+    return node;
+  });
+  const groups = source.groups.map((sourceGroup) => ({
+    ...cloneGroupState(sourceGroup),
+    id: groupIdMap.get(sourceGroup.id),
+    nodeIds: sourceGroup.nodeIds.map((id) => nodeIdMap.get(id)).filter(Boolean),
+  }));
+  return { nodes, groups };
 }
 
 function pushUndoAction(action) {
@@ -3934,6 +4175,14 @@ function deleteSelectedNodes(confirmed = false) {
       onConfirm: () => deleteSelectedNodes(true),
     });
     return;
+  }
+
+  const activeCanvas = getActiveCanvas();
+  const selectedNodeIds = new Set(state.selectedIds);
+  if (activeCanvas) {
+    cancelGenerationTasks(
+      (task) => task.canvasId === activeCanvas.id && selectedNodeIds.has(task.nodeId),
+    );
   }
 
   const deleted = state.nodes
@@ -3974,13 +4223,22 @@ function undoLastAction() {
   const action = state.undoStack.pop();
   if (!action) return;
 
+  if (action.type === "node-update") {
+    const liveNode = state.nodes.find((node) => node.id === action.node.id);
+    if (liveNode?.generating) {
+      state.undoStack.push(action);
+      showActionToast("生成中的节点暂不能撤销参数");
+      return;
+    }
+  }
+
   if (action.type === "delete") {
     const restored = action.deleted
       .slice()
       .sort((a, b) => a.index - b.index)
-      .map((item) => cloneNodeState(item.node));
+      .map((item) => cloneUndoNodeState(item.node));
     for (const item of action.deleted.slice().sort((a, b) => a.index - b.index)) {
-      state.nodes.splice(Math.min(item.index, state.nodes.length), 0, cloneNodeState(item.node));
+      state.nodes.splice(Math.min(item.index, state.nodes.length), 0, cloneUndoNodeState(item.node));
     }
     const restoredGroups = (action.deletedGroups || []).map((group) => cloneGroupState(group));
     const restoredGroupIds = new Set(restoredGroups.map((group) => group.id));
@@ -4008,14 +4266,9 @@ function undoLastAction() {
   if (action.type === "node-update") {
     const index = state.nodes.findIndex((node) => node.id === action.node.id);
     if (index !== -1) {
-      state.nodes[index] = cloneNodeState(action.node);
+      state.nodes[index] = cloneUndoNodeState(action.node);
       setSelection([action.node.id], action.node.id);
     }
-  }
-
-  if (action.type === "project-rename") {
-    state.projectName = action.name;
-    syncProjectNavigation();
   }
 
   hideUndoToast();
@@ -4039,24 +4292,85 @@ function hideUndoToast() {
   window.clearTimeout(showUndoToast.timeoutId);
 }
 
+function canRestoreDialogFocus(element) {
+  return Boolean(
+    element instanceof HTMLElement &&
+    element.isConnected &&
+    !element.disabled &&
+    !element.closest("[inert], .hidden") &&
+    element.getClientRects().length,
+  );
+}
+
+function getDialogFocusFallback(previousFocus) {
+  if (!(previousFocus instanceof Element)) return null;
+  let selector = null;
+  if (previousFocus.closest("#projectMenu")) selector = "[data-project-menu-button]";
+  if (previousFocus.closest("#canvasMenu, #canvasMoreMenu")) selector = "[data-canvas-menu-button]";
+  if (previousFocus.closest("#profileMenu")) return railProfileBtn;
+  if (!selector) return null;
+  return [...document.querySelectorAll(selector)].find(canRestoreDialogFocus) || null;
+}
+
 function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, onConfirm }) {
-  document.querySelector(".confirm-layer")?.remove();
-  const layer = document.createElement("div");
+  const existingLayer = document.querySelector(".confirm-layer");
+  if (existingLayer) {
+    if (typeof existingLayer.closeConfirmDialog === "function") {
+      existingLayer.closeConfirmDialog(false);
+    } else {
+      existingLayer.remove();
+    }
+  }
+
+  const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const fallbackFocus = getDialogFocusFallback(previousFocus);
+  const titleId = `confirm-title-${crypto.randomUUID()}`;
+  const layer = document.createElement("dialog");
   layer.className = "confirm-layer";
+  layer.setAttribute("aria-modal", "true");
+  layer.setAttribute("aria-labelledby", titleId);
+  Object.assign(layer.style, {
+    width: "100vw",
+    height: "100vh",
+    maxWidth: "none",
+    maxHeight: "none",
+    margin: "0",
+    padding: "0",
+    border: "0",
+    color: "inherit",
+  });
   layer.innerHTML = `
-    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
-      <div class="confirm-title">${escapeHtml(title)}</div>
+    <div class="confirm-dialog">
+      <div class="confirm-title" id="${titleId}">${escapeHtml(title)}</div>
       <div class="confirm-body">${escapePlainText(body)}</div>
       <div class="confirm-actions">
-        ${showCancel ? `<button class="confirm-cancel" type="button">${escapeHtml(cancelText)}</button>` : ""}
-        <button class="confirm-ok ${danger ? "danger" : ""}" type="button">${escapeHtml(confirmText)}</button>
+        ${showCancel ? `<button class="confirm-cancel" type="button" autofocus>${escapeHtml(cancelText)}</button>` : ""}
+        <button class="confirm-ok ${danger ? "danger" : ""}" type="button" ${showCancel ? "" : "autofocus"}>${escapeHtml(confirmText)}</button>
       </div>
     </div>
   `;
   document.body.appendChild(layer);
 
-  const close = () => layer.remove();
+  let closed = false;
+  const close = (restoreFocus = true) => {
+    if (closed) return;
+    closed = true;
+    if (layer.open) layer.close();
+    layer.remove();
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        if (document.querySelector(".confirm-layer")) return;
+        const target = [previousFocus, fallbackFocus].find(canRestoreDialogFocus);
+        target?.focus();
+      });
+    }
+  };
+  layer.closeConfirmDialog = close;
   layer.querySelector(".confirm-cancel")?.addEventListener("click", close);
+  layer.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    close();
+  });
   layer.addEventListener("pointerdown", (event) => {
     if (event.target === layer) close();
   });
@@ -4064,6 +4378,8 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
     close();
     onConfirm?.();
   });
+  layer.showModal();
+  (layer.querySelector("[autofocus]") || layer.querySelector("button"))?.focus();
 }
 
 function escapePlainText(value) {
@@ -4072,6 +4388,19 @@ function escapePlainText(value) {
 
 function getConversation(id) {
   return agentConversations.find((item) => item.id === id) || agentConversations[0];
+}
+
+function renderAgentHistory() {
+  if (!agentHistoryList) return;
+  agentHistoryList.innerHTML = agentConversations
+    .map(
+      (conversation) => `
+        <button class="history-item ${conversation.id === state.activeConversationId ? "active" : ""}" type="button" data-chat-id="${escapeHtml(conversation.id)}">
+          ${escapeHtml(conversation.title)}
+        </button>
+      `,
+    )
+    .join("");
 }
 
 function renderAgentMessages(conversation = getConversation(state.activeConversationId)) {
@@ -4148,10 +4477,6 @@ function getSelectedAgentModelIds() {
 function getSelectedAgentModels() {
   const selectedIds = getSelectedAgentModelIds();
   return selectedIds.map((id) => models.find((model) => model.id === id)).filter(Boolean);
-}
-
-function getAgentModel() {
-  return getSelectedAgentModels()[0] || models[0];
 }
 
 function syncAgentModelButton() {
@@ -4285,7 +4610,11 @@ function getResolvedTheme(mode = state.themeMode) {
 
 function applyTheme(mode = state.themeMode) {
   state.themeMode = mode;
-  localStorage.setItem("reelay-theme-mode", mode);
+  try {
+    localStorage.setItem("reelay-theme-mode", mode);
+  } catch {
+    // A blocked storage API should not prevent theme changes in the current session.
+  }
   document.documentElement.dataset.theme = getResolvedTheme(mode);
   document.documentElement.dataset.themeMode = mode;
   const themeLabels = {
@@ -4318,49 +4647,98 @@ function applyTheme(mode = state.themeMode) {
   refreshIcons();
 }
 
-function positionProfileSubmenu(submenu, actionName, width) {
-  const trigger = profileMenu?.querySelector(`[data-profile-action='${actionName}']`);
-  if (!trigger || !submenu) return;
-  const rect = trigger.getBoundingClientRect();
-  submenu.style.left = `${Math.max(8, rect.left - width)}px`;
-  submenu.style.top = `${rect.top - 2}px`;
-  submenu.style.bottom = "auto";
-}
-
-function positionProfileHelpSubmenu() {
-  positionProfileSubmenu(profileHelpSubmenu, "help", 190);
-}
-
-function closeProfileSubmenus() {
-  profileHelpSubmenu?.classList.add("hidden");
-  profileMenu?.querySelector("[data-profile-action='appearance']")?.classList.remove("active");
-  profileMenu?.querySelector("[data-profile-action='help']")?.classList.remove("active");
-}
-
 function setAgentWidth(width) {
-  state.agentWidth = clamp(width, 340, 640);
+  const maxWidth = Math.min(640, window.innerWidth);
+  const minWidth = Math.min(340, maxWidth);
+  state.agentWidth = clamp(width, minWidth, maxWidth);
   agentDock?.style.setProperty("--agent-width", `${state.agentWidth}px`);
   appShell?.style.setProperty("--agent-width", `${state.agentWidth}px`);
 }
 
 function setAgentOpen(open) {
+  if (open && narrowViewportQuery.matches && assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")) {
+    closeAssetLibrary();
+  }
   state.agentOpen = open;
   if (!agentDock) return;
+  const shouldMoveFocusIntoPanel = open && document.activeElement === agentLauncher;
+  const shouldRestoreLauncherFocus = !open && Boolean(agentPanel?.contains(document.activeElement));
   appShell?.classList.toggle("agent-open", open);
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
+  if (agentPanel) {
+    agentPanel.inert = !open;
+    agentPanel.setAttribute("aria-hidden", String(!open));
+  }
+  if (agentLauncher) {
+    agentLauncher.inert = open;
+    agentLauncher.setAttribute("aria-hidden", String(open));
+    agentLauncher.setAttribute("aria-expanded", String(open));
+  }
   if (!open) {
     agentHistoryMenu?.classList.add("hidden");
   }
+  syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
+  if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => agentInput?.focus());
+  if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
 }
 
-async function shareProject() {
+function getProjectShareUrl() {
+  const { href, protocol } = window.location;
+  if (protocol === "http:" || protocol === "https:") return href;
+  return "https://github.com/Heo7n/reelay-canvas-prototype";
+}
+
+function canNativeShare(shareData) {
+  if (typeof navigator.share !== "function") return false;
+  if (typeof navigator.canShare !== "function") return true;
+  try {
+    return navigator.canShare(shareData);
+  } catch {
+    return false;
+  }
+}
+
+function copyTextFallback(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-999px";
+  textarea.style.left = "-999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+async function copyShareLink(url) {
+  if (window.isSecureContext && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(url);
+      return true;
+    } catch {
+      // Fall through to the textarea fallback for local prototype environments.
+    }
+  }
+  return copyTextFallback(url);
+}
+
+async function shareProject(event) {
+  event?.preventDefault();
+  event?.stopPropagation();
   const shareData = {
     title: `${state.projectName} · Reelay Canvas`,
     text: "查看这个 Reelay Canvas 创作项目",
-    url: window.location.href,
+    url: getProjectShareUrl(),
   };
-  if (navigator.share) {
+  if (canNativeShare(shareData)) {
     try {
       await navigator.share(shareData);
       return;
@@ -4368,12 +4746,8 @@ async function shareProject() {
       if (error?.name === "AbortError") return;
     }
   }
-  try {
-    await navigator.clipboard.writeText(shareData.url);
-    showActionToast("分享链接已复制");
-  } catch {
-    showActionToast("暂时无法复制分享链接");
-  }
+  const copied = await copyShareLink(shareData.url);
+  showActionToast(copied ? "分享链接已复制" : "暂时无法复制分享链接");
 }
 
 function selectEditableText(element) {
@@ -4411,12 +4785,8 @@ function finishInlineRename(element, commit = true) {
 }
 
 function commitProjectRename(nextName) {
-  const previousName = state.projectName;
   state.projectName = String(nextName || "Untitled").trim() || "Untitled";
   syncProjectNavigation();
-  if (previousName !== state.projectName) {
-    pushUndoAction({ type: "project-rename", name: previousName });
-  }
 }
 
 function commitCanvasRename(nextName) {
@@ -4509,15 +4879,17 @@ function duplicateCanvas(canvasId) {
   const source = state.canvases.find((canvas) => canvas.id === canvasId);
   if (!source) return;
   saveActiveCanvasState();
+  const content = cloneCanvasContent(source);
   const duplicate = {
     id: crypto.randomUUID(),
     name: `${source.name} 副本`,
-    nodes: source.nodes.map((node) => cloneNodeState(node)),
-    groups: source.groups.map((group) => cloneGroupState(group)),
+    nodes: content.nodes,
+    groups: content.groups,
     tx: source.tx,
     ty: source.ty,
     scale: source.scale,
     zCounter: source.zCounter,
+    undoStack: [],
   };
   state.canvases.push(duplicate);
   state.activeCanvasId = duplicate.id;
@@ -4539,6 +4911,7 @@ function deleteCanvas(canvasId) {
     danger: true,
     onConfirm: () => {
       const index = state.canvases.findIndex((item) => item.id === canvasId);
+      cancelGenerationTasks((task) => task.canvasId === canvasId);
       state.canvases.splice(index, 1);
       if (state.activeCanvasId === canvasId) {
         const nextCanvas = state.canvases[Math.max(0, index - 1)] || state.canvases[0];
@@ -4558,9 +4931,12 @@ function getVisibleNameElement(kind) {
 }
 
 function resetPrototypeProject() {
+  cancelGenerationTasks((task) => task.projectId === state.projectId);
+  state.projectId = crypto.randomUUID();
   state.projectName = "Untitled";
   state.nodes = [];
   state.groups = [];
+  state.undoStack = [];
   state.selectedIds = new Set();
   state.activeId = null;
   state.activeGroupId = null;
@@ -4569,9 +4945,16 @@ function resetPrototypeProject() {
   state.ty = 0;
   state.scale = 1;
   state.zCounter = 1;
+  state.libraryAssets = [];
+  state.libraryView = "canvas";
+  state.libraryScope = "project";
+  state.libraryTargetNodeId = null;
   state.librarySearch = "";
   state.libraryFilter = "all";
   state.libraryCollapsedGroups = new Set();
+  state.pendingUploadNodeId = null;
+  state.canvasMoreTargetId = null;
+  hideUndoToast();
   initializeCanvases();
   applyTransform();
   render();
@@ -4787,11 +5170,22 @@ function ungroup(groupId) {
 }
 
 function requestRunGroup(group) {
-  const generators = getGroupNodes(group).filter((node) => node.kind === "generator");
-  if (!generators.length) {
+  const groupGenerators = getGroupNodes(group).filter((node) => node.kind === "generator");
+  if (!groupGenerators.length) {
     showConfirmDialog({
       title: "无法整组执行",
       body: "当前组内没有生成节点。请先把图片生成或视频生成节点放入组内。",
+      confirmText: "知道了",
+      showCancel: false,
+    });
+    return;
+  }
+
+  const generators = groupGenerators.filter((node) => !node.generating);
+  if (!generators.length) {
+    showConfirmDialog({
+      title: "组内任务正在生成",
+      body: "当前组内的生成节点都已在运行，本次不会重复启动或扣除积分。",
       confirmText: "知道了",
       showCancel: false,
     });
@@ -4809,7 +5203,20 @@ function requestRunGroup(group) {
     return;
   }
 
-  const totalCredits = generators.reduce((sum, node) => sum + getCost(node), 0);
+  const generationCosts = generators.map((node) => {
+    normalizeNodeParameters(node);
+    return getCost(node);
+  });
+  if (generationCosts.some((cost) => !Number.isFinite(cost) || cost <= 0)) {
+    showConfirmDialog({
+      title: "组内存在不可用模型",
+      body: "至少一个生成节点的参数或积分价格配置不完整，请调整后再执行。",
+      confirmText: "知道了",
+      showCancel: false,
+    });
+    return;
+  }
+  const totalCredits = generationCosts.reduce((sum, cost) => sum + cost, 0);
   if (!hasEnoughCredits(totalCredits)) {
     showConfirmDialog({
       title: "积分不足",
@@ -4825,8 +5232,14 @@ function requestRunGroup(group) {
     body: `即将运行「${group.name || "新建组"}」内的 ${generators.length} 个生成节点。\n预计消耗 ${formatCredit(totalCredits)} 积分。`,
     confirmText: "运行",
     onConfirm: () => {
-      chargeCredits(totalCredits);
-      generators.forEach((node) => startSimulatedGeneration(node, { charge: false }));
+      let actualCredits = 0;
+      generators.forEach((node, index) => {
+        if (node.generating) return;
+        if (startSimulatedGeneration(node, { charge: false })) {
+          actualCredits += generationCosts[index];
+        }
+      });
+      if (actualCredits > 0) chargeCredits(actualCredits);
       setActiveGroup(group.id);
       render();
     },
@@ -4858,7 +5271,7 @@ function shouldBypassCanvasWheel(target) {
         ".agent-history-menu",
         ".agent-model-menu",
         ".profile-menu",
-        ".profile-help-popover",
+        ".profile-help-inline-panel",
         ".canvas-tool-popover",
         ".toolbar-dropdown",
         ".selection-toolbar",
@@ -5332,17 +5745,8 @@ shell.addEventListener(
   { passive: false },
 );
 
-window.addEventListener(
-  "wheel",
-  (event) => {
-    if (!(event.ctrlKey || event.metaKey) || !shouldBypassCanvasWheel(event.target)) return;
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  { passive: false, capture: true },
-);
-
 window.addEventListener("keydown", (event) => {
+  if (document.querySelector(".confirm-layer")) return;
   const target = event.target;
   const isTyping = target instanceof Element && target.closest("input, textarea, [contenteditable='true']");
   if (isTyping) return;
@@ -5350,24 +5754,6 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     undoLastAction();
     return;
-  }
-
-  if (event.ctrlKey || event.metaKey) {
-    if (event.key === "+" || event.key === "=") {
-      event.preventDefault();
-      setCanvasZoom(state.scale * 1.12);
-      return;
-    }
-    if (event.key === "-" || event.key === "_") {
-      event.preventDefault();
-      setCanvasZoom(state.scale / 1.12);
-      return;
-    }
-    if (event.key === "0") {
-      event.preventDefault();
-      setCanvasZoom(1);
-      return;
-    }
   }
 
   if (event.code === "Space") {
@@ -5395,17 +5781,9 @@ document.addEventListener("dragstart", (event) => {
 
 localAssetInput.addEventListener("change", (event) => {
   const files = event.currentTarget.files || [];
-  if (state.pendingUploadMode === "generator") {
-    const node = state.nodes.find((item) => item.id === state.pendingUploadNodeId);
-    if (node) addFilesToGeneratorNode(node, files);
-  } else if (state.pendingUploadMode === "library") {
-    const accepted = createAssetsFromFiles(files);
-    registerLibraryAssets(accepted, state.libraryView === "global" ? state.libraryScope : "project");
-    accepted.forEach((asset) => hydrateAssetMetadata(asset, null));
-    openAssetLibrary();
-  }
+  const node = state.nodes.find((item) => item.id === state.pendingUploadNodeId);
+  if (node) addFilesToGeneratorNode(node, files);
   state.pendingUploadNodeId = null;
-  state.pendingUploadMode = null;
 });
 
 window.addEventListener("dragover", (event) => {
@@ -5581,6 +5959,28 @@ function setProfileCreditDetailsVisible(visible) {
   profileCreditCard?.classList.toggle("hidden", !visible);
 }
 
+function setProfileHelpOpen(open) {
+  const helpInline = profileMenu?.querySelector(".profile-help-inline");
+  const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
+  helpInline?.classList.toggle("open", open);
+  helpTrigger?.setAttribute("aria-expanded", String(open));
+}
+
+function toggleProfileHelpOpen() {
+  const isOpen = profileMenu?.querySelector(".profile-help-inline")?.classList.contains("open");
+  setProfileHelpOpen(!isOpen);
+}
+
+function keepProfileHelpOpenForPointer(event) {
+  const helpInline = profileMenu?.querySelector(".profile-help-inline.open");
+  const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
+  if (!helpInline || !helpTrigger) return;
+  const triggerTop = helpTrigger.getBoundingClientRect().top;
+  if (event.clientY < triggerTop - 2) {
+    setProfileHelpOpen(false);
+  }
+}
+
 function openProfileMenu({ showCredit = false, preserveCredit = false } = {}) {
   clearProfileMenuCloseTimer();
   profileMenu?.classList.remove("hidden");
@@ -5590,7 +5990,6 @@ function openProfileMenu({ showCredit = false, preserveCredit = false } = {}) {
   } else if (!preserveCredit) {
     setProfileCreditDetailsVisible(false);
   }
-  closeProfileSubmenus();
 }
 
 function closeProfileMenu() {
@@ -5598,7 +5997,7 @@ function closeProfileMenu() {
   profileMenu?.classList.add("hidden");
   railProfileBtn?.classList.remove("active");
   setProfileCreditDetailsVisible(false);
-  closeProfileSubmenus();
+  setProfileHelpOpen(false);
 }
 
 function scheduleCloseProfileMenu() {
@@ -5642,32 +6041,35 @@ profileMenu?.addEventListener("pointerdown", (event) => {
 
 profileMenu?.addEventListener("pointerenter", clearProfileMenuCloseTimer);
 profileMenu?.addEventListener("pointerleave", scheduleCloseProfileMenu);
+profileMenu?.addEventListener("pointermove", keepProfileHelpOpenForPointer);
 
-profileHelpSubmenu?.addEventListener("pointerdown", (event) => {
+profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("pointerenter", () => {
+  setProfileHelpOpen(true);
+});
+
+profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
   event.stopPropagation();
+  toggleProfileHelpOpen();
 });
 
 profileMenu?.addEventListener("click", (event) => {
   const inlineTheme = event.target.closest("[data-theme-inline]")?.dataset.themeInline;
   if (inlineTheme) {
     event.stopPropagation();
-    closeProfileSubmenus();
     applyTheme(inlineTheme);
+    return;
+  }
+  const helpTrigger = event.target.closest(".profile-help-trigger");
+  if (helpTrigger) {
+    event.preventDefault();
+    event.stopPropagation();
+    setProfileHelpOpen(true);
     return;
   }
   const actionItem = event.target.closest("[data-profile-action]");
   const action = actionItem?.dataset.profileAction;
-  if (action === "appearance") {
-    closeProfileSubmenus();
-    return;
-  }
-  if (action === "help") {
-    positionProfileHelpSubmenu();
-    closeProfileSubmenus();
-    profileHelpSubmenu?.classList.remove("hidden");
-    actionItem?.classList.add("active");
-    return;
-  }
   if (action === "logout") {
     showConfirmDialog({
       title: "退出登录",
@@ -5686,41 +6088,6 @@ profileMenu?.addEventListener("click", (event) => {
     });
   }
 });
-
-function bindProfileSubmenuPreview(actionName, submenu, positionFn) {
-  const trigger = profileMenu?.querySelector(`[data-profile-action='${actionName}']`);
-  if (!trigger || !submenu) return;
-  let closeTimer = null;
-  const open = () => {
-    clearProfileMenuCloseTimer();
-    window.clearTimeout(closeTimer);
-    closeProfileSubmenus();
-    positionFn();
-    submenu.classList.remove("hidden");
-    trigger.classList.add("active");
-  };
-  const closeSoon = () => {
-    window.clearTimeout(closeTimer);
-    closeTimer = window.setTimeout(() => {
-      submenu.classList.add("hidden");
-      trigger.classList.remove("active");
-    }, 160);
-  };
-  trigger.addEventListener("pointerenter", open);
-  trigger.addEventListener("pointerleave", closeSoon);
-  trigger.addEventListener("focus", open);
-  trigger.addEventListener("blur", closeSoon);
-  submenu.addEventListener("pointerenter", () => {
-    clearProfileMenuCloseTimer();
-    window.clearTimeout(closeTimer);
-  });
-  submenu.addEventListener("pointerleave", () => {
-    closeSoon();
-    scheduleCloseProfileMenu();
-  });
-}
-
-bindProfileSubmenuPreview("help", profileHelpSubmenu, positionProfileHelpSubmenu);
 
 function bindSelectionToolbarMenuPreview(selector, menu) {
   const wrap = selectionToolbar?.querySelector(selector);
@@ -6004,7 +6371,7 @@ document.addEventListener("click", (event) => {
     agentHistoryMenu?.classList.add("hidden");
     agentModelMenu?.classList.add("hidden");
   }
-  if (!target?.closest(".top-actions, #profileHelpSubmenu")) {
+  if (!target?.closest(".top-actions")) {
     closeProfileMenu();
   }
   if (!target?.closest(".project-nav, .project-menu, .canvas-menu, .canvas-more-menu")) {
@@ -6035,11 +6402,25 @@ window.addEventListener("resize", () => {
   setAssetLibraryWidth(state.assetLibraryWidth);
   syncPromptPanelLayouts();
   renderMinimap();
+  if (
+    narrowViewportQuery.matches &&
+    state.agentOpen &&
+    assetLibraryPanel &&
+    !assetLibraryPanel.classList.contains("hidden")
+  ) {
+    if (agentDock?.contains(document.activeElement)) {
+      closeAssetLibrary();
+    } else {
+      setAgentOpen(false);
+    }
+  }
+  syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
 });
 
 setAssetLibraryWidth(state.assetLibraryWidth);
 setAgentWidth(state.agentWidth);
 setAgentOpen(false);
+renderAgentHistory();
 setAgentConversation(state.activeConversationId);
 syncAgentModelButton();
 syncCreditDisplay();
