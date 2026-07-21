@@ -46,6 +46,7 @@ const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
 const selectionToolbar = document.querySelector("#selectionToolbar");
 let profileMenuCloseTimer = null;
+let themeFeedbackTimer = null;
 const selectionCount = document.querySelector("#selectionCount");
 const selectionSortMenu = document.querySelector("#selectionSortMenu");
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
@@ -145,10 +146,16 @@ function loadMediaToolPreferences() {
   return structuredClone(defaultMediaToolPreferences);
 }
 
+function normalizeThemeMode(mode) {
+  if (mode === "light" || mode === "dark") return mode;
+  if (mode === "system") return systemThemeQuery.matches ? "light" : "dark";
+  return "dark";
+}
+
 function loadThemeMode() {
   try {
     const savedMode = localStorage.getItem("reelay-theme-mode");
-    return ["light", "dark", "system"].includes(savedMode) ? savedMode : "dark";
+    return normalizeThemeMode(savedMode);
   } catch {
     return "dark";
   }
@@ -4602,49 +4609,49 @@ function syncAgentModelTabFromScroll() {
 }
 
 function getResolvedTheme(mode = state.themeMode) {
-  if (mode === "system") {
-    return systemThemeQuery.matches ? "light" : "dark";
-  }
-  return mode === "light" ? "light" : "dark";
+  return normalizeThemeMode(mode);
 }
 
-function applyTheme(mode = state.themeMode) {
-  state.themeMode = mode;
+function showThemeSwitchFeedback() {
+  if (!themeInlineSwitch) return;
+  window.clearTimeout(themeFeedbackTimer);
+  themeInlineSwitch.classList.add("is-visible");
+  themeFeedbackTimer = window.setTimeout(() => {
+    themeInlineSwitch.classList.remove("is-visible");
+  }, 1100);
+}
+
+function applyTheme(mode = state.themeMode, options = {}) {
+  const nextMode = normalizeThemeMode(mode);
+  state.themeMode = nextMode;
   try {
-    localStorage.setItem("reelay-theme-mode", mode);
+    localStorage.setItem("reelay-theme-mode", nextMode);
   } catch {
     // A blocked storage API should not prevent theme changes in the current session.
   }
-  document.documentElement.dataset.theme = getResolvedTheme(mode);
-  document.documentElement.dataset.themeMode = mode;
+  document.documentElement.dataset.theme = getResolvedTheme(nextMode);
+  document.documentElement.dataset.themeMode = nextMode;
   const themeLabels = {
-    light: "浅色",
-    dark: "深色",
-    system: "跟随系统",
+    light: "浅色模式",
+    dark: "深色模式",
   };
   const themeIcons = {
     light: "sun",
     dark: "moon",
-    system: "monitor",
   };
   const themeIndexes = {
     light: 0,
     dark: 1,
-    system: 2,
   };
-  if (themeCurrentLabel) themeCurrentLabel.textContent = themeLabels[mode] || "深色";
+  if (themeCurrentLabel) themeCurrentLabel.textContent = themeLabels[nextMode] || "深色模式";
   if (themeModeIcon) {
-    themeModeIcon.innerHTML = `<i data-lucide="${themeIcons[mode] || "moon"}" aria-hidden="true"></i>`;
+    themeModeIcon.innerHTML = `<i data-lucide="${themeIcons[nextMode] || "moon"}" aria-hidden="true"></i>`;
   }
   if (themeInlineSwitch) {
-    themeInlineSwitch.style.setProperty("--theme-index", themeIndexes[mode] ?? 1);
-    themeInlineSwitch.querySelectorAll("[data-theme-inline]").forEach((button) => {
-      const active = button.dataset.themeInline === mode;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-    });
+    themeInlineSwitch.style.setProperty("--theme-index", themeIndexes[nextMode] ?? 1);
   }
   refreshIcons();
+  if (options.flash) showThemeSwitchFeedback();
 }
 
 function setAgentWidth(width) {
@@ -6055,12 +6062,6 @@ profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("keydown",
 });
 
 profileMenu?.addEventListener("click", (event) => {
-  const inlineTheme = event.target.closest("[data-theme-inline]")?.dataset.themeInline;
-  if (inlineTheme) {
-    event.stopPropagation();
-    applyTheme(inlineTheme);
-    return;
-  }
   const helpTrigger = event.target.closest(".profile-help-trigger");
   if (helpTrigger) {
     event.preventDefault();
@@ -6070,6 +6071,12 @@ profileMenu?.addEventListener("click", (event) => {
   }
   const actionItem = event.target.closest("[data-profile-action]");
   const action = actionItem?.dataset.profileAction;
+  if (action === "appearance") {
+    event.preventDefault();
+    event.stopPropagation();
+    applyTheme(state.themeMode === "light" ? "dark" : "light", { flash: true });
+    return;
+  }
   if (action === "logout") {
     showConfirmDialog({
       title: "退出登录",
@@ -6426,11 +6433,6 @@ syncAgentModelButton();
 syncCreditDisplay();
 applyTheme(state.themeMode);
 syncFaviconContrast();
-systemThemeQuery.addEventListener("change", () => {
-  if (state.themeMode === "system") {
-    applyTheme("system");
-  }
-});
 officialLibraryAssets.forEach((asset) => hydrateAssetMetadata(asset, null));
 initializeCanvases();
 applyTransform();

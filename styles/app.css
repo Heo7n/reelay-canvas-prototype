@@ -801,8 +801,8 @@ html[data-theme="light"] .asset-lib-tooltip {
 }
 
 .profile-appearance-item {
-  grid-template-columns: 18px minmax(0, 1fr) 82px;
-  cursor: default;
+  grid-template-columns: 18px minmax(0, 1fr) 58px;
+  cursor: pointer;
 }
 
 .theme-current-icon {
@@ -816,13 +816,37 @@ html[data-theme="light"] .asset-lib-tooltip {
 .theme-inline-switch {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 26px);
+  grid-template-columns: repeat(2, 26px);
   align-items: center;
+  justify-self: end;
+  width: 56px;
   height: 28px;
   padding: 2px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text) 9%, transparent);
   color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px) scale(0.96);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.theme-inline-switch.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.profile-appearance-item:hover .theme-inline-switch,
+.profile-appearance-item:focus-visible .theme-inline-switch {
+  opacity: 0.76;
+  transform: translateY(0) scale(1);
+}
+
+.profile-appearance-item:hover .theme-inline-switch.is-visible,
+.profile-appearance-item:focus-visible .theme-inline-switch.is-visible {
+  opacity: 1;
 }
 
 .theme-inline-thumb {
@@ -836,29 +860,25 @@ html[data-theme="light"] .asset-lib-tooltip {
   background: color-mix(in srgb, var(--floating-bg) 84%, var(--text) 10%);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   transform: translateX(calc(var(--theme-index, 1) * 26px));
-  transition: transform 0.18s ease;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.theme-inline-option {
+.theme-feedback-icon {
   position: relative;
   z-index: 1;
   display: grid;
   place-items: center;
   width: 26px;
   height: 24px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
   color: inherit;
-  cursor: pointer;
 }
 
-.theme-inline-option:hover,
-.theme-inline-option.active {
+html[data-theme-mode="light"] .theme-feedback-light,
+html[data-theme-mode="dark"] .theme-feedback-dark {
   color: var(--text);
 }
 
-.theme-inline-option svg {
+.theme-feedback-icon svg {
   width: 13px;
   height: 13px;
 }

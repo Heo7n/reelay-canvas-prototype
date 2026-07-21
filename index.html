@@ -63,32 +63,28 @@
                 <i data-lucide="settings" aria-hidden="true"></i>
                 <span>账号设置</span>
               </button>
-              <div class="profile-menu-item profile-appearance-item" data-profile-action="appearance" role="group" aria-label="外观">
+              <button class="profile-menu-item profile-appearance-item" type="button" data-profile-action="appearance" aria-label="切换外观">
                 <span class="theme-current-icon" id="themeModeIcon">
                   <i data-lucide="moon" aria-hidden="true"></i>
                 </span>
-                <span>外观</span>
-                <div class="theme-inline-switch" data-theme-inline-switch role="group" aria-label="外观模式" style="--theme-index: 1">
+                <span id="themeCurrentLabel">深色模式</span>
+                <span class="theme-inline-switch" data-theme-inline-switch aria-hidden="true" style="--theme-index: 1">
                   <span class="theme-inline-thumb" aria-hidden="true"></span>
-                  <button class="theme-inline-option" type="button" data-theme-inline="light" title="浅色模式" aria-label="浅色模式">
+                  <span class="theme-feedback-icon theme-feedback-light" aria-hidden="true">
                     <i data-lucide="sun" aria-hidden="true"></i>
-                  </button>
-                  <button class="theme-inline-option" type="button" data-theme-inline="dark" title="深色模式" aria-label="深色模式">
+                  </span>
+                  <span class="theme-feedback-icon theme-feedback-dark" aria-hidden="true">
                     <i data-lucide="moon" aria-hidden="true"></i>
-                  </button>
-                  <button class="theme-inline-option" type="button" data-theme-inline="system" title="跟随系统" aria-label="跟随系统">
-                    <i data-lucide="monitor" aria-hidden="true"></i>
-                  </button>
-                </div>
-                <small id="themeCurrentLabel" class="sr-only">深色</small>
-              </div>
+                  </span>
+                </span>
+              </button>
               <div class="profile-help-inline">
-                <button class="profile-menu-item profile-help-trigger" type="button" aria-label="帮助" aria-expanded="false" aria-controls="profileHelpPanel">
+                <button class="profile-menu-item profile-help-trigger" type="button" aria-label="帮助中心" aria-expanded="false" aria-controls="profileHelpPanel">
                   <i data-lucide="circle-help" aria-hidden="true"></i>
-                  <span>帮助</span>
+                  <span>帮助中心</span>
                   <i data-lucide="chevron-right" aria-hidden="true"></i>
                 </button>
-                <div class="profile-help-inline-panel" id="profileHelpPanel" aria-label="帮助">
+                <div class="profile-help-inline-panel" id="profileHelpPanel" aria-label="帮助中心">
                   <button class="profile-help-link profile-help-shortcuts" type="button" data-help-action="shortcuts">
                     <i data-lucide="keyboard" aria-hidden="true"></i>
                     <span>快捷键</span>
