@@ -7,6 +7,7 @@
 - 这是静态高保真前端原型，不是生产应用。
 - 无后端、无真实账号、无真实模型 API、无项目持久化和部署链路；login / home / canvas 目前仍通过三个静态入口串联，不是正式 router。
 - Phase 0B 已建立隔离的 React + TypeScript + Vite 应用壳、browser route contract、Vitest 和 legacy canvas host；它尚未接管现有三页。旧原型检查与新壳类型 / 单元检查的统一入口仍是 `npm run check`。
+- 多账号组织演示已确认必须支持两个浏览器同时看到共享数据；因此 Phase 0B 需要最小共享后端和服务端会话，IndexedDB 不能冒充跨账号数据源。
 - `prototype-shell-baseline-2026-07-14` 是历史原型壳层标签，不代表最新已验证工作区。
 - 接手时用 `git branch --show-current` 和 `git status --short` 确认实际分支与未提交改动，不依赖文档中的静态分支名。
 

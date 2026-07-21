@@ -417,6 +417,7 @@ sequenceDiagram
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
 - 优先建立 Session、Workspace、Membership、Project 和 CanvasDocument 的 repository / service 边界，让个人空间与组织空间都由显式 actor scope 驱动。
+- 因为组织演示需要两个浏览器同时看到共享数据，Phase 0B 同步建立最小共享后端、服务端会话和开发数据库；IndexedDB 只承担本地草稿、缓存和离线恢复。
 - 为 Asset、GenerationTask、GenerationResult 和 CreditLedger 先定义核心不变量；真实生成接入前再补足 repository 和事务边界。
 - 本地草稿与 Blob 使用 IndexedDB；localStorage 仅保存主题等设备偏好。
 - 建立通用通知、确认、菜单、对话框和焦点管理组件。
