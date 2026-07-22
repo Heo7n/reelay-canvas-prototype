@@ -47,6 +47,25 @@ test("a successful result locks its generator node to one media modality", () =>
   assert.match(appCss, /\.model-mode-lock/);
 });
 
+test("the routed legacy canvas persists a versioned project document without runtime or credit state", () => {
+  const snapshotStart = appSource.indexOf("function createCanvasDocumentSnapshot()");
+  const snapshotEnd = appSource.indexOf("function serializeCanvasDocumentSnapshot()", snapshotStart);
+  assert.ok(snapshotStart >= 0 && snapshotEnd > snapshotStart);
+  const snapshotSource = appSource.slice(snapshotStart, snapshotEnd);
+
+  assert.match(snapshotSource, /kind:\s*"reelay-legacy-canvas"/);
+  assert.match(snapshotSource, /version:\s*1/);
+  assert.match(snapshotSource, /activeCanvasId:\s*state\.activeCanvasId/);
+  assert.match(snapshotSource, /nodes:\s*clonePersistentValue\(canvas\.nodes\)/);
+  assert.match(snapshotSource, /groups:\s*clonePersistentValue\(canvas\.groups\)/);
+  assert.doesNotMatch(snapshotSource, /state\.account|consumedCredits|generationTasks|undoStack|selectedIds/);
+  assert.match(appSource, /childKey === "url"[\s\S]*childValue\.startsWith\("blob:"\)/);
+  assert.match(appSource, /node\.generating = false/);
+  assert.match(appSource, /window\.addEventListener\("message", handleHostBridgeMessage\)/);
+  assert.match(appSource, /type:\s*"canvas:save"[\s\S]*expectedRevision:\s*canvasPersistence\.revision/);
+  assert.match(appSource, /message\.code === "conflict"[\s\S]*canvasPersistence\.blocked = true/);
+});
+
 test("model data and prototype config load before the application", () => {
   const catalogIndex = html.indexOf("./data/model-catalog.js");
   const configIndex = html.indexOf("./src/config/prototype-config.js");

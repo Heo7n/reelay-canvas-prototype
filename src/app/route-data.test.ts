@@ -30,6 +30,16 @@ const projects: ProjectSummary[] = [
 
 function createServices(signedIn = true): ApplicationServices {
   return {
+    canvasDocumentRepository: {
+      getCanvasDocument: vi.fn(async () => null),
+      save: vi.fn(async (input) => ({
+        id: input.canvasId,
+        projectId: input.projectId,
+        schemaVersion: input.schemaVersion,
+        revision: input.expectedRevision + 1,
+        content: input.content,
+      })),
+    },
     sessionGateway: {
       getCurrent: vi.fn(async () => ({ actor: signedIn ? actor : null })),
       signInWithPassword: vi.fn(async () => ({ actor })),

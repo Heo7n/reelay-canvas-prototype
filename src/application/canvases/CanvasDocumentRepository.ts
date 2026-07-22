@@ -2,11 +2,14 @@ import type { CanvasDocument, CanvasId } from "../../domain/canvas/canvas-docume
 import type { ProjectId } from "../../domain/project/project";
 
 export interface SaveCanvasDocumentInput {
-  document: CanvasDocument;
+  projectId: ProjectId;
+  canvasId: CanvasId;
+  schemaVersion: number;
   expectedRevision: number;
+  content: unknown;
 }
 
 export interface CanvasDocumentRepository {
-  get(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null>;
+  getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null>;
   save(input: SaveCanvasDocumentInput): Promise<CanvasDocument>;
 }

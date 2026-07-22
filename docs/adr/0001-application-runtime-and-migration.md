@@ -65,12 +65,14 @@ Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 - `workspaceId`
 - `projectId`
 - `canvasId`
+- `projectName`
 - 主题
-- 会话摘要
+- 项目可写状态
+- CanvasDocument 加载 / 保存消息与 revision
 - 导航意图
 - dirty 状态
 
-桥接层只负责上下文和导航，不复制 repository、权限或计费逻辑。后续按数据与交互边界逐步替换画布内部模块，不按文件长度机械拆组件。
+桥接层只负责上下文、导航和迁移期间的文档消息转发；repository、会话和服务端授权仍留在 host / application 边界，计费不进入桥协议。旧画布只产生带 schemaVersion 的 allow-list 快照，不把全量运行内存当成领域对象。后续按数据与交互边界逐步替换画布内部模块，不按文件长度机械拆组件。
 
 ## 建议目录
 

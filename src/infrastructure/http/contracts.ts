@@ -60,12 +60,35 @@ export const ProjectResponseDtoSchema = z
   })
   .strict();
 
+export const CanvasDocumentDtoSchema = z
+  .object({
+    id: IdentifierSchema,
+    projectId: IdentifierSchema,
+    schemaVersion: z.number().int().min(1),
+    revision: z.number().int().min(0),
+    content: z.unknown(),
+  })
+  .strict();
+
+export const CanvasDocumentReadResponseDtoSchema = z
+  .object({
+    document: CanvasDocumentDtoSchema.nullable(),
+  })
+  .strict();
+
+export const CanvasDocumentResponseDtoSchema = z
+  .object({
+    document: CanvasDocumentDtoSchema,
+  })
+  .strict();
+
 export const ErrorResponseDtoSchema = z
   .object({
     error: z
       .object({
         code: z.string().trim().min(1).max(160),
         message: z.string().trim().min(1).max(500),
+        currentRevision: z.number().int().nonnegative().optional(),
       })
       .strict(),
   })

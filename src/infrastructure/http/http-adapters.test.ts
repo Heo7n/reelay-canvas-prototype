@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createHttpServices } from "./createHttpServices";
+import { HttpCanvasDocumentRepository } from "./HttpCanvasDocumentRepository";
 import { HttpProjectRepository } from "./HttpProjectRepository";
 import { HttpSessionGateway } from "./HttpSessionGateway";
 import {
@@ -207,12 +208,94 @@ describe("HttpProjectRepository", () => {
   });
 });
 
+describe("HttpCanvasDocumentRepository", () => {
+  const documentDto = {
+    id: "main canvas",
+    projectId: "project/one",
+    schemaVersion: 1,
+    revision: 3,
+    content: { nodes: [{ id: "node-1" }] },
+  };
+
+  it("loads nullable documents and saves only the mutable document payload", async () => {
+    const transport = createFetchQueue(
+      { body: { document: null } },
+      { body: { document: documentDto } },
+      { body: { document: { ...documentDto, revision: 4 } } },
+    );
+    const repository = new HttpCanvasDocumentRepository({ baseUrl: "/backend/", fetch: transport.fetch });
+
+    await expect(repository.getCanvasDocument("project/one", "main canvas")).resolves.toBeNull();
+    await expect(repository.getCanvasDocument("project/one", "main canvas")).resolves.toEqual(documentDto);
+    await expect(repository.save({
+      projectId: documentDto.projectId,
+      canvasId: documentDto.id,
+      schemaVersion: documentDto.schemaVersion,
+      content: documentDto.content,
+      expectedRevision: 3,
+    })).resolves.toEqual({
+      ...documentDto,
+      revision: 4,
+    });
+
+    expect(transport.requests.map((request) => request.url)).toEqual([
+      "/backend/api/projects/project%2Fone/canvases/main%20canvas/document",
+      "/backend/api/projects/project%2Fone/canvases/main%20canvas/document",
+      "/backend/api/projects/project%2Fone/canvases/main%20canvas/document",
+    ]);
+    expect(transport.requests[2]?.init.method).toBe("PUT");
+    expect(JSON.parse(String(transport.requests[2]?.init.body))).toEqual({
+      schemaVersion: 1,
+      content: documentDto.content,
+      expectedRevision: 3,
+    });
+  });
+
+  it("rejects malformed canvas documents before they enter the domain", async () => {
+    const transport = createFetchQueue({
+      body: { document: { ...documentDto, revision: -1 } },
+    });
+    const repository = new HttpCanvasDocumentRepository({ fetch: transport.fetch });
+
+    await expect(repository.getCanvasDocument("project-one", "main")).rejects.toBeInstanceOf(
+      HttpResponseValidationError,
+    );
+  });
+
+  it("preserves the typed revision-conflict error envelope", async () => {
+    const transport = createFetchQueue({
+      status: 409,
+      body: {
+        error: {
+          code: "canvas_revision_conflict",
+          message: "Reload before saving again.",
+          currentRevision: 4,
+        },
+      },
+    });
+    const repository = new HttpCanvasDocumentRepository({ fetch: transport.fetch });
+
+    await expect(repository.save({
+      projectId: documentDto.projectId,
+      canvasId: documentDto.id,
+      schemaVersion: 1,
+      expectedRevision: 3,
+      content: documentDto.content,
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "canvas_revision_conflict",
+      message: "Reload before saving again.",
+    });
+  });
+});
+
 describe("createHttpServices", () => {
   it("creates all application adapters from one injectable transport configuration", async () => {
     const transport = createFetchQueue({ body: { actor: null } });
     const services = createHttpServices({ baseUrl: "/shared-api", fetch: transport.fetch });
 
     await expect(services.sessionGateway.getCurrent()).resolves.toEqual({ actor: null });
+    expect(services.canvasDocumentRepository).toBeInstanceOf(HttpCanvasDocumentRepository);
     expect(services.workspaceRepository).toBeInstanceOf(HttpWorkspaceRepository);
     expect(services.projectRepository).toBeInstanceOf(HttpProjectRepository);
     expect(transport.requests[0]?.url).toBe("/shared-api/api/session");

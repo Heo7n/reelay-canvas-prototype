@@ -1,6 +1,7 @@
 import type { ActorId, SessionActor } from "../../domain/identity/session";
 import type { ProjectId, ProjectSummary } from "../../domain/project/project";
 import type { Workspace, WorkspaceId } from "../../domain/workspace/workspace";
+import type { CanvasDocumentStore } from "./CanvasDocumentStore";
 
 export interface CreateProjectInput {
   workspaceId: WorkspaceId;
@@ -15,7 +16,7 @@ export interface UpdateProjectInput {
   coverAssetId?: string | null;
 }
 
-export interface CollaborationStore {
+export interface CollaborationStore extends CanvasDocumentStore {
   readonly storageKind: "server-memory" | "postgresql";
 
   ping(): Promise<void>;
@@ -31,6 +32,7 @@ export interface CollaborationStore {
   getWorkspace(workspaceId: WorkspaceId): Promise<Workspace | null>;
 
   listProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<ProjectSummary[]>;
+  getProjectById(actorId: ActorId, projectId: ProjectId): Promise<ProjectSummary | null>;
   getProject(actorId: ActorId, workspaceId: WorkspaceId, projectId: ProjectId): Promise<ProjectSummary | null>;
   createProject(input: CreateProjectInput): Promise<ProjectSummary>;
   updateProject(

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  CanvasDocumentRevisionConflictError,
+  type SaveCanvasDocumentInput,
+} from "../application/CanvasDocumentStore";
+import type { CanvasDocument, CanvasId } from "../../domain/canvas/canvas-document";
 import type { ActorId, SessionActor } from "../../domain/identity/session";
 import type { ProjectId, ProjectSummary, ProjectUserRole } from "../../domain/project/project";
 import type { Membership, Workspace, WorkspaceId } from "../../domain/workspace/workspace";
@@ -23,6 +28,7 @@ export class InMemoryCollaborationStore implements CollaborationStore {
   private readonly memberships: Membership[];
   private readonly projects = new Map<ProjectId, DemoProjectFixture>();
   private readonly projectMemberships = new Map<ProjectId, Map<ActorId, ProjectUserRole>>();
+  private readonly canvasDocuments = new Map<ProjectId, Map<CanvasId, CanvasDocument>>();
   private readonly sessions = new Map<string, ActorId>();
 
   constructor(
@@ -126,6 +132,12 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     return this.toProjectSummary(project, actorId);
   }
 
+  async getProjectById(actorId: ActorId, projectId: ProjectId): Promise<ProjectSummary | null> {
+    const project = this.projects.get(projectId);
+    if (!project || !this.projectMemberships.get(projectId)?.has(actorId)) return null;
+    return this.toProjectSummary(project, actorId);
+  }
+
   async createProject(input: CreateProjectInput): Promise<ProjectSummary> {
     const project: DemoProjectFixture = {
       id: `project-${this.createId()}`,
@@ -159,6 +171,31 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     };
     this.projects.set(project.id, project);
     return this.toProjectSummary(project, input.updatedByActorId);
+  }
+
+  async getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null> {
+    const document = this.canvasDocuments.get(projectId)?.get(canvasId);
+    return document ? structuredClone(document) : null;
+  }
+
+  async saveCanvasDocument(input: SaveCanvasDocumentInput): Promise<CanvasDocument> {
+    const projectDocuments = this.canvasDocuments.get(input.projectId) ?? new Map<CanvasId, CanvasDocument>();
+    const current = projectDocuments.get(input.canvasId);
+    const currentRevision = current?.revision ?? 0;
+    if (currentRevision !== input.expectedRevision) {
+      throw new CanvasDocumentRevisionConflictError(currentRevision);
+    }
+
+    const document: CanvasDocument = {
+      id: input.canvasId,
+      projectId: input.projectId,
+      schemaVersion: input.schemaVersion,
+      revision: currentRevision + 1,
+      content: structuredClone(input.content),
+    };
+    projectDocuments.set(input.canvasId, document);
+    this.canvasDocuments.set(input.projectId, projectDocuments);
+    return structuredClone(document);
   }
 
   private toProjectSummary(project: DemoProjectFixture, actorId: ActorId): ProjectSummary {

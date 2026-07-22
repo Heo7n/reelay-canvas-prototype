@@ -19,11 +19,11 @@ Reelay Canvas 是面向 AIGC 创作流程的无限画布原型。它不是传统
 这是一个本地可运行的产品原型：
 
 - 没有真实 AIGC API。
-- 没有生产账号生命周期、项目画布持久化、云端素材库或公开部署；项目元数据与演示会话已持久化到本地 PostgreSQL。
+- 没有生产账号生命周期、云端素材库、积分账本或公开部署；项目元数据、演示会话与路由画布文档已持久化到本地 PostgreSQL。
 - 本地主链路已经进入 React browser routes：`/app/login`、`/app/w/:workspaceId`、`/app/w/:workspaceId/projects` 和受保护的画布宿主路由。页面通过 HTTP adapters 消费本地共享 API；`login.html`、`home.html` 与 `index.html` 暂时保留作视觉参考和旧画布实现，不再承接新页面逻辑。
 - 五个固定 `.test` 演示账号由服务端校验并使用 HttpOnly Cookie 维持独立会话；这只验证登录、路由保护、单组织成员关系和项目级访问控制，不是正式账号系统。
-- 用户、会话、唯一组织 Workspace、Project 与项目成员关系保存在本地 PostgreSQL，服务重启后保留；内存 adapter 只用于快速契约测试。
-- 所有节点数据都存在浏览器当前运行内存中，刷新后会丢失。
+- 用户、会话、唯一组织 Workspace、Project、项目成员关系与 CanvasDocument 保存在本地 PostgreSQL，服务重启后保留；内存 adapter 只用于快速契约测试。
+- 从受保护路由进入的旧画布会恢复多画布、节点、组、视口和模型参数；直接打开静态 `index.html` 仍是单次页面内存原型。
 - “生成”是模拟行为，用于验证生成后的媒体状态、标题和规格展示。
 
 这意味着当前项目更接近“可交互产品样机”，不是生产应用。
@@ -56,10 +56,18 @@ Reelay Canvas 是面向 AIGC 创作流程的无限画布原型。它不是传统
 主页与画布的边界：
 
 - 新主页和项目库位于 `src/pages`，共享项目卡、账户栏和主题位于 `src/shared`，数据只通过 `src/application` ports 与 `src/infrastructure/http` adapters 进入页面；不进入 `app.js` 或 `styles/app.css`。
-- 主页创建项目后进入 `/app/w/:workspaceId/projects/:projectId/canvases/main`。宿主会先校验会话、工作空间和项目，再以 iframe 打开旧画布并发送版本化 `host:init` 上下文；旧画布尚未消费该上下文或按项目加载 / 保存内容。
+- 主页创建项目后进入 `/app/w/:workspaceId/projects/:projectId/canvases/main`。宿主会先校验会话、工作空间和项目，再以 iframe 打开旧画布并发送版本化上下文与 CanvasDocument；旧画布按 `projectId + canvasId` 自动保存受控快照。
 - 旧画布内部的历史“回到主页 / 全部项目”入口仍指向静态页面，是待迁移的兼容导航，不代表新路由回退。
 - 模拟积分仍没有共享账本；React 页面和旧画布刷新后都显示当前阶段的 `3000 / 0` 测试基线。
 - 素材、模板、账户设置和更多能力入口只给出明确原型反馈，不伪装为已实现页面。
+
+路由画布保存边界：
+
+- `admin/edit` 可以保存，`view` 只能读取；服务端每次请求仍按 ProjectMembership 校验，前端只读标识不是授权依据。
+- 保存内容是 `schemaVersion = 1` 的 allow-list 迁移快照，只包含内部画布、节点、组、视口和最近模型参数。账号、积分、选择态、撤销栈、运行中的生成任务、Agent 对话和面板状态不进入 CanvasDocument。
+- 当前旧画布内部仍可管理多个画布；迁移阶段把它们作为一个 bundle 存在路由的 `main` CanvasDocument 中，并不宣称已经拆成多条正式 Canvas 实体。
+- 本地文件的 `blob:` 地址不会被伪持久化；刷新后只保留可恢复的节点结构，素材二进制仍等待 Asset / Blob 存储。
+- 保存使用乐观 revision；发现其他窗口已先保存时停止自动覆盖并提示重新进入项目，不做静默的最后写入覆盖。
 
 ## 3. 信息架构
 

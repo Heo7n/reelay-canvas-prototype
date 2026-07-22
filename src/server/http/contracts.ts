@@ -15,6 +15,19 @@ export const ProjectParamsSchema = WorkspaceParamsSchema.extend({
   projectId: z.string().trim().min(1).max(160),
 });
 
+export const CanvasDocumentParamsSchema = z.object({
+  projectId: z.string().trim().min(1).max(160),
+  canvasId: z.string().trim().min(1).max(160),
+});
+
+export const SaveCanvasDocumentBodySchema = z
+  .object({
+    schemaVersion: z.number().int().positive().max(2_147_483_647),
+    expectedRevision: z.number().int().nonnegative().max(2_147_483_647),
+    content: z.json(),
+  })
+  .strict();
+
 export const CreateProjectBodySchema = z
   .object({
     name: z.string().trim().min(1).max(100),

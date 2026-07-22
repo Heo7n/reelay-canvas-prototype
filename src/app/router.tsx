@@ -25,7 +25,11 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
         { path: "no-workspace", loader: handlers.noWorkspaceLoader, element: <NoWorkspacePage /> },
         { path: "w/:workspaceId", loader: handlers.workspaceLoader, action: handlers.workspaceAction, element: <WorkspaceHomePage /> },
         { path: "w/:workspaceId/projects", loader: handlers.workspaceLoader, action: handlers.workspaceAction, element: <ProjectsPage /> },
-        { path: "w/:workspaceId/projects/:projectId/canvases/:canvasId", loader: handlers.canvasLoader, element: <LegacyCanvasRoute /> },
+        {
+          path: "w/:workspaceId/projects/:projectId/canvases/:canvasId",
+          loader: handlers.canvasLoader,
+          element: <LegacyCanvasRoute canvasDocumentRepository={services.canvasDocumentRepository} />,
+        },
         { path: "*", element: <Navigate to={routePaths.login()} replace /> },
       ],
     },

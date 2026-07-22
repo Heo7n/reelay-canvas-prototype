@@ -125,6 +125,136 @@ describe("organization project access API", () => {
     expect(adminLookup.json().project.currentUserRole).toBe("admin");
   });
 
+  it("creates, loads and revision-checks a canvas document", async () => {
+    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const url = "/api/projects/project-perfume-tvc/canvases/main/document";
+
+    const empty = await app.inject({ method: "GET", url, headers: { cookie: adminCookie } });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual({ document: null });
+
+    const missingRevision = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: adminCookie },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [] } },
+    });
+    expect(missingRevision.statusCode).toBe(409);
+    expect(missingRevision.json().error.currentRevision).toBe(0);
+
+    const created = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: adminCookie },
+      payload: {
+        schemaVersion: 1,
+        expectedRevision: 0,
+        content: { viewport: { x: 12, y: -8, zoom: 0.9 }, nodes: [{ id: "node-one" }] },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().document).toEqual({
+      id: "main",
+      projectId: "project-perfume-tvc",
+      schemaVersion: 1,
+      revision: 1,
+      content: { viewport: { x: 12, y: -8, zoom: 0.9 }, nodes: [{ id: "node-one" }] },
+    });
+
+    const updated = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: adminCookie },
+      payload: {
+        schemaVersion: 2,
+        expectedRevision: 1,
+        content: { viewport: { x: 24, y: 4, zoom: 1 }, nodes: [] },
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().document).toEqual(
+      expect.objectContaining({ schemaVersion: 2, revision: 2 }),
+    );
+
+    const stale = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: adminCookie },
+      payload: { schemaVersion: 2, expectedRevision: 1, content: { nodes: ["stale"] } },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error).toEqual(
+      expect.objectContaining({ code: "canvas_revision_conflict", currentRevision: 2 }),
+    );
+
+    const restored = await app.inject({ method: "GET", url, headers: { cookie: adminCookie } });
+    expect(restored.json().document).toEqual(
+      expect.objectContaining({ revision: 2, content: { viewport: { x: 24, y: 4, zoom: 1 }, nodes: [] } }),
+    );
+  });
+
+  it("uses project roles for every canvas document read and write", async () => {
+    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const editCookie = await login(app, "linjing@reelay.test");
+    const viewCookie = await login(app, "zhouyu@reelay.test");
+    const outsiderCookie = await login(app, "chenxi@reelay.test");
+    const url = "/api/projects/project-scifi-trailer/canvases/storyboard/document";
+
+    const created = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: adminCookie },
+      payload: { schemaVersion: 1, expectedRevision: 0, content: { nodes: [] } },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const edited = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: editCookie },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [{ id: "shared" }] } },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().document.revision).toBe(2);
+
+    const viewed = await app.inject({ method: "GET", url, headers: { cookie: viewCookie } });
+    expect(viewed.statusCode).toBe(200);
+    expect(viewed.json().document.content).toEqual({ nodes: [{ id: "shared" }] });
+
+    const viewWrite = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: viewCookie },
+      payload: { schemaVersion: 1, expectedRevision: 2, content: { nodes: [] } },
+    });
+    expect(viewWrite.statusCode).toBe(403);
+    expect(viewWrite.json().error.code).toBe("project_forbidden");
+
+    const hiddenRead = await app.inject({ method: "GET", url, headers: { cookie: outsiderCookie } });
+    expect(hiddenRead.statusCode).toBe(404);
+    expect(hiddenRead.json().error.code).toBe("project_not_found");
+
+    const hiddenWrite = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: outsiderCookie },
+      payload: { schemaVersion: 1, expectedRevision: 2, content: { nodes: [] } },
+    });
+    expect(hiddenWrite.statusCode).toBe(404);
+  });
+
+  it("rejects invalid canvas document envelopes before saving", async () => {
+    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/projects/project-perfume-tvc/canvases/main/document",
+      headers: { cookie: adminCookie },
+      payload: { schemaVersion: 0, expectedRevision: -1, content: {}, extra: true },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("invalid_request");
+  });
+
   it("requires a valid session and keeps project lookup inside its workspace", async () => {
     const anonymous = await app.inject({
       method: "GET",

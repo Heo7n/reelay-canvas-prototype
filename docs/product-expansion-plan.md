@@ -98,7 +98,7 @@ flowchart TD
 
 这是登录后的默认页面，不是宣传落地页。
 
-> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；五个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据与成员关系已持久化到本地 PostgreSQL，旧画布仍未按项目加载 / 保存，因此这仍不是正式账号或生产协作。
+> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；五个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据、成员关系与路由画布文档已持久化到本地 PostgreSQL；旧画布通过受控迁移快照加载 / 保存，但素材、生成任务、历史和积分账本仍未持久化，因此这仍不是正式账号或生产协作。
 
 ### 页面目标
 
@@ -413,7 +413,7 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、Workspace、Membership 与 Project 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed 和跨服务重启集成验证；内存 adapter 只保留作快速契约测试和显式回退。旧画布仍不消费项目上下文，也尚未持久化 CanvasDocument、资产、生成任务或积分账本。
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision 和跨服务重启集成验证；旧画布已消费项目上下文并通过版本化 allow-list bundle 保存多画布、节点、组与视口。内存 adapter 只保留作快速契约测试和显式回退；资产、生成任务、生成历史和积分账本尚未持久化。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
@@ -425,7 +425,7 @@ sequenceDiagram
 
 ### Phase 0C：真实主链路
 
-- 项目保存与加载。
+- 把当前 legacy CanvasDocument bundle 逐步迁移为正式 Canvas / Node 数据边界，并补齐草稿恢复。
 - 资产持久化与显式 AssetReference。
 - 生成任务状态机、参数快照、幂等扣费与失败退款。
 - 真实生成结果先登记为 GenerationResult，由用户或产品规则显式提升为 Asset。

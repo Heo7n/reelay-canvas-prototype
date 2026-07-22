@@ -2,6 +2,11 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import type { Pool, QueryResultRow } from "pg";
 
+import {
+  CanvasDocumentRevisionConflictError,
+  type SaveCanvasDocumentInput,
+} from "../application/CanvasDocumentStore";
+import type { CanvasDocument, CanvasId } from "../../domain/canvas/canvas-document";
 import type { ActorId, SessionActor } from "../../domain/identity/session";
 import type {
   ProjectAccessKind,
@@ -44,6 +49,18 @@ interface ProjectRow extends QueryResultRow {
   current_user_role: ProjectUserRole;
 }
 
+interface CanvasDocumentRow extends QueryResultRow {
+  project_id: string;
+  canvas_id: string;
+  schema_version: number;
+  revision: number;
+  content: unknown;
+}
+
+interface CanvasDocumentRevisionRow extends QueryResultRow {
+  revision: number;
+}
+
 function mapWorkspace(row: WorkspaceRow): Workspace {
   return { id: row.id, kind: row.kind, name: row.name };
 }
@@ -57,6 +74,16 @@ function mapProject(row: ProjectRow): ProjectSummary {
     name: row.name,
     updatedAt: row.updated_at.toISOString(),
     coverAssetId: row.cover_asset_id,
+  };
+}
+
+function mapCanvasDocument(row: CanvasDocumentRow): CanvasDocument {
+  return {
+    id: row.canvas_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version,
+    revision: row.revision,
+    content: row.content,
   };
 }
 
@@ -216,6 +243,30 @@ export class PostgresCollaborationStore implements CollaborationStore {
     return result.rows[0] ? mapProject(result.rows[0]) : null;
   }
 
+  async getProjectById(actorId: ActorId, projectId: ProjectId): Promise<ProjectSummary | null> {
+    const result = await this.pool.query<ProjectRow>(
+      `SELECT
+         project.id,
+         project.workspace_id,
+         project.name,
+         project.updated_at,
+         project.cover_asset_id,
+         project.access_kind,
+         project_membership.role AS current_user_role
+       FROM projects AS project
+       JOIN project_memberships AS project_membership
+         ON project_membership.project_id = project.id
+        AND project_membership.user_id = $1
+       WHERE project.id = $2
+         AND (
+           (project.access_kind = 'private' AND project.created_by_user_id = $1)
+           OR project.access_kind = 'collaborative'
+         )`,
+      [actorId, projectId],
+    );
+    return result.rows[0] ? mapProject(result.rows[0]) : null;
+  }
+
   async createProject(input: CreateProjectInput): Promise<ProjectSummary> {
     const client = await this.pool.connect();
     try {
@@ -307,6 +358,67 @@ export class PostgresCollaborationStore implements CollaborationStore {
       ],
     );
     return result.rows[0] ? mapProject(result.rows[0]) : null;
+  }
+
+  async getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null> {
+    const result = await this.pool.query<CanvasDocumentRow>(
+      `SELECT project_id, canvas_id, schema_version, revision, content
+       FROM canvas_documents
+       WHERE project_id = $1 AND canvas_id = $2`,
+      [projectId, canvasId],
+    );
+    return result.rows[0] ? mapCanvasDocument(result.rows[0]) : null;
+  }
+
+  async saveCanvasDocument(input: SaveCanvasDocumentInput): Promise<CanvasDocument> {
+    const savedAt = this.now().toISOString();
+    const result = await this.pool.query<CanvasDocumentRow>(
+      `INSERT INTO canvas_documents (
+         project_id,
+         canvas_id,
+         schema_version,
+         revision,
+         content,
+         created_by_user_id,
+         updated_by_user_id,
+         created_at,
+         updated_at
+       )
+       SELECT $1, $2, $3, 1, $4::jsonb, $5, $5, $7, $7
+       WHERE $6 = 0
+          OR EXISTS (
+            SELECT 1
+            FROM canvas_documents AS existing
+            WHERE existing.project_id = $1 AND existing.canvas_id = $2
+          )
+       ON CONFLICT (project_id, canvas_id) DO UPDATE
+       SET
+         schema_version = EXCLUDED.schema_version,
+         revision = canvas_documents.revision + 1,
+         content = EXCLUDED.content,
+         updated_by_user_id = EXCLUDED.updated_by_user_id,
+         updated_at = EXCLUDED.updated_at
+       WHERE canvas_documents.revision = $6
+       RETURNING project_id, canvas_id, schema_version, revision, content`,
+      [
+        input.projectId,
+        input.canvasId,
+        input.schemaVersion,
+        JSON.stringify(input.content),
+        input.actorId,
+        input.expectedRevision,
+        savedAt,
+      ],
+    );
+    if (result.rows[0]) return mapCanvasDocument(result.rows[0]);
+
+    const current = await this.pool.query<CanvasDocumentRevisionRow>(
+      `SELECT revision
+       FROM canvas_documents
+       WHERE project_id = $1 AND canvas_id = $2`,
+      [input.projectId, input.canvasId],
+    );
+    throw new CanvasDocumentRevisionConflictError(current.rows[0]?.revision ?? 0);
   }
 
   private hashSessionToken(token: string): Buffer {

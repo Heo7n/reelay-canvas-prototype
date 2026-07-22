@@ -219,6 +219,25 @@ const state = {
   overlaySyncTimer: null,
 };
 
+const canvasPersistence = {
+  initialized: false,
+  hydrating: false,
+  writable: false,
+  blocked: false,
+  revision: 0,
+  canvasId: null,
+  saveTimer: 0,
+  inFlight: null,
+  lastSavedSnapshot: "",
+};
+
+const transientCanvasDocumentKeys = new Set([
+  "generationTaskId",
+  "layoutMenuOpen",
+  "mediaMenuOpen",
+  "panel",
+]);
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -324,6 +343,270 @@ function initializeCanvases() {
   syncProjectNavigation();
 }
 
+function clonePersistentValue(value, key = "", seen = new WeakSet()) {
+  if (transientCanvasDocumentKeys.has(key)) return undefined;
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "object") return undefined;
+  if (seen.has(value)) return undefined;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const items = value.map((item) => clonePersistentValue(item, "", seen)).filter((item) => item !== undefined);
+    seen.delete(value);
+    return items;
+  }
+  const result = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    if (childKey === "url" && typeof childValue === "string" && childValue.startsWith("blob:")) {
+      result[childKey] = "";
+      continue;
+    }
+    const cloned = clonePersistentValue(childValue, childKey, seen);
+    if (cloned !== undefined) result[childKey] = cloned;
+  }
+  seen.delete(value);
+  return result;
+}
+
+function createCanvasDocumentSnapshot() {
+  saveActiveCanvasState();
+  return {
+    kind: "reelay-legacy-canvas",
+    version: 1,
+    activeCanvasId: state.activeCanvasId,
+    canvases: state.canvases.map((canvas) => ({
+      id: canvas.id,
+      name: canvas.name,
+      nodes: clonePersistentValue(canvas.nodes) || [],
+      groups: clonePersistentValue(canvas.groups) || [],
+      viewport: {
+        tx: Number.isFinite(canvas.tx) ? canvas.tx : 0,
+        ty: Number.isFinite(canvas.ty) ? canvas.ty : 0,
+        scale: Number.isFinite(canvas.scale) ? canvas.scale : 1,
+      },
+      zCounter: Number.isFinite(canvas.zCounter) ? canvas.zCounter : 1,
+    })),
+    lastPreset: {
+      mode: state.lastPreset.mode,
+      model: state.lastPreset.model,
+      aspect: state.lastPreset.aspect,
+      resolution: state.lastPreset.resolution,
+      quality: state.lastPreset.quality,
+      duration: state.lastPreset.duration,
+      count: state.lastPreset.count,
+    },
+  };
+}
+
+function serializeCanvasDocumentSnapshot() {
+  return JSON.stringify(createCanvasDocumentSnapshot());
+}
+
+function normalizePersistedNode(candidate) {
+  if (!candidate || typeof candidate !== "object") return null;
+  if (typeof candidate.id !== "string" || !candidate.id) return null;
+  if (candidate.kind !== "generator" && candidate.kind !== "asset") return null;
+  const node = clonePersistentValue(candidate);
+  if (!node || typeof node !== "object") return null;
+  node.x = Number.isFinite(candidate.x) ? clamp(candidate.x, -1_000_000, 1_000_000) : 0;
+  node.y = Number.isFinite(candidate.y) ? clamp(candidate.y, -1_000_000, 1_000_000) : 0;
+  node.z = Number.isFinite(candidate.z) ? clamp(candidate.z, 0, 1_000_000) : 1;
+  node.assets = Array.isArray(node.assets) ? node.assets : [];
+  node.generating = false;
+  node.panel = null;
+  node.mediaMenuOpen = false;
+  delete node.generationTaskId;
+  if (node.kind === "generator") normalizeNodeParameters(node);
+  return node;
+}
+
+function normalizePersistedCanvas(candidate, index) {
+  if (!candidate || typeof candidate !== "object" || typeof candidate.id !== "string" || !candidate.id) return null;
+  const nodes = Array.isArray(candidate.nodes) ? candidate.nodes.map(normalizePersistedNode).filter(Boolean) : [];
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const groups = Array.isArray(candidate.groups)
+    ? candidate.groups
+        .map((item) => {
+          if (!item || typeof item !== "object" || typeof item.id !== "string" || !item.id) return null;
+          const group = clonePersistentValue(item);
+          if (!group || typeof group !== "object") return null;
+          group.nodeIds = Array.isArray(item.nodeIds) ? item.nodeIds.filter((id) => typeof id === "string" && nodeIds.has(id)) : [];
+          group.x = Number.isFinite(item.x) ? clamp(item.x, -1_000_000, 1_000_000) : 0;
+          group.y = Number.isFinite(item.y) ? clamp(item.y, -1_000_000, 1_000_000) : 0;
+          group.width = Number.isFinite(item.width) ? clamp(item.width, 1, 1_000_000) : 1;
+          group.height = Number.isFinite(item.height) ? clamp(item.height, 1, 1_000_000) : 1;
+          group.z = Number.isFinite(item.z) ? clamp(item.z, 0, 1_000_000) : 1;
+          group.layoutMenuOpen = false;
+          return group;
+        })
+        .filter(Boolean)
+    : [];
+  const viewport = candidate.viewport && typeof candidate.viewport === "object" ? candidate.viewport : {};
+  return {
+    id: candidate.id,
+    name: typeof candidate.name === "string" && candidate.name.trim() ? candidate.name.trim().slice(0, 100) : `画布 ${index + 1}`,
+    nodes,
+    groups,
+    tx: Number.isFinite(viewport.tx) ? clamp(viewport.tx, -1_000_000, 1_000_000) : 0,
+    ty: Number.isFinite(viewport.ty) ? clamp(viewport.ty, -1_000_000, 1_000_000) : 0,
+    scale: Number.isFinite(viewport.scale)
+      ? clamp(viewport.scale, canvasScaleLimits.min, canvasScaleLimits.max)
+      : 1,
+    zCounter: Number.isFinite(candidate.zCounter) ? clamp(candidate.zCounter, 1, 1_000_000) : 1,
+    undoStack: [],
+  };
+}
+
+function hydrateCanvasDocumentSnapshot(content) {
+  if (!content || typeof content !== "object" || content.kind !== "reelay-legacy-canvas" || content.version !== 1) {
+    return false;
+  }
+  const canvases = Array.isArray(content.canvases)
+    ? content.canvases.map(normalizePersistedCanvas).filter(Boolean)
+    : [];
+  if (!canvases.length) return false;
+  state.canvases = canvases;
+  state.activeCanvasId = canvases.some((canvas) => canvas.id === content.activeCanvasId)
+    ? content.activeCanvasId
+    : canvases[0].id;
+  if (content.lastPreset && typeof content.lastPreset === "object") {
+    const preset = content.lastPreset;
+    state.lastPreset = {
+      mode: preset.mode === "video" ? "video" : "image",
+      model: typeof preset.model === "string" ? preset.model : state.lastPreset.model,
+      aspect: typeof preset.aspect === "string" ? preset.aspect : state.lastPreset.aspect,
+      resolution: typeof preset.resolution === "string" ? preset.resolution : state.lastPreset.resolution,
+      quality: typeof preset.quality === "string" ? preset.quality : state.lastPreset.quality,
+      duration: typeof preset.duration === "string" ? preset.duration : state.lastPreset.duration,
+      count: Number.isFinite(preset.count) ? clamp(Math.round(preset.count), 1, 4) : state.lastPreset.count,
+    };
+  }
+  state.libraryAssets = [];
+  state.libraryView = "canvas";
+  state.libraryScope = "project";
+  loadCanvasState(getActiveCanvas());
+  return true;
+}
+
+function postCanvasBridgeMessage(message) {
+  if (window.parent === window) return;
+  window.parent.postMessage(message, window.location.origin);
+}
+
+function postCanvasDirty(dirty) {
+  postCanvasBridgeMessage({
+    source: "reelay-legacy-canvas",
+    type: "canvas:dirty",
+    protocolVersion: 1,
+    dirty,
+  });
+}
+
+function flushCanvasDocumentSave() {
+  window.clearTimeout(canvasPersistence.saveTimer);
+  canvasPersistence.saveTimer = 0;
+  if (
+    !canvasPersistence.initialized ||
+    canvasPersistence.hydrating ||
+    !canvasPersistence.writable ||
+    canvasPersistence.blocked ||
+    canvasPersistence.inFlight ||
+    !canvasPersistence.canvasId
+  ) return;
+  const serialized = serializeCanvasDocumentSnapshot();
+  if (serialized === canvasPersistence.lastSavedSnapshot) {
+    postCanvasDirty(false);
+    return;
+  }
+  const requestId = crypto.randomUUID();
+  canvasPersistence.inFlight = { requestId, serialized };
+  postCanvasDirty(true);
+  postCanvasBridgeMessage({
+    source: "reelay-legacy-canvas",
+    type: "canvas:save",
+    protocolVersion: 1,
+    requestId,
+    schemaVersion: 1,
+    expectedRevision: canvasPersistence.revision,
+    content: JSON.parse(serialized),
+  });
+}
+
+function scheduleCanvasDocumentSave(delay = 800) {
+  if (!canvasPersistence.initialized || canvasPersistence.hydrating || !canvasPersistence.writable || canvasPersistence.blocked) return;
+  window.clearTimeout(canvasPersistence.saveTimer);
+  canvasPersistence.saveTimer = window.setTimeout(flushCanvasDocumentSave, delay);
+}
+
+function handleCanvasSaveResult(message) {
+  if (message.requestId !== canvasPersistence.inFlight?.requestId) return;
+  canvasPersistence.revision = message.document.revision;
+  canvasPersistence.lastSavedSnapshot = canvasPersistence.inFlight.serialized;
+  canvasPersistence.inFlight = null;
+  if (serializeCanvasDocumentSnapshot() === canvasPersistence.lastSavedSnapshot) {
+    postCanvasDirty(false);
+  } else {
+    scheduleCanvasDocumentSave(0);
+  }
+}
+
+function handleCanvasSaveError(message) {
+  if (message.requestId !== canvasPersistence.inFlight?.requestId) return;
+  canvasPersistence.inFlight = null;
+  if (message.code === "conflict") {
+    canvasPersistence.blocked = true;
+    showActionToast("画布已在其他窗口更新，请重新进入项目后继续");
+    return;
+  }
+  if (message.code === "forbidden") {
+    canvasPersistence.writable = false;
+    showActionToast("当前项目为只读，画布修改不会保存");
+    return;
+  }
+  showActionToast("画布暂时保存失败，正在等待重试");
+  scheduleCanvasDocumentSave(3000);
+}
+
+function handleHostBridgeMessage(event) {
+  if (window.parent === window || event.origin !== window.location.origin || event.source !== window.parent) return;
+  const message = event.data;
+  if (!message || typeof message !== "object" || message.source !== "reelay-shell") return;
+  if (message.type === "host:init" && message.context?.protocolVersion === 1) {
+    state.projectId = String(message.context.projectId || state.projectId);
+    state.projectName = String(message.context.projectName || state.projectName);
+    canvasPersistence.canvasId = String(message.context.canvasId || "main");
+    canvasPersistence.writable = message.context.writable === true;
+    syncProjectNavigation();
+    return;
+  }
+  if (message.type === "host:document" && message.protocolVersion === 1) {
+    canvasPersistence.hydrating = true;
+    canvasPersistence.writable = message.writable === true;
+    canvasPersistence.revision = message.document?.revision || 0;
+    const hydrated = message.document ? hydrateCanvasDocumentSnapshot(message.document.content) : true;
+    canvasPersistence.hydrating = false;
+    if (!hydrated) {
+      canvasPersistence.blocked = true;
+      showActionToast("此画布数据版本暂不支持，已停止自动保存");
+      return;
+    }
+    canvasPersistence.initialized = true;
+    canvasPersistence.lastSavedSnapshot = serializeCanvasDocumentSnapshot();
+    postCanvasDirty(false);
+    if (!canvasPersistence.writable) {
+      showActionToast("当前项目为只读，画布修改不会保存");
+    }
+    return;
+  }
+  if (message.type === "host:save-result" && message.protocolVersion === 1) {
+    handleCanvasSaveResult(message);
+    return;
+  }
+  if (message.type === "host:save-error" && message.protocolVersion === 1) {
+    handleCanvasSaveError(message);
+  }
+}
+
 function screenToWorld(clientX, clientY) {
   const rect = shell.getBoundingClientRect();
   return {
@@ -387,6 +670,7 @@ function applyTransform() {
   syncZoomControl();
   renderSelectionToolbar();
   renderMinimap();
+  scheduleCanvasDocumentSave();
 }
 
 function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id="${node.id}"]`)) {
@@ -2795,6 +3079,7 @@ function render() {
   renderAssetLibrary();
   refreshIcons();
   requestAnimationFrame(syncPromptPanelLayouts);
+  scheduleCanvasDocumentSave();
 }
 
 function getNodeRenderSignature(node) {
@@ -3110,6 +3395,7 @@ function createGeneratorNodeElement(node) {
     node.prompt = event.currentTarget.value;
     syncGenerateButton(el.querySelector(".generate-button"), node);
     resizePromptTextarea(event.currentTarget, node);
+    scheduleCanvasDocumentSave();
   });
   if (node.promptLarge && promptInput) {
     requestAnimationFrame(() => resizePromptTextarea(promptInput, node));
@@ -4868,6 +5154,7 @@ function commitCanvasRename(nextName) {
   canvas.name = String(nextName || canvas.name || "画布 1").trim() || "画布 1";
   syncProjectNavigation();
   renderCanvasMenu();
+  scheduleCanvasDocumentSave();
 }
 
 function positionMenu(menu, anchor, options = {}) {
@@ -6472,6 +6759,9 @@ window.addEventListener("resize", () => {
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
 });
 
+window.addEventListener("message", handleHostBridgeMessage);
+window.addEventListener("beforeunload", flushCanvasDocumentSave);
+
 setAssetLibraryWidth(state.assetLibraryWidth);
 setAgentWidth(state.agentWidth);
 setAgentOpen(false);
@@ -6486,3 +6776,8 @@ initializeCanvases();
 applyTransform();
 consumeHomeLaunchIntent();
 render();
+postCanvasBridgeMessage({
+  source: "reelay-legacy-canvas",
+  type: "canvas:ready",
+  protocolVersion: 1,
+});

@@ -53,6 +53,7 @@ beforeAll(async () => {
       "0001_collaboration.sql",
       "0002_password_identities.sql",
       "0003_project_access.sql",
+      "0004_canvas_documents.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);
@@ -172,6 +173,99 @@ describe("PostgreSQL collaboration persistence", () => {
       expect(hidden.statusCode).toBe(404);
     } finally {
       await app.close();
+    }
+  });
+
+  it("persists revisioned canvas documents and enforces project roles across restarts", async () => {
+    const appA = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+    let appB: FastifyInstance | null = null;
+    const url = "/api/projects/project-scifi-trailer/canvases/persistence-test/document";
+
+    try {
+      const adminCookie = await login(appA, "tianmaochao@reelay.test");
+      const created = await appA.inject({
+        method: "PUT",
+        url,
+        headers: { cookie: adminCookie },
+        payload: {
+          schemaVersion: 1,
+          expectedRevision: 0,
+          content: { viewport: { x: 3, y: 5, zoom: 1.25 }, nodes: [{ id: "persisted" }] },
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json().document.revision).toBe(1);
+
+      await appA.close();
+      appB = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+
+      const viewCookie = await login(appB, "zhouyu@reelay.test");
+      const restored = await appB.inject({ method: "GET", url, headers: { cookie: viewCookie } });
+      expect(restored.statusCode).toBe(200);
+      expect(restored.json().document).toEqual(
+        expect.objectContaining({
+          projectId: "project-scifi-trailer",
+          id: "persistence-test",
+          schemaVersion: 1,
+          revision: 1,
+          content: { viewport: { x: 3, y: 5, zoom: 1.25 }, nodes: [{ id: "persisted" }] },
+        }),
+      );
+
+      const viewWrite = await appB.inject({
+        method: "PUT",
+        url,
+        headers: { cookie: viewCookie },
+        payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [] } },
+      });
+      expect(viewWrite.statusCode).toBe(403);
+
+      const editorCookie = await login(appB, "linjing@reelay.test");
+      const edited = await appB.inject({
+        method: "PUT",
+        url,
+        headers: { cookie: editorCookie },
+        payload: { schemaVersion: 2, expectedRevision: 1, content: { nodes: [{ id: "edited" }] } },
+      });
+      expect(edited.statusCode).toBe(200);
+      expect(edited.json().document).toEqual(
+        expect.objectContaining({ schemaVersion: 2, revision: 2, content: { nodes: [{ id: "edited" }] } }),
+      );
+
+      const stale = await appB.inject({
+        method: "PUT",
+        url,
+        headers: { cookie: editorCookie },
+        payload: { schemaVersion: 2, expectedRevision: 1, content: { nodes: [] } },
+      });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().error.currentRevision).toBe(2);
+
+      const outsiderCookie = await login(appB, "chenxi@reelay.test");
+      const hidden = await appB.inject({ method: "GET", url, headers: { cookie: outsiderCookie } });
+      expect(hidden.statusCode).toBe(404);
+
+      const auditPool = createPool();
+      try {
+        const row = await auditPool.query(
+          `SELECT schema_version, revision, content, created_by_user_id, updated_by_user_id
+           FROM canvas_documents
+           WHERE project_id = $1 AND canvas_id = $2`,
+          ["project-scifi-trailer", "persistence-test"],
+        );
+        expect(row.rows[0]).toEqual({
+          schema_version: 2,
+          revision: 2,
+          content: { nodes: [{ id: "edited" }] },
+          created_by_user_id: "actor-tianmaochao",
+          updated_by_user_id: "actor-linjing",
+        });
+      } finally {
+        await auditPool.end();
+      }
+    } finally {
+      if (appB) await appB.close();
+      else await appA.close();
     }
   });
 

@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 
 import { registerSessionRoutes } from "./http/session-routes";
 import { registerWorkspaceProjectRoutes } from "./http/workspace-project-routes";
+import { registerCanvasDocumentRoutes } from "./http/canvas-document-routes";
 import type { CollaborationStore } from "./application/CollaborationStore";
 
 export interface BuildServerOptions {
@@ -27,6 +28,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   });
   await registerSessionRoutes(app, store, options.secureCookies ?? process.env.NODE_ENV === "production");
   await registerWorkspaceProjectRoutes(app, store);
+  await registerCanvasDocumentRoutes(app, store);
 
   return app;
 }
