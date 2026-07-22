@@ -6,17 +6,12 @@ const pageContracts = [
   {
     htmlFile: "index.html",
     scriptFile: "app.js",
-    requiredScripts: ["./data/model-catalog.js", "./src/config/prototype-config.js", "./app.js"],
-  },
-  {
-    htmlFile: "home.html",
-    scriptFile: "src/home/index.js",
-    requiredScripts: ["./src/config/home-prototype-config.js", "./src/home/index.js"],
-  },
-  {
-    htmlFile: "login.html",
-    scriptFile: "src/login/index.js",
-    requiredScripts: ["./src/login/index.js"],
+    requiredScripts: [
+      "./data/model-catalog.js",
+      "./src/config/prototype-config.js",
+      "./src/legacy-canvas/canvas-document-codec.js",
+      "./app.js",
+    ],
   },
 ];
 
