@@ -56,6 +56,8 @@ const organizationDto = {
 const projectDto = {
   id: "project-one",
   workspaceId: "workspace-shared",
+  accessKind: "private",
+  currentUserRole: "admin",
   name: "Brand story",
   updatedAt: "2026-07-22T08:00:00.000Z",
   coverAssetId: null,
@@ -144,6 +146,10 @@ describe("HttpProjectRepository", () => {
       "/backend/api/workspaces/workspace%2Fshared/projects/project%2Fone",
     ]);
     expect(transport.requests[2]?.init.method).toBe("POST");
+    expect(JSON.parse(String(transport.requests[2]?.init.body))).toEqual({
+      accessKind: "private",
+      name: "Brand story",
+    });
     expect(transport.requests[3]?.init.method).toBe("PATCH");
   });
 
@@ -182,6 +188,22 @@ describe("HttpProjectRepository", () => {
     await expect(repository.listByWorkspace("workspace-shared")).rejects.toBeInstanceOf(
       HttpResponseValidationError,
     );
+  });
+
+  it("rejects unknown project access kinds and current-user roles", async () => {
+    const invalidAccessTransport = createFetchQueue({
+      body: { projects: [{ ...projectDto, accessKind: "organization" }] },
+    });
+    const invalidRoleTransport = createFetchQueue({
+      body: { projects: [{ ...projectDto, currentUserRole: "owner" }] },
+    });
+
+    await expect(
+      new HttpProjectRepository({ fetch: invalidAccessTransport.fetch }).listByWorkspace("workspace-shared"),
+    ).rejects.toBeInstanceOf(HttpResponseValidationError);
+    await expect(
+      new HttpProjectRepository({ fetch: invalidRoleTransport.fetch }).listByWorkspace("workspace-shared"),
+    ).rejects.toBeInstanceOf(HttpResponseValidationError);
   });
 });
 

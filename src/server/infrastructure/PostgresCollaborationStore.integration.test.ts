@@ -52,6 +52,7 @@ beforeAll(async () => {
     await expect(runMigrations(setupPool)).resolves.toEqual([
       "0001_collaboration.sql",
       "0002_password_identities.sql",
+      "0003_project_access.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);
@@ -72,7 +73,7 @@ afterAll(async () => {
 });
 
 describe("PostgreSQL collaboration persistence", () => {
-  it("keeps a session and shared project changes across server restarts", async () => {
+  it("keeps a session and private project changes across server restarts", async () => {
     const appA = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
     let appB: FastifyInstance | null = null;
 
@@ -106,15 +107,15 @@ describe("PostgreSQL collaboration persistence", () => {
         url: "/api/workspaces/workspace-organization-reelay/projects",
         headers: { cookie: editorCookie },
       });
-      expect(editorList.json().projects).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: projectId, name: "跨重启持久化项目" })]),
+      expect(editorList.json().projects).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: projectId })]),
       );
 
       const renamed = await appB.inject({
         method: "PATCH",
         url: `/api/workspaces/workspace-organization-reelay/projects/${projectId}`,
-        headers: { cookie: editorCookie },
-        payload: { name: "跨账号修改仍持久" },
+        headers: { cookie: ownerCookie },
+        payload: { name: "私人项目修改仍持久" },
       });
       expect(renamed.statusCode).toBe(200);
 
@@ -128,17 +129,49 @@ describe("PostgreSQL collaboration persistence", () => {
         );
         expect(audit.rows[0]).toEqual({
           created_by_user_id: "actor-tianmaochao",
-          updated_by_user_id: "actor-linjing",
+          updated_by_user_id: "actor-tianmaochao",
         });
         await seedDemoDatabase(auditPool);
         const preserved = await auditPool.query("SELECT name FROM projects WHERE id = $1", [projectId]);
-        expect(preserved.rows[0].name).toBe("跨账号修改仍持久");
+        expect(preserved.rows[0].name).toBe("私人项目修改仍持久");
       } finally {
         await auditPool.end();
       }
     } finally {
       if (appB) await appB.close();
       else await appA.close();
+    }
+  });
+
+  it("persists explicit collaborative project roles", async () => {
+    const app = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+    try {
+      const editorCookie = await login(app, "linjing@reelay.test");
+      const viewerCookie = await login(app, "zhouyu@reelay.test");
+      const outsiderCookie = await login(app, "chenxi@reelay.test");
+      const projectUrl = "/api/workspaces/workspace-organization-reelay/projects/project-scifi-trailer";
+
+      const edited = await app.inject({
+        method: "PATCH",
+        url: projectUrl,
+        headers: { cookie: editorCookie },
+        payload: { name: "数据库协作权限演示" },
+      });
+      expect(edited.statusCode).toBe(200);
+      expect(edited.json().project.currentUserRole).toBe("edit");
+
+      const viewAttempt = await app.inject({
+        method: "PATCH",
+        url: projectUrl,
+        headers: { cookie: viewerCookie },
+        payload: { name: "只读成员不能修改" },
+      });
+      expect(viewAttempt.statusCode).toBe(403);
+
+      const hidden = await app.inject({ method: "GET", url: projectUrl, headers: { cookie: outsiderCookie } });
+      expect(hidden.statusCode).toBe(404);
+    } finally {
+      await app.close();
     }
   });
 

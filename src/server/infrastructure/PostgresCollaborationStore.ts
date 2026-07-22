@@ -3,7 +3,12 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
 
 import type { ActorId, SessionActor } from "../../domain/identity/session";
-import type { ProjectId, ProjectSummary } from "../../domain/project/project";
+import type {
+  ProjectAccessKind,
+  ProjectId,
+  ProjectSummary,
+  ProjectUserRole,
+} from "../../domain/project/project";
 import type { Workspace, WorkspaceId, WorkspaceKind } from "../../domain/workspace/workspace";
 import type {
   CollaborationStore,
@@ -35,6 +40,8 @@ interface ProjectRow extends QueryResultRow {
   name: string;
   updated_at: Date;
   cover_asset_id: string | null;
+  access_kind: ProjectAccessKind;
+  current_user_role: ProjectUserRole;
 }
 
 function mapWorkspace(row: WorkspaceRow): Workspace {
@@ -45,6 +52,8 @@ function mapProject(row: ProjectRow): ProjectSummary {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
+    accessKind: row.access_kind,
+    currentUserRole: row.current_user_role,
     name: row.name,
     updatedAt: row.updated_at.toISOString(),
     coverAssetId: row.cover_asset_id,
@@ -145,16 +154,6 @@ export class PostgresCollaborationStore implements CollaborationStore {
     return result.rowCount === 1;
   }
 
-  async canWriteWorkspaceProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<boolean> {
-    const result = await this.pool.query(
-      `SELECT 1
-       FROM memberships
-       WHERE user_id = $1 AND workspace_id = $2 AND role IN ('owner', 'editor')`,
-      [actorId, workspaceId],
-    );
-    return result.rowCount === 1;
-  }
-
   async getWorkspace(workspaceId: WorkspaceId): Promise<Workspace | null> {
     const result = await this.pool.query<WorkspaceRow>(
       "SELECT id, kind, name FROM workspaces WHERE id = $1",
@@ -163,45 +162,107 @@ export class PostgresCollaborationStore implements CollaborationStore {
     return result.rows[0] ? mapWorkspace(result.rows[0]) : null;
   }
 
-  async listProjects(workspaceId: WorkspaceId): Promise<ProjectSummary[]> {
+  async listProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<ProjectSummary[]> {
     const result = await this.pool.query<ProjectRow>(
-      `SELECT id, workspace_id, name, updated_at, cover_asset_id
-       FROM projects
-       WHERE workspace_id = $1
-       ORDER BY updated_at DESC, id`,
-      [workspaceId],
+      `SELECT
+         project.id,
+         project.workspace_id,
+         project.name,
+         project.updated_at,
+         project.cover_asset_id,
+         project.access_kind,
+         project_membership.role AS current_user_role
+       FROM projects AS project
+       JOIN project_memberships AS project_membership
+         ON project_membership.project_id = project.id
+        AND project_membership.user_id = $1
+       WHERE project.workspace_id = $2
+         AND (
+           (project.access_kind = 'private' AND project.created_by_user_id = $1)
+           OR project.access_kind = 'collaborative'
+         )
+       ORDER BY project.updated_at DESC, project.id`,
+      [actorId, workspaceId],
     );
     return result.rows.map(mapProject);
   }
 
-  async getProject(workspaceId: WorkspaceId, projectId: ProjectId): Promise<ProjectSummary | null> {
+  async getProject(
+    actorId: ActorId,
+    workspaceId: WorkspaceId,
+    projectId: ProjectId,
+  ): Promise<ProjectSummary | null> {
     const result = await this.pool.query<ProjectRow>(
-      `SELECT id, workspace_id, name, updated_at, cover_asset_id
-       FROM projects
-       WHERE workspace_id = $1 AND id = $2`,
-      [workspaceId, projectId],
+      `SELECT
+         project.id,
+         project.workspace_id,
+         project.name,
+         project.updated_at,
+         project.cover_asset_id,
+         project.access_kind,
+         project_membership.role AS current_user_role
+       FROM projects AS project
+       JOIN project_memberships AS project_membership
+         ON project_membership.project_id = project.id
+        AND project_membership.user_id = $1
+       WHERE project.workspace_id = $2
+         AND project.id = $3
+         AND (
+           (project.access_kind = 'private' AND project.created_by_user_id = $1)
+           OR project.access_kind = 'collaborative'
+         )`,
+      [actorId, workspaceId, projectId],
     );
     return result.rows[0] ? mapProject(result.rows[0]) : null;
   }
 
   async createProject(input: CreateProjectInput): Promise<ProjectSummary> {
-    const result = await this.pool.query<ProjectRow>(
-      `INSERT INTO projects (
-         id, workspace_id, created_by_user_id, updated_by_user_id, name, created_at, updated_at, cover_asset_id
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
-       RETURNING id, workspace_id, name, updated_at, cover_asset_id`,
-      [
-        `project-${this.createId()}`,
-        input.workspaceId,
-        input.createdByActorId,
-        input.createdByActorId,
-        input.name,
-        this.now().toISOString(),
-        input.coverAssetId ?? null,
-      ],
-    );
-    return mapProject(result.rows[0]);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<ProjectRow>(
+        `INSERT INTO projects (
+           id,
+           workspace_id,
+           created_by_user_id,
+           updated_by_user_id,
+           name,
+           created_at,
+           updated_at,
+           cover_asset_id,
+           access_kind
+         )
+         VALUES ($1, $2, $3, $3, $4, $5, $5, $6, 'private')
+         RETURNING
+           id,
+           workspace_id,
+           name,
+           updated_at,
+           cover_asset_id,
+           access_kind,
+           'admin'::text AS current_user_role`,
+        [
+          `project-${this.createId()}`,
+          input.workspaceId,
+          input.createdByActorId,
+          input.name,
+          this.now().toISOString(),
+          input.coverAssetId ?? null,
+        ],
+      );
+      await client.query(
+        `INSERT INTO project_memberships (project_id, user_id, role)
+         VALUES ($1, $2, 'admin')`,
+        [result.rows[0].id, input.createdByActorId],
+      );
+      await client.query("COMMIT");
+      return mapProject(result.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async updateProject(
@@ -210,14 +271,30 @@ export class PostgresCollaborationStore implements CollaborationStore {
     input: UpdateProjectInput,
   ): Promise<ProjectSummary | null> {
     const result = await this.pool.query<ProjectRow>(
-      `UPDATE projects
+      `UPDATE projects AS project
        SET
-         name = CASE WHEN $3::boolean THEN $4::text ELSE name END,
-         cover_asset_id = CASE WHEN $5::boolean THEN $6::text ELSE cover_asset_id END,
+         name = CASE WHEN $3::boolean THEN $4::text ELSE project.name END,
+         cover_asset_id = CASE WHEN $5::boolean THEN $6::text ELSE project.cover_asset_id END,
          updated_by_user_id = $7,
          updated_at = $8
-       WHERE workspace_id = $1 AND id = $2
-       RETURNING id, workspace_id, name, updated_at, cover_asset_id`,
+       FROM project_memberships AS project_membership
+       WHERE project.workspace_id = $1
+         AND project.id = $2
+         AND project_membership.project_id = project.id
+         AND project_membership.user_id = $7
+         AND project_membership.role IN ('admin', 'edit')
+         AND (
+           (project.access_kind = 'private' AND project.created_by_user_id = $7)
+           OR project.access_kind = 'collaborative'
+         )
+       RETURNING
+         project.id,
+         project.workspace_id,
+         project.name,
+         project.updated_at,
+         project.cover_asset_id,
+         project.access_kind,
+         project_membership.role AS current_user_role`,
       [
         workspaceId,
         projectId,

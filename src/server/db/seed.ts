@@ -50,18 +50,36 @@ async function insertDemoData(client: PoolClient): Promise<void> {
   for (const project of seed.projects) {
     await client.query(
       `INSERT INTO projects (
-         id, workspace_id, created_by_user_id, updated_by_user_id, name, created_at, updated_at, cover_asset_id
+         id,
+         workspace_id,
+         created_by_user_id,
+         updated_by_user_id,
+         name,
+         created_at,
+         updated_at,
+         cover_asset_id,
+         access_kind
        )
-       VALUES ($1, $2, $3, $3, $4, $5, $5, $6)
+       VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7)
        ON CONFLICT (id) DO NOTHING`,
       [
         project.id,
         project.workspaceId,
-        seed.projectAuthors[project.id],
+        project.createdByActorId,
         project.name,
         project.updatedAt,
         project.coverAssetId,
+        project.accessKind,
       ],
+    );
+  }
+
+  for (const membership of seed.projectMemberships) {
+    await client.query(
+      `INSERT INTO project_memberships (project_id, user_id, role)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (project_id, user_id) DO NOTHING`,
+      [membership.projectId, membership.actorId, membership.role],
     );
   }
 }

@@ -1,8 +1,8 @@
 # Reelay Canvas Prototype
 
-Reelay 是一个 AIGC 创作平台原型。当前已形成一条本地可运行的前后端演示链路：账户密码登录、个人 / 组织工作空间、主页、全部项目和受保护的旧画布入口；画布继续用于验证生成节点、媒体素材和 Agent 辅助的核心创作体验。
+Reelay 是一个 AIGC 创作平台原型。当前已形成一条本地可运行的前后端演示链路：账户密码登录、单组织下的个人 / 协作项目、主页、全部项目和受保护的旧画布入口；画布继续用于验证生成节点、媒体素材和 Agent 辅助的核心创作体验。
 
-这仍不是生产系统：没有真实生成接口、正式账号生命周期、画布文档持久化或部署链路。当前后端只接受两个固定的 `.test` 演示账号；会话、Workspace、Membership 与项目已保存到本地 PostgreSQL，旧静态登录页和主页暂时保留作视觉回归参考，不再承接新功能。
+这仍不是生产系统：没有真实生成接口、正式账号生命周期、画布文档持久化或部署链路。当前后端只接受五个固定的 `.test` 演示账号；会话、组织、项目元数据与项目成员关系已保存到本地 PostgreSQL，旧静态登录页和主页暂时保留作视觉回归参考，不再承接新功能。
 
 ## 文件结构
 
@@ -69,7 +69,7 @@ npm run db:up
 npm run db:migrate
 ```
 
-空库需要显式写入两个本地演示账号和示例项目；生产环境会强制拒绝这个 seed：
+空库需要显式写入五个本地演示账号和示例项目；生产环境会强制拒绝这个 seed：
 
 ```powershell
 $env:ALLOW_DEMO_SEED='true'
@@ -86,11 +86,14 @@ npm run dev:server
 npm run dev:shell
 ```
 
-访问 `http://127.0.0.1:5173/app/login`。两个演示账号共享 `Reelay 创作组`，个人空间互相隔离：
+访问 `http://127.0.0.1:5173/app/login`。五个演示账号都属于 `Reelay 创作组`；个人项目彼此隔离，协作项目按 `admin/edit/view` 预置成员：
 
 ```text
 tianmaochao@reelay.test / reelay-demo
 linjing@reelay.test      / reelay-demo
+chenxi@reelay.test       / reelay-demo
+zhouyu@reelay.test       / reelay-demo
+suhe@reelay.test         / reelay-demo
 ```
 
 开发壳会把 `/api` 请求转发到 `http://127.0.0.1:5175`。账号使用 HttpOnly 服务端会话，浏览器 token 在数据库中只保存 SHA-256 摘要并具有过期时间。演示密码散列与固定账号仍只是本地夹具，不是正式账号系统。

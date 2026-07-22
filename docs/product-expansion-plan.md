@@ -16,10 +16,10 @@ Reelay 不应只是一块无限画布，也不应演变成把大量后台页面�
 
 以下是为了让基础开发可以前进而采用的可逆假设，不是不可更改的产品结论：
 
-- 每个用户先拥有一个个人 Workspace；组织空间以后使用同一套归属模型扩展，避免把“个人版”写成另一套数据结构。
+- 首期账号主要属于一个组织 Workspace；“个人 / 协作项目”是同一组织内的项目访问类型，不再为每个账号复制一套个人 Workspace。个人项目只对创建者可见，协作项目通过显式 ProjectMembership 分配成员与角色。
 - 可跨项目复用的 Asset 归 Workspace 所有，Project 和 Node 只保存 AssetReference。尚未保存的生成结果仍是 GenerationResult，不会自动污染全局资产中心。
 - 首期按 Reelay 统一提供模型服务设计，但 ProviderConnection 保留扩展边界；不在首期同时建设 BYOK 的密钥、配额和故障处理体系。
-- 同一组织下的成员身份、Membership 和组织项目可见性先于外部分享与实时协作。首期先演示多个账号在同一组织范围内使用项目，不引入分享链接、实时光标和冲突合并。
+- 同一组织下的成员身份、Membership 和显式 ProjectMembership 先于外部分享与实时协作。首期先演示多个账号在同一组织内访问各自有权使用的项目，不引入分享链接、实时光标和冲突合并。
 - 前端框架不是产品架构本身。先定义 route contract、领域对象和存储接口；Phase 0B 暂按 `docs/adr/0001-application-runtime-and-migration.md` 采用 React + TypeScript + Vite + React Router，答案或运行证据反驳时重新评审。现有画布通过 adapter 接入，不因框架选择被整体重写。
 
 任何一项假设改变时，都必须同时复核路由、权限、资产归属、计费和迁移策略。
@@ -98,7 +98,7 @@ flowchart TD
 
 这是登录后的默认页面，不是宣传落地页。
 
-> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；两个固定演示账号可验证个人空间隔离和同组织项目共享。项目仍保存在服务端进程内，旧画布也尚未按项目加载 / 保存，因此这不是正式账号、持久化项目或生产协作。
+> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；五个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据与成员关系已持久化到本地 PostgreSQL，旧画布仍未按项目加载 / 保存，因此这仍不是正式账号或生产协作。
 
 ### 页面目标
 
@@ -134,7 +134,7 @@ flowchart TD
 
 - 项目封面：真实数据接入后从画布内容生成；在尚无项目持久化的高保真原型中，允许使用语义明确的本地 mock 封面，但必须标明原型状态且不能伪装成真实用户数据。
 - 项目名。
-- 所属组织或个人空间。
+- 所属组织与个人 / 协作访问类型。
 - 最近编辑时间。
 - 协作者头像。
 - 生成中 / 有失败任务等状态。
@@ -284,15 +284,16 @@ flowchart TD
 
 ### 首期范围
 
-- Phase 0B 只验证已有 Membership：两个演示账号以所有者 / 编辑者身份访问同一协作 Workspace，并共享团队项目。
-- 不在这一阶段提供成员管理、邀请、角色配置、团队资产或积分管理 UI。
+- Phase 0B 以五个固定演示账号验证单组织 Membership、个人项目隔离和协作项目的 `admin/edit/view` 项目角色。
+- 组织 Membership 只证明账号属于组织；项目列表、详情和修改必须继续由 ProjectMembership 在服务端过滤，不能用前端标签或组织角色代替。
+- 不在这一阶段提供成员管理、邀请、角色配置界面、外部分享、团队资产或积分管理 UI。
 
 ### Phase 2 及后续范围
 
 - 成员列表与邀请成员。
-- 所有者、管理员、编辑者、查看者等角色及明确的读写权限矩阵。
+- 组织所有者 / 成员管理，以及项目 `admin/edit/view` 角色的配置界面和完整权限矩阵。
 - 团队资产与积分使用概览。
-- 项目级权限。
+- 项目成员的添加、移除和权限变更。
 - 评论与 @ 提及。
 - 实时协作光标。
 - 审批流程。
@@ -334,9 +335,10 @@ Agent 不直接调用页面 DOM 或原型事件函数。跨项目写操作必须
 
 | 对象 | 责任 |
 | --- | --- |
-| Workspace | 个人或组织空间 |
+| Workspace | 首期组织容器；承载组织成员与项目集合 |
 | User | 用户资料与偏好 |
-| Project | 项目元数据、Workspace 归属、封面与创建 / 更新审计；项目级成员以后单独建模 |
+| Project | 项目元数据、Workspace 归属、个人 / 协作访问类型、封面与创建 / 更新审计 |
+| ProjectMembership | 项目成员及 `admin/edit/view` 角色；是项目读写权限来源 |
 | CanvasDocument | 画布视口、节点、组与版本 |
 | Node | 生成节点或素材节点 |
 | Asset | 可跨项目复用的媒体对象 |
@@ -399,7 +401,7 @@ sequenceDiagram
 - 卡片只用于项目、资产、模板等重复对象，不把整页章节做成浮动卡片。
 - 所有图标按钮提供 tooltip 和 `aria-label`。
 - 删除、批量执行、积分扣减等高影响操作必须有清晰确认与可恢复机制。
-- 延期的是完整移动端画布编辑，不是基础响应式和可访问性；工作台与抽屉至少要在 320 / 360 / 768px 下保持关键入口可达，并支持键盘焦点、触控目标和 reduced-motion。
+- 当前产品只面向桌面浏览器，功能设计与验收以 `1280×720` 及以上视口为基线，并优先检查常见 `1440×900` / `1920×1080` 桌面尺寸；保留必要的窄屏防御性布局、键盘焦点和 reduced-motion，但不为移动端或触控端新增产品分支。
 
 ## 8. 开发顺序
 
@@ -415,8 +417,8 @@ sequenceDiagram
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
-- 优先建立 Session、Workspace、Membership、Project 和 CanvasDocument 的 repository / service 边界，让个人空间与组织空间都由显式 actor scope 驱动。
-- 因为组织演示需要两个浏览器同时看到共享数据，Phase 0B 同步建立最小共享后端、服务端会话和开发数据库；IndexedDB 只承担本地草稿、缓存和离线恢复。
+- 优先建立 Session、Workspace、Membership、Project、ProjectMembership 和 CanvasDocument 的 repository / service 边界，让单组织容器和项目访问都由显式 actor scope 驱动。
+- 因为组织演示需要多个浏览器账号看到各自有权访问的共享数据，Phase 0B 同步建立最小共享后端、服务端会话和开发数据库；IndexedDB 只承担本地草稿、缓存和离线恢复。
 - 为 Asset、GenerationTask、GenerationResult 和 CreditLedger 先定义核心不变量；真实生成接入前再补足 repository 和事务边界。
 - 本地草稿与 Blob 使用 IndexedDB；localStorage 仅保存主题等设备偏好。
 - 建立通用通知、确认、菜单、对话框和焦点管理组件。
@@ -440,7 +442,7 @@ sequenceDiagram
 - 模板中心。
 - 模型与服务。
 - 完整个人设置。
-- 组织成员管理、邀请、细粒度权限与策略；基础 Membership 和组织项目可见性已经在 Phase 0B 建立。
+- 组织成员管理、邀请、项目成员配置与权限策略；基础 Membership、ProjectMembership 和服务端访问隔离已经在 Phase 0B 建立。
 
 ### Phase 3：协作与规模化
 
@@ -465,11 +467,11 @@ sequenceDiagram
 
 Phase 0B 可以按 1.1 节的可逆假设推进，但在进入相应产品功能前必须完成验证：
 
-1. 个人创作者作为首期主用户；团队与商业制作复用 Workspace 模型扩展，而不是另起一套产品结构。
+1. 首期账号主要属于一个组织；个人创作以组织内 private Project 表达，而不是为每个账号建立个人 Workspace。
 2. Reelay 统一提供模型服务；BYOK 只保留 ProviderConnection 边界，不在首期同时实现。
 3. Asset 归 Workspace，Project / Node 保存 AssetReference；项目内的临时数组不是正式所有权模型。
 4. GenerationResult 默认不自动进入资产中心，必须显式保存或经过可解释的产品规则晋升。
 5. 模板首期仅限内部或私有复用，公开发布与市场化另行评估。
-6. 组织成员身份与共享组织项目可见性先于外部分享和实时协作；分享链接、实时状态、冲突合并和审批留到主链路稳定后。
+6. 组织成员身份与显式 ProjectMembership 先于外部分享和实时协作；分享链接、实时状态、冲突合并和审批留到主链路稳定后。
 
 这些假设不是文档权威。调研、用户反馈或实现证据一旦反驳其中任意一项，应先修订路线和数据模型，再继续编码。

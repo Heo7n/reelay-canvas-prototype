@@ -7,12 +7,11 @@ interface CreationComposerProps {
   onNotice: (message: string) => void;
   onPromptChange: (prompt: string) => void;
   prompt: string;
-  workspaceId: string;
 }
 
 const launchIntentKey = "reelay-home-launch-intent";
 
-export function CreationComposer({ onNotice, onPromptChange, prompt, workspaceId }: CreationComposerProps) {
+export function CreationComposer({ onNotice, onPromptChange, prompt }: CreationComposerProps) {
   function preservePrompt(): void {
     try {
       window.sessionStorage.setItem(launchIntentKey, prompt.trim());
@@ -24,7 +23,6 @@ export function CreationComposer({ onNotice, onPromptChange, prompt, workspaceId
   return (
     <Form className={styles.composer} method="post" onSubmit={preservePrompt}>
       <input type="hidden" name="intent" value="create" />
-      <input type="hidden" name="workspaceId" value={workspaceId} />
       <label className={styles.srOnly} htmlFor="creation-prompt">描述你的创作需求</label>
       <textarea
         id="creation-prompt"

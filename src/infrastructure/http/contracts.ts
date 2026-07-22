@@ -40,6 +40,8 @@ export const ProjectDtoSchema = z
   .object({
     id: IdentifierSchema,
     workspaceId: IdentifierSchema,
+    accessKind: z.enum(["private", "collaborative"]),
+    currentUserRole: z.enum(["admin", "edit", "view"]),
     name: z.string().trim().min(1).max(100),
     updatedAt: z.string().datetime({ offset: true }),
     coverAssetId: IdentifierSchema.nullable(),

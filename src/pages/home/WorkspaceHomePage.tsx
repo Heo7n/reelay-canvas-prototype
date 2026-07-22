@@ -20,9 +20,8 @@ export function WorkspaceHomePage() {
   const [activeSlide, setActiveSlide] = useState(1);
   const [prompt, setPrompt] = useState("");
   const { notice, showNotice } = useTransientNotice();
-  const recentProjects = data.workspaceProjects
-    .flatMap(({ projects, workspace }) => projects.map((project) => ({ project, workspace })))
-    .sort((left, right) => right.project.updatedAt.localeCompare(left.project.updatedAt))
+  const recentProjects = [...data.projects]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, 4);
 
   function chooseSlide(slide: HeroSlide): void {
@@ -39,13 +38,13 @@ export function WorkspaceHomePage() {
 
   return (
     <div className={styles.workspaceShell}>
-      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} workspaces={data.workspaces} />
+      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} workspaces={data.workspaces} onNotice={showNotice} />
       <main className={styles.homeMain}>
         <h1 className={styles.srOnly}>Reelay 创作主页</h1>
         <HeroCarousel slides={heroSlides} activeIndex={activeSlide} onActiveIndexChange={setActiveSlide} onChooseSlide={chooseSlide} />
 
         <section className={styles.creationStart} aria-label="开始创作">
-          <CreationComposer workspaceId={data.currentWorkspace.id} prompt={prompt} onPromptChange={setPrompt} onNotice={showNotice} />
+          <CreationComposer prompt={prompt} onPromptChange={setPrompt} onNotice={showNotice} />
           <CapabilityStrip capabilities={capabilities} onChoose={chooseCapability} />
         </section>
 
@@ -55,9 +54,9 @@ export function WorkspaceHomePage() {
             <Link to={routePaths.projects(data.currentWorkspace.id)}>全部项目 <ChevronRight aria-hidden="true" /></Link>
           </div>
           <div className={styles.projectGrid}>
-            <NewProjectCard workspaceId={data.currentWorkspace.id} />
-            {recentProjects.map(({ project, workspace }) => (
-              <ProjectCard key={project.id} project={project} workspaceKind={workspace.kind} onNotice={showNotice} />
+            <NewProjectCard />
+            {recentProjects.map((project) => (
+              <ProjectCard key={project.id} project={project} onNotice={showNotice} />
             ))}
           </div>
         </section>

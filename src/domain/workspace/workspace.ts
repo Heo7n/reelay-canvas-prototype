@@ -2,7 +2,7 @@ import type { ActorId } from "../identity/session";
 
 export type WorkspaceId = string;
 export type WorkspaceKind = "personal" | "organization";
-export type MembershipRole = "owner" | "editor";
+export type MembershipRole = "owner" | "member";
 
 export interface Workspace {
   id: WorkspaceId;

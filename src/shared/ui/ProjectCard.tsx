@@ -8,7 +8,6 @@ import perfumeCoverUrl from "../../../assets/home/project-perfume.webp";
 import productCoverUrl from "../../../assets/home/project-product.webp";
 import scifiCoverUrl from "../../../assets/home/project-scifi.webp";
 import type { ProjectSummary } from "../../domain/project/project";
-import type { WorkspaceKind } from "../../domain/workspace/workspace";
 import { routePaths } from "../../app/routes";
 import type { WorkspaceActionData } from "../../app/route-data";
 import styles from "./ProjectCard.module.css";
@@ -24,7 +23,6 @@ const coverUrls: Record<string, string> = {
 interface ProjectCardProps {
   onNotice: (message: string) => void;
   project: ProjectSummary;
-  workspaceKind: WorkspaceKind;
 }
 
 function formatUpdatedAt(value: string): string {
@@ -41,12 +39,14 @@ function formatUpdatedAt(value: string): string {
   return updated.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
-export function ProjectCard({ onNotice, project, workspaceKind }: ProjectCardProps) {
+export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   const fetcher = useFetcher<WorkspaceActionData>();
   const [renaming, setRenaming] = useState(false);
   const cancelRename = useRef(false);
   const menuDetails = useRef<HTMLDetailsElement>(null);
   const coverUrl = project.coverAssetId ? coverUrls[project.coverAssetId] : undefined;
+  const canEdit = project.currentUserRole !== "view";
+  const canAdminister = project.currentUserRole === "admin";
 
   function startRename(): void {
     cancelRename.current = false;
@@ -79,10 +79,12 @@ export function ProjectCard({ onNotice, project, workspaceKind }: ProjectCardPro
         </summary>
         <div className={styles.menu} role="menu">
           <Link role="menuitem" to={routePaths.canvas(project.workspaceId, project.id, "main")}>打开</Link>
-          <button type="button" role="menuitem" onClick={startRename}>重命名</button>
-          <button type="button" role="menuitem" onClick={() => showPrototypeNotice("封面上传将在项目持久化阶段接入。")}>修改封面</button>
-          <button type="button" role="menuitem" onClick={() => showPrototypeNotice("项目转为协作项目需要迁移工作空间归属，暂未接入。")}>转为协作项目</button>
-          <button className={styles.danger} type="button" role="menuitem" onClick={() => showPrototypeNotice("删除项目将在持久化和恢复机制完成后接入。")}>删除项目</button>
+          {canEdit ? <button type="button" role="menuitem" onClick={startRename}>重命名</button> : null}
+          {canEdit ? <button type="button" role="menuitem" onClick={() => showPrototypeNotice("封面上传将在项目持久化阶段接入。")}>修改封面</button> : null}
+          {canAdminister && project.accessKind === "private" ? (
+            <button type="button" role="menuitem" onClick={() => showPrototypeNotice("转为协作项目后可添加组织成员并分配权限，暂未接入。")}>转为协作项目</button>
+          ) : null}
+          {canAdminister ? <button className={styles.danger} type="button" role="menuitem" onClick={() => showPrototypeNotice("删除项目将在持久化和恢复机制完成后接入。")}>删除项目</button> : null}
         </div>
       </details>
 
@@ -90,11 +92,11 @@ export function ProjectCard({ onNotice, project, workspaceKind }: ProjectCardPro
         {renaming ? (
           <fetcher.Form
             method="post"
+            action={routePaths.workspaceHome(project.workspaceId)}
             className={styles.renameForm}
             onSubmit={() => setRenaming(false)}
           >
             <input type="hidden" name="intent" value="rename" />
-            <input type="hidden" name="workspaceId" value={project.workspaceId} />
             <input type="hidden" name="projectId" value={project.id} />
             <input
               name="name"
@@ -121,15 +123,17 @@ export function ProjectCard({ onNotice, project, workspaceKind }: ProjectCardPro
         ) : (
           <div className={styles.titleRow}>
             <Link to={routePaths.canvas(project.workspaceId, project.id, "main")}>{project.name}</Link>
-            <button type="button" className={styles.quickRename} onClick={startRename} aria-label={`重命名 ${project.name}`}>
-              <Pencil aria-hidden="true" />
-            </button>
+            {canEdit ? (
+              <button type="button" className={styles.quickRename} onClick={startRename} aria-label={`重命名 ${project.name}`}>
+                <Pencil aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         )}
 
         <div className={styles.metaRow}>
           <time dateTime={project.updatedAt}>{formatUpdatedAt(project.updatedAt)}</time>
-          {workspaceKind === "organization" ? <UsersRound aria-label="协作项目" /> : null}
+          {project.accessKind === "collaborative" ? <UsersRound aria-label="协作项目" /> : null}
         </div>
         {fetcher.data?.error ? <span className={styles.srOnly} role="alert">{fetcher.data.error}</span> : null}
       </div>

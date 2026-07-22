@@ -19,10 +19,11 @@ export const CreateProjectBodySchema = z
   .object({
     name: z.string().trim().min(1).max(100),
     coverAssetId: z.string().trim().min(1).max(160).nullable().optional(),
+    accessKind: z.literal("private").optional(),
   })
   .strict();
 
-export const UpdateProjectBodySchema = CreateProjectBodySchema.partial().refine(
+export const UpdateProjectBodySchema = CreateProjectBodySchema.omit({ accessKind: true }).partial().refine(
   (value) => value.name !== undefined || value.coverAssetId !== undefined,
   { message: "At least one project field is required." },
 );

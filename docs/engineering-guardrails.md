@@ -4,7 +4,7 @@
 
 ## 1. 当前基线
 
-- 当前项目仍是静态高保真原型，不是生产应用。
+- 当前项目是 React 应用壳、Fastify/PostgreSQL 本地服务与 legacy canvas 并存的高保真原型，不是生产应用。
 - 开始工作前以仓库实际分支、工作区状态和 `docs/agent-handoff.md` 的最新交接为准，不依赖本文中的静态分支名或提交号。
 - 当前阶段采用渐进式迁移：保留已验证的画布交互，把新的数据边界、任务和页面逐步移出原型单体。
 - 阶段基线必须是已验证且可回退的提交；标签只用于标记这样的基线。
@@ -28,9 +28,9 @@
 | Agent/画布交接约束 | `docs/agent-handoff.md` |
 | 工程边界变更 | `docs/engineering-guardrails.md` |
 
-高保真静态原型新增页面时，至少先建立独立入口、独立样式 / 脚本目录和可逆 route contract；不要用新的浮层或隐藏容器假装完成页面结构。真实账号、持久化或生产部署开始前，必须再完成 runtime / router 决策并建立正式应用壳。
+新产品页面必须进入现有 React 路由、独立页面模块和 application / infrastructure 边界；不要用新的浮层、静态入口或隐藏容器假装完成页面结构。legacy canvas 只通过显式 host / bridge 逐步接入，不继续承担账号、项目库或 repository 逻辑。
 
-Phase 0B 的暂定 runtime、Workspace 路由和 legacy canvas 迁移边界记录在 `docs/adr/0001-application-runtime-and-migration.md`。它是可重新评审的决策，不得把 React 组件结构误当成领域模型，也不得绕过 Membership 只用前端 Workspace 类型推断权限。
+Phase 0B 的 runtime、Workspace 路由和 legacy canvas 迁移边界记录在 `docs/adr/0001-application-runtime-and-migration.md`，单组织与项目访问控制记录在 `docs/adr/0002-organization-project-access.md`。不得把 React 组件结构误当成领域模型，也不得用前端标签、`accessKind` 或组织 Membership 代替服务端 ProjectMembership 权限检查。
 
 ## 4. 原型代码清理规则
 
@@ -57,9 +57,11 @@ Phase 0B 的暂定 runtime、Workspace 路由和 legacy canvas 迁移边界记�
 
 改到可见 UI 时再执行浅色/深色、相关响应式状态和浏览器控制台检查。以下领域检查同样只在改动可能影响对应边界时执行：
 
-- 在仍使用内存模拟账户的原型阶段，刷新后积分回到 `3000 / 0`；接入账户或账本持久化后，这条检查必须替换为“刷新前后账本一致且扣费幂等”，不能继续重置真实积分。
-- 登录流程样机不得写入 Token、Cookie 或持久登录标记；真实鉴权必须在生产运行时、服务端会话和权限模型确定后单独实施。
-- 当前项目库通过 `home.html#all-projects` 即时切换为共享顶部栏下的常规页面状态；进入正式应用壳时应迁移到独立路由，不要继续扩写 hash 状态模拟路由。
+- 在尚未建立 `CreditLedger` 的原型阶段，刷新后积分仍回到 `3000 / 0`；接入积分持久化后，这条检查必须替换为“刷新前后余额与账本一致且扣费 / 退款幂等”，不能继续重置真实积分。
+- 浏览器只使用 HttpOnly 会话 Cookie，不得把原始会话 token 写进 localStorage、页面状态或日志；固定 `.test` 账号和 demo 密码不得被描述为生产鉴权。
+- 项目库位于 `/app/w/:workspaceId/projects`；静态 `home.html#all-projects` 只保留视觉回归参考，不再增加产品逻辑。
+- 个人项目只对创建者可见；协作项目只对显式 ProjectMembership 成员可见。列表、详情与修改都必须在服务端按 actor 过滤，`view` 不得写入。
+- 当前只开发桌面端；保留必要的窄屏防御规则，但不新增移动端页面、手势或独立状态分支。
 - 扫描旧入口、旧文案和不存在的 DOM id。
 - 跨画布生成任务不会停滞或写入错误画布。
 - 生成节点首次成功后，图片 / 视频类型锁必须独立于当前预览存在；UI、模型校验、参数规范化、任务完成和撤销恢复都不能绕过该锁。

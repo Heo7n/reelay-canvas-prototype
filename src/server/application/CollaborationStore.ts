@@ -28,11 +28,10 @@ export interface CollaborationStore {
 
   listWorkspacesForActor(actorId: ActorId): Promise<Workspace[]>;
   canReadWorkspace(actorId: ActorId, workspaceId: WorkspaceId): Promise<boolean>;
-  canWriteWorkspaceProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<boolean>;
   getWorkspace(workspaceId: WorkspaceId): Promise<Workspace | null>;
 
-  listProjects(workspaceId: WorkspaceId): Promise<ProjectSummary[]>;
-  getProject(workspaceId: WorkspaceId, projectId: ProjectId): Promise<ProjectSummary | null>;
+  listProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<ProjectSummary[]>;
+  getProject(actorId: ActorId, workspaceId: WorkspaceId, projectId: ProjectId): Promise<ProjectSummary | null>;
   createProject(input: CreateProjectInput): Promise<ProjectSummary>;
   updateProject(
     workspaceId: WorkspaceId,

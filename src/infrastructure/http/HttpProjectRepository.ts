@@ -14,6 +14,8 @@ function toProject(project: ProjectDto): ProjectSummary {
   return {
     id: project.id,
     workspaceId: project.workspaceId,
+    accessKind: project.accessKind,
+    currentUserRole: project.currentUserRole,
     name: project.name,
     updatedAt: project.updatedAt,
     coverAssetId: project.coverAssetId,
@@ -54,7 +56,7 @@ export class HttpProjectRepository implements ProjectRepository {
   async create(workspaceId: WorkspaceId, input: CreateProjectInput): Promise<ProjectSummary> {
     const response = await this.http.read(projectsPath(workspaceId), ProjectResponseDtoSchema, {
       method: "POST",
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, accessKind: "private" }),
     });
     return toProject(response.project);
   }

@@ -22,7 +22,7 @@ async function login(app: FastifyInstance, account: string): Promise<string> {
   return getCookie(response);
 }
 
-describe("shared organization project API", () => {
+describe("organization project access API", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
@@ -33,67 +33,96 @@ describe("shared organization project API", () => {
     await app.close();
   });
 
-  it("shares project changes across two independent actor sessions", async () => {
+  it("signs in five demo accounts that all belong to one organization", async () => {
+    const accounts = [
+      "tianmaochao@reelay.test",
+      "linjing@reelay.test",
+      "chenxi@reelay.test",
+      "zhouyu@reelay.test",
+      "suhe@reelay.test",
+    ];
+
+    for (const account of accounts) {
+      const cookie = await login(app, account);
+      const response = await app.inject({ method: "GET", url: "/api/workspaces", headers: { cookie } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().workspaces).toEqual([
+        { id: "workspace-organization-reelay", kind: "organization", name: "Reelay 创作组" },
+      ]);
+    }
+  });
+
+  it("creates a private project that only its creator can read", async () => {
     const ownerCookie = await login(app, "tianmaochao@reelay.test");
-    const editorCookie = await login(app, "linjing@reelay.test");
-
-    const ownerWorkspaces = await app.inject({ method: "GET", url: "/api/workspaces", headers: { cookie: ownerCookie } });
-    const editorWorkspaces = await app.inject({ method: "GET", url: "/api/workspaces", headers: { cookie: editorCookie } });
-    const ownerOrganization = ownerWorkspaces.json().workspaces.find((workspace: { kind: string }) => workspace.kind === "organization");
-    const editorOrganization = editorWorkspaces.json().workspaces.find((workspace: { kind: string }) => workspace.kind === "organization");
-
-    expect(ownerOrganization.id).toBe(editorOrganization.id);
+    const memberCookie = await login(app, "linjing@reelay.test");
 
     const created = await app.inject({
       method: "POST",
-      url: `/api/workspaces/${ownerOrganization.id}/projects`,
+      url: "/api/workspaces/workspace-organization-reelay/projects",
       headers: { cookie: ownerCookie },
-      payload: { name: "双浏览器协作演示" },
+      payload: { name: "个人项目演示", accessKind: "private" },
     });
     expect(created.statusCode).toBe(201);
+    expect(created.json().project).toEqual(
+      expect.objectContaining({ accessKind: "private", currentUserRole: "admin", name: "个人项目演示" }),
+    );
     const projectId = created.json().project.id as string;
 
-    const editorList = await app.inject({
+    const memberList = await app.inject({
       method: "GET",
-      url: `/api/workspaces/${editorOrganization.id}/projects`,
-      headers: { cookie: editorCookie },
+      url: "/api/workspaces/workspace-organization-reelay/projects",
+      headers: { cookie: memberCookie },
     });
-    expect(editorList.json().projects).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: projectId, name: "双浏览器协作演示" })]),
+    expect(memberList.json().projects).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: projectId })]),
     );
 
-    const renamed = await app.inject({
-      method: "PATCH",
-      url: `/api/workspaces/${editorOrganization.id}/projects/${projectId}`,
-      headers: { cookie: editorCookie },
-      payload: { name: "协作项目已重命名" },
-    });
-    expect(renamed.statusCode).toBe(200);
-
-    const ownerList = await app.inject({
+    const hiddenLookup = await app.inject({
       method: "GET",
-      url: `/api/workspaces/${ownerOrganization.id}/projects`,
-      headers: { cookie: ownerCookie },
+      url: `/api/workspaces/workspace-organization-reelay/projects/${projectId}`,
+      headers: { cookie: memberCookie },
     });
-    expect(ownerList.json().projects).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: projectId, name: "协作项目已重命名" })]),
-    );
+    expect(hiddenLookup.statusCode).toBe(404);
+    expect(hiddenLookup.json().error.code).toBe("project_not_found");
   });
 
-  it("keeps personal workspaces private between demo actors", async () => {
-    const ownerCookie = await login(app, "tianmaochao@reelay.test");
-    const editorCookie = await login(app, "linjing@reelay.test");
-    const ownerWorkspaces = await app.inject({ method: "GET", url: "/api/workspaces", headers: { cookie: ownerCookie } });
-    const personalWorkspace = ownerWorkspaces.json().workspaces.find((workspace: { kind: string }) => workspace.kind === "personal");
+  it("enforces collaborative admin, edit, view and non-member roles", async () => {
+    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const editCookie = await login(app, "linjing@reelay.test");
+    const viewCookie = await login(app, "zhouyu@reelay.test");
+    const nonMemberCookie = await login(app, "chenxi@reelay.test");
+    const url = "/api/workspaces/workspace-organization-reelay/projects/project-scifi-trailer";
 
-    const forbidden = await app.inject({
-      method: "GET",
-      url: `/api/workspaces/${personalWorkspace.id}/projects`,
-      headers: { cookie: editorCookie },
+    const edited = await app.inject({
+      method: "PATCH",
+      url,
+      headers: { cookie: editCookie },
+      payload: { name: "协作项目已重命名" },
     });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().project.currentUserRole).toBe("edit");
 
-    expect(forbidden.statusCode).toBe(403);
-    expect(forbidden.json().error.code).toBe("workspace_forbidden");
+    const viewed = await app.inject({ method: "GET", url, headers: { cookie: viewCookie } });
+    expect(viewed.statusCode).toBe(200);
+    expect(viewed.json().project).toEqual(
+      expect.objectContaining({ name: "协作项目已重命名", currentUserRole: "view" }),
+    );
+
+    const viewUpdate = await app.inject({
+      method: "PATCH",
+      url,
+      headers: { cookie: viewCookie },
+      payload: { name: "不应生效" },
+    });
+    expect(viewUpdate.statusCode).toBe(403);
+    expect(viewUpdate.json().error.code).toBe("project_forbidden");
+
+    const hidden = await app.inject({ method: "GET", url, headers: { cookie: nonMemberCookie } });
+    expect(hidden.statusCode).toBe(404);
+
+    const adminLookup = await app.inject({ method: "GET", url, headers: { cookie: adminCookie } });
+    expect(adminLookup.statusCode).toBe(200);
+    expect(adminLookup.json().project.currentUserRole).toBe("admin");
   });
 
   it("requires a valid session and keeps project lookup inside its workspace", async () => {
@@ -114,7 +143,7 @@ describe("shared organization project API", () => {
 
     const wrongWorkspace = await app.inject({
       method: "GET",
-      url: "/api/workspaces/workspace-personal-tianmaochao/projects/project-brand-story",
+      url: "/api/workspaces/workspace-does-not-exist/projects/project-brand-story",
       headers: { cookie: ownerCookie },
     });
     expect(wrongWorkspace.statusCode).toBe(404);

@@ -9,18 +9,19 @@ import type { ApplicationServices } from "./services";
 const actor = {
   id: "actor-one",
   displayName: "Demo One",
-  workspaceIds: ["workspace-personal", "workspace-organization"],
+  workspaceIds: ["workspace-organization"],
 };
 
 const workspaces: Workspace[] = [
   { id: "workspace-organization", kind: "organization", name: "Organization" },
-  { id: "workspace-personal", kind: "personal", name: "Personal" },
 ];
 
 const projects: ProjectSummary[] = [
   {
     id: "project-one",
-    workspaceId: "workspace-personal",
+    workspaceId: "workspace-organization",
+    accessKind: "private",
+    currentUserRole: "admin",
     name: "Personal film",
     updatedAt: "2026-07-22T08:00:00.000Z",
     coverAssetId: null,
@@ -51,10 +52,10 @@ function loaderArgs(url: string, params: Record<string, string> = {}): LoaderFun
   return { request: new Request(url), params, context: undefined } as unknown as LoaderFunctionArgs;
 }
 
-function actionArgs(url: string, form: Record<string, string>): ActionFunctionArgs {
+function actionArgs(url: string, form: Record<string, string>, params: Record<string, string> = {}): ActionFunctionArgs {
   return {
     request: new Request(url, { method: "POST", body: new URLSearchParams(form) }),
-    params: {},
+    params,
     context: undefined,
   } as unknown as ActionFunctionArgs;
 }
@@ -80,7 +81,7 @@ describe("application route data", () => {
     );
   });
 
-  it("chooses the personal workspace after login and rejects external return targets", async () => {
+  it("chooses the organization workspace after login and rejects external return targets", async () => {
     const handlers = createRouteHandlers(createServices());
     const response = await handlers.loginAction(
       actionArgs("http://reelay.local/app/login?returnTo=https%3A%2F%2Fevil.example", {
@@ -90,7 +91,7 @@ describe("application route data", () => {
     );
 
     expect(response).toBeInstanceOf(Response);
-    expect((response as Response).headers.get("Location")).toBe("/w/workspace-personal");
+    expect((response as Response).headers.get("Location")).toBe("/w/workspace-organization");
   });
 
   it("restores an authorized workspace deep link after login", async () => {
@@ -106,7 +107,7 @@ describe("application route data", () => {
     expect((response as Response).headers.get("Location")).toBe(returnTo);
   });
 
-  it("loads projects for every accessible workspace while keeping the route workspace explicit", async () => {
+  it("loads projects once for the organization workspace in the route", async () => {
     const services = createServices();
     const handlers = createRouteHandlers(services);
     const data = await handlers.workspaceLoader(
@@ -114,7 +115,24 @@ describe("application route data", () => {
     );
 
     expect(data.currentWorkspace.id).toBe("workspace-organization");
-    expect(data.workspaceProjects).toHaveLength(2);
-    expect(services.projectRepository.listByWorkspace).toHaveBeenCalledTimes(2);
+    expect(data.projects).toEqual(projects);
+    expect(services.projectRepository.listByWorkspace).toHaveBeenCalledOnce();
+    expect(services.projectRepository.listByWorkspace).toHaveBeenCalledWith("workspace-organization");
+  });
+
+  it("uses the route workspace as the authority for project mutations", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const response = await handlers.workspaceAction(
+      actionArgs(
+        "http://reelay.local/app/w/workspace-organization",
+        { intent: "create", workspaceId: "workspace-personal" },
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(services.projectRepository.create).toHaveBeenCalledWith("workspace-organization", { name: "未命名项目" });
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).headers.get("Location")).toBe("/w/workspace-organization/projects/project-created/canvases/main");
   });
 });

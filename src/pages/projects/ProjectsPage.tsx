@@ -1,5 +1,5 @@
 import { ArrowLeft, Search } from "lucide-react";
-import { Link, useActionData, useLoaderData } from "react-router-dom";
+import { Link, useActionData, useLoaderData, useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 
 import type { WorkspaceActionData, WorkspaceRouteData } from "../../app/route-data";
@@ -14,20 +14,20 @@ export function ProjectsPage() {
   const data = useLoaderData() as WorkspaceRouteData;
   const actionData = useActionData() as WorkspaceActionData | undefined;
   const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
   const { notice, showNotice } = useTransientNotice();
-  const projectGroup = data.workspaceProjects.find(({ workspace }) => workspace.id === data.currentWorkspace.id);
-  const projects = projectGroup?.projects ?? [];
+  const activeAccessKind = searchParams.get("kind") === "collaborative" ? "collaborative" : "private";
   const filteredProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
-    if (!normalizedQuery) return projects;
-    return projects.filter((project) => project.name.toLocaleLowerCase("zh-CN").includes(normalizedQuery));
-  }, [projects, query]);
-  const personalWorkspace = data.workspaces.find((workspace) => workspace.kind === "personal");
-  const organizationWorkspace = data.workspaces.find((workspace) => workspace.kind === "organization");
+    return data.projects.filter((project) => {
+      if (project.accessKind !== activeAccessKind) return false;
+      return !normalizedQuery || project.name.toLocaleLowerCase("zh-CN").includes(normalizedQuery);
+    });
+  }, [activeAccessKind, data.projects, query]);
 
   return (
     <div className={styles.workspaceShell}>
-      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} workspaces={data.workspaces} />
+      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} workspaces={data.workspaces} onNotice={showNotice} />
       <main className={styles.projectsMain}>
         <div className={styles.projectsHeading}>
           <Link className={styles.backLink} to={routePaths.workspaceHome(data.currentWorkspace.id)}>
@@ -40,12 +40,14 @@ export function ProjectsPage() {
 
         <div className={styles.projectControls}>
           <nav className={styles.scopeTabs} aria-label="项目类型筛选">
-            {personalWorkspace ? (
-              <Link className={data.currentWorkspace.kind === "personal" ? styles.activeTab : ""} to={routePaths.projects(personalWorkspace.id)}>个人</Link>
-            ) : null}
-            {organizationWorkspace ? (
-              <Link className={data.currentWorkspace.kind === "organization" ? styles.activeTab : ""} to={routePaths.projects(organizationWorkspace.id)}>协作项目</Link>
-            ) : null}
+            <Link
+              className={activeAccessKind === "private" ? styles.activeTab : ""}
+              to={`${routePaths.projects(data.currentWorkspace.id)}?kind=private`}
+            >个人</Link>
+            <Link
+              className={activeAccessKind === "collaborative" ? styles.activeTab : ""}
+              to={`${routePaths.projects(data.currentWorkspace.id)}?kind=collaborative`}
+            >协作项目</Link>
           </nav>
 
           <label className={styles.searchBox}>
@@ -56,9 +58,9 @@ export function ProjectsPage() {
         </div>
 
         <div className={styles.libraryGrid}>
-          <NewProjectCard workspaceId={data.currentWorkspace.id} />
+          <NewProjectCard />
           {filteredProjects.map((project) => (
-            <ProjectCard key={project.id} project={project} workspaceKind={data.currentWorkspace.kind} onNotice={showNotice} />
+            <ProjectCard key={project.id} project={project} onNotice={showNotice} />
           ))}
         </div>
 

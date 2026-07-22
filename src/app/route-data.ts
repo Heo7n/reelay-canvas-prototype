@@ -11,15 +11,10 @@ import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { routePaths } from "./routes";
 import type { ApplicationServices } from "./services";
 
-export interface WorkspaceProjects {
-  projects: ProjectSummary[];
-  workspace: Workspace;
-}
-
 export interface WorkspaceRouteData {
   actor: SessionActor;
   currentWorkspace: Workspace;
-  workspaceProjects: WorkspaceProjects[];
+  projects: ProjectSummary[];
   workspaces: Workspace[];
 }
 
@@ -33,7 +28,7 @@ export interface WorkspaceActionData {
 }
 
 function selectDefaultWorkspace(workspaces: Workspace[]): Workspace | null {
-  return workspaces.find((workspace) => workspace.kind === "personal") ?? workspaces[0] ?? null;
+  return workspaces.find((workspace) => workspace.kind === "organization") ?? workspaces[0] ?? null;
 }
 
 function internalReturnTo(request: Request): string {
@@ -94,17 +89,12 @@ async function loadWorkspaceData(
   const currentWorkspace = context.workspaces.find((workspace) => workspace.id === args.params.workspaceId);
   if (!currentWorkspace) throw redirect(routePaths.workspaceHome(defaultWorkspace.id));
 
-  const workspaceProjects = await Promise.all(
-    context.workspaces.map(async (workspace) => ({
-      workspace,
-      projects: await services.projectRepository.listByWorkspace(workspace.id),
-    })),
-  );
+  const projects = await services.projectRepository.listByWorkspace(currentWorkspace.id);
 
   return {
     actor: context.actor,
     currentWorkspace,
-    workspaceProjects,
+    projects,
     workspaces: context.workspaces,
   };
 }
@@ -162,12 +152,12 @@ export function createRouteHandlers(services: ApplicationServices) {
 
     workspaceLoader: (args: LoaderFunctionArgs) => loadWorkspaceData(services, args),
 
-    workspaceAction: async ({ request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
+    workspaceAction: async ({ params, request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
       const session = await services.sessionGateway.getCurrent();
       if (!session.actor) throw loginRedirect(request);
       const formData = await request.formData();
       const intent = String(formData.get("intent") ?? "");
-      const workspaceId = String(formData.get("workspaceId") ?? "");
+      const workspaceId = params.workspaceId ?? "";
       if (!workspaceId || !session.actor.workspaceIds.includes(workspaceId)) {
         return { error: "当前账号无权修改此工作空间。" };
       }

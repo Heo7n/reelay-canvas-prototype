@@ -1,6 +1,6 @@
 # ADR 0001：应用运行时与渐进迁移边界
 
-- 状态：部分决定。React / TypeScript / Vite 壳、显式 Workspace 路由、legacy host、Fastify 模块化单体与 PostgreSQL adapter 为 `DECIDED`；正式账号标识与完整角色级别仍为 `PROPOSED`
+- 状态：部分决定。React / TypeScript / Vite 壳、显式 Workspace 路由、legacy host、Fastify 模块化单体与 PostgreSQL adapter 为 `DECIDED`；项目归属与访问控制已由 ADR 0002 更新，正式账号标识仍为 `PROPOSED`
 - 日期：2026-07-21
 - 适用阶段：Phase 0B 可迁移基础
 
@@ -42,7 +42,7 @@ Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 /settings
 ```
 
-个人空间和组织空间共用 Workspace 路由；权限来自 Membership，不从 `workspace.kind` 推断。
+首期由唯一 organization Workspace 提供稳定路由 scope；具体项目权限来自 ProjectMembership，不从 `workspace.kind`、组织 Membership 或前端标签推断。详见 ADR 0002。
 
 ### 领域与应用边界
 
@@ -136,7 +136,7 @@ src/
 
 `DECIDED`：当前使用 TypeScript Fastify 模块化单体和 PostgreSQL adapter，通过同源会话和 API 服务前端。Session、Workspace、Membership 与 Project 已通过 migration / seed 流程持久化，并完成双浏览器与跨服务重启验证；服务端内存 adapter 只保留作快速契约测试和显式开发回退，不允许数据库故障时自动降级。公网部署、域名和国内云厂商后续再定。
 
-首版数据库将可登录的人类主体存为 `users`，请求上下文继续使用领域名 `SessionActor`；登录标识使用可多条扩展的 identity 记录，不把当前邮箱外观的 `.test` 账号固化为正式邮箱策略。浏览器会话 token 只以摘要存库并具有过期 / 撤销状态。当前 owner / editor 只决定演示写权限，数据库不把它误写成最终角色全集。
+首版数据库将可登录的人类主体存为 `users`，请求上下文继续使用领域名 `SessionActor`；登录标识使用可多条扩展的 identity 记录，不把当前邮箱外观的 `.test` 账号固化为正式邮箱策略。浏览器会话 token 只以摘要存库并具有过期 / 撤销状态。组织角色为 `owner/member`，项目角色为 `admin/edit/view`；二者不得互相推断。
 
 ## 待用户确认
 
@@ -145,10 +145,9 @@ src/
 以下答案仍会影响后续账号和部署范围，但不阻塞当前壳层与共享数据边界开发：
 
 1. 首期账号标识优先使用用户名、邮箱还是手机号。
-2. 演示权限是否先采用“组织所有者 / 编辑者”两级。
-3. 未来主要部署在公网云服务还是企业内网；具体云厂商和域名可以以后再定。
+2. 未来主要部署在公网云服务还是企业内网；具体云厂商和域名可以以后再定。
 
-首期“账户 + 密码”方式已经确认；具体使用用户名、邮箱还是手机号仍未确认。为了本地双浏览器演示，可以使用两个明确标注的演示账号和 `PROPOSED` 的“所有者 / 编辑者”角色，但不得把它写成正式账号策略。不加入短信、外部分享、实时光标或具体云厂商绑定。
+首期“账户 + 密码”方式已经确认；具体使用用户名、邮箱还是手机号仍未确认。本地演示使用五个明确标注的固定账号、单组织 Membership 和项目 `admin/edit/view` 角色，但不得把它写成正式账号策略。不加入短信、外部分享、实时光标或具体云厂商绑定。
 
 ## 重新评审条件
 
