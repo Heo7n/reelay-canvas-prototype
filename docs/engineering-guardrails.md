@@ -50,15 +50,13 @@ Phase 0B 的暂定 runtime、Workspace 路由和 legacy canvas 迁移边界记�
 
 ## 5. 阶段结束检查
 
-每个阶段结束前至少执行：
+迭代中的检查按 `docs/development-workflow.md` 选择，避免无关改动反复执行整套人工回归。每个代码阶段结束前至少执行：
 
-- `node --check app.js`
-- `node --check data/model-catalog.js`
-- `node --check src/config/prototype-config.js`
-- CSS 大括号结构检查。
+- `npm run check`
 - `git diff --check`
-- 浅色/深色各检查一次。
-- 浏览器控制台无错误。
+
+改到可见 UI 时再执行浅色/深色、相关响应式状态和浏览器控制台检查。以下领域检查同样只在改动可能影响对应边界时执行：
+
 - 在仍使用内存模拟账户的原型阶段，刷新后积分回到 `3000 / 0`；接入账户或账本持久化后，这条检查必须替换为“刷新前后账本一致且扣费幂等”，不能继续重置真实积分。
 - 登录流程样机不得写入 Token、Cookie 或持久登录标记；真实鉴权必须在生产运行时、服务端会话和权限模型确定后单独实施。
 - 当前项目库通过 `home.html#all-projects` 即时切换为共享顶部栏下的常规页面状态；进入正式应用壳时应迁移到独立路由，不要继续扩写 hash 状态模拟路由。

@@ -1,11 +1,10 @@
 # Reelay Agent Guide
 
-Before changing this prototype, read:
+Before changing this prototype:
 
-1. `docs/current-product-spec.md`
-2. `docs/agent-handoff.md`
-3. `docs/engineering-guardrails.md`
-4. `docs/product-expansion-plan.md` for new pages, routing, persistence, assets, generation tasks, credits, or cross-project Agent work
+1. Inspect the current branch and worktree; do not trust a branch name copied into a document.
+2. Read `docs/development-workflow.md` and `docs/agent-handoff.md`.
+3. Use the routing table in `docs/development-workflow.md` to read only the relevant product spec, guardrail, plan, or ADR sections. Do not reload every long document for an unrelated local change.
 
 Keep these boundaries:
 
@@ -16,10 +15,8 @@ Keep these boundaries:
 - Avoid adding more page-level behavior to `app.js`; new product pages should begin in a routed application structure.
 - Update the product spec when implemented behavior changes.
 
-Minimum verification:
+Verification follows the change scope in `docs/development-workflow.md`:
 
-- Run `npm run check`.
-- Test light and dark themes.
-- Check the browser console.
-- In the current mock-account phase, verify refresh resets credits to `3000 / 0`.
-- Verify generation completion, undo history, and project assets do not cross canvas or project boundaries.
+- Use the smallest relevant check while iterating.
+- Before a code milestone or commit, run `npm run check` and `git diff --check`.
+- Run visual, theme, console, credit, and cross-canvas checks only when the changed surface can affect them; do not turn unrelated documentation or domain-only changes into a full manual canvas regression.

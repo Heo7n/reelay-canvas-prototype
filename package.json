@@ -13,7 +13,9 @@
     "check:css": "node scripts/check-css.mjs",
     "check:html": "node scripts/check-html.mjs",
     "test": "node --test tests/model-config.test.mjs tests/static-contracts.test.mjs",
-    "check": "npm run check:js && npm run check:config && npm run check:css && npm run check:html && npm test && npm run check:shell"
+    "check:legacy": "npm run check:js && npm run check:config && npm run check:css && npm run check:html && npm test",
+    "verify:shell": "npm run check:shell && npm run build:shell",
+    "check": "npm run check:legacy && npm run check:shell"
   },
   "engines": {
     "node": ">=20.0.0"

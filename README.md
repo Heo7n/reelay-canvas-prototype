@@ -34,9 +34,15 @@ Reelay 是一个 AIGC 创作平台前端原型。当前由账户密码登录样�
 │  │  └─ home-prototype-config.js   主页轮播、能力与项目 mock
 │  ├─ home/
 │  │  └─ index.js                   主页与项目库交互
-│  └─ login/
-│     └─ index.js                   登录流程样机交互
+│  ├─ login/
+│  │  └─ index.js                   登录流程样机交互
+│  ├─ app/                          React 应用壳、路由与入口
+│  ├─ application/                  repository / gateway ports
+│  ├─ domain/                       与 UI、HTTP、存储无关的领域类型
+│  ├─ legacy-canvas/                旧画布宿主与版本化桥接协议
+│  └─ pages/                        渐进迁移中的路由页面
 └─ docs/
+   ├─ development-workflow.md       按任务范围选读文档与运行检查
    ├─ current-product-spec.md       当前产品与实现说明
    ├─ product-expansion-plan.md     其他页面与产品架构规划
    ├─ agent-handoff.md              工程交接与分支边界
@@ -60,15 +66,23 @@ http://127.0.0.1:5174/home.html  登录后主页
 http://127.0.0.1:5174/           无限画布
 ```
 
-## 变更验证
-
-当前验证基线不依赖外部软件包，安装 Node.js 20 或更高版本后运行：
+预览尚未接管产品页面的 React 应用壳：
 
 ```powershell
+npm ci
+npm run dev:shell
+```
+
+## 变更验证
+
+安装 Node.js 20 或更高版本，并先安装锁定依赖：
+
+```powershell
+npm ci
 npm run check
 ```
 
-它会检查 JavaScript 语法、模型与原型配置、CSS 结构、HTML 引用和基础回归契约。浏览器手势、主题与跨画布任务仍需按工程护栏做运行验证。
+它会检查旧原型的 JavaScript、配置、CSS、HTML 与基础契约，以及应用壳的 TypeScript 和 Vitest。开发中的定向检查见 [docs/development-workflow.md](docs/development-workflow.md)；浏览器手势、主题与跨画布任务只在相关改动影响对应边界时运行验证。
 
 ## 当前能力
 
