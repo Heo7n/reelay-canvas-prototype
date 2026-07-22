@@ -59,7 +59,7 @@ Phase 0B 的 runtime、Workspace 路由和 legacy canvas 迁移边界记录在 `
 
 - 在尚未建立 `CreditLedger` 的原型阶段，刷新后积分仍回到 `3000 / 0`；接入积分持久化后，这条检查必须替换为“刷新前后余额与账本一致且扣费 / 退款幂等”，不能继续重置真实积分。
 - 浏览器只使用 HttpOnly 会话 Cookie，不得把原始会话 token 写进 localStorage、页面状态或日志；固定 `.test` 账号和 demo 密码不得被描述为生产鉴权。
-- 项目库位于 `/app/w/:workspaceId/projects`；静态 `home.html#all-projects` 只保留视觉回归参考，不再增加产品逻辑。
+- 项目库位于 `/app/w/:workspaceId/projects`；旧静态主页和 hash 项目库已经删除，不得重新引入第二套路由状态。
 - 个人项目只对创建者可见；协作项目只对显式 ProjectMembership 成员可见。列表、详情与修改都必须在服务端按 actor 过滤，`view` 不得写入。
 - 路由画布按 `projectId + canvasId` 保存 CanvasDocument，并用 revision 防止多窗口静默覆盖；legacy bundle 不得混入账号、积分、撤销栈、运行任务或素材 Blob。
 - 当前只开发桌面端；保留必要的窄屏防御规则，但不新增移动端页面、手势或独立状态分支。

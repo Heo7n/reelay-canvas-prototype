@@ -4,34 +4,36 @@
 
 ## 当前定位
 
-- 当前本地主链路是 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。`login.html` 与 `home.html` 只保留作视觉回归参考，新功能不得再进入静态页面逻辑。
+- 当前本地主链路是 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。登录、主页和项目库只保留 React 正式路由；旧静态双轨已经删除，`index.html` 仅作为迁移期画布 iframe。
 - React 页面通过 `src/infrastructure/http` adapters 消费共享 API；Zod 在传输边界校验 DTO，页面不直接依赖 server-memory store。
-- 五个固定演示账号使用 HttpOnly 服务端会话并属于唯一的 `Reelay 创作组`。个人 / 协作是 Project 的 `accessKind`，不是两类 Workspace；项目读取和修改由服务端 ProjectMembership 的 `admin/edit/view` 过滤。Session、Workspace、Membership、Project 与 ProjectMembership 已切换到 PostgreSQL，migration / seed 可重复，集成测试覆盖跨服务重启持久化。浏览器 token 只以摘要存库并具有过期 / 撤销状态，但固定账号与 demo 密码散列仍不是生产鉴权。
-- `LegacyCanvasHost` 已受路由权限保护；旧 `index.html` 消费版本化上下文和 CanvasDocument 消息，按 `projectId + canvasId` 加载 / 自动保存。PostgreSQL 使用 revision 乐观并发，`admin/edit` 可写、`view` 只读，非成员不可见。
+- 五个固定演示账号使用 HttpOnly 服务端会话并属于唯一的 `星海视觉工作室`。个人 / 协作是 Project 的 `accessKind`，不是两类 Workspace；项目读取和修改由服务端 ProjectMembership 的 `admin/edit/view` 过滤。Session、Workspace、Membership、Project 与 ProjectMembership 已切换到 PostgreSQL，migration / seed 可重复，集成测试覆盖跨服务重启持久化。浏览器 token 只以摘要存库并具有过期 / 撤销状态，但固定账号与 demo 密码散列仍不是生产鉴权。
+- `LegacyCanvasHost` 已受路由权限保护；旧 `index.html` 消费版本化账号 / 组织 / 项目上下文和 CanvasDocument 消息，按 `projectId + canvasId` 加载 / 自动保存。PostgreSQL 使用 revision 乐观并发，`admin/edit` 可写、`view` 只读，非成员不可见；只读画布保留选择、浏览、缩放和下载，但会禁用拖动、删除、生成、重命名与参数修改。
 - 开发服务器必须让 `/app/*` 回退到 `app-shell.html`，同时保留 `/index.html` 给旧画布 iframe；不要重新引入会吞掉 Vite 内部脚本或旧画布入口的宽泛回退。
 - 当前画布已实现生成节点首次成功后的图片 / 视频类型锁；入口使用统一模型选择图标，选择器内部仍保留具体模型图标。
 
 ## 下一开发切片
 
-不要继续积分账本。先用三个独立、可见、可回退的小任务收完迁移桥，再回到资产中心、生成任务和跨页演示流程：
+迁移桥的三个收尾项已经完成：后台画布生成会显式触发保存，dirty / 导航会先刷新保存；`view` 的修改交互和加载失败画布已封锁并提供重试；CanvasDocument 使用真实字段 allow-list 和序列化 / 恢复行为测试；旧静态登录 / 主页双轨已经删除，画布导航统一回到 React 路由。
 
-1. 持久化生命周期：首个空文档保存与重复初始化已经修正；下一步只处理后台内部画布生成完成的显式保存，以及 dirty / 项目内离开页面的可靠收尾，不改数据库。
-2. 只读与快照边界：真正禁用 `view` 的修改交互；加载失败时封锁画布并提供重试；把 serializer 改为真实字段 allow-list，并用序列化、恢复行为测试验证。
-3. 删除静态双轨：让旧画布的主页、项目库与退出入口通过 bridge 回到 React 路由，再删除静态登录 / 主页实现、旧项目 mock 和只保护旧源码的正则测试。
+下一开发切片应立即回到用户可见前端，以一个可演示的完整故事为单位推进。优先顺序建议为：
 
-完成这三个任务后再评估积分前端模拟。积分口径至少需要确认组织月度额度与结转规则、一次生成的预占 / 扣减 / 失败退款、成员与项目统计维度、管理员可见范围，以及演示月份和异常场景；没有这些口径前，不把当前 `3000 / 0` mock 扩成伪账本。
+1. 资产中心的项目内入口、空状态和素材卡流程，并明确哪些只是原型数据。
+2. 节点内生成历史的可见交互，先使用前端模拟任务，不建立积分账本。
+3. 从主页创建意图 → 画布生成 → 结果进入项目资产的跨页演示闭环。
 
-CanvasDocument 当前是迁移桥：一个路由 `main` 文档内保存旧画布的多画布 bundle。目标边界只包含节点、组、视口和模型参数，但当前 serializer 还不是严格字段 allow-list；不要把现状误写成边界已经完全落实。后续生成历史与 AssetReference 应建立独立实体，不继续向该 bundle 塞运行态。
+积分前端模拟需另开切片。开始前至少确认组织月度额度与结转规则、一次生成的预占 / 扣减 / 失败退款、成员与项目统计维度、管理员可见范围，以及演示月份和异常场景；没有这些口径前，不把当前 `3000 / 0` mock 扩成伪账本。
+
+CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画布的多画布 bundle，严格 allow-list 只包含节点、组、视口和模型参数。后续生成历史与 AssetReference 应建立独立实体，不继续向该 bundle 塞运行态。
 
 暂不加入邀请、外部分享、实时光标、复杂权限、真实密码生命周期和公开部署。
 
 固定演示账号统一使用密码 `reelay-demo`：
 
-- `tianmaochao@reelay.test`（天猫超）
-- `linjing@reelay.test`（林静）
-- `chenxi@reelay.test`（陈曦）
-- `zhouyu@reelay.test`（周予）
-- `suhe@reelay.test`（苏禾）
+- `creator@reelay.test`（Hoo，主账户）
+- `linjing@reelay.test`（林静，管理员）
+- `chenxi@reelay.test`（陈曦，成员）
+- `zhouyu@reelay.test`（周予，成员）
+- `suhe@reelay.test`（苏禾，成员）
 
 这些稳定账号可用于后续组织积分月度模拟，但当前还没有 `CreditLedger`，不要把账户面板的 `3000 / 0` 当成持久余额。
 

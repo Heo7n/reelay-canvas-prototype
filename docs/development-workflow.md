@@ -17,8 +17,8 @@
 | 改动范围 | 必读内容 | 常见代码位置 |
 | --- | --- | --- |
 | 旧画布交互、节点、Agent、素材库 | `current-product-spec.md` 的对应章节；涉及边界时再读 `engineering-guardrails.md` | `app.js`、`styles/app.css`、`src/config/`、`data/` |
-| 登录、主页、最近项目、全部项目静态样机 | `current-product-spec.md` 的登录/主页/项目章节 | `login.html`、`home.html`、`src/login/`、`src/home/`、对应样式 |
-| React 应用壳、路由、页面迁移 | `adr/0001-application-runtime-and-migration.md`；相关 `product-expansion-plan.md` 章节 | `src/app/`、`src/pages/` |
+| 登录、主页、最近项目、全部项目 | `current-product-spec.md` 的登录/主页/项目章节；涉及迁移边界时再读 ADR 0001 | `src/app/`、`src/pages/`、`src/shared/` |
+| React 应用壳、路由、页面迁移 | `adr/0001-application-runtime-and-migration.md`；相关 `product-expansion-plan.md` 章节 | `src/app/`、`src/pages/`、`src/infrastructure/http/` |
 | Session、Workspace、Membership、Project、共享后端 | ADR 的领域和后端章节；扩展计划的数据边界章节 | `src/domain/`、`src/application/`、后续服务端目录 |
 | 资产、生成任务、积分、跨项目 Agent | `product-expansion-plan.md` 的对应领域章节和相关护栏 | 对应 domain/application 模块 |
 | 只改文档 | 被修改文档及其直接引用 | `docs/` |
@@ -39,7 +39,7 @@
 
 | 改动范围 | 快速检查 |
 | --- | --- |
-| 旧静态原型 JS / 配置 / HTML / CSS | `npm run check:legacy` |
+| 迁移期旧画布 JS / 配置 / HTML / CSS | `npm run check:legacy` |
 | React / TypeScript 应用壳或领域层 | `npm run check:shell` |
 | 共享服务、会话或项目 API | `npm run check:server` |
 | PostgreSQL schema、迁移、seed 或 adapter | `npm run check:server`；本地 PostgreSQL 健康时再运行 `npm run check:server:postgres` |

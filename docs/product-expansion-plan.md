@@ -413,7 +413,7 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision 和跨服务重启集成验证；旧画布已消费项目上下文并通过版本化 allow-list bundle 保存多画布、节点、组与视口。内存 adapter 只保留作快速契约测试和显式回退；资产、生成任务、生成历史和积分账本尚未持久化。
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision 和跨服务重启集成验证；旧画布已消费账号、组织和项目上下文，并通过严格 allow-list bundle 保存多画布、节点、组与视口。静态登录 / 主页双轨已经删除，画布导航统一回到 React 宿主。内存 adapter 只保留作快速契约测试和显式回退；资产、生成任务、生成历史和积分账本尚未持久化。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
