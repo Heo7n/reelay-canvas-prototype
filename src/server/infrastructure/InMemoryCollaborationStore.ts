@@ -3,20 +3,16 @@ import { randomUUID } from "node:crypto";
 import type { ActorId, SessionActor } from "../../domain/identity/session";
 import type { ProjectId, ProjectSummary } from "../../domain/project/project";
 import type { Membership, Workspace, WorkspaceId } from "../../domain/workspace/workspace";
+import type {
+  CollaborationStore,
+  CreateProjectInput,
+  UpdateProjectInput,
+} from "../application/CollaborationStore";
 import { createDemoSeed, type DemoAccountFixture, type DemoSeed } from "../demo-fixtures";
 
-export interface CreateProjectInput {
-  workspaceId: WorkspaceId;
-  name: string;
-  coverAssetId?: string | null;
-}
+export class InMemoryCollaborationStore implements CollaborationStore {
+  readonly storageKind = "server-memory" as const;
 
-export interface UpdateProjectInput {
-  name?: string;
-  coverAssetId?: string | null;
-}
-
-export class InMemoryCollaborationStore {
   private readonly accounts: DemoAccountFixture[];
   private readonly workspaces: Workspace[];
   private readonly memberships: Membership[];
@@ -34,7 +30,11 @@ export class InMemoryCollaborationStore {
     seed.projects.forEach((project) => this.projects.set(project.id, { ...project }));
   }
 
-  authenticate(account: string, password: string): ActorId | null {
+  async ping(): Promise<void> {}
+
+  async close(): Promise<void> {}
+
+  async authenticate(account: string, password: string): Promise<ActorId | null> {
     const normalizedAccount = account.trim().toLocaleLowerCase("en-US");
     const match = this.accounts.find(
       (candidate) =>
@@ -43,17 +43,17 @@ export class InMemoryCollaborationStore {
     return match?.actorId ?? null;
   }
 
-  createSession(actorId: ActorId): string {
+  async createSession(actorId: ActorId): Promise<string> {
     const sessionId = this.createId();
     this.sessions.set(sessionId, actorId);
     return sessionId;
   }
 
-  deleteSession(sessionId: string): void {
+  async deleteSession(sessionId: string): Promise<void> {
     this.sessions.delete(sessionId);
   }
 
-  getSessionActor(sessionId: string | undefined): SessionActor | null {
+  async getSessionActor(sessionId: string | undefined): Promise<SessionActor | null> {
     if (!sessionId) return null;
     const actorId = this.sessions.get(sessionId);
     if (!actorId) return null;
@@ -69,7 +69,7 @@ export class InMemoryCollaborationStore {
     };
   }
 
-  listWorkspacesForActor(actorId: ActorId): Workspace[] {
+  async listWorkspacesForActor(actorId: ActorId): Promise<Workspace[]> {
     const accessibleIds = new Set(
       this.memberships
         .filter((membership) => membership.actorId === actorId)
@@ -78,31 +78,40 @@ export class InMemoryCollaborationStore {
     return this.workspaces.filter((workspace) => accessibleIds.has(workspace.id)).map((workspace) => ({ ...workspace }));
   }
 
-  hasWorkspaceAccess(actorId: ActorId, workspaceId: WorkspaceId): boolean {
+  async canReadWorkspace(actorId: ActorId, workspaceId: WorkspaceId): Promise<boolean> {
     return this.memberships.some(
       (membership) => membership.actorId === actorId && membership.workspaceId === workspaceId,
     );
   }
 
-  getWorkspace(workspaceId: WorkspaceId): Workspace | null {
+  async canWriteWorkspaceProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<boolean> {
+    return this.memberships.some(
+      (membership) =>
+        membership.actorId === actorId &&
+        membership.workspaceId === workspaceId &&
+        (membership.role === "owner" || membership.role === "editor"),
+    );
+  }
+
+  async getWorkspace(workspaceId: WorkspaceId): Promise<Workspace | null> {
     const workspace = this.workspaces.find((candidate) => candidate.id === workspaceId);
     return workspace ? { ...workspace } : null;
   }
 
-  listProjects(workspaceId: WorkspaceId): ProjectSummary[] {
+  async listProjects(workspaceId: WorkspaceId): Promise<ProjectSummary[]> {
     return [...this.projects.values()]
       .filter((project) => project.workspaceId === workspaceId)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map((project) => ({ ...project }));
   }
 
-  getProject(workspaceId: WorkspaceId, projectId: ProjectId): ProjectSummary | null {
+  async getProject(workspaceId: WorkspaceId, projectId: ProjectId): Promise<ProjectSummary | null> {
     const project = this.projects.get(projectId);
     if (!project || project.workspaceId !== workspaceId) return null;
     return { ...project };
   }
 
-  createProject(input: CreateProjectInput): ProjectSummary {
+  async createProject(input: CreateProjectInput): Promise<ProjectSummary> {
     const project: ProjectSummary = {
       id: `project-${this.createId()}`,
       workspaceId: input.workspaceId,
@@ -114,11 +123,11 @@ export class InMemoryCollaborationStore {
     return { ...project };
   }
 
-  updateProject(
+  async updateProject(
     workspaceId: WorkspaceId,
     projectId: ProjectId,
     input: UpdateProjectInput,
-  ): ProjectSummary | null {
+  ): Promise<ProjectSummary | null> {
     const current = this.projects.get(projectId);
     if (!current || current.workspaceId !== workspaceId) return null;
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildServer } from "./app";
 import { DEMO_PASSWORD } from "./demo-fixtures";
+import { InMemoryCollaborationStore } from "./infrastructure/InMemoryCollaborationStore";
 
 function getCookie(response: LightMyRequestResponse): string {
   const header = response.headers["set-cookie"];
@@ -25,7 +26,7 @@ describe("shared organization project API", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
-    app = await buildServer();
+    app = await buildServer({ store: new InMemoryCollaborationStore() });
   });
 
   afterEach(async () => {
