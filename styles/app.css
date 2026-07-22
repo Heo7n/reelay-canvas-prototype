@@ -171,6 +171,53 @@ textarea {
     transform 0.16s ease;
 }
 
+.canvas-access-status {
+  position: fixed;
+  z-index: 42;
+  top: 17px;
+  left: 50%;
+  min-height: 32px;
+  padding: 7px 13px;
+  border: 1px solid var(--floating-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--floating-bg) 94%, transparent);
+  color: var(--muted);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  transform: translateX(-50%);
+  backdrop-filter: blur(16px);
+}
+
+.canvas-access-status[hidden] {
+  display: none;
+}
+
+.app-shell[data-canvas-access="blocked"] .canvas-access-status {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--floating-line));
+  color: var(--danger);
+}
+
+.app-shell[data-canvas-access="loading"] [data-canvas-mutation],
+.app-shell[data-canvas-access="readonly"] [data-canvas-mutation],
+.app-shell[data-canvas-access="blocked"] [data-canvas-mutation] {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.app-shell[data-canvas-access="loading"] [data-group-resize],
+.app-shell[data-canvas-access="readonly"] [data-group-resize],
+.app-shell[data-canvas-access="blocked"] [data-group-resize] {
+  display: none;
+}
+
+.app-shell[data-canvas-access="loading"] .prompt-input,
+.app-shell[data-canvas-access="readonly"] .prompt-input,
+.app-shell[data-canvas-access="blocked"] .prompt-input {
+  cursor: default;
+}
+
 .app-shell.asset-library-open .top-bar {
   opacity: 0;
   pointer-events: none;
@@ -203,7 +250,7 @@ textarea {
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  cursor: default;
+  cursor: pointer;
 }
 
 .project-logo-button {
@@ -600,7 +647,7 @@ html[data-theme="light"] .asset-lib-tooltip {
 }
 
 .avatar-button::before {
-  content: "T";
+  content: attr(data-initial);
   color: currentColor;
   font-size: 13px;
   font-weight: 850;
@@ -641,7 +688,7 @@ html[data-theme="light"] .asset-lib-tooltip {
   font-size: 12px;
   font-weight: 850;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
 }
 
 .avatar-credit-badge svg {
@@ -754,6 +801,21 @@ html[data-theme="light"] .asset-lib-tooltip {
 
 .profile-menu-item.danger {
   color: #ff5f6d;
+}
+
+.profile-membership {
+  min-height: 40px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  cursor: pointer;
+}
+
+.profile-membership > span {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.profile-membership small {
+  grid-column: 3;
 }
 
 .profile-appearance-item {

@@ -1,0 +1,289 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import vm from "node:vm";
+
+const codecSource = await readFile(
+  new URL("../src/legacy-canvas/canvas-document-codec.js", import.meta.url),
+  "utf8",
+);
+const context = vm.createContext({});
+new vm.Script(codecSource, { filename: "canvas-document-codec.js" }).runInContext(context);
+const codec = context.REELAY_CANVAS_DOCUMENT_CODEC;
+
+const sortedKeys = (value) => Object.keys(value).sort();
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test("the canvas document codec persists only explicit content fields and restores runtime defaults", () => {
+  const state = {
+    activeCanvasId: "canvas-1",
+    unknownRootField: "must-not-persist",
+    lastPreset: {
+      mode: "image",
+      model: "gpt-image-2",
+      aspect: "16:9",
+      resolution: "2K",
+      quality: "high",
+      duration: "4s",
+      count: 2,
+      credits: 999,
+    },
+    canvases: [
+      {
+        id: "canvas-1",
+        name: "主画布",
+        tx: 120,
+        ty: -45,
+        scale: 1.25,
+        zCounter: 9,
+        undoStack: [{ type: "delete" }],
+        unknownCanvasField: true,
+        nodes: [
+          {
+            id: "generator-1",
+            kind: "generator",
+            x: 10,
+            y: 20,
+            z: 3,
+            groupId: "group-1",
+            mode: "image",
+            model: "gpt-image-2",
+            aspect: "16:9",
+            resolution: "2K",
+            quality: "high",
+            duration: "4s",
+            count: 2,
+            prompt: "一艘穿越星云的飞船",
+            preview: true,
+            name: "星云飞船",
+            generatedAsset: {
+              id: "result-1",
+              type: "image",
+              name: "result.png",
+              displayName: "生成结果",
+              url: "https://example.test/result.png",
+              width: 2048,
+              height: 1152,
+              duration: 0,
+              aspectRatio: 16 / 9,
+              source: "generated",
+              category: "image",
+              librarySourceId: "source-result-1",
+              enhanced: true,
+              unknownAssetField: "must-not-persist",
+            },
+            lockedMode: "image",
+            assets: [
+              {
+                id: "reference-1",
+                type: "image",
+                name: "reference.png",
+                displayName: "参考图",
+                url: "blob:https://reelay.test/local-only",
+                width: 800,
+                height: 600,
+                duration: 0,
+                aspectRatio: 4 / 3,
+                source: "local",
+                category: "reference",
+                librarySourceId: "library-1",
+                enhanced: false,
+                unknownAssetField: "must-not-persist",
+              },
+            ],
+            activeAssetId: "reference-1",
+            credits: 999,
+            generating: true,
+            generationTaskId: "task-1",
+            expanded: false,
+            promptLarge: true,
+            promptInputHeight: 999,
+            mediaMenuOpen: true,
+            panel: "model",
+            modelFilter: "video",
+            unknownNodeField: "must-not-persist",
+          },
+          {
+            id: "asset-node-1",
+            kind: "asset",
+            x: -5,
+            y: 6,
+            z: 4,
+            mode: "audio",
+            assets: [
+              {
+                id: "audio-1",
+                type: "audio",
+                name: "score.mp3",
+                displayName: "配乐",
+                url: "/assets/score.mp3",
+                duration: 18,
+                aspectRatio: 16 / 9,
+                source: "library",
+              },
+            ],
+            activeAssetId: "audio-1",
+            expanded: true,
+            panel: "unknown",
+            mediaMenuOpen: true,
+          },
+        ],
+        groups: [
+          {
+            id: "group-1",
+            name: "场景组",
+            nodeIds: ["generator-1", "missing-node"],
+            x: 0,
+            y: 0,
+            width: 900,
+            height: 600,
+            z: 2,
+            layoutMenuOpen: true,
+            unknownGroupField: "must-not-persist",
+          },
+        ],
+      },
+    ],
+  };
+
+  const snapshot = codec.createSnapshot(state);
+  const canvas = snapshot.canvases[0];
+  const generator = canvas.nodes[0];
+  const assetNode = canvas.nodes[1];
+  const generatedAsset = generator.generatedAsset;
+  const referenceAsset = generator.assets[0];
+  const group = canvas.groups[0];
+
+  assert.deepEqual(sortedKeys(snapshot), ["activeCanvasId", "canvases", "kind", "lastPreset", "version"]);
+  assert.deepEqual(sortedKeys(canvas), ["groups", "id", "name", "nodes", "viewport", "zCounter"]);
+  assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
+  assert.deepEqual(sortedKeys(generator), [
+    "activeAssetId", "aspect", "assets", "count", "duration", "generatedAsset", "groupId", "id", "kind",
+    "lockedMode", "mode", "model", "name", "preview", "prompt", "quality", "resolution", "x", "y", "z",
+  ]);
+  assert.deepEqual(sortedKeys(assetNode), ["activeAssetId", "assets", "id", "kind", "mode", "x", "y", "z"]);
+  assert.deepEqual(sortedKeys(generatedAsset), [
+    "aspectRatio", "category", "displayName", "duration", "enhanced", "height", "id", "librarySourceId",
+    "name", "source", "type", "url", "width",
+  ]);
+  assert.deepEqual(sortedKeys(referenceAsset), sortedKeys(generatedAsset));
+  assert.deepEqual(sortedKeys(group), ["height", "id", "name", "nodeIds", "width", "x", "y", "z"]);
+  assert.deepEqual(sortedKeys(snapshot.lastPreset), [
+    "aspect", "count", "duration", "mode", "model", "quality", "resolution",
+  ]);
+  assert.equal(referenceAsset.url, "");
+  assert.deepEqual(plain(group.nodeIds), ["generator-1"]);
+
+  for (const forbiddenKey of [
+    "credits", "generating", "generationTaskId", "promptLarge", "promptInputHeight", "mediaMenuOpen",
+    "panel", "modelFilter", "layoutMenuOpen", "unknownRootField", "unknownCanvasField", "unknownNodeField",
+    "unknownAssetField", "unknownGroupField", "undoStack",
+  ]) {
+    assert.equal(JSON.stringify(snapshot).includes(`\"${forbiddenKey}\"`), false, forbiddenKey);
+  }
+
+  const restored = codec.restoreSnapshot(plain(snapshot), {
+    minScale: 0.2,
+    maxScale: 2,
+    promptInputHeight: 144,
+  });
+  const restoredCanvas = restored.canvases[0];
+  const restoredGenerator = restoredCanvas.nodes[0];
+  const restoredAssetNode = restoredCanvas.nodes[1];
+
+  assert.equal(restored.activeCanvasId, "canvas-1");
+  assert.equal(restoredCanvas.tx, 120);
+  assert.equal(restoredCanvas.ty, -45);
+  assert.equal(restoredCanvas.scale, 1.25);
+  assert.deepEqual(plain(restoredCanvas.undoStack), []);
+  assert.equal(restoredGenerator.prompt, "一艘穿越星云的飞船");
+  assert.equal(restoredGenerator.model, "gpt-image-2");
+  assert.equal(restoredGenerator.generatedAsset.id, "result-1");
+  assert.equal(restoredGenerator.generating, false);
+  assert.equal(restoredGenerator.credits, 0);
+  assert.equal(restoredGenerator.expanded, true);
+  assert.equal(restoredGenerator.promptLarge, false);
+  assert.equal(restoredGenerator.promptInputHeight, 144);
+  assert.equal(restoredGenerator.mediaMenuOpen, false);
+  assert.equal(restoredGenerator.panel, null);
+  assert.equal(restoredGenerator.modelFilter, "image");
+  assert.equal(Object.hasOwn(restoredGenerator, "generationTaskId"), false);
+  assert.equal(restoredAssetNode.expanded, false);
+  assert.equal(restoredAssetNode.panel, null);
+  assert.equal(restoredAssetNode.mediaMenuOpen, false);
+  assert.deepEqual(plain(restoredCanvas.groups[0].nodeIds), ["generator-1"]);
+});
+
+test("the codec rejects unknown versions and normalizes hostile or invalid content", () => {
+  assert.equal(codec.restoreSnapshot({ kind: "reelay-legacy-canvas", version: 2, canvases: [] }), null);
+  assert.equal(codec.restoreSnapshot({ kind: "other", version: 1, canvases: [] }), null);
+
+  const content = {
+    kind: "reelay-legacy-canvas",
+    version: 1,
+    activeCanvasId: "missing-canvas",
+    lastPreset: { mode: "unknown", count: Infinity },
+    canvases: [
+      {
+        id: "canvas-safe",
+        name: "安全画布",
+        viewport: { tx: Infinity, ty: -Infinity, scale: 99 },
+        zCounter: Infinity,
+        nodes: [
+          {
+            id: "asset-safe",
+            kind: "asset",
+            x: Infinity,
+            y: -Infinity,
+            z: Infinity,
+            mode: "image",
+            assets: [
+              { id: "javascript", type: "image", url: "javascript:alert(1)" },
+              { id: "data", type: "image", url: "data:image/svg+xml,<svg/>" },
+              { id: "valid", type: "image", url: "https://example.test/safe.png" },
+            ],
+            activeAssetId: "javascript",
+          },
+          { id: "unknown-kind", kind: "widget", x: 1, y: 2 },
+        ],
+        groups: [
+          {
+            id: "group-safe",
+            name: "安全组",
+            nodeIds: ["asset-safe", "unknown-kind", "missing"],
+            x: Infinity,
+            y: -Infinity,
+            width: -20,
+            height: Infinity,
+            z: Infinity,
+          },
+        ],
+      },
+    ],
+  };
+
+  const restored = codec.restoreSnapshot(content, { minScale: 0.25, maxScale: 1.5 });
+  const canvas = restored.canvases[0];
+  const node = canvas.nodes[0];
+
+  assert.equal(restored.activeCanvasId, "canvas-safe");
+  assert.equal(restored.lastPreset.mode, "image");
+  assert.equal(restored.lastPreset.count, 1);
+  assert.equal(canvas.tx, 0);
+  assert.equal(canvas.ty, 0);
+  assert.equal(canvas.scale, 1.5);
+  assert.equal(canvas.zCounter, 1);
+  assert.equal(canvas.nodes.length, 1);
+  assert.equal(node.x, 0);
+  assert.equal(node.y, 0);
+  assert.equal(node.z, 1);
+  assert.equal(node.assets[0].url, "");
+  assert.equal(node.assets[1].url, "");
+  assert.equal(node.assets[2].url, "https://example.test/safe.png");
+  assert.deepEqual(plain(canvas.groups[0].nodeIds), ["asset-safe"]);
+  assert.equal(canvas.groups[0].x, 0);
+  assert.equal(canvas.groups[0].y, 0);
+  assert.equal(canvas.groups[0].width, 1);
+  assert.equal(canvas.groups[0].height, 1);
+  assert.equal(canvas.groups[0].z, 1);
+});

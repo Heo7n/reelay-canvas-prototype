@@ -39,7 +39,15 @@ const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
 const avatarCreditBadge = document.querySelector("#avatarCreditBadge");
 const avatarCreditValue = document.querySelector("#avatarCreditValue");
+const profileAvatar = document.querySelector("#profileAvatar");
+const profileName = document.querySelector("#profileName");
+const profileEmail = document.querySelector("#profileEmail");
+const profileOrganization = document.querySelector("#profileOrganization");
+const profileOrganizationName = document.querySelector("#profileOrganizationName");
+const profileOrganizationRole = document.querySelector("#profileOrganizationRole");
 const emptyState = document.querySelector("#emptyState");
+const emptyCreateMain = document.querySelector(".empty-create-main");
+const emptyCreateSub = document.querySelector(".empty-create-sub");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
 const selectionToolbar = document.querySelector("#selectionToolbar");
@@ -66,6 +74,7 @@ const agentModelBtn = document.querySelector("#agentModelBtn");
 const agentModelMenu = document.querySelector("#agentModelMenu");
 const undoToast = document.querySelector("#undoToast");
 const undoDeleteBtn = document.querySelector("#undoDeleteBtn");
+const canvasAccessStatus = document.querySelector("#canvasAccessStatus");
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
@@ -201,6 +210,12 @@ const state = {
     credits: 3000,
     consumedCredits: 0,
   },
+  identity: {
+    account: "",
+    displayName: "Reelay 用户",
+    workspaceName: "组织空间",
+    workspaceRole: "member",
+  },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
   libraryAssets: [],
@@ -229,14 +244,99 @@ const canvasPersistence = {
   saveTimer: 0,
   inFlight: null,
   lastSavedSnapshot: "",
+  accessMode: window.parent === window ? "standalone" : "loading",
+  accessNoticeTimer: 0,
 };
 
-const transientCanvasDocumentKeys = new Set([
-  "generationTaskId",
-  "layoutMenuOpen",
-  "mediaMenuOpen",
-  "panel",
-]);
+const canvasDocumentCodec = window.REELAY_CANVAS_DOCUMENT_CODEC;
+if (!canvasDocumentCodec) throw new Error("Canvas document codec is unavailable.");
+
+function isCanvasMutationAllowed() {
+  return canvasPersistence.accessMode === "standalone" || canvasPersistence.accessMode === "editable";
+}
+
+function syncCanvasAccessUi() {
+  const mode = canvasPersistence.accessMode;
+  appShell?.setAttribute("data-canvas-access", mode);
+  const locked = !isCanvasMutationAllowed();
+  document.querySelectorAll("[data-canvas-mutation]").forEach((control) => {
+    if (!(control instanceof HTMLButtonElement || control instanceof HTMLInputElement)) return;
+    if (locked) {
+      if (!control.disabled) control.dataset.accessDisabled = "true";
+      control.disabled = true;
+      control.setAttribute("aria-disabled", "true");
+    } else if (control.dataset.accessDisabled === "true") {
+      control.disabled = false;
+      control.removeAttribute("aria-disabled");
+      delete control.dataset.accessDisabled;
+    }
+  });
+  document.querySelectorAll(".prompt-input").forEach((input) => {
+    if (!(input instanceof HTMLTextAreaElement)) return;
+    input.readOnly = locked;
+    input.setAttribute("aria-readonly", String(locked));
+  });
+  if (emptyCreateMain && emptyCreateSub) {
+    const readonly = mode === "readonly";
+    emptyCreateMain.textContent = readonly ? "此画布暂无内容" : "双击画布";
+    emptyCreateSub.textContent = readonly ? "只读模式下不可新建节点" : "自由生成节点";
+  }
+  if (!canvasAccessStatus) return;
+  const labels = {
+    loading: "正在加载项目画布",
+    readonly: "只读 · 可浏览和下载，不能编辑",
+    blocked: "画布已锁定 · 请重新加载后继续",
+  };
+  const label = labels[mode];
+  canvasAccessStatus.hidden = !label;
+  canvasAccessStatus.textContent = label || "";
+}
+
+function setCanvasAccessMode(mode) {
+  if (!["standalone", "loading", "editable", "readonly", "blocked"].includes(mode)) return;
+  canvasPersistence.accessMode = mode;
+  if (!isCanvasMutationAllowed()) {
+    state.action = null;
+    shell?.classList.remove("dragging");
+  }
+  syncCanvasAccessUi();
+}
+
+function syncHostedIdentity(context) {
+  const displayName = String(context?.actor?.displayName || "Reelay 用户").trim() || "Reelay 用户";
+  const account = String(context?.actor?.account || "").trim();
+  const workspaceName = String(context?.workspace?.name || "组织空间").trim() || "组织空间";
+  const workspaceRole = ["owner", "admin", "member"].includes(context?.workspace?.role)
+    ? context.workspace.role
+    : "member";
+  const roleLabels = { owner: "主账户", admin: "管理员", member: "成员" };
+  const initial = Array.from(displayName)[0]?.toUpperCase() || "R";
+
+  state.identity = { account, displayName, workspaceName, workspaceRole };
+  railProfileBtn?.setAttribute("data-initial", initial);
+  railProfileBtn?.setAttribute("title", displayName);
+  if (profileAvatar) profileAvatar.textContent = initial;
+  if (profileName) profileName.textContent = displayName;
+  if (profileEmail) profileEmail.textContent = account || "演示画布";
+  if (profileOrganizationName) profileOrganizationName.textContent = workspaceName;
+  if (profileOrganizationRole) profileOrganizationRole.textContent = roleLabels[workspaceRole];
+  profileOrganization?.setAttribute("aria-label", `进入${workspaceName}组织面板`);
+}
+
+function requireCanvasMutation({ notify = true } = {}) {
+  if (isCanvasMutationAllowed()) return true;
+  if (!notify || canvasPersistence.accessNoticeTimer) return false;
+  const messages = {
+    loading: "项目画布仍在加载，暂时不能编辑",
+    readonly: "当前为只读项目，可浏览但不能修改",
+    blocked: "画布当前不可编辑，请重新加载后继续",
+  };
+  showActionToast(messages[canvasPersistence.accessMode] || "当前画布不可编辑");
+  canvasPersistence.accessNoticeTimer = window.setTimeout(() => {
+    canvasPersistence.accessNoticeTimer = 0;
+  }, 1200);
+  return false;
+}
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -343,144 +443,38 @@ function initializeCanvases() {
   syncProjectNavigation();
 }
 
-function clonePersistentValue(value, key = "", seen = new WeakSet()) {
-  if (transientCanvasDocumentKeys.has(key)) return undefined;
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "object") return undefined;
-  if (seen.has(value)) return undefined;
-  seen.add(value);
-  if (Array.isArray(value)) {
-    const items = value.map((item) => clonePersistentValue(item, "", seen)).filter((item) => item !== undefined);
-    seen.delete(value);
-    return items;
-  }
-  const result = {};
-  for (const [childKey, childValue] of Object.entries(value)) {
-    if (childKey === "url" && typeof childValue === "string" && childValue.startsWith("blob:")) {
-      result[childKey] = "";
-      continue;
-    }
-    const cloned = clonePersistentValue(childValue, childKey, seen);
-    if (cloned !== undefined) result[childKey] = cloned;
-  }
-  seen.delete(value);
-  return result;
-}
-
 function createCanvasDocumentSnapshot() {
   saveActiveCanvasState();
-  return {
-    kind: "reelay-legacy-canvas",
-    version: 1,
-    activeCanvasId: state.activeCanvasId,
-    canvases: state.canvases.map((canvas) => ({
-      id: canvas.id,
-      name: canvas.name,
-      nodes: clonePersistentValue(canvas.nodes) || [],
-      groups: clonePersistentValue(canvas.groups) || [],
-      viewport: {
-        tx: Number.isFinite(canvas.tx) ? canvas.tx : 0,
-        ty: Number.isFinite(canvas.ty) ? canvas.ty : 0,
-        scale: Number.isFinite(canvas.scale) ? canvas.scale : 1,
-      },
-      zCounter: Number.isFinite(canvas.zCounter) ? canvas.zCounter : 1,
-    })),
-    lastPreset: {
-      mode: state.lastPreset.mode,
-      model: state.lastPreset.model,
-      aspect: state.lastPreset.aspect,
-      resolution: state.lastPreset.resolution,
-      quality: state.lastPreset.quality,
-      duration: state.lastPreset.duration,
-      count: state.lastPreset.count,
-    },
-  };
+  return canvasDocumentCodec.createSnapshot(state);
 }
 
 function serializeCanvasDocumentSnapshot() {
   return JSON.stringify(createCanvasDocumentSnapshot());
 }
 
-function normalizePersistedNode(candidate) {
-  if (!candidate || typeof candidate !== "object") return null;
-  if (typeof candidate.id !== "string" || !candidate.id) return null;
-  if (candidate.kind !== "generator" && candidate.kind !== "asset") return null;
-  const node = clonePersistentValue(candidate);
-  if (!node || typeof node !== "object") return null;
-  node.x = Number.isFinite(candidate.x) ? clamp(candidate.x, -1_000_000, 1_000_000) : 0;
-  node.y = Number.isFinite(candidate.y) ? clamp(candidate.y, -1_000_000, 1_000_000) : 0;
-  node.z = Number.isFinite(candidate.z) ? clamp(candidate.z, 0, 1_000_000) : 1;
-  node.assets = Array.isArray(node.assets) ? node.assets : [];
-  node.generating = false;
-  node.panel = null;
-  node.mediaMenuOpen = false;
-  delete node.generationTaskId;
-  if (node.kind === "generator") normalizeNodeParameters(node);
-  return node;
-}
-
-function normalizePersistedCanvas(candidate, index) {
-  if (!candidate || typeof candidate !== "object" || typeof candidate.id !== "string" || !candidate.id) return null;
-  const nodes = Array.isArray(candidate.nodes) ? candidate.nodes.map(normalizePersistedNode).filter(Boolean) : [];
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const groups = Array.isArray(candidate.groups)
-    ? candidate.groups
-        .map((item) => {
-          if (!item || typeof item !== "object" || typeof item.id !== "string" || !item.id) return null;
-          const group = clonePersistentValue(item);
-          if (!group || typeof group !== "object") return null;
-          group.nodeIds = Array.isArray(item.nodeIds) ? item.nodeIds.filter((id) => typeof id === "string" && nodeIds.has(id)) : [];
-          group.x = Number.isFinite(item.x) ? clamp(item.x, -1_000_000, 1_000_000) : 0;
-          group.y = Number.isFinite(item.y) ? clamp(item.y, -1_000_000, 1_000_000) : 0;
-          group.width = Number.isFinite(item.width) ? clamp(item.width, 1, 1_000_000) : 1;
-          group.height = Number.isFinite(item.height) ? clamp(item.height, 1, 1_000_000) : 1;
-          group.z = Number.isFinite(item.z) ? clamp(item.z, 0, 1_000_000) : 1;
-          group.layoutMenuOpen = false;
-          return group;
-        })
-        .filter(Boolean)
-    : [];
-  const viewport = candidate.viewport && typeof candidate.viewport === "object" ? candidate.viewport : {};
-  return {
-    id: candidate.id,
-    name: typeof candidate.name === "string" && candidate.name.trim() ? candidate.name.trim().slice(0, 100) : `画布 ${index + 1}`,
-    nodes,
-    groups,
-    tx: Number.isFinite(viewport.tx) ? clamp(viewport.tx, -1_000_000, 1_000_000) : 0,
-    ty: Number.isFinite(viewport.ty) ? clamp(viewport.ty, -1_000_000, 1_000_000) : 0,
-    scale: Number.isFinite(viewport.scale)
-      ? clamp(viewport.scale, canvasScaleLimits.min, canvasScaleLimits.max)
-      : 1,
-    zCounter: Number.isFinite(candidate.zCounter) ? clamp(candidate.zCounter, 1, 1_000_000) : 1,
-    undoStack: [],
-  };
-}
-
 function hydrateCanvasDocumentSnapshot(content) {
-  if (!content || typeof content !== "object" || content.kind !== "reelay-legacy-canvas" || content.version !== 1) {
-    return false;
-  }
-  const canvases = Array.isArray(content.canvases)
-    ? content.canvases.map(normalizePersistedCanvas).filter(Boolean)
-    : [];
-  if (!canvases.length) return false;
-  state.canvases = canvases;
-  state.activeCanvasId = canvases.some((canvas) => canvas.id === content.activeCanvasId)
-    ? content.activeCanvasId
-    : canvases[0].id;
-  if (content.lastPreset && typeof content.lastPreset === "object") {
-    const preset = content.lastPreset;
-    state.lastPreset = {
-      mode: preset.mode === "video" ? "video" : "image",
-      model: typeof preset.model === "string" ? preset.model : state.lastPreset.model,
-      aspect: typeof preset.aspect === "string" ? preset.aspect : state.lastPreset.aspect,
-      resolution: typeof preset.resolution === "string" ? preset.resolution : state.lastPreset.resolution,
-      quality: typeof preset.quality === "string" ? preset.quality : state.lastPreset.quality,
-      duration: typeof preset.duration === "string" ? preset.duration : state.lastPreset.duration,
-      count: Number.isFinite(preset.count) ? clamp(Math.round(preset.count), 1, 4) : state.lastPreset.count,
-    };
-  }
+  const restored = canvasDocumentCodec.restoreSnapshot(content, {
+    minScale: canvasScaleLimits.min,
+    maxScale: canvasScaleLimits.max,
+    promptInputHeight: layoutRules.largePromptMinHeight,
+  });
+  if (!restored) return false;
+  state.canvases = restored.canvases;
+  state.canvases.forEach((canvas) => {
+    canvas.nodes.forEach((node) => {
+      if (node.kind === "generator") normalizeNodeParameters(node);
+    });
+  });
+  state.activeCanvasId = restored.activeCanvasId;
+  state.lastPreset = {
+    mode: restored.lastPreset.mode,
+    model: restored.lastPreset.model || state.lastPreset.model,
+    aspect: restored.lastPreset.aspect || state.lastPreset.aspect,
+    resolution: restored.lastPreset.resolution || state.lastPreset.resolution,
+    quality: restored.lastPreset.quality || state.lastPreset.quality,
+    duration: restored.lastPreset.duration || state.lastPreset.duration,
+    count: clamp(restored.lastPreset.count, 1, 4),
+  };
   state.libraryAssets = [];
   state.libraryView = "canvas";
   state.libraryScope = "project";
@@ -491,6 +485,19 @@ function hydrateCanvasDocumentSnapshot(content) {
 function postCanvasBridgeMessage(message) {
   if (window.parent === window) return;
   window.parent.postMessage(message, window.location.origin);
+}
+
+function requestHostNavigation(target) {
+  if (window.parent === window) {
+    showActionToast("请从 Reelay 应用主页进入此画布");
+    return;
+  }
+  postCanvasBridgeMessage({
+    source: "reelay-legacy-canvas",
+    type: "canvas:navigate",
+    protocolVersion: 1,
+    target,
+  });
 }
 
 function postCanvasDirty(dirty) {
@@ -534,6 +541,7 @@ function flushCanvasDocumentSave() {
 
 function scheduleCanvasDocumentSave(delay = 800) {
   if (!canvasPersistence.initialized || canvasPersistence.hydrating || !canvasPersistence.writable || canvasPersistence.blocked) return;
+  postCanvasDirty(true);
   window.clearTimeout(canvasPersistence.saveTimer);
   canvasPersistence.saveTimer = window.setTimeout(flushCanvasDocumentSave, delay);
 }
@@ -555,12 +563,14 @@ function handleCanvasSaveError(message) {
   canvasPersistence.inFlight = null;
   if (message.code === "conflict") {
     canvasPersistence.blocked = true;
+    setCanvasAccessMode("blocked");
     showActionToast("画布已在其他窗口更新，请重新进入项目后继续");
     return;
   }
   if (message.code === "forbidden") {
     canvasPersistence.writable = false;
-    showActionToast("当前项目为只读，画布修改不会保存");
+    setCanvasAccessMode("readonly");
+    showActionToast("当前项目为只读，可浏览但不能修改");
     return;
   }
   showActionToast("画布暂时保存失败，正在等待重试");
@@ -576,6 +586,8 @@ function handleHostBridgeMessage(event) {
     state.projectName = String(message.context.projectName || state.projectName);
     canvasPersistence.canvasId = String(message.context.canvasId || "main");
     canvasPersistence.writable = message.context.writable === true;
+    syncHostedIdentity(message.context);
+    setCanvasAccessMode("loading");
     syncProjectNavigation();
     return;
   }
@@ -587,10 +599,13 @@ function handleHostBridgeMessage(event) {
     canvasPersistence.hydrating = false;
     if (!hydrated) {
       canvasPersistence.blocked = true;
+      setCanvasAccessMode("blocked");
       showActionToast("此画布数据版本暂不支持，已停止自动保存");
       return;
     }
     canvasPersistence.initialized = true;
+    setCanvasAccessMode(canvasPersistence.writable ? "editable" : "readonly");
+    if (canvasPersistence.writable) consumeHomeLaunchIntent();
     const serializedSnapshot = serializeCanvasDocumentSnapshot();
     if (!message.document && canvasPersistence.writable) {
       canvasPersistence.lastSavedSnapshot = "";
@@ -601,8 +616,12 @@ function handleHostBridgeMessage(event) {
       postCanvasDirty(false);
     }
     if (!canvasPersistence.writable) {
-      showActionToast("当前项目为只读，画布修改不会保存");
+      showActionToast("当前项目为只读，可浏览但不能修改");
     }
+    return;
+  }
+  if (message.type === "host:flush" && message.protocolVersion === 1) {
+    flushCanvasDocumentSave();
     return;
   }
   if (message.type === "host:save-result" && message.protocolVersion === 1) {
@@ -2710,6 +2729,7 @@ function closeAssetLibrary() {
 }
 
 function addAssetToGeneratorNode(node, sourceAsset) {
+  if (!requireCanvasMutation()) return;
   if (!node || node.kind !== "generator" || node.generating || !sourceAsset) return;
   const asset = cloneAsset(sourceAsset, "library");
   node.assets.push(asset);
@@ -2723,6 +2743,7 @@ function addAssetToGeneratorNode(node, sourceAsset) {
 }
 
 function addLibraryAssetToCanvas(sourceAsset, clientX, clientY) {
+  if (!requireCanvasMutation()) return null;
   if (!sourceAsset) return null;
   const rect = shell.getBoundingClientRect();
   const x = Number.isFinite(clientX) ? clientX : rect.left + rect.width / 2;
@@ -2938,7 +2959,7 @@ function assetShelf(node) {
             <span>${escapeHtml(getAssetDisplayName(asset))}</span>
             <small>${assetTypeLabel(asset.type)}</small>
           </div>
-          <button class="asset-remove" data-action="remove-material" data-value="${asset.id}" type="button" title="移除">×</button>
+        <button class="asset-remove" data-action="remove-material" data-value="${asset.id}" data-canvas-mutation type="button" title="移除">×</button>
         </div>
       `,
     )
@@ -2947,6 +2968,7 @@ function assetShelf(node) {
 }
 
 function addFilesToGeneratorNode(node, files) {
+  if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
   const accepted = createAssetsFromFiles(files);
   if (!accepted.length) return;
@@ -2963,6 +2985,7 @@ function addFilesToGeneratorNode(node, files) {
 }
 
 function addMediaNodesFromFiles(files, clientX, clientY) {
+  if (!requireCanvasMutation()) return [];
   const accepted = createAssetsFromFiles(files);
   if (!accepted.length) return [];
 
@@ -2986,6 +3009,7 @@ function addMediaNodesFromFiles(files, clientX, clientY) {
 }
 
 function addVirtualAsset(node, source) {
+  if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
   const type = source === "canvas" ? "video" : "image";
   const name = source === "canvas" ? "画布素材" : "资产库素材";
@@ -3008,6 +3032,7 @@ function addVirtualAsset(node, source) {
 }
 
 function openLocalAssetPicker(node) {
+  if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
   state.pendingUploadNodeId = node.id;
   localAssetInput.value = "";
@@ -3085,6 +3110,7 @@ function render() {
   renderMinimap();
   renderAssetLibrary();
   refreshIcons();
+  syncCanvasAccessUi();
   requestAnimationFrame(syncPromptPanelLayouts);
   scheduleCanvasDocumentSave();
 }
@@ -3146,22 +3172,22 @@ function createGroupFrameElement(group) {
     <div class="group-title">${escapeHtml(group.name || "新建组")}</div>
     <div class="group-toolbar">
       <div class="toolbar-menu-wrap">
-        <button class="icon-toolbar-button" type="button" data-group-action="toggle-layout" aria-label="布局">
+      <button class="icon-toolbar-button" type="button" data-group-action="toggle-layout" data-canvas-mutation aria-label="布局">
           <i data-lucide="layout-grid" aria-hidden="true"></i>
           <i data-lucide="chevron-down" aria-hidden="true"></i>
           <span class="toolbar-tip">布局</span>
         </button>
         <div class="toolbar-dropdown group-layout-menu ${group.layoutMenuOpen ? "" : "hidden"}">
-          <button type="button" data-group-layout="grid"><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
-          <button type="button" data-group-layout="horizontal"><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
-          <button type="button" data-group-layout="vertical"><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
+          <button type="button" data-group-layout="grid" data-canvas-mutation><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
+          <button type="button" data-group-layout="horizontal" data-canvas-mutation><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
+          <button type="button" data-group-layout="vertical" data-canvas-mutation><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
         </div>
       </div>
-      <button class="icon-toolbar-button primary" type="button" data-group-action="run" aria-label="整组执行">
+      <button class="icon-toolbar-button primary" type="button" data-group-action="run" data-canvas-mutation aria-label="整组执行">
         <i data-lucide="play" aria-hidden="true"></i>
         <span class="toolbar-tip">整组执行</span>
       </button>
-      <button class="icon-toolbar-button" type="button" data-group-action="ungroup" aria-label="解组">
+      <button class="icon-toolbar-button" type="button" data-group-action="ungroup" data-canvas-mutation aria-label="解组">
         <i data-lucide="ungroup" aria-hidden="true"></i>
         <span class="toolbar-tip">解组</span>
       </button>
@@ -3192,6 +3218,11 @@ function bindGroupFrameEvents(el, group) {
     event.stopPropagation();
     if (event.target.closest("button, .toolbar-dropdown")) {
       setActiveGroup(group.id);
+      return;
+    }
+    if (!isCanvasMutationAllowed()) {
+      setActiveGroup(group.id);
+      render();
       return;
     }
 
@@ -3362,7 +3393,7 @@ function createGeneratorNodeElement(node) {
   const promptPanel = node.expanded
     ? `
       <section class="prompt-panel ${node.promptLarge ? "large" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px;">
-        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" type="button" ${generationInputsDisabled}><span>+</span><span>素材</span></button>
+        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" ${generationInputsDisabled}><span>+</span><span>素材</span></button>
         <button class="expand-corner ${node.promptLarge ? "active" : ""}" data-action="toggle-large" type="button" title="${node.promptLarge ? "收起输入区" : "展开输入区"}">
           <i data-lucide="${node.promptLarge ? "minimize-2" : "maximize-2"}" aria-hidden="true"></i>
         </button>
@@ -3374,8 +3405,8 @@ function createGeneratorNodeElement(node) {
           </button>
           <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>${getParamLabel(node)} ⌃</button>
           <div class="control-spacer"></div>
-          <button class="control-chip count-chip" data-action="count" type="button" ${generationInputsDisabled}>${node.count}x</button>
-          <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
+          <button class="control-chip count-chip" data-action="count" data-canvas-mutation type="button" ${generationInputsDisabled}>${node.count}x</button>
+          <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
             <span class="credit-mark">▰ ${node.credits}</span>
             <span class="send-arrow"><i data-lucide="arrow-up" aria-hidden="true"></i></span>
           </button>
@@ -3399,6 +3430,10 @@ function createGeneratorNodeElement(node) {
   bindNodeEvents(el, node);
   const promptInput = el.querySelector(".prompt-input");
   promptInput?.addEventListener("input", (event) => {
+    if (!requireCanvasMutation()) {
+      event.currentTarget.value = node.prompt;
+      return;
+    }
     node.prompt = event.currentTarget.value;
     syncGenerateButton(el.querySelector(".generate-button"), node);
     resizePromptTextarea(event.currentTarget, node);
@@ -3506,6 +3541,7 @@ function addEditableMediaToLibrary(node) {
 }
 
 function enhanceEditableMedia(node) {
+  if (!requireCanvasMutation()) return;
   const asset = getEditableMedia(node);
   if (!asset) return;
   if (!asset.enhanced) {
@@ -3647,12 +3683,14 @@ function handleMediaToolAction(node, action) {
     return;
   }
   if (action === "add-library") {
+    if (!requireCanvasMutation()) return;
     node.mediaMenuOpen = false;
     addEditableMediaToLibrary(node);
     render();
     return;
   }
   if (action === "enhance") {
+    if (!requireCanvasMutation()) return;
     enhanceEditableMedia(node);
     return;
   }
@@ -3687,6 +3725,7 @@ function selectElementText(element) {
 }
 
 function renameMediaNode(node, value) {
+  if (!requireCanvasMutation()) return;
   const before = cloneNodeState(node);
   const cleaned = value.trim().replace(/\s+/g, " ");
   if (node.kind === "asset") {
@@ -3724,6 +3763,7 @@ function bindMediaTitleEvents(el, node) {
   };
 
   const start = (event) => {
+    if (!requireCanvasMutation()) return;
     event.preventDefault();
     event.stopPropagation();
     beforeEdit = title.textContent;
@@ -3938,6 +3978,7 @@ function cancelGenerationTask(taskId, resetNode = true) {
     if (target?.node.generationTaskId === task.id) {
       target.node.generating = false;
       delete target.node.generationTaskId;
+      scheduleCanvasDocumentSave();
     }
   }
   state.generationTasks.delete(taskId);
@@ -3975,6 +4016,7 @@ function completeSimulatedGeneration(taskId) {
       showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
       render();
     }
+    scheduleCanvasDocumentSave();
     return;
   }
   node.lockedMode = outputMode;
@@ -3983,6 +4025,7 @@ function completeSimulatedGeneration(taskId) {
   node.name = node.name || node.generatedAsset.displayName || defaultGeneratedName(node);
   commitGenerationUndoBoundary(canvas, node.id);
   if (canvas.id === state.activeCanvasId) render();
+  scheduleCanvasDocumentSave();
 }
 
 function syncGenerateButton(button, node) {
@@ -3994,6 +4037,7 @@ function syncGenerateButton(button, node) {
 }
 
 function startSimulatedGeneration(node, options = {}) {
+  if (!requireCanvasMutation()) return false;
   const { charge = true } = options;
   if (node.generating) return false;
   normalizeNodeParameters(node);
@@ -4078,7 +4122,7 @@ function modelPanel(node) {
         .filter((item) => item.type === type.id)
         .map(
           (item) => `
-            <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" type="button">
+            <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" data-canvas-mutation type="button">
               <span class="model-icon">${item.icon}</span>
               <span>
                 <span class="model-name">${item.name}</span>
@@ -4170,13 +4214,13 @@ function bindModelPanelEvents(element, node) {
 function materialPanel() {
   return `
     <div class="material-panel">
-      <button class="material-option" data-action="material" data-value="local" type="button">
+      <button class="material-option" data-action="material" data-value="local" data-canvas-mutation type="button">
         <span class="material-icon">↑</span><span>从本地上传</span>
       </button>
-      <button class="material-option" data-action="material" data-value="library" type="button">
+      <button class="material-option" data-action="material" data-value="library" data-canvas-mutation type="button">
         <span class="material-icon">◇</span><span>从资产库添加</span>
       </button>
-      <button class="material-option" data-action="material" data-value="canvas" type="button">
+      <button class="material-option" data-action="material" data-value="canvas" data-canvas-mutation type="button">
         <span class="material-icon">⌖</span><span>从画布中选择</span>
       </button>
     </div>
@@ -4219,7 +4263,7 @@ function parameterSection(node, label, action, values) {
 
 function paramButton(node, action, value) {
   const aspectIcon = action === "aspect" ? renderAspectIcon(value) : "";
-  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" type="button">${aspectIcon}<span>${value}</span></button>`;
+  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" data-canvas-mutation type="button">${aspectIcon}<span>${value}</span></button>`;
 }
 
 function renderAspectIcon(value) {
@@ -4246,6 +4290,18 @@ const generationLockedActions = new Set([
 
 function handleAction(node, action, value) {
   if (node.kind !== "generator") return;
+  const persistentActions = new Set([
+    "material",
+    "remove-material",
+    "generate",
+    "count",
+    "model",
+    "aspect",
+    "duration",
+    "quality",
+    "resolution",
+  ]);
+  if (persistentActions.has(action) && !requireCanvasMutation()) return;
   if (node.generating && generationLockedActions.has(action)) return;
   const undoableActions = new Set(["count", "model", "aspect", "duration", "quality", "resolution"]);
   const before = undoableActions.has(action) ? cloneNodeState(node) : null;
@@ -4367,7 +4423,7 @@ function handleNodePointerDown(event, nodeId) {
     if (target.closest(".media-spec") && getEditableMedia(node)) {
       state.mediaToolbarNodeId = node.id;
     }
-    bringNodesToFront([node]);
+    if (isCanvasMutationAllowed()) bringNodesToFront([node]);
     const nodeElement = target.closest(".canvas-node");
     if (nodeElement) nodeElement.style.zIndex = String(node.z);
     if (!hadMediaToolbar && state.mediaToolbarNodeId === node.id && !target.closest(".media-edit-toolbar")) {
@@ -4394,6 +4450,11 @@ function handleNodePointerDown(event, nodeId) {
 
   const editableMediaClicked = Boolean(target.closest(".media-frame") && getEditableMedia(node));
   state.mediaToolbarNodeId = editableMediaClicked ? node.id : null;
+
+  if (!isCanvasMutationAllowed()) {
+    render();
+    return;
+  }
 
   if (node.kind === "generator" && !node.generating && target.closest(".media-frame")) {
     node.expanded = true;
@@ -4423,6 +4484,7 @@ function handleNodePointerDown(event, nodeId) {
 }
 
 function addNodeAt(clientX, clientY, mode = "image") {
+  if (!requireCanvasMutation()) return null;
   const world = screenToWorld(clientX, clientY);
   const node = defaultGeneratorNode(0, 0, state.lastPreset.mode || mode);
   applyPreset(node, state.lastPreset);
@@ -4439,17 +4501,25 @@ function addNodeAt(clientX, clientY, mode = "image") {
 }
 
 function consumeHomeLaunchIntent() {
+  if (!isCanvasMutationAllowed()) return false;
   let prompt = "";
   try {
     prompt = sessionStorage.getItem(homeLaunchIntentKey)?.trim() || "";
-    sessionStorage.removeItem(homeLaunchIntentKey);
   } catch {
-    return;
+    return false;
   }
-  if (!prompt) return;
+  if (!prompt) return false;
   const node = addNodeAt(window.innerWidth / 2, window.innerHeight / 2);
+  if (!node) return false;
   node.prompt = prompt;
   node.expanded = true;
+  try {
+    sessionStorage.removeItem(homeLaunchIntentKey);
+  } catch {
+    // The node is already created; storage cleanup can safely fail.
+  }
+  render();
+  return true;
 }
 
 function cloneNodeState(node) {
@@ -4518,6 +4588,7 @@ function pushUndoAction(action) {
 }
 
 function deleteSelectedNodes(confirmed = false) {
+  if (!requireCanvasMutation()) return;
   if (state.activeGroupId && !state.selectedIds.size) {
     const group = getGroupById(state.activeGroupId);
     if (!group) return;
@@ -4586,6 +4657,7 @@ function restoreGroupSnapshot(groups) {
 }
 
 function undoLastAction() {
+  if (!requireCanvasMutation()) return;
   const action = state.undoStack.pop();
   if (!action) return;
 
@@ -5125,6 +5197,7 @@ function selectEditableText(element) {
 }
 
 function beginInlineRename(element) {
+  if (!requireCanvasMutation()) return;
   if (!element) return;
   element.dataset.beforeEdit = element.textContent || "";
   element.contentEditable = "true";
@@ -5151,11 +5224,13 @@ function finishInlineRename(element, commit = true) {
 }
 
 function commitProjectRename(nextName) {
+  if (!requireCanvasMutation()) return;
   state.projectName = String(nextName || "Untitled").trim() || "Untitled";
   syncProjectNavigation();
 }
 
 function commitCanvasRename(nextName) {
+  if (!requireCanvasMutation()) return;
   const canvas = getActiveCanvas();
   if (!canvas) return;
   canvas.name = String(nextName || canvas.name || "画布 1").trim() || "画布 1";
@@ -5225,6 +5300,7 @@ function openCanvasMenu(anchor) {
 }
 
 function addCanvas() {
+  if (!requireCanvasMutation()) return;
   saveActiveCanvasState();
   const canvas = createCanvasRecord(`画布 ${state.canvases.length + 1}`);
   state.canvases.push(canvas);
@@ -5243,6 +5319,7 @@ function switchCanvas(canvasId) {
 }
 
 function duplicateCanvas(canvasId) {
+  if (!requireCanvasMutation()) return;
   const source = state.canvases.find((canvas) => canvas.id === canvasId);
   if (!source) return;
   saveActiveCanvasState();
@@ -5265,6 +5342,7 @@ function duplicateCanvas(canvasId) {
 }
 
 function deleteCanvas(canvasId) {
+  if (!requireCanvasMutation()) return;
   if (state.canvases.length <= 1) {
     showActionToast("至少保留一个画布");
     return;
@@ -5298,6 +5376,7 @@ function getVisibleNameElement(kind) {
 }
 
 function resetPrototypeProject() {
+  if (!requireCanvasMutation()) return;
   cancelGenerationTasks((task) => task.projectId === state.projectId);
   state.projectId = crypto.randomUUID();
   state.projectName = "Untitled";
@@ -5330,11 +5409,11 @@ function resetPrototypeProject() {
 function handleProjectMenuAction(action) {
   closeProjectMenus();
   if (action === "home") {
-    window.location.assign("./home.html");
+    requestHostNavigation("home");
     return;
   }
   if (action === "all") {
-    window.location.assign("./home.html#all-projects");
+    requestHostNavigation("projects");
     return;
   }
   if (action === "create") {
@@ -5385,6 +5464,7 @@ function handleCanvasMoreAction(action) {
 }
 
 function groupSelectedNodes() {
+  if (!requireCanvasMutation()) return;
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return;
   const groupId = crypto.randomUUID();
@@ -5454,6 +5534,7 @@ function arrangeNodes(nodes, layout = "grid") {
 }
 
 function sortSelectedNodes(layout = "grid") {
+  if (!requireCanvasMutation()) return;
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return;
   arrangeNodes(selectedNodes, layout);
@@ -5518,6 +5599,7 @@ async function downloadSelectedMedia(packageMode = false) {
 }
 
 function arrangeGroup(group, layout = "grid") {
+  if (!requireCanvasMutation()) return;
   const groupNodes = getGroupNodes(group);
   if (groupNodes.length < 2) return;
   group.layoutMenuOpen = false;
@@ -5528,6 +5610,7 @@ function arrangeGroup(group, layout = "grid") {
 }
 
 function ungroup(groupId) {
+  if (!requireCanvasMutation()) return;
   const group = getGroupById(groupId);
   if (!group) return;
   const groupsBefore = state.groups.map((item) => cloneGroupState(item));
@@ -5541,6 +5624,7 @@ function ungroup(groupId) {
 }
 
 function requestRunGroup(group) {
+  if (!requireCanvasMutation()) return;
   const groupGenerators = getGroupNodes(group).filter((node) => node.kind === "generator");
   if (!groupGenerators.length) {
     showConfirmDialog({
@@ -6421,10 +6505,19 @@ profileMenu?.addEventListener("click", (event) => {
   }
   if (action === "logout") {
     showConfirmDialog({
-      title: "退出演示账号",
-      body: "当前没有真实登录会话。继续后将返回账户密码流程样机。",
-      confirmText: "返回登录页",
-      onConfirm: () => window.location.assign("./login.html"),
+      title: "退出当前账号",
+      body: "退出后将结束当前本地演示会话，并返回账户密码登录页。",
+      confirmText: "退出登录",
+      onConfirm: () => requestHostNavigation("logout"),
+    });
+    return;
+  }
+  if (action === "organization") {
+    showConfirmDialog({
+      title: state.identity.workspaceName,
+      body: "组织管理页面将在下一阶段接入。当前可在这里确认账号的组织归属与角色。",
+      confirmText: "知道了",
+      showCancel: false,
     });
     return;
   }
@@ -6768,6 +6861,10 @@ window.addEventListener("resize", () => {
 
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
+window.addEventListener("pagehide", flushCanvasDocumentSave);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushCanvasDocumentSave();
+});
 
 setAssetLibraryWidth(state.assetLibraryWidth);
 setAgentWidth(state.agentWidth);

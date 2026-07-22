@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hostDocumentMessageSchema,
+  hostFlushMessageSchema,
   hostMessageSchema,
   hostSaveErrorMessageSchema,
   hostSaveResultMessageSchema,
@@ -29,6 +30,14 @@ describe("legacy canvas bridge", () => {
           canvasId: "canvas-1",
           theme: "dark",
           writable: true,
+          actor: {
+            account: "creator@reelay.test",
+            displayName: "Hoo",
+          },
+          workspace: {
+            name: "星海视觉工作室",
+            role: "owner",
+          },
         },
       }).context.workspaceId,
     ).toBe("org-1");
@@ -40,6 +49,11 @@ describe("legacy canvas bridge", () => {
       document,
       writable: true,
     }).document).toEqual(document);
+    expect(hostFlushMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:flush",
+      protocolVersion: 1,
+    }).type).toBe("host:flush");
   });
 
   it("rejects unversioned or foreign messages", () => {

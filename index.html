@@ -25,6 +25,8 @@
         </div>
       </header>
 
+      <div class="canvas-access-status" id="canvasAccessStatus" role="status" aria-live="polite" hidden></div>
+
       <aside class="left-rail" aria-label="资产">
         <button class="rail-button asset-library-trigger" id="railLibraryBtn" type="button" aria-label="资产库" aria-expanded="false">
           <i data-lucide="folders" aria-hidden="true"></i>
@@ -42,20 +44,22 @@
             <i data-lucide="sparkles" aria-hidden="true"></i>
             <span id="avatarCreditValue">3000</span>
           </span>
-          <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人"></button>
+          <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人" data-initial="R"></button>
 
           <div class="profile-menu hidden" id="profileMenu">
             <div class="profile-card">
-              <div class="profile-avatar">T</div>
+              <div class="profile-avatar" id="profileAvatar">R</div>
               <div class="profile-identity">
-                <div class="profile-name">Tianmaochao</div>
-                <div class="profile-email">t***@reelay.test</div>
+                <div class="profile-name" id="profileName">Reelay 用户</div>
+                <div class="profile-email" id="profileEmail">演示画布</div>
               </div>
             </div>
             <div class="profile-menu-list">
-              <button class="profile-menu-item" type="button" data-profile-action="organization">
+              <button class="profile-menu-item profile-membership" id="profileOrganization" type="button" data-profile-action="organization" aria-label="进入组织面板">
                 <i data-lucide="building-2" aria-hidden="true"></i>
-                <span>进入组织</span>
+                <span id="profileOrganizationName">组织空间</span>
+                <small id="profileOrganizationRole">成员</small>
+                <i data-lucide="chevron-right" aria-hidden="true"></i>
               </button>
               <button class="profile-menu-item" type="button" data-profile-action="account">
                 <i data-lucide="settings" aria-hidden="true"></i>
@@ -111,7 +115,7 @@
               </div>
               <button class="profile-menu-item danger" type="button" data-profile-action="logout">
                 <i data-lucide="log-out" aria-hidden="true"></i>
-                <span>退出演示账号</span>
+                <span>退出登录</span>
               </button>
             </div>
           </div>
@@ -163,14 +167,14 @@
         <button type="button" data-project-action="home">回到主页</button>
         <button type="button" data-project-action="all">全部项目</button>
         <hr />
-        <button type="button" data-project-action="create">创建新项目</button>
-        <button class="danger" type="button" data-project-action="delete">删除项目</button>
+        <button type="button" data-project-action="create" data-canvas-mutation>创建新项目</button>
+        <button class="danger" type="button" data-project-action="delete" data-canvas-mutation>删除项目</button>
       </div>
 
       <div class="canvas-menu hidden" id="canvasMenu">
         <div class="canvas-menu-title">
           <span>画布</span>
-          <button type="button" data-canvas-action="add" title="添加画布" aria-label="添加画布">
+          <button type="button" data-canvas-action="add" data-canvas-mutation title="添加画布" aria-label="添加画布">
             <i data-lucide="plus" aria-hidden="true"></i>
           </button>
         </div>
@@ -179,9 +183,9 @@
 
       <div class="canvas-more-menu hidden" id="canvasMoreMenu">
         <button type="button" data-canvas-more-action="open">在新窗口打开</button>
-        <button type="button" data-canvas-more-action="rename">重命名画布</button>
-        <button type="button" data-canvas-more-action="duplicate">复制画布</button>
-        <button class="danger" type="button" data-canvas-more-action="delete">删除画布</button>
+        <button type="button" data-canvas-more-action="rename" data-canvas-mutation>重命名画布</button>
+        <button type="button" data-canvas-more-action="duplicate" data-canvas-mutation>复制画布</button>
+        <button class="danger" type="button" data-canvas-more-action="delete" data-canvas-mutation>删除画布</button>
       </div>
 
       <section class="canvas-shell" id="canvasShell">
@@ -193,26 +197,26 @@
         <div class="selection-toolbar hidden" id="selectionToolbar">
           <span class="selection-toolbar-count" id="selectionCount">0 个节点</span>
           <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button text-button" type="button" data-selection-action="group" aria-label="打组">
+          <button class="icon-toolbar-button text-button" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
             <i data-lucide="combine" aria-hidden="true"></i>
             <span>打组</span>
             <span class="toolbar-tip">打组</span>
           </button>
           <div class="toolbar-menu-wrap" data-toolbar-menu="layout">
-            <button class="icon-toolbar-button text-button" type="button" data-selection-action="toggle-sort" aria-label="整理布局" aria-haspopup="menu">
+            <button class="icon-toolbar-button text-button" type="button" data-selection-action="toggle-sort" data-canvas-mutation aria-label="整理布局" aria-haspopup="menu">
               <i data-lucide="layout-grid" aria-hidden="true"></i>
               <span>整理布局</span>
               <i data-lucide="chevron-down" aria-hidden="true"></i>
               <span class="toolbar-tip">整理布局</span>
             </button>
             <div class="toolbar-dropdown hidden" id="selectionSortMenu" role="menu">
-              <button type="button" data-sort-layout="grid"><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
-              <button type="button" data-sort-layout="horizontal"><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
-              <button type="button" data-sort-layout="vertical"><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
+              <button type="button" data-sort-layout="grid" data-canvas-mutation><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
+              <button type="button" data-sort-layout="horizontal" data-canvas-mutation><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
+              <button type="button" data-sort-layout="vertical" data-canvas-mutation><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
             </div>
           </div>
           <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button" type="button" data-selection-action="add-library" aria-label="批量保存到素材库">
+          <button class="icon-toolbar-button" type="button" data-selection-action="add-library" data-canvas-mutation aria-label="批量保存到素材库">
             <i data-lucide="folder-plus" aria-hidden="true"></i>
             <span class="toolbar-tip">批量保存到素材库</span>
           </button>
@@ -226,7 +230,7 @@
               <button type="button" data-download-action="archive"><i data-lucide="archive" aria-hidden="true"></i><span>打包下载</span></button>
             </div>
           </div>
-          <button class="icon-toolbar-button danger" type="button" data-selection-action="delete" aria-label="删除选中节点">
+          <button class="icon-toolbar-button danger" type="button" data-selection-action="delete" data-canvas-mutation aria-label="删除选中节点">
             <i data-lucide="trash-2" aria-hidden="true"></i>
             <span class="toolbar-tip">删除</span>
           </button>
@@ -335,6 +339,7 @@
     <script src="./vendor/lucide-1.25.0.min.js"></script>
     <script src="./data/model-catalog.js?v=20260710-undo-feedback"></script>
     <script src="./src/config/prototype-config.js?v=20260716-foundation-modularization"></script>
+    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260722-allow-list"></script>
     <script src="./app.js?v=20260716-foundation-modularization"></script>
   </body>
 </html>

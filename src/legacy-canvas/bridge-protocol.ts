@@ -19,6 +19,14 @@ export const legacyCanvasContextSchema = z
     canvasId: z.string().min(1),
     theme: z.enum(["light", "dark"]),
     writable: z.boolean(),
+    actor: z.object({
+      account: z.string().min(1),
+      displayName: z.string().min(1),
+    }).strict(),
+    workspace: z.object({
+      name: z.string().min(1),
+      role: z.enum(["owner", "admin", "member"]),
+    }).strict(),
   })
   .strict();
 
@@ -39,6 +47,14 @@ export const hostDocumentMessageSchema = z
     protocolVersion: z.literal(1),
     document: bridgeCanvasDocumentSchema.nullable(),
     writable: z.boolean(),
+  })
+  .strict();
+
+export const hostFlushMessageSchema = z
+  .object({
+    source: z.literal("reelay-shell"),
+    type: z.literal("host:flush"),
+    protocolVersion: z.literal(1),
   })
   .strict();
 
@@ -78,7 +94,7 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:navigate"),
     protocolVersion: z.literal(1),
-    target: z.enum(["home", "projects"]),
+    target: z.enum(["home", "projects", "logout"]),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

@@ -50,21 +50,67 @@ a {
   position: relative;
 }
 
-.legacy-canvas-error {
+.legacy-canvas-state {
   position: absolute;
-  inset: 50% auto auto 50%;
-  margin: 0;
-  padding: 12px 16px;
-  border: 1px solid #dededb;
-  border-radius: 10px;
-  background: #fff;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f7f7f6;
   color: #525252;
   font-size: 14px;
-  transform: translate(-50%, -50%);
 }
 
-html[data-theme="dark"] .legacy-canvas-error {
+.legacy-canvas-state-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 420px;
+  padding: 24px;
+  border: 1px solid #dededb;
+  border-radius: 14px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
+}
+
+.legacy-canvas-state-card strong {
+  color: #171717;
+  font-size: 16px;
+}
+
+.legacy-canvas-state-card span {
+  color: #737373;
+  line-height: 1.6;
+}
+
+.legacy-canvas-state-card button {
+  min-width: 104px;
+  margin-top: 4px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: #171717;
+  color: #fff;
+  cursor: pointer;
+}
+
+html[data-theme="dark"] .legacy-canvas-state {
+  background: #171717;
+  color: #d4d4d4;
+}
+
+html[data-theme="dark"] .legacy-canvas-state-card {
   border-color: #393939;
   background: #202020;
   color: #d4d4d4;
+}
+
+html[data-theme="dark"] .legacy-canvas-state-card strong {
+  color: #f5f5f5;
+}
+
+html[data-theme="dark"] .legacy-canvas-state-card button {
+  background: #f5f5f5;
+  color: #171717;
 }
