@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appRoutes } from "./routes";
+import { appRoutes, routePaths } from "./routes";
 
 describe("application route contract", () => {
   it("keeps workspace, project, and canvas identity in the URL", () => {
@@ -11,5 +11,11 @@ describe("application route contract", () => {
   it("keeps personal and organization workspaces on the same route shape", () => {
     expect(appRoutes.projects("personal-user-1")).toBe("/app/w/personal-user-1/projects");
     expect(appRoutes.projects("organization-1")).toBe("/app/w/organization-1/projects");
+  });
+
+  it("separates browser-facing app URLs from basename-relative navigation paths", () => {
+    expect(appRoutes.login()).toBe("/app/login");
+    expect(routePaths.login()).toBe("/login");
+    expect(routePaths.projects("workspace one")).toBe("/w/workspace%20one/projects");
   });
 });

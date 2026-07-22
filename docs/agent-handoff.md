@@ -4,15 +4,16 @@
 
 ## 当前定位
 
-- 用户可见主链路仍是 `login.html` → `home.html` → `index.html` 的高保真静态原型。
-- 静态原型没有真实账号、持久化、共享项目、真实生成 API 或生产部署。
-- 隔离的 React + TypeScript + Vite 应用壳已经建立，包含 browser route contract、首批领域对象 / repository ports、Vitest 和版本化 `LegacyCanvasHost`；它还没有接管现有三页。
-- 最小共享服务已经建立：两个独立的演示账号使用 HttpOnly 服务端会话，可读写同一组织项目；集成测试使用两个独立 cookie 验证双向可见。当前 repository 位于服务端进程内，重启即丢失，不是持久化。
+- 当前本地主链路是 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。`login.html` 与 `home.html` 只保留作视觉回归参考，新功能不得再进入静态页面逻辑。
+- React 页面通过 `src/infrastructure/http` adapters 消费共享 API；Zod 在传输边界校验 DTO，页面不直接依赖 server-memory store。
+- 两个固定演示账号使用 HttpOnly 服务端会话，可读写同一组织项目且个人空间隔离；自动集成测试使用两个独立 cookie，浏览器验收也使用两个隔离会话验证。当前 repository 位于服务端进程内，重启即丢失，不是生产鉴权或持久化。
+- `LegacyCanvasHost` 已受路由权限保护并发送版本化 `host:init`，但旧 `index.html` 尚未消费上下文，也不会按 project id 加载或保存画布内容。
+- 开发服务器必须让 `/app/*` 回退到 `app-shell.html`，同时保留 `/index.html` 给旧画布 iframe；不要重新引入会吞掉 Vite 内部脚本或旧画布入口的宽泛回退。
 - 当前画布已实现生成节点首次成功后的图片 / 视频类型锁；入口使用统一模型选择图标，选择器内部仍保留具体模型图标。
 
 ## 下一开发切片
 
-为新壳实现 HTTP gateway / repository adapter，再迁移登录、主页和全部项目，让它们直接消费当前共享 API。页面主链路稳定后，把 server-memory adapter 替换为 PostgreSQL，并加入 schema 迁移。
+先把 server-memory repository 替换为 PostgreSQL adapter，并建立可重复的 schema migration / seed 流程；保持现有 ports、HTTP contracts 和两个演示账号行为不变。随后让旧画布消费 `host:init`，通过明确的 `CanvasDocument` API 加载 / 保存项目画布，再删除重复的静态登录与主页入口。
 
 暂不加入邀请、外部分享、实时光标、复杂权限、真实密码生命周期和公开部署。
 

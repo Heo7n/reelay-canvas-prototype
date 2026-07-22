@@ -98,7 +98,7 @@ flowchart TD
 
 这是登录后的默认页面，不是宣传落地页。
 
-> 原型状态：已建立登录样机、独立静态主页与画布的三段式入口，完成轮播、创作意图输入、能力快捷项、最近项目、项目库页面状态、本地搜索 / 项目类型筛选、账户菜单和浅深主题。项目库仍是内存 mock，真实项目加载、持久化、登录鉴权、账户与组织权限仍未实现。
+> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；两个固定演示账号可验证个人空间隔离和同组织项目共享。项目仍保存在服务端进程内，旧画布也尚未按项目加载 / 保存，因此这不是正式账号、持久化项目或生产协作。
 
 ### 页面目标
 
@@ -412,7 +412,7 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、隔离的 React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、Vitest 检查、版本化 legacy canvas host，以及最小共享服务纵切。共享服务以两个独立服务端会话验证同组织项目读写，当前仍是重启即丢失的 server-memory adapter。现有登录、主页、项目库和画布仍运行在静态入口，尚未完成页面迁移或 PostgreSQL 持久化。
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。两个隔离浏览器会话已验证同组织项目读写与个人空间隔离。当前仍是重启即丢失的 server-memory adapter，旧画布不消费项目上下文，也尚未引入 PostgreSQL、schema 迁移或画布文档持久化。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。

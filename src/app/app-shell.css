@@ -2,6 +2,11 @@
   font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
   color: #171717;
   background: #f7f7f6;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 html,
@@ -12,6 +17,18 @@ body,
   min-width: 320px;
   height: 100%;
   margin: 0;
+}
+
+body,
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .legacy-route-status {

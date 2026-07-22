@@ -1,0 +1,46 @@
+.brand {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  outline: none;
+}
+
+.brand:focus-visible {
+  outline: 3px solid color-mix(in srgb, #6e6eff 55%, transparent);
+  outline-offset: 3px;
+}
+
+.crop {
+  position: relative;
+  display: block;
+  width: 210px;
+  height: 40px;
+  overflow: hidden;
+}
+
+.crop img {
+  position: absolute;
+  top: -49px;
+  left: -12px;
+  width: 240px;
+  max-width: none;
+  mix-blend-mode: multiply;
+}
+
+:global(html[data-theme="dark"]) .crop img {
+  filter: invert(1);
+  mix-blend-mode: screen;
+}
+
+@media (max-width: 680px) {
+  .crop {
+    width: 172px;
+    height: 34px;
+  }
+
+  .crop img {
+    top: -40px;
+    left: -10px;
+    width: 196px;
+  }
+}

@@ -7,7 +7,11 @@ function shellHistoryFallback() {
     configureServer(server: { middlewares: { use: (handler: (request: { url?: string }, response: unknown, next: () => void) => void) => void } }) {
       server.middlewares.use((request, _response, next) => {
         const url = request.url || "";
-        if (/^\/app(?:\/|$)/.test(url) && !/\.[A-Za-z0-9]+(?:[?#]|$)/.test(url)) {
+        const isApplicationRoute = /^\/app(?:\/|$)/.test(url);
+        const isViteInternalRoute = /^\/app\/@/.test(url);
+        const hasFileExtension = /\.[A-Za-z0-9]+(?:[?#]|$)/.test(url);
+
+        if (isApplicationRoute && !isViteInternalRoute && !hasFileExtension) {
           request.url = "/app-shell.html";
         }
         next();
@@ -17,7 +21,7 @@ function shellHistoryFallback() {
 }
 
 export default defineConfig({
-  base: "/app/",
+  base: "/",
   plugins: [react(), shellHistoryFallback()],
   server: {
     proxy: {

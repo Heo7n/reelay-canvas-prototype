@@ -4,6 +4,8 @@ function segment(value: string) {
 
 export const appRoutes = {
   login: () => "/app/login",
+  logout: () => "/app/logout",
+  noWorkspace: () => "/app/no-workspace",
   workspaceHome: (workspaceId: string) => `/app/w/${segment(workspaceId)}`,
   projects: (workspaceId: string) => `/app/w/${segment(workspaceId)}/projects`,
   canvas: (workspaceId: string, projectId: string, canvasId: string) =>
@@ -12,4 +14,14 @@ export const appRoutes = {
   generations: (workspaceId: string) => `/app/w/${segment(workspaceId)}/generations`,
   members: (workspaceId: string) => `/app/w/${segment(workspaceId)}/members`,
   settings: () => "/app/settings",
+} as const;
+
+export const routePaths = {
+  login: () => "/login",
+  logout: () => "/logout",
+  noWorkspace: () => "/no-workspace",
+  workspaceHome: (workspaceId: string) => `/w/${segment(workspaceId)}`,
+  projects: (workspaceId: string) => `/w/${segment(workspaceId)}/projects`,
+  canvas: (workspaceId: string, projectId: string, canvasId: string) =>
+    `/w/${segment(workspaceId)}/projects/${segment(projectId)}/canvases/${segment(canvasId)}`,
 } as const;

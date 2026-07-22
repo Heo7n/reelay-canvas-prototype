@@ -1,0 +1,138 @@
+import { useRef, useState } from "react";
+import { EllipsisVertical, Pencil, UsersRound } from "lucide-react";
+import { Link, useFetcher } from "react-router-dom";
+
+import characterCoverUrl from "../../../assets/home/project-character.webp";
+import educationCoverUrl from "../../../assets/home/project-education.webp";
+import perfumeCoverUrl from "../../../assets/home/project-perfume.webp";
+import productCoverUrl from "../../../assets/home/project-product.webp";
+import scifiCoverUrl from "../../../assets/home/project-scifi.webp";
+import type { ProjectSummary } from "../../domain/project/project";
+import type { WorkspaceKind } from "../../domain/workspace/workspace";
+import { routePaths } from "../../app/routes";
+import type { WorkspaceActionData } from "../../app/route-data";
+import styles from "./ProjectCard.module.css";
+
+const coverUrls: Record<string, string> = {
+  "demo-cover-character": characterCoverUrl,
+  "demo-cover-education": educationCoverUrl,
+  "demo-cover-perfume": perfumeCoverUrl,
+  "demo-cover-product": productCoverUrl,
+  "demo-cover-scifi": scifiCoverUrl,
+};
+
+interface ProjectCardProps {
+  onNotice: (message: string) => void;
+  project: ProjectSummary;
+  workspaceKind: WorkspaceKind;
+}
+
+function formatUpdatedAt(value: string): string {
+  const updated = new Date(value);
+  const now = new Date();
+  const sameDay = updated.toDateString() === now.toDateString();
+  if (sameDay) return `今天 ${updated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (updated.toDateString() === yesterday.toDateString()) {
+    return `昨天 ${updated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+  }
+  return updated.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+export function ProjectCard({ onNotice, project, workspaceKind }: ProjectCardProps) {
+  const fetcher = useFetcher<WorkspaceActionData>();
+  const [renaming, setRenaming] = useState(false);
+  const cancelRename = useRef(false);
+  const menuDetails = useRef<HTMLDetailsElement>(null);
+  const coverUrl = project.coverAssetId ? coverUrls[project.coverAssetId] : undefined;
+
+  function startRename(): void {
+    cancelRename.current = false;
+    if (menuDetails.current) menuDetails.current.open = false;
+    setRenaming(true);
+  }
+
+  function showPrototypeNotice(message: string): void {
+    if (menuDetails.current) menuDetails.current.open = false;
+    onNotice(message);
+  }
+
+  return (
+    <article className={styles.card}>
+      <Link className={styles.visualLink} to={routePaths.canvas(project.workspaceId, project.id, "main")} aria-label={`打开项目 ${project.name}`}>
+        {coverUrl ? (
+          <img src={coverUrl} alt="" />
+        ) : (
+          <span className={styles.semanticCover} data-project-seed={project.id.length % 4} aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        )}
+      </Link>
+
+      <details className={styles.menuDetails} ref={menuDetails}>
+        <summary className={styles.menuTrigger} aria-label={`打开 ${project.name} 的项目菜单`}>
+          <EllipsisVertical aria-hidden="true" />
+        </summary>
+        <div className={styles.menu} role="menu">
+          <Link role="menuitem" to={routePaths.canvas(project.workspaceId, project.id, "main")}>打开</Link>
+          <button type="button" role="menuitem" onClick={startRename}>重命名</button>
+          <button type="button" role="menuitem" onClick={() => showPrototypeNotice("封面上传将在项目持久化阶段接入。")}>修改封面</button>
+          <button type="button" role="menuitem" onClick={() => showPrototypeNotice("项目转为协作项目需要迁移工作空间归属，暂未接入。")}>转为协作项目</button>
+          <button className={styles.danger} type="button" role="menuitem" onClick={() => showPrototypeNotice("删除项目将在持久化和恢复机制完成后接入。")}>删除项目</button>
+        </div>
+      </details>
+
+      <div className={styles.info}>
+        {renaming ? (
+          <fetcher.Form
+            method="post"
+            className={styles.renameForm}
+            onSubmit={() => setRenaming(false)}
+          >
+            <input type="hidden" name="intent" value="rename" />
+            <input type="hidden" name="workspaceId" value={project.workspaceId} />
+            <input type="hidden" name="projectId" value={project.id} />
+            <input
+              name="name"
+              defaultValue={project.name}
+              maxLength={100}
+              autoFocus
+              aria-label="项目名称"
+              onBlur={(event) => {
+                if (cancelRename.current) {
+                  cancelRename.current = false;
+                  return;
+                }
+                event.currentTarget.form?.requestSubmit();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelRename.current = true;
+                  setRenaming(false);
+                }
+              }}
+            />
+          </fetcher.Form>
+        ) : (
+          <div className={styles.titleRow}>
+            <Link to={routePaths.canvas(project.workspaceId, project.id, "main")}>{project.name}</Link>
+            <button type="button" className={styles.quickRename} onClick={startRename} aria-label={`重命名 ${project.name}`}>
+              <Pencil aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
+        <div className={styles.metaRow}>
+          <time dateTime={project.updatedAt}>{formatUpdatedAt(project.updatedAt)}</time>
+          {workspaceKind === "organization" ? <UsersRound aria-label="协作项目" /> : null}
+        </div>
+        {fetcher.data?.error ? <span className={styles.srOnly} role="alert">{fetcher.data.error}</span> : null}
+      </div>
+    </article>
+  );
+}
