@@ -22,9 +22,12 @@
     "src/app/**/*.tsx",
     "src/application/**/*.ts",
     "src/domain/**/*.ts",
+    "src/infrastructure/**/*.ts",
     "src/legacy-canvas/**/*.ts",
     "src/legacy-canvas/**/*.tsx",
     "src/pages/**/*.ts",
-    "src/pages/**/*.tsx"
+    "src/pages/**/*.tsx",
+    "src/shared/**/*.ts",
+    "src/shared/**/*.tsx"
   ]
 }

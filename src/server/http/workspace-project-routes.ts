@@ -61,6 +61,21 @@ export async function registerWorkspaceProjectRoutes(
     return { projects: store.listProjects(parsed.data.workspaceId) };
   });
 
+  app.get("/api/workspaces/:workspaceId/projects/:projectId", async (request, reply) => {
+    const actor = requireActor(request, reply, store);
+    if (!actor) return reply;
+    const parsed = ProjectParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_request", message: "项目标识无效。" } });
+    }
+    if (!requireWorkspaceAccess(actor, parsed.data.workspaceId, reply, store)) return reply;
+    const project = store.getProject(parsed.data.workspaceId, parsed.data.projectId);
+    if (!project) {
+      return reply.code(404).send({ error: { code: "project_not_found", message: "项目不存在。" } });
+    }
+    return { project };
+  });
+
   app.post("/api/workspaces/:workspaceId/projects", async (request, reply) => {
     const actor = requireActor(request, reply, store);
     if (!actor) return reply;

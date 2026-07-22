@@ -94,4 +94,28 @@ describe("shared organization project API", () => {
     expect(forbidden.statusCode).toBe(403);
     expect(forbidden.json().error.code).toBe("workspace_forbidden");
   });
+
+  it("requires a valid session and keeps project lookup inside its workspace", async () => {
+    const anonymous = await app.inject({
+      method: "GET",
+      url: "/api/workspaces/workspace-organization-reelay/projects/project-brand-story",
+    });
+    expect(anonymous.statusCode).toBe(401);
+
+    const ownerCookie = await login(app, "tianmaochao@reelay.test");
+    const found = await app.inject({
+      method: "GET",
+      url: "/api/workspaces/workspace-organization-reelay/projects/project-brand-story",
+      headers: { cookie: ownerCookie },
+    });
+    expect(found.statusCode).toBe(200);
+    expect(found.json().project.name).toBe("品牌故事片脚本");
+
+    const wrongWorkspace = await app.inject({
+      method: "GET",
+      url: "/api/workspaces/workspace-personal-tianmaochao/projects/project-brand-story",
+      headers: { cookie: ownerCookie },
+    });
+    expect(wrongWorkspace.statusCode).toBe(404);
+  });
 });

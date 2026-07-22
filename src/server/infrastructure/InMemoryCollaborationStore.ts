@@ -96,6 +96,12 @@ export class InMemoryCollaborationStore {
       .map((project) => ({ ...project }));
   }
 
+  getProject(workspaceId: WorkspaceId, projectId: ProjectId): ProjectSummary | null {
+    const project = this.projects.get(projectId);
+    if (!project || project.workspaceId !== workspaceId) return null;
+    return { ...project };
+  }
+
   createProject(input: CreateProjectInput): ProjectSummary {
     const project: ProjectSummary = {
       id: `project-${this.createId()}`,
