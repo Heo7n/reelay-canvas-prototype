@@ -14,6 +14,7 @@ export interface DemoSeed {
   workspaces: Workspace[];
   memberships: Membership[];
   projects: ProjectSummary[];
+  projectAuthors: Record<string, ActorId>;
 }
 
 export const DEMO_PASSWORD = "reelay-demo";
@@ -103,5 +104,15 @@ export function createDemoSeed(): DemoSeed {
         coverAssetId: null,
       },
     ],
+    projectAuthors: {
+      "project-perfume-tvc": "actor-tianmaochao",
+      "project-scifi-trailer": "actor-tianmaochao",
+      "project-character-film": "actor-tianmaochao",
+      "project-product-film": "actor-linjing",
+      "project-education-video": "actor-linjing",
+      "project-brand-story": "actor-tianmaochao",
+      "project-personal-concept": "actor-tianmaochao",
+      "project-city-emotion": "actor-linjing",
+    },
   };
 }

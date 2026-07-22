@@ -42,6 +42,7 @@
 | 旧静态原型 JS / 配置 / HTML / CSS | `npm run check:legacy` |
 | React / TypeScript 应用壳或领域层 | `npm run check:shell` |
 | 共享服务、会话或项目 API | `npm run check:server` |
+| PostgreSQL schema、迁移、seed 或 adapter | `npm run check:server`；本地 PostgreSQL 健康时再运行 `npm run check:server:postgres` |
 | 应用壳构建、入口或路由 | `npm run verify:shell` |
 | 仅文档 | `git diff --check` |
 
@@ -51,6 +52,8 @@
 npm run check
 git diff --check
 ```
+
+`npm run check` 保持不依赖 Docker，便于快速回归；数据库切片的里程碑还必须显式运行 `npm run check:server:postgres`，不能用内存 adapter 测试代替持久化验收。
 
 视觉与行为检查按影响面执行：
 

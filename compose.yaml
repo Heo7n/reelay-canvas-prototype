@@ -1,0 +1,23 @@
+name: reelay-local
+
+services:
+  postgres:
+    image: postgres:18.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-reelay}
+      POSTGRES_USER: ${POSTGRES_USER:-reelay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reelay-local-only}
+    ports:
+      - "${POSTGRES_PORT:-54329}:5432"
+    volumes:
+      - reelay-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  reelay-postgres-data:

@@ -1,6 +1,6 @@
 # ADR 0001：应用运行时与渐进迁移边界
 
-- 状态：部分决定。React / TypeScript / Vite 壳、显式 Workspace 路由、legacy host 和跨浏览器共享数据源为 `DECIDED`；Fastify、PostgreSQL、账号标识与角色级别仍为 `PROPOSED`
+- 状态：部分决定。React / TypeScript / Vite 壳、显式 Workspace 路由、legacy host、Fastify 模块化单体与 PostgreSQL adapter 为 `DECIDED`；正式账号标识与完整角色级别仍为 `PROPOSED`
 - 日期：2026-07-21
 - 适用阶段：Phase 0B 可迁移基础
 
@@ -134,7 +134,9 @@ src/
 
 `DECIDED`：共享数据源必须位于浏览器进程之外，并通过服务端会话识别 actor；不得用 localStorage 或 IndexedDB 冒充组织协作。
 
-`PROPOSED`：如果没有新的运行证据或既定后端约束，使用 TypeScript Fastify 模块化单体和 PostgreSQL adapter，通过同源会话和 API 服务前端。第一切片可使用服务端进程内 repository 验证双浏览器协议，但必须明确其重启即丢失；验证通过后直接替换为 PostgreSQL，不再引入 SQLite 过渡层。公网部署、域名和国内云厂商后续再定。
+`DECIDED`：当前使用 TypeScript Fastify 模块化单体和 PostgreSQL adapter，通过同源会话和 API 服务前端。Session、Workspace、Membership 与 Project 已通过 migration / seed 流程持久化，并完成双浏览器与跨服务重启验证；服务端内存 adapter 只保留作快速契约测试和显式开发回退，不允许数据库故障时自动降级。公网部署、域名和国内云厂商后续再定。
+
+首版数据库将可登录的人类主体存为 `users`，请求上下文继续使用领域名 `SessionActor`；登录标识使用可多条扩展的 identity 记录，不把当前邮箱外观的 `.test` 账号固化为正式邮箱策略。浏览器会话 token 只以摘要存库并具有过期 / 撤销状态。当前 owner / editor 只决定演示写权限，数据库不把它误写成最终角色全集。
 
 ## 待用户确认
 

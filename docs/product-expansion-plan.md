@@ -284,15 +284,14 @@ flowchart TD
 
 ### 首期范围
 
-- 成员列表。
-- 邀请成员。
-- 角色：所有者、管理员、编辑者、查看者。
-- 团队项目。
-- 团队资产。
-- 积分使用概览。
+- Phase 0B 只验证已有 Membership：两个演示账号以所有者 / 编辑者身份访问同一协作 Workspace，并共享团队项目。
+- 不在这一阶段提供成员管理、邀请、角色配置、团队资产或积分管理 UI。
 
-### 后续范围
+### Phase 2 及后续范围
 
+- 成员列表与邀请成员。
+- 所有者、管理员、编辑者、查看者等角色及明确的读写权限矩阵。
+- 团队资产与积分使用概览。
 - 项目级权限。
 - 评论与 @ 提及。
 - 实时协作光标。
@@ -337,7 +336,7 @@ Agent 不直接调用页面 DOM 或原型事件函数。跨项目写操作必须
 | --- | --- |
 | Workspace | 个人或组织空间 |
 | User | 用户资料与偏好 |
-| Project | 项目元数据、成员、封面 |
+| Project | 项目元数据、Workspace 归属、封面与创建 / 更新审计；项目级成员以后单独建模 |
 | CanvasDocument | 画布视口、节点、组与版本 |
 | Node | 生成节点或素材节点 |
 | Asset | 可跨项目复用的媒体对象 |
@@ -412,7 +411,7 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。两个隔离浏览器会话已验证同组织项目读写与个人空间隔离。当前仍是重启即丢失的 server-memory adapter，旧画布不消费项目上下文，也尚未引入 PostgreSQL、schema 迁移或画布文档持久化。
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、Workspace、Membership 与 Project 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed 和跨服务重启集成验证；内存 adapter 只保留作快速契约测试和显式回退。旧画布仍不消费项目上下文，也尚未持久化 CanvasDocument、资产、生成任务或积分账本。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
