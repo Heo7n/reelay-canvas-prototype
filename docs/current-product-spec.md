@@ -56,7 +56,7 @@ Reelay Canvas 是面向 AIGC 创作流程的无限画布原型。它不是传统
 主页与画布的边界：
 
 - 新主页和项目库位于 `src/pages`，共享项目卡、账户栏和主题位于 `src/shared`，数据只通过 `src/application` ports 与 `src/infrastructure/http` adapters 进入页面；不进入 `app.js` 或 `styles/app.css`。
-- 主页创建项目后进入 `/app/w/:workspaceId/projects/:projectId/canvases/main`。宿主会先校验会话、工作空间和项目，再以 iframe 打开旧画布并发送版本化上下文与 CanvasDocument；旧画布按 `projectId + canvasId` 自动保存受控快照。
+- 主页创建项目后进入 `/app/w/:workspaceId/projects/:projectId/canvases/main`。宿主会先校验会话、工作空间和项目，再以 iframe 打开旧画布并通过一次 `canvas:ready` 握手发送版本化上下文与 CanvasDocument；旧画布按 `projectId + canvasId` 自动保存迁移快照。新项目尚无服务端文档时，主页提示词形成的首个节点会立即写入 revision 1，不需要等待用户再次操作。
 - 旧画布内部的历史“回到主页 / 全部项目”入口仍指向静态页面，是待迁移的兼容导航，不代表新路由回退。
 - 模拟积分仍没有共享账本；React 页面和旧画布刷新后都显示当前阶段的 `3000 / 0` 测试基线。
 - 素材、模板、账户设置和更多能力入口只给出明确原型反馈，不伪装为已实现页面。
@@ -64,7 +64,7 @@ Reelay Canvas 是面向 AIGC 创作流程的无限画布原型。它不是传统
 路由画布保存边界：
 
 - `admin/edit` 可以保存，`view` 只能读取；服务端每次请求仍按 ProjectMembership 校验，前端只读标识不是授权依据。
-- 保存内容是 `schemaVersion = 1` 的 allow-list 迁移快照，只包含内部画布、节点、组、视口和最近模型参数。账号、积分、选择态、撤销栈、运行中的生成任务、Agent 对话和面板状态不进入 CanvasDocument。
+- 保存内容是 `schemaVersion = 1` 的迁移快照，目标边界是内部画布、节点、组、视口和最近模型参数。账号、选择态、撤销栈、生成任务与 Agent 对话不会写入；但当前节点 / 组序列化仍采用“递归复制并排除已知字段”，不是真正的字段 allow-list，积分、展开态和部分输入 UI 状态仍可能进入文档，必须在扩展 schema 前收敛并用序列化 / 恢复行为测试验证。
 - 当前旧画布内部仍可管理多个画布；迁移阶段把它们作为一个 bundle 存在路由的 `main` CanvasDocument 中，并不宣称已经拆成多条正式 Canvas 实体。
 - 本地文件的 `blob:` 地址不会被伪持久化；刷新后只保留可恢复的节点结构，素材二进制仍等待 Asset / Blob 存储。
 - 保存使用乐观 revision；发现其他窗口已先保存时停止自动覆盖并提示重新进入项目，不做静默的最后写入覆盖。
@@ -561,7 +561,7 @@ src/shared
   定义迁移页面共用的品牌、账户栏、项目卡、主题和短暂提示能力。
 
 src/legacy-canvas
-  定义版本化同源消息协议和旧画布隔离宿主；当前旧画布尚未消费 `host:init` 上下文。
+  定义版本化同源消息协议和旧画布隔离宿主；旧画布通过单一 ready 握手消费 `host:init` 与 `host:document`，并回传保存请求。
 ```
 
 核心状态在 `state` 对象中：
@@ -596,7 +596,7 @@ src/legacy-canvas
 - 迁移页面已经按 route、共享 UI、application port、HTTP adapter 和 server 边界拆分；旧画布仍缺少相同级别的模块边界。
 - 旧静态原型已有 JavaScript、配置、CSS、HTML 检查和 Node 契约测试；Phase 0B 新壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
 - 暂无代码格式化、lint 和自动浏览器端到端测试；当前 React 主链路已完成两套隔离浏览器的人工验证，下一阶段应把稳定的登录、路由保护和组织共享流程固化为 E2E。
-- 会话、Workspace、Membership 与 Project 已通过 PostgreSQL 持久化，并具有可重复 migration、幂等 demo seed 和重启集成测试；画布文档、资产、生成任务与积分仍只存在原型状态。
+- 会话、Workspace、Membership、Project 与 CanvasDocument 已通过 PostgreSQL 持久化；前四者具有可重复 migration、幂等 demo seed 和重启集成测试，画布文档仍处于迁移桥阶段，资产、生成任务与积分仍只存在原型状态。
 - 演示会话 token 以摘要存库并具有过期 / 撤销状态，但五个固定账号、确定性 demo 密码散列和预置项目角色仍不是正式账号生命周期或完整权限管理系统。
 - 全局可变状态仍缺少统一 action/store 边界，撤销也还不是覆盖全部操作的命令系统。
 - React 壳已通过包管理器和构建流程使用 Lucide；旧静态画布仍固定在 `vendor/lucide-1.25.0.min.js`，不依赖境外 CDN。
@@ -605,7 +605,9 @@ src/legacy-canvas
 
 - 主交互和样式仍集中在 `app.js` 与 `styles/app.css`，新页面不能继续进入这两个单体文件。
 - 登录和主页暂时同时存在 React 实现与静态视觉参考；旧画布导航和回归基线迁移完成后应删除重复入口，不能长期双轨维护。
-- Legacy canvas host 已传递 workspace / project / canvas 上下文，但旧画布尚未消费，也没有 `CanvasDocument` 加载 / 保存 API。
+- Legacy canvas host 与旧画布已接通 `CanvasDocument` 加载 / 保存；当前已修正空文档首写和重复初始化，但后台画布生成完成仍可能漏触发保存，快速离开仍有丢数据窗口。
+- `view` 已在 Host 和服务端拒绝写入，但旧画布编辑控件尚未真正禁用；文档加载失败时 iframe 也尚未封锁和提供重试入口。
+- CanvasDocument 序列化尚未收敛为真实字段 allow-list，现有静态源码断言不能替代序列化 / 恢复行为测试。
 - 当前生成任务只存在页面内存中，虽已记录启动参数快照和节点级结果类型锁，但还没有持久化、节点内多结果历史、取消 UI 或失败退款。
 - 当前撤销仍不是完整 command 系统，只覆盖部分画布操作；项目重命名暂不支持撤销。
 - 资产仍以原型对象副本存在，Blob URL 生命周期和正式 AssetReference 尚未落地。

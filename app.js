@@ -591,8 +591,15 @@ function handleHostBridgeMessage(event) {
       return;
     }
     canvasPersistence.initialized = true;
-    canvasPersistence.lastSavedSnapshot = serializeCanvasDocumentSnapshot();
-    postCanvasDirty(false);
+    const serializedSnapshot = serializeCanvasDocumentSnapshot();
+    if (!message.document && canvasPersistence.writable) {
+      canvasPersistence.lastSavedSnapshot = "";
+      postCanvasDirty(true);
+      flushCanvasDocumentSave();
+    } else {
+      canvasPersistence.lastSavedSnapshot = serializedSnapshot;
+      postCanvasDirty(false);
+    }
     if (!canvasPersistence.writable) {
       showActionToast("当前项目为只读，画布修改不会保存");
     }

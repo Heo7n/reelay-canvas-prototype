@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { CanvasHost } from "./CanvasHost";
@@ -63,6 +63,12 @@ function saveMessage(requestId: string): unknown {
   };
 }
 
+const readyMessage = {
+  source: "reelay-legacy-canvas",
+  type: "canvas:ready",
+  protocolVersion: 1,
+};
+
 describe("CanvasHost", () => {
   it("keeps workspace, project, and canvas identity on the isolated legacy URL", () => {
     render(
@@ -83,7 +89,7 @@ describe("CanvasHost", () => {
     );
   });
 
-  it("loads the scoped document and sends context plus document after iframe load", async () => {
+  it("initializes one ready iframe exactly once after its scoped document loads", async () => {
     const getCanvasDocument = vi.fn(async () => document);
     render(
       <CanvasHost
@@ -93,7 +99,7 @@ describe("CanvasHost", () => {
     );
     const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
-    fireEvent.load(frame);
+    dispatchCanvasMessage(frame, readyMessage);
 
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       {
@@ -114,6 +120,7 @@ describe("CanvasHost", () => {
       window.location.origin,
     );
     expect(getCanvasDocument).toHaveBeenCalledWith("project-1", "main");
+    expect(postMessage).toHaveBeenCalledTimes(2);
   });
 
   it("saves opaque content within the route scope and returns the new revision", async () => {

@@ -25,8 +25,8 @@ type DocumentLoadState =
 
 export function CanvasHost({ context, repository }: CanvasHostProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const initSentForLoadRef = useRef(0);
-  const [frameLoad, setFrameLoad] = useState(0);
+  const initializedReadyGenerationRef = useRef(0);
+  const [readyGeneration, setReadyGeneration] = useState(0);
   const [documentState, setDocumentState] = useState<DocumentLoadState>({ status: "loading" });
   const safeContext = legacyCanvasContextSchema.parse(context);
   const frameSource = useMemo(() => {
@@ -76,10 +76,14 @@ export function CanvasHost({ context, repository }: CanvasHostProps) {
   }, [repository, safeContext.canvasId, safeContext.projectId]);
 
   useEffect(() => {
-    if (frameLoad === 0 || documentState.status !== "ready" || initSentForLoadRef.current === frameLoad) return;
-    initSentForLoadRef.current = frameLoad;
+    if (
+      readyGeneration === 0 ||
+      documentState.status !== "ready" ||
+      initializedReadyGenerationRef.current === readyGeneration
+    ) return;
+    initializedReadyGenerationRef.current = readyGeneration;
     sendInit();
-  }, [documentState.status, frameLoad, sendInit]);
+  }, [documentState.status, readyGeneration, sendInit]);
 
   useEffect(() => {
     const sendSaveError = (requestId: string, code: "conflict" | "forbidden" | "network"): void => {
@@ -98,7 +102,7 @@ export function CanvasHost({ context, repository }: CanvasHostProps) {
       if (!message) return;
 
       if (message.type === "canvas:ready") {
-        sendInit();
+        setReadyGeneration((generation) => generation + 1);
         return;
       }
       if (message.type !== "canvas:save") return;
@@ -140,7 +144,7 @@ export function CanvasHost({ context, repository }: CanvasHostProps) {
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [postToCanvas, repository, safeContext.canvasId, safeContext.projectId, safeContext.writable, sendInit]);
+  }, [postToCanvas, repository, safeContext.canvasId, safeContext.projectId, safeContext.writable]);
 
   return (
     <section className="legacy-canvas-host" aria-label="Reelay 项目画布">
@@ -149,7 +153,6 @@ export function CanvasHost({ context, repository }: CanvasHostProps) {
         className="legacy-canvas-frame"
         src={frameSource}
         title="Reelay 项目画布"
-        onLoad={() => setFrameLoad((value) => value + 1)}
       />
       {documentState.status === "error" ? (
         <p className="legacy-canvas-error" role="alert">暂时无法加载此项目画布，请稍后重试。</p>
