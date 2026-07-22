@@ -412,7 +412,7 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、隔离的 React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、Vitest 检查和版本化 legacy canvas host。现有登录、主页、项目库和画布仍运行在静态入口，尚未完成页面迁移、repository 实现或持久化。
+> 当前进度：已完成 runtime ADR、隔离的 React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、Vitest 检查、版本化 legacy canvas host，以及最小共享服务纵切。共享服务以两个独立服务端会话验证同组织项目读写，当前仍是重启即丢失的 server-memory adapter。现有登录、主页、项目库和画布仍运行在静态入口，尚未完成页面迁移或 PostgreSQL 持久化。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。

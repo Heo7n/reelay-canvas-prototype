@@ -20,7 +20,7 @@ Reelay Canvas 是面向 AIGC 创作流程的无限画布原型。它不是传统
 
 - 没有真实 AIGC API。
 - 没有真实账号鉴权、项目存储、云端素材库。
-- 没有部署、已接管产品页面的生产路由或后端服务；当前用户主链路仍是 `login.html`、`home.html` 与 `index.html` 之间的可逆静态入口契约。Phase 0B 已另建隔离的 React + TypeScript + Vite 应用壳、browser route contract 和 legacy canvas host，尚未替换这三个入口。
+- 没有部署或已接管产品页面的生产路由；当前用户主链路仍是 `login.html`、`home.html` 与 `index.html` 之间的可逆静态入口契约。Phase 0B 已另建隔离的 React + TypeScript + Vite 应用壳、browser route contract、legacy canvas host，以及尚未接入用户页面的本地共享服务；它们还没有替换这三个入口。
 - 所有节点数据都存在浏览器当前运行内存中，刷新后会丢失。
 - “生成”是模拟行为，用于验证生成后的媒体状态、标题和规格展示。
 
@@ -573,7 +573,7 @@ src/legacy-canvas
 - 旧静态原型已有 JavaScript、配置、CSS、HTML 检查和 Node 契约测试；Phase 0B 新壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
 - 暂无代码格式化、lint 和端到端测试；这些工具应随新壳代码量和稳定主链路增加，不恢复与当前源码脱节的旧配置。
 - 数据没有持久化。
-- 没有真实服务接口抽象。
+- 已建立首批 Session、Workspace、Membership、Project ports 和本地共享 API；当前使用服务端进程内 repository，仅验证两个独立会话读取同一组织项目，不是持久化或正式鉴权。
 - 全局可变状态仍缺少统一 action/store 边界，撤销也还不是覆盖全部操作的命令系统。
 - Lucide 图标运行时已固定在 `vendor/lucide-1.25.0.min.js`，静态原型不再依赖境外 CDN；正式工程壳落地后改由包管理器和构建流程治理。
 

@@ -40,7 +40,8 @@ Reelay 是一个 AIGC 创作平台前端原型。当前由账户密码登录样�
 │  ├─ application/                  repository / gateway ports
 │  ├─ domain/                       与 UI、HTTP、存储无关的领域类型
 │  ├─ legacy-canvas/                旧画布宿主与版本化桥接协议
-│  └─ pages/                        渐进迁移中的路由页面
+│  ├─ pages/                        渐进迁移中的路由页面
+│  └─ server/                       最小共享服务、演示会话与项目 API
 └─ docs/
    ├─ development-workflow.md       按任务范围选读文档与运行检查
    ├─ current-product-spec.md       当前产品与实现说明
@@ -72,6 +73,14 @@ http://127.0.0.1:5174/           无限画布
 npm ci
 npm run dev:shell
 ```
+
+另开一个终端启动本地共享服务：
+
+```powershell
+npm run dev:server
+```
+
+开发壳会把 `/api` 请求转发到 `http://127.0.0.1:5175`。当前服务使用进程内存储，只用于验证两个浏览器的独立会话和同一组织项目共享；服务重启后数据重置，不是持久化。
 
 ## 变更验证
 

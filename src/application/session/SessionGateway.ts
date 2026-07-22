@@ -1,7 +1,12 @@
-import type { ActorId, SessionSnapshot } from "../../domain/identity/session";
+import type { SessionSnapshot } from "../../domain/identity/session";
+
+export interface PasswordCredentials {
+  account: string;
+  password: string;
+}
 
 export interface SessionGateway {
   getCurrent(): Promise<SessionSnapshot>;
-  switchDemoActor(actorId: ActorId): Promise<SessionSnapshot>;
+  signInWithPassword(credentials: PasswordCredentials): Promise<SessionSnapshot>;
   signOut(): Promise<void>;
 }

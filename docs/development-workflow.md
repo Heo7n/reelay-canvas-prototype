@@ -41,6 +41,7 @@
 | --- | --- |
 | 旧静态原型 JS / 配置 / HTML / CSS | `npm run check:legacy` |
 | React / TypeScript 应用壳或领域层 | `npm run check:shell` |
+| 共享服务、会话或项目 API | `npm run check:server` |
 | 应用壳构建、入口或路由 | `npm run verify:shell` |
 | 仅文档 | `git diff --check` |
 

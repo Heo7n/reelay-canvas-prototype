@@ -19,6 +19,11 @@ function shellHistoryFallback() {
 export default defineConfig({
   base: "/app/",
   plugins: [react(), shellHistoryFallback()],
+  server: {
+    proxy: {
+      "/api": "http://127.0.0.1:5175",
+    },
+  },
   build: {
     outDir: "dist/shell",
     emptyOutDir: true,
