@@ -1,5 +1,6 @@
 import { Navigate, useParams } from "react-router-dom";
 import { CanvasHost } from "../../legacy-canvas/CanvasHost";
+import { readTheme } from "../../shared/theme/theme";
 
 export function LegacyCanvasRoute() {
   const { workspaceId, projectId, canvasId } = useParams();
@@ -15,7 +16,7 @@ export function LegacyCanvasRoute() {
         workspaceId,
         projectId,
         canvasId,
-        theme: "light",
+        theme: readTheme(),
       }}
     />
   );

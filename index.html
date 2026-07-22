@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260713-asset-library-resizable" />
+    <link rel="stylesheet" href="./styles.css?v=20260722-account-panel" />
   </head>
   <body>
     <main class="app-shell">
@@ -38,7 +38,10 @@
           <span class="action-tip">分享</span>
         </button>
         <div class="profile-anchor">
-          <span class="avatar-credit-badge" id="avatarCreditBadge" role="button" tabindex="0" aria-label="可用积分 3000">3000</span>
+          <span class="avatar-credit-badge" id="avatarCreditBadge" aria-label="可用积分 3000">
+            <i data-lucide="sparkles" aria-hidden="true"></i>
+            <span id="avatarCreditValue">3000</span>
+          </span>
           <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人"></button>
 
           <div class="profile-menu hidden" id="profileMenu">
@@ -48,11 +51,6 @@
                 <div class="profile-name">Tianmaochao</div>
                 <div class="profile-email">t***@reelay.test</div>
               </div>
-            </div>
-            <div class="credit-card hidden" id="profileCreditCard">
-              <div class="credit-label"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i><span>可用积分</span></div>
-              <div class="credit-value" id="profileCreditAvailable">3000</div>
-              <div class="credit-sub">累计消耗 <span id="profileCreditConsumed">0</span> 积分</div>
             </div>
             <div class="profile-menu-list">
               <button class="profile-menu-item" type="button" data-profile-action="organization">

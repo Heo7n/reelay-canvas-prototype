@@ -21,8 +21,9 @@ test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
     appSource,
     /account:\s*\{\s*credits:\s*3000,\s*consumedCredits:\s*0,?\s*\}/,
   );
-  assert.match(html, /id="avatarCreditBadge"[^>]*>3000<\/span>/);
-  assert.match(html, /id="profileCreditConsumed">0<\/span>/);
+  assert.match(html, /id="avatarCreditBadge"[^>]*>[\s\S]*?data-lucide="sparkles"[\s\S]*?id="avatarCreditValue">3000<\/span>/);
+  assert.doesNotMatch(html, /id="avatarCreditBadge"[^>]*(?:role="button"|tabindex=)/);
+  assert.doesNotMatch(appSource, /avatarCreditBadge\?\.addEventListener/);
 });
 
 test("a successful result locks its generator node to one media modality", () => {

@@ -24,7 +24,6 @@ const railLibraryBtn = document.querySelector("#railLibraryBtn");
 const railProfileBtn = document.querySelector("#railProfileBtn");
 const shareProjectBtn = document.querySelector("#shareProjectBtn");
 const profileMenu = document.querySelector("#profileMenu");
-const profileCreditCard = document.querySelector("#profileCreditCard");
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
 const assetLibraryGrid = document.querySelector("#assetLibraryGrid");
@@ -39,8 +38,7 @@ const themeModeIcon = document.querySelector("#themeModeIcon");
 const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
 const avatarCreditBadge = document.querySelector("#avatarCreditBadge");
-const profileCreditAvailable = document.querySelector("#profileCreditAvailable");
-const profileCreditConsumed = document.querySelector("#profileCreditConsumed");
+const avatarCreditValue = document.querySelector("#avatarCreditValue");
 const emptyState = document.querySelector("#emptyState");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
@@ -1331,11 +1329,9 @@ function formatCredit(value) {
 function syncCreditDisplay() {
   const credits = formatCredit(state.account.credits);
   if (avatarCreditBadge) {
-    avatarCreditBadge.textContent = credits;
     avatarCreditBadge.setAttribute("aria-label", `可用积分 ${credits}`);
   }
-  if (profileCreditAvailable) profileCreditAvailable.textContent = credits;
-  if (profileCreditConsumed) profileCreditConsumed.textContent = formatCredit(state.account.consumedCredits);
+  if (avatarCreditValue) avatarCreditValue.textContent = credits;
 }
 
 function hasEnoughCredits(cost) {
@@ -6036,10 +6032,6 @@ function clearProfileMenuCloseTimer() {
   profileMenuCloseTimer = null;
 }
 
-function setProfileCreditDetailsVisible(visible) {
-  profileCreditCard?.classList.toggle("hidden", !visible);
-}
-
 function setProfileHelpOpen(open) {
   const helpInline = profileMenu?.querySelector(".profile-help-inline");
   const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
@@ -6062,22 +6054,16 @@ function keepProfileHelpOpenForPointer(event) {
   }
 }
 
-function openProfileMenu({ showCredit = false, preserveCredit = false } = {}) {
+function openProfileMenu() {
   clearProfileMenuCloseTimer();
   profileMenu?.classList.remove("hidden");
   railProfileBtn?.classList.add("active");
-  if (showCredit) {
-    setProfileCreditDetailsVisible(true);
-  } else if (!preserveCredit) {
-    setProfileCreditDetailsVisible(false);
-  }
 }
 
 function closeProfileMenu() {
   clearProfileMenuCloseTimer();
   profileMenu?.classList.add("hidden");
   railProfileBtn?.classList.remove("active");
-  setProfileCreditDetailsVisible(false);
   setProfileHelpOpen(false);
 }
 
@@ -6088,11 +6074,11 @@ function scheduleCloseProfileMenu() {
 
 railProfileBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  openProfileMenu({ showCredit: false });
+  openProfileMenu();
 });
 
 railProfileBtn?.addEventListener("pointerenter", () => {
-  openProfileMenu({ preserveCredit: true });
+  openProfileMenu();
 });
 
 railProfileBtn?.addEventListener("pointerleave", scheduleCloseProfileMenu);
@@ -6101,19 +6087,7 @@ railProfileBtn?.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
   event.stopPropagation();
-  openProfileMenu({ showCredit: false });
-});
-
-avatarCreditBadge?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  openProfileMenu({ showCredit: true });
-});
-
-avatarCreditBadge?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  event.stopPropagation();
-  openProfileMenu({ showCredit: true });
+  openProfileMenu();
 });
 
 profileMenu?.addEventListener("pointerdown", (event) => {
