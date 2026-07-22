@@ -54,6 +54,8 @@ beforeAll(async () => {
       "0002_password_identities.sql",
       "0003_project_access.sql",
       "0004_canvas_documents.sql",
+      "0005_rename_organization.sql",
+      "0006_account_roles.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);
@@ -82,7 +84,7 @@ describe("PostgreSQL collaboration persistence", () => {
       const health = await appA.inject({ method: "GET", url: "/api/health" });
       expect(health.json()).toEqual({ status: "ok", storage: "postgresql" });
 
-      const ownerCookie = await login(appA, "tianmaochao@reelay.test");
+      const ownerCookie = await login(appA, "creator@reelay.test");
       const created = await appA.inject({
         method: "POST",
         url: "/api/workspaces/workspace-organization-reelay/projects",
@@ -182,7 +184,7 @@ describe("PostgreSQL collaboration persistence", () => {
     const url = "/api/projects/project-scifi-trailer/canvases/persistence-test/document";
 
     try {
-      const adminCookie = await login(appA, "tianmaochao@reelay.test");
+      const adminCookie = await login(appA, "creator@reelay.test");
       const created = await appA.inject({
         method: "PUT",
         url,

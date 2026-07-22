@@ -3,6 +3,7 @@ import type { WorkspaceId } from "../workspace/workspace";
 export type ActorId = string;
 
 export interface SessionActor {
+  account: string;
   id: ActorId;
   displayName: string;
   workspaceIds: WorkspaceId[];

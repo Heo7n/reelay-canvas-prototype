@@ -8,7 +8,7 @@ import type { LoginActionData } from "../../app/route-data";
 import { Brand } from "../../shared/ui/Brand";
 import styles from "./LoginPage.module.css";
 
-const DEMO_ACCOUNT = "tianmaochao@reelay.test";
+const DEMO_ACCOUNT = "creator@reelay.test";
 const DEMO_PASSWORD = "reelay-demo";
 
 export function LoginPage() {

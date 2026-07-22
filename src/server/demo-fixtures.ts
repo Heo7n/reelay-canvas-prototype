@@ -39,10 +39,10 @@ export function createDemoSeed(): DemoSeed {
   return {
     accounts: [
       {
-        account: "tianmaochao@reelay.test",
+        account: "creator@reelay.test",
         password: DEMO_PASSWORD,
         actorId: "actor-tianmaochao",
-        displayName: "天猫超",
+        displayName: "Hoo",
       },
       {
         account: "linjing@reelay.test",
@@ -70,11 +70,11 @@ export function createDemoSeed(): DemoSeed {
       },
     ],
     workspaces: [
-      { id: "workspace-organization-reelay", kind: "organization", name: "Reelay 创作组" },
+      { id: "workspace-organization-reelay", kind: "organization", name: "星海视觉工作室" },
     ],
     memberships: [
       { workspaceId: "workspace-organization-reelay", actorId: "actor-tianmaochao", role: "owner" },
-      { workspaceId: "workspace-organization-reelay", actorId: "actor-linjing", role: "member" },
+      { workspaceId: "workspace-organization-reelay", actorId: "actor-linjing", role: "admin" },
       { workspaceId: "workspace-organization-reelay", actorId: "actor-chenxi", role: "member" },
       { workspaceId: "workspace-organization-reelay", actorId: "actor-zhouyu", role: "member" },
       { workspaceId: "workspace-organization-reelay", actorId: "actor-suhe", role: "member" },

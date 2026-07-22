@@ -27,7 +27,7 @@ export function ProjectsPage() {
 
   return (
     <div className={styles.workspaceShell}>
-      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} workspaces={data.workspaces} onNotice={showNotice} />
+      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} onNotice={showNotice} />
       <main className={styles.projectsMain}>
         <div className={styles.projectsHeading}>
           <Link className={styles.backLink} to={routePaths.workspaceHome(data.currentWorkspace.id)}>

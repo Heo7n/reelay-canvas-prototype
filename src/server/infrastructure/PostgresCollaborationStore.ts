@@ -14,7 +14,7 @@ import type {
   ProjectSummary,
   ProjectUserRole,
 } from "../../domain/project/project";
-import type { Workspace, WorkspaceId, WorkspaceKind } from "../../domain/workspace/workspace";
+import type { MembershipRole, Workspace, WorkspaceId, WorkspaceKind } from "../../domain/workspace/workspace";
 import type {
   CollaborationStore,
   CreateProjectInput,
@@ -28,12 +28,14 @@ interface CredentialRow extends QueryResultRow {
 }
 
 interface SessionActorRow extends QueryResultRow {
+  account: string;
   id: string;
   display_name: string;
   workspace_ids: string[];
 }
 
 interface WorkspaceRow extends QueryResultRow {
+  current_user_role?: MembershipRole;
   id: string;
   kind: WorkspaceKind;
   name: string;
@@ -62,7 +64,7 @@ interface CanvasDocumentRevisionRow extends QueryResultRow {
 }
 
 function mapWorkspace(row: WorkspaceRow): Workspace {
-  return { id: row.id, kind: row.kind, name: row.name };
+  return { id: row.id, kind: row.kind, name: row.name, currentUserRole: row.current_user_role };
 }
 
 function mapProject(row: ProjectRow): ProjectSummary {
@@ -142,6 +144,7 @@ export class PostgresCollaborationStore implements CollaborationStore {
       `SELECT
          users.id,
          users.display_name,
+         password_identities.identifier AS account,
          COALESCE(
            array_agg(memberships.workspace_id ORDER BY memberships.workspace_id)
              FILTER (WHERE memberships.workspace_id IS NOT NULL),
@@ -149,21 +152,22 @@ export class PostgresCollaborationStore implements CollaborationStore {
          ) AS workspace_ids
        FROM sessions
        JOIN users ON users.id = sessions.user_id
+       JOIN password_identities ON password_identities.user_id = users.id
        LEFT JOIN memberships ON memberships.user_id = users.id
        WHERE sessions.token_hash = $1
          AND sessions.revoked_at IS NULL
          AND sessions.expires_at > now()
-       GROUP BY users.id, users.display_name`,
+       GROUP BY users.id, users.display_name, password_identities.identifier`,
       [this.hashSessionToken(sessionId)],
     );
     const actor = result.rows[0];
     if (!actor) return null;
-    return { id: actor.id, displayName: actor.display_name, workspaceIds: actor.workspace_ids };
+    return { account: actor.account, id: actor.id, displayName: actor.display_name, workspaceIds: actor.workspace_ids };
   }
 
   async listWorkspacesForActor(actorId: ActorId): Promise<Workspace[]> {
     const result = await this.pool.query<WorkspaceRow>(
-      `SELECT workspaces.id, workspaces.kind, workspaces.name
+      `SELECT workspaces.id, workspaces.kind, workspaces.name, memberships.role AS current_user_role
        FROM workspaces
        JOIN memberships ON memberships.workspace_id = workspaces.id
        WHERE memberships.user_id = $1

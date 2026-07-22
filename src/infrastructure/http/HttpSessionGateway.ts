@@ -10,6 +10,7 @@ type SessionActorDto = (typeof SessionResponseDtoSchema)["_output"]["actor"];
 
 function toSessionActor(actor: NonNullable<SessionActorDto>): SessionActor {
   return {
+    account: actor.account,
     id: actor.id,
     displayName: actor.displayName,
     workspaceIds: [...actor.workspaceIds],

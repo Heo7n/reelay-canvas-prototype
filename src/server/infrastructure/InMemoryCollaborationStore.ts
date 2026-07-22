@@ -78,6 +78,7 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     if (!account) return null;
 
     return {
+      account: account.account,
       id: actorId,
       displayName: account.displayName,
       workspaceIds: this.memberships
@@ -87,12 +88,12 @@ export class InMemoryCollaborationStore implements CollaborationStore {
   }
 
   async listWorkspacesForActor(actorId: ActorId): Promise<Workspace[]> {
-    const accessibleIds = new Set(
-      this.memberships
-        .filter((membership) => membership.actorId === actorId)
-        .map((membership) => membership.workspaceId),
-    );
-    return this.workspaces.filter((workspace) => accessibleIds.has(workspace.id)).map((workspace) => ({ ...workspace }));
+    return this.memberships
+      .filter((membership) => membership.actorId === actorId)
+      .flatMap((membership) => {
+        const workspace = this.workspaces.find((candidate) => candidate.id === membership.workspaceId);
+        return workspace ? [{ ...workspace, currentUserRole: membership.role }] : [];
+      });
   }
 
   async canReadWorkspace(actorId: ActorId, workspaceId: WorkspaceId): Promise<boolean> {

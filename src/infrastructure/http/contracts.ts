@@ -4,6 +4,7 @@ const IdentifierSchema = z.string().trim().min(1).max(160);
 
 export const SessionActorDtoSchema = z
   .object({
+    account: z.string().trim().min(1).max(320),
     id: IdentifierSchema,
     displayName: z.string().trim().min(1).max(160),
     workspaceIds: z.array(IdentifierSchema),
@@ -27,6 +28,7 @@ export const WorkspaceDtoSchema = z
     id: IdentifierSchema,
     kind: z.enum(["personal", "organization"]),
     name: z.string().trim().min(1).max(160),
+    currentUserRole: z.enum(["owner", "admin", "member"]),
   })
   .strict();
 

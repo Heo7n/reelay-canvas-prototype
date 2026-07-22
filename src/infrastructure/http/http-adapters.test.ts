@@ -43,6 +43,7 @@ function createFetchQueue(...responses: PlannedResponse[]): {
 }
 
 const actorDto = {
+  account: "owner@reelay.test",
   id: "actor-owner",
   displayName: "Owner",
   workspaceIds: ["workspace-personal", "workspace-shared"],
@@ -52,6 +53,7 @@ const organizationDto = {
   id: "workspace-shared",
   kind: "organization",
   name: "Reelay",
+  currentUserRole: "owner",
 };
 
 const projectDto = {

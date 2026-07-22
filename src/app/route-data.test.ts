@@ -7,13 +7,14 @@ import { createRouteHandlers } from "./route-data";
 import type { ApplicationServices } from "./services";
 
 const actor = {
+  account: "creator@reelay.test",
   id: "actor-one",
   displayName: "Demo One",
   workspaceIds: ["workspace-organization"],
 };
 
 const workspaces: Workspace[] = [
-  { id: "workspace-organization", kind: "organization", name: "Organization" },
+  { id: "workspace-organization", kind: "organization", name: "Organization", currentUserRole: "owner" },
 ];
 
 const projects: ProjectSummary[] = [

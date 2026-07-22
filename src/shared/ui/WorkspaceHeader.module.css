@@ -15,28 +15,36 @@
 .profile summary { list-style: none; }
 .profile summary::-webkit-details-marker { display: none; }
 
-.avatar {
-  display: inline-grid;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  place-items: center;
+.accountTrigger {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 96px) 12px 28px;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 6px;
   border: 1px solid color-mix(in srgb, var(--workspace-text, #171719) 8%, transparent);
-  border-radius: 50%;
-  background: linear-gradient(145deg, #29292c, #45454a);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 780;
+  border-radius: 999px;
+  background: var(--workspace-surface, #fff);
+  box-shadow: 0 5px 16px rgba(16, 16, 20, 0.06);
+  color: var(--workspace-text, #171719);
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-.avatar:hover,
-.profile[open] .avatar {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 8px 20px rgba(16, 16, 20, 0.12);
+.accountTrigger:hover,
+.profile[open] .accountTrigger {
+  box-shadow: 0 8px 22px rgba(16, 16, 20, 0.12);
   transform: translateY(-1px);
 }
+
+.organizationMark,
+.triggerAvatar { display: grid; place-items: center; border-radius: 50%; }
+.organizationMark { width: 24px; height: 24px; background: var(--workspace-hover, rgba(23, 23, 25, 0.06)); color: var(--workspace-muted, #77777d); }
+.organizationMark svg { width: 13px; height: 13px; }
+.organizationName { overflow: hidden; font-size: 13px; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
+.accountChevron { width: 12px; height: 12px; color: var(--workspace-muted, #77777d); transition: transform 0.16s ease; }
+.profile[open] .accountChevron { transform: rotate(180deg); }
+.triggerAvatar { width: 28px; height: 28px; background: linear-gradient(145deg, #29292c, #45454a); color: #fff; font-size: 11px; font-weight: 820; }
 
 .menu {
   position: absolute;
@@ -96,11 +104,13 @@
   text-decoration: none;
   cursor: pointer;
 }
-.menuItem:hover,
-.current { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
+.menuItem:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
 .menuItem svg { width: 15px; height: 15px; }
 .menuItem > svg:last-child:not(:first-child) { grid-column: 4; justify-self: end; }
 .menuItem small { grid-column: 3 / 5; justify-self: end; color: var(--workspace-muted, #77777d); font-size: 10px; }
+.membership { min-height: 40px; background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); cursor: pointer; }
+.membership > span { overflow-wrap: anywhere; white-space: normal; }
+.membership small { grid-column: 3; }
 .divider { height: 1px; margin: 8px 4px; background: var(--workspace-border, rgba(23, 23, 25, 0.12)); }
 .signOut { color: #d64c58; }
 .profile form { margin: 0; }
@@ -183,19 +193,20 @@
 :global(html[data-theme="dark"]) .shortcutSheetPortal .shortcutRow { color: #a5a5ac; }
 :global(html[data-theme="dark"]) .shortcutSheetPortal .shortcutRow kbd { border-color: rgba(244, 244, 245, 0.12); background: rgba(244, 244, 245, 0.08); color: #f4f4f5; }
 
-.avatar:focus-visible,
+.accountTrigger:focus-visible,
 .menuItem:focus-visible,
 .helpLink:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
 
 @media (max-width: 680px) {
   .header { height: 64px; padding: 12px 16px; }
-  .avatar { width: 36px; height: 36px; }
+  .accountTrigger { grid-template-columns: 24px minmax(0, 72px) 12px 28px; min-height: 36px; }
   .menu { right: -2px; width: min(286px, calc(100vw - 30px)); overflow-y: auto; }
   .shortcutSheetPortal { right: 16px !important; left: 16px; width: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .avatar,
+  .accountTrigger,
+  .accountChevron,
   .themeSwitch,
   .themeThumb,
   .helpTrigger > svg:last-child { transition: none; }

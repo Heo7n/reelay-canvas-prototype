@@ -35,25 +35,25 @@ describe("organization project access API", () => {
 
   it("signs in five demo accounts that all belong to one organization", async () => {
     const accounts = [
-      "tianmaochao@reelay.test",
-      "linjing@reelay.test",
-      "chenxi@reelay.test",
-      "zhouyu@reelay.test",
-      "suhe@reelay.test",
+      { account: "creator@reelay.test", role: "owner" },
+      { account: "linjing@reelay.test", role: "admin" },
+      { account: "chenxi@reelay.test", role: "member" },
+      { account: "zhouyu@reelay.test", role: "member" },
+      { account: "suhe@reelay.test", role: "member" },
     ];
 
-    for (const account of accounts) {
+    for (const { account, role } of accounts) {
       const cookie = await login(app, account);
       const response = await app.inject({ method: "GET", url: "/api/workspaces", headers: { cookie } });
       expect(response.statusCode).toBe(200);
       expect(response.json().workspaces).toEqual([
-        { id: "workspace-organization-reelay", kind: "organization", name: "Reelay 创作组" },
+        { id: "workspace-organization-reelay", kind: "organization", name: "星海视觉工作室", currentUserRole: role },
       ]);
     }
   });
 
   it("creates a private project that only its creator can read", async () => {
-    const ownerCookie = await login(app, "tianmaochao@reelay.test");
+    const ownerCookie = await login(app, "creator@reelay.test");
     const memberCookie = await login(app, "linjing@reelay.test");
 
     const created = await app.inject({
@@ -87,7 +87,7 @@ describe("organization project access API", () => {
   });
 
   it("enforces collaborative admin, edit, view and non-member roles", async () => {
-    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const adminCookie = await login(app, "creator@reelay.test");
     const editCookie = await login(app, "linjing@reelay.test");
     const viewCookie = await login(app, "zhouyu@reelay.test");
     const nonMemberCookie = await login(app, "chenxi@reelay.test");
@@ -126,7 +126,7 @@ describe("organization project access API", () => {
   });
 
   it("creates, loads and revision-checks a canvas document", async () => {
-    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const adminCookie = await login(app, "creator@reelay.test");
     const url = "/api/projects/project-perfume-tvc/canvases/main/document";
 
     const empty = await app.inject({ method: "GET", url, headers: { cookie: adminCookie } });
@@ -194,7 +194,7 @@ describe("organization project access API", () => {
   });
 
   it("uses project roles for every canvas document read and write", async () => {
-    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const adminCookie = await login(app, "creator@reelay.test");
     const editCookie = await login(app, "linjing@reelay.test");
     const viewCookie = await login(app, "zhouyu@reelay.test");
     const outsiderCookie = await login(app, "chenxi@reelay.test");
@@ -244,7 +244,7 @@ describe("organization project access API", () => {
   });
 
   it("rejects invalid canvas document envelopes before saving", async () => {
-    const adminCookie = await login(app, "tianmaochao@reelay.test");
+    const adminCookie = await login(app, "creator@reelay.test");
     const response = await app.inject({
       method: "PUT",
       url: "/api/projects/project-perfume-tvc/canvases/main/document",
@@ -262,7 +262,7 @@ describe("organization project access API", () => {
     });
     expect(anonymous.statusCode).toBe(401);
 
-    const ownerCookie = await login(app, "tianmaochao@reelay.test");
+    const ownerCookie = await login(app, "creator@reelay.test");
     const found = await app.inject({
       method: "GET",
       url: "/api/workspaces/workspace-organization-reelay/projects/project-brand-story",

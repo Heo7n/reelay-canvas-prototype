@@ -12,6 +12,7 @@ afterEach(cleanup);
 
 const routeData: WorkspaceRouteData = {
   actor: {
+    account: "creator@reelay.test",
     id: "actor-one",
     displayName: "Demo One",
     workspaceIds: ["workspace-organization"],
@@ -19,7 +20,8 @@ const routeData: WorkspaceRouteData = {
   currentWorkspace: {
     id: "workspace-organization",
     kind: "organization",
-    name: "Reelay 创作组",
+    name: "星海视觉工作室",
+    currentUserRole: "owner",
   },
   projects: [
     {
@@ -45,7 +47,8 @@ const routeData: WorkspaceRouteData = {
     {
       id: "workspace-organization",
       kind: "organization",
-      name: "Reelay 创作组",
+      name: "星海视觉工作室",
+      currentUserRole: "owner",
     },
   ],
 };

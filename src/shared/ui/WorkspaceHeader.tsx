@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   BookOpenCheck,
   Building2,
+  ChevronDown,
   ChevronRight,
   CircleDollarSign,
   CircleHelp,
@@ -12,9 +13,8 @@ import {
   SendHorizontal,
   Settings,
   Sun,
-  UserRound,
 } from "lucide-react";
-import { Form, Link } from "react-router-dom";
+import { Form } from "react-router-dom";
 
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -25,6 +25,11 @@ import styles from "./WorkspaceHeader.module.css";
 
 const manualUrl = "https://reelay.tech.jetsentv.com/manual";
 const feedbackUrl = "https://ycndvyll62ov.feishu.cn/share/base/form/shrcnCSKgzknYF8PZuoMdw8uLGd";
+const membershipRoleLabels = {
+  owner: "主账户",
+  admin: "管理员",
+  member: "成员",
+} as const;
 
 const shortcuts = [
   ["空格 + 拖动", "平移画布"],
@@ -41,7 +46,6 @@ interface WorkspaceHeaderProps {
   actor: SessionActor;
   currentWorkspace: Workspace;
   onNotice: (message: string) => void;
-  workspaces: Workspace[];
 }
 
 function ShortcutHelp() {
@@ -128,7 +132,7 @@ function ShortcutHelp() {
   );
 }
 
-export function WorkspaceHeader({ actor, currentWorkspace, onNotice, workspaces }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: WorkspaceHeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -136,6 +140,7 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice, workspaces 
   const helpTriggerRef = useRef<HTMLButtonElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const avatar = actor.displayName.slice(0, 1).toUpperCase();
+  const membershipRole = currentWorkspace.currentUserRole ?? "member";
 
   function clearCloseTimer(): void {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
@@ -189,7 +194,7 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice, workspaces 
           onPointerLeave={scheduleCloseProfile}
         >
           <summary
-            className={styles.avatar}
+            className={styles.accountTrigger}
             aria-label="打开账户菜单"
             aria-expanded={profileOpen}
             onClick={(event) => {
@@ -197,7 +202,10 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice, workspaces 
               openProfile();
             }}
           >
-            {avatar}
+            <span className={styles.organizationMark} aria-hidden="true"><Building2 /></span>
+            <span className={styles.organizationName} title={currentWorkspace.name}>{currentWorkspace.name}</span>
+            <ChevronDown className={styles.accountChevron} aria-hidden="true" />
+            <span className={styles.triggerAvatar} aria-hidden="true">{avatar}</span>
           </summary>
 
           <div
@@ -213,7 +221,7 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice, workspaces 
               <span className={styles.identityAvatar} aria-hidden="true">{avatar}</span>
               <span>
                 <strong>{actor.displayName}</strong>
-                <small>本地演示账号</small>
+                <small>{actor.account}</small>
               </span>
             </div>
 
@@ -224,19 +232,18 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice, workspaces 
             </div>
 
             <div className={styles.menuList}>
-              <span className={styles.label}>工作空间</span>
-              {workspaces.map((workspace) => (
-                <Link
-                  className={`${styles.menuItem} ${workspace.id === currentWorkspace.id ? styles.current : ""}`}
-                  key={workspace.id}
-                  to={routePaths.workspaceHome(workspace.id)}
-                  onClick={closeProfile}
-                >
-                  {workspace.kind === "personal" ? <UserRound aria-hidden="true" /> : <Building2 aria-hidden="true" />}
-                  <span>{workspace.name}</span>
-                  {workspace.id === currentWorkspace.id ? <small>当前</small> : null}
-                </Link>
-              ))}
+              <span className={styles.label}>所属组织</span>
+              <button
+                className={`${styles.menuItem} ${styles.membership}`}
+                type="button"
+                aria-label={`进入${currentWorkspace.name}组织面板`}
+                onClick={() => onNotice(`${currentWorkspace.name}组织管理页将在下一阶段开放。`)}
+              >
+                <Building2 aria-hidden="true" />
+                <span>{currentWorkspace.name}</span>
+                <small>{membershipRoleLabels[membershipRole]}</small>
+                <ChevronRight aria-hidden="true" />
+              </button>
 
               <div className={styles.divider} />
               <button className={styles.menuItem} type="button" onClick={() => onNotice("账号设置将在正式账户系统接入后开放。") }>

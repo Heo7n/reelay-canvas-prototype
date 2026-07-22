@@ -11,6 +11,7 @@ function toWorkspace(workspace: WorkspaceDto): Workspace {
     id: workspace.id,
     kind: workspace.kind,
     name: workspace.name,
+    currentUserRole: workspace.currentUserRole,
   };
 }
 
