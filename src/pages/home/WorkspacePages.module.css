@@ -119,7 +119,7 @@
 .composerSubmit:disabled { background: var(--workspace-subtle); cursor: not-allowed; opacity: 0.72; }
 .composerSubmit svg { width: 18px; height: 18px; }
 
-.capabilities { display: flex; gap: 10px; justify-content: center; margin: 18px -180px 0; }
+.capabilities { display: flex; width: min(1160px, calc(100vw - 48px)); gap: 10px; justify-content: center; margin: 18px 0 0 50%; transform: translateX(-50%); }
 .capabilities button { display: inline-flex; min-width: max-content; height: 42px; align-items: center; justify-content: center; gap: 8px; padding: 0 17px; border: 1px solid var(--workspace-border); border-radius: 999px; background: color-mix(in srgb, var(--workspace-surface) 78%, transparent); color: var(--workspace-text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
 .capabilities button:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
 .capabilities svg { width: 16px; height: 16px; }
@@ -178,7 +178,7 @@
   .heroCard { height: 240px; }
   .heroCard_active { height: 286px; }
   .heroArrow { top: 118px; }
-  .capabilities { justify-content: flex-start; margin-right: 0; margin-left: 0; padding-bottom: 4px; overflow-x: auto; }
+  .capabilities { width: 100%; justify-content: flex-start; margin-right: 0; margin-left: 0; padding-bottom: 4px; overflow-x: auto; transform: none; }
   .projectGrid,
   .libraryGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .projectGrid > :last-child { display: none; }
