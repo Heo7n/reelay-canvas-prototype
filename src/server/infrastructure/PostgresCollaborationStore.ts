@@ -441,13 +441,22 @@ export class PostgresCollaborationStore implements CollaborationStore {
     const result = await this.pool.query(
       `UPDATE projects AS project
        SET deleted_at = $4, deleted_by_user_id = $3
-       FROM project_memberships AS project_membership
        WHERE project.workspace_id = $1
          AND project.id = $2
          AND project.deleted_at IS NULL
-         AND project_membership.project_id = project.id
-         AND project_membership.user_id = $3
-         AND project_membership.role = 'admin'`,
+         AND (
+           (project.access_kind = 'private' AND project.created_by_user_id = $3)
+           OR (
+             project.access_kind = 'collaborative'
+             AND EXISTS (
+               SELECT 1
+               FROM project_memberships AS project_membership
+               WHERE project_membership.project_id = project.id
+                 AND project_membership.user_id = $3
+                 AND project_membership.role = 'admin'
+             )
+           )
+         )`,
       [workspaceId, projectId, actorId, this.now().toISOString()],
     );
     return result.rowCount === 1;

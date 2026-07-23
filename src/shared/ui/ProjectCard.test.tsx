@@ -70,6 +70,24 @@ describe("ProjectCard access projection", () => {
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "转为协作项目" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "删除项目" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除项目" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("从你的个人项目列表中移除");
+  });
+
+  it("lets collaborative editors edit but reserves deletion for project admins", () => {
+    renderCard({
+      ...collaborativeViewerProject,
+      id: "project-editor",
+      currentUserRole: "edit",
+      name: "协作编辑项目",
+    });
+
+    fireEvent.click(screen.getByLabelText("打开 协作编辑项目 的项目菜单"));
+
+    expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "修改封面" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "删除项目" })).toBeNull();
   });
 
   it("asks for explicit confirmation before moving an administered project to trash", async () => {

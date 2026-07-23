@@ -133,9 +133,13 @@ export async function registerWorkspaceProjectRoutes(
     if (!existing) {
       return reply.code(404).send({ error: { code: "project_not_found", message: "项目不存在或已删除。" } });
     }
-    if (existing.currentUserRole !== "admin") {
+    const canDelete = existing.accessKind === "private" || existing.currentUserRole === "admin";
+    if (!canDelete) {
       return reply.code(403).send({
-        error: { code: "project_forbidden", message: "只有项目管理员可以删除项目。" },
+        error: {
+          code: "project_forbidden",
+          message: "个人项目仅创建者可删除；协作项目仅项目管理员可删除。",
+        },
       });
     }
     const deleted = await store.moveProjectToTrash(

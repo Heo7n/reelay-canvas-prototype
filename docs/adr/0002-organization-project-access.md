@@ -19,7 +19,7 @@
   - `admin/edit` 可修改，`view` 只读。
 - 项目列表、详情和修改必须在服务端按当前 actor 过滤。前端 `accessKind` 和标签只负责呈现，不能成为授权依据。
 - 未加入项目的组织成员按项目不存在处理，避免泄露项目标识；已加入但只有 `view` 的成员修改时返回明确的只读错误。
-- 只有 ProjectMembership `admin` 可以删除项目。当前删除为软删除：服务端立即从项目列表、详情与画布授权中排除该项目，同时保留项目记录、ProjectMembership 和 CanvasDocument，为后续回收站恢复提供数据基础。
+- `private` 项目由其创建者删除；`collaborative` 项目只有 ProjectMembership `admin` 可以删除，组织角色不替代项目权限。当前删除为软删除：服务端立即从项目列表、详情与画布授权中排除该项目，同时保留项目记录、ProjectMembership 和 CanvasDocument，为后续回收站恢复提供数据基础。
 - “转为协作项目”、成员选择、外部分享链接、实时协作和积分账本在后续切片实现；本决策只建立可迁移的数据与权限边界。
 
 ## 数据迁移

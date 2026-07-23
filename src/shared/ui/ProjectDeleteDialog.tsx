@@ -77,7 +77,9 @@ export function ProjectDeleteDialog({
         <div className={styles.copy}>
           <h2 id={titleId}>删除“{project.name}”？</h2>
           <p id={descriptionId}>
-            项目会立即从最近项目和全部项目中移除。项目成员关系与画布数据会保留，供后续恢复机制使用。
+            {project.accessKind === "private"
+              ? "项目会立即从你的个人项目列表中移除。项目与画布数据会保留，供后续恢复机制使用。"
+              : "项目会立即从所有协作成员的项目列表中移除。项目成员关系与画布数据会保留，供后续恢复机制使用。"}
           </p>
           {project.accessKind === "collaborative" ? (
             <p className={styles.collaborationWarning}>协作成员也将无法继续访问这个项目。</p>

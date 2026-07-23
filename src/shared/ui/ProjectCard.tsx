@@ -50,6 +50,7 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   const coverUrl = project.coverAssetId ? coverUrls[project.coverAssetId] : undefined;
   const canEdit = project.currentUserRole !== "view";
   const canAdminister = project.currentUserRole === "admin";
+  const canDelete = project.accessKind === "private" || canAdminister;
 
   function startRename(): void {
     cancelRename.current = false;
@@ -88,7 +89,7 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
           {canAdminister && project.accessKind === "private" ? (
             <button type="button" role="menuitem" onClick={() => showPrototypeNotice("转为协作项目后可添加组织成员并分配权限，暂未接入。")}>转为协作项目</button>
           ) : null}
-          {canAdminister ? (
+          {canDelete ? (
             <button
               ref={deleteTriggerRef}
               className={styles.danger}

@@ -180,6 +180,48 @@ describe("PostgreSQL collaboration persistence", () => {
     }
   });
 
+  it("allows only a collaborative project admin to move that project to trash", async () => {
+    const app = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+    const projectUrl = "/api/workspaces/workspace-organization-reelay/projects/project-education-video";
+    try {
+      const editorCookie = await login(app, "suhe@reelay.test");
+      const adminCookie = await login(app, "linjing@reelay.test");
+
+      const editorAttempt = await app.inject({
+        method: "DELETE",
+        url: projectUrl,
+        headers: { cookie: editorCookie },
+      });
+      expect(editorAttempt.statusCode).toBe(403);
+      expect(editorAttempt.json().error.code).toBe("project_forbidden");
+
+      const removed = await app.inject({
+        method: "DELETE",
+        url: projectUrl,
+        headers: { cookie: adminCookie },
+      });
+      expect(removed.statusCode).toBe(204);
+
+      const auditPool = createPool();
+      try {
+        const audit = await auditPool.query(
+          `SELECT access_kind, deleted_at IS NOT NULL AS deleted, deleted_by_user_id
+           FROM projects
+           WHERE id = 'project-education-video'`,
+        );
+        expect(audit.rows[0]).toEqual({
+          access_kind: "collaborative",
+          deleted: true,
+          deleted_by_user_id: "actor-linjing",
+        });
+      } finally {
+        await auditPool.end();
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   it("persists revisioned canvas documents and enforces project roles across restarts", async () => {
     const appA = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
     let appB: FastifyInstance | null = null;

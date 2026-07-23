@@ -209,11 +209,15 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     actorId: ActorId,
   ): Promise<boolean> {
     const project = this.projects.get(projectId);
+    const role = this.projectMemberships.get(projectId)?.get(actorId);
+    const canDelete = project?.accessKind === "private"
+      ? project.createdByActorId === actorId
+      : role === "admin";
     if (
       !project ||
       project.workspaceId !== workspaceId ||
       this.trashedProjects.has(projectId) ||
-      this.projectMemberships.get(projectId)?.get(actorId) !== "admin"
+      !canDelete
     ) {
       return false;
     }

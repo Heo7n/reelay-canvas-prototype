@@ -100,7 +100,7 @@ describe("organization project access API", () => {
     expect(anonymous.statusCode).toBe(401);
   });
 
-  it("creates a private project that only its creator can read", async () => {
+  it("creates a private project that only its creator can read and delete", async () => {
     const ownerCookie = await login(app, "creator@reelay.test");
     const memberCookie = await login(app, "linjing@reelay.test");
 
@@ -132,6 +132,19 @@ describe("organization project access API", () => {
     });
     expect(hiddenLookup.statusCode).toBe(404);
     expect(hiddenLookup.json().error.code).toBe("project_not_found");
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/workspaces/workspace-organization-reelay/projects/${projectId}`,
+      headers: { cookie: ownerCookie },
+    });
+    expect(removed.statusCode).toBe(204);
+    const removedLookup = await app.inject({
+      method: "GET",
+      url: `/api/workspaces/workspace-organization-reelay/projects/${projectId}`,
+      headers: { cookie: ownerCookie },
+    });
+    expect(removedLookup.statusCode).toBe(404);
   });
 
   it("enforces collaborative admin, edit, view and non-member roles", async () => {
