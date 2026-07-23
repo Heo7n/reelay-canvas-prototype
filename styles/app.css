@@ -804,9 +804,7 @@ html[data-theme="light"] .asset-lib-tooltip {
 }
 
 .profile-membership {
-  position: relative;
   min-height: 40px;
-  overflow: visible;
   background: color-mix(in srgb, var(--text) 7%, transparent);
   cursor: pointer;
 }
@@ -820,23 +818,9 @@ html[data-theme="light"] .asset-lib-tooltip {
   grid-column: 3;
 }
 
-.profile-membership > svg:last-of-type {
-  transition: transform 140ms ease;
-}
-
 .profile-membership:hover,
 .profile-membership:focus-visible {
   background: color-mix(in srgb, var(--text) 7%, transparent);
-}
-
-.profile-membership:hover > svg:last-of-type,
-.profile-membership:focus-visible > svg:last-of-type {
-  transform: translateX(2px);
-}
-
-.profile-membership:focus-visible > span {
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 .profile-appearance-item {

@@ -164,8 +164,6 @@ test("the canvas organization entry exposes a visual management affordance witho
   assert.match(html, /id="profileOrganization"[^>]*aria-label="进入组织管理界面"/);
   assert.doesNotMatch(html, />所属组织</);
   assert.doesNotMatch(html, /role="tooltip">进入组织管理界面</);
-  assert.match(appCss, /\.profile-membership:hover > svg:last-of-type,[\s\S]*?\{[^}]*transform:\s*translateX\(2px\)/);
-  assert.doesNotMatch(appCss, /\.profile-membership:hover > svg:first-child/);
-  assert.doesNotMatch(appCss, /\.profile-membership:hover > span/);
+  assert.doesNotMatch(appCss, /\.profile-membership:hover > (?:svg|span)/);
   assert.doesNotMatch(appCss, /\.profile-membership:hover,\s*\.profile-membership:focus-visible\s*\{[^}]*box-shadow/);
 });

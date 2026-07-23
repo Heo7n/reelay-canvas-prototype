@@ -69,20 +69,31 @@
 .identity small { color: var(--workspace-muted, #77777d); font-size: 11px; }
 .identityAvatar { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 50%; background: var(--workspace-text, #29292c); color: var(--workspace-bg, #fff); font-size: 15px; font-weight: 850; }
 
+.accountOverview {
+  display: grid;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
 .creditSummary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 5px 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  gap: 4px 12px;
+  padding: 11px 12px 10px;
 }
 .creditLabel { display: inline-flex; align-items: center; gap: 7px; color: var(--workspace-muted, #77777d); font-size: 12px; font-weight: 720; }
 .creditLabel svg { width: 13px; height: 13px; }
 .creditSummary strong { color: var(--workspace-text, #171719); font-size: 20px; line-height: 1; }
 .creditSummary small { grid-column: 1 / -1; color: var(--workspace-muted, #77777d); font-size: 11px; }
 
-.menuList { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.12)); }
+.overviewDivider {
+  height: 1px;
+  margin: 0 12px;
+  background: color-mix(in srgb, var(--workspace-text, #171719) 6%, transparent);
+}
+
+.menuList { display: grid; gap: 2px; }
 
 .menuItem {
   display: grid;
@@ -108,10 +119,10 @@
 .menuItem > svg:last-child:not(:first-child) { grid-column: 4; justify-self: end; }
 .menuItem small { grid-column: 3 / 5; justify-self: end; color: var(--workspace-muted, #77777d); font-size: 10px; }
 .membership {
-  position: relative;
-  min-height: 40px;
-  overflow: visible;
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  min-height: 42px;
+  padding-inline: 12px;
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
 }
 .membershipName {
@@ -119,22 +130,10 @@
   white-space: normal;
 }
 .membership small { grid-column: 3; }
-.membership > svg:last-of-type {
-  transition: transform 140ms ease;
-}
 .membership:hover,
 .membership:focus-visible {
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  background: transparent;
 }
-.membership:hover > svg:last-of-type,
-.membership:focus-visible > svg:last-of-type {
-  transform: translateX(2px);
-}
-.membership:focus-visible .membershipName {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.divider { height: 1px; margin: 8px 4px; background: var(--workspace-border, rgba(23, 23, 25, 0.12)); }
 .signOut { color: #d64c58; }
 .profile form { margin: 0; }
 

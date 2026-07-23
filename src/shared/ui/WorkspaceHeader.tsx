@@ -228,13 +228,7 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: Workspace
               </span>
             </div>
 
-            <div className={styles.creditSummary} aria-label="积分详情">
-              <span className={styles.creditLabel}><CircleDollarSign aria-hidden="true" />可用积分</span>
-              <strong>3000</strong>
-              <small>累计消耗 0 积分</small>
-            </div>
-
-            <div className={styles.menuList}>
+            <div className={styles.accountOverview}>
               <button
                 className={`${styles.menuItem} ${styles.membership}`}
                 type="button"
@@ -247,7 +241,15 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: Workspace
                 <ChevronRight aria-hidden="true" />
               </button>
 
-              <div className={styles.divider} />
+              <div className={styles.overviewDivider} aria-hidden="true" />
+              <div className={styles.creditSummary} aria-label="积分详情">
+                <span className={styles.creditLabel}><CircleDollarSign aria-hidden="true" />可用积分</span>
+                <strong>3000</strong>
+                <small>累计消耗 0 积分</small>
+              </div>
+            </div>
+
+            <div className={styles.menuList}>
               <button
                 className={styles.menuItem}
                 type="button"
