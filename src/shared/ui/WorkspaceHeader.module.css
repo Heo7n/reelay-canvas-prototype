@@ -1,0 +1,235 @@
+.header {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  display: flex;
+  height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px clamp(20px, 2.2vw, 38px);
+  background: var(--workspace-bg, #f8f8f7);
+}
+
+.account { display: flex; align-items: center; }
+.profile { position: relative; }
+.profile summary { list-style: none; }
+.profile summary::-webkit-details-marker { display: none; }
+
+.accountTrigger {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 96px) 12px 28px;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--workspace-text, #171719) 8%, transparent);
+  border-radius: 999px;
+  background: var(--workspace-surface, #fff);
+  box-shadow: 0 5px 16px rgba(16, 16, 20, 0.06);
+  color: var(--workspace-text, #171719);
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.accountTrigger:hover,
+.profile[open] .accountTrigger {
+  box-shadow: 0 8px 22px rgba(16, 16, 20, 0.12);
+  transform: translateY(-1px);
+}
+
+.organizationMark,
+.triggerAvatar { display: grid; place-items: center; border-radius: 50%; }
+.organizationMark { width: 24px; height: 24px; background: var(--workspace-hover, rgba(23, 23, 25, 0.06)); color: var(--workspace-muted, #77777d); }
+.organizationMark svg { width: 13px; height: 13px; }
+.organizationName { overflow: hidden; font-size: 13px; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
+.accountChevron { width: 12px; height: 12px; color: var(--workspace-muted, #77777d); transition: transform 0.16s ease; }
+.profile[open] .accountChevron { transform: rotate(180deg); }
+.triggerAvatar { width: 28px; height: 28px; background: linear-gradient(145deg, #29292c, #45454a); color: #fff; font-size: 11px; font-weight: 820; }
+
+.menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  width: 286px;
+  max-height: calc(100vh - 92px);
+  gap: 12px;
+  overflow: visible;
+  padding: 14px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.12));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--workspace-surface, #fff) 98%, transparent);
+  box-shadow: 0 18px 44px rgba(16, 16, 20, 0.16);
+}
+
+.identity { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 10px; }
+.identity > span:last-child { display: grid; min-width: 0; gap: 2px; }
+.identity strong { overflow: hidden; color: var(--workspace-text, #171719); text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.identity small { color: var(--workspace-muted, #77777d); font-size: 11px; }
+.identityAvatar { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 50%; background: var(--workspace-text, #29292c); color: var(--workspace-bg, #fff); font-size: 15px; font-weight: 850; }
+
+.accountOverview {
+  display: grid;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
+.creditSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 11px 12px 10px;
+}
+.creditLabel { display: inline-flex; align-items: center; gap: 7px; color: var(--workspace-muted, #77777d); font-size: 12px; font-weight: 720; }
+.creditLabel svg { width: 13px; height: 13px; }
+.creditSummary strong { color: var(--workspace-text, #171719); font-size: 20px; line-height: 1; }
+.creditSummary small { grid-column: 1 / -1; color: var(--workspace-muted, #77777d); font-size: 11px; }
+
+.overviewDivider {
+  height: 1px;
+  margin: 0 12px;
+  background: color-mix(in srgb, var(--workspace-text, #171719) 6%, transparent);
+}
+
+.menuList { display: grid; gap: 2px; }
+
+.menuItem {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto 16px;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.menuItem:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
+.menuItem svg { width: 15px; height: 15px; }
+.menuItem > svg:last-child:not(:first-child) { grid-column: 4; justify-self: end; }
+.menuItem small { grid-column: 3 / 5; justify-self: end; color: var(--workspace-muted, #77777d); font-size: 10px; }
+.membership {
+  min-height: 42px;
+  padding-inline: 12px;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.membershipName {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.membership small { grid-column: 3; }
+.membership:hover,
+.membership:focus-visible {
+  background: transparent;
+}
+.signOut { color: #d64c58; }
+.profile form { margin: 0; }
+
+.appearanceItem { grid-template-columns: 18px minmax(0, 1fr) 58px; }
+.themeCurrentIcon { display: grid; width: 18px; height: 18px; place-items: center; }
+.themeCurrentIcon svg { width: 15px; height: 15px; }
+.themeSwitch {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 26px);
+  width: 56px;
+  height: 28px;
+  align-items: center;
+  justify-self: end;
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--workspace-text, #171719) 9%, transparent);
+  color: var(--workspace-muted, #77777d);
+  opacity: 0;
+  transform: translateY(2px) scale(0.96);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.appearanceItem:hover .themeSwitch,
+.appearanceItem:focus-visible .themeSwitch { opacity: 1; transform: translateY(0) scale(1); }
+.themeSwitch svg { position: relative; z-index: 1; justify-self: center; width: 13px; height: 13px; }
+.themeThumb { position: absolute; z-index: 0; top: 3px; left: 3px; width: 24px; height: 22px; border-radius: 999px; background: var(--workspace-surface, #fff); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.themeSwitchDark .themeThumb { transform: translateX(26px); }
+
+.helpSection { position: relative; display: grid; }
+.helpSection:hover .helpTrigger,
+.helpSection:focus-within .helpTrigger { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
+.helpTrigger > svg:last-child { transition: transform 0.16s ease; }
+.helpOpen .helpTrigger > svg:last-child { transform: rotate(90deg); }
+.helpPanel { display: none; gap: 2px; margin: 1px 0 5px 28px; padding: 3px 0 2px; }
+.helpOpen .helpPanel { display: grid; }
+
+.helpLink {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-height: 30px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--workspace-text, #171719);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.helpLink:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
+.helpLink svg { width: 15px; height: 15px; }
+.shortcutSheetPortal {
+  position: fixed;
+  z-index: 200;
+  display: grid;
+  width: 206px;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(23, 23, 25, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  color: #171719;
+  box-shadow: 0 18px 44px rgba(16, 16, 20, 0.16);
+}
+.shortcutRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; color: var(--workspace-muted, #77777d); font-size: 10px; }
+.shortcutRow kbd { padding: 3px 5px; border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.12)); border-radius: 5px; background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); color: var(--workspace-text, #171719); font: inherit; font-weight: 700; }
+
+:global(html[data-theme="dark"]) .shortcutSheetPortal {
+  border-color: rgba(244, 244, 245, 0.12);
+  background: rgba(20, 21, 24, 0.98);
+  color: #f4f4f5;
+}
+
+:global(html[data-theme="dark"]) .shortcutSheetPortal .shortcutRow { color: #a5a5ac; }
+:global(html[data-theme="dark"]) .shortcutSheetPortal .shortcutRow kbd { border-color: rgba(244, 244, 245, 0.12); background: rgba(244, 244, 245, 0.08); color: #f4f4f5; }
+
+.accountTrigger:focus-visible,
+.menuItem:focus-visible,
+.helpLink:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
+
+@media (max-width: 680px) {
+  .header { height: 64px; padding: 12px 16px; }
+  .accountTrigger { grid-template-columns: 24px minmax(0, 72px) 12px 28px; min-height: 36px; }
+  .menu { right: -2px; width: min(286px, calc(100vw - 30px)); overflow-y: auto; }
+  .shortcutSheetPortal { right: 16px !important; left: 16px; width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accountTrigger,
+  .accountChevron,
+  .themeSwitch,
+  .themeThumb,
+  .helpTrigger > svg:last-child { transition: none; }
+}

@@ -1,0 +1,75 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 32px;
+  background: #f8f8f7;
+  color: #171719;
+  text-align: center;
+}
+
+.page > svg {
+  width: 28px;
+  height: 28px;
+}
+
+.page h1,
+.page p {
+  margin: 0;
+}
+
+.page h1 {
+  font-size: 24px;
+}
+
+.page p {
+  color: #77777d;
+}
+
+.page button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #171719;
+  color: white;
+  cursor: pointer;
+}
+
+.page button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.avatar {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 50%;
+  background: #171719;
+  color: white;
+  font-weight: 700;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #d7d7da;
+  border-top-color: #171719;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.4s; }
+}

@@ -12,6 +12,18 @@ Reelay 不应只是一块无限画布，也不应演变成把大量后台页面�
 - 项目画布负责沉浸式创作、节点组织和 Agent 协作。
 - 两种状态共享账号、积分、模型、生成任务和素材数据，但使用不同的信息密度与导航方式。
 
+### 1.1 当前工作假设
+
+以下是为了让基础开发可以前进而采用的可逆假设，不是不可更改的产品结论：
+
+- 首期账号主要属于一个组织 Workspace；“个人 / 协作项目”是同一组织内的项目访问类型，不再为每个账号复制一套个人 Workspace。个人项目只对创建者可见，协作项目通过显式 ProjectMembership 分配成员与角色。
+- 可跨项目复用的 Asset 归 Workspace 所有，Project 和 Node 只保存 AssetReference。尚未保存的生成结果仍是 GenerationResult，不会自动污染全局资产中心。
+- 首期按 Reelay 统一提供模型服务设计，但 ProviderConnection 保留扩展边界；不在首期同时建设 BYOK 的密钥、配额和故障处理体系。
+- 同一组织下的成员身份、Membership 和显式 ProjectMembership 先于外部分享与实时协作。首期先演示多个账号在同一组织内访问各自有权使用的项目，不引入分享链接、实时光标和冲突合并。
+- 前端框架不是产品架构本身。先定义 route contract、领域对象和存储接口；Phase 0B 暂按 `docs/adr/0001-application-runtime-and-migration.md` 采用 React + TypeScript + Vite + React Router，答案或运行证据反驳时重新评审。现有画布通过 adapter 接入，不因框架选择被整体重写。
+
+任何一项假设改变时，都必须同时复核路由、权限、资产归属、计费和迁移策略。
+
 核心价值链：
 
 ```mermaid
@@ -21,8 +33,9 @@ flowchart LR
   Asset["资产中心"] --> Canvas
   Template["模板中心"] --> Canvas
   Canvas --> Task["生成任务"]
-  Task --> Result["媒体结果"]
-  Result --> Asset
+  Task --> Result["GenerationResult"]
+  Result --> Promote["显式保存 / 产品规则"]
+  Promote --> Asset
   Result --> Canvas
   Agent["Reelay Agent"] --> Canvas
   Agent --> Task
@@ -46,7 +59,7 @@ flowchart TD
   Generations --> Canvas
   Templates --> Canvas
 
-  Canvas --> ProjectAssets["项目素材"]
+  Canvas --> ProjectAssets["项目资产引用"]
   Canvas --> ProjectAgent["项目 Agent"]
   Canvas --> ProjectHistory["项目版本与记录"]
 ```
@@ -55,7 +68,7 @@ flowchart TD
 
 ### 3.1 工作台模式
 
-工作台使用稳定的左侧主导航，适合高频切换与信息扫描：
+资产中心、生成任务等高信息密度管理页可以使用稳定的左侧主导航；登录后主页本身保持轻量创作入口，不为尚未实现的后台页面提前常驻完整侧栏：
 
 - 首页 / 项目
 - 资产中心
@@ -65,7 +78,7 @@ flowchart TD
 - 组织
 - 底部：积分、通知、个人
 
-主导航保持窄而稳定，不使用大面积装饰，不做营销首页。
+管理页主导航保持窄而稳定，不使用大面积装饰；主页可以用项目封面与创作主题建立进入画布前的内容语境，但不做公开营销首页或作品社区。
 
 ### 3.2 画布模式
 
@@ -84,6 +97,8 @@ flowchart TD
 ## 4.1 首页 / 项目
 
 这是登录后的默认页面，不是宣传落地页。
+
+> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；五个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据、成员关系与路由画布文档已持久化到本地 PostgreSQL；旧画布通过受控迁移快照加载 / 保存，但素材、生成任务、历史和积分账本仍未持久化，因此这仍不是正式账号或生产协作。
 
 ### 页面目标
 
@@ -117,18 +132,19 @@ flowchart TD
 
 ### 项目卡片信息
 
-- 项目封面：从画布内容生成，不使用随机插画。
+- 项目封面：真实数据接入后从画布内容生成；在尚无项目持久化的高保真原型中，允许使用语义明确的本地 mock 封面，但必须标明原型状态且不能伪装成真实用户数据。
 - 项目名。
-- 所属组织或个人空间。
+- 所属组织与个人 / 协作访问类型。
 - 最近编辑时间。
 - 协作者头像。
 - 生成中 / 有失败任务等状态。
 
 ### 关键交互
 
-- 双击项目进入画布。
+- 单击项目卡或按 Enter 进入画布；双击只能作为桌面增强，不能是唯一入口。
 - 卡片菜单支持重命名、复制、移动、归档、删除。
 - 删除进入回收站，不直接永久删除。
+- 当前已完成管理员二次确认与服务端软删除，项目、成员关系和画布文档仍保留；回收站列表、恢复和永久删除尚未实现，不能把“从项目列表移除”描述为完整回收站。
 - 支持列表与网格视图，但默认使用信息密度较高的网格。
 
 ## 4.2 资产中心
@@ -171,7 +187,7 @@ flowchart TD
 ### 关键交互
 
 - 拖入上传。
-- 批量加入项目。
+- 批量加入项目（创建 AssetReference，不复制 Asset 所有权）。
 - 打开素材所在画布并定位节点。
 - 查看生成提示词和模型参数。
 - 删除前检查引用关系。
@@ -269,16 +285,16 @@ flowchart TD
 
 ### 首期范围
 
-- 成员列表。
-- 邀请成员。
-- 角色：所有者、管理员、编辑者、查看者。
-- 团队项目。
-- 团队资产。
-- 积分使用概览。
+- Phase 0B 以五个固定演示账号验证单组织 Membership、个人项目隔离和协作项目的 `admin/edit/view` 项目角色。
+- 组织 Membership 只证明账号属于组织；项目列表、详情和修改必须继续由 ProjectMembership 在服务端过滤，不能用前端标签或组织角色代替。
+- 不在这一阶段提供成员管理、邀请、角色配置界面、外部分享、团队资产或积分管理 UI。
 
-### 后续范围
+### Phase 2 及后续范围
 
-- 项目级权限。
+- 成员列表与邀请成员。
+- 组织所有者 / 成员管理，以及项目 `admin/edit/view` 角色的配置界面和完整权限矩阵。
+- 团队资产与积分使用概览。
+- 项目成员的添加、移除和权限变更。
 - 评论与 @ 提及。
 - 实时协作光标。
 - 审批流程。
@@ -314,13 +330,16 @@ flowchart TD
 
 独立 Agent 不应替代画布，而是负责跨页面、跨项目的操作编排。
 
+Agent 不直接调用页面 DOM 或原型事件函数。跨项目写操作必须通过 application service / command，经过权限检查、显式确认、幂等 command id、审计记录和可恢复策略；Conversation 必须记录 workspace / project scope 与可访问资源。
+
 ## 5. 核心数据对象
 
 | 对象 | 责任 |
 | --- | --- |
-| Workspace | 个人或组织空间 |
+| Workspace | 首期组织容器；承载组织成员与项目集合 |
 | User | 用户资料与偏好 |
-| Project | 项目元数据、成员、封面 |
+| Project | 项目元数据、Workspace 归属、个人 / 协作访问类型、封面与创建 / 更新审计 |
+| ProjectMembership | 项目成员及 `admin/edit/view` 角色；是项目读写权限来源 |
 | CanvasDocument | 画布视口、节点、组与版本 |
 | Node | 生成节点或素材节点 |
 | Asset | 可跨项目复用的媒体对象 |
@@ -329,8 +348,19 @@ flowchart TD
 | GenerationResult | 任务输出，可转为 Asset |
 | ModelDefinition | 模型能力、参数模式和计费规则 |
 | CreditLedger | 积分增加、冻结、扣减和退回记录 |
-| Conversation | Agent 会话与项目关联 |
+| Conversation | Agent 会话、Workspace / Project scope 与可访问资源 |
 | Template | 可实例化的画布结构 |
+
+### 5.1 生成节点与结果历史的类型契约
+
+当前原型已经用节点级 `lockedMode` 建立最小约束，但正式数据模型不应把单个 `generatedAsset` 扩写成一串松散对象。后续应保持以下边界：
+
+- 生成节点在第一次成功前没有结果类型锁；任务成功后以不可变的 `GenerationTask.parameterSnapshot.mode` 原子写入节点类型锁。
+- 一个节点的全部 `GenerationResult` 必须是同一媒体类型。跨图片 / 视频应创建新节点，并通过稳定的结果或资产引用连接输入输出关系。
+- 节点只保存 `activeResultId` 与有序的 `generationResultIds`；任务状态、参数快照、计费和错误归 `GenerationTask`，媒体输出归 `GenerationResult`，可复用资产归 `Asset`。
+- 删除当前结果、切换历史结果、失败、取消、复制节点或普通参数撤销都不能解除节点类型锁。复制已有结果的节点应继承类型锁，但不得伪造一次新任务或重复计费。
+- 成功生成是普通参数撤销的版本边界。未来如果支持撤销生成，必须作为显式生成命令处理结果引用、任务状态和 `CreditLedger`，不能用整节点旧快照覆盖。
+- 一次任务可以产生多个结果，`count` 不应继续被压缩为单个 `generatedAsset`；参考素材快照也应保存稳定的 `AssetReference` 与必要版本信息，而不只是易失的内存 id。
 
 ## 6. 跨页面核心流程
 
@@ -348,9 +378,11 @@ sequenceDiagram
   H->>C: 加载画布文档
   U->>C: 配置节点并执行生成
   C->>T: 创建任务与参数快照
-  T-->>C: 返回进度和结果
-  C->>A: 将结果登记为资产
-  U->>A: 跨项目复用结果
+  T-->>C: 返回任务状态与进度
+  T-->>C: 返回 GenerationResult
+  U->>C: 显式保存结果
+  C->>A: 创建 Workspace Asset 与项目 AssetReference
+  U->>A: 通过新的 AssetReference 跨项目复用
 ```
 
 ### 6.2 从资产中心回到节点
@@ -370,17 +402,34 @@ sequenceDiagram
 - 卡片只用于项目、资产、模板等重复对象，不把整页章节做成浮动卡片。
 - 所有图标按钮提供 tooltip 和 `aria-label`。
 - 删除、批量执行、积分扣减等高影响操作必须有清晰确认与可恢复机制。
+- 当前产品只面向桌面浏览器，功能设计与验收以 `1280×720` 及以上视口为基线，并优先检查常见 `1440×900` / `1920×1080` 桌面尺寸；保留必要的窄屏防御性布局、键盘焦点和 reduced-motion，但不为移动端或触控端新增产品分支。
 
 ## 8. 开发顺序
 
-### Phase 0：产品基础
+### Phase 0A：原型稳定化
 
-- 路由与应用壳。
-- 数据模型和 schema 版本。
-- 项目保存与加载。
-- 资产持久化。
-- 生成任务状态机。
-- 通用通知、确认、菜单、对话框组件。
+- 修复生成任务、撤销历史、项目资产和模型参数的跨画布 / 跨项目边界。
+- 为当前画布交互建立特征测试，清理确认不可达的旧代码和重复静态数据。
+- 建立可复现的检查和回归测试入口；正式构建随 Phase 0B 的 runtime 决策落地。
+
+### Phase 0B：可迁移基础
+
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、账号联系资料、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision、项目软删除和跨服务重启集成验证；旧画布已消费账号、组织和项目上下文，并通过严格 allow-list bundle 保存多画布、节点、组与视口。账号设置已形成个人主页 / 积分记录 / 用量看板的 React 弹出面板，但积分与用量保持真实空状态。静态登录 / 主页双轨已经删除，画布导航统一回到 React 宿主。内存 adapter 只保留作快速契约测试和显式回退；资产、生成任务、生成历史和积分账本尚未持久化。
+
+- 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
+- 定义数据模型、schema 版本和迁移机制。
+- 优先建立 Session、Workspace、Membership、Project、ProjectMembership 和 CanvasDocument 的 repository / service 边界，让单组织容器和项目访问都由显式 actor scope 驱动。
+- 因为组织演示需要多个浏览器账号看到各自有权访问的共享数据，Phase 0B 同步建立最小共享后端、服务端会话和开发数据库；IndexedDB 只承担本地草稿、缓存和离线恢复。
+- 为 Asset、GenerationTask、GenerationResult 和 CreditLedger 先定义核心不变量；真实生成接入前再补足 repository 和事务边界。
+- 本地草稿与 Blob 使用 IndexedDB；localStorage 仅保存主题等设备偏好。
+- 建立通用通知、确认、菜单、对话框和焦点管理组件。
+
+### Phase 0C：真实主链路
+
+- 把当前 legacy CanvasDocument bundle 逐步迁移为正式 Canvas / Node 数据边界，并补齐草稿恢复。
+- 资产持久化与显式 AssetReference。
+- 生成任务状态机、参数快照、幂等扣费与失败退款。
+- 真实生成结果先登记为 GenerationResult，由用户或产品规则显式提升为 Asset。
 
 ### Phase 1：核心工作台
 
@@ -394,7 +443,7 @@ sequenceDiagram
 - 模板中心。
 - 模型与服务。
 - 完整个人设置。
-- 组织成员与基础权限。
+- 组织成员管理、邀请、项目成员配置与权限策略；基础 Membership、ProjectMembership 和服务端访问隔离已经在 Phase 0B 建立。
 
 ### Phase 3：协作与规模化
 
@@ -402,7 +451,7 @@ sequenceDiagram
 - 评论与审批。
 - 项目版本。
 - 团队模型策略。
-- 真实积分账本与账单。
+- 团队额度、用量归集与账单展示（真实积分账本必须在首次接入真实生成前已经存在）。
 
 ## 9. 当前不建议立即开发
 
@@ -415,13 +464,15 @@ sequenceDiagram
 
 这些功能不是没有价值，而是当前无法增强“项目到生成结果再到复用”的主链路。
 
-## 10. 待产品确认
+## 10. 需要验证或推翻的工作假设
 
-1. 产品首先服务个人创作者，还是团队与商业制作？
-2. 模型服务由 Reelay 统一提供，还是允许用户绑定自己的供应商账号？
-3. 资产默认属于个人空间、组织空间，还是项目？
-4. 生成结果是否自动进入资产中心？
-5. 模板是否允许外部公开发布？
-6. 首期是否需要真实多人协作，还是先做分享与只读权限？
+Phase 0B 可以按 1.1 节的可逆假设推进，但在进入相应产品功能前必须完成验证：
 
-上述答案会直接影响路由、权限、积分归属和数据模型，应在新页面编码前确认。
+1. 首期账号主要属于一个组织；个人创作以组织内 private Project 表达，而不是为每个账号建立个人 Workspace。
+2. Reelay 统一提供模型服务；BYOK 只保留 ProviderConnection 边界，不在首期同时实现。
+3. Asset 归 Workspace，Project / Node 保存 AssetReference；项目内的临时数组不是正式所有权模型。
+4. GenerationResult 默认不自动进入资产中心，必须显式保存或经过可解释的产品规则晋升。
+5. 模板首期仅限内部或私有复用，公开发布与市场化另行评估。
+6. 组织成员身份与显式 ProjectMembership 先于外部分享和实时协作；分享链接、实时状态、冲突合并和审批留到主链路稳定后。
+
+这些假设不是文档权威。调研、用户反馈或实现证据一旦反驳其中任意一项，应先修订路线和数据模型，再继续编码。
