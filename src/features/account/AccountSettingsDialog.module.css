@@ -55,6 +55,7 @@
   position: relative;
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 28px 58px 48px;
   background: #fff;
 }
