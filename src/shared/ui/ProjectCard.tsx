@@ -12,6 +12,7 @@ import { routePaths } from "../../app/routes";
 import type { WorkspaceActionData } from "../../app/route-data";
 import styles from "./ProjectCard.module.css";
 import { ProjectDeleteDialog } from "./ProjectDeleteDialog";
+import { useProjectMenu } from "./ProjectMenuProvider";
 
 const coverUrls: Record<string, string> = {
   "demo-cover-character": characterCoverUrl,
@@ -46,20 +47,20 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const cancelRename = useRef(false);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
-  const menuDetails = useRef<HTMLDetailsElement>(null);
   const coverUrl = project.coverAssetId ? coverUrls[project.coverAssetId] : undefined;
   const canEdit = project.currentUserRole !== "view";
   const canAdminister = project.currentUserRole === "admin";
   const canDelete = project.accessKind === "private" || canAdminister;
+  const { closeMenu, menuOpen, toggleMenu } = useProjectMenu(project.id);
 
   function startRename(): void {
     cancelRename.current = false;
-    if (menuDetails.current) menuDetails.current.open = false;
+    closeMenu();
     setRenaming(true);
   }
 
   function showPrototypeNotice(message: string): void {
-    if (menuDetails.current) menuDetails.current.open = false;
+    closeMenu();
     onNotice(message);
   }
 
@@ -78,8 +79,19 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
         )}
       </Link>
 
-      <details className={styles.menuDetails} ref={menuDetails}>
-        <summary className={styles.menuTrigger} aria-label={`打开 ${project.name} 的项目菜单`}>
+      <details
+        className={styles.menuDetails}
+        data-project-menu-id={project.id}
+        open={menuOpen}
+      >
+        <summary
+          className={styles.menuTrigger}
+          aria-label={`打开 ${project.name} 的项目菜单`}
+          onClick={(event) => {
+            event.preventDefault();
+            toggleMenu(event.currentTarget);
+          }}
+        >
           <EllipsisVertical aria-hidden="true" />
         </summary>
         <div className={styles.menu} role="menu">
@@ -97,9 +109,20 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
               role="menuitem"
               aria-haspopup="dialog"
               onClick={() => {
-                if (menuDetails.current) menuDetails.current.open = false;
+                closeMenu();
                 setDeleteDialogOpen(true);
               }}
+            >
+              删除项目
+            </button>
+          ) : canEdit && project.accessKind === "collaborative" ? (
+            <button
+              className={styles.danger}
+              type="button"
+              role="menuitem"
+              aria-label="删除项目（仅项目管理员可用）"
+              title="仅项目管理员可删除"
+              disabled
             >
               删除项目
             </button>

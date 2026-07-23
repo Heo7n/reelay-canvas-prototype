@@ -7,6 +7,7 @@ import type { WorkspaceActionData, WorkspaceRouteData } from "../../app/route-da
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { NewProjectCard } from "../../shared/ui/NewProjectCard";
 import { ProjectCard } from "../../shared/ui/ProjectCard";
+import { ProjectMenuProvider } from "../../shared/ui/ProjectMenuProvider";
 import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
 import { CapabilityStrip } from "./CapabilityStrip";
 import { CreationComposer } from "./CreationComposer";
@@ -53,12 +54,14 @@ export function WorkspaceHomePage() {
             <h2 id="recent-projects-title">最近项目</h2>
             <Link to={routePaths.projects(data.currentWorkspace.id)}>全部项目 <ChevronRight aria-hidden="true" /></Link>
           </div>
-          <div className={styles.projectGrid}>
-            <NewProjectCard />
-            {recentProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} onNotice={showNotice} />
-            ))}
-          </div>
+          <ProjectMenuProvider>
+            <div className={styles.projectGrid}>
+              <NewProjectCard />
+              {recentProjects.map((project) => (
+                <ProjectCard key={project.id} project={project} onNotice={showNotice} />
+              ))}
+            </div>
+          </ProjectMenuProvider>
         </section>
       </main>
 

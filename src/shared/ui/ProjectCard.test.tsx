@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ProjectSummary } from "../../domain/project/project";
 import { ProjectCard } from "./ProjectCard";
+import { ProjectMenuProvider } from "./ProjectMenuProvider";
 
 afterEach(cleanup);
 
@@ -19,7 +20,30 @@ function renderCard(
       {
         path: "*",
         action,
-        element: <ProjectCard project={project} onNotice={vi.fn()} />,
+        element: (
+          <ProjectMenuProvider>
+            <ProjectCard project={project} onNotice={vi.fn()} />
+          </ProjectMenuProvider>
+        ),
+      },
+    ],
+    { initialEntries: ["/w/workspace-organization/projects"] },
+  );
+  render(<RouterProvider router={router} />);
+}
+
+function renderCards(projects: ProjectSummary[]): void {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "*",
+        element: (
+          <ProjectMenuProvider>
+            {projects.map((project) => (
+              <ProjectCard key={project.id} project={project} onNotice={vi.fn()} />
+            ))}
+          </ProjectMenuProvider>
+        ),
       },
     ],
     { initialEntries: ["/w/workspace-organization/projects"] },
@@ -87,7 +111,46 @@ describe("ProjectCard access projection", () => {
 
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "修改封面" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "删除项目" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "删除项目（仅项目管理员可用）" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "删除项目（仅项目管理员可用）" })).toHaveAttribute(
+      "title",
+      "仅项目管理员可删除",
+    );
+  });
+
+  it("keeps only one card menu open and dismisses it outside or with Escape", () => {
+    const firstProject = {
+      ...collaborativeViewerProject,
+      id: "project-first",
+      currentUserRole: "admin" as const,
+      name: "第一个协作项目",
+    };
+    const secondProject = {
+      ...firstProject,
+      id: "project-second",
+      name: "第二个协作项目",
+    };
+    renderCards([firstProject, secondProject]);
+
+    const firstTrigger = screen.getByLabelText("打开 第一个协作项目 的项目菜单");
+    const secondTrigger = screen.getByLabelText("打开 第二个协作项目 的项目菜单");
+    const firstDetails = firstTrigger.closest("details");
+    const secondDetails = secondTrigger.closest("details");
+
+    fireEvent.click(firstTrigger);
+    expect(firstDetails).toHaveAttribute("open");
+
+    fireEvent.click(secondTrigger);
+    expect(firstDetails).not.toHaveAttribute("open");
+    expect(secondDetails).toHaveAttribute("open");
+
+    fireEvent.pointerDown(document.body);
+    expect(secondDetails).not.toHaveAttribute("open");
+
+    fireEvent.click(firstTrigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(firstDetails).not.toHaveAttribute("open");
+    expect(firstTrigger).toHaveFocus();
   });
 
   it("asks for explicit confirmation before moving an administered project to trash", async () => {

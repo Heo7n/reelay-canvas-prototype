@@ -101,6 +101,13 @@
 .menu a:hover,
 .menu button:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
 .menu .danger { color: #b74e4e; }
+.menu button:disabled,
+.menu button:disabled:hover {
+  background: transparent;
+  color: var(--workspace-muted, #77777d);
+  cursor: not-allowed;
+  opacity: 0.62;
+}
 
 .info { min-height: 64px; padding: 10px 12px 11px; }
 .titleRow { display: flex; min-width: 0; align-items: center; gap: 4px; }
@@ -184,7 +191,7 @@
 .quickRename:focus-visible,
 .newCard button:focus-visible,
 .menu a:focus-visible,
-.menu button:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
+.menu button:not(:disabled):focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
 
 @media (max-width: 680px) {
   .visualLink { height: 118px; }

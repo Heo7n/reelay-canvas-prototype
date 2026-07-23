@@ -7,6 +7,7 @@ import { routePaths } from "../../app/routes";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { NewProjectCard } from "../../shared/ui/NewProjectCard";
 import { ProjectCard } from "../../shared/ui/ProjectCard";
+import { ProjectMenuProvider } from "../../shared/ui/ProjectMenuProvider";
 import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
 import styles from "../home/WorkspacePages.module.css";
 
@@ -57,12 +58,14 @@ export function ProjectsPage() {
           </label>
         </div>
 
-        <div className={styles.libraryGrid}>
-          <NewProjectCard />
-          {filteredProjects.map((project) => (
-            <ProjectCard key={project.id} project={project} onNotice={showNotice} />
-          ))}
-        </div>
+        <ProjectMenuProvider>
+          <div className={styles.libraryGrid}>
+            <NewProjectCard />
+            {filteredProjects.map((project) => (
+              <ProjectCard key={project.id} project={project} onNotice={showNotice} />
+            ))}
+          </div>
+        </ProjectMenuProvider>
 
         {query && filteredProjects.length === 0 ? <p className={styles.emptyState}>没有找到匹配“{query}”的项目</p> : null}
       </main>
