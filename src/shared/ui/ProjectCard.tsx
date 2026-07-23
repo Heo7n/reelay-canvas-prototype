@@ -11,6 +11,7 @@ import type { ProjectSummary } from "../../domain/project/project";
 import { routePaths } from "../../app/routes";
 import type { WorkspaceActionData } from "../../app/route-data";
 import styles from "./ProjectCard.module.css";
+import { ProjectDeleteDialog } from "./ProjectDeleteDialog";
 
 const coverUrls: Record<string, string> = {
   "demo-cover-character": characterCoverUrl,
@@ -42,7 +43,9 @@ function formatUpdatedAt(value: string): string {
 export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   const fetcher = useFetcher<WorkspaceActionData>();
   const [renaming, setRenaming] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const cancelRename = useRef(false);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const menuDetails = useRef<HTMLDetailsElement>(null);
   const coverUrl = project.coverAssetId ? coverUrls[project.coverAssetId] : undefined;
   const canEdit = project.currentUserRole !== "view";
@@ -60,7 +63,8 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   }
 
   return (
-    <article className={styles.card}>
+    <>
+      <article className={styles.card}>
       <Link className={styles.visualLink} to={routePaths.canvas(project.workspaceId, project.id, "main")} aria-label={`打开项目 ${project.name}`}>
         {coverUrl ? (
           <img src={coverUrl} alt="" />
@@ -84,7 +88,21 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
           {canAdminister && project.accessKind === "private" ? (
             <button type="button" role="menuitem" onClick={() => showPrototypeNotice("转为协作项目后可添加组织成员并分配权限，暂未接入。")}>转为协作项目</button>
           ) : null}
-          {canAdminister ? <button className={styles.danger} type="button" role="menuitem" onClick={() => showPrototypeNotice("删除项目将在持久化和恢复机制完成后接入。")}>删除项目</button> : null}
+          {canAdminister ? (
+            <button
+              ref={deleteTriggerRef}
+              className={styles.danger}
+              type="button"
+              role="menuitem"
+              aria-haspopup="dialog"
+              onClick={() => {
+                if (menuDetails.current) menuDetails.current.open = false;
+                setDeleteDialogOpen(true);
+              }}
+            >
+              删除项目
+            </button>
+          ) : null}
         </div>
       </details>
 
@@ -137,6 +155,13 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
         </div>
         {fetcher.data?.error ? <span className={styles.srOnly} role="alert">{fetcher.data.error}</span> : null}
       </div>
-    </article>
+      </article>
+      <ProjectDeleteDialog
+        open={deleteDialogOpen}
+        project={project}
+        returnFocusRef={deleteTriggerRef}
+        onClose={() => setDeleteDialogOpen(false)}
+      />
+    </>
   );
 }

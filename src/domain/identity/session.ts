@@ -4,6 +4,8 @@ export type ActorId = string;
 
 export interface SessionActor {
   account: string;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   id: ActorId;
   displayName: string;
   workspaceIds: WorkspaceId[];

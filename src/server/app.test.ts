@@ -52,6 +52,54 @@ describe("organization project access API", () => {
     }
   });
 
+  it("stores optional contact details independently from the login identifier", async () => {
+    const ownerCookie = await login(app, "creator@reelay.test");
+
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: "/api/account",
+      headers: { cookie: ownerCookie },
+      payload: { contactEmail: "not-an-email", contactPhone: "123" },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().error.code).toBe("invalid_request");
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: "/api/account",
+      headers: { cookie: ownerCookie },
+      payload: { contactEmail: "owner@example.com", contactPhone: "+86 138 0000 0000" },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().actor).toEqual(
+      expect.objectContaining({
+        account: "creator@reelay.test",
+        contactEmail: "owner@example.com",
+        contactPhone: "+86 138 0000 0000",
+      }),
+    );
+
+    const restored = await app.inject({
+      method: "GET",
+      url: "/api/session",
+      headers: { cookie: ownerCookie },
+    });
+    expect(restored.json().actor).toEqual(
+      expect.objectContaining({
+        account: "creator@reelay.test",
+        contactEmail: "owner@example.com",
+        contactPhone: "+86 138 0000 0000",
+      }),
+    );
+
+    const anonymous = await app.inject({
+      method: "PATCH",
+      url: "/api/account",
+      payload: { contactEmail: null, contactPhone: null },
+    });
+    expect(anonymous.statusCode).toBe(401);
+  });
+
   it("creates a private project that only its creator can read", async () => {
     const ownerCookie = await login(app, "creator@reelay.test");
     const memberCookie = await login(app, "linjing@reelay.test");
@@ -123,6 +171,58 @@ describe("organization project access API", () => {
     const adminLookup = await app.inject({ method: "GET", url, headers: { cookie: adminCookie } });
     expect(adminLookup.statusCode).toBe(200);
     expect(adminLookup.json().project.currentUserRole).toBe("admin");
+  });
+
+  it("moves projects to recoverable trash and immediately revokes project and canvas access", async () => {
+    const adminCookie = await login(app, "creator@reelay.test");
+    const editCookie = await login(app, "linjing@reelay.test");
+    const viewCookie = await login(app, "zhouyu@reelay.test");
+    const outsiderCookie = await login(app, "chenxi@reelay.test");
+    const projectUrl = "/api/workspaces/workspace-organization-reelay/projects/project-scifi-trailer";
+    const canvasUrl = "/api/projects/project-scifi-trailer/canvases/delete-test/document";
+
+    const canvas = await app.inject({
+      method: "PUT",
+      url: canvasUrl,
+      headers: { cookie: adminCookie },
+      payload: { schemaVersion: 1, expectedRevision: 0, content: { nodes: [{ id: "preserved" }] } },
+    });
+    expect(canvas.statusCode).toBe(201);
+
+    for (const cookie of [editCookie, viewCookie]) {
+      const forbidden = await app.inject({ method: "DELETE", url: projectUrl, headers: { cookie } });
+      expect(forbidden.statusCode).toBe(403);
+      expect(forbidden.json().error.code).toBe("project_forbidden");
+    }
+    const hidden = await app.inject({ method: "DELETE", url: projectUrl, headers: { cookie: outsiderCookie } });
+    expect(hidden.statusCode).toBe(404);
+
+    const removed = await app.inject({ method: "DELETE", url: projectUrl, headers: { cookie: adminCookie } });
+    expect(removed.statusCode).toBe(204);
+
+    const projectLookup = await app.inject({ method: "GET", url: projectUrl, headers: { cookie: adminCookie } });
+    expect(projectLookup.statusCode).toBe(404);
+    const projectList = await app.inject({
+      method: "GET",
+      url: "/api/workspaces/workspace-organization-reelay/projects",
+      headers: { cookie: adminCookie },
+    });
+    expect(projectList.json().projects).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "project-scifi-trailer" })]),
+    );
+
+    const canvasLookup = await app.inject({ method: "GET", url: canvasUrl, headers: { cookie: adminCookie } });
+    expect(canvasLookup.statusCode).toBe(404);
+    const lateCanvasSave = await app.inject({
+      method: "PUT",
+      url: canvasUrl,
+      headers: { cookie: editCookie },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [{ id: "late-write" }] } },
+    });
+    expect(lateCanvasSave.statusCode).toBe(404);
+
+    const repeated = await app.inject({ method: "DELETE", url: projectUrl, headers: { cookie: adminCookie } });
+    expect(repeated.statusCode).toBe(404);
   });
 
   it("creates, loads and revision-checks a canvas document", async () => {

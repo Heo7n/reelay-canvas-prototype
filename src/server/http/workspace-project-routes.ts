@@ -120,4 +120,32 @@ export async function registerWorkspaceProjectRoutes(
     }
     return { project };
   });
+
+  app.delete("/api/workspaces/:workspaceId/projects/:projectId", async (request, reply) => {
+    const actor = await requireActor(request, reply, store);
+    if (!actor) return reply;
+    const params = ProjectParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.code(400).send({ error: { code: "invalid_request", message: "项目标识无效。" } });
+    }
+    if (!(await requireWorkspaceAccess(actor, params.data.workspaceId, reply, store))) return reply;
+    const existing = await store.getProject(actor.id, params.data.workspaceId, params.data.projectId);
+    if (!existing) {
+      return reply.code(404).send({ error: { code: "project_not_found", message: "项目不存在或已删除。" } });
+    }
+    if (existing.currentUserRole !== "admin") {
+      return reply.code(403).send({
+        error: { code: "project_forbidden", message: "只有项目管理员可以删除项目。" },
+      });
+    }
+    const deleted = await store.moveProjectToTrash(
+      params.data.workspaceId,
+      params.data.projectId,
+      actor.id,
+    );
+    if (!deleted) {
+      return reply.code(404).send({ error: { code: "project_not_found", message: "项目不存在或已删除。" } });
+    }
+    return reply.code(204).send();
+  });
 }

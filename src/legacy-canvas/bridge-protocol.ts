@@ -74,7 +74,7 @@ export const hostSaveErrorMessageSchema = z
     type: z.literal("host:save-error"),
     protocolVersion: z.literal(1),
     requestId: z.string().min(1),
-    code: z.enum(["conflict", "forbidden", "network"]),
+    code: z.enum(["conflict", "forbidden", "missing", "network"]),
   })
   .strict();
 
@@ -95,6 +95,11 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("canvas:navigate"),
     protocolVersion: z.literal(1),
     target: z.enum(["home", "projects", "logout"]),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:open-account"),
+    protocolVersion: z.literal(1),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

@@ -17,6 +17,7 @@ export const appRoutes = {
 } as const;
 
 export const routePaths = {
+  account: () => "/account",
   login: () => "/login",
   logout: () => "/logout",
   noWorkspace: () => "/no-workspace",

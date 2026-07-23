@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Navigate, useLoaderData, useParams, useSubmit } from "react-router-dom";
 import type { CanvasDocumentRepository } from "../../application/canvases/CanvasDocumentRepository";
 import type { WorkspaceRouteData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
 import type { ProjectSummary } from "../../domain/project/project";
 import { CanvasHost } from "../../legacy-canvas/CanvasHost";
+import { AccountSettingsDialog } from "../../features/account/AccountSettingsDialog";
 import { readTheme } from "../../shared/theme/theme";
 
 interface LegacyCanvasRouteProps {
@@ -13,6 +15,7 @@ interface LegacyCanvasRouteProps {
 type CanvasRouteData = WorkspaceRouteData & { project: ProjectSummary };
 
 export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRouteProps) {
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const { workspaceId, projectId, canvasId } = useParams();
   const { actor, currentWorkspace, project } = useLoaderData() as CanvasRouteData;
   const submit = useSubmit();
@@ -22,10 +25,12 @@ export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRout
   }
 
   return (
-    <CanvasHost
-      repository={canvasDocumentRepository}
-      onLogout={() => submit(null, { action: routePaths.logout(), method: "post" })}
-      context={{
+    <>
+      <CanvasHost
+        repository={canvasDocumentRepository}
+        onLogout={() => submit(null, { action: routePaths.logout(), method: "post" })}
+        onOpenAccountSettings={() => setAccountSettingsOpen(true)}
+        context={{
         protocolVersion: 1,
         workspaceId,
         projectId,
@@ -41,7 +46,14 @@ export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRout
           name: currentWorkspace.name,
           role: currentWorkspace.currentUserRole ?? "member",
         },
-      }}
-    />
+        }}
+      />
+      <AccountSettingsDialog
+        actor={actor}
+        workspace={currentWorkspace}
+        open={accountSettingsOpen}
+        onClose={() => setAccountSettingsOpen(false)}
+      />
+    </>
   );
 }

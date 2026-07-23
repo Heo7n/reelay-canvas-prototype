@@ -18,6 +18,13 @@ export class CanvasDocumentRevisionConflictError extends Error {
   }
 }
 
+export class CanvasDocumentProjectUnavailableError extends Error {
+  constructor() {
+    super("The project is unavailable or no longer writable.");
+    this.name = "CanvasDocumentProjectUnavailableError";
+  }
+}
+
 export interface CanvasDocumentStore {
   getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null>;
   saveCanvasDocument(input: SaveCanvasDocumentInput): Promise<CanvasDocument>;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  CanvasDocumentProjectUnavailableError,
   CanvasDocumentRevisionConflictError,
   type SaveCanvasDocumentInput,
 } from "../application/CanvasDocumentStore";
@@ -27,9 +28,11 @@ export class InMemoryCollaborationStore implements CollaborationStore {
   private readonly workspaces: Workspace[];
   private readonly memberships: Membership[];
   private readonly projects = new Map<ProjectId, DemoProjectFixture>();
+  private readonly trashedProjects = new Map<ProjectId, { deletedAt: string; deletedByActorId: ActorId }>();
   private readonly projectMemberships = new Map<ProjectId, Map<ActorId, ProjectUserRole>>();
   private readonly canvasDocuments = new Map<ProjectId, Map<CanvasId, CanvasDocument>>();
   private readonly sessions = new Map<string, ActorId>();
+  private readonly accountContacts = new Map<ActorId, { contactEmail: string | null; contactPhone: string | null }>();
 
   constructor(
     seed: DemoSeed = createDemoSeed(),
@@ -37,6 +40,9 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     private readonly createId: () => string = randomUUID,
   ) {
     this.accounts = seed.accounts.map((account) => ({ ...account }));
+    this.accounts.forEach((account) => {
+      this.accountContacts.set(account.actorId, { contactEmail: null, contactPhone: null });
+    });
     this.workspaces = seed.workspaces.map((workspace) => ({ ...workspace }));
     this.memberships = seed.memberships.map((membership) => ({ ...membership }));
     seed.projects.forEach((project) => this.projects.set(project.id, { ...project }));
@@ -74,17 +80,33 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     if (!sessionId) return null;
     const actorId = this.sessions.get(sessionId);
     if (!actorId) return null;
+    return this.toSessionActor(actorId);
+  }
+
+  private toSessionActor(actorId: ActorId): SessionActor | null {
     const account = this.accounts.find((candidate) => candidate.actorId === actorId);
     if (!account) return null;
 
+    const contacts = this.accountContacts.get(actorId);
     return {
       account: account.account,
+      contactEmail: contacts?.contactEmail ?? null,
+      contactPhone: contacts?.contactPhone ?? null,
       id: actorId,
       displayName: account.displayName,
       workspaceIds: this.memberships
         .filter((membership) => membership.actorId === actorId)
         .map((membership) => membership.workspaceId),
     };
+  }
+
+  async updateAccountContacts(
+    actorId: ActorId,
+    contacts: { contactEmail: string | null; contactPhone: string | null },
+  ): Promise<SessionActor | null> {
+    if (!this.accounts.some((account) => account.actorId === actorId)) return null;
+    this.accountContacts.set(actorId, { ...contacts });
+    return this.toSessionActor(actorId);
   }
 
   async listWorkspacesForActor(actorId: ActorId): Promise<Workspace[]> {
@@ -111,7 +133,9 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     return [...this.projects.values()]
       .filter(
         (project) =>
-          project.workspaceId === workspaceId && this.projectMemberships.get(project.id)?.has(actorId),
+          project.workspaceId === workspaceId &&
+          !this.trashedProjects.has(project.id) &&
+          this.projectMemberships.get(project.id)?.has(actorId),
       )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map((project) => this.toProjectSummary(project, actorId));
@@ -125,6 +149,7 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     const project = this.projects.get(projectId);
     if (
       !project ||
+      this.trashedProjects.has(projectId) ||
       project.workspaceId !== workspaceId ||
       !this.projectMemberships.get(projectId)?.has(actorId)
     ) {
@@ -135,7 +160,11 @@ export class InMemoryCollaborationStore implements CollaborationStore {
 
   async getProjectById(actorId: ActorId, projectId: ProjectId): Promise<ProjectSummary | null> {
     const project = this.projects.get(projectId);
-    if (!project || !this.projectMemberships.get(projectId)?.has(actorId)) return null;
+    if (
+      !project ||
+      this.trashedProjects.has(projectId) ||
+      !this.projectMemberships.get(projectId)?.has(actorId)
+    ) return null;
     return this.toProjectSummary(project, actorId);
   }
 
@@ -160,7 +189,7 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     input: UpdateProjectInput,
   ): Promise<ProjectSummary | null> {
     const current = this.projects.get(projectId);
-    if (!current || current.workspaceId !== workspaceId) return null;
+    if (!current || this.trashedProjects.has(projectId) || current.workspaceId !== workspaceId) return null;
     const role = this.projectMemberships.get(projectId)?.get(input.updatedByActorId);
     if (role !== "admin" && role !== "edit") return null;
 
@@ -174,12 +203,42 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     return this.toProjectSummary(project, input.updatedByActorId);
   }
 
+  async moveProjectToTrash(
+    workspaceId: WorkspaceId,
+    projectId: ProjectId,
+    actorId: ActorId,
+  ): Promise<boolean> {
+    const project = this.projects.get(projectId);
+    if (
+      !project ||
+      project.workspaceId !== workspaceId ||
+      this.trashedProjects.has(projectId) ||
+      this.projectMemberships.get(projectId)?.get(actorId) !== "admin"
+    ) {
+      return false;
+    }
+    this.trashedProjects.set(projectId, {
+      deletedAt: this.now().toISOString(),
+      deletedByActorId: actorId,
+    });
+    return true;
+  }
+
   async getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null> {
     const document = this.canvasDocuments.get(projectId)?.get(canvasId);
     return document ? structuredClone(document) : null;
   }
 
   async saveCanvasDocument(input: SaveCanvasDocumentInput): Promise<CanvasDocument> {
+    const project = this.projects.get(input.projectId);
+    const role = this.projectMemberships.get(input.projectId)?.get(input.actorId);
+    if (
+      !project ||
+      this.trashedProjects.has(input.projectId) ||
+      (role !== "admin" && role !== "edit")
+    ) {
+      throw new CanvasDocumentProjectUnavailableError();
+    }
     const projectDocuments = this.canvasDocuments.get(input.projectId) ?? new Map<CanvasId, CanvasDocument>();
     const current = projectDocuments.get(input.canvasId);
     const currentRevision = current?.revision ?? 0;

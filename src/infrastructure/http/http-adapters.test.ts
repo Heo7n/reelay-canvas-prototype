@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createHttpServices } from "./createHttpServices";
+import { HttpAccountRepository } from "./HttpAccountRepository";
 import { HttpCanvasDocumentRepository } from "./HttpCanvasDocumentRepository";
 import { HttpProjectRepository } from "./HttpProjectRepository";
 import { HttpSessionGateway } from "./HttpSessionGateway";
@@ -44,6 +45,8 @@ function createFetchQueue(...responses: PlannedResponse[]): {
 
 const actorDto = {
   account: "owner@reelay.test",
+  contactEmail: null,
+  contactPhone: null,
   id: "actor-owner",
   displayName: "Owner",
   workspaceIds: ["workspace-personal", "workspace-shared"],
@@ -125,6 +128,30 @@ describe("HttpWorkspaceRepository", () => {
   });
 });
 
+describe("HttpAccountRepository", () => {
+  it("persists optional contact channels without treating the login identifier as an email", async () => {
+    const updatedActor = {
+      ...actorDto,
+      contactEmail: "reports@example.com",
+      contactPhone: "+86 138 0000 0000",
+    };
+    const transport = createFetchQueue({ body: { actor: updatedActor } });
+    const repository = new HttpAccountRepository({ baseUrl: "/backend", fetch: transport.fetch });
+
+    await expect(repository.updateContacts({
+      contactEmail: updatedActor.contactEmail,
+      contactPhone: updatedActor.contactPhone,
+    })).resolves.toEqual(updatedActor);
+
+    expect(transport.requests[0]?.url).toBe("/backend/api/account");
+    expect(transport.requests[0]?.init.method).toBe("PATCH");
+    expect(JSON.parse(String(transport.requests[0]?.init.body))).toEqual({
+      contactEmail: "reports@example.com",
+      contactPhone: "+86 138 0000 0000",
+    });
+  });
+});
+
 describe("HttpProjectRepository", () => {
   it("maps list, create and update responses and safely encodes route identifiers", async () => {
     const transport = createFetchQueue(
@@ -132,6 +159,7 @@ describe("HttpProjectRepository", () => {
       { body: { project: projectDto } },
       { status: 201, body: { project: projectDto } },
       { body: { project: { ...projectDto, name: "Renamed" } } },
+      { status: 204 },
     );
     const repository = new HttpProjectRepository({ baseUrl: "/backend/", fetch: transport.fetch });
 
@@ -141,11 +169,13 @@ describe("HttpProjectRepository", () => {
     await expect(
       repository.update("workspace/shared", "project/one", { name: "Renamed" }),
     ).resolves.toEqual({ ...projectDto, name: "Renamed" });
+    await expect(repository.moveToTrash("workspace/shared", "project/one")).resolves.toBeUndefined();
 
     expect(transport.requests.map((request) => request.url)).toEqual([
       "/backend/api/workspaces/workspace%2Fshared/projects",
       "/backend/api/workspaces/workspace%2Fshared/projects/project%2Fone",
       "/backend/api/workspaces/workspace%2Fshared/projects",
+      "/backend/api/workspaces/workspace%2Fshared/projects/project%2Fone",
       "/backend/api/workspaces/workspace%2Fshared/projects/project%2Fone",
     ]);
     expect(transport.requests[2]?.init.method).toBe("POST");
@@ -154,6 +184,7 @@ describe("HttpProjectRepository", () => {
       name: "Brand story",
     });
     expect(transport.requests[3]?.init.method).toBe("PATCH");
+    expect(transport.requests[4]?.init.method).toBe("DELETE");
   });
 
   it("maps API error envelopes to a stable typed request error", async () => {
@@ -298,6 +329,7 @@ describe("createHttpServices", () => {
 
     await expect(services.sessionGateway.getCurrent()).resolves.toEqual({ actor: null });
     expect(services.canvasDocumentRepository).toBeInstanceOf(HttpCanvasDocumentRepository);
+    expect(services.accountRepository).toBeInstanceOf(HttpAccountRepository);
     expect(services.workspaceRepository).toBeInstanceOf(HttpWorkspaceRepository);
     expect(services.projectRepository).toBeInstanceOf(HttpProjectRepository);
     expect(transport.requests[0]?.url).toBe("/shared-api/api/session");

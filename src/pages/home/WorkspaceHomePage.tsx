@@ -62,8 +62,8 @@ export function WorkspaceHomePage() {
         </section>
       </main>
 
-      <div className={`${styles.toast} ${notice || actionData?.error ? styles.toastVisible : ""}`} role="status" aria-live="polite">
-        {actionData?.error ?? notice}
+      <div className={`${styles.toast} ${notice || actionData?.error || actionData?.notice ? styles.toastVisible : ""}`} role="status" aria-live="polite">
+        {actionData?.error ?? actionData?.notice ?? notice}
       </div>
     </div>
   );

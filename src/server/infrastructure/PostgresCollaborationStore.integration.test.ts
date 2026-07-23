@@ -56,6 +56,8 @@ beforeAll(async () => {
       "0004_canvas_documents.sql",
       "0005_rename_organization.sql",
       "0006_account_roles.sql",
+      "0007_project_soft_delete.sql",
+      "0008_account_contacts.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);
@@ -262,6 +264,105 @@ describe("PostgreSQL collaboration persistence", () => {
           created_by_user_id: "actor-tianmaochao",
           updated_by_user_id: "actor-linjing",
         });
+      } finally {
+        await auditPool.end();
+      }
+    } finally {
+      if (appB) await appB.close();
+      else await appA.close();
+    }
+  });
+
+  it("persists account contacts and recoverable project deletion across restarts", async () => {
+    const appA = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+    let appB: FastifyInstance | null = null;
+
+    try {
+      const ownerCookie = await login(appA, "creator@reelay.test");
+      const contacts = await appA.inject({
+        method: "PATCH",
+        url: "/api/account",
+        headers: { cookie: ownerCookie },
+        payload: { contactEmail: "owner@example.com", contactPhone: "+86 138 0000 0000" },
+      });
+      expect(contacts.statusCode).toBe(200);
+
+      const created = await appA.inject({
+        method: "POST",
+        url: "/api/workspaces/workspace-organization-reelay/projects",
+        headers: { cookie: ownerCookie },
+        payload: { name: "可恢复删除项目" },
+      });
+      expect(created.statusCode).toBe(201);
+      const projectId = created.json().project.id as string;
+      const canvasUrl = `/api/projects/${projectId}/canvases/main/document`;
+      const canvas = await appA.inject({
+        method: "PUT",
+        url: canvasUrl,
+        headers: { cookie: ownerCookie },
+        payload: { schemaVersion: 1, expectedRevision: 0, content: { nodes: [{ id: "kept" }] } },
+      });
+      expect(canvas.statusCode).toBe(201);
+
+      const removed = await appA.inject({
+        method: "DELETE",
+        url: `/api/workspaces/workspace-organization-reelay/projects/${projectId}`,
+        headers: { cookie: ownerCookie },
+      });
+      expect(removed.statusCode).toBe(204);
+
+      await appA.close();
+      appB = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+
+      const restoredSession = await appB.inject({
+        method: "GET",
+        url: "/api/session",
+        headers: { cookie: ownerCookie },
+      });
+      expect(restoredSession.json().actor).toEqual(
+        expect.objectContaining({
+          contactEmail: "owner@example.com",
+          contactPhone: "+86 138 0000 0000",
+        }),
+      );
+      const hiddenProject = await appB.inject({
+        method: "GET",
+        url: `/api/workspaces/workspace-organization-reelay/projects/${projectId}`,
+        headers: { cookie: ownerCookie },
+      });
+      expect(hiddenProject.statusCode).toBe(404);
+      const hiddenCanvas = await appB.inject({ method: "GET", url: canvasUrl, headers: { cookie: ownerCookie } });
+      expect(hiddenCanvas.statusCode).toBe(404);
+
+      const auditPool = createPool();
+      try {
+        const projectAudit = await auditPool.query(
+          `SELECT deleted_at IS NOT NULL AS deleted, deleted_by_user_id
+           FROM projects
+           WHERE id = $1`,
+          [projectId],
+        );
+        expect(projectAudit.rows[0]).toEqual({
+          deleted: true,
+          deleted_by_user_id: "actor-tianmaochao",
+        });
+        const membershipAudit = await auditPool.query(
+          "SELECT role FROM project_memberships WHERE project_id = $1 AND user_id = $2",
+          [projectId, "actor-tianmaochao"],
+        );
+        expect(membershipAudit.rows[0]).toEqual({ role: "admin" });
+        const canvasAudit = await auditPool.query(
+          "SELECT revision, content FROM canvas_documents WHERE project_id = $1 AND canvas_id = 'main'",
+          [projectId],
+        );
+        expect(canvasAudit.rows[0]).toEqual({ revision: 1, content: { nodes: [{ id: "kept" }] } });
+
+        await seedDemoDatabase(auditPool);
+        const preservedDeletion = await auditPool.query(
+          "SELECT deleted_at IS NOT NULL AS deleted FROM projects WHERE id = $1",
+          [projectId],
+        );
+        expect(preservedDeletion.rows[0]).toEqual({ deleted: true });
       } finally {
         await auditPool.end();
       }

@@ -21,6 +21,7 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
       children: [
         { index: true, loader: handlers.rootLoader },
         { path: "login", loader: handlers.loginLoader, action: handlers.loginAction, element: <LoginPage /> },
+        { path: "account", action: handlers.accountAction },
         { path: "logout", action: handlers.logoutAction },
         { path: "no-workspace", loader: handlers.noWorkspaceLoader, element: <NoWorkspacePage /> },
         { path: "w/:workspaceId", loader: handlers.workspaceLoader, action: handlers.workspaceAction, element: <WorkspaceHomePage /> },

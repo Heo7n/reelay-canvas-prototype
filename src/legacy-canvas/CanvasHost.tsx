@@ -19,18 +19,19 @@ import {
 interface CanvasHostProps {
   context: LegacyCanvasContext;
   onLogout?: () => void;
+  onOpenAccountSettings?: () => void;
   repository: CanvasDocumentRepository;
 }
 
 type DocumentLoadState =
   | { status: "loading" }
   | { status: "ready"; document: CanvasDocument | null }
-  | { status: "error" };
+  | { status: "error"; reason: "load" | "unavailable" };
 
 type PersistenceStatus = "loading" | "saved" | "dirty" | "saving" | "error";
 type NavigationTarget = "home" | "projects" | "logout";
 
-export function CanvasHost({ context, onLogout, repository }: CanvasHostProps) {
+export function CanvasHost({ context, onLogout, onOpenAccountSettings, repository }: CanvasHostProps) {
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const initializedReadyGenerationRef = useRef(0);
@@ -133,9 +134,12 @@ export function CanvasHost({ context, onLogout, repository }: CanvasHostProps) {
           setPersistenceStatus("saved");
         }
       },
-      () => {
+      (error: unknown) => {
         if (active) {
-          setDocumentState({ status: "error" });
+          setDocumentState({
+            status: "error",
+            reason: error instanceof HttpRequestError && error.status === 404 ? "unavailable" : "load",
+          });
           setPersistenceStatus("error");
         }
       },
@@ -186,7 +190,10 @@ export function CanvasHost({ context, onLogout, repository }: CanvasHostProps) {
   }, [requestFlush]);
 
   useEffect(() => {
-    const sendSaveError = (requestId: string, code: "conflict" | "forbidden" | "network"): void => {
+    const sendSaveError = (
+      requestId: string,
+      code: "conflict" | "forbidden" | "missing" | "network",
+    ): void => {
       postToCanvas(hostSaveErrorMessageSchema.parse({
         source: "reelay-shell",
         type: "host:save-error",
@@ -215,6 +222,10 @@ export function CanvasHost({ context, onLogout, repository }: CanvasHostProps) {
       }
       if (message.type === "canvas:navigate") {
         queueNavigation(message.target);
+        return;
+      }
+      if (message.type === "canvas:open-account") {
+        onOpenAccountSettings?.();
         return;
       }
       if (message.type !== "canvas:save") return;
@@ -264,13 +275,18 @@ export function CanvasHost({ context, onLogout, repository }: CanvasHostProps) {
             sendSaveError(message.requestId, "forbidden");
             return;
           }
+          if (error instanceof HttpRequestError && error.status === 404) {
+            sendSaveError(message.requestId, "missing");
+            setDocumentState({ status: "error", reason: "unavailable" });
+            return;
+          }
           sendSaveError(message.requestId, "network");
         },
       );
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [finishPendingNavigation, postToCanvas, queueNavigation, repository, safeContext.canvasId, safeContext.projectId, safeContext.writable]);
+  }, [finishPendingNavigation, onOpenAccountSettings, postToCanvas, queueNavigation, repository, safeContext.canvasId, safeContext.projectId, safeContext.writable]);
 
   return (
     <section
@@ -289,8 +305,14 @@ export function CanvasHost({ context, onLogout, repository }: CanvasHostProps) {
         <div className="legacy-canvas-state" role={documentState.status === "error" ? "alert" : "status"}>
           {documentState.status === "error" ? (
             <div className="legacy-canvas-state-card">
-              <strong>暂时无法加载此项目画布</strong>
-              <span>画布已停止交互，重试成功前不会写入任何内容。</span>
+              <strong>
+                {documentState.reason === "unavailable" ? "项目已删除或无法访问" : "暂时无法加载此项目画布"}
+              </strong>
+              <span>
+                {documentState.reason === "unavailable"
+                  ? "画布已停止交互，当前窗口不会继续保存任何内容。"
+                  : "画布已停止交互，重试成功前不会写入任何内容。"}
+              </span>
               <button type="button" onClick={retryDocumentLoad}>重试加载</button>
             </div>
           ) : (

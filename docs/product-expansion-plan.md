@@ -144,6 +144,7 @@ flowchart TD
 - 单击项目卡或按 Enter 进入画布；双击只能作为桌面增强，不能是唯一入口。
 - 卡片菜单支持重命名、复制、移动、归档、删除。
 - 删除进入回收站，不直接永久删除。
+- 当前已完成管理员二次确认与服务端软删除，项目、成员关系和画布文档仍保留；回收站列表、恢复和永久删除尚未实现，不能把“从项目列表移除”描述为完整回收站。
 - 支持列表与网格视图，但默认使用信息密度较高的网格。
 
 ## 4.2 资产中心
@@ -413,7 +414,7 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision 和跨服务重启集成验证；旧画布已消费账号、组织和项目上下文，并通过严格 allow-list bundle 保存多画布、节点、组与视口。静态登录 / 主页双轨已经删除，画布导航统一回到 React 宿主。内存 adapter 只保留作快速契约测试和显式回退；资产、生成任务、生成历史和积分账本尚未持久化。
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、账号联系资料、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision、项目软删除和跨服务重启集成验证；旧画布已消费账号、组织和项目上下文，并通过严格 allow-list bundle 保存多画布、节点、组与视口。账号设置已形成个人主页 / 积分记录 / 用量看板的 React 弹出面板，但积分与用量保持真实空状态。静态登录 / 主页双轨已经删除，画布导航统一回到 React 宿主。内存 adapter 只保留作快速契约测试和显式回退；资产、生成任务、生成历史和积分账本尚未持久化。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。

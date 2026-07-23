@@ -31,6 +31,9 @@ const projects: ProjectSummary[] = [
 
 function createServices(signedIn = true): ApplicationServices {
   return {
+    accountRepository: {
+      updateContacts: vi.fn(async (input) => ({ ...actor, ...input })),
+    },
     canvasDocumentRepository: {
       getCanvasDocument: vi.fn(async () => null),
       save: vi.fn(async (input) => ({
@@ -55,6 +58,7 @@ function createServices(signedIn = true): ApplicationServices {
       getById: vi.fn(async (workspaceId, projectId) => projects.find((project) => project.workspaceId === workspaceId && project.id === projectId) ?? null),
       create: vi.fn(async (workspaceId, input) => ({ ...projects[0], id: "project-created", workspaceId, name: input.name })),
       update: vi.fn(async (_workspaceId, _projectId, input) => ({ ...projects[0], name: input.name ?? projects[0].name })),
+      moveToTrash: vi.fn(async () => undefined),
     },
   };
 }
@@ -145,5 +149,43 @@ describe("application route data", () => {
     expect(services.projectRepository.create).toHaveBeenCalledWith("workspace-organization", { name: "未命名项目" });
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).headers.get("Location")).toBe("/w/workspace-organization/projects/project-created/canvases/main");
+  });
+
+  it("moves an admin project to trash through the current workspace route", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const response = await handlers.workspaceAction(
+      actionArgs(
+        "http://reelay.local/app/w/workspace-organization/projects",
+        { intent: "delete", projectId: "project-one" },
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(services.projectRepository.moveToTrash).toHaveBeenCalledWith(
+      "workspace-organization",
+      "project-one",
+    );
+    expect(response).toEqual(expect.objectContaining({
+      ok: true,
+      notice: expect.stringContaining("数据已保留"),
+    }));
+  });
+
+  it("persists optional contact channels through the dedicated account action", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const response = await handlers.accountAction(
+      actionArgs("http://reelay.local/app/account", {
+        contactEmail: "reports@example.com",
+        contactPhone: "+86 138 0000 0000",
+      }),
+    );
+
+    expect(services.accountRepository.updateContacts).toHaveBeenCalledWith({
+      contactEmail: "reports@example.com",
+      contactPhone: "+86 138 0000 0000",
+    });
+    expect(response).toEqual({ ok: true, notice: "联系资料已保存。" });
   });
 });

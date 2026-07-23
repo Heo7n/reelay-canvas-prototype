@@ -155,5 +155,17 @@ test("legacy page exits through the routed host instead of deleted static pages"
   assert.match(appSource, /requestHostNavigation\("home"\)/);
   assert.match(appSource, /requestHostNavigation\("projects"\)/);
   assert.match(appSource, /requestHostNavigation\("logout"\)/);
+  assert.match(html, />退出账号</);
+  assert.doesNotMatch(html, /退出(?:演示账号|登录)/);
   assert.doesNotMatch(appSource, /(?:home|login)\.html/);
+});
+
+test("the canvas organization entry exposes a visual management affordance without redundant text", () => {
+  assert.match(html, /id="profileOrganization"[^>]*aria-label="进入组织管理界面"/);
+  assert.doesNotMatch(html, />所属组织</);
+  assert.doesNotMatch(html, /role="tooltip">进入组织管理界面</);
+  assert.match(appCss, /\.profile-membership:hover > svg:last-of-type,[\s\S]*?\{[^}]*transform:\s*translateX\(2px\)/);
+  assert.doesNotMatch(appCss, /\.profile-membership:hover > svg:first-child/);
+  assert.doesNotMatch(appCss, /\.profile-membership:hover > span/);
+  assert.doesNotMatch(appCss, /\.profile-membership:hover,\s*\.profile-membership:focus-visible\s*\{[^}]*box-shadow/);
 });

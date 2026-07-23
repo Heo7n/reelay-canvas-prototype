@@ -5,6 +5,8 @@ const IdentifierSchema = z.string().trim().min(1).max(160);
 export const SessionActorDtoSchema = z
   .object({
     account: z.string().trim().min(1).max(320),
+    contactEmail: z.string().email().max(254).nullable().default(null),
+    contactPhone: z.string().trim().min(5).max(32).nullable().default(null),
     id: IdentifierSchema,
     displayName: z.string().trim().min(1).max(160),
     workspaceIds: z.array(IdentifierSchema),
@@ -20,6 +22,12 @@ export const DemoSessionResponseDtoSchema = z
   .object({
     actor: SessionActorDtoSchema,
     mode: z.literal("demo"),
+  })
+  .strict();
+
+export const AccountResponseDtoSchema = z
+  .object({
+    actor: SessionActorDtoSchema,
   })
   .strict();
 

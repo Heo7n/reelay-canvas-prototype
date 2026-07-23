@@ -26,6 +26,10 @@ export interface CollaborationStore extends CanvasDocumentStore {
   createSession(actorId: ActorId): Promise<string>;
   deleteSession(sessionId: string): Promise<void>;
   getSessionActor(sessionId: string | undefined): Promise<SessionActor | null>;
+  updateAccountContacts(
+    actorId: ActorId,
+    contacts: { contactEmail: string | null; contactPhone: string | null },
+  ): Promise<SessionActor | null>;
 
   listWorkspacesForActor(actorId: ActorId): Promise<Workspace[]>;
   canReadWorkspace(actorId: ActorId, workspaceId: WorkspaceId): Promise<boolean>;
@@ -40,4 +44,9 @@ export interface CollaborationStore extends CanvasDocumentStore {
     projectId: ProjectId,
     input: UpdateProjectInput,
   ): Promise<ProjectSummary | null>;
+  moveProjectToTrash(
+    workspaceId: WorkspaceId,
+    projectId: ProjectId,
+    actorId: ActorId,
+  ): Promise<boolean>;
 }

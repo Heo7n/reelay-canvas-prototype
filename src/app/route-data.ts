@@ -24,6 +24,7 @@ export interface LoginActionData {
 
 export interface WorkspaceActionData {
   error?: string;
+  notice?: string;
   ok?: boolean;
 }
 
@@ -142,6 +143,22 @@ export function createRouteHandlers(services: ApplicationServices) {
       return redirect(routePaths.login());
     },
 
+    accountAction: async ({ request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
+      const session = await services.sessionGateway.getCurrent();
+      if (!session.actor) throw loginRedirect(request);
+      const formData = await request.formData();
+      const contactEmail = String(formData.get("contactEmail") ?? "").trim() || null;
+      const contactPhone = String(formData.get("contactPhone") ?? "").trim() || null;
+      try {
+        await services.accountRepository.updateContacts({ contactEmail, contactPhone });
+        return { ok: true, notice: "联系资料已保存。" };
+      } catch (error) {
+        if (error instanceof HttpRequestError && error.status === 401) throw loginRedirect(request);
+        if (error instanceof HttpRequestError) return { error: error.message };
+        return { error: "联系资料保存失败，请稍后重试。" };
+      }
+    },
+
     noWorkspaceLoader: async ({ request }: LoaderFunctionArgs) => {
       const context = await getSessionContext(services);
       if (!context.actor) throw loginRedirect(request);
@@ -176,6 +193,16 @@ export function createRouteHandlers(services: ApplicationServices) {
           if (!projectId || !name) return { error: "项目名称不能为空。" };
           await services.projectRepository.update(workspaceId, projectId, { name });
           return { ok: true };
+        }
+
+        if (intent === "delete") {
+          const projectId = String(formData.get("projectId") ?? "");
+          if (!projectId) return { error: "项目标识无效，请刷新后重试。" };
+          await services.projectRepository.moveToTrash(workspaceId, projectId);
+          return {
+            ok: true,
+            notice: "项目已从列表移除，项目与画布数据已保留以便后续恢复。",
+          };
         }
 
         return { error: "无法识别此项目操作。" };

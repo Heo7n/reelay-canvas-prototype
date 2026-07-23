@@ -86,7 +86,19 @@ describe("legacy canvas bridge", () => {
       type: "host:save-error",
       protocolVersion: 1,
       requestId: "save-1",
-      code: "conflict",
-    }).code).toBe("conflict");
+      code: "missing",
+    }).code).toBe("missing");
+  });
+
+  it("accepts the routed account-settings request from the legacy canvas", () => {
+    expect(parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+    })).toEqual({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+    });
   });
 });

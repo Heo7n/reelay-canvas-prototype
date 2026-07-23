@@ -76,4 +76,11 @@ export class HttpProjectRepository implements ProjectRepository {
     );
     return toProject(response.project);
   }
+
+  async moveToTrash(workspaceId: WorkspaceId, projectId: ProjectId): Promise<void> {
+    await this.http.sendWithoutResponse(
+      `${projectsPath(workspaceId)}/${encodeURIComponent(projectId)}`,
+      { method: "DELETE" },
+    );
+  }
 }

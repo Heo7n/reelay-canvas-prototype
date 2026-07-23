@@ -2,6 +2,7 @@ import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { registerSessionRoutes } from "./http/session-routes";
+import { registerAccountRoutes } from "./http/account-routes";
 import { registerWorkspaceProjectRoutes } from "./http/workspace-project-routes";
 import { registerCanvasDocumentRoutes } from "./http/canvas-document-routes";
 import type { CollaborationStore } from "./application/CollaborationStore";
@@ -27,6 +28,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     }
   });
   await registerSessionRoutes(app, store, options.secureCookies ?? process.env.NODE_ENV === "production");
+  await registerAccountRoutes(app, store);
   await registerWorkspaceProjectRoutes(app, store);
   await registerCanvasDocumentRoutes(app, store);
 

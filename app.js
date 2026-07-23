@@ -320,7 +320,7 @@ function syncHostedIdentity(context) {
   if (profileEmail) profileEmail.textContent = account || "演示画布";
   if (profileOrganizationName) profileOrganizationName.textContent = workspaceName;
   if (profileOrganizationRole) profileOrganizationRole.textContent = roleLabels[workspaceRole];
-  profileOrganization?.setAttribute("aria-label", `进入${workspaceName}组织面板`);
+  profileOrganization?.setAttribute("aria-label", `进入${workspaceName}组织管理界面`);
 }
 
 function requireCanvasMutation({ notify = true } = {}) {
@@ -500,6 +500,18 @@ function requestHostNavigation(target) {
   });
 }
 
+function requestHostAccountSettings() {
+  if (window.parent === window) {
+    showActionToast("请从 Reelay 应用主页进入账号设置");
+    return;
+  }
+  postCanvasBridgeMessage({
+    source: "reelay-legacy-canvas",
+    type: "canvas:open-account",
+    protocolVersion: 1,
+  });
+}
+
 function postCanvasDirty(dirty) {
   postCanvasBridgeMessage({
     source: "reelay-legacy-canvas",
@@ -571,6 +583,12 @@ function handleCanvasSaveError(message) {
     canvasPersistence.writable = false;
     setCanvasAccessMode("readonly");
     showActionToast("当前项目为只读，可浏览但不能修改");
+    return;
+  }
+  if (message.code === "missing") {
+    canvasPersistence.blocked = true;
+    setCanvasAccessMode("blocked");
+    showActionToast("项目已删除或无法访问，当前画布已停止保存");
     return;
   }
   showActionToast("画布暂时保存失败，正在等待重试");
@@ -6503,11 +6521,18 @@ profileMenu?.addEventListener("click", (event) => {
     applyTheme(state.themeMode === "light" ? "dark" : "light", { flash: true });
     return;
   }
+  if (action === "account") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProfileMenu();
+    requestHostAccountSettings();
+    return;
+  }
   if (action === "logout") {
     showConfirmDialog({
       title: "退出当前账号",
       body: "退出后将结束当前本地演示会话，并返回账户密码登录页。",
-      confirmText: "退出登录",
+      confirmText: "退出账号",
       onConfirm: () => requestHostNavigation("logout"),
     });
     return;

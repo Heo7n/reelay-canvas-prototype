@@ -83,7 +83,6 @@
 .creditSummary small { grid-column: 1 / -1; color: var(--workspace-muted, #77777d); font-size: 11px; }
 
 .menuList { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.12)); }
-.label { display: block; padding: 5px 9px 4px; color: var(--workspace-muted, #77777d); font-size: 10px; font-weight: 720; }
 
 .menuItem {
   display: grid;
@@ -108,9 +107,33 @@
 .menuItem svg { width: 15px; height: 15px; }
 .menuItem > svg:last-child:not(:first-child) { grid-column: 4; justify-self: end; }
 .menuItem small { grid-column: 3 / 5; justify-self: end; color: var(--workspace-muted, #77777d); font-size: 10px; }
-.membership { min-height: 40px; background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); cursor: pointer; }
-.membership > span { overflow-wrap: anywhere; white-space: normal; }
+.membership {
+  position: relative;
+  min-height: 40px;
+  overflow: visible;
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  cursor: pointer;
+}
+.membershipName {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .membership small { grid-column: 3; }
+.membership > svg:last-of-type {
+  transition: transform 140ms ease;
+}
+.membership:hover,
+.membership:focus-visible {
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+.membership:hover > svg:last-of-type,
+.membership:focus-visible > svg:last-of-type {
+  transform: translateX(2px);
+}
+.membership:focus-visible .membershipName {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .divider { height: 1px; margin: 8px 4px; background: var(--workspace-border, rgba(23, 23, 25, 0.12)); }
 .signOut { color: #d64c58; }
 .profile form { margin: 0; }

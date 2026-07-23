@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,12 +10,15 @@ import { ProjectCard } from "./ProjectCard";
 
 afterEach(cleanup);
 
-function renderCard(project: ProjectSummary): void {
+function renderCard(
+  project: ProjectSummary,
+  action: ({ request }: { request: Request }) => Promise<unknown> = async () => null,
+): void {
   const router = createMemoryRouter(
     [
       {
         path: "*",
-        action: async () => null,
+        action,
         element: <ProjectCard project={project} onNotice={vi.fn()} />,
       },
     ],
@@ -67,5 +70,42 @@ describe("ProjectCard access projection", () => {
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "转为协作项目" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "删除项目" })).toBeInTheDocument();
+  });
+
+  it("asks for explicit confirmation before moving an administered project to trash", async () => {
+    const submitted = vi.fn();
+    const project = {
+      ...collaborativeViewerProject,
+      id: "project-admin",
+      accessKind: "collaborative" as const,
+      currentUserRole: "admin" as const,
+      name: "协作广告项目",
+    };
+    renderCard(project, async ({ request }) => {
+      submitted(Object.fromEntries(await request.formData()));
+      return { ok: true };
+    });
+
+    fireEvent.click(screen.getByLabelText("打开 协作广告项目 的项目菜单"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除项目" }));
+
+    const dialog = screen.getByRole("alertdialog", { name: "删除“协作广告项目”？" });
+    expect(dialog).toHaveTextContent("项目成员关系与画布数据会保留");
+    expect(dialog).toHaveTextContent("协作成员也将无法继续访问这个项目");
+    expect(screen.getByRole("button", { name: "取消" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(submitted).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText("打开 协作广告项目 的项目菜单"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除项目" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除项目" }));
+
+    await waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
+    expect(submitted).toHaveBeenCalledWith({
+      intent: "delete",
+      projectId: "project-admin",
+    });
   });
 });

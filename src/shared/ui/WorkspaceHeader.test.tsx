@@ -44,10 +44,13 @@ describe("workspace account menu", () => {
     expect(screen.queryByText("个人空间")).toBeNull();
     expect(screen.getByTitle("星海视觉工作室")).toBeInTheDocument();
     expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "进入星海视觉工作室组织面板" })).toHaveTextContent("主账户");
+    const organizationEntry = screen.getByRole("button", { name: "进入星海视觉工作室组织管理界面" });
+    expect(organizationEntry).toHaveTextContent("主账户");
+    expect(screen.queryByText("所属组织")).toBeNull();
+    expect(screen.queryByRole("tooltip")).toBeNull();
     expect(screen.getByRole("button", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "帮助中心" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "退出演示账号" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "退出账号" })).toBeInTheDocument();
   });
 
   it.each([
@@ -70,6 +73,23 @@ describe("workspace account menu", () => {
     render(<RouterProvider router={router} />);
 
     fireEvent.pointerEnter(screen.getByLabelText("打开账户菜单"));
-    expect(screen.getByRole("button", { name: "进入星海视觉工作室组织面板" })).toHaveTextContent(label);
+    expect(screen.getByRole("button", { name: "进入星海视觉工作室组织管理界面" })).toHaveTextContent(label);
+  });
+
+  it("opens the routed account settings dialog from the profile menu", () => {
+    const router = createMemoryRouter([
+      {
+        path: "*",
+        action: async () => null,
+        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} onNotice={vi.fn()} />,
+      },
+    ], { initialEntries: ["/w/workspace-organization"] });
+    render(<RouterProvider router={router} />);
+
+    fireEvent.pointerEnter(screen.getByLabelText("打开账户菜单"));
+    fireEvent.click(screen.getByRole("button", { name: "账号设置" }));
+
+    expect(screen.getByRole("dialog", { name: "账号设置" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "账户信息" })).toBeInTheDocument();
   });
 });

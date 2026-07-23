@@ -19,6 +19,7 @@ import { Form } from "react-router-dom";
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { routePaths } from "../../app/routes";
+import { AccountSettingsDialog } from "../../features/account/AccountSettingsDialog";
 import { useTheme } from "../theme/theme";
 import { Brand } from "./Brand";
 import styles from "./WorkspaceHeader.module.css";
@@ -134,6 +135,7 @@ function ShortcutHelp() {
 
 export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: WorkspaceHeaderProps) {
   const { theme, toggleTheme } = useTheme();
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const profileRef = useRef<HTMLDetailsElement>(null);
@@ -179,7 +181,8 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: Workspace
   }, []);
 
   return (
-    <header className={styles.header}>
+    <>
+      <header className={styles.header}>
       <Brand to={routePaths.workspaceHome(currentWorkspace.id)} />
 
       <div className={styles.account}>
@@ -232,21 +235,27 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: Workspace
             </div>
 
             <div className={styles.menuList}>
-              <span className={styles.label}>所属组织</span>
               <button
                 className={`${styles.menuItem} ${styles.membership}`}
                 type="button"
-                aria-label={`进入${currentWorkspace.name}组织面板`}
+                aria-label={`进入${currentWorkspace.name}组织管理界面`}
                 onClick={() => onNotice(`${currentWorkspace.name}组织管理页将在下一阶段开放。`)}
               >
                 <Building2 aria-hidden="true" />
-                <span>{currentWorkspace.name}</span>
+                <span className={styles.membershipName}>{currentWorkspace.name}</span>
                 <small>{membershipRoleLabels[membershipRole]}</small>
                 <ChevronRight aria-hidden="true" />
               </button>
 
               <div className={styles.divider} />
-              <button className={styles.menuItem} type="button" onClick={() => onNotice("账号设置将在正式账户系统接入后开放。") }>
+              <button
+                className={styles.menuItem}
+                type="button"
+                onClick={() => {
+                  closeProfile();
+                  setAccountSettingsOpen(true);
+                }}
+              >
                 <Settings aria-hidden="true" />
                 <span>账号设置</span>
               </button>
@@ -294,13 +303,20 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: Workspace
               <Form method="post" action={routePaths.logout()}>
                 <button className={`${styles.menuItem} ${styles.signOut}`} type="submit">
                   <LogOut aria-hidden="true" />
-                  <span>退出演示账号</span>
+                  <span>退出账号</span>
                 </button>
               </Form>
             </div>
           </div>
         </details>
       </div>
-    </header>
+      </header>
+      <AccountSettingsDialog
+        actor={actor}
+        workspace={currentWorkspace}
+        open={accountSettingsOpen}
+        onClose={() => setAccountSettingsOpen(false)}
+      />
+    </>
   );
 }

@@ -67,8 +67,8 @@ export function ProjectsPage() {
         {query && filteredProjects.length === 0 ? <p className={styles.emptyState}>没有找到匹配“{query}”的项目</p> : null}
       </main>
 
-      <div className={`${styles.toast} ${notice || actionData?.error ? styles.toastVisible : ""}`} role="status" aria-live="polite">
-        {actionData?.error ?? notice}
+      <div className={`${styles.toast} ${notice || actionData?.error || actionData?.notice ? styles.toastVisible : ""}`} role="status" aria-live="polite">
+        {actionData?.error ?? actionData?.notice ?? notice}
       </div>
     </div>
   );

@@ -16,4 +16,5 @@ export interface ProjectRepository {
   getById(workspaceId: WorkspaceId, projectId: ProjectId): Promise<ProjectSummary | null>;
   create(workspaceId: WorkspaceId, input: CreateProjectInput): Promise<ProjectSummary>;
   update(workspaceId: WorkspaceId, projectId: ProjectId, input: UpdateProjectInput): Promise<ProjectSummary>;
+  moveToTrash(workspaceId: WorkspaceId, projectId: ProjectId): Promise<void>;
 }

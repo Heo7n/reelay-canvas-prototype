@@ -7,6 +7,19 @@ export const DemoSessionBodySchema = z
   })
   .strict();
 
+export const UpdateAccountContactsBodySchema = z
+  .object({
+    contactEmail: z.string().trim().email().max(254).nullable(),
+    contactPhone: z
+      .string()
+      .trim()
+      .min(5)
+      .max(32)
+      .regex(/^[+0-9()\-\s]+$/, "Phone contains unsupported characters.")
+      .nullable(),
+  })
+  .strict();
+
 export const WorkspaceParamsSchema = z.object({
   workspaceId: z.string().trim().min(1).max(120),
 });

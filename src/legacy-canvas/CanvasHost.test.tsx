@@ -246,6 +246,34 @@ describe("CanvasHost", () => {
     ));
   });
 
+  it("stops the iframe after a deleted project rejects an in-flight save", async () => {
+    const save = vi.fn(async () => {
+      throw new HttpRequestError(404, "project_not_found", "项目不存在或已删除。");
+    });
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save }}
+        context={editableContext}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, saveMessage("save-after-delete"));
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      {
+        source: "reelay-shell",
+        type: "host:save-error",
+        protocolVersion: 1,
+        requestId: "save-after-delete",
+        code: "missing",
+      },
+      window.location.origin,
+    ));
+    expect(await screen.findByRole("alert")).toHaveTextContent("项目已删除或无法访问");
+    expect(screen.queryByTitle("Reelay 项目画布")).toBeNull();
+  });
+
   it("rejects save requests locally when loader-derived access is read-only", async () => {
     const save = vi.fn();
     render(
@@ -374,5 +402,25 @@ describe("CanvasHost", () => {
     act(() => dispatchCanvasMessage(frame, navigateMessage("logout")));
 
     expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the legacy account action to the routed account dialog", async () => {
+    const onOpenAccountSettings = vi.fn();
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        context={editableContext}
+        onOpenAccountSettings={onOpenAccountSettings}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+
+    act(() => dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+    }));
+
+    expect(onOpenAccountSettings).toHaveBeenCalledTimes(1);
   });
 });

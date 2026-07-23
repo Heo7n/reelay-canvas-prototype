@@ -1,7 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { SessionActor } from "../../domain/identity/session";
-import { CanvasDocumentRevisionConflictError } from "../application/CanvasDocumentStore";
+import {
+  CanvasDocumentProjectUnavailableError,
+  CanvasDocumentRevisionConflictError,
+} from "../application/CanvasDocumentStore";
 import type { CollaborationStore } from "../application/CollaborationStore";
 import { CanvasDocumentParamsSchema, SaveCanvasDocumentBodySchema } from "./contracts";
 import { getRequestActor } from "./session-context";
@@ -82,6 +85,11 @@ export async function registerCanvasDocumentRoutes(
         });
         return reply.code(body.data.expectedRevision === 0 ? 201 : 200).send({ document });
       } catch (error) {
+        if (error instanceof CanvasDocumentProjectUnavailableError) {
+          return reply.code(404).send({
+            error: { code: "project_not_found", message: "项目不存在、已删除或无法访问。" },
+          });
+        }
         if (error instanceof CanvasDocumentRevisionConflictError) {
           return reply.code(409).send({
             error: {
