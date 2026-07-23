@@ -8,7 +8,7 @@ import { buildServer } from "../app";
 import { DEFAULT_LOCAL_DATABASE_URL } from "../db/config";
 import { runMigrations } from "../db/migrate";
 import { seedDemoDatabase } from "../db/seed";
-import { DEMO_PASSWORD } from "../demo-fixtures";
+import { createDemoSeed, DEMO_PASSWORD } from "../demo-fixtures";
 import { PostgresCollaborationStore } from "./PostgresCollaborationStore";
 
 const databaseName = `reelay_test_${process.pid}_${randomBytes(4).toString("hex")}`;
@@ -78,6 +78,123 @@ afterAll(async () => {
 });
 
 describe("PostgreSQL collaboration persistence", () => {
+  it("reconciles only fixed demo project memberships to the fixture", async () => {
+    const pool = createPool();
+    const seed = createDemoSeed();
+    const externalActorId = "actor-seed-boundary-external";
+    const userProjectId = "project-seed-boundary-user-created";
+
+    try {
+      await pool.query(
+        `UPDATE project_memberships
+         SET role = 'admin'
+         WHERE project_id = 'project-scifi-trailer'
+           AND user_id = 'actor-linjing'`,
+      );
+      await pool.query(
+        `INSERT INTO project_memberships (project_id, user_id, role)
+         VALUES ('project-brand-story', 'actor-linjing', 'edit')`,
+      );
+
+      await pool.query(
+        `INSERT INTO users (id, display_name)
+         VALUES ($1, '范围外成员')`,
+        [externalActorId],
+      );
+      await pool.query(
+        `INSERT INTO memberships (workspace_id, user_id, role)
+         VALUES ('workspace-organization-reelay', $1, 'member')`,
+        [externalActorId],
+      );
+      await pool.query(
+        `INSERT INTO project_memberships (project_id, user_id, role)
+         VALUES ('project-brand-story', $1, 'view')`,
+        [externalActorId],
+      );
+      await pool.query(
+        `INSERT INTO projects (
+           id,
+           workspace_id,
+           created_by_user_id,
+           updated_by_user_id,
+           name,
+           created_at,
+           updated_at,
+           access_kind
+         )
+         VALUES (
+           $1,
+           'workspace-organization-reelay',
+           'actor-tianmaochao',
+           'actor-tianmaochao',
+           'Seed 范围外用户项目',
+           now(),
+           now(),
+           'collaborative'
+         )`,
+        [userProjectId],
+      );
+      await pool.query(
+        `INSERT INTO project_memberships (project_id, user_id, role)
+         VALUES ($1, 'actor-linjing', 'view')`,
+        [userProjectId],
+      );
+
+      await seedDemoDatabase(pool);
+
+      const demoProjectIds = seed.projects.map((project) => project.id);
+      const demoActorIds = seed.accounts.map((account) => account.actorId);
+      const expectedMemberships = seed.projectMemberships
+        .map(({ projectId, actorId, role }) => ({ project_id: projectId, user_id: actorId, role }))
+        .sort((left, right) =>
+          `${left.project_id}:${left.user_id}`.localeCompare(`${right.project_id}:${right.user_id}`),
+        );
+      const reconciled = await pool.query<{ project_id: string; user_id: string; role: string }>(
+        `SELECT project_id, user_id, role
+         FROM project_memberships
+         WHERE project_id = ANY($1::text[])
+           AND user_id = ANY($2::text[])
+         ORDER BY project_id, user_id`,
+        [demoProjectIds, demoActorIds],
+      );
+      expect(reconciled.rows).toEqual(expectedMemberships);
+
+      const externalMembership = await pool.query(
+        `SELECT role
+         FROM project_memberships
+         WHERE project_id = 'project-brand-story'
+           AND user_id = $1`,
+        [externalActorId],
+      );
+      expect(externalMembership.rows).toEqual([{ role: "view" }]);
+
+      const userProjectMembership = await pool.query(
+        `SELECT role
+         FROM project_memberships
+         WHERE project_id = $1
+           AND user_id = 'actor-linjing'`,
+        [userProjectId],
+      );
+      expect(userProjectMembership.rows).toEqual([{ role: "view" }]);
+    } finally {
+      await pool.query("DELETE FROM projects WHERE id = $1", [userProjectId]);
+      await pool.query(
+        `DELETE FROM project_memberships
+         WHERE project_id = 'project-brand-story'
+           AND user_id = $1`,
+        [externalActorId],
+      );
+      await pool.query(
+        `DELETE FROM memberships
+         WHERE workspace_id = 'workspace-organization-reelay'
+           AND user_id = $1`,
+        [externalActorId],
+      );
+      await pool.query("DELETE FROM users WHERE id = $1", [externalActorId]);
+      await pool.end();
+    }
+  });
+
   it("keeps a session and private project changes across server restarts", async () => {
     const appA = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
     let appB: FastifyInstance | null = null;

@@ -78,10 +78,29 @@ async function insertDemoData(client: PoolClient): Promise<void> {
     await client.query(
       `INSERT INTO project_memberships (project_id, user_id, role)
        VALUES ($1, $2, $3)
-       ON CONFLICT (project_id, user_id) DO NOTHING`,
+       ON CONFLICT (project_id, user_id) DO UPDATE
+       SET role = EXCLUDED.role`,
       [membership.projectId, membership.actorId, membership.role],
     );
   }
+
+  const demoProjectIds = seed.projects.map((project) => project.id);
+  const demoActorIds = seed.accounts.map((account) => account.actorId);
+  const expectedProjectIds = seed.projectMemberships.map((membership) => membership.projectId);
+  const expectedActorIds = seed.projectMemberships.map((membership) => membership.actorId);
+
+  await client.query(
+    `DELETE FROM project_memberships AS membership
+     WHERE membership.project_id = ANY($1::text[])
+       AND membership.user_id = ANY($2::text[])
+       AND NOT EXISTS (
+         SELECT 1
+         FROM unnest($3::text[], $4::text[]) AS expected(project_id, user_id)
+         WHERE expected.project_id = membership.project_id
+           AND expected.user_id = membership.user_id
+       )`,
+    [demoProjectIds, demoActorIds, expectedProjectIds, expectedActorIds],
+  );
 }
 
 export async function seedDemoDatabase(pool: Pool): Promise<void> {
