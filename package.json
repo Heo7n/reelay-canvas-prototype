@@ -2,7 +2,7 @@
   "name": "reelay-canvas-prototype",
   "version": "0.1.0",
   "private": true,
-  "description": "Reelay Canvas static prototype validation baseline",
+  "description": "Reelay local application shell and AIGC canvas prototype",
   "scripts": {
     "dev:shell": "vite --config vite.shell.config.ts",
     "dev:server": "tsx watch src/server/start.ts",
