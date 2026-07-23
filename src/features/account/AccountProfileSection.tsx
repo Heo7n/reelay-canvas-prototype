@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router-dom";
-import { Mail, Phone } from "lucide-react";
 
 import type { WorkspaceActionData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
@@ -19,38 +18,127 @@ interface AccountProfileSectionProps {
   workspace: Workspace;
 }
 
+interface ContactDraft {
+  email: string;
+  phone: string;
+}
+
+type AutoSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
+function serializeContacts(contacts: ContactDraft): string {
+  return `${contacts.email.trim()}|${contacts.phone.trim()}`;
+}
+
 export function AccountProfileSection({ actor, workspace }: AccountProfileSectionProps) {
   const fetcher = useFetcher<WorkspaceActionData>();
-  const wasSavingRef = useRef(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [feedback, setFeedback] = useState<{ kind: "error" | "success"; message: string } | null>(null);
-  const saving = fetcher.state !== "idle";
+  const formRef = useRef<HTMLFormElement>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const initialContacts: ContactDraft = {
+    email: actor.contactEmail ?? "",
+    phone: actor.contactPhone ?? "",
+  };
+  const [draft, setDraft] = useState<ContactDraft>(initialContacts);
+  const draftRef = useRef<ContactDraft>(initialContacts);
+  const savedContactsRef = useRef<ContactDraft>(initialContacts);
+  const submittedContactsRef = useRef<ContactDraft | null>(null);
+  const lastActorValueRef = useRef(serializeContacts(initialContacts));
+  const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const avatar = actor.displayName.slice(0, 1).toUpperCase();
 
   useEffect(() => {
-    if (fetcher.state !== "idle") {
-      wasSavingRef.current = true;
-      return;
-    }
-    if (!wasSavingRef.current) return;
+    if (
+      fetcher.state !== "idle"
+      || fetcher.data === undefined
+      || submittedContactsRef.current === null
+    ) return;
 
-    wasSavingRef.current = false;
+    const completedContacts = submittedContactsRef.current;
+    submittedContactsRef.current = null;
     if (fetcher.data?.ok) {
-      setHasUnsavedChanges(false);
-      setFeedback({
-        kind: "success",
-        message: fetcher.data.notice ?? "联系资料已保存。",
-      });
-      return;
-    }
-    if (fetcher.data?.error) {
-      setFeedback({ kind: "error", message: fetcher.data.error });
+      savedContactsRef.current = completedContacts;
+      setSaveError(null);
+      if (serializeContacts(draftRef.current) === serializeContacts(completedContacts)) {
+        setAutoSaveState("saved");
+      } else {
+        setAutoSaveState("dirty");
+        queueAutoSave(0);
+      }
+    } else if (fetcher.data?.error) {
+      setSaveError(fetcher.data.error);
+      setAutoSaveState("error");
+      if (serializeContacts(draftRef.current) !== serializeContacts(completedContacts)) {
+        queueAutoSave(0);
+      }
     }
   }, [fetcher.data, fetcher.state]);
 
-  function markAsChanged(): void {
-    setHasUnsavedChanges(true);
-    setFeedback(null);
+  useEffect(() => () => {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    const nextActorContacts: ContactDraft = {
+      email: actor.contactEmail ?? "",
+      phone: actor.contactPhone ?? "",
+    };
+    const nextActorValue = serializeContacts(nextActorContacts);
+    if (nextActorValue === lastActorValueRef.current) return;
+
+    lastActorValueRef.current = nextActorValue;
+    const previousSavedValue = serializeContacts(savedContactsRef.current);
+    savedContactsRef.current = nextActorContacts;
+    if (
+      submittedContactsRef.current === null
+      && serializeContacts(draftRef.current) === previousSavedValue
+    ) {
+      draftRef.current = nextActorContacts;
+      setDraft(nextActorContacts);
+      setAutoSaveState("idle");
+    }
+  }, [actor.contactEmail, actor.contactPhone]);
+
+  function submitLatestDraft(): void {
+    saveTimerRef.current = null;
+    const form = formRef.current;
+    if (!form || !form.checkValidity()) return;
+
+    if (submittedContactsRef.current !== null || fetcher.state !== "idle") {
+      return;
+    }
+
+    const contacts = { ...draftRef.current };
+    if (serializeContacts(contacts) === serializeContacts(savedContactsRef.current)) {
+      setAutoSaveState("idle");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("contactEmail", contacts.email.trim());
+    formData.set("contactPhone", contacts.phone.trim());
+    submittedContactsRef.current = contacts;
+    setAutoSaveState("saving");
+    setSaveError(null);
+    fetcher.submit(formData, { method: "post", action: routePaths.account() });
+  }
+
+  function queueAutoSave(delay = 600): void {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(submitLatestDraft, delay);
+  }
+
+  function updateDraft(field: keyof ContactDraft, value: string): void {
+    const nextDraft = { ...draftRef.current, [field]: value };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    setSaveError(null);
+    if (serializeContacts(nextDraft) === serializeContacts(savedContactsRef.current)) {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+      setAutoSaveState(submittedContactsRef.current === null ? "idle" : "dirty");
+      return;
+    }
+    setAutoSaveState("dirty");
+    queueAutoSave();
   }
 
   return (
@@ -59,77 +147,79 @@ export function AccountProfileSection({ actor, workspace }: AccountProfileSectio
         <h2 id="account-profile-title">账户信息</h2>
       </div>
 
-      <div className={styles.profileSummary}>
-        <div className={styles.identityCard}>
-          <span className={styles.largeAvatar} aria-hidden="true">{avatar}</span>
-          <span className={styles.identityCopy}>
-            <strong>{actor.displayName}</strong>
-            <small>{actor.account}</small>
-          </span>
+      <div className={styles.profileLayout}>
+        <div className={styles.profileSummary}>
+          <div className={styles.identityCard}>
+            <span className={styles.largeAvatar} aria-hidden="true">{avatar}</span>
+            <span className={styles.identityCopy}>
+              <strong>{actor.displayName}</strong>
+              <small>{actor.account}</small>
+            </span>
+          </div>
+
+          <dl className={`${styles.detailsList} ${styles.membershipDetails}`}>
+            <div>
+              <dt>所属组织</dt>
+              <dd>{workspace.name}</dd>
+            </div>
+            <div>
+              <dt>组织角色</dt>
+              <dd>{roleLabels[workspace.currentUserRole ?? "member"]}</dd>
+            </div>
+          </dl>
         </div>
 
-        <dl className={`${styles.detailsList} ${styles.membershipDetails}`}>
-          <div>
-            <dt>所属组织</dt>
-            <dd>{workspace.name}</dd>
+        <fetcher.Form
+          ref={formRef}
+          method="post"
+          action={routePaths.account()}
+          className={styles.contactForm}
+          onBlur={() => queueAutoSave(0)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            queueAutoSave(0);
+          }}
+        >
+          <label>
+            <span>邮箱</span>
+            <input
+              name="contactEmail"
+              type="email"
+              value={draft.email}
+              onChange={(event) => updateDraft("email", event.currentTarget.value)}
+              maxLength={254}
+              placeholder="name@example.com"
+              autoComplete="email"
+            />
+          </label>
+          <label>
+            <span>手机</span>
+            <input
+              name="contactPhone"
+              type="tel"
+              value={draft.phone}
+              onChange={(event) => updateDraft("phone", event.currentTarget.value)}
+              minLength={5}
+              maxLength={32}
+              pattern="[+0-9()\- ]{5,32}"
+              placeholder="+86 138 0000 0000"
+              autoComplete="tel"
+            />
+          </label>
+
+          <div className={styles.formFeedback} aria-live="polite">
+            {autoSaveState === "saving"
+              ? <p className={styles.formStatus} role="status">正在自动保存…</p>
+              : null}
+            {autoSaveState === "error" && saveError
+              ? <p className={styles.formError} role="alert">{saveError}</p>
+              : null}
+            {autoSaveState === "saved"
+              ? <p className={styles.formSuccess} role="status">已自动保存</p>
+              : null}
           </div>
-          <div>
-            <dt>组织角色</dt>
-            <dd>{roleLabels[workspace.currentUserRole ?? "member"]}</dd>
-          </div>
-        </dl>
+        </fetcher.Form>
       </div>
-
-      <fetcher.Form
-        key={`${actor.contactEmail ?? ""}|${actor.contactPhone ?? ""}`}
-        method="post"
-        action={routePaths.account()}
-        className={styles.contactForm}
-        onChange={markAsChanged}
-        onSubmit={() => setFeedback(null)}
-      >
-        <label>
-          <span><Mail aria-hidden="true" />联系邮箱 <small>选填</small></span>
-          <input
-            name="contactEmail"
-            type="email"
-            defaultValue={actor.contactEmail ?? ""}
-            maxLength={254}
-            placeholder="name@example.com"
-            autoComplete="email"
-            disabled={saving}
-          />
-        </label>
-        <label>
-          <span><Phone aria-hidden="true" />手机号码 <small>选填</small></span>
-          <input
-            name="contactPhone"
-            type="tel"
-            defaultValue={actor.contactPhone ?? ""}
-            minLength={5}
-            maxLength={32}
-            pattern="[+0-9()\- ]{5,32}"
-            placeholder="+86 138 0000 0000"
-            autoComplete="tel"
-            disabled={saving}
-          />
-        </label>
-
-        <div className={styles.contactFooter}>
-          <div className={styles.formFeedback}>
-            {saving ? <p className={styles.formStatus} role="status">正在保存…</p> : null}
-            {!saving && feedback?.kind === "error"
-              ? <p className={styles.formError} role="alert">{feedback.message}</p>
-              : null}
-            {!saving && feedback?.kind === "success"
-              ? <p className={styles.formSuccess} role="status">{feedback.message}</p>
-              : null}
-          </div>
-          <button type="submit" disabled={saving || !hasUnsavedChanges}>
-            {saving ? "保存中…" : "保存资料"}
-          </button>
-        </div>
-      </fetcher.Form>
     </section>
   );
 }

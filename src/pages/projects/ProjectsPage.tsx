@@ -1,4 +1,4 @@
-import { ArrowLeft, Search } from "lucide-react";
+import { ChevronLeft, Search } from "lucide-react";
 import { Link, useActionData, useLoaderData, useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 
@@ -32,7 +32,7 @@ export function ProjectsPage() {
       <main className={styles.projectsMain}>
         <div className={styles.projectsHeading}>
           <Link className={styles.backLink} to={routePaths.workspaceHome(data.currentWorkspace.id)}>
-            <ArrowLeft aria-hidden="true" />
+            <ChevronLeft aria-hidden="true" />
             <span>返回</span>
           </Link>
           <span className={styles.headingDivider} aria-hidden="true" />
