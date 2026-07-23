@@ -100,7 +100,6 @@ export function AccountSettingsDialog({
               );
             })}
           </nav>
-          <small>Reelay 本地演示</small>
         </aside>
 
         <div className={styles.content}>
