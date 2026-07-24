@@ -1,8 +1,10 @@
 import { createPostgresPool } from "./config";
 import { seedDemoDatabase } from "./seed";
 
-if (process.env.NODE_ENV === "production") {
-  throw new Error("Demo seed is disabled when NODE_ENV=production.");
+const isPreviewDeployment = process.env.REELAY_DEPLOYMENT_MODE === "preview";
+
+if (process.env.NODE_ENV === "production" && !isPreviewDeployment) {
+  throw new Error("Demo seed is disabled in production outside an explicit preview deployment.");
 }
 if (process.env.ALLOW_DEMO_SEED !== "true") {
   throw new Error("Refusing to write demo accounts unless ALLOW_DEMO_SEED=true.");

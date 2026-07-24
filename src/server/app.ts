@@ -1,4 +1,5 @@
 import cookie from "@fastify/cookie";
+import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { registerSessionRoutes } from "./http/session-routes";
@@ -10,6 +11,7 @@ import type { CollaborationStore } from "./application/CollaborationStore";
 export interface BuildServerOptions {
   logger?: boolean;
   secureCookies?: boolean;
+  staticRoot?: string;
   store: CollaborationStore;
 }
 
@@ -31,6 +33,26 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   await registerAccountRoutes(app, store);
   await registerWorkspaceProjectRoutes(app, store);
   await registerCanvasDocumentRoutes(app, store);
+
+  if (options.staticRoot) {
+    await app.register(fastifyStatic, {
+      root: options.staticRoot,
+      index: false,
+      redirect: false,
+      wildcard: false,
+    });
+
+    app.get("/", async (_request, reply) => reply.redirect("/app/login"));
+    app.setNotFoundHandler(async (request, reply) => {
+      const pathname = request.url.split("?", 1)[0];
+      if (request.method === "GET" && /^\/app(?:\/|$)/.test(pathname)) {
+        return reply.type("text/html; charset=utf-8").sendFile("app-shell.html");
+      }
+      return reply.code(404).send({
+        error: { code: "not_found", message: "The requested resource was not found." },
+      });
+    });
+  }
 
   return app;
 }
