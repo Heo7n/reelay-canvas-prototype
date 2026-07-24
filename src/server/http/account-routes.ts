@@ -21,7 +21,10 @@ export async function registerAccountRoutes(
         error: { code: "invalid_request", message: "请检查联系邮箱和手机号码格式。" },
       });
     }
-    const updated = await store.updateAccountContacts(actor.id, body.data);
+    const updated = await store.updateAccountContacts(actor.id, {
+      contactEmail: body.data.contactEmail ?? null,
+      contactPhone: body.data.contactPhone ?? null,
+    });
     if (!updated) {
       return reply.code(404).send({
         error: { code: "account_not_found", message: "当前演示账号不存在。" },

@@ -5,6 +5,9 @@
 ## 当前定位
 
 - 当前本地主链路是 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。登录、主页和项目库只保留 React 正式路由；旧静态双轨已经删除，`index.html` 仅作为迁移期画布 iframe。
+- 公网原型已部署到 `https://reelay-canvas-prototype.vercel.app`。Vercel Hobby
+  提供同源静态页面和 Fastify API，Supabase Free PostgreSQL 保存服务端状态；
+  具体部署边界、初始化和验收项见 `docs/vercel-supabase-preview.md`。
 - React 页面通过 `src/infrastructure/http` adapters 消费共享 API；Zod 在传输边界校验 DTO，页面不直接依赖 server-memory store。
 - 五个固定演示账号使用 HttpOnly 服务端会话并属于唯一的 `星海视觉工作室`。个人 / 协作是 Project 的 `accessKind`，不是两类 Workspace；项目读取和修改由服务端 ProjectMembership 的 `admin/edit/view` 过滤。Session、Workspace、Membership、Project 与 ProjectMembership 已切换到 PostgreSQL，migration / seed 可重复；固定 demo seed 会精确校准固定账号与固定项目之间的预置关系，但不会触碰用户创建项目或非 demo 成员。集成测试覆盖该边界和跨服务重启持久化。浏览器 token 只以摘要存库并具有过期 / 撤销状态，但固定账号与 demo 密码散列仍不是生产鉴权。
 - 个人项目由当前创建者从卡片菜单二次确认后删除；协作项目仅项目级 `admin` 可删除，组织角色不越权。删除立即撤销相关列表、详情和画布访问，已打开画布保存收到 404 后会停止 iframe。项目、成员关系和 CanvasDocument 仍保留；回收站列表、恢复与永久删除尚未实现。
@@ -27,7 +30,8 @@
 
 CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画布的多画布 bundle，严格 allow-list 只包含节点、组、视口和模型参数。后续生成历史与 AssetReference 应建立独立实体，不继续向该 bundle 塞运行态。
 
-暂不加入邀请、外部分享、实时光标、复杂权限、真实密码生命周期和公开部署。
+暂不加入邀请、外部分享、实时光标、复杂权限和真实密码生命周期。当前公网地址
+只用于原型评审，不应扩写为生产可用承诺。
 
 固定演示账号统一使用密码 `reelay-demo`：
 

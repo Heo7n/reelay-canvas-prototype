@@ -21,6 +21,7 @@
 | React 应用壳、路由、页面迁移 | `adr/0001-application-runtime-and-migration.md`；相关 `product-expansion-plan.md` 章节 | `src/app/`、`src/pages/`、`src/infrastructure/http/` |
 | Session、Workspace、Membership、Project、共享后端 | ADR 的领域和后端章节；扩展计划的数据边界章节 | `src/domain/`、`src/application/`、后续服务端目录 |
 | 资产、生成任务、积分、跨项目 Agent | `product-expansion-plan.md` 的对应领域章节和相关护栏 | 对应 domain/application 模块 |
+| Vercel / Supabase 公网预览 | `vercel-supabase-preview.md`；涉及服务边界时再读后端 ADR | `api/`、`src/server/`、`vercel.json`、数据库迁移 |
 | 只改文档 | 被修改文档及其直接引用 | `docs/` |
 
 文档职责：

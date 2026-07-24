@@ -1,0 +1,30 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/shell",
+  "fluid": true,
+  "regions": ["iad1"],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "src/server/db/supabase-ca.crt",
+      "maxDuration": 30
+    }
+  },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/app/login",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:apiPath*",
+      "destination": "/api"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/app-shell.html"
+    }
+  ]
+}

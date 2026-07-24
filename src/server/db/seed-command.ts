@@ -1,4 +1,4 @@
-import { createPostgresPool } from "./config";
+import { createPostgresPool, getMigrationDatabaseUrl } from "./config";
 import { seedDemoDatabase } from "./seed";
 
 const isPreviewDeployment = process.env.REELAY_DEPLOYMENT_MODE === "preview";
@@ -11,7 +11,7 @@ if (process.env.ALLOW_DEMO_SEED !== "true") {
 }
 
 async function main(): Promise<void> {
-  const pool = createPostgresPool();
+  const pool = createPostgresPool(getMigrationDatabaseUrl());
   try {
     await seedDemoDatabase(pool);
     console.log("Demo seed is present.");
