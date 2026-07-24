@@ -213,7 +213,7 @@
       ...node,
       credits: 0,
       generating: false,
-      expanded: true,
+      expanded: false,
       promptLarge: false,
       promptInputHeight,
       mediaMenuOpen: false,
