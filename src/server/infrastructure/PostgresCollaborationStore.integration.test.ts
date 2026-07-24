@@ -78,6 +78,40 @@ afterAll(async () => {
 });
 
 describe("PostgreSQL collaboration persistence", () => {
+  it("reads organization members from memberships, users, and password identities", async () => {
+    const app = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+
+    try {
+      const ownerCookie = await login(app, "creator@reelay.test");
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/workspaces/workspace-organization-reelay/members",
+        headers: { cookie: ownerCookie },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().members).toEqual([
+        {
+          userId: "actor-tianmaochao",
+          displayName: "Hoo",
+          loginIdentifier: "creator@reelay.test",
+          role: "owner",
+        },
+        {
+          userId: "actor-linjing",
+          displayName: "林静",
+          loginIdentifier: "linjing@reelay.test",
+          role: "admin",
+        },
+        expect.objectContaining({ userId: "actor-chenxi", role: "member" }),
+        expect.objectContaining({ userId: "actor-suhe", role: "member" }),
+        expect.objectContaining({ userId: "actor-zhouyu", role: "member" }),
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("reconciles only fixed demo project memberships to the fixture", async () => {
     const pool = createPool();
     const seed = createDemoSeed();

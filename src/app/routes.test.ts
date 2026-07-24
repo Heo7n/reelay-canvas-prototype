@@ -11,11 +11,15 @@ describe("application route contract", () => {
   it("keeps personal and organization workspaces on the same route shape", () => {
     expect(appRoutes.projects("personal-user-1")).toBe("/app/w/personal-user-1/projects");
     expect(appRoutes.projects("organization-1")).toBe("/app/w/organization-1/projects");
+    expect(appRoutes.organization("organization-1")).toBe("/app/w/organization-1/organization");
   });
 
   it("separates browser-facing app URLs from basename-relative navigation paths", () => {
     expect(appRoutes.login()).toBe("/app/login");
     expect(routePaths.login()).toBe("/login");
     expect(routePaths.projects("workspace one")).toBe("/w/workspace%20one/projects");
+    expect(routePaths.organizationUsage("workspace one")).toBe(
+      "/w/workspace%20one/organization/usage",
+    );
   });
 });

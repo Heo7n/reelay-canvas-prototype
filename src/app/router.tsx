@@ -3,6 +3,7 @@ import { AppShell } from "./AppShell";
 import { LegacyCanvasRoute } from "../pages/canvas/LegacyCanvasRoute";
 import { WorkspaceHomePage } from "../pages/home/WorkspaceHomePage";
 import { LoginPage } from "../pages/login/LoginPage";
+import { OrganizationCenterPage } from "../pages/organization/OrganizationCenterPage";
 import { ProjectsPage } from "../pages/projects/ProjectsPage";
 import { NoWorkspacePage } from "../pages/system/NoWorkspacePage";
 import { RouteErrorPage } from "../pages/system/RouteErrorPage";
@@ -42,6 +43,21 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
               element: <LegacyCanvasRoute canvasDocumentRepository={services.canvasDocumentRepository} />,
             },
           ],
+        },
+        {
+          path: "w/:workspaceId/organization",
+          loader: handlers.organizationLoader,
+          element: <OrganizationCenterPage section="management" />,
+        },
+        {
+          path: "w/:workspaceId/organization/credits",
+          loader: handlers.organizationLoader,
+          element: <OrganizationCenterPage section="credits" />,
+        },
+        {
+          path: "w/:workspaceId/organization/usage",
+          loader: handlers.organizationLoader,
+          element: <OrganizationCenterPage section="usage" />,
         },
         { path: "*", element: <Navigate to={routePaths.login()} replace /> },
       ],

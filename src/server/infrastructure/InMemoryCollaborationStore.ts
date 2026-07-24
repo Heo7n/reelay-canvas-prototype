@@ -8,7 +8,13 @@ import {
 import type { CanvasDocument, CanvasId } from "../../domain/canvas/canvas-document";
 import type { ActorId, SessionActor } from "../../domain/identity/session";
 import type { ProjectId, ProjectSummary, ProjectUserRole } from "../../domain/project/project";
-import type { Membership, Workspace, WorkspaceId } from "../../domain/workspace/workspace";
+import type {
+  Membership,
+  MembershipRole,
+  OrganizationMember,
+  Workspace,
+  WorkspaceId,
+} from "../../domain/workspace/workspace";
 import type {
   CollaborationStore,
   CreateProjectInput,
@@ -127,6 +133,27 @@ export class InMemoryCollaborationStore implements CollaborationStore {
   async getWorkspace(workspaceId: WorkspaceId): Promise<Workspace | null> {
     const workspace = this.workspaces.find((candidate) => candidate.id === workspaceId);
     return workspace ? { ...workspace } : null;
+  }
+
+  async listOrganizationMembers(workspaceId: WorkspaceId): Promise<OrganizationMember[]> {
+    const roleOrder: Record<MembershipRole, number> = { owner: 0, admin: 1, member: 2 };
+    return this.memberships
+      .filter((membership) => membership.workspaceId === workspaceId)
+      .flatMap((membership) => {
+        const account = this.accounts.find((candidate) => candidate.actorId === membership.actorId);
+        return account
+          ? [{
+              userId: account.actorId,
+              displayName: account.displayName,
+              loginIdentifier: account.account,
+              role: membership.role,
+            }]
+          : [];
+      })
+      .sort((left, right) =>
+        roleOrder[left.role] - roleOrder[right.role] ||
+        left.userId.localeCompare(right.userId),
+      );
   }
 
   async listProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<ProjectSummary[]> {

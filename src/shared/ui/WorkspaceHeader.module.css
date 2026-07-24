@@ -78,14 +78,16 @@
 
 .creditSummary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 12px;
-  padding: 11px 12px 10px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
 }
-.creditLabel { display: inline-flex; align-items: center; gap: 7px; color: var(--workspace-muted, #77777d); font-size: 12px; font-weight: 720; }
-.creditLabel svg { width: 13px; height: 13px; }
+.creditSummary > svg { width: 15px; height: 15px; color: var(--workspace-muted, #77777d); }
+.creditCopy { display: grid; min-width: 0; gap: 2px; text-align: left; }
+.creditLabel { color: var(--workspace-muted, #77777d); font-size: 12px; font-weight: 720; }
+.creditCopy small { color: var(--workspace-muted, #77777d); font-size: 11px; }
 .creditSummary strong { color: var(--workspace-text, #171719); font-size: 20px; line-height: 1; }
-.creditSummary small { grid-column: 1 / -1; color: var(--workspace-muted, #77777d); font-size: 11px; }
 
 .overviewDivider {
   height: 1px;

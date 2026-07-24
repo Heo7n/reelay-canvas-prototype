@@ -8,6 +8,9 @@ export const appRoutes = {
   noWorkspace: () => "/app/no-workspace",
   workspaceHome: (workspaceId: string) => `/app/w/${segment(workspaceId)}`,
   projects: (workspaceId: string) => `/app/w/${segment(workspaceId)}/projects`,
+  organization: (workspaceId: string) => `/app/w/${segment(workspaceId)}/organization`,
+  organizationCredits: (workspaceId: string) => `/app/w/${segment(workspaceId)}/organization/credits`,
+  organizationUsage: (workspaceId: string) => `/app/w/${segment(workspaceId)}/organization/usage`,
   canvas: (workspaceId: string, projectId: string, canvasId: string) =>
     `/app/w/${segment(workspaceId)}/projects/${segment(projectId)}/canvases/${segment(canvasId)}`,
   assets: (workspaceId: string) => `/app/w/${segment(workspaceId)}/assets`,
@@ -23,6 +26,9 @@ export const routePaths = {
   noWorkspace: () => "/no-workspace",
   workspaceHome: (workspaceId: string) => `/w/${segment(workspaceId)}`,
   projects: (workspaceId: string) => `/w/${segment(workspaceId)}/projects`,
+  organization: (workspaceId: string) => `/w/${segment(workspaceId)}/organization`,
+  organizationCredits: (workspaceId: string) => `/w/${segment(workspaceId)}/organization/credits`,
+  organizationUsage: (workspaceId: string) => `/w/${segment(workspaceId)}/organization/usage`,
   canvas: (workspaceId: string, projectId: string, canvasId: string) =>
     `/w/${segment(workspaceId)}/projects/${segment(projectId)}/canvases/${segment(canvasId)}`,
 } as const;

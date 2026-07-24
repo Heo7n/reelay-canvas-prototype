@@ -30,6 +30,15 @@ const projects: ProjectSummary[] = [
   },
 ];
 
+const members = [
+  {
+    userId: "actor-one",
+    displayName: "Demo One",
+    loginIdentifier: "creator@reelay.test",
+    role: "owner" as const,
+  },
+];
+
 function createServices(signedIn = true): ApplicationServices {
   return {
     accountRepository: {
@@ -44,6 +53,9 @@ function createServices(signedIn = true): ApplicationServices {
         revision: input.expectedRevision + 1,
         content: input.content,
       })),
+    },
+    organizationRepository: {
+      listMembers: vi.fn(async () => members),
     },
     sessionGateway: {
       getCurrent: vi.fn(async () => ({ actor: signedIn ? actor : null })),
@@ -146,6 +158,21 @@ describe("application route data", () => {
     expect(services.workspaceContextGateway.load).toHaveBeenCalledWith("workspace-organization");
     expect(services.sessionGateway.getCurrent).not.toHaveBeenCalled();
     expect(services.workspaceRepository.listForActor).not.toHaveBeenCalled();
+    expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("loads organization members without coupling the organization route to projects", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const data = await handlers.organizationLoader(
+      loaderArgs(
+        "http://reelay.local/app/w/workspace-organization/organization",
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(data.members).toEqual(members);
+    expect(services.organizationRepository.listMembers).toHaveBeenCalledWith("workspace-organization");
     expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
   });
 

@@ -6,7 +6,7 @@ import {
 
 import type { SessionActor } from "../domain/identity/session";
 import type { ProjectSummary } from "../domain/project/project";
-import type { Workspace } from "../domain/workspace/workspace";
+import type { OrganizationMember, Workspace } from "../domain/workspace/workspace";
 import type { WorkspaceContext } from "../application/workspaces/WorkspaceContextGateway";
 import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { routePaths } from "./routes";
@@ -16,6 +16,13 @@ export interface WorkspaceRouteData {
   actor: SessionActor;
   currentWorkspace: Workspace;
   projects: ProjectSummary[];
+  workspaces: Workspace[];
+}
+
+export interface OrganizationRouteData {
+  actor: SessionActor;
+  currentWorkspace: Workspace;
+  members: OrganizationMember[];
   workspaces: Workspace[];
 }
 
@@ -183,6 +190,17 @@ export function createRouteHandlers(services: ApplicationServices) {
     },
 
     workspaceLoader: (args: LoaderFunctionArgs) => loadWorkspaceData(services, args),
+
+    organizationLoader: async (args: LoaderFunctionArgs): Promise<OrganizationRouteData> => {
+      const context = await loadWorkspaceData(services, args);
+      const members = await services.organizationRepository.listMembers(context.currentWorkspace.id);
+      return {
+        actor: context.actor,
+        currentWorkspace: context.currentWorkspace,
+        members,
+        workspaces: context.workspaces,
+      };
+    },
 
     workspaceAction: async ({ params, request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
       const formData = await request.formData();
