@@ -201,7 +201,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(restoredGenerator.generatedAsset.id, "result-1");
   assert.equal(restoredGenerator.generating, false);
   assert.equal(restoredGenerator.credits, 0);
-  assert.equal(restoredGenerator.expanded, true);
+  assert.equal(restoredGenerator.expanded, false);
   assert.equal(restoredGenerator.promptLarge, false);
   assert.equal(restoredGenerator.promptInputHeight, 144);
   assert.equal(restoredGenerator.mediaMenuOpen, false);

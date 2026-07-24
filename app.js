@@ -2939,7 +2939,7 @@ function assetMediaContent(asset) {
   if (asset.type === "audio") {
     return `
       <div class="media-content audio">
-        <div class="audio-waveform" data-audio-waveform aria-hidden="true">
+        <div class="audio-waveform" data-audio-waveform data-wheel-scope="local" aria-hidden="true">
           <div class="audio-track" data-audio-track>
             ${audioWaveformBars(3)}
           </div>
@@ -5728,6 +5728,9 @@ function shouldBypassCanvasWheel(target) {
   return Boolean(
     target.closest(
       [
+        "[data-wheel-scope='local']",
+        "[contenteditable='true']",
+        "[role='slider']",
         ".panel-popover",
         ".material-panel",
         ".asset-library-panel",
@@ -5759,6 +5762,15 @@ function shouldBypassCanvasWheel(target) {
       ].join(", "),
     ),
   );
+}
+
+function getNormalizedWheelDeltaY(event) {
+  const unit = event.deltaMode === 1
+    ? 16
+    : event.deltaMode === 2
+      ? Math.max(shell.clientHeight || window.innerHeight || 1, 1)
+      : 1;
+  return event.deltaY * unit;
 }
 
 function beginPan(event) {
@@ -6199,15 +6211,29 @@ shell.addEventListener("dblclick", (event) => {
   addNodeAt(event.clientX, event.clientY);
 });
 
+window.addEventListener(
+  "wheel",
+  (event) => {
+    if (event.ctrlKey || event.metaKey) event.preventDefault();
+  },
+  { passive: false, capture: true },
+);
+
 shell.addEventListener(
   "wheel",
   (event) => {
-    if (shouldBypassCanvasWheel(event.target)) return;
-    event.preventDefault();
+    const shouldBypass = shouldBypassCanvasWheel(event.target);
     if (event.ctrlKey || event.metaKey) {
-      setCanvasZoom(state.scale * (event.deltaY > 0 ? 0.92 : 1.08), event.clientX, event.clientY);
+      event.preventDefault();
+      if (shouldBypass) return;
+      const deltaY = getNormalizedWheelDeltaY(event);
+      if (Math.abs(deltaY) < 0.5) return;
+      const zoomFactor = Math.exp(-clamp(deltaY, -120, 120) * 0.0008);
+      setCanvasZoom(state.scale * zoomFactor, event.clientX, event.clientY);
       return;
     }
+    if (shouldBypass) return;
+    event.preventDefault();
 
     const horizontalDelta = event.shiftKey && Math.abs(event.deltaX) < 1 ? event.deltaY : event.deltaX;
     const verticalDelta = event.shiftKey && Math.abs(event.deltaX) < 1 ? 0 : event.deltaY;
