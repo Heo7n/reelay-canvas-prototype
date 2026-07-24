@@ -61,8 +61,9 @@ describe("organization center", () => {
 
     expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "成员管理" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByText("2 位成员")).toBeInTheDocument();
-    expect(screen.getByText("组织 ID：workspace-organization-reelay")).toBeInTheDocument();
+    expect(screen.getByText("组织 ID：REELAY-7X29M4")).toBeInTheDocument();
     expect(screen.queryByText("组织信息")).toBeNull();
     expect(screen.queryByText(/当前身份/)).toBeNull();
     expect(screen.queryByText("2 位组织成员")).toBeNull();
@@ -73,15 +74,26 @@ describe("organization center", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "调整 林静 的组织角色" }));
     expect(screen.getByRole("dialog", { name: "调整 林静 的组织角色" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /成员使用组织能力/ }));
+    fireEvent.click(screen.getByRole("button", { name: "成员" }));
     expect(screen.getByText(/林静 已在本页显示为成员/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "管理 林静 的账号" }));
-    const memberDialog = screen.getByRole("dialog", { name: "林静" });
-    expect(memberDialog).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "发起重置" })).toBeInTheDocument();
-    expect(memberDialog).not.toHaveTextContent("组织角色");
+    const memberPopover = screen.getByRole("dialog", { name: "管理 林静 的账号" });
+    expect(memberPopover).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重置登录密码" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "停用账号" })).toBeInTheDocument();
+    expect(memberPopover).not.toHaveTextContent("组织角色");
     expect(screen.queryByText(/查看现有密码/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "停用账号" }));
+    expect(screen.queryByRole("dialog", { name: "管理 林静 的账号" })).toBeNull();
+    expect(screen.queryByText("已停用")).toBeNull();
+    expect(screen.getByText("林静").closest("[data-account-disabled='true']")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "管理 林静 的账号" }));
+    expect(screen.getByRole("button", { name: "恢复账号" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "恢复账号" }));
+    expect(screen.queryByText("已停用")).toBeNull();
   });
 
   it("closes the temporary role selector after clicking elsewhere", async () => {
@@ -123,6 +135,18 @@ describe("organization center", () => {
     expect(screen.queryByRole("button", { name: "调整 林静 的组织角色" })).toBeNull();
     expect(screen.getByRole("button", { name: "调整 陈曦 的组织角色" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更改组织名称" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "管理 Hoo 的账号" })).toBeNull();
+    expect(screen.getByRole("button", { name: "管理 林静 的账号" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "管理 陈曦 的账号" })).toBeInTheDocument();
+    expect(screen.queryByText("—")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "管理 林静 的账号" }));
+    expect(screen.getByRole("button", { name: "重置登录密码" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "停用账号" })).toBeNull();
+
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(screen.getByRole("button", { name: "管理 陈曦 的账号" }));
+    expect(screen.getByRole("button", { name: "停用账号" })).toBeInTheDocument();
   });
 
   it("opens credit records from the metric cards while marking them as prototype data", async () => {
@@ -130,7 +154,16 @@ describe("organization center", () => {
 
     expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
     expect(screen.getByText("67,000")).toBeInTheDocument();
-    expect(screen.getByText("原型演示数据")).toBeInTheDocument();
+    expect(screen.queryByText("原型演示数据")).toBeNull();
+    expect(screen.queryByText("当前演示口径")).toBeNull();
+    expect(screen.queryByText("成员额度首版按组织子账户展示，项目预算暂不加入。")).toBeNull();
+    expect(screen.queryByRole("button", { name: "分配积分" })).toBeNull();
+    expect(screen.getByText("角色")).toBeInTheDocument();
+    expect(screen.getByText("可用余额")).toBeInTheDocument();
+    expect(screen.getByText("操作")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "为 Hoo 发放积分" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "回收 Hoo 的积分" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看 Hoo 的积分记录" })).toBeInTheDocument();
     const incomeMetric = screen.getByText("累计入账积分");
     const allocatedMetric = screen.getByText("已分配积分");
     const unallocatedMetric = screen.getByText("未分配积分");

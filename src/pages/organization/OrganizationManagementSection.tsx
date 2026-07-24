@@ -1,4 +1,4 @@
-import { Building2, Check, Hash, MoreHorizontal, Pencil, Search, UsersRound } from "lucide-react";
+import { Building2, Check, ChevronDown, Fingerprint, MoreHorizontal, Pencil, Search, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { SessionActor } from "../../domain/identity/session";
@@ -7,7 +7,7 @@ import type {
   OrganizationMember,
   Workspace,
 } from "../../domain/workspace/workspace";
-import { MemberControlDialog } from "./MemberControlDialog";
+import { MemberAccountPopover } from "./MemberAccountPopover";
 import { OrganizationRolePopover } from "./OrganizationRolePopover";
 import styles from "./OrganizationCenterPage.module.css";
 
@@ -24,6 +24,8 @@ const roleLabels = {
   member: "成员",
 } as const;
 
+const demoOrganizationId = "REELAY-7X29M4";
+
 export function OrganizationManagementSection({
   actor,
   members,
@@ -36,15 +38,19 @@ export function OrganizationManagementSection({
   const [editingOrganizationName, setEditingOrganizationName] = useState(false);
   const [organizationAvatarUrl, setOrganizationAvatarUrl] = useState<string | null>(null);
   const [roleOverrides, setRoleOverrides] = useState<Record<string, MembershipRole>>({});
+  const [disabledMemberIds, setDisabledMemberIds] = useState<Set<string>>(() => new Set());
   const [roleEditor, setRoleEditor] = useState<{
     anchor: HTMLButtonElement;
     member: OrganizationMember;
   } | null>(null);
-  const [selectedMember, setSelectedMember] = useState<OrganizationMember | null>(null);
+  const [accountEditor, setAccountEditor] = useState<{
+    anchor: HTMLButtonElement;
+    member: OrganizationMember;
+  } | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const currentRole = workspace.currentUserRole ?? "member";
   const canEditOrganization = currentRole === "owner";
-  const canControlAccounts = currentRole === "owner";
+  const canControlAccounts = currentRole === "owner" || currentRole === "admin";
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   const filteredMembers = normalizedQuery
     ? members.filter((member) => (
@@ -177,7 +183,7 @@ export function OrganizationManagementSection({
           ) : <h2>{organizationName}</h2>}
           <div className={styles.organizationMeta}>
             <span><UsersRound aria-hidden="true" />{members.length} 位成员</span>
-            <span><Hash aria-hidden="true" />组织 ID：{workspace.id}</span>
+            <span><Fingerprint aria-hidden="true" />组织 ID：{demoOrganizationId}</span>
           </div>
         </div>
       </article>
@@ -201,16 +207,21 @@ export function OrganizationManagementSection({
         <div className={styles.memberTable}>
           <div className={styles.memberTableHeader} aria-hidden="true">
             <span>成员</span>
-            <span>登录账号</span>
-            <span>组织角色</span>
-            <span>账号管理</span>
+            <span>账号</span>
+            <span>角色</span>
+            <span>管理</span>
           </div>
           {filteredMembers.map((member) => {
             const isCurrentActor = member.userId === actor.id;
             const displayRole = displayRoleFor(member);
             const canChangeRole = canChangeMemberRole(member);
+            const isDisabled = disabledMemberIds.has(member.userId);
             return (
-              <div className={styles.memberRow} key={member.userId}>
+              <div
+                className={`${styles.memberRow} ${isDisabled ? styles.memberRowDisabled : ""}`}
+                key={member.userId}
+                data-account-disabled={isDisabled ? "true" : undefined}
+              >
                 <div className={styles.memberIdentity}>
                   <span className={styles.memberAvatar} aria-hidden="true">
                     {member.displayName.slice(0, 1).toUpperCase()}
@@ -220,8 +231,13 @@ export function OrganizationManagementSection({
                     {isCurrentActor ? <small>当前账号</small> : null}
                   </span>
                 </div>
-                <span className={styles.loginIdentifier}>
-                  {member.loginIdentifier ?? "未绑定登录账号"}
+                <span
+                  className={styles.loginIdentifier}
+                  aria-label={isDisabled
+                    ? `${member.loginIdentifier ?? "未绑定登录账号"}，账号已停用`
+                    : undefined}
+                >
+                  <span>{member.loginIdentifier ?? "未绑定登录账号"}</span>
                 </span>
                 <span className={styles.roleCell}>
                   {canChangeRole ? (
@@ -232,6 +248,7 @@ export function OrganizationManagementSection({
                       aria-expanded={roleEditor?.member.userId === member.userId}
                       onClick={(event) => {
                         const anchor = event.currentTarget;
+                        setAccountEditor(null);
                         setRoleEditor((current) => (
                           current?.member.userId === member.userId
                             ? null
@@ -240,6 +257,7 @@ export function OrganizationManagementSection({
                       }}
                     >
                       {roleLabels[displayRole]}
+                      <ChevronDown aria-hidden="true" />
                     </button>
                   ) : (
                     <span className={`${styles.roleBadge} ${styles[`role-${displayRole}`]}`}>
@@ -252,12 +270,21 @@ export function OrganizationManagementSection({
                     <button
                       type="button"
                       aria-label={`管理 ${member.displayName} 的账号`}
-                      onClick={() => setSelectedMember(member)}
+                      aria-expanded={accountEditor?.member.userId === member.userId}
+                      onClick={(event) => {
+                        const anchor = event.currentTarget;
+                        setRoleEditor(null);
+                        setAccountEditor((current) => (
+                          current?.member.userId === member.userId
+                            ? null
+                            : { anchor, member }
+                        ));
+                      }}
                     >
                       <MoreHorizontal aria-hidden="true" />
                     </button>
                   ) : (
-                    <small>{member.role === "owner" ? "所有权账号" : "无管理权限"}</small>
+                    <small>{member.role === "owner" ? "所有权账号" : "—"}</small>
                   )}
                 </span>
               </div>
@@ -269,11 +296,41 @@ export function OrganizationManagementSection({
         </div>
       </div>
 
-      <MemberControlDialog
-        member={selectedMember}
-        onClose={() => setSelectedMember(null)}
-        onNotice={onNotice}
-      />
+      {accountEditor ? (
+        <MemberAccountPopover
+          anchor={accountEditor.anchor}
+          canToggleDisabled={accountEditor.member.userId !== actor.id}
+          disabled={disabledMemberIds.has(accountEditor.member.userId)}
+          member={accountEditor.member}
+          onClose={() => setAccountEditor(null)}
+          onResetPassword={(member) => {
+            setAccountEditor(null);
+            onNotice(
+              `已发起 ${member.displayName} 的登录密码重置。`
+              + "当前为安全流程演示，未修改共享账号数据。",
+            );
+          }}
+          onToggleDisabled={(member) => {
+            if (member.userId === actor.id) {
+              setAccountEditor(null);
+              onNotice("不能停用当前登录账号。");
+              return;
+            }
+            const nextDisabled = !disabledMemberIds.has(member.userId);
+            setDisabledMemberIds((current) => {
+              const next = new Set(current);
+              if (nextDisabled) next.add(member.userId);
+              else next.delete(member.userId);
+              return next;
+            });
+            setAccountEditor(null);
+            onNotice(
+              `${member.displayName} 已在本页显示为${nextDisabled ? "停用" : "正常"}状态；`
+              + "账号状态接口尚未接入，刷新后会恢复。",
+            );
+          }}
+        />
+      ) : null}
       {roleEditor ? (
         <OrganizationRolePopover
           anchor={roleEditor.anchor}

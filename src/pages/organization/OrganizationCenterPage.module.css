@@ -194,20 +194,6 @@
   line-height: 1.5;
 }
 
-.prototypeBadge {
-  display: inline-flex;
-  min-height: 28px;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 0 10px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 999px;
-  background: var(--workspace-hover);
-  color: var(--workspace-muted);
-  font-size: 10px;
-  font-weight: 720;
-}
-
 .organizationCard {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);
@@ -383,23 +369,6 @@
 .organizationMeta span { display: inline-flex; align-items: center; gap: 6px; color: var(--workspace-muted); font-size: 11px; }
 .organizationMeta svg { width: 14px; height: 14px; }
 
-.primaryButton {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 13px;
-  border-radius: 9px;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 720;
-  cursor: pointer;
-}
-
-.primaryButton { border: 0; background: var(--workspace-text); color: var(--workspace-bg); }
-.primaryButton svg { width: 14px; height: 14px; }
-
 .membersSection,
 .allocationSection {
   display: grid;
@@ -455,6 +424,11 @@
   letter-spacing: 0.03em;
 }
 
+.memberTableHeader > span:last-child {
+  padding-right: 7px;
+  text-align: right;
+}
+
 .memberRow + .memberRow { border-top: 1px solid var(--workspace-border); }
 .memberRow:hover { background: color-mix(in srgb, var(--workspace-hover) 54%, transparent); }
 
@@ -483,11 +457,25 @@
 }
 
 .loginIdentifier {
-  overflow: hidden;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
   color: var(--workspace-muted);
   font-size: 11px;
+}
+
+.loginIdentifier > span {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.memberRowDisabled .memberIdentity,
+.memberRowDisabled .loginIdentifier > span,
+.memberRowDisabled .roleCell {
+  opacity: 0.42;
+  filter: grayscale(1);
 }
 
 .roleBadge {
@@ -504,7 +492,11 @@
 
 .roleCell { display: flex; align-items: center; }
 .roleButton {
+  min-width: 60px;
+  justify-content: center;
+  gap: 4px;
   border: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent);
   font: inherit;
   font-size: 9px;
   font-weight: 760;
@@ -513,9 +505,13 @@
 }
 
 .roleButton:hover {
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 24%, transparent),
+    0 0 0 3px color-mix(in srgb, currentColor 10%, transparent);
   transform: translateY(-1px);
 }
+
+.roleButton svg { width: 11px; height: 11px; }
 
 .role-owner { background: rgba(99, 86, 224, 0.11); color: #5f55c7; }
 .role-admin { background: rgba(43, 124, 101, 0.11); color: #28765f; }
@@ -551,29 +547,26 @@
   position: fixed;
   z-index: 720;
   display: grid;
-  width: 218px;
-  gap: 2px;
-  padding: 12px;
+  width: 132px;
+  padding: 5px;
   border: 1px solid var(--workspace-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--workspace-surface);
   box-shadow: 0 18px 44px rgba(12, 13, 16, 0.18);
   color: var(--workspace-text);
   animation: rolePopoverIn 0.16s ease both;
 }
 
-.rolePopover > strong { font-size: 11px; }
-.rolePopover > small { margin-bottom: 8px; color: var(--workspace-muted); font-size: 9px; }
-.roleOptions { display: grid; gap: 4px; }
+.roleOptions { display: grid; gap: 2px; }
 .roleOptions button {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 14px;
-  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  min-height: 38px;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: 6px;
+  padding: 0 9px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 7px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -583,17 +576,8 @@
 
 .roleOptions button:hover,
 .roleOptions .roleOptionSelected { background: var(--workspace-hover); }
-.roleOptions button > svg:first-child {
-  width: 15px;
-  height: 15px;
-  margin: 0 auto;
-  color: var(--workspace-muted);
-}
-
 .roleOptions button > svg:last-child { width: 13px; height: 13px; color: #357c64; }
-.roleOptions button > span { display: grid; gap: 2px; }
-.roleOptions strong { font-size: 10px; }
-.roleOptions small { overflow: hidden; color: var(--workspace-muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.roleOptions button > span { font-size: 10px; font-weight: 720; }
 
 @keyframes rolePopoverIn {
   from { opacity: 0; transform: translateX(-7px) scale(0.98); }
@@ -604,6 +588,53 @@
   --workspace-surface: #15161a;
   --workspace-text: #f4f4f5;
   --workspace-muted: #aaaab1;
+  --workspace-border: rgba(244, 244, 245, 0.12);
+  --workspace-hover: rgba(244, 244, 245, 0.07);
+}
+
+.accountPopover {
+  --workspace-surface: #fff;
+  --workspace-text: #171719;
+  --workspace-border: rgba(23, 23, 25, 0.11);
+  --workspace-hover: rgba(23, 23, 25, 0.055);
+  position: fixed;
+  z-index: 720;
+  width: 188px;
+  padding: 5px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 10px;
+  background: var(--workspace-surface);
+  box-shadow: 0 18px 44px rgba(12, 13, 16, 0.18);
+  color: var(--workspace-text);
+  animation: rolePopoverIn 0.16s ease both;
+}
+
+.accountOptions { display: grid; }
+.accountOptions button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.accountOptions button + button { border-top: 1px solid var(--workspace-border); border-radius: 0 0 7px 7px; }
+.accountOptions button:hover { background: var(--workspace-hover); }
+.accountOptions svg { width: 14px; height: 14px; }
+.accountOptions span { font-size: 10px; font-weight: 720; }
+.accountOptions .accountOptionDanger { color: #c24752; }
+
+:global(html[data-theme="dark"]) .accountPopover {
+  --workspace-surface: #15161a;
+  --workspace-text: #f4f4f5;
   --workspace-border: rgba(244, 244, 245, 0.12);
   --workspace-hover: rgba(244, 244, 245, 0.07);
 }
@@ -665,25 +696,10 @@
 .creditMetricGrid .primaryMetric small { color: rgba(255, 255, 255, 0.55); }
 .creditMetricGrid small svg { width: 12px; height: 12px; }
 
-.creditFormula {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--workspace-hover);
-  color: var(--workspace-muted);
-}
-
-.creditFormula > svg { width: 15px; height: 15px; margin-top: 1px; }
-.creditFormula > span { display: grid; gap: 3px; }
-.creditFormula strong { color: var(--workspace-text); font-size: 10px; }
-.creditFormula small { font-size: 10px; line-height: 1.5; }
-
 .allocationTableHeader,
 .allocationRow {
   display: grid;
-  grid-template-columns: 1.25fr 0.7fr 0.75fr 0.75fr;
+  grid-template-columns: 1.25fr 0.65fr 0.7fr 1fr;
   min-height: 56px;
   align-items: center;
   gap: 16px;
@@ -699,11 +715,49 @@
   font-weight: 760;
 }
 
+.allocationTableHeader > span:last-child {
+  padding-right: 2px;
+  text-align: right;
+}
+
 .allocationRow + .allocationRow { border-top: 1px solid var(--workspace-border); }
 .allocationRow > span,
 .allocationRow > strong { color: var(--workspace-muted); font-size: 10px; }
 .allocationRow > strong { color: var(--workspace-text); font-size: 12px; }
 .allocationRow .memberIdentity > strong { color: var(--workspace-text); font-size: 11px; }
+
+.creditRowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.creditRowActions button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--workspace-text);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.creditRowActions button:first-child {
+  border-color: transparent;
+  background: var(--workspace-text);
+  color: var(--workspace-bg);
+}
+
+.creditRowActions button:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
+.creditRowActions button:first-child:hover { background: color-mix(in srgb, var(--workspace-text) 88%, transparent); }
+.creditRowActions svg { width: 12px; height: 12px; }
 
 .usageToolbar {
   display: flex;
@@ -785,7 +839,6 @@
 .breakdownGrid article > div { display: grid; min-height: 110px; place-content: center; justify-items: center; gap: 8px; color: var(--workspace-muted); font-size: 10px; }
 .breakdownGrid article > div svg { width: 20px; height: 20px; }
 
-.dialogBackdrop,
 .drawerBackdrop {
   position: fixed;
   z-index: 650;
@@ -793,85 +846,6 @@
   background: rgba(12, 13, 16, 0.34);
   backdrop-filter: blur(5px);
 }
-
-.dialogBackdrop {
-  display: grid;
-  place-items: center;
-  padding: 32px;
-}
-
-.memberDialog {
-  position: relative;
-  width: min(620px, calc(100vw - 64px));
-  overflow: hidden;
-  border: 1px solid var(--workspace-border);
-  border-radius: 17px;
-  background: var(--workspace-surface, #fff);
-  color: var(--workspace-text, #171719);
-  box-shadow: 0 28px 80px rgba(9, 10, 13, 0.24);
-}
-
-.dialogClose {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: grid;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--workspace-muted, #74747a);
-  cursor: pointer;
-}
-
-.dialogClose:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); color: var(--workspace-text, #171719); }
-.dialogClose svg { width: 17px; height: 17px; }
-
-.dialogIdentity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 56px 20px 24px;
-  border-bottom: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-}
-
-.dialogIdentity > span:last-child { display: grid; gap: 3px; }
-.dialogIdentity h2 { margin: 0; font-size: 16px; }
-.dialogIdentity p { margin: 0; color: var(--workspace-muted, #74747a); font-size: 10px; }
-.controlList { display: grid; padding: 8px 24px 22px; }
-
-.controlList article {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  min-height: 84px;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-}
-
-.controlList article:last-child { border-bottom: 0; }
-.controlIcon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); color: var(--workspace-muted, #74747a); }
-.controlIcon svg { width: 16px; height: 16px; }
-.controlList article > span:nth-child(2) { display: grid; gap: 4px; }
-.controlList strong { font-size: 11px; }
-.controlList small { color: var(--workspace-muted, #74747a); font-size: 9px; line-height: 1.5; }
-.controlList button {
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-  border-radius: 8px;
-  background: var(--workspace-surface, #fff);
-  color: var(--workspace-text, #171719);
-  font: inherit;
-  font-size: 9px;
-  font-weight: 720;
-  cursor: pointer;
-}
-
-.controlList button:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
 
 .drawerBackdrop { display: flex; justify-content: flex-end; }
 .creditDrawer {
@@ -938,7 +912,6 @@
 
 .allocationRecords article > strong { font-size: 12px; }
 
-:global(html[data-theme="dark"]) .memberDialog,
 :global(html[data-theme="dark"]) .creditDrawer {
   --workspace-surface: #15161a;
   --workspace-text: #f4f4f5;
@@ -949,15 +922,14 @@
 
 .sidebar nav a:focus-visible,
 .pageHeading a:focus-visible,
-.primaryButton:focus-visible,
+.creditRowActions button:focus-visible,
 .organizationAvatarEditor:focus-visible,
 .organizationNameEditor:focus-visible,
 .roleButton:focus-visible,
 .roleOptions button:focus-visible,
+.accountOptions button:focus-visible,
 .rowAction button:focus-visible,
 .creditMetricGrid > button:focus-visible,
-.dialogClose:focus-visible,
-.controlList button:focus-visible,
 .creditDrawer button:focus-visible {
   outline: 3px solid rgba(106, 106, 236, 0.28);
   outline-offset: 2px;
@@ -984,6 +956,18 @@
 
 .toastVisible { opacity: 1; transform: translateY(0); }
 
+@media (min-width: 1680px) {
+  .organizationMain { width: min(1760px, calc(100% - 96px)); }
+  .centerLayout { min-height: min(820px, calc(100vh - 150px)); }
+  .section { max-width: 1320px; }
+}
+
+@media (min-width: 2200px) {
+  .organizationMain { width: min(1920px, calc(100% - 160px)); }
+  .centerLayout { min-height: min(880px, calc(100vh - 150px)); }
+  .section { max-width: 1440px; }
+}
+
 @media (max-width: 980px) {
   .organizationMain { width: calc(100% - 36px); }
   .centerLayout { grid-template-columns: 176px minmax(0, 1fr); }
@@ -1003,7 +987,7 @@
   .organizationNameEditor,
   .roleButton,
   .toast { transition: none; }
-  .rolePopover { animation: none; }
-  .dialogBackdrop,
+  .rolePopover,
+  .accountPopover { animation: none; }
   .drawerBackdrop { backdrop-filter: none; }
 }

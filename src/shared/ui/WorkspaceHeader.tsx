@@ -250,9 +250,12 @@ export function WorkspaceHeader({
 
                   <div className={styles.overviewDivider} aria-hidden="true" />
                   <div className={styles.creditSummary} aria-label="积分详情">
-                    <span className={styles.creditLabel}><CircleDollarSign aria-hidden="true" />可用积分</span>
+                    <CircleDollarSign aria-hidden="true" />
+                    <span className={styles.creditCopy}>
+                      <span className={styles.creditLabel}>可用积分</span>
+                      <small>累计消耗 0 积分</small>
+                    </span>
                     <strong>3000</strong>
-                    <small>累计消耗 0 积分</small>
                   </div>
                 </div>
 

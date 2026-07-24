@@ -62,7 +62,7 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
         <div className={styles.pageHeading}>
           <Link to={routePaths.workspaceHome(workspaceId)}>
             <ChevronLeft aria-hidden="true" />
-            <span>返回工作台</span>
+            <span>返回</span>
           </Link>
           <span aria-hidden="true" />
           <strong>组织中心</strong>

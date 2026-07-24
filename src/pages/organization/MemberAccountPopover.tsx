@@ -1,48 +1,38 @@
-import { Check } from "lucide-react";
+import { KeyRound, UserCheck, UserX } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
-import type {
-  MembershipRole,
-  OrganizationMember,
-} from "../../domain/workspace/workspace";
+import type { OrganizationMember } from "../../domain/workspace/workspace";
 import styles from "./OrganizationCenterPage.module.css";
 
-interface OrganizationRolePopoverProps {
+interface MemberAccountPopoverProps {
   anchor: HTMLButtonElement | null;
+  canToggleDisabled: boolean;
+  disabled: boolean;
   member: OrganizationMember;
   onClose: () => void;
-  onSelect: (role: Exclude<MembershipRole, "owner">) => void;
-  selectedRole: Exclude<MembershipRole, "owner">;
+  onResetPassword: (member: OrganizationMember) => void;
+  onToggleDisabled: (member: OrganizationMember) => void;
 }
 
-const roleOptions = [
-  {
-    label: "管理员",
-    value: "admin",
-  },
-  {
-    label: "成员",
-    value: "member",
-  },
-] as const;
-
-export function OrganizationRolePopover({
+export function MemberAccountPopover({
   anchor,
+  canToggleDisabled,
+  disabled,
   member,
   onClose,
-  onSelect,
-  selectedRole,
-}: OrganizationRolePopoverProps) {
+  onResetPassword,
+  onToggleDisabled,
+}: MemberAccountPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const rect = anchor?.getBoundingClientRect();
-  const panelWidth = 132;
-  const panelHeight = 88;
+  const panelWidth = 188;
+  const panelHeight = canToggleDisabled ? 88 : 48;
   const gap = 8;
   const position = rect ? {
-    left: rect.right + gap + panelWidth <= window.innerWidth - 12
-      ? rect.right + gap
-      : Math.max(12, rect.left - panelWidth - gap),
+    left: rect.left - panelWidth - gap >= 12
+      ? rect.left - panelWidth - gap
+      : Math.min(window.innerWidth - panelWidth - 12, rect.right + gap),
     top: Math.max(12, Math.min(rect.top - 7, window.innerHeight - panelHeight - 12)),
   } : null;
 
@@ -72,27 +62,26 @@ export function OrganizationRolePopover({
   return createPortal(
     <div
       ref={panelRef}
-      className={styles.rolePopover}
+      className={styles.accountPopover}
       style={position}
       role="dialog"
-      aria-label={`调整 ${member.displayName} 的组织角色`}
+      aria-label={`管理 ${member.displayName} 的账号`}
     >
-      <div className={styles.roleOptions}>
-        {roleOptions.map((option) => {
-          const selected = selectedRole === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              className={selected ? styles.roleOptionSelected : ""}
-              aria-pressed={selected}
-              onClick={() => onSelect(option.value)}
-            >
-              <span>{option.label}</span>
-              {selected ? <Check aria-hidden="true" /> : null}
-            </button>
-          );
-        })}
+      <div className={styles.accountOptions}>
+        <button type="button" onClick={() => onResetPassword(member)}>
+          <KeyRound aria-hidden="true" />
+          <span>重置登录密码</span>
+        </button>
+        {canToggleDisabled ? (
+          <button
+            className={disabled ? "" : styles.accountOptionDanger}
+            type="button"
+            onClick={() => onToggleDisabled(member)}
+          >
+            {disabled ? <UserCheck aria-hidden="true" /> : <UserX aria-hidden="true" />}
+            <span>{disabled ? "恢复账号" : "停用账号"}</span>
+          </button>
+        ) : null}
       </div>
     </div>,
     document.body,
