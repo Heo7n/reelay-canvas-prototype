@@ -29,6 +29,15 @@ const projects: ProjectSummary[] = [
   },
 ];
 
+const members = [
+  {
+    userId: "actor-one",
+    displayName: "Demo One",
+    loginIdentifier: "creator@reelay.test",
+    role: "owner" as const,
+  },
+];
+
 function createServices(signedIn = true): ApplicationServices {
   return {
     accountRepository: {
@@ -43,6 +52,9 @@ function createServices(signedIn = true): ApplicationServices {
         revision: input.expectedRevision + 1,
         content: input.content,
       })),
+    },
+    organizationRepository: {
+      listMembers: vi.fn(async () => members),
     },
     sessionGateway: {
       getCurrent: vi.fn(async () => ({ actor: signedIn ? actor : null })),
@@ -133,6 +145,21 @@ describe("application route data", () => {
     expect(data.projects).toEqual(projects);
     expect(services.projectRepository.listByWorkspace).toHaveBeenCalledOnce();
     expect(services.projectRepository.listByWorkspace).toHaveBeenCalledWith("workspace-organization");
+  });
+
+  it("loads organization members without coupling the organization route to projects", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const data = await handlers.organizationLoader(
+      loaderArgs(
+        "http://reelay.local/app/w/workspace-organization/organization",
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(data.members).toEqual(members);
+    expect(services.organizationRepository.listMembers).toHaveBeenCalledWith("workspace-organization");
+    expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
   });
 
   it("uses the route workspace as the authority for project mutations", async () => {

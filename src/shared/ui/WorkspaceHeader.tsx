@@ -14,7 +14,7 @@ import {
   Settings,
   Sun,
 } from "lucide-react";
-import { Form } from "react-router-dom";
+import { Form, Link } from "react-router-dom";
 
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -229,17 +229,17 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: Workspace
             </div>
 
             <div className={styles.accountOverview}>
-              <button
+              <Link
                 className={`${styles.menuItem} ${styles.membership}`}
-                type="button"
+                to={routePaths.organization(currentWorkspace.id)}
                 aria-label={`进入${currentWorkspace.name}组织管理界面`}
-                onClick={() => onNotice(`${currentWorkspace.name}组织管理页将在下一阶段开放。`)}
+                onClick={closeProfile}
               >
                 <Building2 aria-hidden="true" />
                 <span className={styles.membershipName}>{currentWorkspace.name}</span>
                 <small>{membershipRoleLabels[membershipRole]}</small>
                 <ChevronRight aria-hidden="true" />
-              </button>
+              </Link>
 
               <div className={styles.overviewDivider} aria-hidden="true" />
               <div className={styles.creditSummary} aria-label="积分详情">

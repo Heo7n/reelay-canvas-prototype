@@ -3,6 +3,7 @@ import { AppShell } from "./AppShell";
 import { LegacyCanvasRoute } from "../pages/canvas/LegacyCanvasRoute";
 import { WorkspaceHomePage } from "../pages/home/WorkspaceHomePage";
 import { LoginPage } from "../pages/login/LoginPage";
+import { OrganizationCenterPage } from "../pages/organization/OrganizationCenterPage";
 import { ProjectsPage } from "../pages/projects/ProjectsPage";
 import { NoWorkspacePage } from "../pages/system/NoWorkspacePage";
 import { RouteErrorPage } from "../pages/system/RouteErrorPage";
@@ -26,6 +27,21 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
         { path: "no-workspace", loader: handlers.noWorkspaceLoader, element: <NoWorkspacePage /> },
         { path: "w/:workspaceId", loader: handlers.workspaceLoader, action: handlers.workspaceAction, element: <WorkspaceHomePage /> },
         { path: "w/:workspaceId/projects", loader: handlers.workspaceLoader, action: handlers.workspaceAction, element: <ProjectsPage /> },
+        {
+          path: "w/:workspaceId/organization",
+          loader: handlers.organizationLoader,
+          element: <OrganizationCenterPage section="management" />,
+        },
+        {
+          path: "w/:workspaceId/organization/credits",
+          loader: handlers.organizationLoader,
+          element: <OrganizationCenterPage section="credits" />,
+        },
+        {
+          path: "w/:workspaceId/organization/usage",
+          loader: handlers.organizationLoader,
+          element: <OrganizationCenterPage section="usage" />,
+        },
         {
           path: "w/:workspaceId/projects/:projectId/canvases/:canvasId",
           loader: handlers.canvasLoader,

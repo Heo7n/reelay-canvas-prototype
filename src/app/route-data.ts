@@ -6,7 +6,7 @@ import {
 
 import type { SessionActor } from "../domain/identity/session";
 import type { ProjectSummary } from "../domain/project/project";
-import type { Workspace } from "../domain/workspace/workspace";
+import type { OrganizationMember, Workspace } from "../domain/workspace/workspace";
 import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { routePaths } from "./routes";
 import type { ApplicationServices } from "./services";
@@ -15,6 +15,13 @@ export interface WorkspaceRouteData {
   actor: SessionActor;
   currentWorkspace: Workspace;
   projects: ProjectSummary[];
+  workspaces: Workspace[];
+}
+
+export interface OrganizationRouteData {
+  actor: SessionActor;
+  currentWorkspace: Workspace;
+  members: OrganizationMember[];
   workspaces: Workspace[];
 }
 
@@ -77,10 +84,10 @@ async function getSessionContext(services: ApplicationServices): Promise<{
   return { actor: session.actor, workspaces };
 }
 
-async function loadWorkspaceData(
+async function loadWorkspaceContext(
   services: ApplicationServices,
   args: LoaderFunctionArgs,
-): Promise<WorkspaceRouteData> {
+): Promise<Omit<WorkspaceRouteData, "projects">> {
   const context = await getSessionContext(services);
   if (!context.actor) throw loginRedirect(args.request);
 
@@ -90,13 +97,23 @@ async function loadWorkspaceData(
   const currentWorkspace = context.workspaces.find((workspace) => workspace.id === args.params.workspaceId);
   if (!currentWorkspace) throw redirect(routePaths.workspaceHome(defaultWorkspace.id));
 
-  const projects = await services.projectRepository.listByWorkspace(currentWorkspace.id);
-
   return {
     actor: context.actor,
     currentWorkspace,
-    projects,
     workspaces: context.workspaces,
+  };
+}
+
+async function loadWorkspaceData(
+  services: ApplicationServices,
+  args: LoaderFunctionArgs,
+): Promise<WorkspaceRouteData> {
+  const context = await loadWorkspaceContext(services, args);
+  const projects = await services.projectRepository.listByWorkspace(context.currentWorkspace.id);
+
+  return {
+    ...context,
+    projects,
   };
 }
 
@@ -168,6 +185,12 @@ export function createRouteHandlers(services: ApplicationServices) {
     },
 
     workspaceLoader: (args: LoaderFunctionArgs) => loadWorkspaceData(services, args),
+
+    organizationLoader: async (args: LoaderFunctionArgs): Promise<OrganizationRouteData> => {
+      const context = await loadWorkspaceContext(services, args);
+      const members = await services.organizationRepository.listMembers(context.currentWorkspace.id);
+      return { ...context, members };
+    },
 
     workspaceAction: async ({ params, request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
       const session = await services.sessionGateway.getCurrent();
