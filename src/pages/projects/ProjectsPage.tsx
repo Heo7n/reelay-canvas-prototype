@@ -1,9 +1,10 @@
 import { ChevronLeft, Search } from "lucide-react";
-import { Link, useActionData, useLoaderData, useSearchParams } from "react-router-dom";
+import { Link, useActionData, useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 
-import type { WorkspaceActionData, WorkspaceRouteData } from "../../app/route-data";
+import type { WorkspaceActionData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
+import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { NewProjectCard } from "../../shared/ui/NewProjectCard";
 import { ProjectCard } from "../../shared/ui/ProjectCard";
@@ -12,7 +13,7 @@ import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
 import styles from "../home/WorkspacePages.module.css";
 
 export function ProjectsPage() {
-  const data = useLoaderData() as WorkspaceRouteData;
+  const data = useWorkspaceRouteData();
   const actionData = useActionData() as WorkspaceActionData | undefined;
   const [query, setQuery] = useState("");
   const [searchParams] = useSearchParams();

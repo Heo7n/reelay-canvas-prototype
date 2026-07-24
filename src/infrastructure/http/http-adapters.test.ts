@@ -11,6 +11,7 @@ import {
   type FetchLike,
 } from "./HttpApiClient";
 import { HttpWorkspaceRepository } from "./HttpWorkspaceRepository";
+import { HttpWorkspaceContextGateway } from "./HttpWorkspaceContextGateway";
 
 interface PlannedResponse {
   body?: unknown;
@@ -125,6 +126,28 @@ describe("HttpWorkspaceRepository", () => {
     const repository = new HttpWorkspaceRepository({ fetch: transport.fetch });
 
     await expect(repository.listForActor("actor-owner")).rejects.toBeInstanceOf(HttpResponseValidationError);
+  });
+});
+
+describe("HttpWorkspaceContextGateway", () => {
+  it("loads the signed-in actor, workspaces and projects in one request", async () => {
+    const transport = createFetchQueue({
+      body: {
+        actor: actorDto,
+        projects: [projectDto],
+        workspaces: [organizationDto],
+      },
+    });
+    const gateway = new HttpWorkspaceContextGateway({ baseUrl: "/backend", fetch: transport.fetch });
+
+    await expect(gateway.load("workspace/shared")).resolves.toEqual({
+      actor: actorDto,
+      projects: [projectDto],
+      workspaces: [organizationDto],
+    });
+    expect(transport.requests.map((request) => request.url)).toEqual([
+      "/backend/api/workspaces/workspace%2Fshared/context",
+    ]);
   });
 });
 
@@ -330,6 +353,7 @@ describe("createHttpServices", () => {
     await expect(services.sessionGateway.getCurrent()).resolves.toEqual({ actor: null });
     expect(services.canvasDocumentRepository).toBeInstanceOf(HttpCanvasDocumentRepository);
     expect(services.accountRepository).toBeInstanceOf(HttpAccountRepository);
+    expect(services.workspaceContextGateway).toBeInstanceOf(HttpWorkspaceContextGateway);
     expect(services.workspaceRepository).toBeInstanceOf(HttpWorkspaceRepository);
     expect(services.projectRepository).toBeInstanceOf(HttpProjectRepository);
     expect(transport.requests[0]?.url).toBe("/shared-api/api/session");

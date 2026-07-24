@@ -8,7 +8,7 @@ import { HttpApiClient, type HttpAdapterOptions } from "./HttpApiClient";
 
 type SessionActorDto = (typeof SessionResponseDtoSchema)["_output"]["actor"];
 
-function toSessionActor(actor: NonNullable<SessionActorDto>): SessionActor {
+export function toSessionActor(actor: NonNullable<SessionActorDto>): SessionActor {
   return {
     account: actor.account,
     contactEmail: actor.contactEmail,

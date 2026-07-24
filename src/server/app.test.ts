@@ -52,6 +52,32 @@ describe("organization project access API", () => {
     }
   });
 
+  it("returns workspace route context in one authenticated response", async () => {
+    const cookie = await login(app, "creator@reelay.test");
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/workspaces/workspace-organization-reelay/context",
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      actor: expect.objectContaining({
+        account: "creator@reelay.test",
+        workspaceIds: ["workspace-organization-reelay"],
+      }),
+      projects: expect.arrayContaining([
+        expect.objectContaining({ workspaceId: "workspace-organization-reelay" }),
+      ]),
+      workspaces: [
+        expect.objectContaining({
+          id: "workspace-organization-reelay",
+          currentUserRole: "owner",
+        }),
+      ],
+    });
+  });
+
   it("stores optional contact details independently from the login identifier", async () => {
     const ownerCookie = await login(app, "creator@reelay.test");
 

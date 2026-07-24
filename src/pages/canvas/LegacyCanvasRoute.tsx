@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Navigate, useLoaderData, useParams, useSubmit } from "react-router-dom";
+import { Navigate, useParams, useSubmit } from "react-router-dom";
 import type { CanvasDocumentRepository } from "../../application/canvases/CanvasDocumentRepository";
-import type { WorkspaceRouteData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
-import type { ProjectSummary } from "../../domain/project/project";
+import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { CanvasHost } from "../../legacy-canvas/CanvasHost";
 import { AccountSettingsDialog } from "../../features/account/AccountSettingsDialog";
 import { readTheme } from "../../shared/theme/theme";
@@ -12,17 +11,17 @@ interface LegacyCanvasRouteProps {
   canvasDocumentRepository: CanvasDocumentRepository;
 }
 
-type CanvasRouteData = WorkspaceRouteData & { project: ProjectSummary };
-
 export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRouteProps) {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const { workspaceId, projectId, canvasId } = useParams();
-  const { actor, currentWorkspace, project } = useLoaderData() as CanvasRouteData;
+  const { actor, currentWorkspace, projects } = useWorkspaceRouteData();
+  const project = projects.find((candidate) => candidate.id === projectId);
   const submit = useSubmit();
 
   if (!workspaceId || !projectId || !canvasId) {
     return <Navigate to="/login" replace />;
   }
+  if (!project) return <Navigate to={routePaths.projects(workspaceId)} replace />;
 
   return (
     <>

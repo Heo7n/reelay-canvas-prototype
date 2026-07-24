@@ -3,12 +3,14 @@ import { HttpAccountRepository } from "./HttpAccountRepository";
 import { HttpCanvasDocumentRepository } from "./HttpCanvasDocumentRepository";
 import { HttpProjectRepository } from "./HttpProjectRepository";
 import { HttpSessionGateway } from "./HttpSessionGateway";
+import { HttpWorkspaceContextGateway } from "./HttpWorkspaceContextGateway";
 import { HttpWorkspaceRepository } from "./HttpWorkspaceRepository";
 
 export interface HttpServices {
   accountRepository: HttpAccountRepository;
   canvasDocumentRepository: HttpCanvasDocumentRepository;
   sessionGateway: HttpSessionGateway;
+  workspaceContextGateway: HttpWorkspaceContextGateway;
   workspaceRepository: HttpWorkspaceRepository;
   projectRepository: HttpProjectRepository;
 }
@@ -19,6 +21,7 @@ export function createHttpServices(options: HttpAdapterOptions = {}): HttpServic
     accountRepository: new HttpAccountRepository(http),
     canvasDocumentRepository: new HttpCanvasDocumentRepository(http),
     sessionGateway: new HttpSessionGateway(http),
+    workspaceContextGateway: new HttpWorkspaceContextGateway(http),
     workspaceRepository: new HttpWorkspaceRepository(http),
     projectRepository: new HttpProjectRepository(http),
   };

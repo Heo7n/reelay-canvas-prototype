@@ -51,6 +51,32 @@ export async function registerWorkspaceProjectRoutes(
     return { workspaces: await store.listWorkspacesForActor(actor.id) };
   });
 
+  app.get("/api/workspaces/:workspaceId/context", async (request, reply) => {
+    const actor = await requireActor(request, reply, store);
+    if (!actor) return reply;
+    const parsed = WorkspaceParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: "invalid_request", message: "工作空间标识无效。" } });
+    }
+
+    const workspaceId = parsed.data.workspaceId;
+    if (!actor.workspaceIds.includes(workspaceId)) {
+      const workspace = await store.getWorkspace(workspaceId);
+      return reply.code(workspace ? 403 : 404).send({
+        error: {
+          code: workspace ? "workspace_forbidden" : "workspace_not_found",
+          message: workspace ? "无权访问此工作空间。" : "工作空间不存在。",
+        },
+      });
+    }
+
+    const [workspaces, projects] = await Promise.all([
+      store.listWorkspacesForActor(actor.id),
+      store.listProjects(actor.id, workspaceId),
+    ]);
+    return { actor, projects, workspaces };
+  });
+
   app.get("/api/workspaces/:workspaceId/projects", async (request, reply) => {
     const actor = await requireActor(request, reply, store);
     if (!actor) return reply;

@@ -3,6 +3,7 @@ import type { CanvasDocumentRepository } from "../application/canvases/CanvasDoc
 import type { ProjectRepository } from "../application/projects/ProjectRepository";
 import type { SessionGateway } from "../application/session/SessionGateway";
 import type { WorkspaceRepository } from "../application/workspaces/WorkspaceRepository";
+import type { WorkspaceContextGateway } from "../application/workspaces/WorkspaceContextGateway";
 import { createHttpServices } from "../infrastructure/http/createHttpServices";
 
 export interface ApplicationServices {
@@ -10,6 +11,7 @@ export interface ApplicationServices {
   canvasDocumentRepository: CanvasDocumentRepository;
   projectRepository: ProjectRepository;
   sessionGateway: SessionGateway;
+  workspaceContextGateway: WorkspaceContextGateway;
   workspaceRepository: WorkspaceRepository;
 }
 

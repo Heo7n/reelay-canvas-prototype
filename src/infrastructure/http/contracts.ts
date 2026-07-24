@@ -64,6 +64,14 @@ export const ProjectListResponseDtoSchema = z
   })
   .strict();
 
+export const WorkspaceContextResponseDtoSchema = z
+  .object({
+    actor: SessionActorDtoSchema,
+    projects: z.array(ProjectDtoSchema),
+    workspaces: z.array(WorkspaceDtoSchema),
+  })
+  .strict();
+
 export const ProjectResponseDtoSchema = z
   .object({
     project: ProjectDtoSchema,

@@ -13,10 +13,17 @@ const store = new PostgresCollaborationStore(pool);
 let appPromise: ReturnType<typeof createApp> | undefined;
 
 async function createApp() {
-  await store.ping();
   const app = await buildServer({ logger: true, secureCookies: true, store });
   await app.ready();
   return app;
+}
+
+function getApp() {
+  appPromise ??= createApp().catch((error: unknown) => {
+    appPromise = undefined;
+    throw error;
+  });
+  return appPromise;
 }
 
 function restoreApiPath(request: IncomingMessage): void {
@@ -34,7 +41,6 @@ export default async function handler(
   response: ServerResponse,
 ): Promise<void> {
   restoreApiPath(request);
-  appPromise ??= createApp();
-  const app = await appPromise;
+  const app = await getApp();
   app.server.emit("request", request, response);
 }

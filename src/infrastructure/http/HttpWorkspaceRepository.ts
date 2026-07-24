@@ -6,7 +6,7 @@ import { HttpApiClient, type HttpAdapterOptions } from "./HttpApiClient";
 
 type WorkspaceDto = (typeof WorkspaceListResponseDtoSchema)["_output"]["workspaces"][number];
 
-function toWorkspace(workspace: WorkspaceDto): Workspace {
+export function toWorkspace(workspace: WorkspaceDto): Workspace {
   return {
     id: workspace.id,
     kind: workspace.kind,

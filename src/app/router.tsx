@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, type RouteObject } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet, type RouteObject } from "react-router-dom";
 import { AppShell } from "./AppShell";
 import { LegacyCanvasRoute } from "../pages/canvas/LegacyCanvasRoute";
 import { WorkspaceHomePage } from "../pages/home/WorkspaceHomePage";
@@ -10,6 +10,7 @@ import { RouteLoadingPage } from "../pages/system/RouteLoadingPage";
 import { createRouteHandlers } from "./route-data";
 import { routePaths } from "./routes";
 import { applicationServices, type ApplicationServices } from "./services";
+import { WORKSPACE_ROUTE_ID } from "./useWorkspaceRouteData";
 
 export function createAppRouteObjects(services: ApplicationServices): RouteObject[] {
   const handlers = createRouteHandlers(services);
@@ -24,12 +25,23 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
         { path: "account", action: handlers.accountAction },
         { path: "logout", action: handlers.logoutAction },
         { path: "no-workspace", loader: handlers.noWorkspaceLoader, element: <NoWorkspacePage /> },
-        { path: "w/:workspaceId", loader: handlers.workspaceLoader, action: handlers.workspaceAction, element: <WorkspaceHomePage /> },
-        { path: "w/:workspaceId/projects", loader: handlers.workspaceLoader, action: handlers.workspaceAction, element: <ProjectsPage /> },
         {
-          path: "w/:workspaceId/projects/:projectId/canvases/:canvasId",
-          loader: handlers.canvasLoader,
-          element: <LegacyCanvasRoute canvasDocumentRepository={services.canvasDocumentRepository} />,
+          id: WORKSPACE_ROUTE_ID,
+          path: "w/:workspaceId",
+          loader: handlers.workspaceLoader,
+          shouldRevalidate: ({ currentParams, nextParams, formMethod }) => (
+            currentParams.workspaceId !== nextParams.workspaceId
+            || Boolean(formMethod && formMethod !== "GET")
+          ),
+          element: <Outlet />,
+          children: [
+            { index: true, action: handlers.workspaceAction, element: <WorkspaceHomePage /> },
+            { path: "projects", action: handlers.workspaceAction, element: <ProjectsPage /> },
+            {
+              path: "projects/:projectId/canvases/:canvasId",
+              element: <LegacyCanvasRoute canvasDocumentRepository={services.canvasDocumentRepository} />,
+            },
+          ],
         },
         { path: "*", element: <Navigate to={routePaths.login()} replace /> },
       ],
