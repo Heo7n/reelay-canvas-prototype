@@ -24,6 +24,26 @@ const workspace = {
 afterEach(cleanup);
 
 describe("workspace account menu", () => {
+  it("can keep only the brand on focused management surfaces", () => {
+    const router = createMemoryRouter([
+      {
+        path: "*",
+        element: (
+          <WorkspaceHeader
+            actor={actor}
+            currentWorkspace={workspace}
+            onNotice={vi.fn()}
+            showAccount={false}
+          />
+        ),
+      },
+    ], { initialEntries: ["/w/workspace-organization/organization"] });
+    render(<RouterProvider router={router} />);
+
+    expect(screen.getByRole("link", { name: /Reelay/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("打开账户菜单")).toBeNull();
+  });
+
   it("keeps credits inside the complete profile menu instead of a separate header control", () => {
     const router = createMemoryRouter([
       {

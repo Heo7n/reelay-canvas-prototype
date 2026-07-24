@@ -210,7 +210,7 @@
 
 .organizationCard {
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr) auto;
+  grid-template-columns: 78px minmax(0, 1fr);
   min-height: 142px;
   align-items: center;
   gap: 22px;
@@ -225,21 +225,165 @@
 .largeOrganizationAvatar {
   width: 78px;
   height: 78px;
+  overflow: hidden;
   border-radius: 22px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .largeOrganizationAvatar svg { width: 34px; height: 34px; }
+.largeOrganizationAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.organizationAvatarEditor {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.avatarEditIcon {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: rgba(18, 19, 23, 0.82);
+  color: #fff;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.avatarEditIcon svg { width: 12px; height: 12px; }
+.organizationAvatarEditor:hover .avatarEditIcon,
+.organizationAvatarEditor:focus-visible .avatarEditIcon { opacity: 1; transform: translateY(0); }
+
+.organizationAvatarEditor::after,
+.organizationNameEditor::after {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 8px);
+  left: 50%;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: #202126;
+  color: #fff;
+  content: attr(data-tooltip);
+  font-size: 9px;
+  font-weight: 650;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -3px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  white-space: nowrap;
+}
+
+.organizationAvatarEditor:hover::after,
+.organizationAvatarEditor:focus-visible::after,
+.organizationNameEditor:hover::after,
+.organizationNameEditor:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .organizationCopy { display: grid; gap: 6px; }
-.eyebrow { color: var(--workspace-muted); font-size: 10px; font-weight: 720; letter-spacing: 0.08em; }
 .organizationCopy h2 { margin: 0; font-size: 21px; letter-spacing: -0.03em; }
+.organizationNameLine {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+}
+
+.organizationNameLine h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organizationNameEditor {
+  position: relative;
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--workspace-muted);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
+  cursor: pointer;
+}
+
+.organizationNameEditor > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.organizationNameEditor:hover,
+.organizationNameEditor:focus-visible { background: var(--workspace-hover); }
+.organizationNameLine:hover .organizationNameEditor,
+.organizationNameEditor:focus-visible { opacity: 1; transform: translateX(0); }
+.organizationNameEditor::after { left: auto; right: 0; transform: translate(0, -3px); }
+.organizationNameEditor:hover::after,
+.organizationNameEditor:focus-visible::after { transform: translate(0, 0); }
+
+.organizationNameInput {
+  position: relative;
+  display: flex;
+  width: min(390px, 100%);
+  align-items: center;
+}
+
+.organizationNameInput input {
+  width: 100%;
+  height: 38px;
+  padding: 0 36px 0 10px;
+  border: 1px solid var(--workspace-border-strong);
+  border-radius: 9px;
+  outline: 0;
+  background: var(--workspace-surface);
+  color: var(--workspace-text);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 760;
+}
+
+.organizationNameInput input:focus {
+  border-color: #7474df;
+  box-shadow: 0 0 0 3px rgba(108, 108, 232, 0.12);
+}
+
+.organizationNameInput svg {
+  position: absolute;
+  right: 11px;
+  width: 15px;
+  height: 15px;
+  color: #357c64;
+  pointer-events: none;
+}
+
 .organizationMeta { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 5px; }
 .organizationMeta span { display: inline-flex; align-items: center; gap: 6px; color: var(--workspace-muted); font-size: 11px; }
 .organizationMeta svg { width: 14px; height: 14px; }
-.organizationActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
-.primaryButton,
-.secondaryButton {
+.primaryButton {
   display: inline-flex;
   min-height: 36px;
   align-items: center;
@@ -253,16 +397,8 @@
   cursor: pointer;
 }
 
-.secondaryButton {
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-surface);
-  color: var(--workspace-text);
-}
-
-.secondaryButton:hover { background: var(--workspace-hover); }
 .primaryButton { border: 0; background: var(--workspace-text); color: var(--workspace-bg); }
-.primaryButton svg,
-.secondaryButton svg { width: 14px; height: 14px; }
+.primaryButton svg { width: 14px; height: 14px; }
 
 .membersSection,
 .allocationSection {
@@ -366,6 +502,21 @@
   font-weight: 760;
 }
 
+.roleCell { display: flex; align-items: center; }
+.roleButton {
+  border: 0;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 760;
+  cursor: pointer;
+  transition: box-shadow 0.14s ease, transform 0.14s ease;
+}
+
+.roleButton:hover {
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+  transform: translateY(-1px);
+}
+
 .role-owner { background: rgba(99, 86, 224, 0.11); color: #5f55c7; }
 .role-admin { background: rgba(43, 124, 101, 0.11); color: #28765f; }
 
@@ -391,9 +542,75 @@
 .rowAction small { color: var(--workspace-subtle); font-size: 9px; }
 .memberEmpty { padding: 42px 20px; color: var(--workspace-muted); font-size: 11px; text-align: center; }
 
+.rolePopover {
+  --workspace-surface: #fff;
+  --workspace-text: #171719;
+  --workspace-muted: #74747a;
+  --workspace-border: rgba(23, 23, 25, 0.11);
+  --workspace-hover: rgba(23, 23, 25, 0.055);
+  position: fixed;
+  z-index: 720;
+  display: grid;
+  width: 218px;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  background: var(--workspace-surface);
+  box-shadow: 0 18px 44px rgba(12, 13, 16, 0.18);
+  color: var(--workspace-text);
+  animation: rolePopoverIn 0.16s ease both;
+}
+
+.rolePopover > strong { font-size: 11px; }
+.rolePopover > small { margin-bottom: 8px; color: var(--workspace-muted); font-size: 9px; }
+.roleOptions { display: grid; gap: 4px; }
+.roleOptions button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 14px;
+  min-height: 52px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.roleOptions button:hover,
+.roleOptions .roleOptionSelected { background: var(--workspace-hover); }
+.roleOptions button > svg:first-child {
+  width: 15px;
+  height: 15px;
+  margin: 0 auto;
+  color: var(--workspace-muted);
+}
+
+.roleOptions button > svg:last-child { width: 13px; height: 13px; color: #357c64; }
+.roleOptions button > span { display: grid; gap: 2px; }
+.roleOptions strong { font-size: 10px; }
+.roleOptions small { overflow: hidden; color: var(--workspace-muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+
+@keyframes rolePopoverIn {
+  from { opacity: 0; transform: translateX(-7px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+:global(html[data-theme="dark"]) .rolePopover {
+  --workspace-surface: #15161a;
+  --workspace-text: #f4f4f5;
+  --workspace-muted: #aaaab1;
+  --workspace-border: rgba(244, 244, 245, 0.12);
+  --workspace-hover: rgba(244, 244, 245, 0.07);
+}
+
 .creditMetricGrid {
   display: grid;
-  grid-template-columns: 1.15fr repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -732,8 +949,11 @@
 
 .sidebar nav a:focus-visible,
 .pageHeading a:focus-visible,
-.secondaryButton:focus-visible,
 .primaryButton:focus-visible,
+.organizationAvatarEditor:focus-visible,
+.organizationNameEditor:focus-visible,
+.roleButton:focus-visible,
+.roleOptions button:focus-visible,
 .rowAction button:focus-visible,
 .creditMetricGrid > button:focus-visible,
 .dialogClose:focus-visible,
@@ -769,8 +989,8 @@
   .centerLayout { grid-template-columns: 176px minmax(0, 1fr); }
   .content { padding-right: 24px; padding-left: 24px; }
   .organizationCard { grid-template-columns: 64px minmax(0, 1fr); }
+  .organizationAvatarEditor { width: 64px; height: 64px; border-radius: 18px; }
   .largeOrganizationAvatar { width: 64px; height: 64px; border-radius: 18px; }
-  .organizationActions { grid-column: 1 / -1; justify-content: flex-start; }
   .creditMetricGrid { grid-template-columns: 1fr; }
   .usageMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .memberTableHeader,
@@ -779,7 +999,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .creditMetricGrid > button,
+  .avatarEditIcon,
+  .organizationNameEditor,
+  .roleButton,
   .toast { transition: none; }
+  .rolePopover { animation: none; }
   .dialogBackdrop,
   .drawerBackdrop { backdrop-filter: none; }
 }

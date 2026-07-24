@@ -40,14 +40,14 @@ const routeData: OrganizationRouteData = {
 
 afterEach(cleanup);
 
-function renderSection(section: OrganizationSection) {
+function renderSection(section: OrganizationSection, data: OrganizationRouteData = routeData) {
   const suffix = section === "management" ? "" : `/${section}`;
   const routePath = `/w/:workspaceId/organization${suffix}`;
   const initialEntry = `/w/workspace-organization-reelay/organization${suffix}`;
   const router = createMemoryRouter([
     {
       path: routePath,
-      loader: async () => routeData,
+      loader: async () => data,
       element: <OrganizationCenterPage section={section} />,
     },
   ], { initialEntries: [initialEntry] });
@@ -62,12 +62,67 @@ describe("organization center", () => {
     expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "成员管理" })).toBeInTheDocument();
     expect(screen.getByText("2 位成员")).toBeInTheDocument();
+    expect(screen.getByText("组织 ID：workspace-organization-reelay")).toBeInTheDocument();
+    expect(screen.queryByText("组织信息")).toBeNull();
+    expect(screen.queryByText(/当前身份/)).toBeNull();
+    expect(screen.queryByText("2 位组织成员")).toBeNull();
+    expect(screen.queryByLabelText("打开账户菜单")).toBeNull();
+    expect(screen.getByRole("button", { name: "更改组织名称" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更改组织头像" })).toBeInTheDocument();
     expect(screen.getByText("linjing@reelay.test")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "调整 林静 的组织角色" }));
+    expect(screen.getByRole("dialog", { name: "调整 林静 的组织角色" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /成员使用组织能力/ }));
+    expect(screen.getByText(/林静 已在本页显示为成员/)).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "管理 林静 的账号" }));
-    expect(screen.getByRole("dialog", { name: "林静" })).toBeInTheDocument();
+    const memberDialog = screen.getByRole("dialog", { name: "林静" });
+    expect(memberDialog).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发起重置" })).toBeInTheDocument();
+    expect(memberDialog).not.toHaveTextContent("组织角色");
     expect(screen.queryByText(/查看现有密码/)).toBeNull();
+  });
+
+  it("closes the temporary role selector after clicking elsewhere", async () => {
+    renderSection("management");
+
+    fireEvent.click(await screen.findByRole("button", { name: "调整 林静 的组织角色" }));
+    expect(screen.getByRole("dialog", { name: "调整 林静 的组织角色" })).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "调整 林静 的组织角色" })).toBeNull();
+  });
+
+  it("lets administrators adjust other non-owner members without editing themselves", async () => {
+    const adminData: OrganizationRouteData = {
+      ...routeData,
+      actor: {
+        ...routeData.actor,
+        id: "actor-linjing",
+        displayName: "林静",
+        account: "linjing@reelay.test",
+      },
+      currentWorkspace: {
+        ...routeData.currentWorkspace,
+        currentUserRole: "admin",
+      },
+      members: [
+        ...routeData.members,
+        {
+          userId: "actor-chenxi",
+          displayName: "陈曦",
+          loginIdentifier: "chenxi@reelay.test",
+          role: "member",
+        },
+      ],
+    };
+    renderSection("management", adminData);
+
+    expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "调整 Hoo 的组织角色" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "调整 林静 的组织角色" })).toBeNull();
+    expect(screen.getByRole("button", { name: "调整 陈曦 的组织角色" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更改组织名称" })).toBeNull();
   });
 
   it("opens credit records from the metric cards while marking them as prototype data", async () => {
@@ -76,6 +131,15 @@ describe("organization center", () => {
     expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
     expect(screen.getByText("67,000")).toBeInTheDocument();
     expect(screen.getByText("原型演示数据")).toBeInTheDocument();
+    const incomeMetric = screen.getByText("累计入账积分");
+    const allocatedMetric = screen.getByText("已分配积分");
+    const unallocatedMetric = screen.getByText("未分配积分");
+    expect(
+      incomeMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      allocatedMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /累计入账积分/ }));
     expect(screen.getByRole("dialog", { name: "入账记录" })).toBeInTheDocument();

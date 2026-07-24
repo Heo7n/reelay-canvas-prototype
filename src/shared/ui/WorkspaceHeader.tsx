@@ -47,6 +47,7 @@ interface WorkspaceHeaderProps {
   actor: SessionActor;
   currentWorkspace: Workspace;
   onNotice: (message: string) => void;
+  showAccount?: boolean;
 }
 
 function ShortcutHelp() {
@@ -133,7 +134,12 @@ function ShortcutHelp() {
   );
 }
 
-export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({
+  actor,
+  currentWorkspace,
+  onNotice,
+  showAccount = true,
+}: WorkspaceHeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -183,142 +189,146 @@ export function WorkspaceHeader({ actor, currentWorkspace, onNotice }: Workspace
   return (
     <>
       <header className={styles.header}>
-      <Brand to={routePaths.workspaceHome(currentWorkspace.id)} />
+        <Brand to={routePaths.workspaceHome(currentWorkspace.id)} />
 
-      <div className={styles.account}>
-        <details
-          className={styles.profile}
-          ref={profileRef}
-          open={profileOpen}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") closeProfile();
-          }}
-          onPointerEnter={openProfile}
-          onPointerLeave={scheduleCloseProfile}
-        >
-          <summary
-            className={styles.accountTrigger}
-            aria-label="打开账户菜单"
-            aria-expanded={profileOpen}
-            onClick={(event) => {
-              event.preventDefault();
-              openProfile();
-            }}
-          >
-            <span className={styles.organizationMark} aria-hidden="true"><Building2 /></span>
-            <span className={styles.organizationName} title={currentWorkspace.name}>{currentWorkspace.name}</span>
-            <ChevronDown className={styles.accountChevron} aria-hidden="true" />
-            <span className={styles.triggerAvatar} aria-hidden="true">{avatar}</span>
-          </summary>
-
-          <div
-            className={styles.menu}
-            data-account-menu
-            onPointerDown={(event) => event.stopPropagation()}
-            onPointerMove={(event) => {
-              if (!helpOpen || !helpTriggerRef.current) return;
-              if (event.clientY < helpTriggerRef.current.getBoundingClientRect().top - 2) setHelpOpen(false);
-            }}
-          >
-            <div className={styles.identity}>
-              <span className={styles.identityAvatar} aria-hidden="true">{avatar}</span>
-              <span>
-                <strong>{actor.displayName}</strong>
-                <small>{actor.account}</small>
-              </span>
-            </div>
-
-            <div className={styles.accountOverview}>
-              <Link
-                className={`${styles.menuItem} ${styles.membership}`}
-                to={routePaths.organization(currentWorkspace.id)}
-                aria-label={`进入${currentWorkspace.name}组织管理界面`}
-                onClick={closeProfile}
-              >
-                <Building2 aria-hidden="true" />
-                <span className={styles.membershipName}>{currentWorkspace.name}</span>
-                <small>{membershipRoleLabels[membershipRole]}</small>
-                <ChevronRight aria-hidden="true" />
-              </Link>
-
-              <div className={styles.overviewDivider} aria-hidden="true" />
-              <div className={styles.creditSummary} aria-label="积分详情">
-                <span className={styles.creditLabel}><CircleDollarSign aria-hidden="true" />可用积分</span>
-                <strong>3000</strong>
-                <small>累计消耗 0 积分</small>
-              </div>
-            </div>
-
-            <div className={styles.menuList}>
-              <button
-                className={styles.menuItem}
-                type="button"
-                onClick={() => {
-                  closeProfile();
-                  setAccountSettingsOpen(true);
+        {showAccount ? (
+          <div className={styles.account}>
+            <details
+              className={styles.profile}
+              ref={profileRef}
+              open={profileOpen}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") closeProfile();
+              }}
+              onPointerEnter={openProfile}
+              onPointerLeave={scheduleCloseProfile}
+            >
+              <summary
+                className={styles.accountTrigger}
+                aria-label="打开账户菜单"
+                aria-expanded={profileOpen}
+                onClick={(event) => {
+                  event.preventDefault();
+                  openProfile();
                 }}
               >
-                <Settings aria-hidden="true" />
-                <span>账号设置</span>
-              </button>
+                <span className={styles.organizationMark} aria-hidden="true"><Building2 /></span>
+                <span className={styles.organizationName} title={currentWorkspace.name}>{currentWorkspace.name}</span>
+                <ChevronDown className={styles.accountChevron} aria-hidden="true" />
+                <span className={styles.triggerAvatar} aria-hidden="true">{avatar}</span>
+              </summary>
 
-              <button className={`${styles.menuItem} ${styles.appearanceItem}`} type="button" onClick={toggleTheme} aria-label="切换外观">
-                <span className={styles.themeCurrentIcon} aria-hidden="true">
-                  {theme === "light" ? <Sun /> : <Moon />}
-                </span>
-                <span>{theme === "light" ? "浅色模式" : "深色模式"}</span>
-                <span className={`${styles.themeSwitch} ${theme === "dark" ? styles.themeSwitchDark : ""}`} aria-hidden="true">
-                  <span className={styles.themeThumb} />
-                  <Sun />
-                  <Moon />
-                </span>
-              </button>
+              <div
+                className={styles.menu}
+                data-account-menu
+                onPointerDown={(event) => event.stopPropagation()}
+                onPointerMove={(event) => {
+                  if (!helpOpen || !helpTriggerRef.current) return;
+                  if (event.clientY < helpTriggerRef.current.getBoundingClientRect().top - 2) setHelpOpen(false);
+                }}
+              >
+                <div className={styles.identity}>
+                  <span className={styles.identityAvatar} aria-hidden="true">{avatar}</span>
+                  <span>
+                    <strong>{actor.displayName}</strong>
+                    <small>{actor.account}</small>
+                  </span>
+                </div>
 
-              <div className={`${styles.helpSection} ${helpOpen ? styles.helpOpen : ""}`}>
-                <button
-                  className={`${styles.menuItem} ${styles.helpTrigger}`}
-                  ref={helpTriggerRef}
-                  type="button"
-                  aria-expanded={helpOpen}
-                  aria-controls="workspace-profile-help"
-                  onClick={() => setHelpOpen(true)}
-                  onPointerEnter={() => setHelpOpen(true)}
-                >
-                  <CircleHelp aria-hidden="true" />
-                  <span>帮助中心</span>
-                  <ChevronRight aria-hidden="true" />
-                </button>
+                <div className={styles.accountOverview}>
+                  <Link
+                    className={`${styles.menuItem} ${styles.membership}`}
+                    to={routePaths.organization(currentWorkspace.id)}
+                    aria-label={`进入${currentWorkspace.name}组织管理界面`}
+                    onClick={closeProfile}
+                  >
+                    <Building2 aria-hidden="true" />
+                    <span className={styles.membershipName}>{currentWorkspace.name}</span>
+                    <small>{membershipRoleLabels[membershipRole]}</small>
+                    <ChevronRight aria-hidden="true" />
+                  </Link>
 
-                <div className={styles.helpPanel} id="workspace-profile-help">
-                  <ShortcutHelp />
-                  <a className={styles.helpLink} href={manualUrl} target="_blank" rel="noopener noreferrer">
-                    <BookOpenCheck aria-hidden="true" />
-                    <span>使用教程</span>
-                  </a>
-                  <a className={styles.helpLink} href={feedbackUrl} target="_blank" rel="noopener noreferrer">
-                    <SendHorizontal aria-hidden="true" />
-                    <span>反馈问题</span>
-                  </a>
+                  <div className={styles.overviewDivider} aria-hidden="true" />
+                  <div className={styles.creditSummary} aria-label="积分详情">
+                    <span className={styles.creditLabel}><CircleDollarSign aria-hidden="true" />可用积分</span>
+                    <strong>3000</strong>
+                    <small>累计消耗 0 积分</small>
+                  </div>
+                </div>
+
+                <div className={styles.menuList}>
+                  <button
+                    className={styles.menuItem}
+                    type="button"
+                    onClick={() => {
+                      closeProfile();
+                      setAccountSettingsOpen(true);
+                    }}
+                  >
+                    <Settings aria-hidden="true" />
+                    <span>账号设置</span>
+                  </button>
+
+                  <button className={`${styles.menuItem} ${styles.appearanceItem}`} type="button" onClick={toggleTheme} aria-label="切换外观">
+                    <span className={styles.themeCurrentIcon} aria-hidden="true">
+                      {theme === "light" ? <Sun /> : <Moon />}
+                    </span>
+                    <span>{theme === "light" ? "浅色模式" : "深色模式"}</span>
+                    <span className={`${styles.themeSwitch} ${theme === "dark" ? styles.themeSwitchDark : ""}`} aria-hidden="true">
+                      <span className={styles.themeThumb} />
+                      <Sun />
+                      <Moon />
+                    </span>
+                  </button>
+
+                  <div className={`${styles.helpSection} ${helpOpen ? styles.helpOpen : ""}`}>
+                    <button
+                      className={`${styles.menuItem} ${styles.helpTrigger}`}
+                      ref={helpTriggerRef}
+                      type="button"
+                      aria-expanded={helpOpen}
+                      aria-controls="workspace-profile-help"
+                      onClick={() => setHelpOpen(true)}
+                      onPointerEnter={() => setHelpOpen(true)}
+                    >
+                      <CircleHelp aria-hidden="true" />
+                      <span>帮助中心</span>
+                      <ChevronRight aria-hidden="true" />
+                    </button>
+
+                    <div className={styles.helpPanel} id="workspace-profile-help">
+                      <ShortcutHelp />
+                      <a className={styles.helpLink} href={manualUrl} target="_blank" rel="noopener noreferrer">
+                        <BookOpenCheck aria-hidden="true" />
+                        <span>使用教程</span>
+                      </a>
+                      <a className={styles.helpLink} href={feedbackUrl} target="_blank" rel="noopener noreferrer">
+                        <SendHorizontal aria-hidden="true" />
+                        <span>反馈问题</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <Form method="post" action={routePaths.logout()}>
+                    <button className={`${styles.menuItem} ${styles.signOut}`} type="submit">
+                      <LogOut aria-hidden="true" />
+                      <span>退出账号</span>
+                    </button>
+                  </Form>
                 </div>
               </div>
-
-              <Form method="post" action={routePaths.logout()}>
-                <button className={`${styles.menuItem} ${styles.signOut}`} type="submit">
-                  <LogOut aria-hidden="true" />
-                  <span>退出账号</span>
-                </button>
-              </Form>
-            </div>
+            </details>
           </div>
-        </details>
-      </div>
+        ) : null}
       </header>
-      <AccountSettingsDialog
-        actor={actor}
-        workspace={currentWorkspace}
-        open={accountSettingsOpen}
-        onClose={() => setAccountSettingsOpen(false)}
-      />
+      {showAccount ? (
+        <AccountSettingsDialog
+          actor={actor}
+          workspace={currentWorkspace}
+          open={accountSettingsOpen}
+          onClose={() => setAccountSettingsOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

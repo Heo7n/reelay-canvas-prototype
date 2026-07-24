@@ -1,4 +1,4 @@
-import { KeyRound, LogOut, ShieldCheck, X } from "lucide-react";
+import { KeyRound, LogOut, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
@@ -10,12 +10,6 @@ interface MemberControlDialogProps {
   onClose: () => void;
   onNotice: (message: string) => void;
 }
-
-const roleLabels = {
-  owner: "主账户",
-  admin: "管理员",
-  member: "成员",
-} as const;
 
 export function MemberControlDialog({
   member,
@@ -100,20 +94,6 @@ export function MemberControlDialog({
         </div>
 
         <div className={styles.controlList}>
-          <article>
-            <span className={styles.controlIcon}><ShieldCheck aria-hidden="true" /></span>
-            <span>
-              <strong>组织角色</strong>
-              <small>当前为{roleLabels[member.role]}。只有主账户可以任免管理员。</small>
-            </span>
-            <button
-              type="button"
-              onClick={() => runPrototypeAction(member.role === "admin" ? "已选择调整为普通成员。" : "已选择调整为管理员。")}
-            >
-              {member.role === "admin" ? "调整为成员" : "设为管理员"}
-            </button>
-          </article>
-
           <article>
             <span className={styles.controlIcon}><KeyRound aria-hidden="true" /></span>
             <span>

@@ -55,6 +55,7 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
         actor={data.actor}
         currentWorkspace={data.currentWorkspace}
         onNotice={showNotice}
+        showAccount={false}
       />
 
       <main className={styles.organizationMain}>

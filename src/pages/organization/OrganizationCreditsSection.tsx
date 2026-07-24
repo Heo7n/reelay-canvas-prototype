@@ -33,28 +33,28 @@ export function OrganizationCreditsSection({
       </div>
 
       <div className={styles.creditMetricGrid}>
-        <article className={styles.primaryMetric}>
-          <span><WalletCards aria-hidden="true" />待分配积分</span>
-          <strong>67,000</strong>
-          <small>组织积分池当前可继续分配的余额</small>
-        </article>
         <button type="button" onClick={() => setDrawerKind("income")}>
           <span><ArrowDownLeft aria-hidden="true" />累计入账积分</span>
           <strong>100,000</strong>
           <small>查看入账记录 <ArrowRight aria-hidden="true" /></small>
         </button>
         <button type="button" onClick={() => setDrawerKind("allocation")}>
-          <span><UsersRound aria-hidden="true" />当前已分配余额</span>
+          <span><UsersRound aria-hidden="true" />已分配积分</span>
           <strong>33,000</strong>
           <small>查看分配详情 <ArrowRight aria-hidden="true" /></small>
         </button>
+        <article className={styles.primaryMetric}>
+          <span><WalletCards aria-hidden="true" />未分配积分</span>
+          <strong>67,000</strong>
+          <small>组织积分池当前可继续分配的余额</small>
+        </article>
       </div>
 
       <div className={styles.creditFormula}>
         <Info aria-hidden="true" />
         <span>
           <strong>当前演示口径</strong>
-          <small>待分配 67,000 = 累计入账 100,000 − 当前已分配余额 33,000</small>
+          <small>未分配积分 67,000 = 累计入账积分 100,000 − 已分配积分 33,000</small>
         </span>
       </div>
 
