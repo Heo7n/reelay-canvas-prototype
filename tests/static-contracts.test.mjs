@@ -146,6 +146,12 @@ test("model data, config and document codec load before the application", () => 
   );
 });
 
+test("the hosted legacy canvas uses its local icon subset instead of the full vendor bundle", () => {
+  assert.doesNotMatch(html, /vendor\/lucide/i);
+  assert.match(appSource, /const fallbackIconPaths = \{/);
+  assert.match(appSource, /function renderFallbackIcons\(\)/);
+});
+
 test("the current prototype still starts with the Agent panel closed", () => {
   assert.match(appSource, /\bsetAgentOpen\(false\);/);
 });

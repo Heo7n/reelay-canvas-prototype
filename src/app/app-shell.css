@@ -52,6 +52,7 @@ a {
 
 .legacy-canvas-state {
   position: absolute;
+  z-index: 1;
   inset: 0;
   display: grid;
   place-items: center;

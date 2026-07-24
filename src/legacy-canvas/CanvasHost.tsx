@@ -294,14 +294,15 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       aria-label="Reelay 项目画布"
       data-persistence-status={persistenceStatus}
     >
-      {documentState.status === "ready" ? (
+      {documentState.status !== "error" || documentState.reason !== "unavailable" ? (
         <iframe
           ref={frameRef}
           className="legacy-canvas-frame"
           src={frameSource}
           title="Reelay 项目画布"
         />
-      ) : (
+      ) : null}
+      {documentState.status !== "ready" ? (
         <div className="legacy-canvas-state" role={documentState.status === "error" ? "alert" : "status"}>
           {documentState.status === "error" ? (
             <div className="legacy-canvas-state-card">
@@ -319,7 +320,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
             <span>正在加载项目画布…</span>
           )}
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

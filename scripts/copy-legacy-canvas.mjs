@@ -12,7 +12,7 @@ const files = [
   "src/config/prototype-config.js",
   "src/legacy-canvas/canvas-document-codec.js",
 ];
-const directories = ["styles", "vendor", "data"];
+const directories = ["styles", "data"];
 
 for (const relativePath of files) {
   const destination = path.join(outputRoot, relativePath);

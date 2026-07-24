@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render as renderTestingLibrary, screen, waitFo
 import type { ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { CanvasDocument } from "../domain/canvas/canvas-document";
 import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { CanvasHost } from "./CanvasHost";
 
@@ -127,7 +128,7 @@ describe("CanvasHost", () => {
     );
   });
 
-  it("does not mount an editable iframe until loading succeeds and supports retry after failure", async () => {
+  it("starts the iframe while the document loads and supports retry after failure", async () => {
     let attempt = 0;
     const getCanvasDocument = vi.fn(async () => {
       attempt += 1;
@@ -141,14 +142,28 @@ describe("CanvasHost", () => {
       />,
     );
 
-    expect(screen.queryByTitle("Reelay 项目画布")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Reelay 项目画布")).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("暂时无法加载此项目画布");
-    expect(screen.queryByTitle("Reelay 项目画布")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Reelay 项目画布")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
 
     expect(await screen.findByTitle("Reelay 项目画布")).toBeInTheDocument();
     expect(getCanvasDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not wait for the document request before mounting the iframe", () => {
+    const getCanvasDocument = vi.fn(() => new Promise<CanvasDocument | null>(() => undefined));
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument, save: repository.save }}
+        context={editableContext}
+      />,
+    );
+
+    expect(screen.getByTitle("Reelay 项目画布")).toBeInTheDocument();
+    expect(screen.getByText("正在加载项目画布…")).toBeInTheDocument();
+    expect(getCanvasDocument).toHaveBeenCalledWith("project-1", "main");
   });
 
   it("initializes one ready iframe exactly once after its scoped document loads", async () => {
