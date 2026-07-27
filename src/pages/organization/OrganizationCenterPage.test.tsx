@@ -176,23 +176,33 @@ describe("organization center", () => {
     expect(screen.getByRole("img", {
       name: "可分配余额 67,000，成员账户余额合计 33,000",
     })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "查看可分配余额调拨记录" }));
-    expect(screen.getByRole("dialog", { name: "可分配余额明细" })).toBeInTheDocument();
-    expect(screen.getByText("调拨记录")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
+    expect(screen.queryByRole("button", { name: /可分配余额/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /成员账户余额合计/ })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "查看成员账户余额明细" }));
-    expect(screen.getByRole("dialog", { name: "成员账户余额明细" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
-
-    fireEvent.click(screen.getByRole("button", { name: /组织积分余额/ }));
-    expect(screen.getByRole("dialog", { name: "组织积分明细" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看组织入账记录" }));
+    expect(screen.getByRole("dialog", { name: "积分记录" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "入账记录" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("累计入账")).toBeInTheDocument();
     expect(screen.getByText("180,000")).toBeInTheDocument();
     expect(screen.getByText("累计消耗")).toBeInTheDocument();
     expect(screen.getByText("80,000")).toBeInTheDocument();
     expect(screen.getByText("共 5 笔")).toBeInTheDocument();
     expect(screen.getByText(/尚未接入 CreditLedger/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "分配记录" }));
+    expect(screen.getByRole("tab", { name: "分配记录" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("全部分配记录")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看积分分配记录" }));
+    expect(screen.getByRole("dialog", { name: "积分记录" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "分配记录" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 Hoo 的积分记录" }));
+    expect(screen.getByRole("button", { name: "清除 Hoo 筛选" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "清除 Hoo 筛选" }));
+    expect(screen.queryByRole("button", { name: "清除 Hoo 筛选" })).toBeNull();
   });
 
   it("presents a coherent organization usage demo for owners", async () => {

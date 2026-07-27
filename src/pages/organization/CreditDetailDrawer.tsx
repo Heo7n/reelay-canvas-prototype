@@ -14,17 +14,19 @@ import styles from "./OrganizationCenterPage.module.css";
 import {
   CREDIT_ALLOCATION_RECORDS,
   CREDIT_INCOME_RECORDS,
-  getAllocationTotals,
+  getMemberCreditBalance,
   ORGANIZATION_CREDIT_SUMMARY,
   type CreditIncomeKind,
 } from "./organization-credit-data";
 
-export type CreditDrawerKind = "income" | "allocation" | "pool";
+export type CreditDrawerKind = "income" | "allocation";
 
 interface CreditDetailDrawerProps {
   kind: CreditDrawerKind | null;
   memberAccount?: string;
   members: OrganizationMember[];
+  onKindChange: (kind: CreditDrawerKind) => void;
+  onClearMemberFilter: () => void;
   onClose: () => void;
 }
 
@@ -38,6 +40,8 @@ export function CreditDetailDrawer({
   kind,
   memberAccount,
   members,
+  onKindChange,
+  onClearMemberFilter,
   onClose,
 }: CreditDetailDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
@@ -63,12 +67,18 @@ export function CreditDetailDrawer({
   if (!kind) return null;
 
   const isIncome = kind === "income";
-  const isPool = kind === "pool";
   const selectedMember = members.find((member) => member.loginIdentifier === memberAccount);
   const allocationRecords = memberAccount
     ? CREDIT_ALLOCATION_RECORDS.filter((record) => record.memberAccount === memberAccount)
     : CREDIT_ALLOCATION_RECORDS;
-  const allocationTotals = getAllocationTotals();
+  const allocationTotals = allocationRecords.reduce(
+    (totals, record) => {
+      if (record.amount > 0) totals.granted += record.amount;
+      else totals.reclaimed += Math.abs(record.amount);
+      return totals;
+    },
+    { granted: 0, reclaimed: 0 },
+  );
 
   return createPortal(
     <div
@@ -102,29 +112,34 @@ export function CreditDetailDrawer({
       >
         <header>
           <span>
-            <h2 id="credit-drawer-title">
-              {isIncome
-                ? "组织积分明细"
-                : isPool
-                  ? "可分配余额明细"
-                : selectedMember
-                  ? `${selectedMember.displayName} 的分配记录`
-                  : "成员账户余额明细"}
-            </h2>
-            <p>
-              {isIncome
-                ? "查看组织累计入账、消耗与当前可用余额"
-                : isPool
-                  ? "查看组织池向成员账户发放与回收的变动"
-                : selectedMember
-                  ? selectedMember.loginIdentifier
-                  : "查看成员账户余额与内部调拨流水"}
-            </p>
+            <h2 id="credit-drawer-title">积分记录</h2>
+            <p>核对组织入账与成员账户内部调拨流水</p>
           </span>
           <button ref={closeButtonRef} type="button" aria-label="关闭详情" onClick={onClose}>
             <X aria-hidden="true" />
           </button>
         </header>
+
+        <div className={styles.drawerTabs} role="tablist" aria-label="积分记录类型">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isIncome}
+            className={isIncome ? styles.activeDrawerTab : undefined}
+            onClick={() => onKindChange("income")}
+          >
+            入账记录
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isIncome}
+            className={!isIncome ? styles.activeDrawerTab : undefined}
+            onClick={() => onKindChange("allocation")}
+          >
+            分配记录
+          </button>
+        </div>
 
         <div className={styles.drawerBadge}>演示流水 · 尚未接入 CreditLedger</div>
 
@@ -171,10 +186,10 @@ export function CreditDetailDrawer({
           <>
             <div className={styles.drawerSummaryGrid}>
               <article>
-                <span>{isPool ? "可分配余额" : "成员余额合计"}</span>
+                <span>{selectedMember ? "当前余额" : "成员余额合计"}</span>
                 <strong>
-                  {(isPool
-                    ? ORGANIZATION_CREDIT_SUMMARY.unallocated
+                  {(selectedMember
+                    ? getMemberCreditBalance(selectedMember)
                     : ORGANIZATION_CREDIT_SUMMARY.allocated).toLocaleString("zh-CN")}
                 </strong>
               </article>
@@ -188,7 +203,19 @@ export function CreditDetailDrawer({
               </article>
             </div>
             <div className={styles.drawerSectionHeading}>
-              <h3>{selectedMember ? "成员记录" : "调拨记录"}</h3>
+              <span className={styles.drawerRecordHeading}>
+                <h3>{selectedMember ? "成员记录" : "全部分配记录"}</h3>
+                {selectedMember ? (
+                  <button
+                    type="button"
+                    aria-label={`清除 ${selectedMember.displayName} 筛选`}
+                    onClick={onClearMemberFilter}
+                  >
+                    {selectedMember.displayName}
+                    <X aria-hidden="true" />
+                  </button>
+                ) : null}
+              </span>
               <span>共 {allocationRecords.length} 笔</span>
             </div>
             <div className={styles.allocationRecords}>

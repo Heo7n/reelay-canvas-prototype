@@ -45,20 +45,26 @@ export function OrganizationCreditsSection({
       </div>
 
       <div className={styles.creditBalanceOverview}>
-        <button
-          className={styles.creditBalanceTotal}
-          type="button"
-          onClick={() => setDrawerState({ kind: "income" })}
-        >
+        <div className={styles.creditBalanceTotal}>
           <span className={styles.creditBalanceLabel}>
             <span><WalletCards aria-hidden="true" />组织积分余额</span>
-            <ArrowRight aria-hidden="true" />
           </span>
           <strong>
             {ORGANIZATION_CREDIT_SUMMARY.available.toLocaleString("zh-CN")}
           </strong>
-          <small>组织当前尚未消耗的全部积分</small>
-        </button>
+          <span className={styles.creditBalanceFooter}>
+            <small>组织当前尚未消耗的全部积分</small>
+            <button
+              type="button"
+              aria-label="查看组织入账记录"
+              onClick={() => setDrawerState({ kind: "income" })}
+            >
+              <History aria-hidden="true" />
+              入账记录
+              <ArrowRight aria-hidden="true" />
+            </button>
+          </span>
+        </div>
 
         <div className={styles.creditComposition}>
           <span className={styles.creditCompositionHeading}>
@@ -80,12 +86,7 @@ export function OrganizationCreditsSection({
             />
           </div>
           <div className={styles.creditCompositionLegend}>
-            <button
-              className={styles.compositionAction}
-              type="button"
-              aria-label="查看可分配余额调拨记录"
-              onClick={() => setDrawerState({ kind: "pool" })}
-            >
+            <div className={styles.compositionMetric}>
               <span className={styles.poolBalanceMarker} aria-hidden="true" />
               <span>
                 <small>可分配余额</small>
@@ -93,14 +94,8 @@ export function OrganizationCreditsSection({
                   {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
                 </strong>
               </span>
-              <ArrowRight aria-hidden="true" />
-            </button>
-            <button
-              className={styles.compositionAction}
-              type="button"
-              aria-label="查看成员账户余额明细"
-              onClick={() => setDrawerState({ kind: "allocation" })}
-            >
+            </div>
+            <div className={styles.compositionMetric}>
               <span className={styles.memberBalanceMarker} aria-hidden="true" />
               <span>
                 <small>成员账户余额合计</small>
@@ -108,8 +103,7 @@ export function OrganizationCreditsSection({
                   {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}
                 </strong>
               </span>
-              <ArrowRight aria-hidden="true" />
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -117,9 +111,20 @@ export function OrganizationCreditsSection({
       <div className={styles.allocationSection}>
         <div className={styles.subsectionHeading}>
           <h2>成员余额</h2>
-          <span>
-            {fundedMemberCount} 位成员 · 合计{" "}
-            {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")} 积分
+          <span className={styles.allocationHeadingActions}>
+            <span>
+              {fundedMemberCount} 位成员 · 合计{" "}
+              {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")} 积分
+            </span>
+            <button
+              type="button"
+              aria-label="查看积分分配记录"
+              onClick={() => setDrawerState({ kind: "allocation" })}
+            >
+              <History aria-hidden="true" />
+              分配记录
+              <ArrowRight aria-hidden="true" />
+            </button>
           </span>
         </div>
 
@@ -179,6 +184,11 @@ export function OrganizationCreditsSection({
         kind={drawerState?.kind ?? null}
         memberAccount={drawerState?.memberAccount}
         members={members}
+        onKindChange={(kind) => setDrawerState((current) => ({
+          kind,
+          memberAccount: current?.memberAccount,
+        }))}
+        onClearMemberFilter={() => setDrawerState({ kind: "allocation" })}
         onClose={() => setDrawerState(null)}
       />
     </section>
