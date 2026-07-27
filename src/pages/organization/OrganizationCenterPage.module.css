@@ -735,6 +735,36 @@
   font-size: 9px;
 }
 
+.creditLedgerAction {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 720;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.creditLedgerAction:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.creditLedgerAction svg { width: 11px; height: 11px; }
+.creditLedgerAction svg:last-child {
+  width: 9px;
+  height: 9px;
+  transition: transform 0.16s ease;
+}
+.creditLedgerAction:hover svg:last-child { transform: translateX(2px); }
+
 .creditComposition {
   display: grid;
   align-content: center;
@@ -877,23 +907,55 @@
   cursor: pointer;
 }
 
-.creditAdjustmentGroup {
-  display: inline-flex;
-  gap: 3px;
-}
-
-.creditRowActions .creditAdjustmentGroup button {
-  width: 29px;
-  min-height: 28px;
+.creditAdjustmentAction,
+.creditDetailAction {
+  min-width: 54px;
   justify-content: center;
-  padding: 0;
-  border: 1px solid var(--workspace-border);
-  border-radius: 7px;
 }
 
-.creditDetailAction { min-width: 54px; justify-content: center; }
 .creditRowActions button:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
 .creditRowActions svg { width: 12px; height: 12px; }
+
+.creditAdjustmentPopover {
+  position: fixed;
+  z-index: 720;
+  display: grid;
+  width: 156px;
+  padding: 5px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 10px;
+  background: var(--workspace-surface, #fff);
+  box-shadow: 0 16px 42px rgba(16, 16, 20, 0.16);
+  color: var(--workspace-text, #171719);
+}
+
+.creditAdjustmentPopover button {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 39px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 680;
+  text-align: left;
+  cursor: pointer;
+}
+
+.creditAdjustmentPopover button:hover {
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
+.creditAdjustmentPopover svg {
+  width: 14px;
+  height: 14px;
+  color: var(--workspace-muted, #74747a);
+}
 
 .drawerBackdrop {
   position: fixed;
@@ -968,6 +1030,49 @@
 
 .drawerBadge { display: inline-flex; min-height: 26px; align-items: center; margin: 14px 0 18px; padding: 0 9px; border-radius: 999px; background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); color: var(--workspace-muted, #74747a); font-size: 9px; font-weight: 700; }
 
+.drawerPanel { display: block; }
+
+.drawerFilterBar {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -4px 0 14px;
+  padding: 0 2px;
+}
+
+.drawerFilterBar > span {
+  color: var(--workspace-muted, #74747a);
+  font-size: 9px;
+  font-weight: 680;
+}
+
+.drawerFilterBar select {
+  min-height: 30px;
+  min-width: 118px;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 7px;
+  outline: 0;
+  background: var(--workspace-surface, #fff);
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.drawerFilterBar select:hover,
+.drawerFilterBar select:focus {
+  border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.22));
+}
+
+.drawerFilterBar select:focus-visible {
+  outline: 3px solid rgba(106, 106, 236, 0.2);
+  outline-offset: 2px;
+}
+
 .drawerSummaryGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1014,42 +1119,6 @@
 }
 
 .drawerSectionHeading span {
-  color: var(--workspace-muted, #74747a);
-  font-size: 9px;
-}
-
-.drawerHeadingTools {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.drawerHeadingTools select {
-  min-height: 30px;
-  min-width: 112px;
-  padding: 0 28px 0 9px;
-  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-  border-radius: 7px;
-  outline: 0;
-  background: var(--workspace-surface, #fff);
-  color: var(--workspace-text, #171719);
-  font: inherit;
-  font-size: 9px;
-  font-weight: 680;
-  cursor: pointer;
-}
-
-.drawerHeadingTools select:hover,
-.drawerHeadingTools select:focus {
-  border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.22));
-}
-
-.drawerHeadingTools select:focus-visible {
-  outline: 3px solid rgba(106, 106, 236, 0.2);
-  outline-offset: 2px;
-}
-
-.drawerHeadingTools > span {
   color: var(--workspace-muted, #74747a);
   font-size: 9px;
 }
@@ -1102,6 +1171,11 @@
   font-weight: 720;
 }
 
+.consumptionRecords .drawerTableHeader,
+.consumptionRecords article {
+  grid-template-columns: 0.96fr 1.06fr 0.38fr 0.7fr;
+}
+
 .allocationRecords article > strong { font-size: 12px; }
 .allocationAction {
   display: inline-flex;
@@ -1118,6 +1192,31 @@
   height: 12px;
 }
 
+.consumptionTask {
+  display: grid !important;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px !important;
+}
+
+.consumptionTask > svg {
+  width: 13px;
+  height: 13px;
+  color: var(--workspace-muted, #74747a);
+}
+
+.consumptionTask > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.consumptionTask small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .allocationRecords .positiveAmount { color: #267a58; }
 .allocationRecords .negativeAmount { color: #a85c4d; }
 .allocationRecords .consumedAmount { color: #9a6540; }
@@ -1130,9 +1229,19 @@
   --workspace-hover: rgba(244, 244, 245, 0.07);
 }
 
+:global(html[data-theme="dark"]) .creditAdjustmentPopover {
+  --workspace-surface: #15161a;
+  --workspace-text: #f4f4f5;
+  --workspace-muted: #aaaab1;
+  --workspace-border: rgba(244, 244, 245, 0.12);
+  --workspace-hover: rgba(244, 244, 245, 0.07);
+}
+
 .sidebar nav a:focus-visible,
 .pageHeading a:focus-visible,
+.creditLedgerAction:focus-visible,
 .creditRowActions button:focus-visible,
+.creditAdjustmentPopover button:focus-visible,
 .organizationAvatarEditor:focus-visible,
 .organizationNameEditor:focus-visible,
 .roleButton:focus-visible,

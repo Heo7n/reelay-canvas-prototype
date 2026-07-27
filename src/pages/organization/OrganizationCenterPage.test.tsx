@@ -161,11 +161,10 @@ describe("organization center", () => {
     expect(screen.getByText("可用余额")).toBeInTheDocument();
     expect(screen.getByText("本月消耗")).toBeInTheDocument();
     expect(screen.getByText("操作")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "为 Hoo 发放积分" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "回收 Hoo 的积分" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "调整 Hoo 的积分额度" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看 Hoo 的积分明细" })).toBeInTheDocument();
     const availableMetric = screen.getByText("组织积分余额");
-    const allocatedMetric = screen.getByText("成员账户余额合计");
+    const allocatedMetric = screen.getByText("所有成员账户余额");
     const unallocatedMetric = screen.getByText("可分配余额");
     expect(
       availableMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -175,40 +174,55 @@ describe("organization center", () => {
     ).toBeTruthy();
 
     expect(screen.getByRole("img", {
-      name: "成员账户余额合计 33,000，可分配余额 67,000",
+      name: "所有成员账户余额 33,000，可分配余额 67,000",
     })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /可分配余额/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /成员账户余额合计/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /所有成员账户余额/ })).toBeNull();
     expect(screen.queryByText("5 位成员持有积分")).toBeNull();
     expect(screen.queryByRole("button", { name: "查看组织入账记录" })).toBeNull();
     expect(screen.queryByRole("button", { name: "查看积分分配记录" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "查看积分变动记录" }));
-    const creditDialog = screen.getByRole("dialog", { name: "积分记录" });
-    expect(creditDialog).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "成员变动" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("成员变动明细")).toBeInTheDocument();
-    expect(within(creditDialog).getByText("本月消耗")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "调整 Hoo 的积分额度" }));
+    const adjustmentDialog = screen.getByRole("dialog", { name: "调整 Hoo 的积分额度" });
+    expect(within(adjustmentDialog).getByRole("button", { name: "发放积分" })).toBeInTheDocument();
+    expect(within(adjustmentDialog).getByRole("button", { name: "回收积分" })).toBeInTheDocument();
+    fireEvent.click(within(adjustmentDialog).getByRole("button", { name: "发放积分" }));
+    expect(screen.getByText("Hoo 的积分发放流程将在额度规则确认后接入。")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "入账记录" }));
-    expect(screen.getByRole("tab", { name: "入账记录" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("button", { name: "查看积分流水" }));
+    const creditDialog = screen.getByRole("dialog", { name: "积分流水" });
+    expect(creditDialog).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "入账明细" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("累计入账")).toBeInTheDocument();
     expect(screen.getByText("180,000")).toBeInTheDocument();
-    expect(within(creditDialog).getByText("累计消耗")).toBeInTheDocument();
-    expect(screen.getByText("80,000")).toBeInTheDocument();
     expect(screen.getByText("共 5 笔")).toBeInTheDocument();
-    expect(screen.getByText(/尚未接入 CreditLedger/)).toBeInTheDocument();
+    expect(screen.getByText("演示数据 · 仅用于前端预览")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "成员变动" }));
-    expect(screen.getByRole("tab", { name: "成员变动" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "分配明细" }));
+    expect(screen.getByRole("tab", { name: "分配明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("额度分配流水")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
+    expect(within(creditDialog).queryByText(/生成任务自动扣减/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "消耗明细" }));
+    expect(screen.getByRole("tab", { name: "消耗明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("任务消耗流水")).toBeInTheDocument();
+    expect(within(creditDialog).getAllByText(/生成任务自动扣减/)).toHaveLength(10);
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看分配明细" }));
+    expect(screen.getByRole("tab", { name: "分配明细" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
 
     fireEvent.click(screen.getByRole("button", { name: "查看 Hoo 的积分明细" }));
     const memberFilter = screen.getByRole("combobox", { name: "筛选成员" });
+    expect(screen.getByRole("tab", { name: "消耗明细" })).toHaveAttribute("aria-selected", "true");
     expect(memberFilter).toHaveValue("creator@reelay.test");
     expect(screen.getAllByText(/生成任务自动扣减/)).toHaveLength(2);
+    fireEvent.click(screen.getByRole("tab", { name: "分配明细" }));
+    expect(memberFilter).toHaveValue("creator@reelay.test");
+    expect(screen.queryByText(/生成任务自动扣减/)).toBeNull();
     fireEvent.change(memberFilter, { target: { value: "linjing@reelay.test" } });
     expect(memberFilter).toHaveValue("linjing@reelay.test");
     fireEvent.change(memberFilter, { target: { value: "" } });

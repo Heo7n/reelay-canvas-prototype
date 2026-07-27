@@ -1,7 +1,8 @@
-import { ArrowRight, History, Minus, Plus, WalletCards } from "lucide-react";
+import { ArrowRight, History, SlidersHorizontal, WalletCards } from "lucide-react";
 import { useState } from "react";
 
 import type { OrganizationMember } from "../../domain/workspace/workspace";
+import { CreditAdjustmentPopover } from "./CreditAdjustmentPopover";
 import { CreditDetailDrawer, type CreditDrawerKind } from "./CreditDetailDrawer";
 import styles from "./OrganizationCenterPage.module.css";
 import {
@@ -21,11 +22,17 @@ interface DrawerState {
   memberAccount?: string;
 }
 
+interface AdjustmentState {
+  anchor: HTMLButtonElement;
+  member: OrganizationMember;
+}
+
 export function OrganizationCreditsSection({
   members,
   onNotice,
 }: OrganizationCreditsSectionProps) {
   const [drawerState, setDrawerState] = useState<DrawerState | null>(null);
+  const [adjustmentState, setAdjustmentState] = useState<AdjustmentState | null>(null);
   const allocations = members.map((member) => ({
     member,
     amount: getMemberCreditBalance(member),
@@ -55,6 +62,16 @@ export function OrganizationCreditsSection({
           </strong>
           <span className={styles.creditBalanceFooter}>
             <small>组织当前尚未消耗的全部积分</small>
+            <button
+              className={styles.creditLedgerAction}
+              type="button"
+              aria-label="查看积分流水"
+              onClick={() => setDrawerState({ kind: "income" })}
+            >
+              <History aria-hidden="true" />
+              积分流水
+              <ArrowRight aria-hidden="true" />
+            </button>
           </span>
         </div>
 
@@ -65,7 +82,7 @@ export function OrganizationCreditsSection({
           <div
             className={styles.creditCompositionBar}
             role="img"
-            aria-label={`成员账户余额合计 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}，可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}`}
+            aria-label={`所有成员账户余额 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}，可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}`}
           >
             <span
               className={styles.memberBalanceSegment}
@@ -80,7 +97,7 @@ export function OrganizationCreditsSection({
             <div className={styles.compositionMetric}>
               <span className={styles.memberBalanceMarker} aria-hidden="true" />
               <span>
-                <small>成员账户余额合计</small>
+                <small>所有成员账户余额</small>
                 <strong>
                   {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}
                 </strong>
@@ -105,11 +122,11 @@ export function OrganizationCreditsSection({
           <button
             className={styles.sectionHeaderAction}
             type="button"
-            aria-label="查看积分变动记录"
+            aria-label="查看分配明细"
             onClick={() => setDrawerState({ kind: "allocation" })}
           >
             <History aria-hidden="true" />
-            积分变动记录
+            分配明细
             <ArrowRight aria-hidden="true" />
           </button>
         </div>
@@ -137,30 +154,29 @@ export function OrganizationCreditsSection({
                 {consumed.toLocaleString("zh-CN")}
               </span>
               <span className={styles.creditRowActions}>
-                <span className={styles.creditAdjustmentGroup} role="group" aria-label={`${member.displayName} 额度调整`}>
-                  <button
-                    type="button"
-                    title="发放积分"
-                    aria-label={`为 ${member.displayName} 发放积分`}
-                    onClick={() => onNotice(`${member.displayName} 的积分发放流程将在额度规则确认后接入。`)}
-                  >
-                    <Plus aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    title="回收积分"
-                    aria-label={`回收 ${member.displayName} 的积分`}
-                    onClick={() => onNotice(`${member.displayName} 的积分回收流程将在额度规则确认后接入。`)}
-                  >
-                    <Minus aria-hidden="true" />
-                  </button>
-                </span>
+                <button
+                  className={styles.creditAdjustmentAction}
+                  type="button"
+                  aria-label={`调整 ${member.displayName} 的积分额度`}
+                  aria-expanded={adjustmentState?.member.userId === member.userId}
+                  onClick={(event) => {
+                    const anchor = event.currentTarget;
+                    setAdjustmentState((current) => (
+                      current?.member.userId === member.userId
+                        ? null
+                        : { anchor, member }
+                    ));
+                  }}
+                >
+                  <SlidersHorizontal aria-hidden="true" />
+                  调整
+                </button>
                 <button
                   className={styles.creditDetailAction}
                   type="button"
                   aria-label={`查看 ${member.displayName} 的积分明细`}
                   onClick={() => setDrawerState({
-                    kind: "allocation",
+                    kind: "consumption",
                     memberAccount: member.loginIdentifier ?? undefined,
                   })}
                 >
@@ -182,11 +198,27 @@ export function OrganizationCreditsSection({
           memberAccount: current?.memberAccount,
         }))}
         onMemberFilterChange={(memberAccount) => setDrawerState({
-          kind: "allocation",
+          kind: drawerState?.kind === "consumption" ? "consumption" : "allocation",
           memberAccount,
         })}
         onClose={() => setDrawerState(null)}
       />
+
+      {adjustmentState ? (
+        <CreditAdjustmentPopover
+          anchor={adjustmentState.anchor}
+          member={adjustmentState.member}
+          onClose={() => setAdjustmentState(null)}
+          onGrant={(member) => {
+            setAdjustmentState(null);
+            onNotice(`${member.displayName} 的积分发放流程将在额度规则确认后接入。`);
+          }}
+          onReclaim={(member) => {
+            setAdjustmentState(null);
+            onNotice(`${member.displayName} 的积分回收流程将在额度规则确认后接入。`);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
