@@ -4,6 +4,7 @@ import { LegacyCanvasRoute } from "../pages/canvas/LegacyCanvasRoute";
 import { WorkspaceHomePage } from "../pages/home/WorkspaceHomePage";
 import { LoginPage } from "../pages/login/LoginPage";
 import { OrganizationCenterPage } from "../pages/organization/OrganizationCenterPage";
+import { OrganizationSectionRoute } from "../pages/organization/OrganizationSectionRoute";
 import { ProjectsPage } from "../pages/projects/ProjectsPage";
 import { NoWorkspacePage } from "../pages/system/NoWorkspacePage";
 import { RouteErrorPage } from "../pages/system/RouteErrorPage";
@@ -47,17 +48,12 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
         {
           path: "w/:workspaceId/organization",
           loader: handlers.organizationLoader,
-          element: <OrganizationCenterPage section="management" />,
-        },
-        {
-          path: "w/:workspaceId/organization/credits",
-          loader: handlers.organizationLoader,
-          element: <OrganizationCenterPage section="credits" />,
-        },
-        {
-          path: "w/:workspaceId/organization/usage",
-          loader: handlers.organizationLoader,
-          element: <OrganizationCenterPage section="usage" />,
+          element: <OrganizationCenterPage />,
+          children: [
+            { index: true, element: <OrganizationSectionRoute section="management" /> },
+            { path: "credits", element: <OrganizationSectionRoute section="credits" /> },
+            { path: "usage", element: <OrganizationSectionRoute section="usage" /> },
+          ],
         },
         { path: "*", element: <Navigate to={routePaths.login()} replace /> },
       ],

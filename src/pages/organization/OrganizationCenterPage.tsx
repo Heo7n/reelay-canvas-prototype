@@ -1,19 +1,15 @@
-import { BarChart3, Building2, ChevronLeft, CircleDollarSign, LockKeyhole, UsersRound } from "lucide-react";
-import { Link, useLoaderData } from "react-router-dom";
+import { BarChart3, Building2, ChevronLeft, CircleDollarSign, UsersRound } from "lucide-react";
+import { Link, NavLink, Outlet, useLoaderData } from "react-router-dom";
 
 import type { OrganizationRouteData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
-import { OrganizationCreditsSection } from "./OrganizationCreditsSection";
-import { OrganizationManagementSection } from "./OrganizationManagementSection";
-import { OrganizationUsageSection } from "./OrganizationUsageSection";
 import styles from "./OrganizationCenterPage.module.css";
 
-export type OrganizationSection = "management" | "credits" | "usage";
-
-interface OrganizationCenterPageProps {
-  section: OrganizationSection;
+export interface OrganizationCenterOutletContext {
+  data: OrganizationRouteData;
+  showNotice: (message: string) => void;
 }
 
 const roleLabels = {
@@ -22,7 +18,7 @@ const roleLabels = {
   member: "成员",
 } as const;
 
-export function OrganizationCenterPage({ section }: OrganizationCenterPageProps) {
+export function OrganizationCenterPage() {
   const data = useLoaderData() as OrganizationRouteData;
   const { notice, showNotice } = useTransientNotice();
   const workspaceId = data.currentWorkspace.id;
@@ -35,18 +31,21 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
       label: "组织管理",
       icon: UsersRound,
       to: routePaths.organization(workspaceId),
+      end: true,
     },
     {
       id: "credits",
       label: "积分管理",
       icon: CircleDollarSign,
       to: routePaths.organizationCredits(workspaceId),
+      end: false,
     },
     {
       id: "usage",
       label: "用量看板",
       icon: BarChart3,
       to: routePaths.organizationUsage(workspaceId),
+      end: false,
     },
   ] as const;
   const visibleNavigation = navigation.filter((item) => item.id !== "usage" || canViewUsage);
@@ -86,45 +85,22 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
               {visibleNavigation.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <Link
+                  <NavLink
                     key={item.id}
-                    className={section === item.id ? styles.activeNavItem : ""}
-                    aria-current={section === item.id ? "page" : undefined}
+                    className={({ isActive }) => isActive ? styles.activeNavItem : ""}
+                    end={item.end}
                     to={item.to}
                   >
                     <Icon aria-hidden="true" />
                     <span>{item.label}</span>
-                  </Link>
+                  </NavLink>
                 );
               })}
             </nav>
           </aside>
 
           <div className={styles.content}>
-            {section === "management" ? (
-              <OrganizationManagementSection
-                actor={data.actor}
-                members={data.members}
-                workspace={data.currentWorkspace}
-                onNotice={showNotice}
-              />
-            ) : null}
-            {section === "credits" ? (
-              <OrganizationCreditsSection members={data.members} onNotice={showNotice} />
-            ) : null}
-            {section === "usage" && canViewUsage ? (
-              <OrganizationUsageSection
-                members={data.members}
-                workspaceName={data.currentWorkspace.name}
-              />
-            ) : null}
-            {section === "usage" && !canViewUsage ? (
-              <section className={styles.permissionState}>
-                <LockKeyhole aria-hidden="true" />
-                <strong>此页面仅对主账户与管理员开放</strong>
-                <p>组织成员仍可在个人积分记录中查看与自己相关的余额信息。</p>
-              </section>
-            ) : null}
+            <Outlet context={{ data, showNotice } satisfies OrganizationCenterOutletContext} />
           </div>
         </div>
       </main>

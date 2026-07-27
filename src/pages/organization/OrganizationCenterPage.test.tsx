@@ -3,10 +3,11 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OrganizationRouteData } from "../../app/route-data";
-import { OrganizationCenterPage, type OrganizationSection } from "./OrganizationCenterPage";
+import { OrganizationCenterPage } from "./OrganizationCenterPage";
+import { OrganizationSectionRoute, type OrganizationSection } from "./OrganizationSectionRoute";
 
 const routeData: OrganizationRouteData = {
   actor: {
@@ -40,19 +41,28 @@ const routeData: OrganizationRouteData = {
 
 afterEach(cleanup);
 
-function renderSection(section: OrganizationSection, data: OrganizationRouteData = routeData) {
+function renderSection(
+  section: OrganizationSection,
+  data: OrganizationRouteData = routeData,
+  loader: () => Promise<OrganizationRouteData> = async () => data,
+) {
   const suffix = section === "management" ? "" : `/${section}`;
-  const routePath = `/w/:workspaceId/organization${suffix}`;
   const initialEntry = `/w/workspace-organization-reelay/organization${suffix}`;
   const router = createMemoryRouter([
     {
-      path: routePath,
-      loader: async () => data,
-      element: <OrganizationCenterPage section={section} />,
+      path: "/w/:workspaceId/organization",
+      loader,
+      element: <OrganizationCenterPage />,
+      children: [
+        { index: true, element: <OrganizationSectionRoute section="management" /> },
+        { path: "credits", element: <OrganizationSectionRoute section="credits" /> },
+        { path: "usage", element: <OrganizationSectionRoute section="usage" /> },
+      ],
     },
   ], { initialEntries: [initialEntry] });
 
   render(<RouterProvider router={router} />);
+  return router;
 }
 
 describe("organization center", () => {
@@ -261,5 +271,21 @@ describe("organization center", () => {
     expect(await screen.findByText("此页面仅对主账户与管理员开放")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "用量看板" })).not.toBeInTheDocument();
     expect(screen.queryByText("组织可用积分")).not.toBeInTheDocument();
+  });
+
+  it("reuses organization data while switching between center sections", async () => {
+    const loader = vi.fn(async () => routeData);
+    renderSection("management", routeData, loader);
+
+    expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
+    expect(loader).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("link", { name: "积分管理" }));
+    expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
+    expect(loader).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("link", { name: "用量看板" }));
+    expect(await screen.findByRole("heading", { name: "用量看板" })).toBeInTheDocument();
+    expect(loader).toHaveBeenCalledOnce();
   });
 });
