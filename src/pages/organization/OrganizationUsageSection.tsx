@@ -31,7 +31,6 @@ import {
   getUsageComposition,
   getUsageRange,
   getUsageSummary,
-  getWeeklyActivity,
   type UsageDimension,
   type UsageRangePreset,
 } from "./organization-usage-data";
@@ -174,10 +173,6 @@ export function OrganizationUsageSection({
     () => getHeatmapDays(demoData.records, activityAnchor),
     [activityAnchor, demoData.records],
   );
-  const weeklyActivity = useMemo(
-    () => getWeeklyActivity(demoData.records, activityAnchor),
-    [activityAnchor, demoData.records],
-  );
   const earliestRecordDate = useMemo(
     () => new Date(demoData.records.at(-1)?.occurredAt ?? now),
     [demoData.records, now],
@@ -235,43 +230,18 @@ export function OrganizationUsageSection({
 
   return (
     <section className={styles.usageSection} aria-labelledby="organization-usage-title">
-      <header className={styles.pageHeader}>
-        <span>
-          <h1 id="organization-usage-title">用量看板</h1>
-          <p>{workspaceName} · 了解积分余量、消耗趋势与媒体产出。</p>
-        </span>
-        <span className={styles.dataFreshness}>
-          <Clock3 aria-hidden="true" />
-          演示数据 · 更新于 5 分钟前
-        </span>
-      </header>
-
-      <section className={styles.stableOverview} aria-label="组织状态概览">
-        <article>
-          <span><CircleDollarSign aria-hidden="true" />可用积分</span>
-          <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
-          <small>组织当前尚未消耗的全部积分</small>
-        </article>
-        <article className={styles.forecastMetric}>
-          <span><Clock3 aria-hidden="true" />预计可用</span>
-          <div>
-            <span>
-              <strong>{formatForecast(summary.estimatedDays30)}</strong>
-              <small>按近 30 日消耗估算</small>
-            </span>
-            <span>
-              <strong>{formatForecast(summary.estimatedDaysLifetime)}</strong>
-              <small>历史累计口径</small>
-            </span>
-          </div>
-        </article>
-      </section>
+      <h1 id="organization-usage-title" className={styles.visuallyHidden}>用量看板</h1>
+      <p className={styles.visuallyHidden}>{workspaceName}的组织用量统计</p>
 
       <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
         <header className={styles.panelHeader}>
           <span>
             <h2 id="usage-activity-title">365 天活动</h2>
             <p>观察长期使用节奏；每日、每周与累计只是同一时间窗口的不同视图。</p>
+            <small className={styles.dataFreshness}>
+              <Clock3 aria-hidden="true" />
+              演示数据 · 更新于 5 分钟前
+            </small>
           </span>
           <div className={styles.activityHeaderControls}>
             <div className={styles.windowNavigation} aria-label="年度活动时间窗口">
@@ -311,8 +281,27 @@ export function OrganizationUsageSection({
         <UsageActivityChart
           days={activityDays}
           mode={activityMode}
-          weeklyPoints={weeklyActivity}
         />
+        <section className={styles.stableOverview} aria-label="组织状态概览">
+          <article>
+            <span><CircleDollarSign aria-hidden="true" />可用积分</span>
+            <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
+            <small>组织当前尚未消耗的全部积分</small>
+          </article>
+          <article className={styles.forecastMetric}>
+            <span><Clock3 aria-hidden="true" />预计可用</span>
+            <div>
+              <span>
+                <strong>{formatForecast(summary.estimatedDays30)}</strong>
+                <small>按近 30 日消耗估算</small>
+              </span>
+              <span>
+                <strong>{formatForecast(summary.estimatedDaysLifetime)}</strong>
+                <small>历史累计口径</small>
+              </span>
+            </div>
+          </article>
+        </section>
       </section>
 
       <section className={styles.periodPanel} aria-labelledby="usage-period-title">

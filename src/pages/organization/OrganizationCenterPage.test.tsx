@@ -259,7 +259,7 @@ describe("organization center", () => {
     fireEvent.click(screen.getByRole("button", { name: "每周" }));
     expect(screen.getByRole("button", { name: "每周" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "累计" }));
-    expect(screen.getByRole("img", { name: "最近 52 周累计积分消耗趋势" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "近 365 天按周累计积分消耗" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "成员" }));
     expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");

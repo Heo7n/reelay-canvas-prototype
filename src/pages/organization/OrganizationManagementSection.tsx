@@ -105,12 +105,7 @@ export function OrganizationManagementSection({
 
   return (
     <section className={styles.section} aria-labelledby="organization-management-title">
-      <div className={styles.sectionHeading}>
-        <span>
-          <h1 id="organization-management-title">组织管理</h1>
-          <p>管理组织资料、成员身份与账号控制权。</p>
-        </span>
-      </div>
+      <h1 id="organization-management-title" className={styles.srOnly}>组织管理</h1>
 
       <article className={styles.organizationCard}>
         {canEditOrganization ? (

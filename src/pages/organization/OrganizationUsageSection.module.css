@@ -14,24 +14,25 @@
   --usage-positive: #77cba6;
 }
 
-.pageHeader {
-  display: flex;
-  min-height: 62px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--workspace-border);
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.pageHeader > span:first-child,
 .panelHeader > span,
 .compositionHeader > span {
   display: grid;
   gap: 5px;
 }
 
-.pageHeader h1,
 .panelHeader h2,
 .compositionHeader h3 {
   margin: 0;
@@ -39,11 +40,9 @@
   letter-spacing: 0;
 }
 
-.pageHeader h1 { font-size: 20px; }
 .panelHeader h2,
 .compositionHeader h3 { font-size: 13px; }
 
-.pageHeader p,
 .panelHeader p,
 .compositionHeader p {
   margin: 0;
@@ -52,7 +51,6 @@
   line-height: 1.5;
 }
 
-.dataFreshness,
 .toolbarMeta > span {
   display: inline-flex;
   align-items: center;
@@ -60,6 +58,15 @@
   color: var(--workspace-muted);
   font-size: 9px;
   white-space: nowrap;
+}
+
+.dataFreshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--workspace-subtle);
+  font-size: 8px;
+  font-weight: 520;
 }
 
 .dataFreshness svg,
@@ -72,9 +79,9 @@
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr);
   overflow: hidden;
-  border: 1px solid var(--workspace-border);
-  border-radius: 8px;
-  background: var(--workspace-surface);
+  margin: 16px -20px 0;
+  border-top: 1px solid var(--workspace-border);
+  background: color-mix(in srgb, var(--workspace-bg) 44%, var(--workspace-surface));
 }
 
 .stableOverview > article {
@@ -155,6 +162,11 @@
   border: 1px solid var(--workspace-border);
   border-radius: 8px;
   background: var(--workspace-surface);
+}
+
+.activityPanel {
+  overflow: hidden;
+  padding-bottom: 0;
 }
 
 .panelHeader {
@@ -412,65 +424,58 @@
   position: relative;
   display: grid;
   min-width: 0;
-  min-height: 156px;
-  gap: 9px;
-  padding: 2px 2px 0;
+  gap: 8px;
+  padding: 14px 2px 18px;
 }
 
-.activityChart[data-mode="weekly"],
-.activityChart[data-mode="cumulative"] { min-height: 248px; }
-
-.heatmapViewport {
-  display: grid;
+.annualPlot {
+  position: relative;
+  width: 100%;
+  height: clamp(160px, 12vw, 190px);
   min-width: 0;
-  justify-content: center;
-  overflow: visible;
-  padding: 42px 6px 2px;
 }
 
 .heatmapGrid {
-  --heatmap-cell: 13px;
-  --heatmap-gap: 2px;
   display: grid;
-  width: max-content;
-  grid-auto-columns: var(--heatmap-cell);
   grid-auto-flow: column;
-  grid-template-rows: repeat(7, var(--heatmap-cell));
-  gap: var(--heatmap-gap);
+  grid-template-columns: repeat(53, minmax(0, 1fr));
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: 3px;
 }
 
-.heatmapMonths {
+.activityMonthAxis {
   display: grid;
-  width: max-content;
-  grid-template-columns: repeat(53, var(--heatmap-cell, 13px));
-  gap: var(--heatmap-gap, 2px);
-  margin-top: 8px;
+  width: 100%;
+  min-height: 18px;
+  grid-template-columns: repeat(53, minmax(0, 1fr));
+  gap: 3px;
   color: var(--workspace-subtle);
   font-size: 8px;
 }
 
-.heatmapMonths span {
+.activityMonthAxis span {
   width: 34px;
   white-space: nowrap;
 }
 
 .heatmapEmpty,
-.heatmapDay,
-.activityLegend i {
-  width: 13px;
-  height: 13px;
+.heatmapDay {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: 3px;
 }
 
 .heatmapDay,
-.activityLegend i { background: var(--workspace-hover); }
+.activityLegend i { background: color-mix(in srgb, var(--workspace-hover) 88%, var(--workspace-border)); }
 
 .heatmapDay {
   position: relative;
   cursor: crosshair;
-  transition: transform 0.12s ease;
+  transition: filter 0.12s ease, transform 0.12s ease;
 }
 
 .heatmapDay[data-level="1"],
@@ -490,37 +495,32 @@
 
 .heatmapDay[data-level="4"],
 .activityLegend i[data-level="4"] { background: var(--usage-accent); }
-.heatmapDay:hover { z-index: 3; transform: scale(1.28); }
-
-.weeklyChart,
-.cumulativeChart {
-  display: grid;
-  min-width: 0;
-  gap: 8px;
-  padding-top: 28px;
+.heatmapDay:hover {
+  z-index: 3;
+  filter: saturate(1.12);
+  transform: scale(1.12);
 }
 
 .weeklyBars {
-  display: flex;
-  height: 184px;
+  display: grid;
+  grid-template-columns: repeat(53, minmax(0, 1fr));
+  gap: 3px;
   align-items: stretch;
-  gap: 4px;
-  padding: 8px 4px 0;
+  padding-top: 8px;
   border-bottom: 1px solid var(--workspace-border);
   background:
     repeating-linear-gradient(
       to bottom,
       transparent 0,
-      transparent 45px,
-      var(--workspace-border) 46px
+      transparent calc(25% - 1px),
+      var(--workspace-border) 25%
     );
 }
 
 .weeklyBars button {
   position: relative;
   display: flex;
-  min-width: 4px;
-  flex: 1 1 0;
+  min-width: 0;
   align-items: flex-end;
   padding: 0;
   border: 0;
@@ -531,8 +531,8 @@
 .weeklyBars i {
   width: 100%;
   height: var(--bar-height);
-  min-height: 3px;
-  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
   background: color-mix(in srgb, var(--usage-accent) 54%, var(--workspace-surface));
   transition: background 0.12s ease, transform 0.12s ease;
 }
@@ -545,31 +545,15 @@
   transform: translateY(-2px);
 }
 
-.weeklyMonths {
-  display: grid;
-  grid-template-columns: repeat(52, minmax(0, 1fr));
-  gap: 4px;
-  padding: 0 4px;
-  color: var(--workspace-subtle);
-  font-size: 8px;
-}
-
-.weeklyMonths span {
-  width: 34px;
-  white-space: nowrap;
-}
-
 .cumulativeCanvas {
-  position: relative;
-  min-height: 184px;
   color: var(--usage-accent);
 }
 
 .cumulativeCanvas svg {
   display: block;
   width: 100%;
-  height: 184px;
-  overflow: visible;
+  height: 100%;
+  overflow: hidden;
 }
 
 .activityGuideLines line {
@@ -604,8 +588,8 @@
 
 .cumulativeTarget {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -661,7 +645,41 @@
   bottom: calc(var(--bar-height) + 8px);
 }
 
+.heatmapDay[data-tooltip-align="start"] .chartTooltip,
+.weeklyBars button[data-tooltip-align="start"] .chartTooltip,
+.cumulativeTarget[data-tooltip-align="start"] .chartTooltip {
+  right: auto;
+  left: 0;
+  transform: translate(0, 4px);
+}
+
+.heatmapDay[data-tooltip-align="end"] .chartTooltip,
+.weeklyBars button[data-tooltip-align="end"] .chartTooltip,
+.cumulativeTarget[data-tooltip-align="end"] .chartTooltip {
+  right: 0;
+  left: auto;
+  transform: translate(0, 4px);
+}
+
+.heatmapDay[data-tooltip-align="start"]:hover .chartTooltip,
+.heatmapDay[data-tooltip-align="start"]:focus-visible .chartTooltip,
+.weeklyBars button[data-tooltip-align="start"]:hover .chartTooltip,
+.weeklyBars button[data-tooltip-align="start"]:focus-visible .chartTooltip,
+.cumulativeTarget[data-tooltip-align="start"]:hover .chartTooltip,
+.cumulativeTarget[data-tooltip-align="start"]:focus-visible .chartTooltip,
+.heatmapDay[data-tooltip-align="end"]:hover .chartTooltip,
+.heatmapDay[data-tooltip-align="end"]:focus-visible .chartTooltip,
+.weeklyBars button[data-tooltip-align="end"]:hover .chartTooltip,
+.weeklyBars button[data-tooltip-align="end"]:focus-visible .chartTooltip,
+.cumulativeTarget[data-tooltip-align="end"]:hover .chartTooltip,
+.cumulativeTarget[data-tooltip-align="end"]:focus-visible .chartTooltip {
+  transform: translate(0, 0);
+}
+
 .activityLegend {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
   display: flex;
   min-height: 16px;
   align-items: center;
@@ -669,6 +687,12 @@
   gap: 4px;
   color: var(--workspace-subtle);
   font-size: 8px;
+}
+
+.activityLegend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
 }
 
 .compositionList { display: grid; }

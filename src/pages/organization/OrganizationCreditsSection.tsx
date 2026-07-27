@@ -44,12 +44,7 @@ export function OrganizationCreditsSection({
 
   return (
     <section className={styles.section} aria-labelledby="organization-credits-title">
-      <div className={styles.sectionHeading}>
-        <span>
-          <h1 id="organization-credits-title">积分管理</h1>
-          <p>管理组织余额及成员账户当前可使用的积分。</p>
-        </span>
-      </div>
+      <h1 id="organization-credits-title" className={styles.srOnly}>积分管理</h1>
 
       <div className={styles.creditBalanceOverview}>
         <div className={styles.creditBalanceTotal}>
