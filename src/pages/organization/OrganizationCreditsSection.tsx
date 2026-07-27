@@ -31,8 +31,8 @@ export function OrganizationCreditsSection({
     latestRecord: getLatestMemberCreditRecord(member),
   }));
   const fundedMemberCount = allocations.filter(({ amount }) => amount > 0).length;
-  const allocatedShare = (
-    ORGANIZATION_CREDIT_SUMMARY.allocated / ORGANIZATION_CREDIT_SUMMARY.available
+  const unallocatedShare = (
+    ORGANIZATION_CREDIT_SUMMARY.unallocated / ORGANIZATION_CREDIT_SUMMARY.available
   ) * 100;
 
   return (
@@ -68,16 +68,37 @@ export function OrganizationCreditsSection({
           <div
             className={styles.creditCompositionBar}
             role="img"
-            aria-label={`成员账户余额合计 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}，可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}`}
+            aria-label={`可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}，成员账户余额合计 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}`}
           >
-            <span style={{ width: `${allocatedShare}%` }} />
-            <span style={{ width: `${100 - allocatedShare}%` }} />
+            <span
+              className={styles.poolBalanceSegment}
+              style={{ width: `${unallocatedShare}%` }}
+            />
+            <span
+              className={styles.memberBalanceSegment}
+              style={{ width: `${100 - unallocatedShare}%` }}
+            />
           </div>
           <div className={styles.creditCompositionLegend}>
             <button
               className={styles.compositionAction}
               type="button"
-              aria-label="查看成员积分分配记录"
+              aria-label="查看可分配余额调拨记录"
+              onClick={() => setDrawerState({ kind: "pool" })}
+            >
+              <span className={styles.poolBalanceMarker} aria-hidden="true" />
+              <span>
+                <small>可分配余额</small>
+                <strong>
+                  {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
+                </strong>
+              </span>
+              <ArrowRight aria-hidden="true" />
+            </button>
+            <button
+              className={styles.compositionAction}
+              type="button"
+              aria-label="查看成员账户余额明细"
               onClick={() => setDrawerState({ kind: "allocation" })}
             >
               <span className={styles.memberBalanceMarker} aria-hidden="true" />
@@ -89,15 +110,6 @@ export function OrganizationCreditsSection({
               </span>
               <ArrowRight aria-hidden="true" />
             </button>
-            <div>
-              <span className={styles.poolBalanceMarker} aria-hidden="true" />
-              <span>
-                <small>可分配余额</small>
-                <strong>
-                  {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
-                </strong>
-              </span>
-            </div>
           </div>
         </div>
       </div>

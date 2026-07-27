@@ -19,7 +19,7 @@ import {
   type CreditIncomeKind,
 } from "./organization-credit-data";
 
-export type CreditDrawerKind = "income" | "allocation";
+export type CreditDrawerKind = "income" | "allocation" | "pool";
 
 interface CreditDetailDrawerProps {
   kind: CreditDrawerKind | null;
@@ -63,6 +63,7 @@ export function CreditDetailDrawer({
   if (!kind) return null;
 
   const isIncome = kind === "income";
+  const isPool = kind === "pool";
   const selectedMember = members.find((member) => member.loginIdentifier === memberAccount);
   const allocationRecords = memberAccount
     ? CREDIT_ALLOCATION_RECORDS.filter((record) => record.memberAccount === memberAccount)
@@ -104,16 +105,20 @@ export function CreditDetailDrawer({
             <h2 id="credit-drawer-title">
               {isIncome
                 ? "组织积分明细"
+                : isPool
+                  ? "可分配余额明细"
                 : selectedMember
                   ? `${selectedMember.displayName} 的分配记录`
-                  : "分配记录"}
+                  : "成员账户余额明细"}
             </h2>
             <p>
               {isIncome
                 ? "查看组织累计入账、消耗与当前可用余额"
+                : isPool
+                  ? "查看组织池向成员账户发放与回收的变动"
                 : selectedMember
                   ? selectedMember.loginIdentifier
-                  : "查看成员积分的发放与回收流水"}
+                  : "查看成员账户余额与内部调拨流水"}
             </p>
           </span>
           <button ref={closeButtonRef} type="button" aria-label="关闭详情" onClick={onClose}>
@@ -166,8 +171,12 @@ export function CreditDetailDrawer({
           <>
             <div className={styles.drawerSummaryGrid}>
               <article>
-                <span>成员余额合计</span>
-                <strong>{ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}</strong>
+                <span>{isPool ? "可分配余额" : "成员余额合计"}</span>
+                <strong>
+                  {(isPool
+                    ? ORGANIZATION_CREDIT_SUMMARY.unallocated
+                    : ORGANIZATION_CREDIT_SUMMARY.allocated).toLocaleString("zh-CN")}
+                </strong>
               </article>
               <article>
                 <span>本月发放</span>
@@ -179,7 +188,7 @@ export function CreditDetailDrawer({
               </article>
             </div>
             <div className={styles.drawerSectionHeading}>
-              <h3>{selectedMember ? "成员记录" : "全部记录"}</h3>
+              <h3>{selectedMember ? "成员记录" : "调拨记录"}</h3>
               <span>共 {allocationRecords.length} 笔</span>
             </div>
             <div className={styles.allocationRecords}>

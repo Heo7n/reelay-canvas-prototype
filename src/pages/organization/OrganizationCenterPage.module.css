@@ -656,7 +656,7 @@
   display: grid;
   grid-template-columns: minmax(250px, 0.8fr) minmax(430px, 1.2fr);
   overflow: hidden;
-  min-height: 166px;
+  min-height: 188px;
   border: 1px solid var(--workspace-border);
   border-radius: 14px;
   background: var(--workspace-surface);
@@ -702,7 +702,7 @@
 .creditComposition {
   display: grid;
   align-content: center;
-  gap: 17px;
+  gap: 13px;
   padding: 24px 28px;
 }
 
@@ -724,25 +724,24 @@
   background: var(--workspace-hover);
 }
 
-.creditCompositionBar > span:first-child { background: #3c3d43; }
-.creditCompositionBar > span:last-child { background: color-mix(in srgb, var(--workspace-muted) 24%, transparent); }
+.creditCompositionBar .poolBalanceSegment {
+  background: color-mix(in srgb, var(--workspace-muted) 24%, transparent);
+}
+
+.creditCompositionBar .memberBalanceSegment { background: #3c3d43; }
 
 .creditCompositionLegend {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 0;
 }
 
-.creditCompositionLegend > div,
 .compositionAction {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-columns: 8px minmax(0, 1fr) 13px;
   min-width: 0;
+  min-height: 38px;
   align-items: center;
   gap: 9px;
-}
-
-.compositionAction {
   padding: 0;
   border: 0;
   background: transparent;
@@ -752,17 +751,16 @@
   cursor: pointer;
 }
 
-.compositionAction:hover small { color: var(--workspace-text); }
-
-.creditCompositionLegend > div {
-  grid-template-columns: 8px minmax(0, 1fr);
+.compositionAction + .compositionAction {
+  border-top: 1px solid color-mix(in srgb, var(--workspace-border) 70%, transparent);
 }
 
-.creditCompositionLegend > div > span:nth-child(2),
 .compositionAction > span:nth-child(2) {
-  display: grid;
+  display: flex;
   min-width: 0;
-  gap: 5px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .creditCompositionLegend small {
@@ -777,7 +775,16 @@
   letter-spacing: 0;
 }
 
-.creditCompositionLegend svg { width: 12px; height: 12px; color: var(--workspace-muted); }
+.creditCompositionLegend svg {
+  width: 12px;
+  height: 12px;
+  color: var(--workspace-muted);
+  transition: color 0.16s ease, transform 0.16s ease;
+}
+
+.compositionAction:hover small,
+.compositionAction:hover svg { color: var(--workspace-text); }
+.compositionAction:hover svg { transform: translateX(2px); }
 .memberBalanceMarker,
 .poolBalanceMarker { width: 8px; height: 8px; border-radius: 2px; }
 .memberBalanceMarker { background: #3c3d43; }

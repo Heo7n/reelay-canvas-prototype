@@ -164,19 +164,26 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "回收 Hoo 的积分" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看 Hoo 的积分记录" })).toBeInTheDocument();
     const availableMetric = screen.getByText("组织积分余额");
-    const allocatedMetric = screen.getByText("成员账户余额合计");
     const unallocatedMetric = screen.getByText("可分配余额");
+    const allocatedMetric = screen.getByText("成员账户余额合计");
     expect(
-      availableMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      availableMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      allocatedMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      unallocatedMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     expect(screen.getByRole("img", {
-      name: "成员账户余额合计 33,000，可分配余额 67,000",
+      name: "可分配余额 67,000，成员账户余额合计 33,000",
     })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看成员积分分配记录" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看可分配余额调拨记录" }));
+    expect(screen.getByRole("dialog", { name: "可分配余额明细" })).toBeInTheDocument();
+    expect(screen.getByText("调拨记录")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看成员账户余额明细" }));
+    expect(screen.getByRole("dialog", { name: "成员账户余额明细" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
 
     fireEvent.click(screen.getByRole("button", { name: /组织积分余额/ }));
     expect(screen.getByRole("dialog", { name: "组织积分明细" })).toBeInTheDocument();
