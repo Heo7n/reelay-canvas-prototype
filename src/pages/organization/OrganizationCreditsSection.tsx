@@ -31,8 +31,8 @@ export function OrganizationCreditsSection({
     latestRecord: getLatestMemberCreditRecord(member),
   }));
   const fundedMemberCount = allocations.filter(({ amount }) => amount > 0).length;
-  const unallocatedShare = (
-    ORGANIZATION_CREDIT_SUMMARY.unallocated / ORGANIZATION_CREDIT_SUMMARY.available
+  const allocatedShare = (
+    ORGANIZATION_CREDIT_SUMMARY.allocated / ORGANIZATION_CREDIT_SUMMARY.available
   ) * 100;
 
   return (
@@ -42,6 +42,16 @@ export function OrganizationCreditsSection({
           <h1 id="organization-credits-title">积分管理</h1>
           <p>管理组织余额及成员账户当前可使用的积分。</p>
         </span>
+        <button
+          className={styles.sectionHeaderAction}
+          type="button"
+          aria-label="查看积分变动记录"
+          onClick={() => setDrawerState({ kind: "income" })}
+        >
+          <History aria-hidden="true" />
+          积分变动记录
+          <ArrowRight aria-hidden="true" />
+        </button>
       </div>
 
       <div className={styles.creditBalanceOverview}>
@@ -54,53 +64,43 @@ export function OrganizationCreditsSection({
           </strong>
           <span className={styles.creditBalanceFooter}>
             <small>组织当前尚未消耗的全部积分</small>
-            <button
-              type="button"
-              aria-label="查看组织入账记录"
-              onClick={() => setDrawerState({ kind: "income" })}
-            >
-              <History aria-hidden="true" />
-              入账记录
-              <ArrowRight aria-hidden="true" />
-            </button>
           </span>
         </div>
 
         <div className={styles.creditComposition}>
           <span className={styles.creditCompositionHeading}>
             <strong>余额构成</strong>
-            <small>{fundedMemberCount} 位成员持有积分</small>
           </span>
           <div
             className={styles.creditCompositionBar}
             role="img"
-            aria-label={`可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}，成员账户余额合计 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}`}
+            aria-label={`成员账户余额合计 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}，可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}`}
           >
             <span
-              className={styles.poolBalanceSegment}
-              style={{ width: `${unallocatedShare}%` }}
+              className={styles.memberBalanceSegment}
+              style={{ width: `${allocatedShare}%` }}
             />
             <span
-              className={styles.memberBalanceSegment}
-              style={{ width: `${100 - unallocatedShare}%` }}
+              className={styles.poolBalanceSegment}
+              style={{ width: `${100 - allocatedShare}%` }}
             />
           </div>
           <div className={styles.creditCompositionLegend}>
-            <div className={styles.compositionMetric}>
-              <span className={styles.poolBalanceMarker} aria-hidden="true" />
-              <span>
-                <small>可分配余额</small>
-                <strong>
-                  {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
-                </strong>
-              </span>
-            </div>
             <div className={styles.compositionMetric}>
               <span className={styles.memberBalanceMarker} aria-hidden="true" />
               <span>
                 <small>成员账户余额合计</small>
                 <strong>
                   {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}
+                </strong>
+              </span>
+            </div>
+            <div className={styles.compositionMetric}>
+              <span className={styles.poolBalanceMarker} aria-hidden="true" />
+              <span>
+                <small>可分配余额</small>
+                <strong>
+                  {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
                 </strong>
               </span>
             </div>
@@ -111,20 +111,9 @@ export function OrganizationCreditsSection({
       <div className={styles.allocationSection}>
         <div className={styles.subsectionHeading}>
           <h2>成员余额</h2>
-          <span className={styles.allocationHeadingActions}>
-            <span>
-              {fundedMemberCount} 位成员 · 合计{" "}
-              {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")} 积分
-            </span>
-            <button
-              type="button"
-              aria-label="查看积分分配记录"
-              onClick={() => setDrawerState({ kind: "allocation" })}
-            >
-              <History aria-hidden="true" />
-              分配记录
-              <ArrowRight aria-hidden="true" />
-            </button>
+          <span className={styles.allocationSummary}>
+            {fundedMemberCount} 位成员 · 合计{" "}
+            {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")} 积分
           </span>
         </div>
 

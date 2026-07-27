@@ -207,6 +207,37 @@
   line-height: 1.5;
 }
 
+.sectionHeaderAction {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 8px;
+  background: var(--workspace-surface);
+  color: var(--workspace-text);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 720;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.sectionHeaderAction:hover {
+  border-color: var(--workspace-border-strong);
+  background: var(--workspace-hover);
+}
+
+.sectionHeaderAction svg { width: 13px; height: 13px; }
+.sectionHeaderAction svg:last-child {
+  width: 11px;
+  height: 11px;
+  color: var(--workspace-muted);
+  transition: transform 0.16s ease;
+}
+.sectionHeaderAction:hover svg:last-child { transform: translateX(2px); }
+
 .organizationCard {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);
@@ -704,31 +735,6 @@
   font-size: 9px;
 }
 
-.creditBalanceFooter button {
-  display: inline-flex;
-  min-height: 26px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.74);
-  font: inherit;
-  font-size: 9px;
-  font-weight: 720;
-  cursor: pointer;
-}
-
-.creditBalanceFooter button:hover { color: #fff; }
-.creditBalanceFooter button svg { width: 12px; height: 12px; }
-.creditBalanceFooter button svg:last-child {
-  width: 11px;
-  height: 11px;
-  transition: transform 0.16s ease;
-}
-.creditBalanceFooter button:hover svg:last-child { transform: translateX(2px); }
-
 .creditComposition {
   display: grid;
   align-content: center;
@@ -796,41 +802,11 @@
 .memberBalanceMarker { background: #3c3d43; }
 .poolBalanceMarker { background: color-mix(in srgb, var(--workspace-muted) 34%, transparent); }
 
-.allocationHeadingActions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.allocationHeadingActions > span {
+.allocationSummary {
   color: var(--workspace-muted);
   font-size: 10px;
   font-weight: 680;
 }
-
-.allocationHeadingActions button {
-  display: inline-flex;
-  min-height: 30px;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--workspace-muted);
-  font: inherit;
-  font-size: 10px;
-  font-weight: 720;
-  cursor: pointer;
-}
-
-.allocationHeadingActions button:hover { color: var(--workspace-text); }
-.allocationHeadingActions button svg { width: 13px; height: 13px; }
-.allocationHeadingActions button svg:last-child {
-  width: 11px;
-  height: 11px;
-  transition: transform 0.16s ease;
-}
-.allocationHeadingActions button:hover svg:last-child { transform: translateX(2px); }
 
 .allocationTableHeader,
 .allocationRow {
@@ -1147,8 +1123,7 @@
 .roleOptions button:focus-visible,
 .accountOptions button:focus-visible,
 .rowAction button:focus-visible,
-.creditBalanceFooter button:focus-visible,
-.allocationHeadingActions button:focus-visible,
+.sectionHeaderAction:focus-visible,
 .creditDrawer button:focus-visible {
   outline: 3px solid rgba(106, 106, 236, 0.28);
   outline-offset: 2px;

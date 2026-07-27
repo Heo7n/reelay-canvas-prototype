@@ -164,22 +164,25 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "回收 Hoo 的积分" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看 Hoo 的积分记录" })).toBeInTheDocument();
     const availableMetric = screen.getByText("组织积分余额");
-    const unallocatedMetric = screen.getByText("可分配余额");
     const allocatedMetric = screen.getByText("成员账户余额合计");
+    const unallocatedMetric = screen.getByText("可分配余额");
     expect(
-      availableMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      availableMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      unallocatedMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      allocatedMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     expect(screen.getByRole("img", {
-      name: "可分配余额 67,000，成员账户余额合计 33,000",
+      name: "成员账户余额合计 33,000，可分配余额 67,000",
     })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /可分配余额/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /成员账户余额合计/ })).toBeNull();
+    expect(screen.queryByText("5 位成员持有积分")).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看组织入账记录" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看积分分配记录" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "查看组织入账记录" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看积分变动记录" }));
     expect(screen.getByRole("dialog", { name: "积分记录" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "入账记录" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("累计入账")).toBeInTheDocument();
@@ -192,11 +195,6 @@ describe("organization center", () => {
     fireEvent.click(screen.getByRole("tab", { name: "分配记录" }));
     expect(screen.getByRole("tab", { name: "分配记录" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("全部分配记录")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
-
-    fireEvent.click(screen.getByRole("button", { name: "查看积分分配记录" }));
-    expect(screen.getByRole("dialog", { name: "积分记录" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "分配记录" })).toHaveAttribute("aria-selected", "true");
     fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
 
     fireEvent.click(screen.getByRole("button", { name: "查看 Hoo 的积分记录" }));
