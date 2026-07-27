@@ -8,7 +8,6 @@ import styles from "./OrganizationCenterPage.module.css";
 import {
   getLatestMemberCreditRecord,
   getMemberCreditBalance,
-  getMemberCreditUsage,
   ORGANIZATION_CREDIT_SUMMARY,
 } from "./organization-credit-data";
 
@@ -25,6 +24,7 @@ interface DrawerState {
 interface AdjustmentState {
   anchor: HTMLButtonElement;
   member: OrganizationMember;
+  balance: number;
 }
 
 export function OrganizationCreditsSection({
@@ -36,11 +36,10 @@ export function OrganizationCreditsSection({
   const allocations = members.map((member) => ({
     member,
     amount: getMemberCreditBalance(member),
-    consumed: getMemberCreditUsage(member),
     latestRecord: getLatestMemberCreditRecord(member),
   }));
-  const allocatedShare = (
-    ORGANIZATION_CREDIT_SUMMARY.allocated / ORGANIZATION_CREDIT_SUMMARY.available
+  const availablePoolShare = (
+    ORGANIZATION_CREDIT_SUMMARY.unallocated / ORGANIZATION_CREDIT_SUMMARY.available
   ) * 100;
 
   return (
@@ -82,33 +81,33 @@ export function OrganizationCreditsSection({
           <div
             className={styles.creditCompositionBar}
             role="img"
-            aria-label={`所有成员账户余额 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}，可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}`}
+            aria-label={`可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}，所有成员账户余额 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}`}
           >
             <span
-              className={styles.memberBalanceSegment}
-              style={{ width: `${allocatedShare}%` }}
+              className={styles.poolBalanceSegment}
+              style={{ width: `${availablePoolShare}%` }}
             />
             <span
-              className={styles.poolBalanceSegment}
-              style={{ width: `${100 - allocatedShare}%` }}
+              className={styles.memberBalanceSegment}
+              style={{ width: `${100 - availablePoolShare}%` }}
             />
           </div>
           <div className={styles.creditCompositionLegend}>
-            <div className={styles.compositionMetric}>
-              <span className={styles.memberBalanceMarker} aria-hidden="true" />
-              <span>
-                <small>所有成员账户余额</small>
-                <strong>
-                  {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}
-                </strong>
-              </span>
-            </div>
-            <div className={styles.compositionMetric}>
+            <div className={`${styles.compositionMetric} ${styles.poolBalanceMetric}`}>
               <span className={styles.poolBalanceMarker} aria-hidden="true" />
               <span>
                 <small>可分配余额</small>
                 <strong>
                   {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
+                </strong>
+              </span>
+            </div>
+            <div className={`${styles.compositionMetric} ${styles.memberBalanceMetric}`}>
+              <span className={styles.memberBalanceMarker} aria-hidden="true" />
+              <span>
+                <small>所有成员账户余额</small>
+                <strong>
+                  {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}
                 </strong>
               </span>
             </div>
@@ -136,10 +135,9 @@ export function OrganizationCreditsSection({
             <span>成员</span>
             <span>角色</span>
             <span>可用余额</span>
-            <span>本月消耗</span>
             <span>操作</span>
           </div>
-          {allocations.map(({ member, amount, consumed, latestRecord }) => (
+          {allocations.map(({ member, amount, latestRecord }) => (
             <div className={styles.allocationRow} key={member.userId}>
               <span className={styles.memberIdentity}>
                 <span className={styles.memberAvatar} aria-hidden="true">{member.displayName.slice(0, 1)}</span>
@@ -150,21 +148,19 @@ export function OrganizationCreditsSection({
                 <strong>{amount.toLocaleString("zh-CN")}</strong>
                 <small>{latestRecord?.date.slice(5, 10).replace("-", "/")} 最近变动</small>
               </span>
-              <span className={styles.memberCreditUsage}>
-                {consumed.toLocaleString("zh-CN")}
-              </span>
               <span className={styles.creditRowActions}>
                 <button
                   className={styles.creditAdjustmentAction}
                   type="button"
                   aria-label={`调整 ${member.displayName} 的积分额度`}
                   aria-expanded={adjustmentState?.member.userId === member.userId}
+                  aria-haspopup="dialog"
                   onClick={(event) => {
                     const anchor = event.currentTarget;
                     setAdjustmentState((current) => (
                       current?.member.userId === member.userId
                         ? null
-                        : { anchor, member }
+                        : { anchor, member, balance: amount }
                     ));
                   }}
                 >
@@ -208,6 +204,7 @@ export function OrganizationCreditsSection({
         <CreditAdjustmentPopover
           anchor={adjustmentState.anchor}
           member={adjustmentState.member}
+          balance={adjustmentState.balance}
           onClose={() => setAdjustmentState(null)}
           onGrant={(member) => {
             setAdjustmentState(null);

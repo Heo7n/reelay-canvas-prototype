@@ -159,7 +159,7 @@ describe("organization center", () => {
     expect(screen.queryByRole("button", { name: "分配积分" })).toBeNull();
     expect(screen.getByText("角色")).toBeInTheDocument();
     expect(screen.getByText("可用余额")).toBeInTheDocument();
-    expect(screen.getByText("本月消耗")).toBeInTheDocument();
+    expect(screen.queryByText("本月消耗")).toBeNull();
     expect(screen.getByText("操作")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "调整 Hoo 的积分额度" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看 Hoo 的积分明细" })).toBeInTheDocument();
@@ -167,14 +167,14 @@ describe("organization center", () => {
     const allocatedMetric = screen.getByText("所有成员账户余额");
     const unallocatedMetric = screen.getByText("可分配余额");
     expect(
-      availableMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      availableMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      allocatedMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      unallocatedMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     expect(screen.getByRole("img", {
-      name: "所有成员账户余额 33,000，可分配余额 67,000",
+      name: "可分配余额 67,000，所有成员账户余额 33,000",
     })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /可分配余额/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /所有成员账户余额/ })).toBeNull();
@@ -184,6 +184,8 @@ describe("organization center", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "调整 Hoo 的积分额度" }));
     const adjustmentDialog = screen.getByRole("dialog", { name: "调整 Hoo 的积分额度" });
+    expect(within(adjustmentDialog).getByText("当前可用余额")).toBeInTheDocument();
+    expect(within(adjustmentDialog).getByText("12,000")).toBeInTheDocument();
     expect(within(adjustmentDialog).getByRole("button", { name: "发放积分" })).toBeInTheDocument();
     expect(within(adjustmentDialog).getByRole("button", { name: "回收积分" })).toBeInTheDocument();
     fireEvent.click(within(adjustmentDialog).getByRole("button", { name: "发放积分" }));

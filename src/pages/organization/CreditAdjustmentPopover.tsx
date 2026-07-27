@@ -1,4 +1,4 @@
-import { Minus, Plus } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
@@ -8,6 +8,7 @@ import styles from "./OrganizationCenterPage.module.css";
 interface CreditAdjustmentPopoverProps {
   anchor: HTMLButtonElement | null;
   member: OrganizationMember;
+  balance: number;
   onClose: () => void;
   onGrant: (member: OrganizationMember) => void;
   onReclaim: (member: OrganizationMember) => void;
@@ -16,14 +17,15 @@ interface CreditAdjustmentPopoverProps {
 export function CreditAdjustmentPopover({
   anchor,
   member,
+  balance,
   onClose,
   onGrant,
   onReclaim,
 }: CreditAdjustmentPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const rect = anchor?.getBoundingClientRect();
-  const panelWidth = 156;
-  const panelHeight = 90;
+  const panelWidth = 208;
+  const panelHeight = 154;
   const gap = 7;
   const position = rect ? {
     left: Math.max(12, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 12)),
@@ -65,13 +67,40 @@ export function CreditAdjustmentPopover({
       role="dialog"
       aria-label={`调整 ${member.displayName} 的积分额度`}
     >
-      <button type="button" onClick={() => onGrant(member)}>
-        <Plus aria-hidden="true" />
-        <span>发放积分</span>
+      <div className={styles.creditAdjustmentHeader}>
+        <span>
+          <strong>{member.displayName}</strong>
+          <small>当前可用余额</small>
+        </span>
+        <strong>{balance.toLocaleString("zh-CN")}</strong>
+      </div>
+      <button
+        className={styles.grantCreditAction}
+        type="button"
+        aria-label="发放积分"
+        onClick={() => onGrant(member)}
+      >
+        <span className={styles.creditAdjustmentIcon}>
+          <ArrowDownToLine aria-hidden="true" />
+        </span>
+        <span className={styles.creditAdjustmentCopy}>
+          <strong>发放积分</strong>
+          <small>从组织可分配余额转入</small>
+        </span>
       </button>
-      <button type="button" onClick={() => onReclaim(member)}>
-        <Minus aria-hidden="true" />
-        <span>回收积分</span>
+      <button
+        className={styles.reclaimCreditAction}
+        type="button"
+        aria-label="回收积分"
+        onClick={() => onReclaim(member)}
+      >
+        <span className={styles.creditAdjustmentIcon}>
+          <ArrowUpFromLine aria-hidden="true" />
+        </span>
+        <span className={styles.creditAdjustmentCopy}>
+          <strong>回收积分</strong>
+          <small>退回组织可分配余额</small>
+        </span>
       </button>
     </div>,
     document.body,

@@ -700,7 +700,7 @@
   padding: 26px 30px;
   border: 0;
   border-right: 1px solid var(--workspace-border);
-  background: #202126;
+  background: #20242a;
   color: #fff;
   text-align: left;
 }
@@ -719,7 +719,11 @@
   font-weight: 720;
 }
 
-.creditBalanceLabel svg { width: 14px; height: 14px; }
+.creditBalanceLabel svg {
+  width: 14px;
+  height: 14px;
+  color: #abc2bb;
+}
 .creditBalanceTotal > strong { font-size: 34px; letter-spacing: 0; line-height: 1; }
 
 .creditBalanceFooter {
@@ -791,10 +795,10 @@
 }
 
 .creditCompositionBar .poolBalanceSegment {
-  background: color-mix(in srgb, var(--workspace-muted) 24%, transparent);
+  background: #78988e;
 }
 
-.creditCompositionBar .memberBalanceSegment { background: #3c3d43; }
+.creditCompositionBar .memberBalanceSegment { background: #50535c; }
 
 .creditCompositionLegend {
   display: grid;
@@ -827,15 +831,18 @@
   letter-spacing: 0;
 }
 
+.poolBalanceMetric strong { color: #55786d; }
+.memberBalanceMetric strong { color: #444750; }
+
 .memberBalanceMarker,
 .poolBalanceMarker { width: 8px; height: 8px; border-radius: 2px; }
-.memberBalanceMarker { background: #3c3d43; }
-.poolBalanceMarker { background: color-mix(in srgb, var(--workspace-muted) 34%, transparent); }
+.memberBalanceMarker { background: #50535c; }
+.poolBalanceMarker { background: #78988e; }
 
 .allocationTableHeader,
 .allocationRow {
   display: grid;
-  grid-template-columns: 1.08fr 0.5fr 0.58fr 0.58fr 0.92fr;
+  grid-template-columns: 1.15fr 0.58fr 0.72fr 1fr;
   min-height: 56px;
   align-items: center;
   gap: 16px;
@@ -878,12 +885,6 @@
   font-weight: 620;
 }
 
-.memberCreditUsage {
-  color: var(--workspace-text) !important;
-  font-size: 11px !important;
-  font-weight: 720;
-}
-
 .creditRowActions {
   display: flex;
   align-items: center;
@@ -920,8 +921,8 @@
   position: fixed;
   z-index: 720;
   display: grid;
-  width: 156px;
-  padding: 5px;
+  width: 208px;
+  padding: 6px;
   border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
   border-radius: 10px;
   background: var(--workspace-surface, #fff);
@@ -929,20 +930,50 @@
   color: var(--workspace-text, #171719);
 }
 
+.creditAdjustmentHeader {
+  display: flex;
+  min-height: 45px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 5px 4px;
+  padding: 0 5px;
+  border-bottom: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+}
+
+.creditAdjustmentHeader > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.creditAdjustmentHeader strong {
+  color: var(--workspace-text, #171719);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.creditAdjustmentHeader > strong {
+  font-size: 12px;
+}
+
+.creditAdjustmentHeader small {
+  color: var(--workspace-muted, #74747a);
+  font-size: 8px;
+}
+
 .creditAdjustmentPopover button {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  min-height: 39px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  min-height: 47px;
   align-items: center;
-  gap: 8px;
-  padding: 0 9px;
+  gap: 9px;
+  padding: 0 7px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 10px;
-  font-weight: 680;
   text-align: left;
   cursor: pointer;
 }
@@ -951,10 +982,46 @@
   background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
 }
 
+.creditAdjustmentIcon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
 .creditAdjustmentPopover svg {
   width: 14px;
   height: 14px;
   color: var(--workspace-muted, #74747a);
+}
+
+.grantCreditAction .creditAdjustmentIcon {
+  background: rgba(94, 132, 119, 0.12);
+}
+
+.grantCreditAction .creditAdjustmentIcon svg { color: #55786d; }
+
+.reclaimCreditAction .creditAdjustmentIcon {
+  background: rgba(111, 113, 122, 0.1);
+}
+
+.creditAdjustmentCopy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.creditAdjustmentCopy strong {
+  color: var(--workspace-text, #171719);
+  font-size: 10px;
+}
+
+.creditAdjustmentCopy small {
+  color: var(--workspace-muted, #74747a);
+  font-size: 8px;
+  line-height: 1.3;
 }
 
 .drawerBackdrop {
@@ -1235,6 +1302,22 @@
   --workspace-muted: #aaaab1;
   --workspace-border: rgba(244, 244, 245, 0.12);
   --workspace-hover: rgba(244, 244, 245, 0.07);
+}
+
+:global(html[data-theme="dark"]) .poolBalanceMetric strong {
+  color: #a8c6bd;
+}
+
+:global(html[data-theme="dark"]) .memberBalanceMetric strong {
+  color: #d1d2d7;
+}
+
+:global(html[data-theme="dark"]) .grantCreditAction .creditAdjustmentIcon {
+  background: rgba(137, 177, 164, 0.15);
+}
+
+:global(html[data-theme="dark"]) .grantCreditAction .creditAdjustmentIcon svg {
+  color: #a8c6bd;
 }
 
 .sidebar nav a:focus-visible,
