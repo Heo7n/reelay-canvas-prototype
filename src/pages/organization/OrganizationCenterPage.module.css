@@ -745,44 +745,12 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
 }
 
 .creditBalanceFooter > small {
   color: rgba(255, 255, 255, 0.52);
   font-size: 9px;
 }
-
-.creditLedgerAction {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.78);
-  font: inherit;
-  font-size: 9px;
-  font-weight: 720;
-  cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
-}
-
-.creditLedgerAction:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-}
-
-.creditLedgerAction svg { width: 11px; height: 11px; }
-.creditLedgerAction svg:last-child {
-  width: 9px;
-  height: 9px;
-  transition: transform 0.16s ease;
-}
-.creditLedgerAction:hover svg:last-child { transform: translateX(2px); }
 
 .creditComposition {
   display: grid;
@@ -1049,10 +1017,13 @@
 
 .drawerBackdrop { display: flex; justify-content: flex-end; }
 .creditDrawer {
-  width: min(610px, 48vw);
+  display: flex;
+  width: clamp(960px, 68vw, 1360px);
+  max-width: calc(100vw - 32px);
   height: 100%;
-  overflow-y: auto;
-  padding: 28px 30px 40px;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 30px 36px 36px;
   border-left: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
   background: var(--workspace-surface, #fff);
   color: var(--workspace-text, #171719);
@@ -1110,9 +1081,14 @@
 .drawerTabs .activeDrawerTab { color: var(--workspace-text, #171719); }
 .drawerTabs .activeDrawerTab::after { background: var(--workspace-text, #171719); }
 
-.drawerBadge { display: inline-flex; min-height: 26px; align-items: center; margin: 14px 0 18px; padding: 0 9px; border-radius: 999px; background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); color: var(--workspace-muted, #74747a); font-size: 9px; font-weight: 700; }
-
-.drawerPanel { display: block; }
+.drawerPanel {
+  display: block;
+  min-height: 0;
+  margin-top: 20px;
+  padding-right: 4px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
 
 .drawerFilterBar {
   display: flex;
@@ -1120,7 +1096,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: -4px 0 14px;
+  margin: 0 0 16px;
   padding: 0 2px;
 }
 
@@ -1157,18 +1133,27 @@
 
 .drawerSummaryGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
   border-radius: 12px;
 }
 
+.drawerIncomeSummary {
+  grid-template-columns: minmax(240px, 360px);
+  width: min(360px, 100%);
+}
+
+.drawerAllocationSummary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .drawerSummaryGrid article {
   display: grid;
-  min-height: 82px;
+  min-height: 78px;
   align-content: center;
   gap: 8px;
-  padding: 0 16px;
+  padding: 0 18px;
 }
 
 .drawerSummaryGrid article + article {
@@ -1205,19 +1190,28 @@
   font-size: 9px;
 }
 
-.incomeRecords,
 .allocationRecords { display: grid; border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11)); border-radius: 12px; }
-.incomeRecords article { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; min-height: 76px; align-items: center; gap: 11px; padding: 0 14px; }
-.incomeRecords article + article,
 .allocationRecords article + article { border-top: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11)); }
 .recordIcon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); color: var(--workspace-muted, #74747a); }
 .recordIcon svg { width: 15px; height: 15px; }
-.incomeRecords article > span:nth-child(2),
 .allocationRecords article > span { display: grid; gap: 4px; }
-.incomeRecords strong,
 .allocationRecords strong { font-size: 11px; }
-.incomeRecords small,
 .allocationRecords small { color: var(--workspace-muted, #74747a); font-size: 9px; line-height: 1.45; }
+
+.recordType {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 9px !important;
+  color: var(--workspace-text, #171719);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.recordType .recordIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
 
 .recordAmount {
   display: grid;
@@ -1238,14 +1232,16 @@
 .drawerTableHeader,
 .allocationRecords article {
   display: grid;
-  grid-template-columns: 1.25fr 0.46fr 0.42fr 0.88fr;
-  min-height: 76px;
+  min-height: 70px;
   align-items: center;
-  gap: 12px;
-  padding: 0 14px;
+  gap: 18px;
+  padding: 0 18px;
 }
 
 .drawerTableHeader {
+  position: sticky;
+  z-index: 1;
+  top: 0;
   min-height: 36px;
   background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
   color: var(--workspace-muted, #74747a);
@@ -1253,9 +1249,43 @@
   font-weight: 720;
 }
 
+.incomeRecordTable .drawerTableHeader,
+.incomeRecordTable article {
+  grid-template-columns:
+    minmax(0, 0.75fr)
+    minmax(0, 0.65fr)
+    minmax(0, 1.7fr)
+    minmax(0, 0.65fr);
+}
+
+.incomeRecordTable .drawerTableHeader > span:last-child {
+  text-align: right;
+}
+
+.allocationRecordTable .drawerTableHeader,
+.allocationRecordTable article {
+  grid-template-columns:
+    minmax(0, 0.72fr)
+    minmax(0, 0.82fr)
+    minmax(0, 0.45fr)
+    minmax(0, 0.62fr)
+    minmax(0, 0.64fr)
+    minmax(0, 1.45fr);
+}
+
 .consumptionRecords .drawerTableHeader,
 .consumptionRecords article {
-  grid-template-columns: 0.96fr 1.06fr 0.38fr 0.7fr;
+  grid-template-columns:
+    minmax(0, 0.72fr)
+    minmax(0, 0.76fr)
+    minmax(0, 0.9fr)
+    minmax(0, 1.55fr)
+    minmax(0, 0.55fr)
+    minmax(0, 0.62fr);
+}
+
+.consumptionRecords .drawerTableHeader > span:last-child {
+  text-align: right;
 }
 
 .allocationRecords article > strong { font-size: 12px; }
@@ -1272,6 +1302,21 @@
 .allocationAction svg {
   width: 12px;
   height: 12px;
+}
+
+.ledgerTime,
+.ledgerChange {
+  font-variant-numeric: tabular-nums;
+}
+
+.ledgerProject {
+  min-width: 0;
+}
+
+.ledgerProject strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .consumptionTask {
@@ -1299,9 +1344,30 @@
   white-space: nowrap;
 }
 
+.settlementStatus {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #267a58 10%, transparent);
+  color: #267a58;
+  font-size: 9px;
+  font-weight: 720;
+}
+
+.consumedAmount {
+  justify-self: end;
+  color: #9a6540;
+  font-size: 12px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .allocationRecords .positiveAmount { color: #267a58; }
 .allocationRecords .negativeAmount { color: #a85c4d; }
-.allocationRecords .consumedAmount { color: #9a6540; }
 
 :global(html[data-theme="dark"]) .creditDrawer {
   --workspace-surface: #15161a;
@@ -1337,7 +1403,6 @@
 
 .sidebar nav a:focus-visible,
 .pageHeading a:focus-visible,
-.creditLedgerAction:focus-visible,
 .creditRowActions button:focus-visible,
 .creditAdjustmentPopover button:focus-visible,
 .organizationAvatarEditor:focus-visible,
