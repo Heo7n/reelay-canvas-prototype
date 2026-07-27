@@ -33,13 +33,18 @@ describe("organization project access API", () => {
     await app.close();
   });
 
-  it("signs in five demo accounts that all belong to one organization", async () => {
+  it("signs in ten demo accounts that all belong to one organization", async () => {
     const accounts = [
       { account: "creator@reelay.test", role: "owner" },
       { account: "linjing@reelay.test", role: "admin" },
+      { account: "liran@reelay.test", role: "admin" },
       { account: "chenxi@reelay.test", role: "member" },
       { account: "zhouyu@reelay.test", role: "member" },
       { account: "suhe@reelay.test", role: "member" },
+      { account: "wangyin@reelay.test", role: "member" },
+      { account: "xuzhe@reelay.test", role: "member" },
+      { account: "yelan@reelay.test", role: "member" },
+      { account: "shenan@reelay.test", role: "member" },
     ];
 
     for (const { account, role } of accounts) {
@@ -96,7 +101,21 @@ describe("organization project access API", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().members).toEqual([
+      const members = response.json().members;
+      expect(members).toHaveLength(10);
+      expect(members.map((member: { role: string }) => member.role)).toEqual([
+        "owner",
+        "admin",
+        "admin",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+      ]);
+      expect(members).toEqual(expect.arrayContaining([
         {
           userId: "actor-tianmaochao",
           displayName: "Hoo",
@@ -109,10 +128,20 @@ describe("organization project access API", () => {
           loginIdentifier: "linjing@reelay.test",
           role: "admin",
         },
+        {
+          userId: "actor-liran",
+          displayName: "李然",
+          loginIdentifier: "liran@reelay.test",
+          role: "admin",
+        },
         expect.objectContaining({ userId: "actor-chenxi", role: "member" }),
+        expect.objectContaining({ userId: "actor-shenan", role: "member" }),
         expect.objectContaining({ userId: "actor-suhe", role: "member" }),
+        expect.objectContaining({ userId: "actor-wangyin", role: "member" }),
+        expect.objectContaining({ userId: "actor-xuzhe", role: "member" }),
+        expect.objectContaining({ userId: "actor-yelan", role: "member" }),
         expect.objectContaining({ userId: "actor-zhouyu", role: "member" }),
-      ]);
+      ]));
 
       const forbidden = await scopedApp.inject({
         method: "GET",
