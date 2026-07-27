@@ -63,6 +63,7 @@ export const CREDIT_INCOME_RECORDS: CreditIncomeRecord[] = [
 ];
 
 export type CreditAllocationAction = "grant" | "reclaim" | "consume";
+export type CreditSettlementStatus = "settled" | "reserved" | "refunded";
 
 export interface CreditAllocationRecord {
   id: string;
@@ -74,6 +75,12 @@ export interface CreditAllocationRecord {
   operator: string;
   note: string;
   date: string;
+  validUntil?: string;
+  projectName?: string;
+  taskType?: string;
+  modelName?: string;
+  specification?: string;
+  settlementStatus?: CreditSettlementStatus;
 }
 
 export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
@@ -87,6 +94,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Seedance 2.0 · 1080p · 10s",
     date: "2026-07-26 16:42",
+    projectName: "科幻预告片_初剪版",
+    taskType: "图生视频",
+    modelName: "Seedance 2.0",
+    specification: "1080p · 10 秒",
+    settlementStatus: "settled",
   },
   {
     id: "US-20260726-01",
@@ -98,6 +110,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "GPT Image 2 · 2K · 4 张",
     date: "2026-07-26 11:08",
+    projectName: "香水品牌 TVC_最终版",
+    taskType: "文生图",
+    modelName: "GPT Image 2",
+    specification: "2K · 4 张",
+    settlementStatus: "settled",
   },
   {
     id: "US-20260725-02",
@@ -109,6 +126,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Seedream 5.0 Pro · 4K · 2 张",
     date: "2026-07-25 19:24",
+    projectName: "角色动画短片_第 3 版",
+    taskType: "文生图",
+    modelName: "Seedream 5.0 Pro",
+    specification: "4K · 2 张",
+    settlementStatus: "settled",
   },
   {
     id: "AL-20260725-01",
@@ -120,6 +142,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "Hoo",
     note: "主账户 7 月追加额度",
     date: "2026-07-25 10:18",
+    validUntil: "2026-07-31",
   },
   {
     id: "US-20260724-02",
@@ -131,6 +154,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Kling Video 3.0 · 1080p · 5s",
     date: "2026-07-24 20:10",
+    projectName: "产品视觉广告_旁白已配",
+    taskType: "图生视频",
+    modelName: "Kling Video 3.0",
+    specification: "1080p · 5 秒",
+    settlementStatus: "settled",
   },
   {
     id: "AL-20260724-01",
@@ -142,6 +170,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "Hoo",
     note: "品牌项目追加额度",
     date: "2026-07-24 16:36",
+    validUntil: "2026-07-31",
   },
   {
     id: "US-20260723-01",
@@ -153,6 +182,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Nano Banana Pro · 2K · 5 张",
     date: "2026-07-23 14:26",
+    projectName: "品牌故事片脚本",
+    taskType: "图像编辑",
+    modelName: "Nano Banana Pro",
+    specification: "2K · 5 张",
+    settlementStatus: "settled",
   },
   {
     id: "AL-20260722-01",
@@ -164,6 +198,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "Hoo",
     note: "短片项目追加额度",
     date: "2026-07-22 09:20",
+    validUntil: "2026-07-31",
   },
   {
     id: "US-20260721-01",
@@ -175,6 +210,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Seedance 2.0 Fast · 720p · 10s",
     date: "2026-07-21 18:52",
+    projectName: "科幻预告片_初剪版",
+    taskType: "图生视频",
+    modelName: "Seedance 2.0 Fast",
+    specification: "720p · 10 秒",
+    settlementStatus: "settled",
   },
   {
     id: "AL-20260720-01",
@@ -186,6 +226,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "林静",
     note: "产品演示项目追加额度",
     date: "2026-07-20 15:04",
+    validUntil: "2026-07-31",
   },
   {
     id: "US-20260719-01",
@@ -197,6 +238,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Midjourney V7 · 2K · 3 张",
     date: "2026-07-19 13:18",
+    projectName: "香水品牌 TVC_最终版",
+    taskType: "文生图",
+    modelName: "Midjourney V7",
+    specification: "2K · 3 张",
+    settlementStatus: "settled",
   },
   {
     id: "AL-20260718-01",
@@ -219,6 +265,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Kling Video 3.0 Omni · 720p · 8s",
     date: "2026-07-18 11:46",
+    projectName: "角色动画短片_第 3 版",
+    taskType: "图生视频",
+    modelName: "Kling Video 3.0 Omni",
+    specification: "720p · 8 秒",
+    settlementStatus: "settled",
   },
   {
     id: "US-20260716-01",
@@ -230,6 +281,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "GPT Image 2 · 2K · 5 张",
     date: "2026-07-16 17:32",
+    projectName: "产品视觉广告_旁白已配",
+    taskType: "文生图",
+    modelName: "GPT Image 2",
+    specification: "2K · 5 张",
+    settlementStatus: "settled",
   },
   {
     id: "US-20260715-01",
@@ -241,6 +297,11 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "系统",
     note: "Seedream 5.0 Lite · 2K · 5 张",
     date: "2026-07-15 10:05",
+    projectName: "品牌故事片脚本",
+    taskType: "文生图",
+    modelName: "Seedream 5.0 Lite",
+    specification: "2K · 5 张",
+    settlementStatus: "settled",
   },
   {
     id: "AL-20260710-01",
@@ -252,6 +313,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "Hoo",
     note: "主账户月度基础额度",
     date: "2026-07-10 09:00",
+    validUntil: "2026-07-31",
   },
   {
     id: "AL-20260708-01",
@@ -263,6 +325,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "Hoo",
     note: "管理员月度基础额度",
     date: "2026-07-08 09:15",
+    validUntil: "2026-07-31",
   },
   {
     id: "AL-20260706-01",
@@ -274,6 +337,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "林静",
     note: "成员月度创作额度",
     date: "2026-07-06 10:42",
+    validUntil: "2026-07-31",
   },
   {
     id: "AL-20260705-01",
@@ -285,6 +349,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "林静",
     note: "成员月度创作额度",
     date: "2026-07-05 11:28",
+    validUntil: "2026-07-31",
   },
   {
     id: "AL-20260704-01",
@@ -296,6 +361,7 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     operator: "Hoo",
     note: "成员月度创作额度",
     date: "2026-07-04 14:10",
+    validUntil: "2026-07-31",
   },
 ];
 
