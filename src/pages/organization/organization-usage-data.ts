@@ -2,7 +2,7 @@ import type { OrganizationMember } from "../../domain/workspace/workspace";
 
 export type UsageRangePreset = "today" | "week" | "month" | "all" | "custom";
 export type UsageActivityKind = "image" | "video" | "enhancement" | "agent";
-export type UsageDimension = "member" | "project" | "model";
+export type UsageDimension = "type" | "member" | "project" | "model";
 
 export interface UsageRecord {
   id: string;
@@ -40,10 +40,10 @@ export interface UsageSummary {
   changeRate: number | null;
   imageCount: number;
   videoSeconds: number;
-  taskCount: number;
-  activeMembers: number;
-  dailyAverage: number;
-  estimatedDays: number | null;
+  dailyAverage30: number;
+  lifetimeDailyAverage: number;
+  estimatedDays30: number | null;
+  estimatedDaysLifetime: number | null;
 }
 
 export interface UsageTrendPoint {
@@ -53,9 +53,10 @@ export interface UsageTrendPoint {
   tasks: number;
 }
 
-export interface UsageBreakdownItem {
-  id: UsageActivityKind;
+export interface UsageCompositionItem {
+  id: string;
   label: string;
+  detail: string;
   credits: number;
   share: number;
   imageCount: number;
@@ -63,14 +64,13 @@ export interface UsageBreakdownItem {
   tasks: number;
 }
 
-export interface UsageRankingItem {
-  id: string;
+export interface UsageActivityPoint {
+  key: string;
   label: string;
-  detail: string;
   credits: number;
-  imageCount: number;
-  videoSeconds: number;
-  tasks: number;
+  cumulativeCredits: number;
+  start: Date;
+  end: Date;
 }
 
 export interface HeatmapDay {
@@ -112,6 +112,8 @@ const PROJECTS = [
   { id: "project-character", name: "角色动画短片_第 3 版" },
   { id: "project-concept", name: "品牌视觉概念" },
 ] as const;
+
+const DEMO_HISTORY_DAYS = 1_095;
 
 const USAGE_TEMPLATES: UsageTemplate[] = [
   {
@@ -239,7 +241,7 @@ export function createOrganizationUsageDemoData(
   const records: UsageRecord[] = [];
   const today = startOfDay(now);
 
-  for (let dayOffset = 0; dayOffset < 370; dayOffset += 1) {
+  for (let dayOffset = 0; dayOffset < DEMO_HISTORY_DAYS; dayOffset += 1) {
     if (dayOffset % 17 === 13) continue;
     const date = addDays(today, -dayOffset);
     const eventCount = 2 + ((dayOffset * 5 + 3) % 5);
@@ -317,7 +319,7 @@ export function getUsageRange(
     const inclusiveEnd = addDays(startOfDay(new Date(`${customEnd}T00:00:00`)), 1);
     return { start, end: inclusiveEnd < end ? inclusiveEnd : end };
   }
-  return { start: addDays(today, -369), end };
+  return { start: addDays(today, -(DEMO_HISTORY_DAYS - 1)), end };
 }
 
 export function getComparisonRange(preset: UsageRangePreset, range: DateRange): DateRange | null {
@@ -364,62 +366,73 @@ export function getUsageSummary(
     return occurredAt >= forecastStart && occurredAt <= now;
   }));
   const dailyAverage = Math.max(0, Math.round(forecastCredits / 30));
+  const firstRecord = allRecords.at(-1);
+  const lifetimeStart = firstRecord
+    ? startOfDay(new Date(firstRecord.occurredAt))
+    : startOfDay(now);
+  const lifetimeDays = Math.max(
+    1,
+    Math.floor((startOfDay(now).getTime() - lifetimeStart.getTime()) / 86_400_000) + 1,
+  );
+  const lifetimeDailyAverage = Math.max(0, Math.round(totalCredits(allRecords) / lifetimeDays));
 
   return {
     netCredits,
     changeRate: previousCredits > 0 ? (netCredits - previousCredits) / previousCredits : null,
     imageCount: records.reduce((total, record) => total + record.outputImages, 0),
     videoSeconds: records.reduce((total, record) => total + record.outputVideoSeconds, 0),
-    taskCount: records.filter((record) => record.status === "settled").length,
-    activeMembers: new Set(records.map((record) => record.memberId)).size,
-    dailyAverage,
-    estimatedDays: dailyAverage > 0 ? Math.ceil(availableCredits / dailyAverage) : null,
+    dailyAverage30: dailyAverage,
+    lifetimeDailyAverage,
+    estimatedDays30: dailyAverage > 0
+      ? Math.max(1, Math.floor(availableCredits / dailyAverage))
+      : null,
+    estimatedDaysLifetime: lifetimeDailyAverage > 0
+      ? Math.max(1, Math.floor(availableCredits / lifetimeDailyAverage))
+      : null,
   };
 }
 
-export function getUsageBreakdown(records: UsageRecord[]): UsageBreakdownItem[] {
+export function getUsageComposition(
+  records: UsageRecord[],
+  dimension: UsageDimension,
+): UsageCompositionItem[] {
+  const groups = new Map<string, UsageCompositionItem>();
   const total = Math.max(0, totalCredits(records));
-  const order: UsageActivityKind[] = ["video", "image", "enhancement", "agent"];
-
-  return order.map((id) => {
-    const matching = records.filter((record) => record.activityKind === id);
-    const credits = Math.max(0, totalCredits(matching));
-    return {
-      id,
-      label: USAGE_ACTIVITY_LABELS[id],
-      credits,
-      share: total > 0 ? credits / total : 0,
-      imageCount: matching.reduce((sum, record) => sum + record.outputImages, 0),
-      videoSeconds: matching.reduce((sum, record) => sum + record.outputVideoSeconds, 0),
-      tasks: matching.filter((record) => record.status === "settled").length,
-    };
-  });
-}
-
-export function getUsageRankings(records: UsageRecord[], dimension: UsageDimension): UsageRankingItem[] {
-  const groups = new Map<string, UsageRankingItem>();
 
   records.forEach((record) => {
-    const id = dimension === "member"
-      ? record.memberId
-      : dimension === "project"
-        ? record.projectId
-        : record.modelId;
-    const label = dimension === "member"
-      ? record.memberName
-      : dimension === "project"
-        ? record.projectName
-        : record.modelName;
-    const detail = dimension === "member"
-      ? record.memberAccount
-      : dimension === "project"
-        ? "项目"
-        : USAGE_ACTIVITY_LABELS[record.activityKind];
+    const id = dimension === "type"
+      ? record.activityKind
+      : dimension === "member"
+        ? record.memberId
+        : dimension === "project"
+          ? record.projectId
+          : record.modelId;
+    const label = dimension === "type"
+      ? USAGE_ACTIVITY_LABELS[record.activityKind]
+      : dimension === "member"
+        ? record.memberName
+        : dimension === "project"
+          ? record.projectName
+          : record.modelName;
+    const detail = dimension === "type"
+      ? record.activityKind === "video"
+        ? "视频生成与延展"
+        : record.activityKind === "image"
+          ? "图片生成与编辑"
+          : record.activityKind === "agent"
+            ? "Agent 规划与处理"
+            : "高清化等媒体处理"
+      : dimension === "member"
+        ? record.memberAccount
+        : dimension === "project"
+          ? "项目"
+          : USAGE_ACTIVITY_LABELS[record.activityKind];
     const current = groups.get(id) ?? {
       id,
       label,
       detail,
       credits: 0,
+      share: 0,
       imageCount: 0,
       videoSeconds: 0,
       tasks: 0,
@@ -431,9 +444,20 @@ export function getUsageRankings(records: UsageRecord[], dimension: UsageDimensi
     groups.set(id, current);
   });
 
+  const order: UsageActivityKind[] = ["video", "image", "agent", "enhancement"];
   return [...groups.values()]
-    .sort((left, right) => right.credits - left.credits)
-    .slice(0, 5);
+    .map((item) => ({
+      ...item,
+      credits: Math.max(0, item.credits),
+      share: total > 0 ? Math.max(0, item.credits) / total : 0,
+    }))
+    .sort((left, right) => {
+      if (dimension === "type") {
+        return order.indexOf(left.id as UsageActivityKind)
+          - order.indexOf(right.id as UsageActivityKind);
+      }
+      return right.credits - left.credits;
+    });
 }
 
 export function getUsageTrend(records: UsageRecord[], range: DateRange): UsageTrendPoint[] {
@@ -505,6 +529,42 @@ export function getHeatmapDays(records: UsageRecord[], now: Date): HeatmapDay[] 
     const ratio = total.credits / peak;
     const level: HeatmapDay["level"] = ratio === 0 ? 0 : ratio < 0.25 ? 1 : ratio < 0.5 ? 2 : ratio < 0.75 ? 3 : 4;
     return { key, date, credits: total.credits, tasks: total.tasks, level };
+  });
+}
+
+export function getWeeklyActivity(
+  records: UsageRecord[],
+  anchor: Date,
+): UsageActivityPoint[] {
+  const endExclusive = addDays(startOfDay(anchor), 1);
+  const start = addDays(endExclusive, -364);
+  const points = Array.from({ length: 52 }, (_, index) => {
+    const pointStart = addDays(start, index * 7);
+    const pointEnd = addDays(pointStart, 7);
+    return {
+      key: localDateKey(pointStart),
+      label: `${dayFormatter.format(pointStart)}–${dayFormatter.format(addDays(pointEnd, -1))}`,
+      credits: 0,
+      cumulativeCredits: 0,
+      start: pointStart,
+      end: pointEnd,
+    };
+  });
+
+  records.forEach((record) => {
+    const occurredAt = new Date(record.occurredAt);
+    if (occurredAt < start || occurredAt >= endExclusive) return;
+    const index = Math.min(
+      51,
+      Math.floor((occurredAt.getTime() - start.getTime()) / (7 * 86_400_000)),
+    );
+    points[index].credits += record.credits;
+  });
+
+  let cumulativeCredits = 0;
+  return points.map((point) => {
+    cumulativeCredits += point.credits;
+    return { ...point, cumulativeCredits };
   });
 }
 

@@ -7,9 +7,11 @@ import {
   createOrganizationUsageDemoData,
   filterUsageRecords,
   getComparisonRange,
-  getUsageBreakdown,
+  getHeatmapDays,
+  getUsageComposition,
   getUsageRange,
   getUsageSummary,
+  getWeeklyActivity,
 } from "./organization-usage-data";
 
 const members: OrganizationMember[] = [
@@ -45,25 +47,62 @@ describe("organization usage demo data", () => {
       now,
       demo.availableCredits,
     );
-    const breakdown = getUsageBreakdown(currentRecords);
+    const composition = getUsageComposition(currentRecords, "type");
 
     expect(demo.records.length).toBeGreaterThan(1_000);
     expect(summary.netCredits).toBeGreaterThan(0);
-    expect(breakdown.reduce((total, item) => total + item.credits, 0)).toBe(summary.netCredits);
-    expect(breakdown.reduce((total, item) => total + item.share, 0)).toBeCloseTo(1, 5);
-    expect(summary.estimatedDays).toBe(Math.ceil(demo.availableCredits / summary.dailyAverage));
+    expect(composition.reduce((total, item) => total + item.credits, 0)).toBe(summary.netCredits);
+    expect(composition.reduce((total, item) => total + item.share, 0)).toBeCloseTo(1, 5);
+    expect(summary.estimatedDays30).toBe(
+      Math.floor(demo.availableCredits / summary.dailyAverage30),
+    );
+    expect(summary.estimatedDaysLifetime).toBe(
+      Math.floor(demo.availableCredits / summary.lifetimeDailyAverage),
+    );
   });
 
-  it("keeps the fixed 30-day forecast stable when the page range changes", () => {
+  it("keeps both organization forecasts stable when the page range changes", () => {
     const demo = createOrganizationUsageDemoData(members, now);
     const monthRecords = filterUsageRecords(demo.records, getUsageRange("month", now));
     const weekRecords = filterUsageRecords(demo.records, getUsageRange("week", now));
     const monthSummary = getUsageSummary(monthRecords, [], demo.records, now, demo.availableCredits);
     const weekSummary = getUsageSummary(weekRecords, [], demo.records, now, demo.availableCredits);
 
-    expect(monthSummary.dailyAverage).toBe(weekSummary.dailyAverage);
-    expect(monthSummary.estimatedDays).toBe(weekSummary.estimatedDays);
+    expect(monthSummary.dailyAverage30).toBe(weekSummary.dailyAverage30);
+    expect(monthSummary.estimatedDays30).toBe(weekSummary.estimatedDays30);
+    expect(monthSummary.lifetimeDailyAverage).toBe(weekSummary.lifetimeDailyAverage);
+    expect(monthSummary.estimatedDaysLifetime).toBe(weekSummary.estimatedDaysLifetime);
     expect(getComparisonRange("all", getUsageRange("all", now))).toBeNull();
+  });
+
+  it("builds navigable annual activity views from the same ledger records", () => {
+    const demo = createOrganizationUsageDemoData(members, now);
+    const heatmap = getHeatmapDays(demo.records, now);
+    const weekly = getWeeklyActivity(demo.records, now);
+
+    expect(heatmap).toHaveLength(365);
+    expect(weekly).toHaveLength(52);
+    expect(weekly.at(-1)?.cumulativeCredits).toBeGreaterThan(0);
+    expect(weekly.every((point, index) => (
+      index === 0 || point.cumulativeCredits >= weekly[index - 1].cumulativeCredits
+    ))).toBe(true);
+
+    const previousWindow = getHeatmapDays(
+      demo.records,
+      new Date("2025-07-28T12:00:00+08:00"),
+    );
+    expect(previousWindow.some((day) => day.credits > 0)).toBe(true);
+  });
+
+  it("groups the same period by member, project, and model without changing totals", () => {
+    const demo = createOrganizationUsageDemoData(members, now);
+    const records = filterUsageRecords(demo.records, getUsageRange("month", now));
+    const total = records.reduce((sum, record) => sum + record.credits, 0);
+
+    for (const dimension of ["member", "project", "model"] as const) {
+      const composition = getUsageComposition(records, dimension);
+      expect(composition.reduce((sum, item) => sum + item.credits, 0)).toBe(total);
+    }
   });
 
   it("applies ledger filters and produces useful export files", () => {
