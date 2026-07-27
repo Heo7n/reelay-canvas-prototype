@@ -1,28 +1,42 @@
-import { ArrowDownLeft, RotateCcw, Sparkles, X } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  CreditCard,
+  RotateCcw,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import type { OrganizationMember } from "../../domain/workspace/workspace";
 import styles from "./OrganizationCenterPage.module.css";
+import {
+  CREDIT_ALLOCATION_RECORDS,
+  CREDIT_INCOME_RECORDS,
+  getAllocationTotals,
+  ORGANIZATION_CREDIT_SUMMARY,
+  type CreditIncomeKind,
+} from "./organization-credit-data";
 
 export type CreditDrawerKind = "income" | "allocation";
 
 interface CreditDetailDrawerProps {
   kind: CreditDrawerKind | null;
+  memberAccount?: string;
   members: OrganizationMember[];
   onClose: () => void;
 }
 
-const demoAllocationAmounts = [12_000, 8_000, 5_000, 4_000, 4_000] as const;
-
-const incomeRecords = [
-  { id: "IN-20260701", source: "组织充值", amount: 60_000, date: "2026-07-01 10:26", icon: ArrowDownLeft },
-  { id: "IN-20260618", source: "活动赠送", amount: 30_000, date: "2026-06-18 16:40", icon: Sparkles },
-  { id: "IN-20260506", source: "运营调整", amount: 10_000, date: "2026-05-06 09:12", icon: RotateCcw },
-] as const;
+const incomeIcons: Record<CreditIncomeKind, typeof ArrowDownLeft> = {
+  purchase: CreditCard,
+  grant: Sparkles,
+  adjustment: RotateCcw,
+};
 
 export function CreditDetailDrawer({
   kind,
+  memberAccount,
   members,
   onClose,
 }: CreditDetailDrawerProps) {
@@ -49,6 +63,11 @@ export function CreditDetailDrawer({
   if (!kind) return null;
 
   const isIncome = kind === "income";
+  const selectedMember = members.find((member) => member.loginIdentifier === memberAccount);
+  const allocationRecords = memberAccount
+    ? CREDIT_ALLOCATION_RECORDS.filter((record) => record.memberAccount === memberAccount)
+    : CREDIT_ALLOCATION_RECORDS;
+  const allocationTotals = getAllocationTotals();
 
   return createPortal(
     <div
@@ -82,53 +101,118 @@ export function CreditDetailDrawer({
       >
         <header>
           <span>
-            <h2 id="credit-drawer-title">{isIncome ? "入账记录" : "分配详情"}</h2>
-            <p>{isIncome ? "组织积分的充值、赠送与调整记录" : "当前成员分配余额与最近操作记录"}</p>
+            <h2 id="credit-drawer-title">
+              {isIncome
+                ? "组织积分明细"
+                : selectedMember
+                  ? `${selectedMember.displayName} 的分配记录`
+                  : "分配记录"}
+            </h2>
+            <p>
+              {isIncome
+                ? "查看组织累计入账、消耗与当前可用余额"
+                : selectedMember
+                  ? selectedMember.loginIdentifier
+                  : "查看成员积分的发放与回收流水"}
+            </p>
           </span>
           <button ref={closeButtonRef} type="button" aria-label="关闭详情" onClick={onClose}>
             <X aria-hidden="true" />
           </button>
         </header>
 
-        <div className={styles.drawerBadge}>原型演示记录 · 尚未接入 CreditLedger</div>
+        <div className={styles.drawerBadge}>演示流水 · 尚未接入 CreditLedger</div>
 
         {isIncome ? (
-          <div className={styles.incomeRecords}>
-            {incomeRecords.map((record) => {
-              const Icon = record.icon;
-              return (
-                <article key={record.id}>
-                  <span className={styles.recordIcon}><Icon aria-hidden="true" /></span>
-                  <span>
-                    <strong>{record.source}</strong>
-                    <small>{record.id} · {record.date}</small>
-                  </span>
-                  <strong>+{record.amount.toLocaleString("zh-CN")}</strong>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className={styles.allocationRecords}>
-            <div className={styles.drawerTableHeader}>
-              <span>接收成员</span>
-              <span>分配额度</span>
-              <span>有效期</span>
-            </div>
-            {members.map((member, index) => (
-              <article key={member.userId}>
-                <span>
-                  <strong>{member.displayName}</strong>
-                  <small>分配人：Hoo · 2026-07-01 09:30</small>
-                </span>
-                <strong>{(demoAllocationAmounts[index] ?? 0).toLocaleString("zh-CN")}</strong>
-                <span>
-                  <strong>2026-07-31</strong>
-                  <small>{member.role === "owner" ? "主账户日常创作" : "7 月创作额度"}</small>
-                </span>
+          <>
+            <div className={styles.drawerSummaryGrid}>
+              <article>
+                <span>累计入账</span>
+                <strong>{ORGANIZATION_CREDIT_SUMMARY.lifetimeIncome.toLocaleString("zh-CN")}</strong>
               </article>
-            ))}
-          </div>
+              <article>
+                <span>累计消耗</span>
+                <strong>{ORGANIZATION_CREDIT_SUMMARY.consumed.toLocaleString("zh-CN")}</strong>
+              </article>
+              <article>
+                <span>当前可用</span>
+                <strong>{ORGANIZATION_CREDIT_SUMMARY.available.toLocaleString("zh-CN")}</strong>
+              </article>
+            </div>
+            <div className={styles.drawerSectionHeading}>
+              <h3>入账记录</h3>
+              <span>共 {CREDIT_INCOME_RECORDS.length} 笔</span>
+            </div>
+            <div className={styles.incomeRecords}>
+              {CREDIT_INCOME_RECORDS.map((record) => {
+                const Icon = incomeIcons[record.kind];
+                return (
+                  <article key={record.id}>
+                    <span className={styles.recordIcon}><Icon aria-hidden="true" /></span>
+                    <span>
+                      <strong>{record.source}</strong>
+                      <small>{record.description} · {record.date}</small>
+                    </span>
+                    <span className={styles.recordAmount}>
+                      <strong>+{record.amount.toLocaleString("zh-CN")}</strong>
+                      <small>{record.id}</small>
+                    </span>
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={styles.drawerSummaryGrid}>
+              <article>
+                <span>成员余额合计</span>
+                <strong>{ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}</strong>
+              </article>
+              <article>
+                <span>本月发放</span>
+                <strong>{allocationTotals.granted.toLocaleString("zh-CN")}</strong>
+              </article>
+              <article>
+                <span>本月回收</span>
+                <strong>{allocationTotals.reclaimed.toLocaleString("zh-CN")}</strong>
+              </article>
+            </div>
+            <div className={styles.drawerSectionHeading}>
+              <h3>{selectedMember ? "成员记录" : "全部记录"}</h3>
+              <span>共 {allocationRecords.length} 笔</span>
+            </div>
+            <div className={styles.allocationRecords}>
+              <div className={styles.drawerTableHeader}>
+                <span>成员 / 时间</span>
+                <span>类型</span>
+                <span>变动</span>
+                <span>变动后余额</span>
+              </div>
+              {allocationRecords.map((record) => (
+                <article key={record.id}>
+                  <span>
+                    <strong>{record.memberName}</strong>
+                    <small>{record.date} · {record.operator} 操作</small>
+                  </span>
+                  <span className={styles.allocationAction}>
+                    {record.action === "grant"
+                      ? <ArrowDownLeft aria-hidden="true" />
+                      : <ArrowUpRight aria-hidden="true" />}
+                    {record.action === "grant" ? "发放" : "回收"}
+                  </span>
+                  <strong className={record.amount > 0 ? styles.positiveAmount : styles.negativeAmount}>
+                    {record.amount > 0 ? "+" : "−"}
+                    {Math.abs(record.amount).toLocaleString("zh-CN")}
+                  </strong>
+                  <span>
+                    <strong>{record.balanceAfter.toLocaleString("zh-CN")}</strong>
+                    <small>{record.note}</small>
+                  </span>
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </aside>
     </div>,

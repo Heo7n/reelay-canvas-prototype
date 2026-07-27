@@ -149,14 +149,13 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "停用账号" })).toBeInTheDocument();
   });
 
-  it("opens credit records from the metric cards while marking them as prototype data", async () => {
+  it("keeps organization credit balances clear and opens reconcilable demo records", async () => {
     renderSection("credits");
 
     expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
+    expect(screen.getByText("100,000")).toBeInTheDocument();
+    expect(screen.getByText("33,000")).toBeInTheDocument();
     expect(screen.getByText("67,000")).toBeInTheDocument();
-    expect(screen.queryByText("原型演示数据")).toBeNull();
-    expect(screen.queryByText("当前演示口径")).toBeNull();
-    expect(screen.queryByText("成员额度首版按组织子账户展示，项目预算暂不加入。")).toBeNull();
     expect(screen.queryByRole("button", { name: "分配积分" })).toBeNull();
     expect(screen.getByText("角色")).toBeInTheDocument();
     expect(screen.getByText("可用余额")).toBeInTheDocument();
@@ -164,18 +163,28 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "为 Hoo 发放积分" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "回收 Hoo 的积分" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看 Hoo 的积分记录" })).toBeInTheDocument();
-    const incomeMetric = screen.getByText("累计入账积分");
-    const allocatedMetric = screen.getByText("已分配积分");
-    const unallocatedMetric = screen.getByText("未分配积分");
+    const availableMetric = screen.getByText("组织积分余额");
+    const allocatedMetric = screen.getByText("成员账户余额合计");
+    const unallocatedMetric = screen.getByText("可分配余额");
     expect(
-      incomeMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      availableMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       allocatedMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /累计入账积分/ }));
-    expect(screen.getByRole("dialog", { name: "入账记录" })).toBeInTheDocument();
+    expect(screen.getByRole("img", {
+      name: "成员账户余额合计 33,000，可分配余额 67,000",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看成员积分分配记录" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /组织积分余额/ }));
+    expect(screen.getByRole("dialog", { name: "组织积分明细" })).toBeInTheDocument();
+    expect(screen.getByText("累计入账")).toBeInTheDocument();
+    expect(screen.getByText("180,000")).toBeInTheDocument();
+    expect(screen.getByText("累计消耗")).toBeInTheDocument();
+    expect(screen.getByText("80,000")).toBeInTheDocument();
+    expect(screen.getByText("共 5 笔")).toBeInTheDocument();
     expect(screen.getByText(/尚未接入 CreditLedger/)).toBeInTheDocument();
   });
 
