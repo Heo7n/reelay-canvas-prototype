@@ -246,17 +246,19 @@ describe("organization center", () => {
 
     expect(await screen.findByRole("heading", { name: "用量看板" })).toBeInTheDocument();
     expect(screen.getByText("演示数据 · 更新于 5 分钟前")).toBeInTheDocument();
-    expect(screen.getByText("组织可用积分")).toBeInTheDocument();
+    expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
-    expect(screen.getByText("近 30 日口径")).toBeInTheDocument();
-    expect(screen.getByText("累计口径")).toBeInTheDocument();
-    expect(screen.getByText("媒体产出")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "近一年活动" })).toBeInTheDocument();
+    expect(screen.getByText("按近 30 日消耗估算")).toBeInTheDocument();
+    expect(screen.getByText("历史累计口径")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "365 天活动" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "期间用量" })).toBeInTheDocument();
+    expect(screen.getByText("图片产出")).toBeInTheDocument();
+    expect(screen.getByText("视频产出")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "消耗构成" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "日历分布" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "周趋势" }));
-    expect(screen.getByRole("button", { name: "周趋势" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "累计趋势" }));
+    expect(screen.getByRole("button", { name: "每日" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "每周" }));
+    expect(screen.getByRole("button", { name: "每周" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "累计" }));
     expect(screen.getByRole("img", { name: "最近 52 周累计积分消耗趋势" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "成员" }));
@@ -276,7 +278,7 @@ describe("organization center", () => {
 
     expect(await screen.findByText("此页面仅对主账户与管理员开放")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "用量看板" })).not.toBeInTheDocument();
-    expect(screen.queryByText("组织可用积分")).not.toBeInTheDocument();
+    expect(screen.queryByText("可用积分")).not.toBeInTheDocument();
   });
 
   it("reuses organization data while switching between center sections", async () => {

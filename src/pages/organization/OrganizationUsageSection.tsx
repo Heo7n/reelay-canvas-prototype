@@ -44,16 +44,16 @@ interface OrganizationUsageSectionProps {
 
 const RANGE_ITEMS: { id: UsageRangePreset; label: string }[] = [
   { id: "today", label: "今日" },
-  { id: "week", label: "本周" },
+  { id: "week", label: "近 7 天" },
   { id: "month", label: "本月" },
-  { id: "all", label: "累计" },
+  { id: "all", label: "全部" },
   { id: "custom", label: "自定义" },
 ];
 
 const ACTIVITY_MODES: { id: UsageActivityMode; label: string }[] = [
-  { id: "calendar", label: "日历分布" },
-  { id: "weekly", label: "周趋势" },
-  { id: "cumulative", label: "累计趋势" },
+  { id: "calendar", label: "每日" },
+  { id: "weekly", label: "每周" },
+  { id: "cumulative", label: "累计" },
 ];
 
 const DIMENSION_ITEMS: { id: UsageDimension; label: string }[] = [
@@ -186,6 +186,10 @@ export function OrganizationUsageSection({
   const canMoveBackward = activityStart > startOfDay(earliestRecordDate);
   const canMoveForward = startOfDay(activityAnchor) < startOfDay(now);
   const activityRangeLabel = `${shortDateFormatter.format(activityStart)} — ${shortDateFormatter.format(activityAnchor)}`;
+  const activityWindowLabel = canMoveForward
+    ? activityRangeLabel
+    : `近 365 天 · ${activityRangeLabel}`;
+  const activeRangeLabel = RANGE_ITEMS.find((item) => item.id === rangePreset)?.label ?? "本月";
 
   useEffect(() => {
     const closeExportMenu = (event: PointerEvent) => {
@@ -206,7 +210,7 @@ export function OrganizationUsageSection({
 
   const moveActivityWindow = (direction: -1 | 1) => {
     setActivityAnchor((current) => {
-      const shifted = addDays(current, direction * 364);
+      const shifted = addDays(current, direction * 365);
       return shifted > now ? now : shifted;
     });
   };
@@ -242,91 +246,23 @@ export function OrganizationUsageSection({
         </span>
       </header>
 
-      <div className={styles.toolbar}>
-        <div className={styles.rangeControl} aria-label="统计时间范围">
-          {RANGE_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={rangePreset === item.id ? styles.activeRange : ""}
-              aria-pressed={rangePreset === item.id}
-              onClick={() => setRangePreset(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.toolbarMeta}>
-          <span><CalendarDays aria-hidden="true" />Asia/Shanghai</span>
-          <details ref={exportMenuRef} className={styles.exportMenu}>
-            <summary aria-label="导出当前时间范围的数据">
-              <Download aria-hidden="true" />
-              导出
-              <ChevronDown aria-hidden="true" />
-            </summary>
-            <div>
-              <button type="button" onClick={() => exportRecords("csv")}>
-                <FileDown aria-hidden="true" />
-                <span><strong>CSV</strong><small>当前时间范围</small></span>
-              </button>
-              <button type="button" onClick={() => exportRecords("excel")}>
-                <BarChart3 aria-hidden="true" />
-                <span><strong>Excel</strong><small>当前时间范围</small></span>
-              </button>
-            </div>
-          </details>
-        </div>
-      </div>
-
-      {rangePreset === "custom" ? (
-        <div className={styles.customRange}>
-          <label>
-            <span>开始日期</span>
-            <input
-              type="date"
-              max={customEnd}
-              value={customStart}
-              onChange={(event) => setCustomStart(event.target.value)}
-            />
-          </label>
-          <span aria-hidden="true">至</span>
-          <label>
-            <span>结束日期</span>
-            <input
-              type="date"
-              min={customStart}
-              max={dateInputValue(now)}
-              value={customEnd}
-              onChange={(event) => setCustomEnd(event.target.value)}
-            />
-          </label>
-        </div>
-      ) : null}
-
-      <section className={styles.overviewStrip} aria-label="组织用量概览">
+      <section className={styles.stableOverview} aria-label="组织状态概览">
         <article>
-          <span><CircleDollarSign aria-hidden="true" />组织可用积分</span>
+          <span><CircleDollarSign aria-hidden="true" />可用积分</span>
           <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
-          <small>未分配与成员账户可用余额之和</small>
+          <small>组织当前尚未消耗的全部积分</small>
         </article>
         <article className={styles.forecastMetric}>
           <span><Clock3 aria-hidden="true" />预计可用</span>
           <div>
-            <span><strong>{formatForecast(summary.estimatedDays30)}</strong><small>近 30 日口径</small></span>
-            <span><strong>{formatForecast(summary.estimatedDaysLifetime)}</strong><small>累计口径</small></span>
-          </div>
-        </article>
-        <article className={styles.periodMetric}>
-          <span><Sparkles aria-hidden="true" />本期消耗</span>
-          <strong>{numberFormatter.format(summary.netCredits)}</strong>
-          <small>{formatChange(summary.changeRate)}</small>
-        </article>
-        <article className={styles.outputMetric}>
-          <span><Image aria-hidden="true" />媒体产出</span>
-          <div>
-            <span><Image aria-hidden="true" /><strong>{numberFormatter.format(summary.imageCount)}</strong><small>张图片</small></span>
-            <span><Video aria-hidden="true" /><strong>{formatVideoDuration(summary.videoSeconds)}</strong><small>视频时长</small></span>
+            <span>
+              <strong>{formatForecast(summary.estimatedDays30)}</strong>
+              <small>按近 30 日消耗估算</small>
+            </span>
+            <span>
+              <strong>{formatForecast(summary.estimatedDaysLifetime)}</strong>
+              <small>历史累计口径</small>
+            </span>
           </div>
         </article>
       </section>
@@ -334,8 +270,8 @@ export function OrganizationUsageSection({
       <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
         <header className={styles.panelHeader}>
           <span>
-            <h2 id="usage-activity-title">近一年活动</h2>
-            <p>按统一年度窗口观察用量分布，不受上方统计周期影响。</p>
+            <h2 id="usage-activity-title">365 天活动</h2>
+            <p>观察长期使用节奏；每日、每周与累计只是同一时间窗口的不同视图。</p>
           </span>
           <div className={styles.activityHeaderControls}>
             <div className={styles.windowNavigation} aria-label="年度活动时间窗口">
@@ -347,7 +283,7 @@ export function OrganizationUsageSection({
               >
                 <ChevronLeft aria-hidden="true" />
               </button>
-              <span>{activityRangeLabel}</span>
+              <span>{activityWindowLabel}</span>
               <button
                 type="button"
                 disabled={!canMoveForward}
@@ -379,11 +315,97 @@ export function OrganizationUsageSection({
         />
       </section>
 
-      <section className={styles.compositionPanel} aria-labelledby="usage-composition-title">
+      <section className={styles.periodPanel} aria-labelledby="usage-period-title">
         <header className={styles.panelHeader}>
           <span>
-            <h2 id="usage-composition-title">消耗构成</h2>
-            <p>切换分析维度，回答积分主要花在了哪里。</p>
+            <h2 id="usage-period-title">期间用量</h2>
+            <p>{activeRangeLabel} · 统计范围同时作用于媒体产出、消耗构成和导出。</p>
+          </span>
+          <div className={styles.periodControls}>
+            <div className={styles.rangeControl} aria-label="统计时间范围">
+              {RANGE_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={rangePreset === item.id ? styles.activeRange : ""}
+                  aria-pressed={rangePreset === item.id}
+                  onClick={() => setRangePreset(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.toolbarMeta}>
+              <span><CalendarDays aria-hidden="true" />Asia/Shanghai</span>
+              <details ref={exportMenuRef} className={styles.exportMenu}>
+                <summary aria-label="导出当前时间范围的数据">
+                  <Download aria-hidden="true" />
+                  导出
+                  <ChevronDown aria-hidden="true" />
+                </summary>
+                <div>
+                  <button type="button" onClick={() => exportRecords("csv")}>
+                    <FileDown aria-hidden="true" />
+                    <span><strong>CSV</strong><small>{activeRangeLabel}数据</small></span>
+                  </button>
+                  <button type="button" onClick={() => exportRecords("excel")}>
+                    <BarChart3 aria-hidden="true" />
+                    <span><strong>Excel</strong><small>{activeRangeLabel}数据</small></span>
+                  </button>
+                </div>
+              </details>
+            </div>
+          </div>
+        </header>
+
+        {rangePreset === "custom" ? (
+          <div className={styles.customRange}>
+            <label>
+              <span>开始日期</span>
+              <input
+                type="date"
+                max={customEnd}
+                value={customStart}
+                onChange={(event) => setCustomStart(event.target.value)}
+              />
+            </label>
+            <span aria-hidden="true">至</span>
+            <label>
+              <span>结束日期</span>
+              <input
+                type="date"
+                min={customStart}
+                max={dateInputValue(now)}
+                value={customEnd}
+                onChange={(event) => setCustomEnd(event.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        <section className={styles.periodMetrics} aria-label={`${activeRangeLabel}用量摘要`}>
+          <article>
+            <span><Sparkles aria-hidden="true" />消耗积分</span>
+            <strong>{numberFormatter.format(summary.netCredits)}</strong>
+            <small>{formatChange(summary.changeRate)}</small>
+          </article>
+          <article>
+            <span><Image aria-hidden="true" />图片产出</span>
+            <strong>{numberFormatter.format(summary.imageCount)}</strong>
+            <small>张图片</small>
+          </article>
+          <article>
+            <span><Video aria-hidden="true" />视频产出</span>
+            <strong>{formatVideoDuration(summary.videoSeconds)}</strong>
+            <small>成片时长</small>
+          </article>
+        </section>
+
+        <header className={styles.compositionHeader}>
+          <span>
+            <h3 id="usage-composition-title">消耗构成</h3>
+            <p>从类型、成员、项目或模型解释当前范围内的积分去向。</p>
           </span>
           <div className={styles.dimensionTabs} aria-label="消耗构成分析维度">
             {DIMENSION_ITEMS.map((item) => (
@@ -419,7 +441,7 @@ export function OrganizationUsageSection({
                   ? `${formatVideoDuration(item.videoSeconds)} 视频`
                   : item.imageCount > 0
                     ? `${numberFormatter.format(item.imageCount)} 张图片`
-                    : `${numberFormatter.format(item.tasks)} 次处理`}
+                    : ""}
               </small>
             </article>
           ))}

@@ -93,6 +93,7 @@ interface UsageTemplate {
   modelId: string;
   modelName: string;
   specification: string;
+  weight: number;
   baseCredits: number;
   outputImages: number;
   outputVideoSeconds: number;
@@ -101,16 +102,23 @@ interface UsageTemplate {
 const FALLBACK_MEMBERS: OrganizationMember[] = [
   { userId: "actor-owner", displayName: "Hoo", loginIdentifier: "creator@reelay.test", role: "owner" },
   { userId: "actor-linjing", displayName: "林静", loginIdentifier: "linjing@reelay.test", role: "admin" },
+  { userId: "actor-liran", displayName: "李然", loginIdentifier: "liran@reelay.test", role: "admin" },
   { userId: "actor-chenxi", displayName: "陈曦", loginIdentifier: "chenxi@reelay.test", role: "member" },
   { userId: "actor-zhouyu", displayName: "周予", loginIdentifier: "zhouyu@reelay.test", role: "member" },
   { userId: "actor-suhe", displayName: "苏禾", loginIdentifier: "suhe@reelay.test", role: "member" },
+  { userId: "actor-wangyin", displayName: "王茵", loginIdentifier: "wangyin@reelay.test", role: "member" },
+  { userId: "actor-xuzhe", displayName: "许哲", loginIdentifier: "xuzhe@reelay.test", role: "member" },
+  { userId: "actor-yelan", displayName: "叶澜", loginIdentifier: "yelan@reelay.test", role: "member" },
+  { userId: "actor-shenan", displayName: "沈岸", loginIdentifier: "shenan@reelay.test", role: "member" },
 ];
 
 const PROJECTS = [
-  { id: "project-perfume", name: "香水品牌 TVC_最终版" },
-  { id: "project-scifi", name: "科幻预告片_初剪版" },
-  { id: "project-character", name: "角色动画短片_第 3 版" },
-  { id: "project-concept", name: "品牌视觉概念" },
+  { id: "project-perfume", name: "香水品牌 TVC_最终版", weight: 20 },
+  { id: "project-scifi", name: "科幻预告片_初剪版", weight: 18 },
+  { id: "project-character", name: "角色动画短片_第 3 版", weight: 17 },
+  { id: "project-launch", name: "智能硬件新品发布", weight: 15 },
+  { id: "project-spring", name: "春季品牌整合传播", weight: 12 },
+  { id: "project-concept", name: "品牌视觉概念", weight: 10 },
 ] as const;
 
 const DEMO_HISTORY_DAYS = 1_095;
@@ -122,6 +130,7 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     modelId: "seedance-2",
     modelName: "Seedance 2.0",
     specification: "1080p · 10s",
+    weight: 14,
     baseCredits: 720,
     outputImages: 0,
     outputVideoSeconds: 10,
@@ -132,6 +141,7 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     modelId: "seedance-2-fast",
     modelName: "Seedance 2.0 Fast",
     specification: "720p · 5s",
+    weight: 10,
     baseCredits: 360,
     outputImages: 0,
     outputVideoSeconds: 5,
@@ -142,9 +152,32 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     modelId: "kling-video-3",
     modelName: "Kling Video 3.0",
     specification: "1080p · 10s",
+    weight: 6,
     baseCredits: 660,
     outputImages: 0,
     outputVideoSeconds: 10,
+  },
+  {
+    activityKind: "video",
+    activityLabel: "文生视频",
+    modelId: "seedance-2-mini",
+    modelName: "Seedance 2.0 Mini",
+    specification: "720p · 5s",
+    weight: 6,
+    baseCredits: 210,
+    outputImages: 0,
+    outputVideoSeconds: 5,
+  },
+  {
+    activityKind: "video",
+    activityLabel: "参考生视频",
+    modelId: "veo-3-1",
+    modelName: "Veo 3.1",
+    specification: "1080p · 8s",
+    weight: 3,
+    baseCredits: 920,
+    outputImages: 0,
+    outputVideoSeconds: 8,
   },
   {
     activityKind: "image",
@@ -152,6 +185,7 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     modelId: "gpt-image-2",
     modelName: "GPT Image 2",
     specification: "2K · 16:9 · 4 张",
+    weight: 15,
     baseCredits: 168,
     outputImages: 4,
     outputVideoSeconds: 0,
@@ -162,8 +196,31 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     modelId: "nano-banana-pro",
     modelName: "Nano Banana Pro",
     specification: "2K · 1:1 · 2 张",
+    weight: 12,
     baseCredits: 96,
     outputImages: 2,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "image",
+    activityLabel: "图片生成",
+    modelId: "midjourney-v8-1",
+    modelName: "Midjourney V8.1",
+    specification: "2K · 16:9 · 4 张",
+    weight: 10,
+    baseCredits: 112,
+    outputImages: 4,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "image",
+    activityLabel: "图片生成",
+    modelId: "seedream-5-lite",
+    modelName: "Seedream 5.0 Lite",
+    specification: "4K · 3:2 · 4 张",
+    weight: 8,
+    baseCredits: 88,
+    outputImages: 4,
     outputVideoSeconds: 0,
   },
   {
@@ -172,6 +229,7 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     modelId: "reelay-hd",
     modelName: "Reelay HD",
     specification: "2× · 4K",
+    weight: 7,
     baseCredits: 54,
     outputImages: 1,
     outputVideoSeconds: 0,
@@ -182,6 +240,7 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     modelId: "reelay-agent",
     modelName: "Reelay Agent",
     specification: "分镜拆解 · 1 次",
+    weight: 9,
     baseCredits: 42,
     outputImages: 0,
     outputVideoSeconds: 0,
@@ -233,6 +292,52 @@ function clampEventHour(now: Date, dayOffset: number, eventIndex: number): numbe
   return Math.max(0, Math.min(now.getHours(), 8 + eventIndex * 2));
 }
 
+function deterministicUnit(seed: number): number {
+  let value = Math.imul(seed ^ 0x6d2b79f5, 0x45d9f3b);
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  return ((value ^ (value >>> 16)) >>> 0) / 4_294_967_296;
+}
+
+function weightedIndex(weights: number[], seed: number): number {
+  const total = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0);
+  if (total <= 0) return 0;
+  let target = deterministicUnit(seed) * total;
+  for (let index = 0; index < weights.length; index += 1) {
+    target -= Math.max(0, weights[index]);
+    if (target <= 0) return index;
+  }
+  return Math.max(0, weights.length - 1);
+}
+
+function getDailyEventCount(date: Date, dayOffset: number): number {
+  const dayOfWeek = date.getDay();
+  const weekendFactor = dayOfWeek === 0 ? 0.28 : dayOfWeek === 6 ? 0.48 : 1;
+  const recentGrowth = 0.72 + Math.max(0, 1 - dayOffset / DEMO_HISTORY_DAYS) * 0.38;
+  const seasonalFactor = 0.82 + Math.sin((dayOffset + 11) / 17) * 0.18;
+  const campaignPhase = dayOffset % 103;
+  const campaignFactor = campaignPhase < 6
+    ? 3.4
+    : campaignPhase < 14
+      ? 1.62
+      : 1;
+  const quietPhase = dayOffset % 149;
+  const absenceChance = dayOfWeek === 0 || dayOfWeek === 6 ? 0.24 : 0.07;
+  const activitySeed = deterministicUnit(dayOffset * 97 + 31);
+
+  // A short production pause makes holidays and between-campaign gaps visible in the annual trend.
+  if (dayOffset > 0 && quietPhase >= 92 && quietPhase <= 105) return 0;
+  if (dayOffset > 0 && activitySeed < absenceChance) return 0;
+
+  const intensity = weekendFactor
+    * recentGrowth
+    * seasonalFactor
+    * campaignFactor;
+  return Math.max(
+    1,
+    Math.min(12, Math.round(1 + intensity * (1.4 + activitySeed * 2.4))),
+  );
+}
+
 export function createOrganizationUsageDemoData(
   members: OrganizationMember[],
   now = new Date(),
@@ -240,19 +345,23 @@ export function createOrganizationUsageDemoData(
   const activeMembers = members.length > 0 ? members : FALLBACK_MEMBERS;
   const records: UsageRecord[] = [];
   const today = startOfDay(now);
+  const templateWeights = USAGE_TEMPLATES.map((template) => template.weight);
+  const projectWeights = PROJECTS.map((project) => project.weight);
+  const memberWeights = activeMembers.map((_, index) => Math.max(4, 18 - index * 1.5));
 
   for (let dayOffset = 0; dayOffset < DEMO_HISTORY_DAYS; dayOffset += 1) {
-    if (dayOffset % 17 === 13) continue;
     const date = addDays(today, -dayOffset);
-    const eventCount = 2 + ((dayOffset * 5 + 3) % 5);
+    const eventCount = getDailyEventCount(date, dayOffset);
 
     for (let eventIndex = 0; eventIndex < eventCount; eventIndex += 1) {
-      const template = USAGE_TEMPLATES[(dayOffset * 3 + eventIndex * 2) % USAGE_TEMPLATES.length];
-      const member = activeMembers[(dayOffset + eventIndex * 2) % activeMembers.length];
-      const project = PROJECTS[(dayOffset * 2 + eventIndex) % PROJECTS.length];
+      const seed = dayOffset * 131 + eventIndex * 29;
+      const template = USAGE_TEMPLATES[weightedIndex(templateWeights, seed + 7)];
+      const member = activeMembers[weightedIndex(memberWeights, seed + 19)];
+      const project = PROJECTS[weightedIndex(projectWeights, seed + 37)];
       const occurredAt = new Date(date);
       occurredAt.setHours(clampEventHour(now, dayOffset, eventIndex), (eventIndex * 11) % 60, 0, 0);
-      const credits = template.baseCredits + ((dayOffset + eventIndex) % 4) * Math.max(8, Math.round(template.baseCredits * 0.07));
+      const costVariation = 0.86 + deterministicUnit(seed + 53) * 0.3;
+      const credits = Math.max(1, Math.round(template.baseCredits * costVariation));
 
       records.push({
         id: `usage-${localDateKey(date)}-${eventIndex}`,
@@ -274,7 +383,7 @@ export function createOrganizationUsageDemoData(
       });
     }
 
-    if (dayOffset > 0 && dayOffset % 41 === 9) {
+    if (dayOffset > 0 && dayOffset % 43 === 9) {
       const source = records.at(-1);
       if (!source) continue;
       records.push({
@@ -308,8 +417,7 @@ export function getUsageRange(
 
   if (preset === "today") return { start: today, end };
   if (preset === "week") {
-    const mondayOffset = (today.getDay() + 6) % 7;
-    return { start: addDays(today, -mondayOffset), end };
+    return { start: addDays(today, -6), end };
   }
   if (preset === "month") {
     return { start: new Date(today.getFullYear(), today.getMonth(), 1), end };
@@ -426,7 +534,7 @@ export function getUsageComposition(
         ? record.memberAccount
         : dimension === "project"
           ? "项目"
-          : USAGE_ACTIVITY_LABELS[record.activityKind];
+          : `${USAGE_ACTIVITY_LABELS[record.activityKind]} · ${record.specification}`;
     const current = groups.get(id) ?? {
       id,
       label,
@@ -445,7 +553,7 @@ export function getUsageComposition(
   });
 
   const order: UsageActivityKind[] = ["video", "image", "agent", "enhancement"];
-  return [...groups.values()]
+  const sortedItems = [...groups.values()]
     .map((item) => ({
       ...item,
       credits: Math.max(0, item.credits),
@@ -458,6 +566,31 @@ export function getUsageComposition(
       }
       return right.credits - left.credits;
     });
+
+  if (dimension === "type" || sortedItems.length <= 5) return sortedItems;
+
+  const visibleItems = sortedItems.slice(0, 5);
+  const remainingItems = sortedItems.slice(5);
+  const otherCredits = remainingItems.reduce((sum, item) => sum + item.credits, 0);
+  const detailUnit = dimension === "member"
+    ? "位成员"
+    : dimension === "project"
+      ? "个项目"
+      : "个模型";
+
+  return [
+    ...visibleItems,
+    {
+      id: `other-${dimension}`,
+      label: "其他",
+      detail: `其余 ${remainingItems.length} ${detailUnit}`,
+      credits: otherCredits,
+      share: total > 0 ? otherCredits / total : 0,
+      imageCount: remainingItems.reduce((sum, item) => sum + item.imageCount, 0),
+      videoSeconds: remainingItems.reduce((sum, item) => sum + item.videoSeconds, 0),
+      tasks: remainingItems.reduce((sum, item) => sum + item.tasks, 0),
+    },
+  ];
 }
 
 export function getUsageTrend(records: UsageRecord[], range: DateRange): UsageTrendPoint[] {
@@ -519,15 +652,28 @@ export function getHeatmapDays(records: UsageRecord[], now: Date): HeatmapDay[] 
     current.tasks += record.status === "settled" ? 1 : 0;
     totals.set(key, current);
   });
-  const values = [...totals.values()].map((value) => value.credits).filter((value) => value > 0);
-  const peak = Math.max(1, ...values);
+  const values = [...totals.values()]
+    .map((value) => value.credits)
+    .filter((value) => value > 0)
+    .sort((left, right) => left - right);
+  const quantile = (ratio: number) => (
+    values[Math.min(values.length - 1, Math.floor(values.length * ratio))] ?? 0
+  );
+  const thresholds = [quantile(0.25), quantile(0.5), quantile(0.75)];
 
   return Array.from({ length: 365 }, (_, index) => {
     const date = addDays(start, index);
     const key = localDateKey(date);
     const total = totals.get(key) ?? { credits: 0, tasks: 0 };
-    const ratio = total.credits / peak;
-    const level: HeatmapDay["level"] = ratio === 0 ? 0 : ratio < 0.25 ? 1 : ratio < 0.5 ? 2 : ratio < 0.75 ? 3 : 4;
+    const level: HeatmapDay["level"] = total.credits <= 0
+      ? 0
+      : total.credits <= thresholds[0]
+        ? 1
+        : total.credits <= thresholds[1]
+          ? 2
+          : total.credits <= thresholds[2]
+            ? 3
+            : 4;
     return { key, date, credits: total.credits, tasks: total.tasks, level };
   });
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import type {
   HeatmapDay,
@@ -14,16 +14,21 @@ interface UsageActivityChartProps {
   weeklyPoints: UsageActivityPoint[];
 }
 
+interface MonthLabel {
+  key: string;
+  label: string;
+  column: number;
+}
+
 const numberFormatter = new Intl.NumberFormat("zh-CN");
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
-  year: "numeric",
   month: "long",
   day: "numeric",
 });
 
 const LINE_WIDTH = 820;
-const LINE_HEIGHT = 210;
-const LINE_PADDING_X = 18;
+const LINE_HEIGHT = 224;
+const LINE_PADDING_X = 14;
 const LINE_PADDING_Y = 18;
 
 function buildLinePoints(points: UsageActivityPoint[]) {
@@ -43,13 +48,9 @@ function buildPath(points: ReturnType<typeof buildLinePoints>): string {
     .join(" ");
 }
 
-function getMonthLabels(days: HeatmapDay[], leadingSlots: number) {
+function getCalendarMonthLabels(days: HeatmapDay[], leadingSlots: number): MonthLabel[] {
   const seen = new Set<string>();
-  const labelsByColumn = new Map<number, {
-    key: string;
-    label: string;
-    column: number;
-  }>();
+  const labelsByColumn = new Map<number, MonthLabel>();
 
   days.forEach((day, index) => {
     const monthKey = `${day.date.getFullYear()}-${day.date.getMonth()}`;
@@ -67,81 +68,76 @@ function getMonthLabels(days: HeatmapDay[], leadingSlots: number) {
   return Array.from(labelsByColumn.values());
 }
 
+function getWeeklyMonthLabels(points: UsageActivityPoint[]): MonthLabel[] {
+  const seen = new Set<string>();
+  return points.flatMap((point, index) => {
+    const monthKey = `${point.start.getFullYear()}-${point.start.getMonth()}`;
+    if (seen.has(monthKey)) return [];
+    seen.add(monthKey);
+    return [{
+      key: monthKey,
+      label: `${point.start.getMonth() + 1}月`,
+      column: index + 1,
+    }];
+  });
+}
+
+function formatSignedCredits(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "±";
+  return `${sign}${numberFormatter.format(Math.abs(value))}`;
+}
+
 export function UsageActivityChart({
   days,
   mode,
   weeklyPoints,
 }: UsageActivityChartProps) {
-  const [activeIndex, setActiveIndex] = useState(
-    mode === "calendar" ? Math.max(0, days.length - 1) : Math.max(0, weeklyPoints.length - 1),
-  );
+  const [activeLineIndex, setActiveLineIndex] = useState<number | null>(null);
   const leadingSlots = days[0] ? (days[0].date.getDay() + 6) % 7 : 0;
-  const monthLabels = useMemo(
-    () => getMonthLabels(days, leadingSlots),
+  const calendarMonthLabels = useMemo(
+    () => getCalendarMonthLabels(days, leadingSlots),
     [days, leadingSlots],
+  );
+  const weeklyMonthLabels = useMemo(
+    () => getWeeklyMonthLabels(weeklyPoints),
+    [weeklyPoints],
   );
   const linePoints = useMemo(() => buildLinePoints(weeklyPoints), [weeklyPoints]);
   const weeklyMaximum = Math.max(1, ...weeklyPoints.map((point) => point.credits));
-
-  useEffect(() => {
-    setActiveIndex(
-      mode === "calendar" ? Math.max(0, days.length - 1) : Math.max(0, weeklyPoints.length - 1),
-    );
-  }, [days.length, mode, weeklyPoints.length]);
-
-  const activeDay = days[Math.min(activeIndex, Math.max(0, days.length - 1))];
-  const activeWeek = weeklyPoints[
-    Math.min(activeIndex, Math.max(0, weeklyPoints.length - 1))
-  ];
-  const activeCredits = mode === "calendar"
-    ? activeDay?.credits ?? 0
-    : mode === "cumulative"
-      ? activeWeek?.cumulativeCredits ?? 0
-      : activeWeek?.credits ?? 0;
-  const activeLabel = mode === "calendar"
-    ? activeDay ? dateFormatter.format(activeDay.date) : "暂无日期"
-    : activeWeek?.label ?? "暂无日期";
+  const activeLinePoint = activeLineIndex === null ? null : linePoints[activeLineIndex];
 
   return (
-    <div className={styles.activityChart}>
-      <div className={styles.activityReading} aria-live="polite">
-        <span>{activeLabel}</span>
-        <strong>{numberFormatter.format(activeCredits)} 积分</strong>
-      </div>
-
+    <div className={styles.activityChart} data-mode={mode}>
       {mode === "calendar" ? (
         <div className={styles.heatmapViewport}>
+          <div
+            className={styles.heatmapGrid}
+            role="group"
+            aria-label="365 天组织积分消耗日历，颜色越深表示当天消耗越高"
+          >
+            {Array.from({ length: leadingSlots }, (_, index) => (
+              <span key={`empty-${index}`} className={styles.heatmapEmpty} aria-hidden="true" />
+            ))}
+            {days.map((day) => (
+              <button
+                key={day.key}
+                className={styles.heatmapDay}
+                data-level={day.level}
+                type="button"
+                aria-label={`${dateFormatter.format(day.date)}，${numberFormatter.format(day.credits)} 积分`}
+              >
+                <span className={styles.chartTooltip} aria-hidden="true">
+                  {dateFormatter.format(day.date)} · {numberFormatter.format(day.credits)} 积分
+                </span>
+              </button>
+            ))}
+          </div>
           <div className={styles.heatmapMonths} aria-hidden="true">
-            {monthLabels.map((month) => (
+            {calendarMonthLabels.map((month) => (
               <span key={month.key} style={{ gridColumnStart: month.column }}>
                 {month.label}
               </span>
             ))}
-          </div>
-          <div className={styles.heatmapBody}>
-            <div className={styles.heatmapWeekdays} aria-hidden="true">
-              <span>一</span><span>三</span><span>五</span>
-            </div>
-            <div
-              className={styles.heatmapGrid}
-              role="group"
-              aria-label="最近一年组织积分消耗日历，颜色越深表示当天消耗越高"
-            >
-              {Array.from({ length: leadingSlots }, (_, index) => (
-                <span key={`empty-${index}`} className={styles.heatmapEmpty} aria-hidden="true" />
-              ))}
-              {days.map((day, index) => (
-                <button
-                  key={day.key}
-                  className={styles.heatmapDay}
-                  data-level={day.level}
-                  type="button"
-                  aria-label={`${dateFormatter.format(day.date)}，${numberFormatter.format(day.credits)} 积分`}
-                  onFocus={() => setActiveIndex(index)}
-                  onMouseEnter={() => setActiveIndex(index)}
-                />
-              ))}
-            </div>
           </div>
         </div>
       ) : null}
@@ -149,26 +145,33 @@ export function UsageActivityChart({
       {mode === "weekly" ? (
         <div className={styles.weeklyChart}>
           <div className={styles.weeklyBars} role="group" aria-label="最近 52 周积分消耗趋势">
-            {weeklyPoints.map((point, index) => (
-              <button
-                key={point.key}
-                className={index === activeIndex ? styles.activeWeeklyBar : ""}
-                style={{
-                  "--bar-height": `${Math.max(3, (point.credits / weeklyMaximum) * 100)}%`,
-                } as CSSProperties}
-                type="button"
-                aria-label={`${point.label}，${numberFormatter.format(point.credits)} 积分`}
-                onFocus={() => setActiveIndex(index)}
-                onMouseEnter={() => setActiveIndex(index)}
-              >
-                <i aria-hidden="true" />
-              </button>
-            ))}
+            {weeklyPoints.map((point, index) => {
+              const previousCredits = weeklyPoints[index - 1]?.credits ?? point.credits;
+              const delta = point.credits - previousCredits;
+              return (
+                <button
+                  key={point.key}
+                  style={{
+                    "--bar-height": `${Math.max(3, (point.credits / weeklyMaximum) * 100)}%`,
+                  } as CSSProperties}
+                  type="button"
+                  aria-label={`${point.label}，${numberFormatter.format(point.credits)} 积分，较前一周 ${formatSignedCredits(delta)}`}
+                >
+                  <i aria-hidden="true" />
+                  <span className={styles.chartTooltip} aria-hidden="true">
+                    <strong>{point.label}</strong>
+                    <small>{numberFormatter.format(point.credits)} 积分 · {formatSignedCredits(delta)}</small>
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <div className={styles.activityAxis} aria-hidden="true">
-            <span>{weeklyPoints[0]?.label.split("–")[0]}</span>
-            <span>{weeklyPoints[Math.floor(weeklyPoints.length / 2)]?.label.split("–")[0]}</span>
-            <span>{weeklyPoints.at(-1)?.label.split("–")[1]}</span>
+          <div className={styles.weeklyMonths} aria-hidden="true">
+            {weeklyMonthLabels.map((month) => (
+              <span key={month.key} style={{ gridColumnStart: month.column }}>
+                {month.label}
+              </span>
+            ))}
           </div>
         </div>
       ) : null}
@@ -201,15 +204,17 @@ export function UsageActivityChart({
                 d={`${buildPath(linePoints)} L ${linePoints.at(-1)?.x ?? 0} ${LINE_HEIGHT - LINE_PADDING_Y} L ${linePoints[0]?.x ?? 0} ${LINE_HEIGHT - LINE_PADDING_Y} Z`}
               />
               <path className={styles.cumulativeLine} d={buildPath(linePoints)} />
-              {linePoints.map((point, index) => (
-                <circle
-                  key={point.key}
-                  className={index === activeIndex ? styles.activeCumulativePoint : styles.cumulativePoint}
-                  cx={point.x}
-                  cy={point.y}
-                  r={index === activeIndex ? 4.5 : 2.4}
-                />
-              ))}
+              {activeLinePoint ? (
+                <g className={styles.activeCumulativeGuide} aria-hidden="true">
+                  <line
+                    x1={activeLinePoint.x}
+                    x2={activeLinePoint.x}
+                    y1={activeLinePoint.y}
+                    y2={LINE_HEIGHT - LINE_PADDING_Y}
+                  />
+                  <circle cx={activeLinePoint.x} cy={activeLinePoint.y} r="5" />
+                </g>
+              ) : null}
             </svg>
             {linePoints.map((point, index) => (
               <button
@@ -220,31 +225,38 @@ export function UsageActivityChart({
                   top: `${(point.y / LINE_HEIGHT) * 100}%`,
                 }}
                 type="button"
-                aria-label={`${point.label}，累计 ${numberFormatter.format(point.cumulativeCredits)} 积分`}
-                onFocus={() => setActiveIndex(index)}
-                onMouseEnter={() => setActiveIndex(index)}
-              />
+                aria-label={`${point.label}，累计 ${numberFormatter.format(point.cumulativeCredits)} 积分，本周增加 ${numberFormatter.format(point.credits)} 积分`}
+                onBlur={() => setActiveLineIndex(null)}
+                onFocus={() => setActiveLineIndex(index)}
+                onMouseEnter={() => setActiveLineIndex(index)}
+                onMouseLeave={() => setActiveLineIndex(null)}
+              >
+                <span className={styles.chartTooltip} aria-hidden="true">
+                  <strong>{point.label}</strong>
+                  <small>
+                    累计 {numberFormatter.format(point.cumulativeCredits)} · 本周 +{numberFormatter.format(point.credits)}
+                  </small>
+                </span>
+              </button>
             ))}
           </div>
-          <div className={styles.activityAxis} aria-hidden="true">
-            <span>{weeklyPoints[0]?.label.split("–")[0]}</span>
-            <span>{weeklyPoints[Math.floor(weeklyPoints.length / 2)]?.label.split("–")[0]}</span>
-            <span>{weeklyPoints.at(-1)?.label.split("–")[1]}</span>
+          <div className={styles.weeklyMonths} aria-hidden="true">
+            {weeklyMonthLabels.map((month) => (
+              <span key={month.key} style={{ gridColumnStart: month.column }}>
+                {month.label}
+              </span>
+            ))}
           </div>
         </div>
       ) : null}
 
-      <div className={styles.activityLegend} aria-label="日历强度图例">
-        {mode === "calendar" ? (
-          <>
-            <span>低</span>
-            {[0, 1, 2, 3, 4].map((level) => <i key={level} data-level={level} />)}
-            <span>高</span>
-          </>
-        ) : (
-          <span>悬停图形查看日期与积分消耗</span>
-        )}
-      </div>
+      {mode === "calendar" ? (
+        <div className={styles.activityLegend} aria-label="日历强度图例">
+          <span>低</span>
+          {[0, 1, 2, 3, 4].map((level) => <i key={level} data-level={level} />)}
+          <span>高</span>
+        </div>
+      ) : null}
     </div>
   );
 }

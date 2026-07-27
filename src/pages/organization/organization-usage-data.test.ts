@@ -65,9 +65,14 @@ describe("organization usage demo data", () => {
     const demo = createOrganizationUsageDemoData(members, now);
     const monthRecords = filterUsageRecords(demo.records, getUsageRange("month", now));
     const weekRecords = filterUsageRecords(demo.records, getUsageRange("week", now));
+    const todayRecords = filterUsageRecords(demo.records, getUsageRange("today", now));
     const monthSummary = getUsageSummary(monthRecords, [], demo.records, now, demo.availableCredits);
     const weekSummary = getUsageSummary(weekRecords, [], demo.records, now, demo.availableCredits);
 
+    expect(weekRecords.length).toBeGreaterThan(todayRecords.length);
+    expect(weekSummary.netCredits).toBeGreaterThan(
+      getUsageSummary(todayRecords, [], demo.records, now, demo.availableCredits).netCredits,
+    );
     expect(monthSummary.dailyAverage30).toBe(weekSummary.dailyAverage30);
     expect(monthSummary.estimatedDays30).toBe(weekSummary.estimatedDays30);
     expect(monthSummary.lifetimeDailyAverage).toBe(weekSummary.lifetimeDailyAverage);
@@ -83,6 +88,10 @@ describe("organization usage demo data", () => {
     expect(heatmap).toHaveLength(365);
     expect(weekly).toHaveLength(52);
     expect(weekly.at(-1)?.cumulativeCredits).toBeGreaterThan(0);
+    expect(new Set(weekly.map((point) => point.credits)).size).toBeGreaterThan(20);
+    expect(Math.max(...weekly.map((point) => point.credits))).toBeGreaterThan(
+      Math.min(...weekly.map((point) => point.credits)) * 4,
+    );
     expect(weekly.every((point, index) => (
       index === 0 || point.cumulativeCredits >= weekly[index - 1].cumulativeCredits
     ))).toBe(true);
@@ -103,6 +112,9 @@ describe("organization usage demo data", () => {
       const composition = getUsageComposition(records, dimension);
       expect(composition.reduce((sum, item) => sum + item.credits, 0)).toBe(total);
     }
+
+    expect(getUsageComposition(records, "model").at(-1)?.label).toBe("其他");
+    expect(getUsageComposition(records, "model")).toHaveLength(6);
   });
 
   it("applies ledger filters and produces useful export files", () => {
