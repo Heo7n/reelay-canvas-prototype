@@ -1,4 +1,4 @@
-import { BarChart3, Building2, ChevronLeft, CircleDollarSign, UsersRound } from "lucide-react";
+import { BarChart3, Building2, ChevronLeft, CircleDollarSign, LockKeyhole, UsersRound } from "lucide-react";
 import { Link, useLoaderData } from "react-router-dom";
 
 import type { OrganizationRouteData } from "../../app/route-data";
@@ -27,6 +27,7 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
   const { notice, showNotice } = useTransientNotice();
   const workspaceId = data.currentWorkspace.id;
   const currentRole = data.currentWorkspace.currentUserRole ?? "member";
+  const canViewUsage = currentRole === "owner" || currentRole === "admin";
 
   const navigation = [
     {
@@ -48,6 +49,7 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
       to: routePaths.organizationUsage(workspaceId),
     },
   ] as const;
+  const visibleNavigation = navigation.filter((item) => item.id !== "usage" || canViewUsage);
 
   return (
     <div className={styles.organizationShell}>
@@ -81,7 +83,7 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
             </div>
 
             <nav aria-label="组织中心分栏">
-              {navigation.map((item) => {
+              {visibleNavigation.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
@@ -110,7 +112,19 @@ export function OrganizationCenterPage({ section }: OrganizationCenterPageProps)
             {section === "credits" ? (
               <OrganizationCreditsSection members={data.members} onNotice={showNotice} />
             ) : null}
-            {section === "usage" ? <OrganizationUsageSection /> : null}
+            {section === "usage" && canViewUsage ? (
+              <OrganizationUsageSection
+                members={data.members}
+                workspaceName={data.currentWorkspace.name}
+              />
+            ) : null}
+            {section === "usage" && !canViewUsage ? (
+              <section className={styles.permissionState}>
+                <LockKeyhole aria-hidden="true" />
+                <strong>此页面仅对主账户与管理员开放</strong>
+                <p>组织成员仍可在个人积分记录中查看与自己相关的余额信息。</p>
+              </section>
+            ) : null}
           </div>
         </div>
       </main>

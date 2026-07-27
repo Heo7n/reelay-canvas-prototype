@@ -179,11 +179,35 @@ describe("organization center", () => {
     expect(screen.getByText(/尚未接入 CreditLedger/)).toBeInTheDocument();
   });
 
-  it("keeps usage metrics empty until task and ledger data exist", async () => {
+  it("presents a coherent organization usage demo for owners", async () => {
     renderSection("usage");
 
     expect(await screen.findByRole("heading", { name: "用量看板" })).toBeInTheDocument();
-    expect(screen.getByText("等待真实生成任务与积分账本")).toBeInTheDocument();
-    expect(screen.getAllByText("—")).toHaveLength(4);
+    expect(screen.getByText("演示数据 · 更新于 5 分钟前")).toBeInTheDocument();
+    expect(screen.getByText("组织可用积分")).toBeInTheDocument();
+    expect(screen.getByText("100,000")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消耗趋势" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消耗构成" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消耗排行" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "年度活跃分布" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "流水明细" }));
+    expect(screen.getByRole("heading", { name: "组织流水明细" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "成员" })).toBeInTheDocument();
+    expect(screen.getByText("时间 / 成员")).toBeInTheDocument();
+  });
+
+  it("keeps organization usage private from regular members", async () => {
+    renderSection("usage", {
+      ...routeData,
+      currentWorkspace: {
+        ...routeData.currentWorkspace,
+        currentUserRole: "member",
+      },
+    });
+
+    expect(await screen.findByText("此页面仅对主账户与管理员开放")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "用量看板" })).not.toBeInTheDocument();
+    expect(screen.queryByText("组织可用积分")).not.toBeInTheDocument();
   });
 });

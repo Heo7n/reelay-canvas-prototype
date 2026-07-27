@@ -151,6 +151,19 @@
   padding: 34px clamp(34px, 4vw, 64px) 54px;
 }
 
+.permissionState {
+  display: grid;
+  min-height: 360px;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  color: var(--workspace-muted);
+  text-align: center;
+}
+.permissionState svg { width: 24px; height: 24px; stroke-width: 1.6; }
+.permissionState strong { color: var(--workspace-text); font-size: 15px; }
+.permissionState p { max-width: 390px; margin: 0; font-size: 11px; line-height: 1.6; }
+
 .section {
   display: grid;
   max-width: 1060px;
@@ -759,86 +772,6 @@
 .creditRowActions button:first-child:hover { background: color-mix(in srgb, var(--workspace-text) 88%, transparent); }
 .creditRowActions svg { width: 12px; height: 12px; }
 
-.usageToolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 2px;
-}
-
-.usageToolbar > span {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 11px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 9px;
-  background: var(--workspace-surface);
-  font-size: 10px;
-  font-weight: 720;
-}
-
-.usageToolbar svg { width: 14px; height: 14px; }
-.usageToolbar small { color: var(--workspace-muted); font-size: 9px; }
-
-.usageMetricGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.usageMetricGrid article {
-  display: grid;
-  min-height: 112px;
-  align-content: center;
-  gap: 8px;
-  padding: 17px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 13px;
-  background: var(--workspace-surface);
-}
-
-.usageMetricGrid article > span { display: inline-flex; align-items: center; gap: 6px; color: var(--workspace-muted); font-size: 9px; font-weight: 720; }
-.usageMetricGrid article svg { width: 13px; height: 13px; }
-.usageMetricGrid strong { font-size: 25px; line-height: 1; }
-.usageMetricGrid small { color: var(--workspace-subtle); font-size: 9px; }
-
-.usageChart {
-  position: relative;
-  min-height: 286px;
-  overflow: hidden;
-  border: 1px solid var(--workspace-border);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, transparent, color-mix(in srgb, var(--workspace-bg) 56%, transparent)),
-    var(--workspace-surface);
-}
-
-.chartGrid {
-  position: absolute;
-  inset: 24px 28px;
-  display: grid;
-  align-content: space-between;
-}
-
-.chartGrid span { border-top: 1px dashed var(--workspace-border); }
-.chartEmpty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 30px; color: var(--workspace-muted); text-align: center; }
-.chartEmpty svg { width: 28px; height: 28px; }
-.chartEmpty strong { color: var(--workspace-text); font-size: 12px; }
-.chartEmpty span { max-width: 450px; font-size: 10px; line-height: 1.6; }
-
-.breakdownGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.breakdownGrid article { overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 13px; background: var(--workspace-surface); }
-.breakdownGrid h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--workspace-border); font-size: 12px; }
-.breakdownGrid article > div { display: grid; min-height: 110px; place-content: center; justify-items: center; gap: 8px; color: var(--workspace-muted); font-size: 10px; }
-.breakdownGrid article > div svg { width: 20px; height: 20px; }
-
 .drawerBackdrop {
   position: fixed;
   z-index: 650;
@@ -976,7 +909,6 @@
   .organizationAvatarEditor { width: 64px; height: 64px; border-radius: 18px; }
   .largeOrganizationAvatar { width: 64px; height: 64px; border-radius: 18px; }
   .creditMetricGrid { grid-template-columns: 1fr; }
-  .usageMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .memberTableHeader,
   .memberRow { grid-template-columns: 1fr 1.15fr 0.6fr 0.42fr; gap: 12px; }
 }
