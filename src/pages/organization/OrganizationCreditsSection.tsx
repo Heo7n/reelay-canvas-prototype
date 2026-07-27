@@ -7,6 +7,7 @@ import styles from "./OrganizationCenterPage.module.css";
 import {
   getLatestMemberCreditRecord,
   getMemberCreditBalance,
+  getMemberCreditUsage,
   ORGANIZATION_CREDIT_SUMMARY,
 } from "./organization-credit-data";
 
@@ -28,9 +29,9 @@ export function OrganizationCreditsSection({
   const allocations = members.map((member) => ({
     member,
     amount: getMemberCreditBalance(member),
+    consumed: getMemberCreditUsage(member),
     latestRecord: getLatestMemberCreditRecord(member),
   }));
-  const fundedMemberCount = allocations.filter(({ amount }) => amount > 0).length;
   const allocatedShare = (
     ORGANIZATION_CREDIT_SUMMARY.allocated / ORGANIZATION_CREDIT_SUMMARY.available
   ) * 100;
@@ -42,16 +43,6 @@ export function OrganizationCreditsSection({
           <h1 id="organization-credits-title">积分管理</h1>
           <p>管理组织余额及成员账户当前可使用的积分。</p>
         </span>
-        <button
-          className={styles.sectionHeaderAction}
-          type="button"
-          aria-label="查看积分变动记录"
-          onClick={() => setDrawerState({ kind: "income" })}
-        >
-          <History aria-hidden="true" />
-          积分变动记录
-          <ArrowRight aria-hidden="true" />
-        </button>
       </div>
 
       <div className={styles.creditBalanceOverview}>
@@ -111,10 +102,16 @@ export function OrganizationCreditsSection({
       <div className={styles.allocationSection}>
         <div className={styles.subsectionHeading}>
           <h2>成员余额</h2>
-          <span className={styles.allocationSummary}>
-            {fundedMemberCount} 位成员 · 合计{" "}
-            {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")} 积分
-          </span>
+          <button
+            className={styles.sectionHeaderAction}
+            type="button"
+            aria-label="查看积分变动记录"
+            onClick={() => setDrawerState({ kind: "allocation" })}
+          >
+            <History aria-hidden="true" />
+            积分变动记录
+            <ArrowRight aria-hidden="true" />
+          </button>
         </div>
 
         <div className={styles.allocationTable}>
@@ -122,9 +119,10 @@ export function OrganizationCreditsSection({
             <span>成员</span>
             <span>角色</span>
             <span>可用余额</span>
+            <span>本月消耗</span>
             <span>操作</span>
           </div>
-          {allocations.map(({ member, amount, latestRecord }) => (
+          {allocations.map(({ member, amount, consumed, latestRecord }) => (
             <div className={styles.allocationRow} key={member.userId}>
               <span className={styles.memberIdentity}>
                 <span className={styles.memberAvatar} aria-hidden="true">{member.displayName.slice(0, 1)}</span>
@@ -133,35 +131,41 @@ export function OrganizationCreditsSection({
               <span>{member.role === "owner" ? "主账户" : member.role === "admin" ? "管理员" : "成员"}</span>
               <span className={styles.memberCreditBalance}>
                 <strong>{amount.toLocaleString("zh-CN")}</strong>
-                <small>{latestRecord?.date.slice(5, 10).replace("-", "/")} 最近调整</small>
+                <small>{latestRecord?.date.slice(5, 10).replace("-", "/")} 最近变动</small>
+              </span>
+              <span className={styles.memberCreditUsage}>
+                {consumed.toLocaleString("zh-CN")}
               </span>
               <span className={styles.creditRowActions}>
+                <span className={styles.creditAdjustmentGroup} role="group" aria-label={`${member.displayName} 额度调整`}>
+                  <button
+                    type="button"
+                    title="发放积分"
+                    aria-label={`为 ${member.displayName} 发放积分`}
+                    onClick={() => onNotice(`${member.displayName} 的积分发放流程将在额度规则确认后接入。`)}
+                  >
+                    <Plus aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    title="回收积分"
+                    aria-label={`回收 ${member.displayName} 的积分`}
+                    onClick={() => onNotice(`${member.displayName} 的积分回收流程将在额度规则确认后接入。`)}
+                  >
+                    <Minus aria-hidden="true" />
+                  </button>
+                </span>
                 <button
+                  className={styles.creditDetailAction}
                   type="button"
-                  aria-label={`为 ${member.displayName} 发放积分`}
-                  onClick={() => onNotice(`${member.displayName} 的积分发放流程将在额度规则确认后接入。`)}
-                >
-                  <Plus aria-hidden="true" />
-                  发放
-                </button>
-                <button
-                  type="button"
-                  aria-label={`回收 ${member.displayName} 的积分`}
-                  onClick={() => onNotice(`${member.displayName} 的积分回收流程将在额度规则确认后接入。`)}
-                >
-                  <Minus aria-hidden="true" />
-                  回收
-                </button>
-                <button
-                  type="button"
-                  aria-label={`查看 ${member.displayName} 的积分记录`}
+                  aria-label={`查看 ${member.displayName} 的积分明细`}
                   onClick={() => setDrawerState({
                     kind: "allocation",
                     memberAccount: member.loginIdentifier ?? undefined,
                   })}
                 >
                   <History aria-hidden="true" />
-                  记录
+                  明细
                 </button>
               </span>
             </div>
@@ -177,7 +181,10 @@ export function OrganizationCreditsSection({
           kind,
           memberAccount: current?.memberAccount,
         }))}
-        onClearMemberFilter={() => setDrawerState({ kind: "allocation" })}
+        onMemberFilterChange={(memberAccount) => setDrawerState({
+          kind: "allocation",
+          memberAccount,
+        })}
         onClose={() => setDrawerState(null)}
       />
     </section>

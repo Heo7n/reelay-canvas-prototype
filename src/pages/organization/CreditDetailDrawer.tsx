@@ -16,6 +16,7 @@ import {
   CREDIT_INCOME_RECORDS,
   getMemberCreditBalance,
   ORGANIZATION_CREDIT_SUMMARY,
+  type CreditAllocationAction,
   type CreditIncomeKind,
 } from "./organization-credit-data";
 
@@ -26,7 +27,7 @@ interface CreditDetailDrawerProps {
   memberAccount?: string;
   members: OrganizationMember[];
   onKindChange: (kind: CreditDrawerKind) => void;
-  onClearMemberFilter: () => void;
+  onMemberFilterChange: (memberAccount?: string) => void;
   onClose: () => void;
 }
 
@@ -36,12 +37,24 @@ const incomeIcons: Record<CreditIncomeKind, typeof ArrowDownLeft> = {
   adjustment: RotateCcw,
 };
 
+const memberChangeIcons: Record<CreditAllocationAction, typeof ArrowDownLeft> = {
+  grant: ArrowDownLeft,
+  reclaim: ArrowUpRight,
+  consume: Sparkles,
+};
+
+const memberChangeLabels: Record<CreditAllocationAction, string> = {
+  grant: "发放",
+  reclaim: "回收",
+  consume: "消耗",
+};
+
 export function CreditDetailDrawer({
   kind,
   memberAccount,
   members,
   onKindChange,
-  onClearMemberFilter,
+  onMemberFilterChange,
   onClose,
 }: CreditDetailDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
@@ -73,11 +86,12 @@ export function CreditDetailDrawer({
     : CREDIT_ALLOCATION_RECORDS;
   const allocationTotals = allocationRecords.reduce(
     (totals, record) => {
-      if (record.amount > 0) totals.granted += record.amount;
-      else totals.reclaimed += Math.abs(record.amount);
+      if (record.action === "grant") totals.granted += record.amount;
+      if (record.action === "reclaim") totals.reclaimed += Math.abs(record.amount);
+      if (record.action === "consume") totals.consumed += Math.abs(record.amount);
       return totals;
     },
-    { granted: 0, reclaimed: 0 },
+    { granted: 0, reclaimed: 0, consumed: 0 },
   );
 
   return createPortal(
@@ -96,7 +110,7 @@ export function CreditDetailDrawer({
         onKeyDown={(event) => {
           if (event.key !== "Tab") return;
           const focusable = drawerRef.current?.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
           );
           if (!focusable?.length) return;
           const first = focusable[0];
@@ -113,7 +127,7 @@ export function CreditDetailDrawer({
         <header>
           <span>
             <h2 id="credit-drawer-title">积分记录</h2>
-            <p>核对组织入账与成员账户内部调拨流水</p>
+            <p>核对组织入账与成员账户额度、消耗变动</p>
           </span>
           <button ref={closeButtonRef} type="button" aria-label="关闭详情" onClick={onClose}>
             <X aria-hidden="true" />
@@ -137,7 +151,7 @@ export function CreditDetailDrawer({
             className={!isIncome ? styles.activeDrawerTab : undefined}
             onClick={() => onKindChange("allocation")}
           >
-            分配记录
+            成员变动
           </button>
         </div>
 
@@ -198,25 +212,30 @@ export function CreditDetailDrawer({
                 <strong>{allocationTotals.granted.toLocaleString("zh-CN")}</strong>
               </article>
               <article>
-                <span>本月回收</span>
-                <strong>{allocationTotals.reclaimed.toLocaleString("zh-CN")}</strong>
+                <span>本月消耗</span>
+                <strong>{allocationTotals.consumed.toLocaleString("zh-CN")}</strong>
               </article>
             </div>
             <div className={styles.drawerSectionHeading}>
-              <span className={styles.drawerRecordHeading}>
-                <h3>{selectedMember ? "成员记录" : "全部分配记录"}</h3>
-                {selectedMember ? (
-                  <button
-                    type="button"
-                    aria-label={`清除 ${selectedMember.displayName} 筛选`}
-                    onClick={onClearMemberFilter}
-                  >
-                    {selectedMember.displayName}
-                    <X aria-hidden="true" />
-                  </button>
-                ) : null}
+              <h3>成员变动明细</h3>
+              <span className={styles.drawerHeadingTools}>
+                <select
+                  aria-label="筛选成员"
+                  value={memberAccount ?? ""}
+                  onChange={(event) => onMemberFilterChange(event.target.value || undefined)}
+                >
+                  <option value="">全部成员</option>
+                  {members.map((member) => (
+                    <option
+                      key={member.userId}
+                      value={member.loginIdentifier ?? ""}
+                    >
+                      {member.displayName}
+                    </option>
+                  ))}
+                </select>
+                <span>共 {allocationRecords.length} 笔</span>
               </span>
-              <span>共 {allocationRecords.length} 笔</span>
             </div>
             <div className={styles.allocationRecords}>
               <div className={styles.drawerTableHeader}>
@@ -225,28 +244,40 @@ export function CreditDetailDrawer({
                 <span>变动</span>
                 <span>变动后余额</span>
               </div>
-              {allocationRecords.map((record) => (
-                <article key={record.id}>
-                  <span>
-                    <strong>{record.memberName}</strong>
-                    <small>{record.date} · {record.operator} 操作</small>
-                  </span>
-                  <span className={styles.allocationAction}>
-                    {record.action === "grant"
-                      ? <ArrowDownLeft aria-hidden="true" />
-                      : <ArrowUpRight aria-hidden="true" />}
-                    {record.action === "grant" ? "发放" : "回收"}
-                  </span>
-                  <strong className={record.amount > 0 ? styles.positiveAmount : styles.negativeAmount}>
-                    {record.amount > 0 ? "+" : "−"}
-                    {Math.abs(record.amount).toLocaleString("zh-CN")}
-                  </strong>
-                  <span>
-                    <strong>{record.balanceAfter.toLocaleString("zh-CN")}</strong>
-                    <small>{record.note}</small>
-                  </span>
-                </article>
-              ))}
+              {allocationRecords.map((record) => {
+                const ChangeIcon = memberChangeIcons[record.action];
+                return (
+                  <article key={record.id}>
+                    <span>
+                      <strong>{record.memberName}</strong>
+                      <small>
+                        {record.date} ·{" "}
+                        {record.action === "consume" ? "生成任务自动扣减" : `${record.operator} 操作`}
+                      </small>
+                    </span>
+                    <span className={styles.allocationAction}>
+                      <ChangeIcon aria-hidden="true" />
+                      {memberChangeLabels[record.action]}
+                    </span>
+                    <strong
+                      className={
+                        record.action === "grant"
+                          ? styles.positiveAmount
+                          : record.action === "consume"
+                            ? styles.consumedAmount
+                            : styles.negativeAmount
+                      }
+                    >
+                      {record.amount > 0 ? "+" : "−"}
+                      {Math.abs(record.amount).toLocaleString("zh-CN")}
+                    </strong>
+                    <span>
+                      <strong>{record.balanceAfter.toLocaleString("zh-CN")}</strong>
+                      <small>{record.note}</small>
+                    </span>
+                  </article>
+                );
+              })}
             </div>
           </>
         )}

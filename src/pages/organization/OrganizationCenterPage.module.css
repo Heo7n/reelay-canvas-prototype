@@ -802,16 +802,10 @@
 .memberBalanceMarker { background: #3c3d43; }
 .poolBalanceMarker { background: color-mix(in srgb, var(--workspace-muted) 34%, transparent); }
 
-.allocationSummary {
-  color: var(--workspace-muted);
-  font-size: 10px;
-  font-weight: 680;
-}
-
 .allocationTableHeader,
 .allocationRow {
   display: grid;
-  grid-template-columns: 1.25fr 0.65fr 0.7fr 1fr;
+  grid-template-columns: 1.08fr 0.5fr 0.58fr 0.58fr 0.92fr;
   min-height: 56px;
   align-items: center;
   gap: 16px;
@@ -854,6 +848,12 @@
   font-weight: 620;
 }
 
+.memberCreditUsage {
+  color: var(--workspace-text) !important;
+  font-size: 11px !important;
+  font-weight: 720;
+}
+
 .creditRowActions {
   display: flex;
   align-items: center;
@@ -877,14 +877,22 @@
   cursor: pointer;
 }
 
-.creditRowActions button:first-child {
-  border-color: transparent;
-  background: var(--workspace-text);
-  color: var(--workspace-bg);
+.creditAdjustmentGroup {
+  display: inline-flex;
+  gap: 3px;
 }
 
+.creditRowActions .creditAdjustmentGroup button {
+  width: 29px;
+  min-height: 28px;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--workspace-border);
+  border-radius: 7px;
+}
+
+.creditDetailAction { min-width: 54px; justify-content: center; }
 .creditRowActions button:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
-.creditRowActions button:first-child:hover { background: color-mix(in srgb, var(--workspace-text) 88%, transparent); }
 .creditRowActions svg { width: 12px; height: 12px; }
 
 .drawerBackdrop {
@@ -1010,34 +1018,41 @@
   font-size: 9px;
 }
 
-.drawerRecordHeading {
+.drawerHeadingTools {
   display: flex;
   align-items: center;
   gap: 9px;
 }
 
-.drawerRecordHeading button {
-  display: inline-flex;
-  min-height: 24px;
-  align-items: center;
-  gap: 4px;
-  padding: 0 7px;
+.drawerHeadingTools select {
+  min-height: 30px;
+  min-width: 112px;
+  padding: 0 28px 0 9px;
   border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-  border-radius: 6px;
-  background: transparent;
-  color: var(--workspace-muted, #74747a);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--workspace-surface, #fff);
+  color: var(--workspace-text, #171719);
   font: inherit;
   font-size: 9px;
   font-weight: 680;
   cursor: pointer;
 }
 
-.drawerRecordHeading button:hover {
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
-  color: var(--workspace-text, #171719);
+.drawerHeadingTools select:hover,
+.drawerHeadingTools select:focus {
+  border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.22));
 }
 
-.drawerRecordHeading button svg { width: 11px; height: 11px; }
+.drawerHeadingTools select:focus-visible {
+  outline: 3px solid rgba(106, 106, 236, 0.2);
+  outline-offset: 2px;
+}
+
+.drawerHeadingTools > span {
+  color: var(--workspace-muted, #74747a);
+  font-size: 9px;
+}
 
 .incomeRecords,
 .allocationRecords { display: grid; border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11)); border-radius: 12px; }
@@ -1105,6 +1120,7 @@
 
 .allocationRecords .positiveAmount { color: #267a58; }
 .allocationRecords .negativeAmount { color: #a85c4d; }
+.allocationRecords .consumedAmount { color: #9a6540; }
 
 :global(html[data-theme="dark"]) .creditDrawer {
   --workspace-surface: #15161a;

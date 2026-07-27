@@ -62,7 +62,7 @@ export const CREDIT_INCOME_RECORDS: CreditIncomeRecord[] = [
   },
 ];
 
-export type CreditAllocationAction = "grant" | "reclaim";
+export type CreditAllocationAction = "grant" | "reclaim" | "consume";
 
 export interface CreditAllocationRecord {
   id: string;
@@ -78,15 +78,59 @@ export interface CreditAllocationRecord {
 
 export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
   {
+    id: "US-20260726-02",
+    action: "consume",
+    memberAccount: "linjing@reelay.test",
+    memberName: "林静",
+    amount: -2_500,
+    balanceAfter: 8_000,
+    operator: "系统",
+    note: "Seedance 2.0 · 1080p · 10s",
+    date: "2026-07-26 16:42",
+  },
+  {
+    id: "US-20260726-01",
+    action: "consume",
+    memberAccount: "creator@reelay.test",
+    memberName: "Hoo",
+    amount: -800,
+    balanceAfter: 12_000,
+    operator: "系统",
+    note: "GPT Image 2 · 2K · 4 张",
+    date: "2026-07-26 11:08",
+  },
+  {
+    id: "US-20260725-02",
+    action: "consume",
+    memberAccount: "chenxi@reelay.test",
+    memberName: "陈曦",
+    amount: -1_200,
+    balanceAfter: 5_000,
+    operator: "系统",
+    note: "Seedream 5.0 Pro · 4K · 2 张",
+    date: "2026-07-25 19:24",
+  },
+  {
     id: "AL-20260725-01",
     action: "grant",
     memberAccount: "creator@reelay.test",
     memberName: "Hoo",
     amount: 3_000,
-    balanceAfter: 12_000,
+    balanceAfter: 12_800,
     operator: "Hoo",
     note: "主账户 7 月追加额度",
     date: "2026-07-25 10:18",
+  },
+  {
+    id: "US-20260724-02",
+    action: "consume",
+    memberAccount: "suhe@reelay.test",
+    memberName: "苏禾",
+    amount: -1_500,
+    balanceAfter: 4_000,
+    operator: "系统",
+    note: "Kling Video 3.0 · 1080p · 5s",
+    date: "2026-07-24 20:10",
   },
   {
     id: "AL-20260724-01",
@@ -94,10 +138,21 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     memberAccount: "linjing@reelay.test",
     memberName: "林静",
     amount: 2_000,
-    balanceAfter: 8_000,
+    balanceAfter: 10_500,
     operator: "Hoo",
     note: "品牌项目追加额度",
     date: "2026-07-24 16:36",
+  },
+  {
+    id: "US-20260723-01",
+    action: "consume",
+    memberAccount: "zhouyu@reelay.test",
+    memberName: "周予",
+    amount: -1_000,
+    balanceAfter: 4_000,
+    operator: "系统",
+    note: "Nano Banana Pro · 2K · 5 张",
+    date: "2026-07-23 14:26",
   },
   {
     id: "AL-20260722-01",
@@ -105,10 +160,21 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     memberAccount: "chenxi@reelay.test",
     memberName: "陈曦",
     amount: 2_000,
-    balanceAfter: 5_000,
+    balanceAfter: 6_200,
     operator: "Hoo",
     note: "短片项目追加额度",
     date: "2026-07-22 09:20",
+  },
+  {
+    id: "US-20260721-01",
+    action: "consume",
+    memberAccount: "creator@reelay.test",
+    memberName: "Hoo",
+    amount: -1_200,
+    balanceAfter: 9_800,
+    operator: "系统",
+    note: "Seedance 2.0 Fast · 720p · 10s",
+    date: "2026-07-21 18:52",
   },
   {
     id: "AL-20260720-01",
@@ -116,10 +182,21 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     memberAccount: "suhe@reelay.test",
     memberName: "苏禾",
     amount: 1_500,
-    balanceAfter: 4_000,
+    balanceAfter: 5_500,
     operator: "林静",
     note: "产品演示项目追加额度",
     date: "2026-07-20 15:04",
+  },
+  {
+    id: "US-20260719-01",
+    action: "consume",
+    memberAccount: "linjing@reelay.test",
+    memberName: "林静",
+    amount: -1_500,
+    balanceAfter: 8_500,
+    operator: "系统",
+    note: "Midjourney V7 · 2K · 3 张",
+    date: "2026-07-19 13:18",
   },
   {
     id: "AL-20260718-01",
@@ -127,18 +204,51 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     memberAccount: "zhouyu@reelay.test",
     memberName: "周予",
     amount: -1_000,
-    balanceAfter: 4_000,
+    balanceAfter: 5_000,
     operator: "Hoo",
     note: "闲置额度回收",
     date: "2026-07-18 18:12",
+  },
+  {
+    id: "US-20260718-01",
+    action: "consume",
+    memberAccount: "chenxi@reelay.test",
+    memberName: "陈曦",
+    amount: -1_800,
+    balanceAfter: 4_200,
+    operator: "系统",
+    note: "Kling Video 3.0 Omni · 720p · 8s",
+    date: "2026-07-18 11:46",
+  },
+  {
+    id: "US-20260716-01",
+    action: "consume",
+    memberAccount: "suhe@reelay.test",
+    memberName: "苏禾",
+    amount: -1_000,
+    balanceAfter: 4_000,
+    operator: "系统",
+    note: "GPT Image 2 · 2K · 5 张",
+    date: "2026-07-16 17:32",
+  },
+  {
+    id: "US-20260715-01",
+    action: "consume",
+    memberAccount: "zhouyu@reelay.test",
+    memberName: "周予",
+    amount: -1_000,
+    balanceAfter: 6_000,
+    operator: "系统",
+    note: "Seedream 5.0 Lite · 2K · 5 张",
+    date: "2026-07-15 10:05",
   },
   {
     id: "AL-20260710-01",
     action: "grant",
     memberAccount: "creator@reelay.test",
     memberName: "Hoo",
-    amount: 9_000,
-    balanceAfter: 9_000,
+    amount: 11_000,
+    balanceAfter: 11_000,
     operator: "Hoo",
     note: "主账户月度基础额度",
     date: "2026-07-10 09:00",
@@ -148,8 +258,8 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     action: "grant",
     memberAccount: "linjing@reelay.test",
     memberName: "林静",
-    amount: 6_000,
-    balanceAfter: 6_000,
+    amount: 10_000,
+    balanceAfter: 10_000,
     operator: "Hoo",
     note: "管理员月度基础额度",
     date: "2026-07-08 09:15",
@@ -159,8 +269,8 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     action: "grant",
     memberAccount: "chenxi@reelay.test",
     memberName: "陈曦",
-    amount: 3_000,
-    balanceAfter: 3_000,
+    amount: 6_000,
+    balanceAfter: 6_000,
     operator: "林静",
     note: "成员月度创作额度",
     date: "2026-07-06 10:42",
@@ -170,8 +280,8 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     action: "grant",
     memberAccount: "suhe@reelay.test",
     memberName: "苏禾",
-    amount: 2_500,
-    balanceAfter: 2_500,
+    amount: 5_000,
+    balanceAfter: 5_000,
     operator: "林静",
     note: "成员月度创作额度",
     date: "2026-07-05 11:28",
@@ -181,8 +291,8 @@ export const CREDIT_ALLOCATION_RECORDS: CreditAllocationRecord[] = [
     action: "grant",
     memberAccount: "zhouyu@reelay.test",
     memberName: "周予",
-    amount: 5_000,
-    balanceAfter: 5_000,
+    amount: 7_000,
+    balanceAfter: 7_000,
     operator: "Hoo",
     note: "成员月度创作额度",
     date: "2026-07-04 14:10",
@@ -212,13 +322,26 @@ export function getLatestMemberCreditRecord(
   );
 }
 
+export function getMemberCreditUsage(member: OrganizationMember): number {
+  if (!member.loginIdentifier) return 0;
+  return CREDIT_ALLOCATION_RECORDS.reduce(
+    (total, record) => (
+      record.memberAccount === member.loginIdentifier && record.action === "consume"
+        ? total + Math.abs(record.amount)
+        : total
+    ),
+    0,
+  );
+}
+
 export function getAllocationTotals() {
   return CREDIT_ALLOCATION_RECORDS.reduce(
     (totals, record) => {
-      if (record.amount > 0) totals.granted += record.amount;
-      else totals.reclaimed += Math.abs(record.amount);
+      if (record.action === "grant") totals.granted += record.amount;
+      else if (record.action === "reclaim") totals.reclaimed += Math.abs(record.amount);
+      else totals.consumed += Math.abs(record.amount);
       return totals;
     },
-    { granted: 0, reclaimed: 0 },
+    { granted: 0, reclaimed: 0, consumed: 0 },
   );
 }

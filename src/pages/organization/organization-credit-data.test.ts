@@ -36,6 +36,9 @@ describe("organization credit demo ledger", () => {
     );
 
     const totals = getAllocationTotals();
-    expect(totals.granted - totals.reclaimed).toBe(ORGANIZATION_CREDIT_SUMMARY.allocated);
+    expect(totals.consumed).toBeGreaterThan(0);
+    expect(totals.granted - totals.reclaimed - totals.consumed).toBe(
+      ORGANIZATION_CREDIT_SUMMARY.allocated,
+    );
   });
 });
