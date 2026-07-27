@@ -308,31 +308,6 @@
 .emptyTable strong { color: #55555b; font-size: 13px; }
 .emptyTable span { max-width: 330px; font-size: 11px; line-height: 1.55; }
 
-.chartShell {
-  position: relative;
-  min-height: 310px;
-  overflow: hidden;
-  border: 1px solid #e7e7e8;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fff, #fafafa);
-}
-.chartGrid { position: absolute; inset: 22px 24px; display: grid; align-content: space-between; }
-.chartGrid span { display: block; border-top: 1px dashed #e5e5e6; }
-.chartEmpty {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 9px;
-  padding: 30px;
-  color: #8d8d93;
-  text-align: center;
-}
-.chartEmpty svg { width: 28px; height: 28px; }
-.chartEmpty strong { color: #55555b; font-size: 13px; }
-.chartEmpty span { max-width: 440px; font-size: 11px; line-height: 1.65; }
-
 .sidebar nav button:focus-visible,
 .closeButton:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
 
@@ -373,12 +348,9 @@
   );
 }
 :global(html[data-theme="dark"]) .metricGrid article,
-:global(html[data-theme="dark"]) .tableShell,
-:global(html[data-theme="dark"]) .chartShell { border-color: #303137; background: #1d1e23; }
+:global(html[data-theme="dark"]) .tableShell { border-color: #303137; background: #1d1e23; }
 :global(html[data-theme="dark"]) .tableHeader { border-color: #303137; background: #222328; }
-:global(html[data-theme="dark"]) .emptyTable strong,
-:global(html[data-theme="dark"]) .chartEmpty strong { color: #d5d5d9; }
-:global(html[data-theme="dark"]) .chartGrid span { border-color: #303137; }
+:global(html[data-theme="dark"]) .emptyTable strong { color: #d5d5d9; }
 
 @media (max-height: 760px) {
   .dialog { height: calc(100vh - 36px); }

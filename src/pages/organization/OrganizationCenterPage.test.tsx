@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OrganizationRouteData } from "../../app/route-data";
-import { OrganizationCenterPage, type OrganizationSection } from "./OrganizationCenterPage";
+import { OrganizationCenterPage } from "./OrganizationCenterPage";
+import { OrganizationSectionRoute, type OrganizationSection } from "./OrganizationSectionRoute";
 
 const routeData: OrganizationRouteData = {
   actor: {
@@ -40,19 +41,28 @@ const routeData: OrganizationRouteData = {
 
 afterEach(cleanup);
 
-function renderSection(section: OrganizationSection, data: OrganizationRouteData = routeData) {
+function renderSection(
+  section: OrganizationSection,
+  data: OrganizationRouteData = routeData,
+  loader: () => Promise<OrganizationRouteData> = async () => data,
+) {
   const suffix = section === "management" ? "" : `/${section}`;
-  const routePath = `/w/:workspaceId/organization${suffix}`;
   const initialEntry = `/w/workspace-organization-reelay/organization${suffix}`;
   const router = createMemoryRouter([
     {
-      path: routePath,
-      loader: async () => data,
-      element: <OrganizationCenterPage section={section} />,
+      path: "/w/:workspaceId/organization",
+      loader,
+      element: <OrganizationCenterPage />,
+      children: [
+        { index: true, element: <OrganizationSectionRoute section="management" /> },
+        { path: "credits", element: <OrganizationSectionRoute section="credits" /> },
+        { path: "usage", element: <OrganizationSectionRoute section="usage" /> },
+      ],
     },
   ], { initialEntries: [initialEntry] });
 
   render(<RouterProvider router={router} />);
+  return router;
 }
 
 describe("organization center", () => {
@@ -149,41 +159,139 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "停用账号" })).toBeInTheDocument();
   });
 
-  it("opens credit records from the metric cards while marking them as prototype data", async () => {
+  it("keeps organization credit balances clear and opens reconcilable demo records", async () => {
     renderSection("credits");
 
     expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
+    expect(screen.getByText("100,000")).toBeInTheDocument();
+    expect(screen.getByText("33,000")).toBeInTheDocument();
     expect(screen.getByText("67,000")).toBeInTheDocument();
-    expect(screen.queryByText("原型演示数据")).toBeNull();
-    expect(screen.queryByText("当前演示口径")).toBeNull();
-    expect(screen.queryByText("成员额度首版按组织子账户展示，项目预算暂不加入。")).toBeNull();
     expect(screen.queryByRole("button", { name: "分配积分" })).toBeNull();
     expect(screen.getByText("角色")).toBeInTheDocument();
     expect(screen.getByText("可用余额")).toBeInTheDocument();
+    expect(screen.queryByText("本月消耗")).toBeNull();
     expect(screen.getByText("操作")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "为 Hoo 发放积分" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "回收 Hoo 的积分" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看 Hoo 的积分记录" })).toBeInTheDocument();
-    const incomeMetric = screen.getByText("累计入账积分");
-    const allocatedMetric = screen.getByText("已分配积分");
-    const unallocatedMetric = screen.getByText("未分配积分");
+    expect(screen.getByRole("button", { name: "调整 Hoo 的积分额度" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看 Hoo 的积分明细" })).toBeInTheDocument();
+    const availableMetric = screen.getByText("组织积分余额");
+    const allocatedMetric = screen.getByText("所有成员账户余额");
+    const unallocatedMetric = screen.getByText("可分配余额");
     expect(
-      incomeMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      availableMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      allocatedMetric.compareDocumentPosition(unallocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
+      unallocatedMetric.compareDocumentPosition(allocatedMetric) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /累计入账积分/ }));
-    expect(screen.getByRole("dialog", { name: "入账记录" })).toBeInTheDocument();
-    expect(screen.getByText(/尚未接入 CreditLedger/)).toBeInTheDocument();
+    expect(screen.getByRole("img", {
+      name: "可分配余额 67,000，所有成员账户余额 33,000",
+    })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /可分配余额/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /所有成员账户余额/ })).toBeNull();
+    expect(screen.queryByText("5 位成员持有积分")).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看组织入账记录" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看积分分配记录" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "调整 Hoo 的积分额度" }));
+    const adjustmentDialog = screen.getByRole("dialog", { name: "调整 Hoo 的积分额度" });
+    expect(within(adjustmentDialog).getByText("当前可用余额")).toBeInTheDocument();
+    expect(within(adjustmentDialog).getByText("12,000")).toBeInTheDocument();
+    expect(within(adjustmentDialog).getByRole("button", { name: "发放积分" })).toBeInTheDocument();
+    expect(within(adjustmentDialog).getByRole("button", { name: "回收积分" })).toBeInTheDocument();
+    fireEvent.click(within(adjustmentDialog).getByRole("button", { name: "发放积分" }));
+    expect(screen.getByText("Hoo 的积分发放流程将在额度规则确认后接入。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看积分流水" }));
+    const creditDialog = screen.getByRole("dialog", { name: "积分流水" });
+    expect(creditDialog).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "入账明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("累计入账")).toBeInTheDocument();
+    expect(screen.getByText("180,000")).toBeInTheDocument();
+    expect(screen.getByText("共 5 笔")).toBeInTheDocument();
+    expect(screen.getByText("演示数据 · 仅用于前端预览")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "分配明细" }));
+    expect(screen.getByRole("tab", { name: "分配明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("额度分配流水")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
+    expect(within(creditDialog).queryByText(/生成任务自动扣减/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "消耗明细" }));
+    expect(screen.getByRole("tab", { name: "消耗明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("任务消耗流水")).toBeInTheDocument();
+    expect(within(creditDialog).getAllByText(/生成任务自动扣减/)).toHaveLength(10);
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看分配明细" }));
+    expect(screen.getByRole("tab", { name: "分配明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 Hoo 的积分明细" }));
+    const memberFilter = screen.getByRole("combobox", { name: "筛选成员" });
+    expect(screen.getByRole("tab", { name: "消耗明细" })).toHaveAttribute("aria-selected", "true");
+    expect(memberFilter).toHaveValue("creator@reelay.test");
+    expect(screen.getAllByText(/生成任务自动扣减/)).toHaveLength(2);
+    fireEvent.click(screen.getByRole("tab", { name: "分配明细" }));
+    expect(memberFilter).toHaveValue("creator@reelay.test");
+    expect(screen.queryByText(/生成任务自动扣减/)).toBeNull();
+    fireEvent.change(memberFilter, { target: { value: "linjing@reelay.test" } });
+    expect(memberFilter).toHaveValue("linjing@reelay.test");
+    fireEvent.change(memberFilter, { target: { value: "" } });
+    expect(memberFilter).toHaveValue("");
   });
 
-  it("keeps usage metrics empty until task and ledger data exist", async () => {
+  it("presents a coherent organization usage demo for owners", async () => {
     renderSection("usage");
 
     expect(await screen.findByRole("heading", { name: "用量看板" })).toBeInTheDocument();
-    expect(screen.getByText("等待真实生成任务与积分账本")).toBeInTheDocument();
-    expect(screen.getAllByText("—")).toHaveLength(4);
+    expect(screen.getByText("演示数据 · 更新于 5 分钟前")).toBeInTheDocument();
+    expect(screen.getByText("组织可用积分")).toBeInTheDocument();
+    expect(screen.getByText("100,000")).toBeInTheDocument();
+    expect(screen.getByText("近 30 日口径")).toBeInTheDocument();
+    expect(screen.getByText("累计口径")).toBeInTheDocument();
+    expect(screen.getByText("媒体产出")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "近一年活动" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消耗构成" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "日历分布" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "周趋势" }));
+    expect(screen.getByRole("button", { name: "周趋势" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "累计趋势" }));
+    expect(screen.getByRole("img", { name: "最近 52 周累计积分消耗趋势" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "成员" }));
+    expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("link", { name: "前往积分管理" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "流水明细" })).toBeNull();
+  });
+
+  it("keeps organization usage private from regular members", async () => {
+    renderSection("usage", {
+      ...routeData,
+      currentWorkspace: {
+        ...routeData.currentWorkspace,
+        currentUserRole: "member",
+      },
+    });
+
+    expect(await screen.findByText("此页面仅对主账户与管理员开放")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "用量看板" })).not.toBeInTheDocument();
+    expect(screen.queryByText("组织可用积分")).not.toBeInTheDocument();
+  });
+
+  it("reuses organization data while switching between center sections", async () => {
+    const loader = vi.fn(async () => routeData);
+    renderSection("management", routeData, loader);
+
+    expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
+    expect(loader).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("link", { name: "积分管理" }));
+    expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
+    expect(loader).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("link", { name: "用量看板" }));
+    expect(await screen.findByRole("heading", { name: "用量看板" })).toBeInTheDocument();
+    expect(loader).toHaveBeenCalledOnce();
   });
 });

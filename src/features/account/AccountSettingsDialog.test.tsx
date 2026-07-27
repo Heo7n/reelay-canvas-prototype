@@ -50,13 +50,13 @@ function renderDialog(action = async ({ request }: { request: Request }) => {
 }
 
 describe("AccountSettingsDialog", () => {
-  it("shows the requested account sections without subscription or device-management placeholders", () => {
+  it("keeps personal account settings focused on profile and credit records", () => {
     renderDialog();
 
     expect(screen.getByRole("dialog", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "个人主页" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "积分记录" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "用量看板" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用量看板" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "账户信息" })).toBeInTheDocument();
     expect(screen.queryByDisplayValue("creator@reelay.test")).not.toBeInTheDocument();
     expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();
@@ -159,7 +159,7 @@ describe("AccountSettingsDialog", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已自动保存"));
   });
 
-  it("keeps credits and usage honest while their persistent sources do not exist", () => {
+  it("keeps personal credit records honest while the persistent ledger does not exist", () => {
     renderDialog();
 
     fireEvent.click(screen.getByRole("button", { name: "积分记录" }));
@@ -167,9 +167,6 @@ describe("AccountSettingsDialog", () => {
     expect(screen.getByText("暂无积分记录")).toBeInTheDocument();
     expect(screen.getByText("未接入账本")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "用量看板" }));
-    expect(screen.getByRole("heading", { name: "用量看板" })).toBeInTheDocument();
-    expect(screen.getByText("尚无可统计数据")).toBeInTheDocument();
-    expect(screen.getByText(/组织用量/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用量看板" })).not.toBeInTheDocument();
   });
 });
