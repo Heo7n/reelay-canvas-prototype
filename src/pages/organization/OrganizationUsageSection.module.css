@@ -792,13 +792,31 @@
 .compositionFooter svg { width: 12px; height: 12px; }
 
 .usageDrawerBackdrop {
+  --workspace-surface: #fff;
+  --workspace-text: #171719;
+  --workspace-muted: #74747a;
+  --workspace-subtle: #9a9aa0;
+  --workspace-border: rgb(23 23 25 / 11%);
+  --workspace-hover: rgb(23 23 25 / 5.5%);
+  --usage-accent: #526fd1;
   position: fixed;
-  z-index: 120;
+  z-index: 1000;
   inset: 0;
   display: flex;
+  isolation: isolate;
   justify-content: flex-end;
   background: rgb(0 0 0 / 32%);
   backdrop-filter: blur(2px);
+}
+
+:global(html[data-theme="dark"]) .usageDrawerBackdrop {
+  --workspace-surface: #15161a;
+  --workspace-text: #f4f4f5;
+  --workspace-muted: #aaaab1;
+  --workspace-subtle: #7e7f87;
+  --workspace-border: rgb(244 244 245 / 12%);
+  --workspace-hover: rgb(244 244 245 / 7%);
+  --usage-accent: #91a7ff;
 }
 
 .usageDrawer {
@@ -806,8 +824,10 @@
   width: min(620px, calc(100vw - 120px));
   height: 100%;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
   background: var(--workspace-surface);
   box-shadow: -18px 0 50px rgb(0 0 0 / 14%);
+  color: var(--workspace-text);
 }
 
 .usageDrawerHeader {
