@@ -22,6 +22,7 @@
     "db:status": "docker compose ps",
     "db:migrate": "tsx src/server/db/migrate-command.ts",
     "db:seed": "tsx src/server/db/seed-command.ts",
+    "worktrees": "node scripts/show-worktrees.mjs",
     "check:js": "node scripts/check-js.mjs",
     "check:config": "node scripts/check-config.mjs",
     "check:css": "node scripts/check-css.mjs",

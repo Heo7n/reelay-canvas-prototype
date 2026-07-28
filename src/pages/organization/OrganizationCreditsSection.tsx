@@ -44,11 +44,19 @@ export function OrganizationCreditsSection({
 
   return (
     <section className={styles.section} aria-labelledby="organization-credits-title">
-      <div className={styles.sectionHeading}>
-        <span>
-          <h1 id="organization-credits-title">积分管理</h1>
-          <p>管理组织余额及成员账户当前可使用的积分。</p>
-        </span>
+      <h1 id="organization-credits-title" className={styles.srOnly}>积分管理</h1>
+      <div className={styles.creditSectionToolbar}>
+        <span>组织余额与成员账户</span>
+        <button
+          className={styles.sectionHeaderAction}
+          type="button"
+          aria-label="查看积分流水"
+          onClick={() => setDrawerState({ kind: "income" })}
+        >
+          <History aria-hidden="true" />
+          积分流水
+          <ArrowRight aria-hidden="true" />
+        </button>
       </div>
 
       <div className={styles.creditBalanceOverview}>
@@ -61,16 +69,6 @@ export function OrganizationCreditsSection({
           </strong>
           <span className={styles.creditBalanceFooter}>
             <small>组织当前尚未消耗的全部积分</small>
-            <button
-              className={styles.creditLedgerAction}
-              type="button"
-              aria-label="查看积分流水"
-              onClick={() => setDrawerState({ kind: "income" })}
-            >
-              <History aria-hidden="true" />
-              积分流水
-              <ArrowRight aria-hidden="true" />
-            </button>
           </span>
         </div>
 

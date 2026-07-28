@@ -18,6 +18,7 @@ import {
   ORGANIZATION_CREDIT_SUMMARY,
   type CreditAllocationRecord,
   type CreditIncomeKind,
+  type CreditSettlementStatus,
 } from "./organization-credit-data";
 
 export type CreditDrawerKind = "income" | "allocation" | "consumption";
@@ -50,6 +51,18 @@ const allocationLabels = {
   grant: "发放",
   reclaim: "回收",
 } as const;
+
+const incomeLabels: Record<CreditIncomeKind, string> = {
+  purchase: "充值",
+  grant: "赠送",
+  adjustment: "调整",
+};
+
+const settlementLabels: Record<CreditSettlementStatus, string> = {
+  settled: "已结算",
+  reserved: "预占中",
+  refunded: "已退回",
+};
 
 export function CreditDetailDrawer({
   kind,
@@ -175,7 +188,7 @@ export function CreditDetailDrawer({
             className={kind === "income" ? styles.activeDrawerTab : undefined}
             onClick={() => onKindChange("income")}
           >
-            入账明细
+            入账
           </button>
           <button
             id="credit-tab-allocation"
@@ -186,7 +199,7 @@ export function CreditDetailDrawer({
             className={kind === "allocation" ? styles.activeDrawerTab : undefined}
             onClick={() => onKindChange("allocation")}
           >
-            分配明细
+            分配
           </button>
           <button
             id="credit-tab-consumption"
@@ -197,12 +210,9 @@ export function CreditDetailDrawer({
             className={kind === "consumption" ? styles.activeDrawerTab : undefined}
             onClick={() => onKindChange("consumption")}
           >
-            消耗明细
+            消耗
           </button>
         </div>
-
-        <div className={styles.drawerBadge}>演示数据 · 仅用于前端预览</div>
-        {kind === "allocation" || kind === "consumption" ? memberFilter : null}
 
         {kind === "income" ? (
           <section
@@ -211,37 +221,45 @@ export function CreditDetailDrawer({
             role="tabpanel"
             aria-labelledby="credit-tab-income"
           >
-            <div className={styles.drawerSummaryGrid}>
+            <div className={`${styles.drawerSummaryGrid} ${styles.drawerIncomeSummary}`}>
               <article>
-                <span>累计入账</span>
+                <span>累计入账积分</span>
                 <strong>{ORGANIZATION_CREDIT_SUMMARY.lifetimeIncome.toLocaleString("zh-CN")}</strong>
-              </article>
-              <article>
-                <span>入账笔数</span>
-                <strong>{CREDIT_INCOME_RECORDS.length}</strong>
-              </article>
-              <article>
-                <span>组织积分余额</span>
-                <strong>{ORGANIZATION_CREDIT_SUMMARY.available.toLocaleString("zh-CN")}</strong>
               </article>
             </div>
             <div className={styles.drawerSectionHeading}>
               <h3>入账流水</h3>
               <span>共 {CREDIT_INCOME_RECORDS.length} 笔</span>
             </div>
-            <div className={styles.incomeRecords}>
+            <div
+              className={`${styles.allocationRecords} ${styles.incomeRecordTable}`}
+              role="table"
+              aria-label="组织积分入账流水"
+            >
+              <div className={styles.drawerTableHeader} role="row">
+                <span role="columnheader">时间</span>
+                <span role="columnheader">类型</span>
+                <span role="columnheader">来源与说明</span>
+                <span role="columnheader">入账积分</span>
+              </div>
               {CREDIT_INCOME_RECORDS.map((record) => {
                 const Icon = incomeIcons[record.kind];
                 return (
-                  <article key={record.id}>
-                    <span className={styles.recordIcon}><Icon aria-hidden="true" /></span>
-                    <span>
-                      <strong>{record.source}</strong>
-                      <small>{record.description} · {record.date}</small>
+                  <article key={record.id} role="row">
+                    <span className={styles.ledgerTime} role="cell">
+                      <strong>{record.date.slice(0, 10)}</strong>
+                      <small>{record.date.slice(11)}</small>
                     </span>
-                    <span className={styles.recordAmount}>
+                    <span className={styles.recordType} role="cell">
+                      <span className={styles.recordIcon}><Icon aria-hidden="true" /></span>
+                      {incomeLabels[record.kind]}
+                    </span>
+                    <span role="cell">
+                      <strong>{record.source}</strong>
+                      <small>{record.description}</small>
+                    </span>
+                    <span className={styles.recordAmount} role="cell">
                       <strong>+{record.amount.toLocaleString("zh-CN")}</strong>
-                      <small>{record.id}</small>
                     </span>
                   </article>
                 );
@@ -257,10 +275,11 @@ export function CreditDetailDrawer({
             role="tabpanel"
             aria-labelledby="credit-tab-allocation"
           >
-            <div className={styles.drawerSummaryGrid}>
+            {memberFilter}
+            <div className={`${styles.drawerSummaryGrid} ${styles.drawerAllocationSummary}`}>
               <article>
-                <span>{selectedMember ? "当前余额" : "所有成员账户余额"}</span>
-                <strong>{selectedBalance.toLocaleString("zh-CN")}</strong>
+                <span>可分配余额</span>
+                <strong>{ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}</strong>
               </article>
               <article>
                 <span>本月发放</span>
@@ -270,42 +289,62 @@ export function CreditDetailDrawer({
                 <span>本月回收</span>
                 <strong>{allocationTotals.reclaimed.toLocaleString("zh-CN")}</strong>
               </article>
+              <article>
+                <span>{selectedMember ? `${selectedMember.displayName} 当前余额` : "所有成员账户余额"}</span>
+                <strong>{selectedBalance.toLocaleString("zh-CN")}</strong>
+              </article>
             </div>
             <div className={styles.drawerSectionHeading}>
               <h3>额度分配流水</h3>
               <span>共 {allocationRecords.length} 笔</span>
             </div>
-            <div className={styles.allocationRecords}>
-              <div className={styles.drawerTableHeader}>
-                <span>成员 / 时间</span>
-                <span>类型</span>
-                <span>变动</span>
-                <span>变动后余额</span>
+            <div
+              className={`${styles.allocationRecords} ${styles.allocationRecordTable}`}
+              role="table"
+              aria-label="成员积分分配流水"
+            >
+              <div className={styles.drawerTableHeader} role="row">
+                <span role="columnheader">时间</span>
+                <span role="columnheader">成员</span>
+                <span role="columnheader">类型</span>
+                <span role="columnheader">额度变动</span>
+                <span role="columnheader">有效期</span>
+                <span role="columnheader">操作信息</span>
               </div>
               {allocationRecords.map((record) => {
                 const ChangeIcon = allocationIcons[record.action];
                 return (
-                  <article key={record.id}>
-                    <span>
-                      <strong>{record.memberName}</strong>
-                      <small>{record.date} · {record.operator} 操作</small>
+                  <article key={record.id} role="row">
+                    <span className={styles.ledgerTime} role="cell">
+                      <strong>{record.date.slice(0, 10)}</strong>
+                      <small>{record.date.slice(11)}</small>
                     </span>
-                    <span className={styles.allocationAction}>
+                    <span role="cell">
+                      <strong>{record.memberName}</strong>
+                      <small>{record.memberAccount}</small>
+                    </span>
+                    <span className={styles.allocationAction} role="cell">
                       <ChangeIcon aria-hidden="true" />
                       {allocationLabels[record.action]}
                     </span>
-                    <strong
-                      className={
-                        record.action === "grant"
-                          ? styles.positiveAmount
-                          : styles.negativeAmount
-                      }
-                    >
-                      {record.amount > 0 ? "+" : "−"}
-                      {Math.abs(record.amount).toLocaleString("zh-CN")}
-                    </strong>
-                    <span>
-                      <strong>{record.balanceAfter.toLocaleString("zh-CN")}</strong>
+                    <span className={styles.ledgerChange} role="cell">
+                      <strong
+                        className={
+                          record.action === "grant"
+                            ? styles.positiveAmount
+                            : styles.negativeAmount
+                        }
+                      >
+                        {record.amount > 0 ? "+" : "−"}
+                        {Math.abs(record.amount).toLocaleString("zh-CN")}
+                      </strong>
+                      <small>余额 {record.balanceAfter.toLocaleString("zh-CN")}</small>
+                    </span>
+                    <span role="cell">
+                      <strong>{record.validUntil ?? "—"}</strong>
+                    </span>
+                    <span role="cell">
+                      <strong>{record.operator}</strong>
                       <small>{record.note}</small>
                     </span>
                   </article>
@@ -322,50 +361,57 @@ export function CreditDetailDrawer({
             role="tabpanel"
             aria-labelledby="credit-tab-consumption"
           >
-            <div className={styles.drawerSummaryGrid}>
-              <article>
-                <span>{selectedMember ? "当前余额" : "所有成员账户余额"}</span>
-                <strong>{selectedBalance.toLocaleString("zh-CN")}</strong>
-              </article>
-              <article>
-                <span>本月消耗</span>
-                <strong>{consumedTotal.toLocaleString("zh-CN")}</strong>
-              </article>
-              <article>
-                <span>生成任务</span>
-                <strong>{consumptionRecords.length}</strong>
-              </article>
-            </div>
+            {memberFilter}
             <div className={styles.drawerSectionHeading}>
               <h3>任务消耗流水</h3>
-              <span>共 {consumptionRecords.length} 笔</span>
+              <span>
+                共 {consumptionRecords.length} 条 · 合计消耗{" "}
+                {consumedTotal.toLocaleString("zh-CN")} 积分
+              </span>
             </div>
-            <div className={`${styles.allocationRecords} ${styles.consumptionRecords}`}>
-              <div className={styles.drawerTableHeader}>
-                <span>成员 / 时间</span>
-                <span>任务</span>
-                <span>消耗</span>
-                <span>扣减后余额</span>
+            <div
+              className={`${styles.allocationRecords} ${styles.consumptionRecords}`}
+              role="table"
+              aria-label="任务积分消耗流水"
+            >
+              <div className={styles.drawerTableHeader} role="row">
+                <span role="columnheader">时间</span>
+                <span role="columnheader">成员</span>
+                <span role="columnheader">项目</span>
+                <span role="columnheader">任务 / 模型</span>
+                <span role="columnheader">结算状态</span>
+                <span role="columnheader">消耗积分</span>
               </div>
               {consumptionRecords.map((record) => (
-                <article key={record.id}>
-                  <span>
-                    <strong>{record.memberName}</strong>
-                    <small>{record.date} · 生成任务自动扣减</small>
+                <article key={record.id} role="row">
+                  <span className={styles.ledgerTime} role="cell">
+                    <strong>{record.date.slice(0, 10)}</strong>
+                    <small>{record.date.slice(11)}</small>
                   </span>
-                  <span className={styles.consumptionTask}>
+                  <span role="cell">
+                    <strong>{record.memberName}</strong>
+                    <small>{record.memberAccount}</small>
+                  </span>
+                  <span className={styles.ledgerProject} role="cell">
+                    <strong>{record.projectName ?? "未命名项目"}</strong>
+                  </span>
+                  <span className={styles.consumptionTask} role="cell">
                     <Sparkles aria-hidden="true" />
                     <span>
-                      <strong>生成任务</strong>
-                      <small>{record.note}</small>
+                      <strong>{record.taskType ?? "生成任务"}</strong>
+                      <small>
+                        {record.modelName ?? record.note}
+                        {record.specification ? ` · ${record.specification}` : ""}
+                      </small>
                     </span>
                   </span>
-                  <strong className={styles.consumedAmount}>
+                  <span role="cell">
+                    <span className={styles.settlementStatus}>
+                      {settlementLabels[record.settlementStatus ?? "settled"]}
+                    </span>
+                  </span>
+                  <span className={styles.consumedAmount} role="cell">
                     −{Math.abs(record.amount).toLocaleString("zh-CN")}
-                  </strong>
-                  <span>
-                    <strong>{record.balanceAfter.toLocaleString("zh-CN")}</strong>
-                    <small>{record.id}</small>
                   </span>
                 </article>
               ))}
