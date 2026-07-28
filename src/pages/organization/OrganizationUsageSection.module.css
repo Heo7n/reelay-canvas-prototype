@@ -1073,19 +1073,21 @@
   z-index: 8;
   bottom: calc(100% + 8px);
   left: 50%;
-  display: grid;
+  display: flex;
+  min-height: 32px;
   min-width: max-content;
-  max-width: 210px;
-  gap: 3px;
-  padding: 7px 9px;
+  max-width: 280px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
   border: 1px solid color-mix(in srgb, var(--workspace-text) 14%, transparent);
   border-radius: 7px;
   background: color-mix(in srgb, var(--workspace-text) 92%, #111318);
   box-shadow: 0 10px 26px rgba(10, 12, 18, 0.2);
   color: var(--workspace-bg);
-  font-size: 8px;
+  font-size: 10px;
   font-style: normal;
-  line-height: 1.35;
+  line-height: 1;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 4px);
@@ -1098,8 +1100,28 @@
   color: #181a1f;
 }
 
-.chartTooltip strong { font-size: 9px; }
-.chartTooltip small { color: color-mix(in srgb, currentColor 74%, transparent); font-size: 8px; }
+.tooltipDate {
+  color: currentColor;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.tooltipSeparator {
+  color: color-mix(in srgb, currentColor 38%, transparent);
+}
+
+.tooltipValue {
+  color: currentColor;
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.tooltipSecondary {
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 9px;
+}
 
 .heatmapDay:hover .chartTooltip,
 .heatmapDay:focus-visible .chartTooltip,

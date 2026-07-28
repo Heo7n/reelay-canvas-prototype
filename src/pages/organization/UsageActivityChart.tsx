@@ -151,7 +151,13 @@ export function UsageActivityChart({
                 aria-label={`${dateFormatter.format(day.date)}，${numberFormatter.format(day.credits)} 积分`}
               >
                 <span className={styles.chartTooltip} aria-hidden="true">
-                  {dateFormatter.format(day.date)} · {numberFormatter.format(day.credits)} 积分
+                  <strong className={styles.tooltipDate}>
+                    {dateFormatter.format(day.date)}
+                  </strong>
+                  <span className={styles.tooltipSeparator}>·</span>
+                  <span className={styles.tooltipValue}>
+                    {numberFormatter.format(day.credits)} 积分
+                  </span>
                 </span>
               </button>
             );
@@ -180,8 +186,11 @@ export function UsageActivityChart({
             >
               <i aria-hidden="true" />
               <span className={styles.chartTooltip} aria-hidden="true">
-                <strong>{week.label}</strong>
-                <small>{numberFormatter.format(week.credits)} 积分</small>
+                <strong className={styles.tooltipDate}>{week.label}</strong>
+                <span className={styles.tooltipSeparator}>·</span>
+                <span className={styles.tooltipValue}>
+                  {numberFormatter.format(week.credits)} 积分
+                </span>
               </span>
             </button>
           ))}
@@ -256,10 +265,14 @@ export function UsageActivityChart({
               } as CSSProperties}
               aria-hidden="true"
             >
-              <strong>{activeLinePoint.label}</strong>
-              <small>
-                累计 {numberFormatter.format(activeLinePoint.cumulativeCredits)} · 本周 +{numberFormatter.format(activeLinePoint.credits)}
-              </small>
+              <strong className={styles.tooltipDate}>{activeLinePoint.label}</strong>
+              <span className={styles.tooltipSeparator}>·</span>
+              <span className={styles.tooltipValue}>
+                累计 {numberFormatter.format(activeLinePoint.cumulativeCredits)}
+              </span>
+              <span className={styles.tooltipSecondary}>
+                本周 +{numberFormatter.format(activeLinePoint.credits)}
+              </span>
             </span>
           ) : null}
         </div>

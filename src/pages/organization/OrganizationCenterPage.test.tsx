@@ -302,7 +302,8 @@ describe("organization center", () => {
       name: /累计 .* 积分，本周增加 .* 积分/,
     })[8];
     fireEvent.mouseEnter(cumulativeTarget);
-    expect(screen.getByText(/累计 .* · 本周 \+/)).toBeInTheDocument();
+    const cumulativeTooltip = screen.getByText(/^累计 /).parentElement;
+    expect(cumulativeTooltip).toHaveTextContent(/累计 .*本周 \+/);
 
     expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute(
       "aria-pressed",
