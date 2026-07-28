@@ -41,4 +41,19 @@ describe("organization credit demo ledger", () => {
       ORGANIZATION_CREDIT_SUMMARY.allocated,
     );
   });
+
+  it("keeps task consumption rows auditable without relying on balance copy", () => {
+    const consumptionRecords = CREDIT_ALLOCATION_RECORDS.filter(
+      (record) => record.action === "consume",
+    );
+
+    expect(consumptionRecords.length).toBeGreaterThan(0);
+    for (const record of consumptionRecords) {
+      expect(record.projectName).toBeTruthy();
+      expect(record.taskType).toBeTruthy();
+      expect(record.modelName).toBeTruthy();
+      expect(record.specification).toBeTruthy();
+      expect(record.settlementStatus).toBe("settled");
+    }
+  });
 });

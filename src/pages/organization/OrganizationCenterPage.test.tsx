@@ -204,37 +204,56 @@ describe("organization center", () => {
     fireEvent.click(screen.getByRole("button", { name: "查看积分流水" }));
     const creditDialog = screen.getByRole("dialog", { name: "积分流水" });
     expect(creditDialog).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "入账明细" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("累计入账")).toBeInTheDocument();
-    expect(screen.getByText("180,000")).toBeInTheDocument();
-    expect(screen.getByText("共 5 笔")).toBeInTheDocument();
-    expect(screen.getByText("演示数据 · 仅用于前端预览")).toBeInTheDocument();
+    expect(within(creditDialog).getByRole("tab", { name: "入账" })).toHaveAttribute("aria-selected", "true");
+    expect(within(creditDialog).getByText("累计入账积分")).toBeInTheDocument();
+    expect(within(creditDialog).getByText("180,000")).toBeInTheDocument();
+    expect(within(creditDialog).getByText("共 5 笔")).toBeInTheDocument();
+    expect(within(creditDialog).queryByText(/演示数据/)).toBeNull();
+    expect(within(creditDialog).queryByText("入账笔数")).toBeNull();
+    expect(within(creditDialog).getByRole("table", { name: "组织积分入账流水" })).toBeInTheDocument();
+    expect(within(creditDialog).getByRole("columnheader", { name: "来源与说明" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "分配明细" }));
-    expect(screen.getByRole("tab", { name: "分配明细" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("额度分配流水")).toBeInTheDocument();
+    fireEvent.click(within(creditDialog).getByRole("tab", { name: "分配" }));
+    expect(within(creditDialog).getByRole("tab", { name: "分配" })).toHaveAttribute("aria-selected", "true");
+    expect(within(creditDialog).getByText("额度分配流水")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
-    expect(within(creditDialog).queryByText(/生成任务自动扣减/)).toBeNull();
+    const allocationSummaryLabels = within(creditDialog).getAllByText(
+      /可分配余额|本月发放|本月回收|所有成员账户余额/,
+    );
+    expect(allocationSummaryLabels.map((label) => label.textContent)).toEqual([
+      "可分配余额",
+      "本月发放",
+      "本月回收",
+      "所有成员账户余额",
+    ]);
+    expect(within(creditDialog).getByRole("columnheader", { name: "有效期" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "消耗明细" }));
-    expect(screen.getByRole("tab", { name: "消耗明细" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("任务消耗流水")).toBeInTheDocument();
-    expect(within(creditDialog).getAllByText(/生成任务自动扣减/)).toHaveLength(10);
+    fireEvent.click(within(creditDialog).getByRole("tab", { name: "消耗" }));
+    expect(within(creditDialog).getByRole("tab", { name: "消耗" })).toHaveAttribute("aria-selected", "true");
+    expect(within(creditDialog).getByText("任务消耗流水")).toBeInTheDocument();
+    expect(within(creditDialog).getByText("共 10 条 · 合计消耗 13,500 积分")).toBeInTheDocument();
+    expect(within(creditDialog).queryByText("本月消耗")).toBeNull();
+    expect(within(creditDialog).queryByText("扣减后余额")).toBeNull();
+    expect(within(creditDialog).getByRole("columnheader", { name: "项目" })).toBeInTheDocument();
+    expect(within(creditDialog).getByRole("columnheader", { name: "任务 / 模型" })).toBeInTheDocument();
+    expect(within(creditDialog).getAllByText("已结算")).toHaveLength(10);
     fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
 
     fireEvent.click(screen.getByRole("button", { name: "查看分配明细" }));
-    expect(screen.getByRole("tab", { name: "分配明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "分配" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "关闭详情" }));
 
     fireEvent.click(screen.getByRole("button", { name: "查看 Hoo 的积分明细" }));
     const memberFilter = screen.getByRole("combobox", { name: "筛选成员" });
-    expect(screen.getByRole("tab", { name: "消耗明细" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "消耗" })).toHaveAttribute("aria-selected", "true");
     expect(memberFilter).toHaveValue("creator@reelay.test");
-    expect(screen.getAllByText(/生成任务自动扣减/)).toHaveLength(2);
-    fireEvent.click(screen.getByRole("tab", { name: "分配明细" }));
+    expect(
+      within(screen.getByRole("table", { name: "任务积分消耗流水" })).getAllByRole("row"),
+    ).toHaveLength(3);
+    fireEvent.click(screen.getByRole("tab", { name: "分配" }));
     expect(memberFilter).toHaveValue("creator@reelay.test");
-    expect(screen.queryByText(/生成任务自动扣减/)).toBeNull();
+    expect(screen.queryByRole("table", { name: "任务积分消耗流水" })).toBeNull();
     fireEvent.change(memberFilter, { target: { value: "linjing@reelay.test" } });
     expect(memberFilter).toHaveValue("linjing@reelay.test");
     fireEvent.change(memberFilter, { target: { value: "" } });
