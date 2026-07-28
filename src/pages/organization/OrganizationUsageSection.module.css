@@ -879,15 +879,18 @@
 .usageDetailTable {
   min-height: 0;
   overflow: auto;
-  padding: 8px 26px 18px;
+  padding: 0 0 18px;
+  overscroll-behavior: contain;
 }
 
 .usageDetailTableHeader,
 .usageDetailTable article {
   display: grid;
+  box-sizing: border-box;
   grid-template-columns: 86px minmax(120px, 1fr) minmax(150px, 1.2fr) 62px;
   align-items: center;
   gap: 14px;
+  padding: 0 26px;
 }
 
 .usageDetailTableHeader {
