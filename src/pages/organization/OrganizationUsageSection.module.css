@@ -2,6 +2,10 @@
   --usage-accent: #526fd1;
   --usage-accent-soft: color-mix(in srgb, var(--usage-accent) 12%, transparent);
   --usage-positive: #287458;
+  --usage-type-video: #4f6fca;
+  --usage-type-image: #3c8d78;
+  --usage-type-agent: #b17a32;
+  --usage-type-enhancement: #79758e;
   display: grid;
   max-width: 1320px;
   gap: 20px;
@@ -12,6 +16,10 @@
   --usage-accent: #91a7ff;
   --usage-accent-soft: color-mix(in srgb, var(--usage-accent) 16%, transparent);
   --usage-positive: #77cba6;
+  --usage-type-video: #8da4f5;
+  --usage-type-image: #6abda5;
+  --usage-type-agent: #d5a35e;
+  --usage-type-enhancement: #aaa4c1;
 }
 
 .visuallyHidden {
@@ -85,9 +93,9 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
-  margin: 16px -20px 0;
-  border-top: 1px solid var(--workspace-border);
-  background: color-mix(in srgb, var(--workspace-bg) 24%, var(--workspace-surface));
+  border: 1px solid var(--workspace-border);
+  border-radius: 8px;
+  background: var(--workspace-surface);
 }
 
 .stableOverview > article {
@@ -159,16 +167,41 @@
 
 .activityPanel {
   overflow: hidden;
-  padding-bottom: 0;
 }
 
-.panelHeader {
+.panelHeader,
+.periodHeader {
   display: flex;
   min-height: 42px;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 14px;
+}
+
+.periodTitle {
+  display: grid;
+  gap: 6px;
+}
+
+.periodTitle h2 {
+  margin: 0;
+  color: var(--workspace-text);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.periodTitle small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--workspace-subtle);
+  font-size: 8px;
+}
+
+.periodTitle svg {
+  width: 12px;
+  height: 12px;
 }
 
 .activityHeaderControls,
@@ -235,7 +268,10 @@
   background: var(--workspace-hover);
 }
 
-.rangeControl { min-height: 34px; }
+.rangeControl {
+  min-height: 34px;
+  position: relative;
+}
 
 .rangeControl button,
 .activityModeTabs button,
@@ -250,10 +286,35 @@
 }
 
 .rangeControl button {
-  min-width: 52px;
+  min-width: 58px;
   height: 28px;
   padding: 0 9px;
   font-size: 9px;
+}
+
+.dateRangeControl {
+  position: relative;
+}
+
+.dateRangeControl > button {
+  display: inline-flex;
+  width: 92px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.dateRangeControl > button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dateRangeControl > button svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
 }
 
 .activityModeTabs button {
@@ -286,7 +347,150 @@
   box-shadow: 0 1px 3px color-mix(in srgb, var(--workspace-text) 9%, transparent);
 }
 
+.dateRangePopover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: 330px;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 8px;
+  background: var(--workspace-surface);
+  box-shadow: 0 20px 48px rgba(17, 18, 22, 0.16);
+}
+
+.dateRangeQuick {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+.dateRangeQuick button {
+  min-width: 0;
+  height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--workspace-muted);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dateRangeQuick button:hover,
+.dateRangeQuick .activeDateQuick {
+  background: var(--workspace-hover);
+  color: var(--workspace-text);
+}
+
+.dateFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+
+.dateFields > span {
+  padding-bottom: 9px;
+  color: var(--workspace-subtle);
+  font-size: 9px;
+}
+
+.dateFields label {
+  display: grid;
+  gap: 5px;
+}
+
+.dateFields label span {
+  color: var(--workspace-muted);
+  font-size: 8px;
+}
+
+.dateFields input {
+  width: 100%;
+  height: 31px;
+  min-width: 0;
+  padding: 0 7px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 6px;
+  background: var(--workspace-surface);
+  color: var(--workspace-text);
+  color-scheme: light;
+  font: inherit;
+  font-size: 9px;
+}
+
+.dateFields input:disabled {
+  background: var(--workspace-hover);
+  color: var(--workspace-subtle);
+}
+
+:global(html[data-theme="dark"]) .dateFields input {
+  color-scheme: dark;
+}
+
+.dateRangePopover footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.dateRangePopover footer button {
+  min-width: 58px;
+  height: 30px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 6px;
+  background: var(--workspace-surface);
+  color: var(--workspace-text);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.dateRangePopover footer button:hover {
+  background: var(--workspace-hover);
+}
+
+.dateRangePopover footer .applyDateRange {
+  border-color: var(--workspace-text);
+  background: var(--workspace-text);
+  color: var(--workspace-bg);
+}
+
+.dateRangePopover footer button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
 .exportMenu { position: relative; }
+
+.ledgerLink {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  color: var(--workspace-muted);
+  font-size: 9px;
+  font-weight: 680;
+  text-decoration: none;
+}
+
+.ledgerLink:hover {
+  color: var(--workspace-text);
+}
+
+.ledgerLink svg {
+  width: 12px;
+  height: 12px;
+}
 
 .exportMenu summary {
   display: inline-flex;
@@ -402,6 +606,200 @@
   font-size: 20px;
   line-height: 1.05;
   letter-spacing: 0;
+}
+
+.analysisGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.85fr);
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+.trendSection,
+.typeSection {
+  min-width: 0;
+  padding: 18px 0 17px;
+}
+
+.trendSection {
+  padding-right: 24px;
+}
+
+.typeSection {
+  padding-left: 24px;
+  border-left: 1px solid var(--workspace-border);
+}
+
+.analysisHeading {
+  display: flex;
+  min-height: 38px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analysisHeading > span {
+  display: grid;
+  gap: 4px;
+}
+
+.analysisHeading h3 {
+  margin: 0;
+  color: var(--workspace-text);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.analysisHeading small {
+  color: var(--workspace-subtle);
+  font-size: 8px;
+}
+
+.trendChart {
+  min-width: 0;
+}
+
+.trendChart svg {
+  display: block;
+  width: 100%;
+  height: 176px;
+  overflow: visible;
+}
+
+.trendGridLine {
+  stroke: var(--workspace-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.trendAxisLabel {
+  fill: var(--workspace-subtle);
+  font-size: 9px;
+}
+
+.trendArea {
+  fill: color-mix(in srgb, var(--usage-accent) 12%, transparent);
+}
+
+.trendLine {
+  fill: none;
+  stroke: var(--usage-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.trendPoint {
+  fill: var(--workspace-surface);
+  stroke: var(--usage-accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.typeCompositionLayout {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding-top: 9px;
+}
+
+.typeDonut {
+  position: relative;
+  display: grid;
+  width: 132px;
+  height: 132px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--usage-donut);
+}
+
+.typeDonut::after {
+  position: absolute;
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  background: var(--workspace-surface);
+  content: "";
+}
+
+.typeDonut > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  max-width: 72px;
+  gap: 3px;
+  text-align: center;
+}
+
+.typeDonut small {
+  color: var(--workspace-subtle);
+  font-size: 8px;
+}
+
+.typeDonut strong {
+  overflow: hidden;
+  color: var(--workspace-text);
+  font-size: 15px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+}
+
+.typeLegend {
+  display: grid;
+}
+
+.typeLegend button {
+  display: grid;
+  min-height: 43px;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.typeLegend button + button {
+  border-top: 1px solid color-mix(in srgb, var(--workspace-border) 70%, transparent);
+}
+
+.typeLegend button:hover {
+  background: var(--workspace-hover);
+}
+
+.typeLegend button > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.typeLegend button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.typeLegend button > span:last-child {
+  justify-items: end;
+}
+
+.typeLegend strong {
+  color: var(--workspace-text);
+  font-size: 9px;
+}
+
+.typeLegend small {
+  overflow: hidden;
+  color: var(--workspace-subtle);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compositionHeader {
@@ -961,6 +1359,10 @@
 .usageDrawerFooter svg { width: 12px; height: 12px; }
 
 .rangeControl button:focus-visible,
+.dateRangeQuick button:focus-visible,
+.dateRangePopover footer button:focus-visible,
+.dateFields input:focus-visible,
+.ledgerLink:focus-visible,
 .exportMenu summary:focus-visible,
 .exportMenu button:focus-visible,
 .windowNavigation button:focus-visible,
@@ -970,6 +1372,7 @@
 .weeklyBars button:focus-visible,
 .cumulativeTarget:focus-visible,
 .compositionRow:focus-visible,
+.typeLegend button:focus-visible,
 .compositionFooter a:focus-visible,
 .usageDrawerHeader button:focus-visible,
 .usageDrawerFooter a:focus-visible,
@@ -987,6 +1390,24 @@
   }
 
   .windowNavigation > span { min-width: 178px; }
+
+  .analysisGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .trendSection {
+    padding-right: 0;
+  }
+
+  .typeSection {
+    padding-left: 0;
+    border-top: 1px solid var(--workspace-border);
+    border-left: 0;
+  }
+
+  .typeCompositionLayout {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 980px) {
@@ -1000,6 +1421,7 @@
   }
 
   .panelHeader,
+  .periodHeader,
   .compositionHeader {
     align-items: flex-start;
     flex-direction: column;
@@ -1023,5 +1445,6 @@
 @media (prefers-reduced-motion: reduce) {
   .heatmapDay,
   .weeklyBars i,
-  .chartTooltip { transition: none; }
+  .chartTooltip,
+  .compositionAction { transition: none; }
 }

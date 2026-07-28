@@ -14,7 +14,13 @@ import {
   Sparkles,
   Video,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 
 import type { OrganizationMember } from "../../domain/workspace/workspace";
@@ -26,30 +32,49 @@ import { UsageDetailDrawer } from "./UsageDetailDrawer";
 import {
   buildUsageCsv,
   buildUsageExcelXml,
+  addOrganizationDays,
   createOrganizationUsageDemoData,
   filterUsageRecords,
+  formatUsageDateInput,
   getComparisonRange,
   getHeatmapDays,
   getUsageComposition,
   getUsageRange,
   getUsageSummary,
+  getUsageTrend,
+  startOfOrganizationDay,
   type UsageCompositionItem,
   type UsageDimension,
   type UsageRangePreset,
+  ORGANIZATION_TIME_ZONE,
 } from "./organization-usage-data";
 import styles from "./OrganizationUsageSection.module.css";
+import { UsageTrendChart } from "./UsageTrendChart";
 
 interface OrganizationUsageSectionProps {
   members: OrganizationMember[];
   workspaceName: string;
 }
 
-const RANGE_ITEMS: { id: UsageRangePreset; label: string }[] = [
-  { id: "today", label: "今日" },
-  { id: "week", label: "近 7 天" },
-  { id: "month", label: "本月" },
-  { id: "all", label: "全部" },
-  { id: "custom", label: "自定义" },
+type FixedRangePreset = "today" | "rolling7" | "rolling30";
+type PickerRangePreset = "month" | "previousMonth" | "all" | "custom";
+
+interface PickerSelection {
+  kind: PickerRangePreset;
+  startDate: string;
+  endDate: string;
+}
+
+interface SelectedBreakdown {
+  composition: UsageCompositionItem[];
+  dimension: UsageDimension;
+  item: UsageCompositionItem;
+}
+
+const FIXED_RANGE_ITEMS: { id: FixedRangePreset; label: string }[] = [
+  { id: "today", label: "今天" },
+  { id: "rolling7", label: "近 7 天" },
+  { id: "rolling30", label: "近 30 天" },
 ];
 
 const ACTIVITY_MODES: { id: UsageActivityMode; label: string }[] = [
@@ -58,37 +83,50 @@ const ACTIVITY_MODES: { id: UsageActivityMode; label: string }[] = [
   { id: "cumulative", label: "累计" },
 ];
 
-const DIMENSION_ITEMS: { id: UsageDimension; label: string }[] = [
-  { id: "type", label: "类型" },
+const SOURCE_DIMENSIONS: { id: Exclude<UsageDimension, "type">; label: string }[] = [
   { id: "member", label: "成员" },
   { id: "project", label: "项目" },
   { id: "model", label: "模型" },
 ];
+
+const TYPE_COLOR_VARIABLES: Record<string, string> = {
+  video: "var(--usage-type-video)",
+  image: "var(--usage-type-image)",
+  agent: "var(--usage-type-agent)",
+  enhancement: "var(--usage-type-enhancement)",
+};
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
 const shortDateFormatter = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
+  timeZone: ORGANIZATION_TIME_ZONE,
+});
+const compactDateFormatter = new Intl.DateTimeFormat("zh-CN", {
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: ORGANIZATION_TIME_ZONE,
 });
 
-function dateInputValue(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(value: Date, amount: number): Date {
-  const result = new Date(value);
-  result.setDate(result.getDate() + amount);
-  return result;
-}
-
-function startOfDay(value: Date): Date {
-  const result = new Date(value);
-  result.setHours(0, 0, 0, 0);
-  return result;
+function createPickerSelection(kind: PickerRangePreset, now: Date): PickerSelection {
+  if (kind === "previousMonth") {
+    const range = getUsageRange("previousMonth", now);
+    return {
+      kind,
+      startDate: formatUsageDateInput(range.start),
+      endDate: formatUsageDateInput(new Date(range.end.getTime() - 1)),
+    };
+  }
+  if (kind === "all") {
+    return { kind, startDate: "", endDate: formatUsageDateInput(now) };
+  }
+  const range = getUsageRange("month", now);
+  return {
+    kind,
+    startDate: formatUsageDateInput(range.start),
+    endDate: formatUsageDateInput(now),
+  };
 }
 
 function formatVideoDuration(seconds: number): string {
@@ -97,12 +135,6 @@ function formatVideoDuration(seconds: number): string {
   if (hours > 0) return `${hours} 小时 ${minutes} 分`;
   if (minutes > 0) return `${minutes} 分钟`;
   return `${seconds} 秒`;
-}
-
-function formatChange(rate: number | null): string {
-  if (rate === null) return "暂无上期数据";
-  const percentage = Math.abs(rate * 100).toFixed(1);
-  return `较上期 ${rate >= 0 ? "+" : "−"}${percentage}%`;
 }
 
 function formatForecast(days: number | null): string {
@@ -114,6 +146,45 @@ function formatRelativeChange(rate: number | null): string {
   if (rate === null) return "—";
   if (Math.abs(rate) < 0.005) return "0%";
   return `${rate > 0 ? "+" : "−"}${Math.abs(rate * 100).toFixed(0)}%`;
+}
+
+function comparisonLabel(preset: UsageRangePreset): string | null {
+  if (preset === "today") return "较昨日同期";
+  if (preset === "rolling7") return "较前 7 天";
+  if (preset === "rolling30") return "较前 30 天";
+  if (preset === "month") return "较上月同期";
+  if (preset === "previousMonth") return "较上上月";
+  if (preset === "custom") return "较前一等长周期";
+  return null;
+}
+
+function formatChange(rate: number | null, label: string | null): string {
+  if (!label) return "";
+  if (rate === null) return `${label}暂无数据`;
+  const percentage = Math.abs(rate * 100).toFixed(1);
+  return `${label} ${rate >= 0 ? "+" : "−"}${percentage}%`;
+}
+
+function pickerButtonLabel(selection: PickerSelection | null): string {
+  if (!selection) return "日期范围";
+  if (selection.kind === "month") return "本月";
+  if (selection.kind === "previousMonth") return "上月";
+  if (selection.kind === "all") return "全部历史";
+  return `${selection.startDate.slice(5).replace("-", "/")}–${
+    selection.endDate.slice(5).replace("-", "/")
+  }`;
+}
+
+function appliedRangeName(preset: UsageRangePreset, picker: PickerSelection | null): string {
+  if (preset === "today") return "今天";
+  if (preset === "rolling7") return "近 7 天";
+  if (preset === "rolling30") return "近 30 天";
+  return pickerButtonLabel(picker);
+}
+
+function formatActualRange(start: Date, end: Date): string {
+  const displayEnd = new Date(Math.max(start.getTime(), end.getTime() - 1));
+  return `${compactDateFormatter.format(start)}–${compactDateFormatter.format(displayEnd)}`;
 }
 
 function downloadFile(content: string, fileName: string, mimeType: string): void {
@@ -136,20 +207,49 @@ export function OrganizationUsageSection({
     () => createOrganizationUsageDemoData(members, now),
     [members, now],
   );
-  const [rangePreset, setRangePreset] = useState<UsageRangePreset>("month");
-  const [customStart, setCustomStart] = useState(
-    dateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)),
+  const earliestRecordDate = useMemo(
+    () => demoData.records.reduce<Date>(
+      (earliest, record) => {
+        const occurredAt = new Date(record.occurredAt);
+        return occurredAt < earliest ? occurredAt : earliest;
+      },
+      now,
+    ),
+    [demoData.records, now],
   );
-  const [customEnd, setCustomEnd] = useState(dateInputValue(now));
+  const initialPickerSelection = useMemo(
+    () => createPickerSelection("month", now),
+    [now],
+  );
+
+  const [rangePreset, setRangePreset] = useState<UsageRangePreset>("rolling30");
+  const [appliedPickerSelection, setAppliedPickerSelection] =
+    useState<PickerSelection | null>(null);
+  const [lastPickerSelection, setLastPickerSelection] =
+    useState<PickerSelection | null>(null);
+  const [draftPickerSelection, setDraftPickerSelection] =
+    useState<PickerSelection>(initialPickerSelection);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [activityMode, setActivityMode] = useState<UsageActivityMode>("calendar");
   const [activityAnchor, setActivityAnchor] = useState(now);
-  const [dimension, setDimension] = useState<UsageDimension>("type");
-  const [selectedComposition, setSelectedComposition] = useState<UsageCompositionItem | null>(null);
+  const [sourceDimension, setSourceDimension] =
+    useState<Exclude<UsageDimension, "type">>("member");
+  const [selectedBreakdown, setSelectedBreakdown] =
+    useState<SelectedBreakdown | null>(null);
+
   const exportMenuRef = useRef<HTMLDetailsElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const pickerTriggerRef = useRef<HTMLButtonElement>(null);
 
   const range = useMemo(
-    () => getUsageRange(rangePreset, now, customStart, customEnd),
-    [customEnd, customStart, now, rangePreset],
+    () => getUsageRange(
+      rangePreset,
+      now,
+      appliedPickerSelection?.startDate,
+      appliedPickerSelection?.endDate,
+      earliestRecordDate,
+    ),
+    [appliedPickerSelection, earliestRecordDate, now, rangePreset],
   );
   const comparisonRange = useMemo(
     () => getComparisonRange(rangePreset, range),
@@ -175,57 +275,111 @@ export function OrganizationUsageSection({
     ),
     [comparisonRecords, demoData, now, rangeRecords],
   );
-  const composition = useMemo(
-    () => getUsageComposition(rangeRecords, dimension),
-    [dimension, rangeRecords],
+  const trend = useMemo(
+    () => getUsageTrend(rangeRecords, range),
+    [range, rangeRecords],
+  );
+  const typeComposition = useMemo(
+    () => getUsageComposition(rangeRecords, "type"),
+    [rangeRecords],
+  );
+  const sourceComposition = useMemo(
+    () => getUsageComposition(rangeRecords, sourceDimension),
+    [rangeRecords, sourceDimension],
   );
   const activityDays = useMemo(
     () => getHeatmapDays(demoData.records, activityAnchor),
     [activityAnchor, demoData.records],
   );
-  const earliestRecordDate = useMemo(
-    () => new Date(demoData.records.at(-1)?.occurredAt ?? now),
-    [demoData.records, now],
-  );
-  const activityStart = addDays(startOfDay(activityAnchor), -364);
-  const canMoveBackward = activityStart > startOfDay(earliestRecordDate);
-  const canMoveForward = startOfDay(activityAnchor) < startOfDay(now);
-  const activityRangeLabel = `${shortDateFormatter.format(activityStart)} — ${shortDateFormatter.format(activityAnchor)}`;
+
+  const activityStart = addOrganizationDays(startOfOrganizationDay(activityAnchor), -364);
+  const canMoveBackward = activityStart > startOfOrganizationDay(earliestRecordDate);
+  const canMoveForward =
+    startOfOrganizationDay(activityAnchor) < startOfOrganizationDay(now);
+  const activityRangeLabel = `${shortDateFormatter.format(activityStart)} — ${
+    shortDateFormatter.format(activityAnchor)
+  }`;
   const activityWindowLabel = canMoveForward
     ? activityRangeLabel
     : `近 365 天 · ${activityRangeLabel}`;
-  const activeRangeLabel = RANGE_ITEMS.find((item) => item.id === rangePreset)?.label ?? "本月";
+  const activeRangeLabel = appliedRangeName(rangePreset, appliedPickerSelection);
+  const actualRangeLabel = formatActualRange(range.start, range.end);
+  const activeComparisonLabel = comparisonLabel(rangePreset);
+  const pickerLabel = pickerButtonLabel(lastPickerSelection);
+  const totalTypeCredits = Math.max(
+    0,
+    typeComposition.reduce((total, item) => total + item.credits, 0),
+  );
+  let donutOffset = 0;
+  const donutSegments = typeComposition.map((item) => {
+    const start = donutOffset;
+    donutOffset += item.share * 100;
+    return `${TYPE_COLOR_VARIABLES[item.id] ?? "var(--workspace-muted)"} ${
+      start.toFixed(2)
+    }% ${donutOffset.toFixed(2)}%`;
+  });
+  const donutStyle = {
+    "--usage-donut": totalTypeCredits > 0 && donutSegments.length > 0
+      ? `conic-gradient(${donutSegments.join(", ")})`
+      : "conic-gradient(var(--workspace-border) 0 100%)",
+  } as CSSProperties;
 
   useEffect(() => {
-    const closeExportMenu = (event: PointerEvent) => {
-      if (!exportMenuRef.current?.contains(event.target as Node)) {
+    const closeFloatingControls = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!exportMenuRef.current?.contains(target)) {
         exportMenuRef.current?.removeAttribute("open");
       }
+      if (pickerOpen && !pickerRef.current?.contains(target)) {
+        setPickerOpen(false);
+      }
     };
-    const closeExportMenuOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") exportMenuRef.current?.removeAttribute("open");
+    const closeFloatingControlsOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      exportMenuRef.current?.removeAttribute("open");
+      if (pickerOpen) {
+        setPickerOpen(false);
+        pickerTriggerRef.current?.focus();
+      }
     };
-    document.addEventListener("pointerdown", closeExportMenu);
-    document.addEventListener("keydown", closeExportMenuOnEscape);
+    document.addEventListener("pointerdown", closeFloatingControls);
+    document.addEventListener("keydown", closeFloatingControlsOnEscape);
     return () => {
-      document.removeEventListener("pointerdown", closeExportMenu);
-      document.removeEventListener("keydown", closeExportMenuOnEscape);
+      document.removeEventListener("pointerdown", closeFloatingControls);
+      document.removeEventListener("keydown", closeFloatingControlsOnEscape);
     };
-  }, []);
+  }, [pickerOpen]);
 
   useEffect(() => {
-    setSelectedComposition(null);
-  }, [customEnd, customStart, dimension, rangePreset]);
+    setSelectedBreakdown(null);
+  }, [range, sourceDimension]);
+
+  const openPicker = () => {
+    setDraftPickerSelection(lastPickerSelection ?? initialPickerSelection);
+    setPickerOpen(true);
+  };
+
+  const choosePickerQuickRange = (kind: Exclude<PickerRangePreset, "custom">) => {
+    setDraftPickerSelection(createPickerSelection(kind, now));
+  };
+
+  const applyPickerSelection = () => {
+    const next = { ...draftPickerSelection };
+    setAppliedPickerSelection(next);
+    setLastPickerSelection(next);
+    setRangePreset(next.kind);
+    setPickerOpen(false);
+  };
 
   const moveActivityWindow = (direction: -1 | 1) => {
     setActivityAnchor((current) => {
-      const shifted = addDays(current, direction * 365);
+      const shifted = addOrganizationDays(current, direction * 365);
       return shifted > now ? now : shifted;
     });
   };
 
   const exportRecords = (format: "csv" | "excel") => {
-    const stamp = dateInputValue(now);
+    const stamp = formatUsageDateInput(now);
     if (format === "csv") {
       downloadFile(
         buildUsageCsv(rangeRecords),
@@ -246,6 +400,325 @@ export function OrganizationUsageSection({
     <section className={styles.usageSection} aria-labelledby="organization-usage-title">
       <h1 id="organization-usage-title" className={styles.visuallyHidden}>用量看板</h1>
       <p className={styles.visuallyHidden}>{workspaceName}的组织用量统计</p>
+
+      <section className={styles.stableOverview} aria-label="组织状态概览">
+        <article>
+          <span><CircleDollarSign aria-hidden="true" />可用积分</span>
+          <div className={styles.metricValue}>
+            <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
+            <small>积分</small>
+          </div>
+        </article>
+        <article>
+          <span><Clock3 aria-hidden="true" />预计可用</span>
+          <div className={styles.metricValue}>
+            <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
+          </div>
+          <small>按近 30 日消耗估算</small>
+        </article>
+        <article>
+          <span><Sparkles aria-hidden="true" />日均消耗（近 30 天）</span>
+          <div className={styles.metricValue}>
+            <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
+            <small>积分 / 日</small>
+          </div>
+          <small className={styles.metricDelta}>
+            较历史日均 {formatRelativeChange(summary.recentToLifetimeRate)}
+          </small>
+        </article>
+        <article>
+          <span><BarChart3 aria-hidden="true" />历史日均</span>
+          <div className={styles.metricValue}>
+            <strong>{numberFormatter.format(summary.lifetimeDailyAverage)}</strong>
+            <small>积分 / 日</small>
+          </div>
+        </article>
+      </section>
+
+      <section className={styles.periodPanel} aria-labelledby="usage-period-title">
+        <header className={styles.periodHeader}>
+          <span className={styles.periodTitle}>
+            <h2 id="usage-period-title">期间分析</h2>
+            <small>
+              <CalendarDays aria-hidden="true" />
+              {actualRangeLabel} · Asia/Shanghai
+            </small>
+          </span>
+          <div className={styles.periodControls}>
+            <div className={styles.rangeControl} aria-label="统计时间范围">
+              {FIXED_RANGE_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={rangePreset === item.id ? styles.activeRange : ""}
+                  aria-pressed={rangePreset === item.id}
+                  onClick={() => {
+                    setRangePreset(item.id);
+                    setAppliedPickerSelection(null);
+                    setPickerOpen(false);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+              <div ref={pickerRef} className={styles.dateRangeControl}>
+                <button
+                  ref={pickerTriggerRef}
+                  type="button"
+                  className={
+                    !FIXED_RANGE_ITEMS.some((item) => item.id === rangePreset)
+                      ? styles.activeRange
+                      : ""
+                  }
+                  aria-expanded={pickerOpen}
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    if (pickerOpen) {
+                      setPickerOpen(false);
+                    } else {
+                      openPicker();
+                    }
+                  }}
+                >
+                  <span>{pickerLabel}</span>
+                  <ChevronDown aria-hidden="true" />
+                </button>
+                {pickerOpen ? (
+                  <div
+                    className={styles.dateRangePopover}
+                    role="dialog"
+                    aria-label="选择日期范围"
+                  >
+                    <div className={styles.dateRangeQuick}>
+                      {([
+                        ["month", "本月"],
+                        ["previousMonth", "上月"],
+                        ["all", "全部历史"],
+                      ] as const).map(([kind, label]) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          className={
+                            draftPickerSelection.kind === kind
+                              ? styles.activeDateQuick
+                              : ""
+                          }
+                          aria-pressed={draftPickerSelection.kind === kind}
+                          onClick={() => choosePickerQuickRange(kind)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className={styles.dateFields}>
+                      <label>
+                        <span>开始日期</span>
+                        <input
+                          type="date"
+                          max={draftPickerSelection.endDate || formatUsageDateInput(now)}
+                          value={draftPickerSelection.startDate}
+                          disabled={draftPickerSelection.kind === "all"}
+                          onChange={(event) => setDraftPickerSelection({
+                            kind: "custom",
+                            startDate: event.target.value,
+                            endDate: draftPickerSelection.endDate,
+                          })}
+                        />
+                      </label>
+                      <span aria-hidden="true">至</span>
+                      <label>
+                        <span>结束日期</span>
+                        <input
+                          type="date"
+                          min={draftPickerSelection.startDate}
+                          max={formatUsageDateInput(now)}
+                          value={draftPickerSelection.endDate}
+                          disabled={draftPickerSelection.kind === "all"}
+                          onChange={(event) => setDraftPickerSelection({
+                            kind: "custom",
+                            startDate: draftPickerSelection.startDate,
+                            endDate: event.target.value,
+                          })}
+                        />
+                      </label>
+                    </div>
+                    <footer>
+                      <button type="button" onClick={() => setPickerOpen(false)}>取消</button>
+                      <button
+                        type="button"
+                        className={styles.applyDateRange}
+                        disabled={
+                          draftPickerSelection.kind === "custom"
+                          && (!draftPickerSelection.startDate
+                            || !draftPickerSelection.endDate
+                            || draftPickerSelection.startDate > draftPickerSelection.endDate)
+                        }
+                        onClick={applyPickerSelection}
+                      >
+                        应用
+                      </button>
+                    </footer>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className={styles.toolbarMeta}>
+              <Link className={styles.ledgerLink} to="../credits">
+                积分变动记录
+                <ArrowRight aria-hidden="true" />
+              </Link>
+              <details ref={exportMenuRef} className={styles.exportMenu}>
+                <summary aria-label="导出当前时间范围的数据">
+                  <Download aria-hidden="true" />
+                  导出
+                  <ChevronDown aria-hidden="true" />
+                </summary>
+                <div>
+                  <button type="button" onClick={() => exportRecords("csv")}>
+                    <FileDown aria-hidden="true" />
+                    <span><strong>CSV</strong><small>{actualRangeLabel} 数据</small></span>
+                  </button>
+                  <button type="button" onClick={() => exportRecords("excel")}>
+                    <BarChart3 aria-hidden="true" />
+                    <span><strong>Excel</strong><small>{actualRangeLabel} 数据</small></span>
+                  </button>
+                </div>
+              </details>
+            </div>
+          </div>
+        </header>
+
+        <section className={styles.periodMetrics} aria-label={`${activeRangeLabel}用量摘要`}>
+          <article>
+            <span><Sparkles aria-hidden="true" />消耗积分</span>
+            <strong>{numberFormatter.format(summary.netCredits)}</strong>
+            <small>{formatChange(summary.changeRate, activeComparisonLabel)}</small>
+          </article>
+          <article>
+            <span><Image aria-hidden="true" />图片产出</span>
+            <strong>{numberFormatter.format(summary.imageCount)}</strong>
+            <small>张图片</small>
+          </article>
+          <article>
+            <span><Video aria-hidden="true" />视频产出</span>
+            <strong>{formatVideoDuration(summary.videoSeconds)}</strong>
+            <small>成片时长</small>
+          </article>
+        </section>
+
+        <section className={styles.analysisGrid} aria-label="消耗趋势与类型构成">
+          <section className={styles.trendSection} aria-labelledby="usage-trend-title">
+            <header className={styles.analysisHeading}>
+              <span>
+                <h3 id="usage-trend-title">消耗趋势</h3>
+                <small>{activeRangeLabel}的积分消耗变化</small>
+              </span>
+            </header>
+            <UsageTrendChart points={trend} rangeLabel={actualRangeLabel} />
+          </section>
+
+          <section className={styles.typeSection} aria-labelledby="usage-type-title">
+            <header className={styles.analysisHeading}>
+              <span>
+                <h3 id="usage-type-title">类型构成</h3>
+                <small>积分主要花在什么地方</small>
+              </span>
+            </header>
+            <div className={styles.typeCompositionLayout}>
+              <div className={styles.typeDonut} style={donutStyle} aria-hidden="true">
+                <span>
+                  <small>本期消耗</small>
+                  <strong>{numberFormatter.format(totalTypeCredits)}</strong>
+                </span>
+              </div>
+              <div className={styles.typeLegend}>
+                {typeComposition.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-label={`查看${item.label}消耗明细`}
+                    onClick={() => setSelectedBreakdown({
+                      composition: typeComposition,
+                      dimension: "type",
+                      item,
+                    })}
+                  >
+                    <i
+                      aria-hidden="true"
+                      style={{
+                        background: TYPE_COLOR_VARIABLES[item.id]
+                          ?? "var(--workspace-muted)",
+                      }}
+                    />
+                    <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                    <span>
+                      <strong>{numberFormatter.format(item.credits)}</strong>
+                      <small>{(item.share * 100).toFixed(1)}%</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <header className={styles.compositionHeader}>
+          <span>
+            <h3 id="usage-composition-title">主要消耗来源</h3>
+            <p>按成员、项目或模型定位积分使用集中度</p>
+          </span>
+          <div className={styles.dimensionTabs} aria-label="主要消耗来源分析维度">
+            {SOURCE_DIMENSIONS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={sourceDimension === item.id ? styles.activeDimension : ""}
+                aria-pressed={sourceDimension === item.id}
+                onClick={() => setSourceDimension(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        <div className={styles.compositionList}>
+          {sourceComposition.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={styles.compositionRow}
+              aria-label={`查看${item.label}消耗明细`}
+              onClick={() => setSelectedBreakdown({
+                composition: sourceComposition,
+                dimension: sourceDimension,
+                item,
+              })}
+            >
+              <span className={styles.compositionIdentity}>
+                <strong>{item.label}</strong>
+                <small>{item.detail}</small>
+              </span>
+              <span className={styles.compositionTrack} aria-hidden="true">
+                <i style={{ width: `${Math.max(2, item.share * 100)}%` }} />
+              </span>
+              <span className={styles.compositionValue}>
+                <strong>{numberFormatter.format(item.credits)}</strong>
+                <small>{(item.share * 100).toFixed(1)}%</small>
+              </span>
+              <small className={styles.compositionOutput}>
+                {item.videoSeconds > 0
+                  ? `${formatVideoDuration(item.videoSeconds)} 视频`
+                  : item.imageCount > 0
+                    ? `${numberFormatter.format(item.imageCount)} 张图片`
+                    : ""}
+              </small>
+              <ArrowUpRight className={styles.compositionAction} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
         <header className={styles.panelHeader}>
@@ -291,196 +764,16 @@ export function OrganizationUsageSection({
             </div>
           </div>
         </header>
-        <UsageActivityChart
-          days={activityDays}
-          mode={activityMode}
-        />
-        <section className={styles.stableOverview} aria-label="组织状态概览">
-          <article>
-            <span><CircleDollarSign aria-hidden="true" />可用积分</span>
-            <div className={styles.metricValue}>
-              <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
-              <small>积分</small>
-            </div>
-          </article>
-          <article>
-            <span><Clock3 aria-hidden="true" />预计可用（近 30 天趋势）</span>
-            <div className={styles.metricValue}>
-              <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
-            </div>
-          </article>
-          <article>
-            <span><Sparkles aria-hidden="true" />日均消耗（近 30 天）</span>
-            <div className={styles.metricValue}>
-              <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
-              <small>积分 / 日</small>
-            </div>
-            <small className={styles.metricDelta}>
-              较历史日均 {formatRelativeChange(summary.recentToLifetimeRate)}
-            </small>
-          </article>
-          <article>
-            <span><BarChart3 aria-hidden="true" />历史日均</span>
-            <div className={styles.metricValue}>
-              <strong>{numberFormatter.format(summary.lifetimeDailyAverage)}</strong>
-              <small>积分 / 日</small>
-            </div>
-          </article>
-        </section>
-      </section>
-
-      <section className={styles.periodPanel} aria-labelledby="usage-period-title">
-        <header className={styles.panelHeader}>
-          <span>
-            <h2 id="usage-period-title">期间用量</h2>
-          </span>
-          <div className={styles.periodControls}>
-            <div className={styles.rangeControl} aria-label="统计时间范围">
-              {RANGE_ITEMS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={rangePreset === item.id ? styles.activeRange : ""}
-                  aria-pressed={rangePreset === item.id}
-                  onClick={() => setRangePreset(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <div className={styles.toolbarMeta}>
-              <span><CalendarDays aria-hidden="true" />Asia/Shanghai</span>
-              <details ref={exportMenuRef} className={styles.exportMenu}>
-                <summary aria-label="导出当前时间范围的数据">
-                  <Download aria-hidden="true" />
-                  导出
-                  <ChevronDown aria-hidden="true" />
-                </summary>
-                <div>
-                  <button type="button" onClick={() => exportRecords("csv")}>
-                    <FileDown aria-hidden="true" />
-                    <span><strong>CSV</strong><small>{activeRangeLabel}数据</small></span>
-                  </button>
-                  <button type="button" onClick={() => exportRecords("excel")}>
-                    <BarChart3 aria-hidden="true" />
-                    <span><strong>Excel</strong><small>{activeRangeLabel}数据</small></span>
-                  </button>
-                </div>
-              </details>
-            </div>
-          </div>
-        </header>
-
-        {rangePreset === "custom" ? (
-          <div className={styles.customRange}>
-            <label>
-              <span>开始日期</span>
-              <input
-                type="date"
-                max={customEnd}
-                value={customStart}
-                onChange={(event) => setCustomStart(event.target.value)}
-              />
-            </label>
-            <span aria-hidden="true">至</span>
-            <label>
-              <span>结束日期</span>
-              <input
-                type="date"
-                min={customStart}
-                max={dateInputValue(now)}
-                value={customEnd}
-                onChange={(event) => setCustomEnd(event.target.value)}
-              />
-            </label>
-          </div>
-        ) : null}
-
-        <section className={styles.periodMetrics} aria-label={`${activeRangeLabel}用量摘要`}>
-          <article>
-            <span><Sparkles aria-hidden="true" />消耗积分</span>
-            <strong>{numberFormatter.format(summary.netCredits)}</strong>
-            <small>{formatChange(summary.changeRate)}</small>
-          </article>
-          <article>
-            <span><Image aria-hidden="true" />图片产出</span>
-            <strong>{numberFormatter.format(summary.imageCount)}</strong>
-            <small>张图片</small>
-          </article>
-          <article>
-            <span><Video aria-hidden="true" />视频产出</span>
-            <strong>{formatVideoDuration(summary.videoSeconds)}</strong>
-            <small>成片时长</small>
-          </article>
-        </section>
-
-        <header className={styles.compositionHeader}>
-          <span>
-            <h3 id="usage-composition-title">消耗构成</h3>
-          </span>
-          <div className={styles.dimensionTabs} aria-label="消耗构成分析维度">
-            {DIMENSION_ITEMS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={dimension === item.id ? styles.activeDimension : ""}
-                aria-pressed={dimension === item.id}
-                onClick={() => setDimension(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <div className={styles.compositionList}>
-          {composition.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={styles.compositionRow}
-              aria-label={`查看${item.label}消耗明细`}
-              onClick={() => setSelectedComposition(item)}
-            >
-              <span className={styles.compositionIdentity}>
-                <strong>{item.label}</strong>
-                <small>{item.detail}</small>
-              </span>
-              <span className={styles.compositionTrack} aria-hidden="true">
-                <i style={{ width: `${Math.max(2, item.share * 100)}%` }} />
-              </span>
-              <span className={styles.compositionValue}>
-                <strong>{numberFormatter.format(item.credits)}</strong>
-                <small>{(item.share * 100).toFixed(1)}%</small>
-              </span>
-              <small className={styles.compositionOutput}>
-                {item.videoSeconds > 0
-                  ? `${formatVideoDuration(item.videoSeconds)} 视频`
-                  : item.imageCount > 0
-                    ? `${numberFormatter.format(item.imageCount)} 张图片`
-                    : ""}
-              </small>
-              <ArrowUpRight className={styles.compositionAction} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-
-        <footer className={styles.compositionFooter}>
-          <Link to="../credits">
-            查看积分流水
-            <ArrowRight aria-hidden="true" />
-          </Link>
-        </footer>
+        <UsageActivityChart days={activityDays} mode={activityMode} />
       </section>
 
       <UsageDetailDrawer
-        composition={composition}
-        dimension={dimension}
-        item={selectedComposition}
+        composition={selectedBreakdown?.composition ?? []}
+        dimension={selectedBreakdown?.dimension ?? "type"}
+        item={selectedBreakdown?.item ?? null}
         rangeLabel={activeRangeLabel}
         records={rangeRecords}
-        onClose={() => setSelectedComposition(null)}
+        onClose={() => setSelectedBreakdown(null)}
       />
     </section>
   );

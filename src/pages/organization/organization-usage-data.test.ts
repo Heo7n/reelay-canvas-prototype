@@ -6,6 +6,7 @@ import {
   buildUsageExcelXml,
   createOrganizationUsageDemoData,
   filterUsageRecords,
+  formatUsageDateInput,
   getComparisonRange,
   getHeatmapDays,
   getUsageComposition,
@@ -63,7 +64,7 @@ describe("organization usage demo data", () => {
   it("keeps the organization forecast stable when the page range changes", () => {
     const demo = createOrganizationUsageDemoData(members, now);
     const monthRecords = filterUsageRecords(demo.records, getUsageRange("month", now));
-    const weekRecords = filterUsageRecords(demo.records, getUsageRange("week", now));
+    const weekRecords = filterUsageRecords(demo.records, getUsageRange("rolling7", now));
     const todayRecords = filterUsageRecords(demo.records, getUsageRange("today", now));
     const monthSummary = getUsageSummary(monthRecords, [], demo.records, now, demo.availableCredits);
     const weekSummary = getUsageSummary(weekRecords, [], demo.records, now, demo.availableCredits);
@@ -77,6 +78,90 @@ describe("organization usage demo data", () => {
     expect(monthSummary.lifetimeDailyAverage).toBe(weekSummary.lifetimeDailyAverage);
     expect(monthSummary.recentToLifetimeRate).toBe(weekSummary.recentToLifetimeRate);
     expect(getComparisonRange("all", getUsageRange("all", now))).toBeNull();
+  });
+
+  it("uses the documented natural-day ranges and comparison periods", () => {
+    const today = getUsageRange("today", now);
+    const rolling7 = getUsageRange("rolling7", now);
+    const rolling30 = getUsageRange("rolling30", now);
+    const month = getUsageRange("month", now);
+    const previousMonth = getUsageRange("previousMonth", now);
+    const custom = getUsageRange("custom", now, "2026-07-05", "2026-07-12");
+    const historyStart = new Date("2024-03-14T18:20:00+08:00");
+    const all = getUsageRange("all", now, undefined, undefined, historyStart);
+
+    expect(today.start.toISOString()).toBe("2026-07-26T16:00:00.000Z");
+    expect(formatUsageDateInput(rolling7.start)).toBe("2026-07-21");
+    expect(formatUsageDateInput(rolling30.start)).toBe("2026-06-28");
+    expect(formatUsageDateInput(month.start)).toBe("2026-07-01");
+    expect([
+      formatUsageDateInput(previousMonth.start),
+      formatUsageDateInput(previousMonth.end),
+    ]).toEqual(["2026-06-01", "2026-07-01"]);
+    expect([
+      formatUsageDateInput(custom.start),
+      formatUsageDateInput(custom.end),
+    ]).toEqual(["2026-07-05", "2026-07-13"]);
+    expect(all.start.toISOString()).toBe("2024-03-13T16:00:00.000Z");
+
+    const todayComparison = getComparisonRange("today", today);
+    const rolling7Comparison = getComparisonRange("rolling7", rolling7);
+    const rolling30Comparison = getComparisonRange("rolling30", rolling30);
+    const monthComparison = getComparisonRange("month", month);
+    const previousMonthComparison = getComparisonRange("previousMonth", previousMonth);
+    const customComparison = getComparisonRange("custom", custom);
+
+    expect(todayComparison?.start.toISOString()).toBe("2026-07-25T16:00:00.000Z");
+    expect(todayComparison?.end.toISOString()).toBe("2026-07-26T04:00:00.000Z");
+    expect(rolling7Comparison?.start.toISOString()).toBe("2026-07-13T16:00:00.000Z");
+    expect(rolling7Comparison?.end.toISOString()).toBe("2026-07-20T04:00:00.000Z");
+    expect(rolling30Comparison?.start.toISOString()).toBe("2026-05-28T16:00:00.000Z");
+    expect(rolling30Comparison?.end.toISOString()).toBe("2026-06-27T04:00:00.000Z");
+    expect(monthComparison?.start.toISOString()).toBe("2026-05-31T16:00:00.000Z");
+    expect(monthComparison?.end.toISOString()).toBe("2026-06-27T04:00:00.000Z");
+    expect(previousMonthComparison?.start.toISOString()).toBe("2026-04-30T16:00:00.000Z");
+    expect(previousMonthComparison?.end.toISOString()).toBe("2026-05-31T16:00:00.000Z");
+    expect(customComparison?.end.getTime()).toBe(custom.start.getTime());
+    expect(customComparison!.end.getTime() - customComparison!.start.getTime()).toBe(
+      custom.end.getTime() - custom.start.getTime(),
+    );
+  });
+
+  it("includes both selected custom dates while excluding the next day", () => {
+    const createRecord = (id: string, occurredAt: string): UsageRecord => ({
+      id,
+      occurredAt,
+      memberId: "actor-owner",
+      memberName: "Hoo",
+      memberAccount: "creator@reelay.test",
+      projectId: "project-1",
+      projectName: "测试项目",
+      activityKind: "image",
+      activityLabel: "图片生成",
+      modelId: "model-1",
+      modelName: "GPT Image 2",
+      specification: "1K",
+      credits: 10,
+      outputImages: 1,
+      outputVideoSeconds: 0,
+      status: "settled",
+    });
+    const range = getUsageRange(
+      "custom",
+      new Date("2026-07-27T12:00:00+08:00"),
+      "2026-07-05",
+      "2026-07-12",
+    );
+    const records = [
+      createRecord("start", "2026-07-05T00:00:00+08:00"),
+      createRecord("end", "2026-07-12T23:59:59+08:00"),
+      createRecord("next", "2026-07-13T00:00:00+08:00"),
+    ];
+
+    expect(filterUsageRecords(records, range).map((record) => record.id)).toEqual([
+      "start",
+      "end",
+    ]);
   });
 
   it("keeps zero-use calendar days in the recent trend forecast", () => {

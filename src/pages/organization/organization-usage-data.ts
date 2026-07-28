@@ -1,6 +1,13 @@
 import type { OrganizationMember } from "../../domain/workspace/workspace";
 
-export type UsageRangePreset = "today" | "week" | "month" | "all" | "custom";
+export type UsageRangePreset =
+  | "today"
+  | "rolling7"
+  | "rolling30"
+  | "month"
+  | "previousMonth"
+  | "all"
+  | "custom";
 export type UsageActivityKind = "image" | "video" | "enhancement" | "agent";
 export type UsageDimension = "type" | "member" | "project" | "model";
 
@@ -122,6 +129,8 @@ const PROJECTS = [
 ] as const;
 
 const DEMO_HISTORY_DAYS = 1_095;
+export const ORGANIZATION_TIME_ZONE = "Asia/Shanghai";
+const ORGANIZATION_TIME_ZONE_OFFSET = 8 * 60 * 60 * 1_000;
 
 const USAGE_TEMPLATES: UsageTemplate[] = [
   {
@@ -254,42 +263,91 @@ export const USAGE_ACTIVITY_LABELS: Record<UsageActivityKind, string> = {
   agent: "Agent 处理",
 };
 
-const dayFormatter = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" });
-const monthFormatter = new Intl.DateTimeFormat("zh-CN", { year: "2-digit", month: "short" });
-const hourFormatter = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", hour12: false });
+const dayFormatter = new Intl.DateTimeFormat("zh-CN", {
+  month: "numeric",
+  day: "numeric",
+  timeZone: ORGANIZATION_TIME_ZONE,
+});
+const monthFormatter = new Intl.DateTimeFormat("zh-CN", {
+  year: "2-digit",
+  month: "short",
+  timeZone: ORGANIZATION_TIME_ZONE,
+});
+const hourFormatter = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  hour12: false,
+  timeZone: ORGANIZATION_TIME_ZONE,
+});
 
-function startOfDay(value: Date): Date {
-  const result = new Date(value);
-  result.setHours(0, 0, 0, 0);
-  return result;
+function shiftToOrganizationTime(value: Date): Date {
+  return new Date(value.getTime() + ORGANIZATION_TIME_ZONE_OFFSET);
 }
 
-function addDays(value: Date, amount: number): Date {
-  const result = new Date(value);
-  result.setDate(result.getDate() + amount);
-  return result;
+function shiftFromOrganizationTime(value: Date): Date {
+  return new Date(value.getTime() - ORGANIZATION_TIME_ZONE_OFFSET);
+}
+
+export function startOfOrganizationDay(value: Date): Date {
+  const shifted = shiftToOrganizationTime(value);
+  shifted.setUTCHours(0, 0, 0, 0);
+  return shiftFromOrganizationTime(shifted);
+}
+
+export function addOrganizationDays(value: Date, amount: number): Date {
+  const shifted = shiftToOrganizationTime(value);
+  shifted.setUTCDate(shifted.getUTCDate() + amount);
+  return shiftFromOrganizationTime(shifted);
 }
 
 function addMonths(value: Date, amount: number): Date {
-  const result = new Date(value);
-  result.setMonth(result.getMonth() + amount);
-  return result;
+  const shifted = shiftToOrganizationTime(value);
+  shifted.setUTCMonth(shifted.getUTCMonth() + amount);
+  return shiftFromOrganizationTime(shifted);
+}
+
+function startOfMonth(value: Date): Date {
+  const shifted = shiftToOrganizationTime(value);
+  shifted.setUTCDate(1);
+  shifted.setUTCHours(0, 0, 0, 0);
+  return shiftFromOrganizationTime(shifted);
+}
+
+function parseOrganizationDateInput(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(
+    Date.UTC(year, Math.max(0, month - 1), day) - ORGANIZATION_TIME_ZONE_OFFSET,
+  );
+}
+
+export function formatUsageDateInput(value: Date): string {
+  const shifted = shiftToOrganizationTime(value);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function localDateKey(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
+  const shifted = shiftToOrganizationTime(value);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
 function monthKey(value: Date): string {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+  const shifted = shiftToOrganizationTime(value);
+  return `${shifted.getUTCFullYear()}-${
+    String(shifted.getUTCMonth() + 1).padStart(2, "0")
+  }`;
 }
 
 function clampEventHour(now: Date, dayOffset: number, eventIndex: number): number {
   if (dayOffset !== 0) return 8 + ((eventIndex * 3 + dayOffset) % 13);
-  return Math.max(0, Math.min(now.getHours(), 8 + eventIndex * 2));
+  return Math.max(
+    0,
+    Math.min(shiftToOrganizationTime(now).getUTCHours(), 8 + eventIndex * 2),
+  );
 }
 
 function deterministicUnit(seed: number): number {
@@ -310,7 +368,7 @@ function weightedIndex(weights: number[], seed: number): number {
 }
 
 function getDailyEventCount(date: Date, dayOffset: number): number {
-  const dayOfWeek = date.getDay();
+  const dayOfWeek = shiftToOrganizationTime(date).getUTCDay();
   const weekendFactor = dayOfWeek === 0 ? 0.28 : dayOfWeek === 6 ? 0.48 : 1;
   const recentGrowth = 0.72 + Math.max(0, 1 - dayOffset / DEMO_HISTORY_DAYS) * 0.38;
   const seasonalFactor = 0.82 + Math.sin((dayOffset + 11) / 17) * 0.18;
@@ -344,13 +402,13 @@ export function createOrganizationUsageDemoData(
 ): OrganizationUsageDemoData {
   const activeMembers = members.length > 0 ? members : FALLBACK_MEMBERS;
   const records: UsageRecord[] = [];
-  const today = startOfDay(now);
+  const today = startOfOrganizationDay(now);
   const templateWeights = USAGE_TEMPLATES.map((template) => template.weight);
   const projectWeights = PROJECTS.map((project) => project.weight);
   const memberWeights = activeMembers.map((_, index) => Math.max(4, 18 - index * 1.5));
 
   for (let dayOffset = 0; dayOffset < DEMO_HISTORY_DAYS; dayOffset += 1) {
-    const date = addDays(today, -dayOffset);
+    const date = addOrganizationDays(today, -dayOffset);
     const eventCount = getDailyEventCount(date, dayOffset);
 
     for (let eventIndex = 0; eventIndex < eventCount; eventIndex += 1) {
@@ -358,8 +416,11 @@ export function createOrganizationUsageDemoData(
       const template = USAGE_TEMPLATES[weightedIndex(templateWeights, seed + 7)];
       const member = activeMembers[weightedIndex(memberWeights, seed + 19)];
       const project = PROJECTS[weightedIndex(projectWeights, seed + 37)];
-      const occurredAt = new Date(date);
-      occurredAt.setHours(clampEventHour(now, dayOffset, eventIndex), (eventIndex * 11) % 60, 0, 0);
+      const occurredAt = new Date(
+        date.getTime()
+        + clampEventHour(now, dayOffset, eventIndex) * 60 * 60 * 1_000
+        + ((eventIndex * 11) % 60) * 60 * 1_000,
+      );
       const costVariation = 0.86 + deterministicUnit(seed + 53) * 0.3;
       const credits = Math.max(1, Math.round(template.baseCredits * costVariation));
 
@@ -411,27 +472,85 @@ export function getUsageRange(
   now: Date,
   customStart?: string,
   customEnd?: string,
+  historyStart?: Date,
 ): DateRange {
   const end = new Date(now);
-  const today = startOfDay(now);
+  const today = startOfOrganizationDay(now);
 
   if (preset === "today") return { start: today, end };
-  if (preset === "week") {
-    return { start: addDays(today, -6), end };
+  if (preset === "rolling7") {
+    return { start: addOrganizationDays(today, -6), end };
+  }
+  if (preset === "rolling30") {
+    return { start: addOrganizationDays(today, -29), end };
   }
   if (preset === "month") {
-    return { start: new Date(today.getFullYear(), today.getMonth(), 1), end };
+    return { start: startOfMonth(today), end };
+  }
+  if (preset === "previousMonth") {
+    const currentMonthStart = startOfMonth(today);
+    return {
+      start: addMonths(currentMonthStart, -1),
+      end: currentMonthStart,
+    };
   }
   if (preset === "custom" && customStart && customEnd) {
-    const start = startOfDay(new Date(`${customStart}T00:00:00`));
-    const inclusiveEnd = addDays(startOfDay(new Date(`${customEnd}T00:00:00`)), 1);
+    const start = parseOrganizationDateInput(customStart);
+    const inclusiveEnd = addOrganizationDays(parseOrganizationDateInput(customEnd), 1);
     return { start, end: inclusiveEnd < end ? inclusiveEnd : end };
   }
-  return { start: addDays(today, -(DEMO_HISTORY_DAYS - 1)), end };
+  return {
+    start: historyStart
+      ? startOfOrganizationDay(historyStart)
+      : addOrganizationDays(today, -(DEMO_HISTORY_DAYS - 1)),
+    end,
+  };
 }
 
 export function getComparisonRange(preset: UsageRangePreset, range: DateRange): DateRange | null {
   if (preset === "all") return null;
+
+  if (preset === "today") {
+    const comparisonStart = addOrganizationDays(range.start, -1);
+    return {
+      start: comparisonStart,
+      end: new Date(comparisonStart.getTime() + (range.end.getTime() - range.start.getTime())),
+    };
+  }
+
+  if (preset === "month") {
+    const previousMonthStart = addMonths(range.start, -1);
+    const elapsed = range.end.getTime() - range.start.getTime();
+    return {
+      start: previousMonthStart,
+      end: new Date(Math.min(
+        previousMonthStart.getTime() + elapsed,
+        range.start.getTime(),
+      )),
+    };
+  }
+
+  if (preset === "previousMonth") {
+    return {
+      start: addMonths(range.start, -1),
+      end: new Date(range.start),
+    };
+  }
+
+  if (preset === "rolling7") {
+    return {
+      start: addOrganizationDays(range.start, -7),
+      end: addOrganizationDays(range.end, -7),
+    };
+  }
+
+  if (preset === "rolling30") {
+    return {
+      start: addOrganizationDays(range.start, -30),
+      end: addOrganizationDays(range.end, -30),
+    };
+  }
+
   const duration = range.end.getTime() - range.start.getTime();
   return {
     start: new Date(range.start.getTime() - duration),
@@ -464,12 +583,12 @@ function buildRecentDailyCredits(
   now: Date,
   dayCount: number,
 ): number[] {
-  const end = startOfDay(now);
-  const start = addDays(end, -(dayCount - 1));
+  const end = startOfOrganizationDay(now);
+  const start = addOrganizationDays(end, -(dayCount - 1));
   const dailyCredits = Array.from({ length: dayCount }, () => 0);
 
   records.forEach((record) => {
-    const occurredAt = startOfDay(new Date(record.occurredAt));
+    const occurredAt = startOfOrganizationDay(new Date(record.occurredAt));
     const dayIndex = Math.floor((occurredAt.getTime() - start.getTime()) / 86_400_000);
     if (dayIndex >= 0 && dayIndex < dayCount) {
       dailyCredits[dayIndex] += record.credits;
@@ -505,11 +624,13 @@ export function getUsageSummary(
   const previousCredits = totalCredits(previousRecords);
   const firstRecord = allRecords.at(-1);
   const lifetimeStart = firstRecord
-    ? startOfDay(new Date(firstRecord.occurredAt))
-    : startOfDay(now);
+    ? startOfOrganizationDay(new Date(firstRecord.occurredAt))
+    : startOfOrganizationDay(now);
   const lifetimeDays = Math.max(
     1,
-    Math.floor((startOfDay(now).getTime() - lifetimeStart.getTime()) / 86_400_000) + 1,
+    Math.floor(
+      (startOfOrganizationDay(now).getTime() - lifetimeStart.getTime()) / 86_400_000,
+    ) + 1,
   );
   const lifetimeDailyAverage = Math.max(0, Math.round(totalCredits(allRecords) / lifetimeDays));
   const recentObservationDays = Math.min(30, lifetimeDays);
@@ -644,7 +765,8 @@ export function getUsageTrend(records: UsageRecord[], range: DateRange): UsageTr
 
   const createPoint = (date: Date): UsageTrendPoint => {
     if (mode === "hour") {
-      const key = `${localDateKey(date)}-${String(date.getHours()).padStart(2, "0")}`;
+      const organizationHour = shiftToOrganizationTime(date).getUTCHours();
+      const key = `${localDateKey(date)}-${String(organizationHour).padStart(2, "0")}`;
       return { key, label: hourFormatter.format(date), credits: 0, tasks: 0 };
     }
     if (mode === "day") {
@@ -654,19 +776,23 @@ export function getUsageTrend(records: UsageRecord[], range: DateRange): UsageTr
   };
 
   if (mode === "hour") {
-    for (let hour = 0; hour <= range.end.getHours(); hour += 2) {
-      const date = new Date(range.start);
-      date.setHours(hour, 0, 0, 0);
+    const organizationHour = shiftToOrganizationTime(range.end).getUTCHours();
+    for (let hour = 0; hour <= organizationHour; hour += 2) {
+      const date = new Date(range.start.getTime() + hour * 60 * 60 * 1_000);
       const point = createPoint(date);
       buckets.set(point.key, point);
     }
   } else if (mode === "day") {
-    for (let date = startOfDay(range.start); date < range.end; date = addDays(date, 1)) {
+    for (
+      let date = startOfOrganizationDay(range.start);
+      date < range.end;
+      date = addOrganizationDays(date, 1)
+    ) {
       const point = createPoint(date);
       buckets.set(point.key, point);
     }
   } else {
-    const monthStart = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
+    const monthStart = startOfMonth(range.start);
     for (let date = monthStart; date < range.end; date = addMonths(date, 1)) {
       const point = createPoint(date);
       buckets.set(point.key, point);
@@ -686,7 +812,7 @@ export function getUsageTrend(records: UsageRecord[], range: DateRange): UsageTr
 
 export function getHeatmapDays(records: UsageRecord[], now: Date): HeatmapDay[] {
   const totals = new Map<string, { credits: number; tasks: number }>();
-  const start = addDays(startOfDay(now), -364);
+  const start = addOrganizationDays(startOfOrganizationDay(now), -364);
   records.forEach((record) => {
     const date = new Date(record.occurredAt);
     if (date < start || date > now) return;
@@ -706,7 +832,7 @@ export function getHeatmapDays(records: UsageRecord[], now: Date): HeatmapDay[] 
   const thresholds = [quantile(0.25), quantile(0.5), quantile(0.75)];
 
   return Array.from({ length: 365 }, (_, index) => {
-    const date = addDays(start, index);
+    const date = addOrganizationDays(start, index);
     const key = localDateKey(date);
     const total = totals.get(key) ?? { credits: 0, tasks: 0 };
     const level: HeatmapDay["level"] = total.credits <= 0
@@ -726,14 +852,16 @@ export function getWeeklyActivity(
   records: UsageRecord[],
   anchor: Date,
 ): UsageActivityPoint[] {
-  const endExclusive = addDays(startOfDay(anchor), 1);
-  const start = addDays(endExclusive, -364);
+  const endExclusive = addOrganizationDays(startOfOrganizationDay(anchor), 1);
+  const start = addOrganizationDays(endExclusive, -364);
   const points = Array.from({ length: 52 }, (_, index) => {
-    const pointStart = addDays(start, index * 7);
-    const pointEnd = addDays(pointStart, 7);
+    const pointStart = addOrganizationDays(start, index * 7);
+    const pointEnd = addOrganizationDays(pointStart, 7);
     return {
       key: localDateKey(pointStart),
-      label: `${dayFormatter.format(pointStart)}–${dayFormatter.format(addDays(pointEnd, -1))}`,
+      label: `${dayFormatter.format(pointStart)}–${
+        dayFormatter.format(addOrganizationDays(pointEnd, -1))
+      }`,
       credits: 0,
       cumulativeCredits: 0,
       start: pointStart,
