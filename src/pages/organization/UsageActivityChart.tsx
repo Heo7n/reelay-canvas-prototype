@@ -33,14 +33,10 @@ const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
   month: "long",
   day: "numeric",
 });
-const compactDateFormatter = new Intl.DateTimeFormat("zh-CN", {
-  month: "numeric",
-  day: "numeric",
-});
 
 function getTooltipAlignment(column: number): "start" | "center" | "end" {
   if (column <= 2) return "start";
-  if (column >= COLUMN_COUNT - 1) return "end";
+  if (column >= COLUMN_COUNT - 3) return "end";
   return "center";
 }
 
@@ -82,7 +78,7 @@ function getActivityWeeks(days: HeatmapDay[], leadingSlots: number): ActivityWee
     return {
       key: firstDay?.key ?? `empty-week-${index}`,
       label: firstDay && lastDay
-        ? `${compactDateFormatter.format(firstDay.date)}–${compactDateFormatter.format(lastDay.date)}`
+        ? `${dateFormatter.format(firstDay.date)}–${dateFormatter.format(lastDay.date)}`
         : "无日期",
       credits,
       cumulativeCredits,

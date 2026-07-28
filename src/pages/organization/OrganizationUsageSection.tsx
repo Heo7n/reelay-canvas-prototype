@@ -464,6 +464,22 @@ export function OrganizationUsageSection({
               <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
             </div>
           </article>
+          <dl className={styles.averageMetrics} aria-label="日均消耗参考">
+            <div>
+              <dt>近 30 天日均</dt>
+              <dd>
+                {numberFormatter.format(summary.recentDailyAverage)}
+                <small>积分/日</small>
+              </dd>
+            </div>
+            <div>
+              <dt>历史日均</dt>
+              <dd>
+                {numberFormatter.format(summary.lifetimeDailyAverage)}
+                <small>积分/日</small>
+              </dd>
+            </div>
+          </dl>
           <article className={styles.forecastMetric}>
             <span><Clock3 aria-hidden="true" />预计可用</span>
             <div className={styles.metricValue}>
@@ -611,10 +627,6 @@ export function OrganizationUsageSection({
             </div>
 
             <div className={styles.toolbarMeta}>
-              <Link className={styles.ledgerLink} to="../credits">
-                积分变动记录
-                <ArrowRight aria-hidden="true" />
-              </Link>
               <details ref={exportMenuRef} className={styles.exportMenu}>
                 <summary aria-label="导出当前时间范围的数据">
                   <Download aria-hidden="true" />
@@ -632,6 +644,10 @@ export function OrganizationUsageSection({
                   </button>
                 </div>
               </details>
+              <Link className={styles.ledgerLink} to="../credits">
+                积分变动记录
+                <ArrowRight aria-hidden="true" />
+              </Link>
             </div>
           </div>
         </header>
@@ -654,21 +670,11 @@ export function OrganizationUsageSection({
           </article>
         </section>
 
-        <section className={styles.analysisGrid} aria-label="消耗趋势与类型构成">
-          <section className={styles.trendSection} aria-labelledby="usage-trend-title">
-            <header className={styles.analysisHeading}>
-              <span>
-                <h3 id="usage-trend-title">消耗趋势</h3>
-                <small>{activeRangeLabel}的积分消耗变化</small>
-              </span>
-            </header>
-            <UsageTrendChart points={trend} rangeLabel={actualRangeLabel} />
-          </section>
-
+        <section className={styles.analysisGrid} aria-label="消耗构成与消耗趋势">
           <section className={styles.typeSection} aria-labelledby="usage-type-title">
             <header className={styles.analysisHeading}>
               <span>
-                <h3 id="usage-type-title">类型构成</h3>
+                <h3 id="usage-type-title">消耗构成</h3>
                 <small>积分主要花在什么地方</small>
               </span>
             </header>
@@ -707,6 +713,16 @@ export function OrganizationUsageSection({
                 ))}
               </div>
             </div>
+          </section>
+
+          <section className={styles.trendSection} aria-labelledby="usage-trend-title">
+            <header className={styles.analysisHeading}>
+              <span>
+                <h3 id="usage-trend-title">消耗趋势</h3>
+                <small>{activeRangeLabel}的积分消耗变化</small>
+              </span>
+            </header>
+            <UsageTrendChart points={trend} rangeLabel={actualRangeLabel} />
           </section>
         </section>
 

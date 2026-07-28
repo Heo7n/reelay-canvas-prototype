@@ -105,7 +105,7 @@
 .stableOverview {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto auto auto;
   align-content: space-between;
   padding: 18px 20px;
   overflow: hidden;
@@ -193,12 +193,11 @@
 }
 
 .primaryMetric {
-  padding: 14px 0 18px;
+  padding: 10px 0 12px;
 }
 
 .forecastMetric {
-  padding: 16px 0 4px;
-  border-top: 1px solid color-mix(in srgb, var(--workspace-border) 78%, transparent);
+  padding: 12px 0 3px;
 }
 
 .primaryMetric .metricValue strong {
@@ -223,6 +222,49 @@
   font-weight: 720;
 }
 
+.averageMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--workspace-hover) 78%, transparent);
+}
+
+.averageMetrics > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.averageMetrics > div + div {
+  padding-left: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--workspace-border) 78%, transparent);
+}
+
+.averageMetrics dt {
+  color: var(--workspace-subtle);
+  font-size: 8px;
+  font-weight: 620;
+}
+
+.averageMetrics dd {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  color: var(--workspace-text);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.averageMetrics dd small {
+  color: var(--workspace-subtle);
+  font-size: 7px;
+  font-weight: 560;
+}
+
 .activityPanel,
 .periodPanel {
   min-width: 0;
@@ -233,7 +275,7 @@
 }
 
 .activityPanel {
-  overflow: hidden;
+  overflow: visible;
   container-type: inline-size;
 }
 
@@ -686,7 +728,7 @@
 
 .analysisGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.85fr);
+  grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.35fr);
   border-bottom: 1px solid var(--workspace-border);
 }
 
@@ -696,11 +738,11 @@
   padding: 18px 0 17px;
 }
 
-.trendSection {
+.typeSection {
   padding-right: 24px;
 }
 
-.typeSection {
+.trendSection {
   padding-left: 24px;
   border-left: 1px solid var(--workspace-border);
 }
@@ -1502,11 +1544,11 @@
     grid-template-columns: 1fr;
   }
 
-  .trendSection {
+  .typeSection {
     padding-right: 0;
   }
 
-  .typeSection {
+  .trendSection {
     padding-left: 0;
     border-top: 1px solid var(--workspace-border);
     border-left: 0;

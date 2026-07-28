@@ -270,8 +270,8 @@ describe("organization center", () => {
     expect(screen.getByText("预计可用")).toBeInTheDocument();
     expect(screen.getByText(/按近 30 天日均消耗/)).toBeInTheDocument();
     expect(screen.getByText(/1,272 积分/)).toBeInTheDocument();
-    expect(screen.queryByText("近 30 天日均")).toBeNull();
-    expect(screen.queryByText("历史日均")).toBeNull();
+    expect(screen.getByText("近 30 天日均")).toBeInTheDocument();
+    expect(screen.getByText("历史日均")).toBeInTheDocument();
     expect(screen.queryByText(/较历史日均/)).toBeNull();
     const overviewHeading = screen.getByRole("heading", { name: "组织概览" });
     const activityHeading = screen.getByRole("heading", { name: "长期活动" });
@@ -282,9 +282,13 @@ describe("organization center", () => {
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByText("图片产出")).toBeInTheDocument();
     expect(screen.getByText("视频产出")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "消耗趋势" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "类型构成" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "消耗来源" })).toBeInTheDocument();
+    const compositionHeading = screen.getByRole("heading", { name: "消耗构成" });
+    const trendHeading = screen.getByRole("heading", { name: "消耗趋势" });
+    const sourceHeading = screen.getByRole("heading", { name: "消耗来源" });
+    expect(compositionHeading.compareDocumentPosition(trendHeading))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(trendHeading.compareDocumentPosition(sourceHeading))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByRole("button", { name: "近 30 天" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -293,6 +297,9 @@ describe("organization center", () => {
     fireEvent.click(screen.getByRole("button", { name: "每周" }));
     expect(screen.getByRole("button", { name: "每周" })).toHaveAttribute("aria-pressed", "true");
     const weeklyChart = screen.getByRole("group", { name: "近 365 天每周积分消耗趋势" });
+    expect(within(weeklyChart).getAllByRole("button")[0]).toHaveAccessibleName(
+      /7月29日–8月3日/,
+    );
     expect(within(weeklyChart).getAllByRole("button")[0]).not.toHaveAccessibleName(
       /较前一周/,
     );
