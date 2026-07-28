@@ -104,8 +104,9 @@
 
 .stableOverview {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  align-content: stretch;
   padding: 18px 20px;
   overflow: hidden;
   border: 1px solid var(--workspace-border);
@@ -147,6 +148,16 @@
   height: 13px;
 }
 
+.primaryMetric > span svg,
+.forecastMetric > span svg {
+  width: 20px;
+  height: 20px;
+  padding: 4px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--workspace-hover) 86%, var(--workspace-surface));
+  color: var(--workspace-muted);
+}
+
 .stableOverview > article > small,
 .periodMetrics article > small {
   color: var(--workspace-subtle);
@@ -178,58 +189,22 @@
 }
 
 .primaryMetric {
-  min-height: 66px;
-  padding: 8px 0 14px;
+  min-height: 88px;
+  padding: 12px 0 20px;
 }
 
 .forecastMetric {
-  min-height: 62px;
-  padding: 14px 0;
+  min-height: 86px;
+  padding: 18px 0 8px;
   border-top: 1px solid color-mix(in srgb, var(--workspace-border) 78%, transparent);
-}
-
-.secondaryMetric {
-  min-height: 56px;
-  padding: 13px 0 2px;
-  border-top: 1px solid color-mix(in srgb, var(--workspace-border) 78%, transparent);
-}
-
-.secondaryMetric + .secondaryMetric {
-  padding-left: 16px;
-  border-left: 1px solid color-mix(in srgb, var(--workspace-border) 64%, transparent);
 }
 
 .primaryMetric .metricValue strong {
-  font-size: 25px;
+  font-size: 27px;
 }
 
 .forecastMetric .metricValue strong {
-  font-size: 20px;
-}
-
-.secondaryMetric > span {
-  gap: 5px;
-  color: var(--workspace-subtle);
-  font-size: 8px;
-  font-weight: 620;
-}
-
-.secondaryMetric > span svg {
-  width: 12px;
-  height: 12px;
-}
-
-.secondaryMetric .metricValue {
-  gap: 4px;
-}
-
-.secondaryMetric .metricValue strong {
-  font-size: 15px;
-  font-weight: 690;
-}
-
-.secondaryMetric .metricValue small {
-  font-size: 7px;
+  font-size: 22px;
 }
 
 .activityPanel,
@@ -899,6 +874,7 @@
 .activityChart {
   position: relative;
   display: grid;
+  grid-template-rows: clamp(160px, 12vw, 190px) 18px;
   min-width: 0;
   gap: 8px;
   padding: 14px 2px 18px;
@@ -906,13 +882,17 @@
 
 .annualPlot {
   position: relative;
+  grid-row: 1;
   width: 100%;
-  height: clamp(160px, 12vw, 190px);
+  height: 100%;
   min-width: 0;
 }
 
 .heatmapGrid {
   display: grid;
+  height: auto;
+  align-self: center;
+  aspect-ratio: 53 / 7;
   grid-auto-flow: column;
   grid-template-columns: repeat(53, minmax(0, 1fr));
   grid-template-rows: repeat(7, minmax(0, 1fr));
@@ -921,6 +901,7 @@
 
 .activityMonthAxis {
   display: grid;
+  grid-row: 2;
   width: 100%;
   min-height: 18px;
   grid-template-columns: repeat(53, minmax(0, 1fr));
@@ -942,7 +923,7 @@
   min-height: 0;
   padding: 0;
   border: 0;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .heatmapDay,
@@ -1064,14 +1045,17 @@
 
 .cumulativeTarget {
   position: absolute;
-  width: 18px;
-  height: 18px;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: calc(100% / 53);
+  height: auto;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 0;
   background: transparent;
   cursor: crosshair;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
 }
 
 .chartTooltip {
@@ -1119,6 +1103,27 @@
 
 .weeklyBars .chartTooltip {
   bottom: calc(var(--bar-height) + 8px);
+}
+
+.cumulativeTooltip {
+  z-index: 5;
+  top: max(44px, var(--point-y));
+  bottom: auto;
+  left: var(--point-x);
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
+.cumulativeTooltip[data-tooltip-align="start"] {
+  right: auto;
+  left: 0;
+  transform: translate(0, calc(-100% - 8px));
+}
+
+.cumulativeTooltip[data-tooltip-align="end"] {
+  right: 0;
+  left: auto;
+  transform: translate(0, calc(-100% - 8px));
 }
 
 .heatmapDay[data-tooltip-align="start"] .chartTooltip,
@@ -1455,7 +1460,6 @@
 .dimensionTabs button:focus-visible,
 .heatmapDay:focus-visible,
 .weeklyBars button:focus-visible,
-.cumulativeTarget:focus-visible,
 .compositionRow:focus-visible,
 .typeLegend button:focus-visible,
 .compositionFooter a:focus-visible,
@@ -1464,6 +1468,11 @@
 .customRange input:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--usage-accent) 32%, transparent);
   outline-offset: 2px;
+}
+
+.cumulativeTarget:focus-visible {
+  outline: 0;
+  background: color-mix(in srgb, var(--usage-accent) 5%, transparent);
 }
 
 @media (max-width: 1180px) {

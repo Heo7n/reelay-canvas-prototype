@@ -6,13 +6,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleDollarSign,
   Clock3,
   Download,
   FileDown,
+  Hourglass,
   Image,
   Sparkles,
   Video,
+  WalletCards,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -403,7 +404,7 @@ export function OrganizationUsageSection({
     <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
       <header className={styles.panelHeader}>
         <span className={styles.activityTitle}>
-          <h2 id="usage-activity-title">365 天活动</h2>
+          <h2 id="usage-activity-title">年度用量</h2>
           <small className={styles.dataFreshness}>
             <Clock3 aria-hidden="true" />
             演示数据 · 更新于 5 分钟前
@@ -459,32 +460,19 @@ export function OrganizationUsageSection({
             <h2 id="usage-overview-title">组织概览</h2>
           </header>
           <article className={styles.primaryMetric}>
-            <span><CircleDollarSign aria-hidden="true" />可用积分</span>
+            <span><WalletCards aria-hidden="true" />可用积分</span>
             <div className={styles.metricValue}>
               <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
-              <small>积分</small>
             </div>
           </article>
           <article className={styles.forecastMetric}>
-            <span><Clock3 aria-hidden="true" />预计可用</span>
+            <span><Hourglass aria-hidden="true" />预计可用</span>
             <div className={styles.metricValue}>
               <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
             </div>
-            <small>按近 30 日消耗估算</small>
-          </article>
-          <article className={styles.secondaryMetric}>
-            <span><Sparkles aria-hidden="true" />近 30 天日均</span>
-            <div className={styles.metricValue}>
-              <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
-              <small>积分 / 日</small>
-            </div>
-          </article>
-          <article className={styles.secondaryMetric}>
-            <span><BarChart3 aria-hidden="true" />历史日均</span>
-            <div className={styles.metricValue}>
-              <strong>{numberFormatter.format(summary.lifetimeDailyAverage)}</strong>
-              <small>积分 / 日</small>
-            </div>
+            <small>
+              按近 30 天日均消耗 {numberFormatter.format(summary.recentDailyAverage)} 积分估算
+            </small>
           </article>
         </section>
         {activityPanel}

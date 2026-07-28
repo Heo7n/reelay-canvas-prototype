@@ -268,11 +268,12 @@ describe("organization center", () => {
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
     expect(screen.getByText("预计可用")).toBeInTheDocument();
-    expect(screen.getByText("近 30 天日均")).toBeInTheDocument();
-    expect(screen.getByText("历史日均")).toBeInTheDocument();
+    expect(screen.getByText(/按近 30 天日均消耗 .* 积分估算/)).toBeInTheDocument();
+    expect(screen.queryByText("近 30 天日均")).toBeNull();
+    expect(screen.queryByText("历史日均")).toBeNull();
     expect(screen.queryByText(/较历史日均/)).toBeNull();
     const overviewHeading = screen.getByRole("heading", { name: "组织概览" });
-    const activityHeading = screen.getByRole("heading", { name: "365 天活动" });
+    const activityHeading = screen.getByRole("heading", { name: "年度用量" });
     const periodHeading = screen.getByRole("heading", { name: "期间分析" });
     expect(overviewHeading.compareDocumentPosition(activityHeading))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -290,8 +291,17 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "每日" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "每周" }));
     expect(screen.getByRole("button", { name: "每周" })).toHaveAttribute("aria-pressed", "true");
+    const weeklyChart = screen.getByRole("group", { name: "近 365 天每周积分消耗趋势" });
+    expect(within(weeklyChart).getAllByRole("button")[0]).not.toHaveAccessibleName(
+      /较前一周/,
+    );
     fireEvent.click(screen.getByRole("button", { name: "累计" }));
     expect(screen.getByRole("img", { name: "近 365 天按周累计积分消耗" })).toBeInTheDocument();
+    const cumulativeTarget = screen.getAllByRole("button", {
+      name: /累计 .* 积分，本周增加 .* 积分/,
+    })[8];
+    fireEvent.mouseEnter(cumulativeTarget);
+    expect(screen.getByText(/累计 .* · 本周 \+/)).toBeInTheDocument();
 
     expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute(
       "aria-pressed",

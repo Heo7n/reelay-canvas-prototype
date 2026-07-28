@@ -109,11 +109,6 @@ function buildPath(points: ReturnType<typeof getLinePoints>): string {
     .join(" ");
 }
 
-function formatSignedCredits(value: number): string {
-  if (value === 0) return "±0";
-  return `${value > 0 ? "+" : "−"}${numberFormatter.format(Math.abs(value))}`;
-}
-
 export function UsageActivityChart({
   days,
   mode,
@@ -173,32 +168,31 @@ export function UsageActivityChart({
           role="group"
           aria-label="近 365 天每周积分消耗趋势"
         >
-          {weeks.map((week, index) => {
-            const previousCredits = weeks[index - 1]?.credits ?? week.credits;
-            const delta = week.credits - previousCredits;
-            return (
-              <button
-                key={week.key}
-                style={{
-                  "--bar-height": `${Math.max(2, (week.credits / weeklyMaximum) * 100)}%`,
-                } as CSSProperties}
-                data-tooltip-align={getTooltipAlignment(index)}
-                type="button"
-                aria-label={`${week.label}，${numberFormatter.format(week.credits)} 积分，较前一周 ${formatSignedCredits(delta)}`}
-              >
-                <i aria-hidden="true" />
-                <span className={styles.chartTooltip} aria-hidden="true">
-                  <strong>{week.label}</strong>
-                  <small>{numberFormatter.format(week.credits)} 积分 · {formatSignedCredits(delta)}</small>
-                </span>
-              </button>
-            );
-          })}
+          {weeks.map((week, index) => (
+            <button
+              key={week.key}
+              style={{
+                "--bar-height": `${Math.max(2, (week.credits / weeklyMaximum) * 100)}%`,
+              } as CSSProperties}
+              data-tooltip-align={getTooltipAlignment(index)}
+              type="button"
+              aria-label={`${week.label}，${numberFormatter.format(week.credits)} 积分`}
+            >
+              <i aria-hidden="true" />
+              <span className={styles.chartTooltip} aria-hidden="true">
+                <strong>{week.label}</strong>
+                <small>{numberFormatter.format(week.credits)} 积分</small>
+              </span>
+            </button>
+          ))}
         </div>
       ) : null}
 
       {mode === "cumulative" ? (
-        <div className={`${styles.annualPlot} ${styles.cumulativeCanvas}`}>
+        <div
+          className={`${styles.annualPlot} ${styles.cumulativeCanvas}`}
+          onMouseLeave={() => setActiveLineIndex(null)}
+        >
           <svg
             viewBox={`0 0 ${LINE_WIDTH} ${LINE_HEIGHT}`}
             preserveAspectRatio="none"
@@ -230,8 +224,8 @@ export function UsageActivityChart({
                 <line
                   x1={activeLinePoint.x}
                   x2={activeLinePoint.x}
-                  y1={activeLinePoint.y}
-                  y2={LINE_HEIGHT - LINE_PADDING_Y}
+                  y1={0}
+                  y2={LINE_HEIGHT}
                 />
                 <circle cx={activeLinePoint.x} cy={activeLinePoint.y} r="5" />
               </g>
@@ -244,23 +238,30 @@ export function UsageActivityChart({
               data-tooltip-align={getTooltipAlignment(index)}
               style={{
                 left: `${((index + 0.5) / COLUMN_COUNT) * 100}%`,
-                top: `${(point.y / LINE_HEIGHT) * 100}%`,
               }}
               type="button"
               aria-label={`${point.label}，累计 ${numberFormatter.format(point.cumulativeCredits)} 积分，本周增加 ${numberFormatter.format(point.credits)} 积分`}
               onBlur={() => setActiveLineIndex(null)}
               onFocus={() => setActiveLineIndex(index)}
               onMouseEnter={() => setActiveLineIndex(index)}
-              onMouseLeave={() => setActiveLineIndex(null)}
-            >
-              <span className={styles.chartTooltip} aria-hidden="true">
-                <strong>{point.label}</strong>
-                <small>
-                  累计 {numberFormatter.format(point.cumulativeCredits)} · 本周 +{numberFormatter.format(point.credits)}
-                </small>
-              </span>
-            </button>
+            />
           ))}
+          {activeLinePoint && activeLineIndex !== null ? (
+            <span
+              className={`${styles.chartTooltip} ${styles.cumulativeTooltip}`}
+              data-tooltip-align={getTooltipAlignment(activeLineIndex)}
+              style={{
+                "--point-x": `${((activeLineIndex + 0.5) / COLUMN_COUNT) * 100}%`,
+                "--point-y": `${(activeLinePoint.y / LINE_HEIGHT) * 100}%`,
+              } as CSSProperties}
+              aria-hidden="true"
+            >
+              <strong>{activeLinePoint.label}</strong>
+              <small>
+                累计 {numberFormatter.format(activeLinePoint.cumulativeCredits)} · 本周 +{numberFormatter.format(activeLinePoint.credits)}
+              </small>
+            </span>
+          ) : null}
         </div>
       ) : null}
 
