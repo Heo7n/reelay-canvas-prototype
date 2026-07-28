@@ -268,10 +268,16 @@ describe("organization center", () => {
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
     expect(screen.getByText("预计可用")).toBeInTheDocument();
-    expect(screen.getByText(/日均消耗（近 30 天）/)).toBeInTheDocument();
+    expect(screen.getByText("近 30 天日均")).toBeInTheDocument();
     expect(screen.getByText("历史日均")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "365 天活动" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "期间分析" })).toBeInTheDocument();
+    expect(screen.queryByText(/较历史日均/)).toBeNull();
+    const overviewHeading = screen.getByRole("heading", { name: "组织概览" });
+    const activityHeading = screen.getByRole("heading", { name: "365 天活动" });
+    const periodHeading = screen.getByRole("heading", { name: "期间分析" });
+    expect(overviewHeading.compareDocumentPosition(activityHeading))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(activityHeading.compareDocumentPosition(periodHeading))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByText("图片产出")).toBeInTheDocument();
     expect(screen.getByText("视频产出")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "消耗趋势" })).toBeInTheDocument();
@@ -317,6 +323,9 @@ describe("organization center", () => {
     const dialog = screen.getByRole("dialog", { name: "选择日期范围" });
     const startInput = within(dialog).getByLabelText("开始日期") as HTMLInputElement;
     const endInput = within(dialog).getByLabelText("结束日期") as HTMLInputElement;
+    const monthQuickButton = within(dialog).getByRole("button", { name: "本月" });
+    expect(startInput.compareDocumentPosition(monthQuickButton))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     const current = new Date();
     expect(startInput.value).toBe(
       `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-01`,

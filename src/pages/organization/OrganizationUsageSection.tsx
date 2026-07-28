@@ -151,12 +151,6 @@ function formatForecast(days: number | null): string {
   return `约 ${numberFormatter.format(days)} 天`;
 }
 
-function formatRelativeChange(rate: number | null): string {
-  if (rate === null) return "—";
-  if (Math.abs(rate) < 0.005) return "0%";
-  return `${rate > 0 ? "+" : "−"}${Math.abs(rate * 100).toFixed(0)}%`;
-}
-
 function comparisonLabel(preset: UsageRangePreset): string | null {
   if (preset === "today") return "较昨日同期";
   if (preset === "rolling7") return "较前 7 天";
@@ -405,44 +399,96 @@ export function OrganizationUsageSection({
     exportMenuRef.current?.removeAttribute("open");
   };
 
+  const activityPanel = (
+    <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
+      <header className={styles.panelHeader}>
+        <span className={styles.activityTitle}>
+          <h2 id="usage-activity-title">365 天活动</h2>
+          <small className={styles.dataFreshness}>
+            <Clock3 aria-hidden="true" />
+            演示数据 · 更新于 5 分钟前
+          </small>
+        </span>
+        <div className={styles.activityHeaderControls}>
+          <div className={styles.windowNavigation} aria-label="年度活动时间窗口">
+            <button
+              type="button"
+              disabled={!canMoveBackward}
+              aria-label="查看更早一年"
+              onClick={() => moveActivityWindow(-1)}
+            >
+              <ChevronLeft aria-hidden="true" />
+            </button>
+            <span>{activityWindowLabel}</span>
+            <button
+              type="button"
+              disabled={!canMoveForward}
+              aria-label="查看更新一年"
+              onClick={() => moveActivityWindow(1)}
+            >
+              <ChevronRight aria-hidden="true" />
+            </button>
+          </div>
+          <div className={styles.activityModeTabs} aria-label="活动图表形式">
+            {ACTIVITY_MODES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={activityMode === item.id ? styles.activeActivityMode : ""}
+                aria-pressed={activityMode === item.id}
+                onClick={() => setActivityMode(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+      <UsageActivityChart days={activityDays} mode={activityMode} />
+    </section>
+  );
+
   return (
     <section className={styles.usageSection} aria-labelledby="organization-usage-title">
       <h1 id="organization-usage-title" className={styles.visuallyHidden}>用量看板</h1>
       <p className={styles.visuallyHidden}>{workspaceName}的组织用量统计</p>
 
-      <section className={styles.stableOverview} aria-label="组织状态概览">
-        <article>
-          <span><CircleDollarSign aria-hidden="true" />可用积分</span>
-          <div className={styles.metricValue}>
-            <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
-            <small>积分</small>
-          </div>
-        </article>
-        <article>
-          <span><Clock3 aria-hidden="true" />预计可用</span>
-          <div className={styles.metricValue}>
-            <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
-          </div>
-          <small>按近 30 日消耗估算</small>
-        </article>
-        <article>
-          <span><Sparkles aria-hidden="true" />日均消耗（近 30 天）</span>
-          <div className={styles.metricValue}>
-            <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
-            <small>积分 / 日</small>
-          </div>
-          <small className={styles.metricDelta}>
-            较历史日均 {formatRelativeChange(summary.recentToLifetimeRate)}
-          </small>
-        </article>
-        <article>
-          <span><BarChart3 aria-hidden="true" />历史日均</span>
-          <div className={styles.metricValue}>
-            <strong>{numberFormatter.format(summary.lifetimeDailyAverage)}</strong>
-            <small>积分 / 日</small>
-          </div>
-        </article>
-      </section>
+      <div className={styles.overviewGrid}>
+        <section className={styles.stableOverview} aria-labelledby="usage-overview-title">
+          <header className={styles.overviewHeader}>
+            <h2 id="usage-overview-title">组织概览</h2>
+          </header>
+          <article className={styles.primaryMetric}>
+            <span><CircleDollarSign aria-hidden="true" />可用积分</span>
+            <div className={styles.metricValue}>
+              <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
+              <small>积分</small>
+            </div>
+          </article>
+          <article className={styles.forecastMetric}>
+            <span><Clock3 aria-hidden="true" />预计可用</span>
+            <div className={styles.metricValue}>
+              <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
+            </div>
+            <small>按近 30 日消耗估算</small>
+          </article>
+          <article className={styles.secondaryMetric}>
+            <span><Sparkles aria-hidden="true" />近 30 天日均</span>
+            <div className={styles.metricValue}>
+              <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
+              <small>积分 / 日</small>
+            </div>
+          </article>
+          <article className={styles.secondaryMetric}>
+            <span><BarChart3 aria-hidden="true" />历史日均</span>
+            <div className={styles.metricValue}>
+              <strong>{numberFormatter.format(summary.lifetimeDailyAverage)}</strong>
+              <small>积分 / 日</small>
+            </div>
+          </article>
+        </section>
+        {activityPanel}
+      </div>
 
       <section className={styles.periodPanel} aria-labelledby="usage-period-title">
         <header className={styles.periodHeader}>
@@ -498,27 +544,6 @@ export function OrganizationUsageSection({
                     role="dialog"
                     aria-label="选择日期范围"
                   >
-                    <div className={styles.dateRangeQuick}>
-                      {([
-                        ["month", "本月"],
-                        ["previousMonth", "上月"],
-                        ["all", "全部历史"],
-                      ] as const).map(([kind, label]) => (
-                        <button
-                          key={kind}
-                          type="button"
-                          className={
-                            draftPickerSelection.kind === kind
-                              ? styles.activeDateQuick
-                              : ""
-                          }
-                          aria-pressed={draftPickerSelection.kind === kind}
-                          onClick={() => choosePickerQuickRange(kind)}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
                     <div className={styles.dateFields}>
                       <label>
                         <span>开始日期</span>
@@ -552,6 +577,28 @@ export function OrganizationUsageSection({
                           })}
                         />
                       </label>
+                    </div>
+                    <div className={styles.dateRangeQuick}>
+                      <span>快捷选择</span>
+                      {([
+                        ["month", "本月"],
+                        ["previousMonth", "上月"],
+                        ["all", "全部历史"],
+                      ] as const).map(([kind, label]) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          className={
+                            draftPickerSelection.kind === kind
+                              ? styles.activeDateQuick
+                              : ""
+                          }
+                          aria-pressed={draftPickerSelection.kind === kind}
+                          onClick={() => choosePickerQuickRange(kind)}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
                     <footer>
                       <button type="button" onClick={() => setPickerOpen(false)}>取消</button>
@@ -729,53 +776,6 @@ export function OrganizationUsageSection({
             </button>
           ))}
         </div>
-      </section>
-
-      <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
-        <header className={styles.panelHeader}>
-          <span className={styles.activityTitle}>
-            <h2 id="usage-activity-title">365 天活动</h2>
-            <small className={styles.dataFreshness}>
-              <Clock3 aria-hidden="true" />
-              演示数据 · 更新于 5 分钟前
-            </small>
-          </span>
-          <div className={styles.activityHeaderControls}>
-            <div className={styles.windowNavigation} aria-label="年度活动时间窗口">
-              <button
-                type="button"
-                disabled={!canMoveBackward}
-                aria-label="查看更早一年"
-                onClick={() => moveActivityWindow(-1)}
-              >
-                <ChevronLeft aria-hidden="true" />
-              </button>
-              <span>{activityWindowLabel}</span>
-              <button
-                type="button"
-                disabled={!canMoveForward}
-                aria-label="查看更新一年"
-                onClick={() => moveActivityWindow(1)}
-              >
-                <ChevronRight aria-hidden="true" />
-              </button>
-            </div>
-            <div className={styles.activityModeTabs} aria-label="活动图表形式">
-              {ACTIVITY_MODES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={activityMode === item.id ? styles.activeActivityMode : ""}
-                  aria-pressed={activityMode === item.id}
-                  onClick={() => setActivityMode(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </header>
-        <UsageActivityChart days={activityDays} mode={activityMode} />
       </section>
 
       <UsageDetailDrawer
