@@ -12,6 +12,7 @@ import {
   getUsageRange,
   getUsageSummary,
   getWeeklyActivity,
+  type UsageRecord,
 } from "./organization-usage-data";
 
 const members: OrganizationMember[] = [
@@ -53,12 +54,14 @@ describe("organization usage demo data", () => {
     expect(summary.netCredits).toBeGreaterThan(0);
     expect(composition.reduce((total, item) => total + item.credits, 0)).toBe(summary.netCredits);
     expect(composition.reduce((total, item) => total + item.share, 0)).toBeCloseTo(1, 5);
-    expect(summary.estimatedDays30).toBe(
-      Math.floor(demo.availableCredits / summary.dailyAverage30),
+    expect(summary.estimatedDaysRecent).toBe(
+      Math.floor(demo.availableCredits / summary.recentDailyAverage),
     );
     expect(summary.estimatedDaysLifetime).toBe(
       Math.floor(demo.availableCredits / summary.lifetimeDailyAverage),
     );
+    expect(summary.recentToLifetimeRate).not.toBeNull();
+    expect(summary.forecastConfidence).toBe("high");
   });
 
   it("keeps both organization forecasts stable when the page range changes", () => {
@@ -73,11 +76,51 @@ describe("organization usage demo data", () => {
     expect(weekSummary.netCredits).toBeGreaterThan(
       getUsageSummary(todayRecords, [], demo.records, now, demo.availableCredits).netCredits,
     );
-    expect(monthSummary.dailyAverage30).toBe(weekSummary.dailyAverage30);
-    expect(monthSummary.estimatedDays30).toBe(weekSummary.estimatedDays30);
+    expect(monthSummary.recentDailyAverage).toBe(weekSummary.recentDailyAverage);
+    expect(monthSummary.estimatedDaysRecent).toBe(weekSummary.estimatedDaysRecent);
     expect(monthSummary.lifetimeDailyAverage).toBe(weekSummary.lifetimeDailyAverage);
     expect(monthSummary.estimatedDaysLifetime).toBe(weekSummary.estimatedDaysLifetime);
+    expect(monthSummary.recentToLifetimeRate).toBe(weekSummary.recentToLifetimeRate);
     expect(getComparisonRange("all", getUsageRange("all", now))).toBeNull();
+  });
+
+  it("keeps zero-use calendar days in the recent trend forecast", () => {
+    const createRecord = (id: string, occurredAt: string, credits: number): UsageRecord => ({
+      id,
+      occurredAt,
+      memberId: "actor-owner",
+      memberName: "Hoo",
+      memberAccount: "creator@reelay.test",
+      projectId: "project-1",
+      projectName: "测试项目",
+      activityKind: "image",
+      activityLabel: "图片生成",
+      modelId: "model-1",
+      modelName: "GPT Image 2",
+      specification: "1K",
+      credits,
+      outputImages: 1,
+      outputVideoSeconds: 0,
+      status: "settled",
+    });
+    const sparseRecords = [
+      createRecord("recent", now.toISOString(), 300),
+      createRecord("oldest", new Date("2026-06-28T12:00:00+08:00").toISOString(), 1),
+    ];
+    const summary = getUsageSummary(
+      sparseRecords,
+      [],
+      sparseRecords,
+      now,
+      100_000,
+    );
+
+    expect(summary.recentDailyAverage).toBeGreaterThan(0);
+    expect(summary.recentDailyAverage).toBeLessThan(100);
+    expect(summary.forecastConfidence).toBe("low");
+    expect(summary.estimatedDaysRecent).toBe(
+      Math.floor(100_000 / summary.recentDailyAverage),
+    );
   });
 
   it("builds navigable annual activity views from the same ledger records", () => {

@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  ArrowUpRight,
   BarChart3,
   CalendarDays,
   ChevronDown,
@@ -10,7 +11,10 @@ import {
   Download,
   FileDown,
   Image,
+  Info,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
   Video,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +25,7 @@ import {
   UsageActivityChart,
   type UsageActivityMode,
 } from "./UsageActivityChart";
+import { UsageDetailDrawer } from "./UsageDetailDrawer";
 import {
   buildUsageCsv,
   buildUsageExcelXml,
@@ -31,6 +36,7 @@ import {
   getUsageComposition,
   getUsageRange,
   getUsageSummary,
+  type UsageCompositionItem,
   type UsageDimension,
   type UsageRangePreset,
 } from "./organization-usage-data";
@@ -107,6 +113,18 @@ function formatForecast(days: number | null): string {
   return `约 ${numberFormatter.format(days)} 天`;
 }
 
+function formatForecastDifference(rate: number | null): string {
+  if (rate === null) return "暂无历史基准";
+  if (Math.abs(rate) < 0.05) return "近期日均与历史基本持平";
+  return `近期日均较历史${rate > 0 ? "高" : "低"} ${Math.abs(rate * 100).toFixed(0)}%`;
+}
+
+const forecastConfidenceLabels = {
+  low: "数据积累中",
+  medium: "趋势逐步稳定",
+  high: "数据充分",
+} as const;
+
 function downloadFile(content: string, fileName: string, mimeType: string): void {
   const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
   const anchor = document.createElement("a");
@@ -135,6 +153,7 @@ export function OrganizationUsageSection({
   const [activityMode, setActivityMode] = useState<UsageActivityMode>("calendar");
   const [activityAnchor, setActivityAnchor] = useState(now);
   const [dimension, setDimension] = useState<UsageDimension>("type");
+  const [selectedComposition, setSelectedComposition] = useState<UsageCompositionItem | null>(null);
   const exportMenuRef = useRef<HTMLDetailsElement>(null);
 
   const range = useMemo(
@@ -202,6 +221,10 @@ export function OrganizationUsageSection({
       document.removeEventListener("keydown", closeExportMenuOnEscape);
     };
   }, []);
+
+  useEffect(() => {
+    setSelectedComposition(null);
+  }, [customEnd, customStart, dimension, rangePreset]);
 
   const moveActivityWindow = (direction: -1 | 1) => {
     setActivityAnchor((current) => {
@@ -283,22 +306,51 @@ export function OrganizationUsageSection({
           mode={activityMode}
         />
         <section className={styles.stableOverview} aria-label="组织状态概览">
-          <article>
+          <article className={styles.balanceMetric}>
             <span><CircleDollarSign aria-hidden="true" />可用积分</span>
             <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
             <small>组织当前尚未消耗的全部积分</small>
           </article>
           <article className={styles.forecastMetric}>
-            <span><Clock3 aria-hidden="true" />预计可用</span>
-            <div>
+            <span className={styles.forecastHeading}>
+              <span><Clock3 aria-hidden="true" />预计可用</span>
+              <small>{forecastConfidenceLabels[summary.forecastConfidence]}</small>
+            </span>
+            <div className={styles.forecastPrimary}>
               <span>
-                <strong>{formatForecast(summary.estimatedDays30)}</strong>
-                <small>按近 30 日消耗估算</small>
+                <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
+                <small>
+                  近期趋势估算 · 日均 {numberFormatter.format(summary.recentDailyAverage)} 积分
+                </small>
               </span>
+              <span
+                className={styles.forecastDifference}
+                data-direction={
+                  summary.recentToLifetimeRate !== null && summary.recentToLifetimeRate < 0
+                    ? "down"
+                    : "up"
+                }
+              >
+                {summary.recentToLifetimeRate !== null && summary.recentToLifetimeRate < 0
+                  ? <TrendingDown aria-hidden="true" />
+                  : <TrendingUp aria-hidden="true" />}
+                {formatForecastDifference(summary.recentToLifetimeRate)}
+              </span>
+            </div>
+            <div className={styles.forecastReference}>
               <span>
-                <strong>{formatForecast(summary.estimatedDaysLifetime)}</strong>
-                <small>历史累计口径</small>
+                历史平均参考
+                <span
+                  className={styles.forecastMethodHint}
+                  tabIndex={0}
+                  title="近期趋势综合近 30 个自然日平均和近期加权均值，保留零消耗日与真实高峰。"
+                  aria-label="预测方法：综合近 30 个自然日平均和近期加权均值，保留零消耗日与真实高峰"
+                >
+                  <Info aria-hidden="true" />
+                </span>
               </span>
+              <strong>{formatForecast(summary.estimatedDaysLifetime)}</strong>
+              <small>历史日均 {numberFormatter.format(summary.lifetimeDailyAverage)} 积分</small>
             </div>
           </article>
         </section>
@@ -413,7 +465,13 @@ export function OrganizationUsageSection({
 
         <div className={styles.compositionList}>
           {composition.map((item) => (
-            <article key={item.id}>
+            <button
+              key={item.id}
+              type="button"
+              className={styles.compositionRow}
+              aria-label={`查看${item.label}消耗明细`}
+              onClick={() => setSelectedComposition(item)}
+            >
               <span className={styles.compositionIdentity}>
                 <strong>{item.label}</strong>
                 <small>{item.detail}</small>
@@ -432,7 +490,8 @@ export function OrganizationUsageSection({
                     ? `${numberFormatter.format(item.imageCount)} 张图片`
                     : ""}
               </small>
-            </article>
+              <ArrowUpRight className={styles.compositionAction} aria-hidden="true" />
+            </button>
           ))}
         </div>
 
@@ -444,6 +503,15 @@ export function OrganizationUsageSection({
           </Link>
         </footer>
       </section>
+
+      <UsageDetailDrawer
+        composition={composition}
+        dimension={dimension}
+        item={selectedComposition}
+        rangeLabel={activeRangeLabel}
+        records={rangeRecords}
+        onClose={() => setSelectedComposition(null)}
+      />
     </section>
   );
 }

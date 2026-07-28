@@ -267,8 +267,9 @@ describe("organization center", () => {
     expect(screen.getByText("演示数据 · 更新于 5 分钟前")).toBeInTheDocument();
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
-    expect(screen.getByText("按近 30 日消耗估算")).toBeInTheDocument();
-    expect(screen.getByText("历史累计口径")).toBeInTheDocument();
+    expect(screen.getByText(/近期趋势估算/)).toBeInTheDocument();
+    expect(screen.getByText("历史平均参考")).toBeInTheDocument();
+    expect(screen.getByText(/近期日均较历史/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "365 天活动" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "期间用量" })).toBeInTheDocument();
     expect(screen.getByText("图片产出")).toBeInTheDocument();
@@ -282,6 +283,10 @@ describe("organization center", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "成员" }));
     expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getAllByRole("button", { name: /查看.*消耗明细/ })[0]);
+    expect(screen.getByRole("dialog", { name: /消耗明细/ })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: /消耗记录/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
     expect(screen.getByRole("link", { name: "前往积分管理" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "流水明细" })).toBeNull();
   });
