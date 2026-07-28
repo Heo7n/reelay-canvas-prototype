@@ -6,14 +6,13 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleDollarSign,
   Clock3,
   Download,
   FileDown,
-  Hourglass,
   Image,
   Sparkles,
   Video,
-  WalletCards,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -404,14 +403,14 @@ export function OrganizationUsageSection({
     <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
       <header className={styles.panelHeader}>
         <span className={styles.activityTitle}>
-          <h2 id="usage-activity-title">长期用量</h2>
+          <h2 id="usage-activity-title">长期活动</h2>
           <small className={styles.dataFreshness}>
             <Clock3 aria-hidden="true" />
             演示数据 · 更新于 5 分钟前
           </small>
         </span>
         <div className={styles.activityHeaderControls}>
-          <div className={styles.windowNavigation} aria-label="年度活动时间窗口">
+          <div className={styles.windowNavigation} aria-label="长期活动时间窗口">
             <button
               type="button"
               disabled={!canMoveBackward}
@@ -460,18 +459,20 @@ export function OrganizationUsageSection({
             <h2 id="usage-overview-title">组织概览</h2>
           </header>
           <article className={styles.primaryMetric}>
-            <span><WalletCards aria-hidden="true" />可用积分</span>
+            <span><CircleDollarSign aria-hidden="true" />可用积分</span>
             <div className={styles.metricValue}>
               <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
             </div>
           </article>
           <article className={styles.forecastMetric}>
-            <span><Hourglass aria-hidden="true" />预计可用</span>
+            <span><Clock3 aria-hidden="true" />预计可用</span>
             <div className={styles.metricValue}>
               <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
             </div>
-            <small>
-              按近 30 天日均消耗 {numberFormatter.format(summary.recentDailyAverage)} 积分估算
+            <small className={styles.forecastBasis}>
+              按近 30 天日均消耗{" "}
+              <strong>{numberFormatter.format(summary.recentDailyAverage)} 积分</strong>
+              {" "}估算
             </small>
           </article>
         </section>

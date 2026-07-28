@@ -272,14 +272,6 @@ export function UsageActivityChart({
           </span>
         ))}
       </div>
-
-      {mode === "calendar" ? (
-        <div className={styles.activityLegend} aria-label="日历强度图例">
-          <span>低</span>
-          {[0, 1, 2, 3, 4].map((level) => <i key={level} data-level={level} />)}
-          <span>高</span>
-        </div>
-      ) : null}
     </div>
   );
 }

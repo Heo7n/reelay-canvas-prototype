@@ -268,12 +268,13 @@ describe("organization center", () => {
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
     expect(screen.getByText("预计可用")).toBeInTheDocument();
-    expect(screen.getByText(/按近 30 天日均消耗 .* 积分估算/)).toBeInTheDocument();
+    expect(screen.getByText(/按近 30 天日均消耗/)).toBeInTheDocument();
+    expect(screen.getByText(/1,272 积分/)).toBeInTheDocument();
     expect(screen.queryByText("近 30 天日均")).toBeNull();
     expect(screen.queryByText("历史日均")).toBeNull();
     expect(screen.queryByText(/较历史日均/)).toBeNull();
     const overviewHeading = screen.getByRole("heading", { name: "组织概览" });
-    const activityHeading = screen.getByRole("heading", { name: "长期用量" });
+    const activityHeading = screen.getByRole("heading", { name: "长期活动" });
     const periodHeading = screen.getByRole("heading", { name: "期间分析" });
     expect(overviewHeading.compareDocumentPosition(activityHeading))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
