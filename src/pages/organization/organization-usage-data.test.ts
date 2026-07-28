@@ -57,14 +57,10 @@ describe("organization usage demo data", () => {
     expect(summary.estimatedDaysRecent).toBe(
       Math.floor(demo.availableCredits / summary.recentDailyAverage),
     );
-    expect(summary.estimatedDaysLifetime).toBe(
-      Math.floor(demo.availableCredits / summary.lifetimeDailyAverage),
-    );
     expect(summary.recentToLifetimeRate).not.toBeNull();
-    expect(summary.forecastConfidence).toBe("high");
   });
 
-  it("keeps both organization forecasts stable when the page range changes", () => {
+  it("keeps the organization forecast stable when the page range changes", () => {
     const demo = createOrganizationUsageDemoData(members, now);
     const monthRecords = filterUsageRecords(demo.records, getUsageRange("month", now));
     const weekRecords = filterUsageRecords(demo.records, getUsageRange("week", now));
@@ -79,7 +75,6 @@ describe("organization usage demo data", () => {
     expect(monthSummary.recentDailyAverage).toBe(weekSummary.recentDailyAverage);
     expect(monthSummary.estimatedDaysRecent).toBe(weekSummary.estimatedDaysRecent);
     expect(monthSummary.lifetimeDailyAverage).toBe(weekSummary.lifetimeDailyAverage);
-    expect(monthSummary.estimatedDaysLifetime).toBe(weekSummary.estimatedDaysLifetime);
     expect(monthSummary.recentToLifetimeRate).toBe(weekSummary.recentToLifetimeRate);
     expect(getComparisonRange("all", getUsageRange("all", now))).toBeNull();
   });
@@ -117,7 +112,6 @@ describe("organization usage demo data", () => {
 
     expect(summary.recentDailyAverage).toBeGreaterThan(0);
     expect(summary.recentDailyAverage).toBeLessThan(100);
-    expect(summary.forecastConfidence).toBe("low");
     expect(summary.estimatedDaysRecent).toBe(
       Math.floor(100_000 / summary.recentDailyAverage),
     );

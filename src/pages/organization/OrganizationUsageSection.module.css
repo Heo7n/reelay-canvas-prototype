@@ -75,21 +75,27 @@
   height: 13px;
 }
 
+.activityTitle {
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
 .stableOverview {
   display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.55fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   margin: 16px -20px 0;
   border-top: 1px solid var(--workspace-border);
-  background: color-mix(in srgb, var(--workspace-bg) 44%, var(--workspace-surface));
+  background: color-mix(in srgb, var(--workspace-bg) 24%, var(--workspace-surface));
 }
 
 .stableOverview > article {
   display: grid;
-  min-height: 128px;
+  min-height: 88px;
   align-content: center;
-  gap: 8px;
-  padding: 18px 20px;
+  gap: 9px;
+  padding: 15px 20px;
 }
 
 .stableOverview > article + article { border-left: 1px solid var(--workspace-border); }
@@ -110,13 +116,6 @@
   height: 13px;
 }
 
-.stableOverview > article > strong {
-  color: var(--workspace-text);
-  font-size: 26px;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
 .stableOverview > article > small,
 .periodMetrics article > small {
   color: var(--workspace-subtle);
@@ -124,106 +123,29 @@
   line-height: 1.45;
 }
 
-.forecastMetric {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.forecastHeading {
-  display: flex !important;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.forecastHeading > span {
+.metricValue {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
 }
 
-.forecastHeading > small {
-  color: var(--workspace-subtle);
-  font-size: 8px;
-  font-weight: 580;
-}
-
-.forecastPrimary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 18px;
-}
-
-.forecastPrimary > span:first-child {
-  display: grid;
-  gap: 4px;
-}
-
-.forecastPrimary strong {
+.metricValue strong {
   color: var(--workspace-text);
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
+  letter-spacing: 0;
 }
 
-.forecastPrimary small,
-.forecastReference small {
+.metricValue small {
   color: var(--workspace-subtle);
   font-size: 8px;
 }
 
-.forecastDifference {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding-bottom: 2px;
-  color: var(--workspace-muted);
+.metricDelta {
+  margin-top: -3px;
+  color: color-mix(in srgb, #a56120 74%, var(--workspace-muted)) !important;
   font-size: 8px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.forecastDifference svg {
-  width: 12px;
-  height: 12px;
-}
-
-.forecastDifference[data-direction="up"] {
-  color: color-mix(in srgb, #b26a22 76%, var(--workspace-text));
-}
-
-.forecastDifference[data-direction="down"] {
-  color: color-mix(in srgb, #267a59 76%, var(--workspace-text));
-}
-
-.forecastReference {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--workspace-border) 72%, transparent);
-  color: var(--workspace-muted);
-  font-size: 8px;
-}
-
-.forecastReference > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.forecastReference strong {
-  color: var(--workspace-text);
-  font-size: 10px;
-}
-
-.forecastMethodHint {
-  display: inline-flex;
-  color: var(--workspace-subtle);
-}
-
-.forecastMethodHint svg {
-  width: 11px;
-  height: 11px;
+  font-weight: 620;
 }
 
 .activityPanel,
@@ -1024,7 +946,6 @@
 .heatmapDay:focus-visible,
 .weeklyBars button:focus-visible,
 .cumulativeTarget:focus-visible,
-.forecastMethodHint:focus-visible,
 .compositionRow:focus-visible,
 .compositionFooter a:focus-visible,
 .usageDrawerHeader button:focus-visible,
@@ -1046,9 +967,12 @@
 }
 
 @media (max-width: 980px) {
-  .stableOverview { grid-template-columns: 1fr; }
-  .stableOverview > article + article {
+  .stableOverview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stableOverview > article:nth-child(3),
+  .stableOverview > article:nth-child(4) {
     border-top: 1px solid var(--workspace-border);
+  }
+  .stableOverview > article:nth-child(3) {
     border-left: 0;
   }
 

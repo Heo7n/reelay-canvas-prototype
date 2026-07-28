@@ -43,9 +43,7 @@ export interface UsageSummary {
   recentDailyAverage: number;
   lifetimeDailyAverage: number;
   estimatedDaysRecent: number | null;
-  estimatedDaysLifetime: number | null;
   recentToLifetimeRate: number | null;
-  forecastConfidence: "low" | "medium" | "high";
 }
 
 export interface UsageTrendPoint {
@@ -529,12 +527,6 @@ export function getUsageSummary(
     0,
     Math.round((recentSimpleAverage * 0.35) + (recentWeightedAverage * 0.65)),
   );
-  const recentActiveDays = recentDailyCredits.filter((credits) => credits > 0).length;
-  const forecastConfidence = recentObservationDays < 14 || recentActiveDays < 5
-    ? "low"
-    : recentObservationDays < 30 || recentActiveDays < 12
-      ? "medium"
-      : "high";
 
   return {
     netCredits,
@@ -546,13 +538,9 @@ export function getUsageSummary(
     estimatedDaysRecent: recentDailyAverage > 0
       ? Math.max(1, Math.floor(availableCredits / recentDailyAverage))
       : null,
-    estimatedDaysLifetime: lifetimeDailyAverage > 0
-      ? Math.max(1, Math.floor(availableCredits / lifetimeDailyAverage))
-      : null,
     recentToLifetimeRate: lifetimeDailyAverage > 0
       ? (recentDailyAverage - lifetimeDailyAverage) / lifetimeDailyAverage
       : null,
-    forecastConfidence,
   };
 }
 
