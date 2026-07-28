@@ -273,7 +273,7 @@ describe("organization center", () => {
     expect(screen.queryByText("历史日均")).toBeNull();
     expect(screen.queryByText(/较历史日均/)).toBeNull();
     const overviewHeading = screen.getByRole("heading", { name: "组织概览" });
-    const activityHeading = screen.getByRole("heading", { name: "年度用量" });
+    const activityHeading = screen.getByRole("heading", { name: "长期用量" });
     const periodHeading = screen.getByRole("heading", { name: "期间分析" });
     expect(overviewHeading.compareDocumentPosition(activityHeading))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);

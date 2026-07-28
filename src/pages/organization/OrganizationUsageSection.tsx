@@ -404,7 +404,7 @@ export function OrganizationUsageSection({
     <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
       <header className={styles.panelHeader}>
         <span className={styles.activityTitle}>
-          <h2 id="usage-activity-title">年度用量</h2>
+          <h2 id="usage-activity-title">长期用量</h2>
           <small className={styles.dataFreshness}>
             <Clock3 aria-hidden="true" />
             演示数据 · 更新于 5 分钟前
