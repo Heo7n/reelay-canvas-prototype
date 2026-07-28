@@ -40,10 +40,12 @@ export interface UsageSummary {
   changeRate: number | null;
   imageCount: number;
   videoSeconds: number;
-  dailyAverage30: number;
+  recentDailyAverage: number;
   lifetimeDailyAverage: number;
-  estimatedDays30: number | null;
+  estimatedDaysRecent: number | null;
   estimatedDaysLifetime: number | null;
+  recentToLifetimeRate: number | null;
+  forecastConfidence: "low" | "medium" | "high";
 }
 
 export interface UsageTrendPoint {
@@ -459,6 +461,41 @@ function totalCredits(records: UsageRecord[]): number {
   return records.reduce((total, record) => total + record.credits, 0);
 }
 
+function buildRecentDailyCredits(
+  records: UsageRecord[],
+  now: Date,
+  dayCount: number,
+): number[] {
+  const end = startOfDay(now);
+  const start = addDays(end, -(dayCount - 1));
+  const dailyCredits = Array.from({ length: dayCount }, () => 0);
+
+  records.forEach((record) => {
+    const occurredAt = startOfDay(new Date(record.occurredAt));
+    const dayIndex = Math.floor((occurredAt.getTime() - start.getTime()) / 86_400_000);
+    if (dayIndex >= 0 && dayIndex < dayCount) {
+      dailyCredits[dayIndex] += record.credits;
+    }
+  });
+
+  return dailyCredits.map((credits) => Math.max(0, credits));
+}
+
+function getWeightedDailyAverage(values: number[], halfLifeDays: number): number {
+  if (values.length === 0) return 0;
+
+  let weightedTotal = 0;
+  let totalWeight = 0;
+  values.forEach((value, index) => {
+    const age = values.length - 1 - index;
+    const weight = 0.5 ** (age / halfLifeDays);
+    weightedTotal += value * weight;
+    totalWeight += weight;
+  });
+
+  return totalWeight > 0 ? weightedTotal / totalWeight : 0;
+}
+
 export function getUsageSummary(
   records: UsageRecord[],
   previousRecords: UsageRecord[],
@@ -468,12 +505,6 @@ export function getUsageSummary(
 ): UsageSummary {
   const netCredits = totalCredits(records);
   const previousCredits = totalCredits(previousRecords);
-  const forecastStart = addDays(startOfDay(now), -29);
-  const forecastCredits = totalCredits(allRecords.filter((record) => {
-    const occurredAt = new Date(record.occurredAt);
-    return occurredAt >= forecastStart && occurredAt <= now;
-  }));
-  const dailyAverage = Math.max(0, Math.round(forecastCredits / 30));
   const firstRecord = allRecords.at(-1);
   const lifetimeStart = firstRecord
     ? startOfDay(new Date(firstRecord.occurredAt))
@@ -483,20 +514,45 @@ export function getUsageSummary(
     Math.floor((startOfDay(now).getTime() - lifetimeStart.getTime()) / 86_400_000) + 1,
   );
   const lifetimeDailyAverage = Math.max(0, Math.round(totalCredits(allRecords) / lifetimeDays));
+  const recentObservationDays = Math.min(30, lifetimeDays);
+  const recentDailyCredits = buildRecentDailyCredits(
+    allRecords,
+    now,
+    recentObservationDays,
+  );
+  const recentSimpleAverage = recentDailyCredits.reduce(
+    (total, credits) => total + credits,
+    0,
+  ) / recentObservationDays;
+  const recentWeightedAverage = getWeightedDailyAverage(recentDailyCredits, 10);
+  const recentDailyAverage = Math.max(
+    0,
+    Math.round((recentSimpleAverage * 0.35) + (recentWeightedAverage * 0.65)),
+  );
+  const recentActiveDays = recentDailyCredits.filter((credits) => credits > 0).length;
+  const forecastConfidence = recentObservationDays < 14 || recentActiveDays < 5
+    ? "low"
+    : recentObservationDays < 30 || recentActiveDays < 12
+      ? "medium"
+      : "high";
 
   return {
     netCredits,
     changeRate: previousCredits > 0 ? (netCredits - previousCredits) / previousCredits : null,
     imageCount: records.reduce((total, record) => total + record.outputImages, 0),
     videoSeconds: records.reduce((total, record) => total + record.outputVideoSeconds, 0),
-    dailyAverage30: dailyAverage,
+    recentDailyAverage,
     lifetimeDailyAverage,
-    estimatedDays30: dailyAverage > 0
-      ? Math.max(1, Math.floor(availableCredits / dailyAverage))
+    estimatedDaysRecent: recentDailyAverage > 0
+      ? Math.max(1, Math.floor(availableCredits / recentDailyAverage))
       : null,
     estimatedDaysLifetime: lifetimeDailyAverage > 0
       ? Math.max(1, Math.floor(availableCredits / lifetimeDailyAverage))
       : null,
+    recentToLifetimeRate: lifetimeDailyAverage > 0
+      ? (recentDailyAverage - lifetimeDailyAverage) / lifetimeDailyAverage
+      : null,
+    forecastConfidence,
   };
 }
 

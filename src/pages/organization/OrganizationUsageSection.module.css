@@ -77,7 +77,7 @@
 
 .stableOverview {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr);
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.55fr);
   overflow: hidden;
   margin: 16px -20px 0;
   border-top: 1px solid var(--workspace-border);
@@ -86,10 +86,10 @@
 
 .stableOverview > article {
   display: grid;
-  min-height: 112px;
+  min-height: 128px;
   align-content: center;
   gap: 8px;
-  padding: 17px 20px;
+  padding: 18px 20px;
 }
 
 .stableOverview > article + article { border-left: 1px solid var(--workspace-border); }
@@ -124,35 +124,106 @@
   line-height: 1.45;
 }
 
-.forecastMetric > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+.forecastMetric {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.forecastMetric > div > span {
+.forecastHeading {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.forecastHeading > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.forecastHeading > small {
+  color: var(--workspace-subtle);
+  font-size: 8px;
+  font-weight: 580;
+}
+
+.forecastPrimary {
   display: grid;
-  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 18px;
+}
+
+.forecastPrimary > span:first-child {
+  display: grid;
   gap: 4px;
 }
 
-.forecastMetric > div > span + span {
-  padding-left: 20px;
-  border-left: 1px solid var(--workspace-border);
+.forecastPrimary strong {
+  color: var(--workspace-text);
+  font-size: 22px;
+  line-height: 1;
 }
 
-.forecastMetric > div strong {
-  overflow: hidden;
-  color: var(--workspace-text);
-  font-size: 18px;
-  line-height: 1.15;
-  text-overflow: ellipsis;
+.forecastPrimary small,
+.forecastReference small {
+  color: var(--workspace-subtle);
+  font-size: 8px;
+}
+
+.forecastDifference {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-bottom: 2px;
+  color: var(--workspace-muted);
+  font-size: 8px;
+  font-weight: 650;
   white-space: nowrap;
 }
 
-.forecastMetric > div small {
-  color: var(--workspace-subtle);
+.forecastDifference svg {
+  width: 12px;
+  height: 12px;
+}
+
+.forecastDifference[data-direction="up"] {
+  color: color-mix(in srgb, #b26a22 76%, var(--workspace-text));
+}
+
+.forecastDifference[data-direction="down"] {
+  color: color-mix(in srgb, #267a59 76%, var(--workspace-text));
+}
+
+.forecastReference {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--workspace-border) 72%, transparent);
+  color: var(--workspace-muted);
   font-size: 8px;
+}
+
+.forecastReference > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.forecastReference strong {
+  color: var(--workspace-text);
+  font-size: 10px;
+}
+
+.forecastMethodHint {
+  display: inline-flex;
+  color: var(--workspace-subtle);
+}
+
+.forecastMethodHint svg {
+  width: 11px;
+  height: 11px;
 }
 
 .activityPanel,
@@ -697,16 +768,26 @@
 
 .compositionList { display: grid; }
 
-.compositionList article {
+.compositionRow {
   display: grid;
   min-height: 62px;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 2fr) 84px 112px;
+  width: 100%;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 2fr) 84px 112px 18px;
   align-items: center;
   gap: 16px;
-  padding: 8px 2px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 140ms ease;
 }
 
-.compositionList article + article { border-top: 1px solid var(--workspace-border); }
+.compositionRow + .compositionRow { border-top: 1px solid var(--workspace-border); }
+.compositionRow:hover { background: var(--workspace-hover); }
 
 .compositionIdentity,
 .compositionValue {
@@ -749,6 +830,20 @@
 .compositionValue strong { color: var(--workspace-text); font-size: 11px; }
 .compositionOutput { text-align: right; }
 
+.compositionAction {
+  width: 14px;
+  height: 14px;
+  color: var(--workspace-subtle);
+  opacity: 0.5;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.compositionRow:hover .compositionAction,
+.compositionRow:focus-visible .compositionAction {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
 .compositionFooter {
   display: flex;
   min-height: 42px;
@@ -774,6 +869,152 @@
 .compositionFooter a:hover { color: var(--usage-accent); }
 .compositionFooter svg { width: 12px; height: 12px; }
 
+.usageDrawerBackdrop {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(0 0 0 / 32%);
+  backdrop-filter: blur(2px);
+}
+
+.usageDrawer {
+  display: grid;
+  width: min(620px, calc(100vw - 120px));
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--workspace-surface);
+  box-shadow: -18px 0 50px rgb(0 0 0 / 14%);
+}
+
+.usageDrawerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+.usageDrawerHeader > span {
+  display: grid;
+  gap: 5px;
+}
+
+.usageDrawerHeader small,
+.usageDrawerHeader p,
+.usageDrawerFooter {
+  color: var(--workspace-subtle);
+  font-size: 9px;
+}
+
+.usageDrawerHeader h2 {
+  margin: 0;
+  color: var(--workspace-text);
+  font-size: 19px;
+  letter-spacing: 0;
+}
+
+.usageDrawerHeader p { margin: 0; }
+
+.usageDrawerHeader button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workspace-muted);
+  cursor: pointer;
+}
+
+.usageDrawerHeader button:hover { background: var(--workspace-hover); }
+.usageDrawerHeader button svg { width: 17px; height: 17px; }
+
+.usageDetailTable {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 26px 18px;
+}
+
+.usageDetailTableHeader,
+.usageDetailTable article {
+  display: grid;
+  grid-template-columns: 86px minmax(120px, 1fr) minmax(150px, 1.2fr) 62px;
+  align-items: center;
+  gap: 14px;
+}
+
+.usageDetailTableHeader {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  min-height: 38px;
+  border-bottom: 1px solid var(--workspace-border);
+  background: var(--workspace-surface);
+  color: var(--workspace-subtle);
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.usageDetailTable article {
+  min-height: 58px;
+  border-bottom: 1px solid var(--workspace-border);
+  color: var(--workspace-muted);
+  font-size: 9px;
+}
+
+.usageDetailTable article > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.usageDetailTable article strong {
+  overflow: hidden;
+  color: var(--workspace-text);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usageDetailTable article small {
+  overflow: hidden;
+  color: var(--workspace-subtle);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usageDetailTable article > span:last-child { justify-items: end; }
+.refundedUsage strong { color: #2f8061 !important; }
+
+.usageDrawerFooter {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 26px;
+  border-top: 1px solid var(--workspace-border);
+}
+
+.usageDrawerFooter a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--workspace-text);
+  font-size: 9px;
+  font-weight: 680;
+  text-decoration: none;
+}
+
+.usageDrawerFooter a:hover { color: var(--usage-accent); }
+.usageDrawerFooter svg { width: 12px; height: 12px; }
+
 .rangeControl button:focus-visible,
 .exportMenu summary:focus-visible,
 .exportMenu button:focus-visible,
@@ -783,7 +1024,11 @@
 .heatmapDay:focus-visible,
 .weeklyBars button:focus-visible,
 .cumulativeTarget:focus-visible,
+.forecastMethodHint:focus-visible,
+.compositionRow:focus-visible,
 .compositionFooter a:focus-visible,
+.usageDrawerHeader button:focus-visible,
+.usageDrawerFooter a:focus-visible,
 .customRange input:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--usage-accent) 32%, transparent);
   outline-offset: 2px;
@@ -821,8 +1066,8 @@
     justify-content: space-between;
   }
 
-  .compositionList article {
-    grid-template-columns: minmax(130px, 0.8fr) minmax(170px, 1.4fr) 76px;
+  .compositionRow {
+    grid-template-columns: minmax(130px, 0.8fr) minmax(170px, 1.4fr) 76px 18px;
   }
 
   .compositionOutput { display: none; }
