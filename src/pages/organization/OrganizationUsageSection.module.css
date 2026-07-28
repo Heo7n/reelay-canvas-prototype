@@ -75,21 +75,27 @@
   height: 13px;
 }
 
+.activityTitle {
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
 .stableOverview {
   display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.55fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   margin: 16px -20px 0;
   border-top: 1px solid var(--workspace-border);
-  background: color-mix(in srgb, var(--workspace-bg) 44%, var(--workspace-surface));
+  background: color-mix(in srgb, var(--workspace-bg) 24%, var(--workspace-surface));
 }
 
 .stableOverview > article {
   display: grid;
-  min-height: 128px;
+  min-height: 88px;
   align-content: center;
-  gap: 8px;
-  padding: 18px 20px;
+  gap: 9px;
+  padding: 15px 20px;
 }
 
 .stableOverview > article + article { border-left: 1px solid var(--workspace-border); }
@@ -110,13 +116,6 @@
   height: 13px;
 }
 
-.stableOverview > article > strong {
-  color: var(--workspace-text);
-  font-size: 26px;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
 .stableOverview > article > small,
 .periodMetrics article > small {
   color: var(--workspace-subtle);
@@ -124,106 +123,29 @@
   line-height: 1.45;
 }
 
-.forecastMetric {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.forecastHeading {
-  display: flex !important;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.forecastHeading > span {
+.metricValue {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
 }
 
-.forecastHeading > small {
-  color: var(--workspace-subtle);
-  font-size: 8px;
-  font-weight: 580;
-}
-
-.forecastPrimary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 18px;
-}
-
-.forecastPrimary > span:first-child {
-  display: grid;
-  gap: 4px;
-}
-
-.forecastPrimary strong {
+.metricValue strong {
   color: var(--workspace-text);
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
+  letter-spacing: 0;
 }
 
-.forecastPrimary small,
-.forecastReference small {
+.metricValue small {
   color: var(--workspace-subtle);
   font-size: 8px;
 }
 
-.forecastDifference {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding-bottom: 2px;
-  color: var(--workspace-muted);
+.metricDelta {
+  margin-top: -3px;
+  color: color-mix(in srgb, #a56120 74%, var(--workspace-muted)) !important;
   font-size: 8px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.forecastDifference svg {
-  width: 12px;
-  height: 12px;
-}
-
-.forecastDifference[data-direction="up"] {
-  color: color-mix(in srgb, #b26a22 76%, var(--workspace-text));
-}
-
-.forecastDifference[data-direction="down"] {
-  color: color-mix(in srgb, #267a59 76%, var(--workspace-text));
-}
-
-.forecastReference {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--workspace-border) 72%, transparent);
-  color: var(--workspace-muted);
-  font-size: 8px;
-}
-
-.forecastReference > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.forecastReference strong {
-  color: var(--workspace-text);
-  font-size: 10px;
-}
-
-.forecastMethodHint {
-  display: inline-flex;
-  color: var(--workspace-subtle);
-}
-
-.forecastMethodHint svg {
-  width: 11px;
-  height: 11px;
+  font-weight: 620;
 }
 
 .activityPanel,
@@ -870,13 +792,31 @@
 .compositionFooter svg { width: 12px; height: 12px; }
 
 .usageDrawerBackdrop {
+  --workspace-surface: #fff;
+  --workspace-text: #171719;
+  --workspace-muted: #74747a;
+  --workspace-subtle: #9a9aa0;
+  --workspace-border: rgb(23 23 25 / 11%);
+  --workspace-hover: rgb(23 23 25 / 5.5%);
+  --usage-accent: #526fd1;
   position: fixed;
-  z-index: 120;
+  z-index: 1000;
   inset: 0;
   display: flex;
+  isolation: isolate;
   justify-content: flex-end;
   background: rgb(0 0 0 / 32%);
   backdrop-filter: blur(2px);
+}
+
+:global(html[data-theme="dark"]) .usageDrawerBackdrop {
+  --workspace-surface: #15161a;
+  --workspace-text: #f4f4f5;
+  --workspace-muted: #aaaab1;
+  --workspace-subtle: #7e7f87;
+  --workspace-border: rgb(244 244 245 / 12%);
+  --workspace-hover: rgb(244 244 245 / 7%);
+  --usage-accent: #91a7ff;
 }
 
 .usageDrawer {
@@ -884,8 +824,10 @@
   width: min(620px, calc(100vw - 120px));
   height: 100%;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
   background: var(--workspace-surface);
   box-shadow: -18px 0 50px rgb(0 0 0 / 14%);
+  color: var(--workspace-text);
 }
 
 .usageDrawerHeader {
@@ -937,15 +879,18 @@
 .usageDetailTable {
   min-height: 0;
   overflow: auto;
-  padding: 8px 26px 18px;
+  padding: 0 0 18px;
+  overscroll-behavior: contain;
 }
 
 .usageDetailTableHeader,
 .usageDetailTable article {
   display: grid;
+  box-sizing: border-box;
   grid-template-columns: 86px minmax(120px, 1fr) minmax(150px, 1.2fr) 62px;
   align-items: center;
   gap: 14px;
+  padding: 0 26px;
 }
 
 .usageDetailTableHeader {
@@ -1024,7 +969,6 @@
 .heatmapDay:focus-visible,
 .weeklyBars button:focus-visible,
 .cumulativeTarget:focus-visible,
-.forecastMethodHint:focus-visible,
 .compositionRow:focus-visible,
 .compositionFooter a:focus-visible,
 .usageDrawerHeader button:focus-visible,
@@ -1046,9 +990,12 @@
 }
 
 @media (max-width: 980px) {
-  .stableOverview { grid-template-columns: 1fr; }
-  .stableOverview > article + article {
+  .stableOverview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stableOverview > article:nth-child(3),
+  .stableOverview > article:nth-child(4) {
     border-top: 1px solid var(--workspace-border);
+  }
+  .stableOverview > article:nth-child(3) {
     border-left: 0;
   }
 

@@ -11,10 +11,7 @@ import {
   Download,
   FileDown,
   Image,
-  Info,
   Sparkles,
-  TrendingDown,
-  TrendingUp,
   Video,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -113,17 +110,11 @@ function formatForecast(days: number | null): string {
   return `约 ${numberFormatter.format(days)} 天`;
 }
 
-function formatForecastDifference(rate: number | null): string {
-  if (rate === null) return "暂无历史基准";
-  if (Math.abs(rate) < 0.05) return "近期日均与历史基本持平";
-  return `近期日均较历史${rate > 0 ? "高" : "低"} ${Math.abs(rate * 100).toFixed(0)}%`;
+function formatRelativeChange(rate: number | null): string {
+  if (rate === null) return "—";
+  if (Math.abs(rate) < 0.005) return "0%";
+  return `${rate > 0 ? "+" : "−"}${Math.abs(rate * 100).toFixed(0)}%`;
 }
-
-const forecastConfidenceLabels = {
-  low: "数据积累中",
-  medium: "趋势逐步稳定",
-  high: "数据充分",
-} as const;
 
 function downloadFile(content: string, fileName: string, mimeType: string): void {
   const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
@@ -258,9 +249,8 @@ export function OrganizationUsageSection({
 
       <section className={styles.activityPanel} aria-labelledby="usage-activity-title">
         <header className={styles.panelHeader}>
-          <span>
+          <span className={styles.activityTitle}>
             <h2 id="usage-activity-title">365 天活动</h2>
-            <p>观察长期使用节奏；每日、每周与累计只是同一时间窗口的不同视图。</p>
             <small className={styles.dataFreshness}>
               <Clock3 aria-hidden="true" />
               演示数据 · 更新于 5 分钟前
@@ -306,51 +296,34 @@ export function OrganizationUsageSection({
           mode={activityMode}
         />
         <section className={styles.stableOverview} aria-label="组织状态概览">
-          <article className={styles.balanceMetric}>
+          <article>
             <span><CircleDollarSign aria-hidden="true" />可用积分</span>
-            <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
-            <small>组织当前尚未消耗的全部积分</small>
-          </article>
-          <article className={styles.forecastMetric}>
-            <span className={styles.forecastHeading}>
-              <span><Clock3 aria-hidden="true" />预计可用</span>
-              <small>{forecastConfidenceLabels[summary.forecastConfidence]}</small>
-            </span>
-            <div className={styles.forecastPrimary}>
-              <span>
-                <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
-                <small>
-                  近期趋势估算 · 日均 {numberFormatter.format(summary.recentDailyAverage)} 积分
-                </small>
-              </span>
-              <span
-                className={styles.forecastDifference}
-                data-direction={
-                  summary.recentToLifetimeRate !== null && summary.recentToLifetimeRate < 0
-                    ? "down"
-                    : "up"
-                }
-              >
-                {summary.recentToLifetimeRate !== null && summary.recentToLifetimeRate < 0
-                  ? <TrendingDown aria-hidden="true" />
-                  : <TrendingUp aria-hidden="true" />}
-                {formatForecastDifference(summary.recentToLifetimeRate)}
-              </span>
+            <div className={styles.metricValue}>
+              <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
+              <small>积分</small>
             </div>
-            <div className={styles.forecastReference}>
-              <span>
-                历史平均参考
-                <span
-                  className={styles.forecastMethodHint}
-                  tabIndex={0}
-                  title="近期趋势综合近 30 个自然日平均和近期加权均值，保留零消耗日与真实高峰。"
-                  aria-label="预测方法：综合近 30 个自然日平均和近期加权均值，保留零消耗日与真实高峰"
-                >
-                  <Info aria-hidden="true" />
-                </span>
-              </span>
-              <strong>{formatForecast(summary.estimatedDaysLifetime)}</strong>
-              <small>历史日均 {numberFormatter.format(summary.lifetimeDailyAverage)} 积分</small>
+          </article>
+          <article>
+            <span><Clock3 aria-hidden="true" />预计可用（近 30 天趋势）</span>
+            <div className={styles.metricValue}>
+              <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
+            </div>
+          </article>
+          <article>
+            <span><Sparkles aria-hidden="true" />日均消耗（近 30 天）</span>
+            <div className={styles.metricValue}>
+              <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
+              <small>积分 / 日</small>
+            </div>
+            <small className={styles.metricDelta}>
+              较历史日均 {formatRelativeChange(summary.recentToLifetimeRate)}
+            </small>
+          </article>
+          <article>
+            <span><BarChart3 aria-hidden="true" />历史日均</span>
+            <div className={styles.metricValue}>
+              <strong>{numberFormatter.format(summary.lifetimeDailyAverage)}</strong>
+              <small>积分 / 日</small>
             </div>
           </article>
         </section>
@@ -360,7 +333,6 @@ export function OrganizationUsageSection({
         <header className={styles.panelHeader}>
           <span>
             <h2 id="usage-period-title">期间用量</h2>
-            <p>{activeRangeLabel} · 统计范围同时作用于媒体产出、消耗构成和导出。</p>
           </span>
           <div className={styles.periodControls}>
             <div className={styles.rangeControl} aria-label="统计时间范围">
@@ -446,7 +418,6 @@ export function OrganizationUsageSection({
         <header className={styles.compositionHeader}>
           <span>
             <h3 id="usage-composition-title">消耗构成</h3>
-            <p>从类型、成员、项目或模型解释当前范围内的积分去向。</p>
           </span>
           <div className={styles.dimensionTabs} aria-label="消耗构成分析维度">
             {DIMENSION_ITEMS.map((item) => (
@@ -496,9 +467,8 @@ export function OrganizationUsageSection({
         </div>
 
         <footer className={styles.compositionFooter}>
-          <span>需要核对任务级扣费、退款或成员流水？</span>
           <Link to="../credits">
-            前往积分管理
+            查看积分流水
             <ArrowRight aria-hidden="true" />
           </Link>
         </footer>
