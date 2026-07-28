@@ -276,7 +276,7 @@ describe("organization center", () => {
     expect(screen.getByText("视频产出")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "消耗趋势" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "类型构成" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "主要消耗来源" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消耗来源" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "近 30 天" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -287,6 +287,10 @@ describe("organization center", () => {
     fireEvent.click(screen.getByRole("button", { name: "累计" }));
     expect(screen.getByRole("img", { name: "近 365 天按周累计积分消耗" })).toBeInTheDocument();
 
+    expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.click(screen.getByRole("button", { name: "成员" }));
     expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getAllByRole("button", { name: /查看.*消耗明细/ })[0]);
@@ -356,8 +360,22 @@ describe("organization center", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "全部历史" }));
     const reopenedDialog = screen.getByRole("dialog", { name: "选择日期范围" });
-    fireEvent.click(within(reopenedDialog).getByRole("button", { name: "上月" }));
-    fireEvent.click(within(reopenedDialog).getByRole("button", { name: "应用" }));
+    const historyStartInput = within(reopenedDialog).getByLabelText("开始日期");
+    const historyEndInput = within(reopenedDialog).getByLabelText("结束日期");
+    expect(historyStartInput).not.toBeDisabled();
+    expect(historyEndInput).not.toBeDisabled();
+    expect(historyStartInput).not.toHaveValue("");
+    fireEvent.change(historyStartInput, { target: { value: endInput.value } });
+    expect(
+      within(reopenedDialog).getByRole("button", { name: "全部历史" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(within(reopenedDialog).getByRole("button", { name: "取消" }));
+    expect(screen.getByRole("button", { name: "全部历史" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "全部历史" }));
+    const previousMonthDialog = screen.getByRole("dialog", { name: "选择日期范围" });
+    fireEvent.click(within(previousMonthDialog).getByRole("button", { name: "上月" }));
+    fireEvent.click(within(previousMonthDialog).getByRole("button", { name: "应用" }));
     expect(screen.getByRole("button", { name: "上月" })).toHaveAttribute(
       "aria-expanded",
       "false",

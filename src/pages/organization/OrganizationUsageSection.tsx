@@ -84,9 +84,9 @@ const ACTIVITY_MODES: { id: UsageActivityMode; label: string }[] = [
 ];
 
 const SOURCE_DIMENSIONS: { id: Exclude<UsageDimension, "type">; label: string }[] = [
+  { id: "model", label: "模型" },
   { id: "member", label: "成员" },
   { id: "project", label: "项目" },
-  { id: "model", label: "模型" },
 ];
 
 const TYPE_COLOR_VARIABLES: Record<string, string> = {
@@ -109,7 +109,11 @@ const compactDateFormatter = new Intl.DateTimeFormat("zh-CN", {
   timeZone: ORGANIZATION_TIME_ZONE,
 });
 
-function createPickerSelection(kind: PickerRangePreset, now: Date): PickerSelection {
+function createPickerSelection(
+  kind: PickerRangePreset,
+  now: Date,
+  historyStart?: Date,
+): PickerSelection {
   if (kind === "previousMonth") {
     const range = getUsageRange("previousMonth", now);
     return {
@@ -119,7 +123,12 @@ function createPickerSelection(kind: PickerRangePreset, now: Date): PickerSelect
     };
   }
   if (kind === "all") {
-    return { kind, startDate: "", endDate: formatUsageDateInput(now) };
+    const range = getUsageRange("all", now, undefined, undefined, historyStart);
+    return {
+      kind,
+      startDate: formatUsageDateInput(range.start),
+      endDate: formatUsageDateInput(now),
+    };
   }
   const range = getUsageRange("month", now);
   return {
@@ -233,7 +242,7 @@ export function OrganizationUsageSection({
   const [activityMode, setActivityMode] = useState<UsageActivityMode>("calendar");
   const [activityAnchor, setActivityAnchor] = useState(now);
   const [sourceDimension, setSourceDimension] =
-    useState<Exclude<UsageDimension, "type">>("member");
+    useState<Exclude<UsageDimension, "type">>("model");
   const [selectedBreakdown, setSelectedBreakdown] =
     useState<SelectedBreakdown | null>(null);
 
@@ -360,7 +369,7 @@ export function OrganizationUsageSection({
   };
 
   const choosePickerQuickRange = (kind: Exclude<PickerRangePreset, "custom">) => {
-    setDraftPickerSelection(createPickerSelection(kind, now));
+    setDraftPickerSelection(createPickerSelection(kind, now, earliestRecordDate));
   };
 
   const applyPickerSelection = () => {
@@ -515,9 +524,9 @@ export function OrganizationUsageSection({
                         <span>开始日期</span>
                         <input
                           type="date"
+                          min={formatUsageDateInput(earliestRecordDate)}
                           max={draftPickerSelection.endDate || formatUsageDateInput(now)}
                           value={draftPickerSelection.startDate}
-                          disabled={draftPickerSelection.kind === "all"}
                           onChange={(event) => setDraftPickerSelection({
                             kind: "custom",
                             startDate: event.target.value,
@@ -530,10 +539,12 @@ export function OrganizationUsageSection({
                         <span>结束日期</span>
                         <input
                           type="date"
-                          min={draftPickerSelection.startDate}
+                          min={
+                            draftPickerSelection.startDate
+                            || formatUsageDateInput(earliestRecordDate)
+                          }
                           max={formatUsageDateInput(now)}
                           value={draftPickerSelection.endDate}
-                          disabled={draftPickerSelection.kind === "all"}
                           onChange={(event) => setDraftPickerSelection({
                             kind: "custom",
                             startDate: draftPickerSelection.startDate,
@@ -665,10 +676,10 @@ export function OrganizationUsageSection({
 
         <header className={styles.compositionHeader}>
           <span>
-            <h3 id="usage-composition-title">主要消耗来源</h3>
-            <p>按成员、项目或模型定位积分使用集中度</p>
+            <h3 id="usage-composition-title">消耗来源</h3>
+            <p>按模型、成员或项目定位积分使用集中度</p>
           </span>
-          <div className={styles.dimensionTabs} aria-label="主要消耗来源分析维度">
+          <div className={styles.dimensionTabs} aria-label="消耗来源分析维度">
             {SOURCE_DIMENSIONS.map((item) => (
               <button
                 key={item.id}
