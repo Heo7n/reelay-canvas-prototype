@@ -26,6 +26,10 @@ export interface OrganizationRouteData {
   workspaces: Workspace[];
 }
 
+export interface OrganizationMembersRouteData {
+  members: OrganizationMember[];
+}
+
 export interface LoginActionData {
   error: string;
 }
@@ -191,15 +195,27 @@ export function createRouteHandlers(services: ApplicationServices) {
 
     workspaceLoader: (args: LoaderFunctionArgs) => loadWorkspaceData(services, args),
 
-    organizationLoader: async (args: LoaderFunctionArgs): Promise<OrganizationRouteData> => {
-      const context = await loadWorkspaceData(services, args);
-      const members = await services.organizationRepository.listMembers(context.currentWorkspace.id);
-      return {
-        actor: context.actor,
-        currentWorkspace: context.currentWorkspace,
-        members,
-        workspaces: context.workspaces,
-      };
+    organizationLoader: async (args: LoaderFunctionArgs): Promise<OrganizationMembersRouteData> => {
+      const workspaceId = args.params.workspaceId;
+      if (!workspaceId) throw new Response("Workspace not found", { status: 404 });
+      try {
+        return {
+          members: await services.organizationRepository.listMembers(workspaceId),
+        };
+      } catch (error) {
+        if (error instanceof HttpRequestError && error.status === 401) {
+          throw loginRedirect(args.request);
+        }
+        if (error instanceof HttpRequestError && (error.status === 403 || error.status === 404)) {
+          const sessionContext = await getSessionContext(services);
+          if (!sessionContext.actor) throw loginRedirect(args.request);
+          const defaultWorkspace = selectDefaultWorkspace(sessionContext.workspaces);
+          throw redirect(defaultWorkspace
+            ? routePaths.workspaceHome(defaultWorkspace.id)
+            : routePaths.noWorkspace());
+        }
+        throw error;
+      }
     },
 
     workspaceAction: async ({ params, request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {

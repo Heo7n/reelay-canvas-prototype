@@ -1,8 +1,9 @@
 import { BarChart3, Building2, ChevronLeft, CircleDollarSign, UsersRound } from "lucide-react";
 import { Link, NavLink, Outlet, useLoaderData } from "react-router-dom";
 
-import type { OrganizationRouteData } from "../../app/route-data";
+import type { OrganizationMembersRouteData, OrganizationRouteData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
+import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
 import styles from "./OrganizationCenterPage.module.css";
@@ -19,7 +20,14 @@ const roleLabels = {
 } as const;
 
 export function OrganizationCenterPage() {
-  const data = useLoaderData() as OrganizationRouteData;
+  const workspaceData = useWorkspaceRouteData();
+  const organizationData = useLoaderData() as OrganizationMembersRouteData;
+  const data: OrganizationRouteData = {
+    actor: workspaceData.actor,
+    currentWorkspace: workspaceData.currentWorkspace,
+    members: organizationData.members,
+    workspaces: workspaceData.workspaces,
+  };
   const { notice, showNotice } = useTransientNotice();
   const workspaceId = data.currentWorkspace.id;
   const currentRole = data.currentWorkspace.currentUserRole ?? "member";

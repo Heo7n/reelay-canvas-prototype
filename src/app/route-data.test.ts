@@ -173,6 +173,7 @@ describe("application route data", () => {
 
     expect(data.members).toEqual(members);
     expect(services.organizationRepository.listMembers).toHaveBeenCalledWith("workspace-organization");
+    expect(services.workspaceContextGateway.load).not.toHaveBeenCalled();
     expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
   });
 

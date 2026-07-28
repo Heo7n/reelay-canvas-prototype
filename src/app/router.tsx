@@ -43,16 +43,16 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
               path: "projects/:projectId/canvases/:canvasId",
               element: <LegacyCanvasRoute canvasDocumentRepository={services.canvasDocumentRepository} />,
             },
-          ],
-        },
-        {
-          path: "w/:workspaceId/organization",
-          loader: handlers.organizationLoader,
-          element: <OrganizationCenterPage />,
-          children: [
-            { index: true, element: <OrganizationSectionRoute section="management" /> },
-            { path: "credits", element: <OrganizationSectionRoute section="credits" /> },
-            { path: "usage", element: <OrganizationSectionRoute section="usage" /> },
+            {
+              path: "organization",
+              loader: handlers.organizationLoader,
+              element: <OrganizationCenterPage />,
+              children: [
+                { index: true, element: <OrganizationSectionRoute section="management" /> },
+                { path: "credits", element: <OrganizationSectionRoute section="credits" /> },
+                { path: "usage", element: <OrganizationSectionRoute section="usage" /> },
+              ],
+            },
           ],
         },
         { path: "*", element: <Navigate to={routePaths.login()} replace /> },
