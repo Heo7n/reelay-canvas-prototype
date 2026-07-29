@@ -264,16 +264,16 @@ describe("organization center", () => {
     renderSection("usage");
 
     expect(await screen.findByRole("heading", { name: "用量看板" })).toBeInTheDocument();
-    expect(screen.getByText("演示数据 · 更新于 5 分钟前")).toBeInTheDocument();
+    expect(screen.queryByText("演示数据 · 更新于 5 分钟前")).toBeNull();
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
     expect(screen.getByText("预计可用")).toBeInTheDocument();
     expect(screen.getByText(/按近 30 天日均消耗/))
-      .toHaveTextContent(/按近 30 天日均消耗 .* 积分.*估算/);
+      .toHaveTextContent("按近 30 天日均消耗估算");
     expect(screen.getByText("近 30 天日均")).toBeInTheDocument();
     expect(screen.getByText("历史日均")).toBeInTheDocument();
     expect(screen.queryByText(/较历史日均/)).toBeNull();
-    const overviewHeading = screen.getByRole("heading", { name: "组织概览" });
+    const overviewHeading = screen.getByRole("heading", { name: "概览" });
     const activityHeading = screen.getByRole("heading", { name: "长期活动" });
     const periodHeading = screen.getByRole("heading", { name: "期间分析" });
     expect(overviewHeading.compareDocumentPosition(activityHeading))

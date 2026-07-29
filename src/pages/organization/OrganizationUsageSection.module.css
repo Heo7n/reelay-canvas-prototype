@@ -92,22 +92,26 @@
 
 .activityTitle h2 {
   flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 720;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
 .overviewGrid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.38fr) minmax(0, 1fr);
+  grid-template-columns: minmax(276px, 0.34fr) minmax(0, 1fr);
   align-items: stretch;
-  gap: 20px;
+  gap: 16px;
 }
 
 .stableOverview {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto auto;
-  align-content: space-between;
-  padding: 20px;
+  align-content: start;
+  gap: 4px;
+  padding: 12px 14px;
   overflow: hidden;
   border: 1px solid var(--workspace-border);
   border-radius: 8px;
@@ -115,14 +119,18 @@
 }
 
 .overviewHeader {
+  display: flex;
   grid-column: 1 / -1;
-  padding-bottom: 8px;
+  min-height: 26px;
+  align-items: center;
 }
 
 .overviewHeader h2 {
   margin: 0;
   color: var(--workspace-text);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 720;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
@@ -162,6 +170,18 @@
   font-weight: 680 !important;
 }
 
+.primaryMetric > span {
+  justify-self: start;
+  text-align: left;
+}
+
+.primaryMetric > span svg {
+  width: 13px;
+  height: 13px;
+  color: color-mix(in srgb, var(--usage-accent) 82%, var(--workspace-text));
+  stroke-width: 1.8;
+}
+
 .stableOverview > article > small {
   grid-column: 1 / -1;
   color: var(--workspace-subtle);
@@ -197,26 +217,34 @@
   grid-template-areas:
     "label illustration"
     "value illustration";
-  grid-template-columns: minmax(0, 1fr) 52px !important;
-  min-height: 66px;
-  padding: 4px 0 12px;
+  grid-template-columns: minmax(0, 1fr) 96px !important;
+  min-height: 54px;
+  padding: 0;
 }
 
 .forecastMetric {
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--usage-accent) 18%, var(--workspace-border));
+  grid-template-areas:
+    "label value"
+    "basis value";
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-rows: auto auto;
+  min-height: 44px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--usage-accent) 14%, var(--workspace-border));
   border-radius: 6px;
-  background: color-mix(in srgb, var(--usage-accent) 6%, var(--workspace-surface));
+  background: color-mix(in srgb, var(--usage-accent) 5%, var(--workspace-surface));
 }
 
 .primaryMetric .metricValue strong {
-  font-size: 18px;
+  font-size: 34px;
   color: var(--usage-accent);
-  font-weight: 760;
+  font-weight: 740;
 }
 
 .forecastMetric .metricValue strong {
-  font-size: 18px;
+  font-size: 23px;
+  color: var(--usage-accent);
+  font-weight: 720;
 }
 
 .primaryMetric > span {
@@ -232,18 +260,31 @@
 
 .overviewIllustration {
   grid-area: illustration;
+  position: relative;
   align-self: center;
-  width: 48px;
-  height: 48px;
-  color: var(--usage-accent);
-  opacity: 0.24;
-  stroke-width: 1.35;
+  justify-self: end;
+  width: 88px;
+  height: 66px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.overviewIllustration img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 196px;
+  max-width: none;
+  height: auto;
+  opacity: 0.86;
+  transform: translate(-50%, -50%);
 }
 
 .forecastBasis {
+  grid-area: basis;
   max-width: 215px;
   color: var(--workspace-muted) !important;
-  font-size: 9px !important;
+  font-size: 9.5px !important;
   font-weight: 560;
   line-height: 1.55 !important;
 }
@@ -257,27 +298,31 @@
 .averageMetrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
-  padding: 11px 12px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--workspace-hover) 72%, transparent);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .averageMetrics > div {
   display: grid;
   min-width: 0;
-  gap: 5px;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--usage-accent) 9%, var(--workspace-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--usage-accent) 2%, var(--workspace-surface));
 }
 
 .averageMetrics > div + div {
-  padding-left: 12px;
-  border-left: 1px solid color-mix(in srgb, var(--workspace-border) 78%, transparent);
+  padding-left: 10px;
 }
 
 .averageMetrics dt {
-  color: var(--workspace-subtle);
-  font-size: 8px;
-  font-weight: 620;
+  color: var(--workspace-muted);
+  font-size: 9px;
+  font-weight: 640;
 }
 
 .averageMetrics dd {
@@ -286,15 +331,24 @@
   gap: 4px;
   margin: 0;
   color: var(--workspace-text);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 720;
   letter-spacing: 0;
 }
 
 .averageMetrics dd small {
   color: var(--workspace-subtle);
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 560;
+}
+
+.forecastMetric > span {
+  grid-area: label;
+}
+
+.forecastMetric .metricValue {
+  grid-area: value;
+  align-self: center;
 }
 
 .activityPanel,
@@ -307,8 +361,22 @@
 }
 
 .activityPanel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 9px 16px 10px;
   overflow: visible;
   container-type: inline-size;
+}
+
+.activityPanel .activityChart {
+  width: 100%;
+  height: 100%;
+}
+
+.activityPanel .panelHeader {
+  min-height: 26px;
+  align-items: center;
+  margin-bottom: 4px;
 }
 
 .panelHeader,
@@ -337,13 +405,14 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--workspace-subtle);
-  font-size: 8px;
+  color: var(--workspace-muted);
+  font-size: 9px;
+  font-weight: 600;
 }
 
 .periodTitle svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
 }
 
 .activityHeaderControls,
@@ -353,7 +422,10 @@
   align-items: center;
 }
 
-.activityHeaderControls { gap: 12px; }
+.activityHeaderControls {
+  min-height: 30px;
+  gap: 12px;
+}
 .periodControls { gap: 14px; }
 .toolbarMeta { gap: 12px; }
 
@@ -363,7 +435,7 @@
   align-items: center;
   gap: 3px;
   color: var(--workspace-muted);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .windowNavigation button {
@@ -463,7 +535,7 @@
   min-width: 52px;
   height: 26px;
   padding: 0 9px;
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .dimensionTabs button {
@@ -917,39 +989,52 @@
 .activityChart {
   position: relative;
   display: grid;
-  grid-template-rows: clamp(92px, 13.2cqw, 160px) 18px;
+  grid-template-rows:
+    minmax(10px, 0.64fr)
+    auto
+    14px
+    minmax(6px, 0.36fr);
+  align-content: start;
   min-width: 0;
-  gap: 6px;
-  padding: 8px 2px 4px;
+  min-height: 0;
+  row-gap: 2px;
+  padding: 0 2px;
 }
 
 .annualPlot {
   position: relative;
-  grid-row: 1;
+  grid-row: 2;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-width: 0;
+  min-height: 0;
+  aspect-ratio: 53 / 7.35;
 }
 
 .heatmapGrid {
   display: grid;
-  height: 100%;
-  align-self: stretch;
+  align-self: start;
+  align-content: stretch;
   grid-auto-flow: column;
   grid-template-columns: repeat(53, minmax(0, 1fr));
   grid-template-rows: repeat(7, minmax(0, 1fr));
-  gap: 3px;
+  column-gap: 2px;
+  row-gap: 2px;
 }
 
 .activityMonthAxis {
+  position: relative;
+  top: 2px;
   display: grid;
-  grid-row: 2;
+  grid-row: 3;
   width: 100%;
-  min-height: 18px;
+  min-height: 14px;
   grid-template-columns: repeat(53, minmax(0, 1fr));
-  gap: 3px;
-  color: var(--workspace-subtle);
-  font-size: 8px;
+  align-items: start;
+  column-gap: 2px;
+  color: var(--workspace-muted);
+  font-size: 8.5px;
+  font-weight: 600;
 }
 
 .activityMonthAxis span {
@@ -959,10 +1044,11 @@
 
 .heatmapEmpty,
 .heatmapDay {
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  justify-self: stretch;
   padding: 0;
   border: 0;
   border-radius: 2px;
@@ -971,6 +1057,7 @@
 .heatmapDay { background: color-mix(in srgb, var(--workspace-hover) 88%, var(--workspace-border)); }
 
 .heatmapDay {
+  align-self: stretch;
   position: relative;
   cursor: crosshair;
   transition: filter 0.12s ease, transform 0.12s ease;
@@ -997,6 +1084,7 @@
 
 .weeklyBars {
   display: grid;
+  min-height: 0;
   grid-template-columns: repeat(53, minmax(0, 1fr));
   gap: 3px;
   align-items: stretch;
@@ -1040,13 +1128,17 @@
 }
 
 .cumulativeCanvas {
+  min-height: 0;
   color: var(--usage-accent);
 }
 
 .cumulativeCanvas svg {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1515,13 +1607,8 @@
   background: color-mix(in srgb, var(--usage-accent) 5%, transparent);
 }
 
-@media (max-width: 1180px) {
-  .activityHeaderControls,
-  .periodControls {
-    align-items: flex-end;
-    flex-direction: column;
-    gap: 7px;
-  }
+@media (max-width: 1300px) {
+  .overviewGrid { grid-template-columns: 1fr; }
 
   .windowNavigation > span { min-width: 178px; }
 
@@ -1545,8 +1632,6 @@
 }
 
 @media (max-width: 980px) {
-  .overviewGrid { grid-template-columns: 1fr; }
-
   .panelHeader,
   .periodHeader,
   .compositionHeader {

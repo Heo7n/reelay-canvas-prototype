@@ -6,11 +6,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleDollarSign,
-  Clock3,
+  Coins,
   Download,
   FileDown,
-  Layers3,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -21,6 +19,7 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 
+import creditsStackUrl from "../../../assets/organization/credits-stack.png";
 import type { OrganizationMember } from "../../domain/workspace/workspace";
 import {
   UsageActivityChart,
@@ -384,10 +383,6 @@ export function OrganizationUsageSection({
       <header className={styles.panelHeader}>
         <span className={styles.activityTitle}>
           <h2 id="usage-activity-title">长期活动</h2>
-          <small className={styles.dataFreshness}>
-            <Clock3 aria-hidden="true" />
-            演示数据 · 更新于 5 分钟前
-          </small>
         </span>
         <div className={styles.activityHeaderControls}>
           <div className={styles.windowNavigation} aria-label="长期活动时间窗口">
@@ -436,40 +431,34 @@ export function OrganizationUsageSection({
       <div className={styles.overviewGrid}>
         <section className={styles.stableOverview} aria-labelledby="usage-overview-title">
           <header className={styles.overviewHeader}>
-            <h2 id="usage-overview-title">组织概览</h2>
+            <h2 id="usage-overview-title">概览</h2>
           </header>
           <article className={styles.primaryMetric}>
-            <span><CircleDollarSign aria-hidden="true" />可用积分</span>
+            <span><Coins aria-hidden="true" />可用积分</span>
             <div className={styles.metricValue}>
               <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
             </div>
-            <Layers3 className={styles.overviewIllustration} aria-hidden="true" />
+            <div className={styles.overviewIllustration} aria-hidden="true">
+              <img src={creditsStackUrl} alt="" />
+            </div>
           </article>
           <dl className={styles.averageMetrics} aria-label="日均消耗参考">
             <div>
               <dt>近 30 天日均</dt>
-              <dd>
-                {numberFormatter.format(summary.recentDailyAverage)}
-                <small>积分/日</small>
-              </dd>
+              <dd>{numberFormatter.format(summary.recentDailyAverage)}</dd>
             </div>
             <div>
               <dt>历史日均</dt>
-              <dd>
-                {numberFormatter.format(summary.lifetimeDailyAverage)}
-                <small>积分/日</small>
-              </dd>
+              <dd>{numberFormatter.format(summary.lifetimeDailyAverage)}</dd>
             </div>
           </dl>
           <article className={styles.forecastMetric}>
-            <span><Clock3 aria-hidden="true" />预计可用</span>
+            <span><CalendarDays aria-hidden="true" />预计可用</span>
             <div className={styles.metricValue}>
               <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
             </div>
             <small className={styles.forecastBasis}>
-              按近 30 天日均消耗{" "}
-              <strong>{numberFormatter.format(summary.recentDailyAverage)} 积分</strong>
-              {" "}估算
+              按近 30 天日均消耗估算
             </small>
           </article>
         </section>
@@ -486,6 +475,26 @@ export function OrganizationUsageSection({
             </small>
           </span>
           <div className={styles.periodControls}>
+            <div className={styles.toolbarMeta}>
+              <details ref={exportMenuRef} className={styles.exportMenu}>
+                <summary aria-label="导出当前时间范围的数据">
+                  <Download aria-hidden="true" />
+                  导出
+                  <ChevronDown aria-hidden="true" />
+                </summary>
+                <div>
+                  <button type="button" onClick={() => exportRecords("csv")}>
+                    <FileDown aria-hidden="true" />
+                    <span><strong>CSV</strong><small>{actualRangeLabel} 数据</small></span>
+                  </button>
+                  <button type="button" onClick={() => exportRecords("excel")}>
+                    <BarChart3 aria-hidden="true" />
+                    <span><strong>Excel</strong><small>{actualRangeLabel} 数据</small></span>
+                  </button>
+                </div>
+              </details>
+            </div>
+
             <div className={styles.rangeControl} aria-label="统计时间范围">
               {FIXED_RANGE_ITEMS.map((item) => (
                 <button
@@ -605,26 +614,6 @@ export function OrganizationUsageSection({
                   </div>
                 ) : null}
               </div>
-            </div>
-
-            <div className={styles.toolbarMeta}>
-              <details ref={exportMenuRef} className={styles.exportMenu}>
-                <summary aria-label="导出当前时间范围的数据">
-                  <Download aria-hidden="true" />
-                  导出
-                  <ChevronDown aria-hidden="true" />
-                </summary>
-                <div>
-                  <button type="button" onClick={() => exportRecords("csv")}>
-                    <FileDown aria-hidden="true" />
-                    <span><strong>CSV</strong><small>{actualRangeLabel} 数据</small></span>
-                  </button>
-                  <button type="button" onClick={() => exportRecords("excel")}>
-                    <BarChart3 aria-hidden="true" />
-                    <span><strong>Excel</strong><small>{actualRangeLabel} 数据</small></span>
-                  </button>
-                </div>
-              </details>
             </div>
           </div>
         </header>
