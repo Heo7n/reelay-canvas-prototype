@@ -97,7 +97,7 @@
 
 .overviewGrid {
   display: grid;
-  grid-template-columns: minmax(250px, 0.34fr) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 0.38fr) minmax(0, 1fr);
   align-items: stretch;
   gap: 20px;
 }
@@ -107,7 +107,7 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto auto;
   align-content: space-between;
-  padding: 18px 20px;
+  padding: 20px;
   overflow: hidden;
   border: 1px solid var(--workspace-border);
   border-radius: 8px;
@@ -116,7 +116,7 @@
 
 .overviewHeader {
   grid-column: 1 / -1;
-  padding-bottom: 11px;
+  padding-bottom: 8px;
 }
 
 .overviewHeader h2 {
@@ -194,19 +194,50 @@
 }
 
 .primaryMetric {
-  padding: 8px 0 10px;
+  grid-template-areas:
+    "label illustration"
+    "value illustration";
+  grid-template-columns: minmax(0, 1fr) 52px !important;
+  min-height: 66px;
+  padding: 4px 0 12px;
 }
 
 .forecastMetric {
-  padding: 10px 0 2px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--usage-accent) 18%, var(--workspace-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--usage-accent) 6%, var(--workspace-surface));
 }
 
 .primaryMetric .metricValue strong {
   font-size: 18px;
+  color: var(--usage-accent);
+  font-weight: 760;
 }
 
 .forecastMetric .metricValue strong {
   font-size: 18px;
+}
+
+.primaryMetric > span {
+  grid-area: label;
+  align-self: end;
+}
+
+.primaryMetric .metricValue {
+  grid-area: value;
+  align-self: start;
+  justify-self: start;
+}
+
+.overviewIllustration {
+  grid-area: illustration;
+  align-self: center;
+  width: 48px;
+  height: 48px;
+  color: var(--usage-accent);
+  opacity: 0.24;
+  stroke-width: 1.35;
 }
 
 .forecastBasis {
@@ -227,9 +258,9 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 0;
-  padding: 9px 10px;
+  padding: 11px 12px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--workspace-hover) 78%, transparent);
+  background: color-mix(in srgb, var(--workspace-hover) 72%, transparent);
 }
 
 .averageMetrics > div {

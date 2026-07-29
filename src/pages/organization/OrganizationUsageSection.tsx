@@ -10,6 +10,7 @@ import {
   Clock3,
   Download,
   FileDown,
+  Layers3,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -442,6 +443,7 @@ export function OrganizationUsageSection({
             <div className={styles.metricValue}>
               <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
             </div>
+            <Layers3 className={styles.overviewIllustration} aria-hidden="true" />
           </article>
           <dl className={styles.averageMetrics} aria-label="日均消耗参考">
             <div>
