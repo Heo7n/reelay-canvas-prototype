@@ -10,9 +10,6 @@ import {
   Clock3,
   Download,
   FileDown,
-  Image,
-  Sparkles,
-  Video,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -149,23 +146,6 @@ function formatVideoDuration(seconds: number): string {
 function formatForecast(days: number | null): string {
   if (days === null) return "数据不足";
   return `约 ${numberFormatter.format(days)} 天`;
-}
-
-function comparisonLabel(preset: UsageRangePreset): string | null {
-  if (preset === "today") return "较昨日同期";
-  if (preset === "rolling7") return "较前 7 天";
-  if (preset === "rolling30") return "较前 30 天";
-  if (preset === "month") return "较上月同期";
-  if (preset === "previousMonth") return "较上上月";
-  if (preset === "custom") return "较前一等长周期";
-  return null;
-}
-
-function formatChange(rate: number | null, label: string | null): string {
-  if (!label) return "";
-  if (rate === null) return `${label}暂无数据`;
-  const percentage = Math.abs(rate * 100).toFixed(1);
-  return `${label} ${rate >= 0 ? "+" : "−"}${percentage}%`;
 }
 
 function pickerButtonLabel(selection: PickerSelection | null): string {
@@ -307,7 +287,6 @@ export function OrganizationUsageSection({
     : `近 365 天 · ${activityRangeLabel}`;
   const activeRangeLabel = appliedRangeName(rangePreset, appliedPickerSelection);
   const actualRangeLabel = formatActualRange(range.start, range.end);
-  const activeComparisonLabel = comparisonLabel(rangePreset);
   const pickerLabel = pickerButtonLabel(lastPickerSelection);
   const totalTypeCredits = Math.max(
     0,
@@ -644,33 +623,11 @@ export function OrganizationUsageSection({
                   </button>
                 </div>
               </details>
-              <Link className={styles.ledgerLink} to="../credits">
-                积分变动记录
-                <ArrowRight aria-hidden="true" />
-              </Link>
             </div>
           </div>
         </header>
 
-        <section className={styles.periodMetrics} aria-label={`${activeRangeLabel}用量摘要`}>
-          <article>
-            <span><Sparkles aria-hidden="true" />消耗积分</span>
-            <strong>{numberFormatter.format(summary.netCredits)}</strong>
-            <small>{formatChange(summary.changeRate, activeComparisonLabel)}</small>
-          </article>
-          <article>
-            <span><Image aria-hidden="true" />图片产出</span>
-            <strong>{numberFormatter.format(summary.imageCount)}</strong>
-            <small>张图片</small>
-          </article>
-          <article>
-            <span><Video aria-hidden="true" />视频产出</span>
-            <strong>{formatVideoDuration(summary.videoSeconds)}</strong>
-            <small>成片时长</small>
-          </article>
-        </section>
-
-        <section className={styles.analysisGrid} aria-label="消耗构成与消耗趋势">
+        <section className={styles.analysisGrid} aria-label="消耗构成与消耗走势">
           <section className={styles.typeSection} aria-labelledby="usage-type-title">
             <header className={styles.analysisHeading}>
               <span>
@@ -718,7 +675,7 @@ export function OrganizationUsageSection({
           <section className={styles.trendSection} aria-labelledby="usage-trend-title">
             <header className={styles.analysisHeading}>
               <span>
-                <h3 id="usage-trend-title">消耗趋势</h3>
+                <h3 id="usage-trend-title">消耗走势</h3>
                 <small>{activeRangeLabel}的积分消耗变化</small>
               </span>
             </header>
@@ -781,6 +738,13 @@ export function OrganizationUsageSection({
             </button>
           ))}
         </div>
+        <footer className={styles.compositionFooter}>
+          <span>需要核对具体任务与扣费记录？</span>
+          <Link to="../credits">
+            查看积分明细
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </footer>
       </section>
 
       <UsageDetailDrawer

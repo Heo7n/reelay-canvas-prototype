@@ -128,42 +128,42 @@
 
 .stableOverview > article {
   display: grid;
-  align-content: start;
-  gap: 8px;
-}
-
-.stableOverview > article > span,
-.periodMetrics article > span {
-  display: inline-flex;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  color: var(--workspace-muted);
-  font-size: 9px;
-  font-weight: 680;
+  column-gap: 14px;
+  row-gap: 7px;
 }
 
 .stableOverview > article > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--workspace-text);
   font-size: 10px;
   font-weight: 660;
 }
 
-.stableOverview > article > span svg,
-.periodMetrics article > span svg {
+.stableOverview > article > span svg {
   width: 13px;
   height: 13px;
 }
 
 .primaryMetric > span svg,
 .forecastMetric > span svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   color: var(--usage-accent);
 }
 
-.stableOverview > article > small,
-.periodMetrics article > small {
+.primaryMetric > span,
+.forecastMetric > span {
+  font-size: 11.5px !important;
+  font-weight: 680 !important;
+}
+
+.stableOverview > article > small {
+  grid-column: 1 / -1;
   color: var(--workspace-subtle);
   font-size: 8px;
   line-height: 1.45;
@@ -173,6 +173,7 @@
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
+  justify-self: end;
 }
 
 .metricValue strong {
@@ -193,19 +194,19 @@
 }
 
 .primaryMetric {
-  padding: 10px 0 12px;
+  padding: 8px 0 10px;
 }
 
 .forecastMetric {
-  padding: 12px 0 3px;
+  padding: 10px 0 2px;
 }
 
 .primaryMetric .metricValue strong {
-  font-size: 29px;
+  font-size: 24px;
 }
 
 .forecastMetric .metricValue strong {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .forecastBasis {
@@ -589,27 +590,6 @@
 
 .exportMenu { position: relative; }
 
-.ledgerLink {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  gap: 5px;
-  padding: 0 4px;
-  color: var(--workspace-muted);
-  font-size: 9px;
-  font-weight: 680;
-  text-decoration: none;
-}
-
-.ledgerLink:hover {
-  color: var(--workspace-text);
-}
-
-.ledgerLink svg {
-  width: 12px;
-  height: 12px;
-}
-
 .exportMenu summary {
   display: inline-flex;
   height: 34px;
@@ -699,36 +679,10 @@
 
 :global(html[data-theme="dark"]) .customRange input { color-scheme: dark; }
 
-.periodMetrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  overflow: hidden;
-  margin: 0 -20px;
-  border-top: 1px solid var(--workspace-border);
-  border-bottom: 1px solid var(--workspace-border);
-  background: color-mix(in srgb, var(--workspace-bg) 48%, var(--workspace-surface));
-}
-
-.periodMetrics article {
-  display: grid;
-  min-height: 92px;
-  align-content: center;
-  gap: 7px;
-  padding: 14px 20px;
-}
-
-.periodMetrics article + article { border-left: 1px solid var(--workspace-border); }
-
-.periodMetrics article > strong {
-  color: var(--workspace-text);
-  font-size: 20px;
-  line-height: 1.05;
-  letter-spacing: 0;
-}
-
 .analysisGrid {
   display: grid;
   grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.35fr);
+  border-top: 1px solid var(--workspace-border);
   border-bottom: 1px solid var(--workspace-border);
 }
 

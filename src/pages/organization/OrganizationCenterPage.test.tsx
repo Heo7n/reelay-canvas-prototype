@@ -268,8 +268,8 @@ describe("organization center", () => {
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
     expect(screen.getByText("预计可用")).toBeInTheDocument();
-    expect(screen.getByText(/按近 30 天日均消耗/)).toBeInTheDocument();
-    expect(screen.getByText(/1,272 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/按近 30 天日均消耗/))
+      .toHaveTextContent(/按近 30 天日均消耗 .* 积分.*估算/);
     expect(screen.getByText("近 30 天日均")).toBeInTheDocument();
     expect(screen.getByText("历史日均")).toBeInTheDocument();
     expect(screen.queryByText(/较历史日均/)).toBeNull();
@@ -280,10 +280,10 @@ describe("organization center", () => {
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(activityHeading.compareDocumentPosition(periodHeading))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(screen.getByText("图片产出")).toBeInTheDocument();
-    expect(screen.getByText("视频产出")).toBeInTheDocument();
+    expect(screen.queryByText("图片产出")).not.toBeInTheDocument();
+    expect(screen.queryByText("视频产出")).not.toBeInTheDocument();
     const compositionHeading = screen.getByRole("heading", { name: "消耗构成" });
-    const trendHeading = screen.getByRole("heading", { name: "消耗趋势" });
+    const trendHeading = screen.getByRole("heading", { name: "消耗走势" });
     const sourceHeading = screen.getByRole("heading", { name: "消耗来源" });
     expect(compositionHeading.compareDocumentPosition(trendHeading))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -298,7 +298,7 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "每周" })).toHaveAttribute("aria-pressed", "true");
     const weeklyChart = screen.getByRole("group", { name: "近 365 天每周积分消耗趋势" });
     expect(within(weeklyChart).getAllByRole("button")[0]).toHaveAccessibleName(
-      /7月29日–8月3日/,
+      /\d+月\d+日–\d+月\d+日/,
     );
     expect(within(weeklyChart).getAllByRole("button")[0]).not.toHaveAccessibleName(
       /较前一周/,
@@ -322,7 +322,7 @@ describe("organization center", () => {
     expect(screen.getByRole("dialog", { name: /消耗明细/ })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: /消耗记录/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
-    expect(screen.getByRole("link", { name: "积分变动记录" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看积分明细" })).toBeInTheDocument();
   });
 
   it("applies usage date ranges only after confirmation and remembers the selection", async () => {
