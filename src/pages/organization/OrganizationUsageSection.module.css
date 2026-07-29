@@ -68,17 +68,6 @@
   white-space: nowrap;
 }
 
-.dataFreshness {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--workspace-subtle);
-  font-size: 8px;
-  font-weight: 520;
-  white-space: nowrap;
-}
-
-.dataFreshness svg,
 .toolbarMeta > span svg {
   width: 13px;
   height: 13px;
@@ -110,7 +99,7 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto auto;
   align-content: start;
-  gap: 4px;
+  gap: 5px;
   padding: 12px 14px;
   overflow: hidden;
   border: 1px solid var(--workspace-border);
@@ -142,30 +131,21 @@
   row-gap: 7px;
 }
 
-.stableOverview > article > span {
+.stableOverview > article > span:not(.forecastIcon) {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   color: var(--workspace-text);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 660;
 }
 
-.stableOverview > article > span svg {
+.stableOverview > article > span:not(.forecastIcon) svg {
   width: 13px;
   height: 13px;
 }
 
-.primaryMetric > span svg,
-.forecastMetric > span svg {
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  color: var(--usage-accent);
-}
-
-.primaryMetric > span,
-.forecastMetric > span {
+.primaryMetric > span {
   font-size: 11.5px !important;
   font-weight: 680 !important;
 }
@@ -173,13 +153,6 @@
 .primaryMetric > span {
   justify-self: start;
   text-align: left;
-}
-
-.primaryMetric > span svg {
-  width: 13px;
-  height: 13px;
-  color: color-mix(in srgb, var(--usage-accent) 82%, var(--workspace-text));
-  stroke-width: 1.8;
 }
 
 .stableOverview > article > small {
@@ -217,39 +190,42 @@
   grid-template-areas:
     "label illustration"
     "value illustration";
-  grid-template-columns: minmax(0, 1fr) 96px !important;
-  min-height: 54px;
+  grid-template-columns: minmax(0, 1fr) 104px !important;
+  min-height: 62px;
   padding: 0;
 }
 
 .forecastMetric {
   grid-template-areas:
-    "label value"
-    "basis value";
-  grid-template-columns: minmax(0, 1fr) auto !important;
-  grid-template-rows: auto auto;
-  min-height: 44px;
+    "icon copy value";
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center !important;
+  column-gap: 7px !important;
+  min-height: 51px;
   padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--usage-accent) 14%, var(--workspace-border));
+  border: 1px solid color-mix(in srgb, var(--usage-accent) 20%, var(--workspace-border));
   border-radius: 6px;
-  background: color-mix(in srgb, var(--usage-accent) 5%, var(--workspace-surface));
+  background: color-mix(in srgb, var(--usage-accent) 6%, var(--workspace-surface));
 }
 
 .primaryMetric .metricValue strong {
-  font-size: 34px;
+  font-size: 38px;
   color: var(--usage-accent);
-  font-weight: 740;
+  font-weight: 750;
 }
 
 .forecastMetric .metricValue strong {
-  font-size: 23px;
+  font-size: 25px;
   color: var(--usage-accent);
-  font-weight: 720;
+  font-weight: 740;
 }
 
 .primaryMetric > span {
   grid-area: label;
   align-self: end;
+  font-size: 12px !important;
+  font-weight: 680 !important;
 }
 
 .primaryMetric .metricValue {
@@ -263,8 +239,8 @@
   position: relative;
   align-self: center;
   justify-self: end;
-  width: 88px;
-  height: 66px;
+  width: 98px;
+  height: 72px;
   overflow: hidden;
   pointer-events: none;
 }
@@ -273,7 +249,7 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 196px;
+  width: 214px;
   max-width: none;
   height: auto;
   opacity: 0.86;
@@ -281,12 +257,12 @@
 }
 
 .forecastBasis {
-  grid-area: basis;
   max-width: 215px;
   color: var(--workspace-muted) !important;
-  font-size: 9.5px !important;
+  font-size: 8.2px !important;
   font-weight: 560;
-  line-height: 1.55 !important;
+  line-height: 1.25 !important;
+  white-space: nowrap;
 }
 
 .forecastBasis strong {
@@ -298,7 +274,7 @@
 .averageMetrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -308,11 +284,11 @@
 .averageMetrics > div {
   display: grid;
   min-width: 0;
-  gap: 4px;
-  padding: 6px 10px;
-  border: 1px solid color-mix(in srgb, var(--usage-accent) 9%, var(--workspace-border));
+  gap: 3px;
+  padding: 6px 10px 7px;
+  border: 1px solid color-mix(in srgb, var(--usage-accent) 14%, var(--workspace-border));
   border-radius: 6px;
-  background: color-mix(in srgb, var(--usage-accent) 2%, var(--workspace-surface));
+  background: color-mix(in srgb, var(--usage-accent) 1.5%, var(--workspace-surface));
 }
 
 .averageMetrics > div + div {
@@ -321,8 +297,8 @@
 
 .averageMetrics dt {
   color: var(--workspace-muted);
-  font-size: 9px;
-  font-weight: 640;
+  font-size: 9.5px;
+  font-weight: 620;
 }
 
 .averageMetrics dd {
@@ -331,8 +307,8 @@
   gap: 4px;
   margin: 0;
   color: var(--workspace-text);
-  font-size: 16px;
-  font-weight: 720;
+  font-size: 18px;
+  font-weight: 730;
   letter-spacing: 0;
 }
 
@@ -342,8 +318,39 @@
   font-weight: 560;
 }
 
-.forecastMetric > span {
-  grid-area: label;
+.forecastIcon {
+  display: grid !important;
+  grid-area: icon;
+  width: 32px;
+  height: 32px;
+  place-items: center !important;
+  justify-self: start;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--usage-accent) 16%, var(--workspace-surface));
+  color: var(--usage-accent) !important;
+  line-height: 0;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--usage-accent) 12%, transparent);
+}
+
+.forecastIcon svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: inherit;
+  stroke-width: 1.8;
+}
+
+.forecastCopy {
+  display: grid;
+  grid-area: copy;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.forecastCopy > span {
+  color: var(--workspace-text);
+  font-size: 11.5px;
+  font-weight: 680;
 }
 
 .forecastMetric .metricValue {
@@ -376,7 +383,7 @@
 .activityPanel .panelHeader {
   min-height: 26px;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .panelHeader,
@@ -749,39 +756,6 @@
 .exportMenu > div strong { font-size: 10px; }
 .exportMenu > div small { color: var(--workspace-muted); font-size: 8px; }
 
-.customRange {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 11px 14px;
-  border-left: 2px solid var(--usage-accent);
-  background: var(--workspace-hover);
-}
-
-.customRange > span {
-  padding-bottom: 9px;
-  color: var(--workspace-subtle);
-  font-size: 9px;
-}
-
-.customRange label { display: grid; gap: 5px; }
-.customRange label span { color: var(--workspace-muted); font-size: 8px; }
-
-.customRange input {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 6px;
-  background: var(--workspace-surface);
-  color: var(--workspace-text);
-  color-scheme: light;
-  font: inherit;
-  font-size: 9px;
-}
-
-:global(html[data-theme="dark"]) .customRange input { color-scheme: dark; }
-
 .analysisGrid {
   display: grid;
   grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.35fr);
@@ -990,10 +964,10 @@
   position: relative;
   display: grid;
   grid-template-rows:
-    minmax(10px, 0.64fr)
+    minmax(4px, 0.6fr)
     auto
     14px
-    minmax(6px, 0.36fr);
+    minmax(2px, 0.4fr);
   align-content: start;
   min-width: 0;
   min-height: 0;
@@ -1005,10 +979,10 @@
   position: relative;
   grid-row: 2;
   width: 100%;
-  height: auto;
+  height: clamp(136px, 13cqw, 150px);
   min-width: 0;
   min-height: 0;
-  aspect-ratio: 53 / 7.35;
+  aspect-ratio: auto;
 }
 
 .heatmapGrid {
@@ -1584,7 +1558,6 @@
 .dateRangeQuick button:focus-visible,
 .dateRangePopover footer button:focus-visible,
 .dateFields input:focus-visible,
-.ledgerLink:focus-visible,
 .exportMenu summary:focus-visible,
 .exportMenu button:focus-visible,
 .windowNavigation button:focus-visible,
@@ -1596,8 +1569,7 @@
 .typeLegend button:focus-visible,
 .compositionFooter a:focus-visible,
 .usageDrawerHeader button:focus-visible,
-.usageDrawerFooter a:focus-visible,
-.customRange input:focus-visible {
+.usageDrawerFooter a:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--usage-accent) 32%, transparent);
   outline-offset: 2px;
 }

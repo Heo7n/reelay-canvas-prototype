@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Coins,
   Download,
   FileDown,
 } from "lucide-react";
@@ -434,7 +433,7 @@ export function OrganizationUsageSection({
             <h2 id="usage-overview-title">概览</h2>
           </header>
           <article className={styles.primaryMetric}>
-            <span><Coins aria-hidden="true" />可用积分</span>
+            <span>可用积分</span>
             <div className={styles.metricValue}>
               <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
             </div>
@@ -453,13 +452,18 @@ export function OrganizationUsageSection({
             </div>
           </dl>
           <article className={styles.forecastMetric}>
-            <span><CalendarDays aria-hidden="true" />预计可用</span>
+            <span className={styles.forecastIcon} aria-hidden="true">
+              <CalendarDays />
+            </span>
+            <div className={styles.forecastCopy}>
+              <span>预计可用</span>
+              <small className={styles.forecastBasis}>
+                按近 30 天日均消耗估算
+              </small>
+            </div>
             <div className={styles.metricValue}>
               <strong>{formatForecast(summary.estimatedDaysRecent)}</strong>
             </div>
-            <small className={styles.forecastBasis}>
-              按近 30 天日均消耗估算
-            </small>
           </article>
         </section>
         {activityPanel}

@@ -26,7 +26,8 @@ interface ActivityWeek {
 const COLUMN_COUNT = 53;
 const LINE_WIDTH = 1060;
 const LINE_HEIGHT = 184;
-const LINE_PADDING_Y = 12;
+const LINE_PADDING_TOP = 12;
+const LINE_BASELINE_Y = LINE_HEIGHT - 1;
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -88,12 +89,12 @@ function getActivityWeeks(days: HeatmapDay[], leadingSlots: number): ActivityWee
 
 function getLinePoints(weeks: ActivityWeek[]) {
   const maximum = Math.max(1, ...weeks.map((week) => week.cumulativeCredits));
-  const chartHeight = LINE_HEIGHT - LINE_PADDING_Y * 2;
+  const chartHeight = LINE_BASELINE_Y - LINE_PADDING_TOP;
 
   return weeks.map((week, index) => ({
     ...week,
     x: ((index + 0.5) / COLUMN_COUNT) * LINE_WIDTH,
-    y: LINE_PADDING_Y
+    y: LINE_PADDING_TOP
       + chartHeight
       - (week.cumulativeCredits / maximum) * chartHeight,
   }));
@@ -206,8 +207,8 @@ export function UsageActivityChart({
           >
             <g className={styles.activityGuideLines} aria-hidden="true">
               {[0, 1, 2, 3].map((line) => {
-                const y = LINE_PADDING_Y
-                  + ((LINE_HEIGHT - LINE_PADDING_Y * 2) / 3) * line;
+                const y = LINE_PADDING_TOP
+                  + ((LINE_BASELINE_Y - LINE_PADDING_TOP) / 3) * line;
                 return (
                   <line
                     key={line}
@@ -221,7 +222,7 @@ export function UsageActivityChart({
             </g>
             <path
               className={styles.cumulativeArea}
-              d={`${buildPath(linePoints)} L ${linePoints.at(-1)?.x ?? 0} ${LINE_HEIGHT - LINE_PADDING_Y} L ${linePoints[0]?.x ?? 0} ${LINE_HEIGHT - LINE_PADDING_Y} Z`}
+              d={`${buildPath(linePoints)} L ${linePoints.at(-1)?.x ?? 0} ${LINE_BASELINE_Y} L ${linePoints[0]?.x ?? 0} ${LINE_BASELINE_Y} Z`}
             />
             <path className={styles.cumulativeLine} d={buildPath(linePoints)} />
             {activeLinePoint ? (
@@ -230,7 +231,7 @@ export function UsageActivityChart({
                   x1={activeLinePoint.x}
                   x2={activeLinePoint.x}
                   y1={0}
-                  y2={LINE_HEIGHT}
+                  y2={LINE_BASELINE_Y}
                 />
                 <circle cx={activeLinePoint.x} cy={activeLinePoint.y} r="5" />
               </g>
