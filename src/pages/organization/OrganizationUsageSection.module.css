@@ -202,11 +202,11 @@
 }
 
 .primaryMetric .metricValue strong {
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .forecastMetric .metricValue strong {
-  font-size: 22px;
+  font-size: 18px;
 }
 
 .forecastBasis {

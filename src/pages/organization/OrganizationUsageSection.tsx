@@ -480,7 +480,7 @@ export function OrganizationUsageSection({
             <h2 id="usage-period-title">期间分析</h2>
             <small>
               <CalendarDays aria-hidden="true" />
-              {actualRangeLabel} · Asia/Shanghai
+              {actualRangeLabel}
             </small>
           </span>
           <div className={styles.periodControls}>
