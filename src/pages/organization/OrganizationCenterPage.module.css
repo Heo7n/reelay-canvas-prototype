@@ -253,21 +253,6 @@
 }
 .sectionHeaderAction:hover svg:last-child { transform: translateX(2px); }
 
-.creditSectionToolbar {
-  display: flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.creditSectionToolbar > span {
-  color: var(--workspace-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
 .organizationCard {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);
@@ -715,46 +700,72 @@
 
 .creditBalanceOverview {
   display: grid;
-  grid-template-columns: minmax(250px, 0.8fr) minmax(430px, 1.2fr);
+  grid-template-columns: minmax(260px, 0.72fr) minmax(460px, 1.28fr);
   overflow: hidden;
-  min-height: 176px;
+  min-height: 182px;
   border: 1px solid var(--workspace-border);
-  border-radius: 14px;
-  background: var(--workspace-surface);
+  border-radius: 16px;
+  background: #f7f7f6;
+  box-shadow: 0 10px 28px rgba(20, 22, 26, 0.04);
+}
+
+.creditOverviewSection {
+  display: grid;
+  gap: 12px;
+}
+
+.creditOverviewTitle {
+  margin: 0;
+  color: var(--workspace-text);
+  font-size: 15px;
+  letter-spacing: -0.02em;
 }
 
 .creditBalanceTotal {
   display: grid;
-  align-content: center;
-  gap: 12px;
-  padding: 26px 30px;
+  grid-template-rows: 1fr;
+  padding: 24px 32px 25px;
   border: 0;
   border-right: 1px solid var(--workspace-border);
-  background: #20242a;
-  color: #fff;
+  background: transparent;
+  color: var(--workspace-text);
   text-align: left;
+}
+
+.creditBalanceTotalContent {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  align-content: stretch;
+  height: 100%;
+  gap: 8px;
 }
 
 .creditBalanceLabel {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--workspace-text);
 }
 
 .creditBalanceLabel > span {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 720;
+  letter-spacing: -0.01em;
 }
 
 .creditBalanceLabel svg {
   width: 14px;
   height: 14px;
-  color: #abc2bb;
+  color: #65776f;
 }
-.creditBalanceTotal > strong { font-size: 34px; letter-spacing: 0; line-height: 1; }
+.creditBalanceTotalContent > strong {
+  color: var(--workspace-text);
+  font-size: 38px;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
 
 .creditBalanceFooter {
   display: flex;
@@ -763,15 +774,69 @@
 }
 
 .creditBalanceFooter > small {
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 9px;
+  color: var(--workspace-muted);
+  font-size: 10px;
 }
+
+.creditBalanceAction {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
+  width: 180px;
+  min-height: 40px;
+  align-self: end;
+  align-items: center;
+  gap: 9px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 1px solid rgba(23, 23, 25, 0.12);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 4px 12px rgba(20, 22, 26, 0.05);
+  color: var(--workspace-text);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 720;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.creditBalanceActionIcon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: #5f7f6e;
+}
+
+.creditBalanceActionIcon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
+}
+
+.creditBalanceAction svg:last-child {
+  width: 14px;
+  height: 14px;
+  color: var(--workspace-muted);
+  transition: transform 0.16s ease;
+}
+
+.creditBalanceAction:hover {
+  border-color: rgba(95, 127, 110, 0.38);
+  background: #fff;
+  box-shadow: 0 5px 14px rgba(41, 59, 50, 0.08);
+  transform: translateY(-1px);
+}
+
+.creditBalanceAction:hover svg:last-child { transform: translateX(2px); }
 
 .creditComposition {
   display: grid;
-  align-content: center;
-  gap: 17px;
-  padding: 24px 28px;
+  grid-template-rows: auto 1fr auto;
+  align-content: stretch;
+  gap: 12px;
+  padding: 24px 32px 25px;
 }
 
 .creditCompositionHeading {
@@ -779,40 +844,59 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--workspace-border);
 }
 
-.creditCompositionHeading strong { color: var(--workspace-text); font-size: 11px; }
+.creditCompositionHeading strong { color: var(--workspace-text); font-size: 13px; }
 .creditCompositionHeading small { color: var(--workspace-muted); font-size: 9px; }
 
 .creditCompositionBar {
   display: flex;
   overflow: hidden;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--workspace-hover);
+  height: 20px;
+  padding: 2px;
+  border: 1px solid rgba(23, 23, 25, 0.07);
+  border-radius: 6px;
+  background: #e1e3e5;
+  box-shadow: inset 0 1px 2px rgba(20, 22, 26, 0.07);
 }
 
 .creditCompositionBar .poolBalanceSegment {
-  background: #78988e;
+  border-radius: 4px 1px 1px 4px;
+  background: linear-gradient(90deg, #6d897a, #7d998a);
 }
 
-.creditCompositionBar .memberBalanceSegment { background: #50535c; }
+.creditCompositionBar .memberBalanceSegment {
+  border-radius: 1px 4px 4px 1px;
+  background: #898d95;
+  box-shadow: inset 2px 0 0 #e1e3e5;
+}
 
 .creditCompositionLegend {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  align-self: center;
+  gap: 18px;
 }
 
 .compositionMetric {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
+  grid-template-columns: 7px minmax(0, 1fr);
   min-width: 0;
-  align-items: center;
-  gap: 9px;
+  align-items: start;
+  gap: 8px;
 }
 
-.compositionMetric > span:nth-child(2) {
+.compositionMetric::before {
+  width: 7px;
+  height: 7px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: #7d998a;
+  content: "";
+}
+
+.compositionMetric > span {
   display: grid;
   min-width: 0;
   gap: 5px;
@@ -825,25 +909,26 @@
 
 .creditCompositionLegend strong {
   color: var(--workspace-text);
-  font-size: 15px;
+  font-size: 17px;
   letter-spacing: 0;
 }
 
-.poolBalanceMetric strong { color: #55786d; }
+.poolBalanceMetric strong { color: #5f7f6e; }
 .memberBalanceMetric strong { color: #444750; }
-
-.memberBalanceMarker,
-.poolBalanceMarker { width: 8px; height: 8px; border-radius: 2px; }
-.memberBalanceMarker { background: #50535c; }
-.poolBalanceMarker { background: #78988e; }
+.memberBalanceMetric::before { background: #898d95; }
 
 .allocationTableHeader,
 .allocationRow {
   display: grid;
-  grid-template-columns: 1.15fr 0.58fr 0.72fr 1fr;
+  grid-template-columns:
+    150px
+    220px
+    100px
+    130px
+    minmax(130px, 1fr);
   min-height: 56px;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   padding: 0 18px;
 }
 
@@ -867,14 +952,24 @@
 .allocationRow > strong { color: var(--workspace-text); font-size: 12px; }
 .allocationRow .memberIdentity > strong { color: var(--workspace-text); font-size: 11px; }
 
+.memberAccount {
+  overflow: hidden;
+  color: var(--workspace-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .memberCreditBalance {
   display: grid;
   gap: 3px;
+  justify-items: start;
+  text-align: left;
 }
 
 .allocationRow .memberCreditBalance strong {
   color: var(--workspace-text);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .allocationRow .memberCreditBalance small {
@@ -884,10 +979,15 @@
 }
 
 .creditRowActions {
-  display: flex;
+  display: inline-flex;
+  width: fit-content;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  justify-self: end;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--workspace-surface) 88%, var(--workspace-bg));
 }
 
 .creditRowActions button {
@@ -895,9 +995,9 @@
   min-height: 28px;
   align-items: center;
   gap: 4px;
-  padding: 0 9px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 7px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--workspace-text);
   font: inherit;
@@ -908,21 +1008,21 @@
 
 .creditAdjustmentAction,
 .creditDetailAction {
-  min-width: 54px;
+  min-width: 56px;
   justify-content: center;
 }
 
-.creditRowActions button:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
+.creditRowActions button:hover { background: var(--workspace-hover); }
 .creditRowActions svg { width: 12px; height: 12px; }
 
 .creditAdjustmentPopover {
   position: fixed;
   z-index: 720;
   display: grid;
-  width: 208px;
-  padding: 6px;
+  width: 304px;
+  padding: 12px;
   border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--workspace-surface, #fff);
   box-shadow: 0 16px 42px rgba(16, 16, 20, 0.16);
   color: var(--workspace-text, #171719);
@@ -930,29 +1030,24 @@
 
 .creditAdjustmentHeader {
   display: flex;
-  min-height: 45px;
+  min-height: 46px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 5px 4px;
-  padding: 0 5px;
+  padding: 0 2px 10px;
   border-bottom: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
 }
 
 .creditAdjustmentHeader > span {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 3px;
 }
 
 .creditAdjustmentHeader strong {
   color: var(--workspace-text, #171719);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0;
-}
-
-.creditAdjustmentHeader > strong {
-  font-size: 12px;
 }
 
 .creditAdjustmentHeader small {
@@ -960,66 +1055,188 @@
   font-size: 8px;
 }
 
-.creditAdjustmentPopover button {
+.creditAdjustmentBalance {
+  flex: none;
+  justify-items: end;
+  text-align: right;
+}
+
+.creditAdjustmentBalance strong { font-size: 14px; }
+
+.creditAdjustmentForm {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  min-height: 47px;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.creditAdjustmentMode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
+.creditAdjustmentMode button {
+  display: inline-flex;
+  min-height: 32px;
   align-items: center;
-  gap: 9px;
-  padding: 0 7px;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: inherit;
   font: inherit;
-  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.creditAdjustmentMode button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--workspace-surface, #fff) 64%, transparent);
+}
+
+.creditAdjustmentMode button:disabled {
+  color: var(--workspace-subtle, #a5a5aa);
+  cursor: not-allowed;
+}
+
+.creditAdjustmentMode .creditAdjustmentModeSelected {
+  background: var(--workspace-surface, #fff);
+  box-shadow: 0 1px 5px rgba(16, 16, 20, 0.08);
+}
+
+.creditAdjustmentMode svg {
+  width: 13px;
+  height: 13px;
+  color: currentColor;
+}
+
+.creditAmountField {
+  display: grid;
+  gap: 6px;
+}
+
+.creditAmountField > span:first-child {
+  color: var(--workspace-text, #171719);
+  font-size: 9px;
+  font-weight: 720;
+}
+
+.creditAmountControl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 38px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 9px;
+  background: var(--workspace-surface, #fff);
+}
+
+.creditAmountControl:focus-within {
+  border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.24));
+  box-shadow: 0 0 0 3px rgba(95, 127, 110, 0.1);
+}
+
+.creditAmountControl input {
+  min-width: 0;
+  height: 100%;
+  padding: 0 11px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.creditAmountControl input::-webkit-inner-spin-button,
+.creditAmountControl input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.creditAmountControl input::placeholder {
+  color: var(--workspace-subtle, #a5a5aa);
+}
+
+.creditAmountControl > small {
+  color: var(--workspace-muted, #74747a);
+  font-size: 8px;
+}
+
+.creditAmountControl button {
+  align-self: stretch;
+  margin-left: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.creditAdjustmentPopover button:hover {
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
-}
-
-.creditAdjustmentIcon {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
-}
-
-.creditAdjustmentPopover svg {
-  width: 14px;
-  height: 14px;
-  color: var(--workspace-muted, #74747a);
-}
-
-.grantCreditAction .creditAdjustmentIcon {
-  background: rgba(94, 132, 119, 0.12);
-}
-
-.grantCreditAction .creditAdjustmentIcon svg { color: #55786d; }
-
-.reclaimCreditAction .creditAdjustmentIcon {
-  background: rgba(111, 113, 122, 0.1);
-}
-
-.creditAdjustmentCopy {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.creditAdjustmentCopy strong {
-  color: var(--workspace-text, #171719);
-  font-size: 10px;
-}
-
-.creditAdjustmentCopy small {
+.creditAdjustmentHint {
+  display: flex;
+  min-height: 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   color: var(--workspace-muted, #74747a);
   font-size: 8px;
-  line-height: 1.3;
+}
+
+.creditAdjustmentHint [role="alert"] { color: #c24752; }
+
+.creditAdjustmentFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding-top: 2px;
+}
+
+.creditAdjustmentFooter button {
+  min-height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 8px;
+  background: var(--workspace-surface, #fff);
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.creditAdjustmentFooter button:hover:not(:disabled) {
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
+.creditAdjustmentFooter .creditAdjustmentConfirm {
+  border-color: #24262a;
+  background: #24262a;
+  color: #fff;
+}
+
+.creditAdjustmentFooter .creditAdjustmentConfirm:hover:not(:disabled) {
+  background: #111215;
+}
+
+.creditAdjustmentFooter button:disabled {
+  border-color: transparent;
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  color: var(--workspace-subtle, #a5a5aa);
+  cursor: not-allowed;
 }
 
 .drawerBackdrop {
@@ -1105,28 +1322,251 @@
   scrollbar-gutter: stable;
 }
 
-.drawerFilterBar {
+.memberLedgerIdentity {
   display: flex;
-  min-height: 36px;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 0 0 16px;
-  padding: 0 2px;
+  gap: 8px 18px;
 }
 
-.drawerFilterBar > span {
+.memberLedgerIdentity span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.memberLedgerIdentity strong {
+  color: var(--workspace-text, #171719);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memberLedgerBody {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-rows: minmax(180px, 3fr) minmax(300px, 7fr);
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.memberLedgerSection {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 13px;
+  background: color-mix(
+    in srgb,
+    var(--workspace-surface, #fff) 96%,
+    var(--workspace-hover, rgba(23, 23, 25, 0.055))
+  );
+}
+
+.memberLedgerSectionHeading {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+}
+
+.memberLedgerSectionHeading > span {
+  display: grid;
+  gap: 4px;
+}
+
+.memberLedgerSectionHeading h3,
+.memberLedgerSectionHeading p {
+  margin: 0;
+}
+
+.memberLedgerSectionHeading h3 {
+  color: var(--workspace-text, #171719);
+  font-size: 12px;
+}
+
+.memberLedgerSectionHeading p,
+.memberLedgerSectionHeading small {
   color: var(--workspace-muted, #74747a);
   font-size: 9px;
+}
+
+.memberLedgerHeadingActions,
+.drawerSectionHeadingActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.memberLedgerScroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.memberLedgerScroll .allocationRecords {
+  border: 0;
+  border-radius: 0;
+}
+
+.memberLedgerScroll .drawerTableHeader {
+  top: 0;
+}
+
+.memberAllocationRecordTable .drawerTableHeader,
+.memberAllocationRecordTable article {
+  grid-template-columns:
+    minmax(106px, 0.7fr)
+    minmax(72px, 0.45fr)
+    minmax(96px, 0.62fr)
+    minmax(128px, 0.92fr)
+    minmax(82px, 0.52fr)
+    minmax(180px, 1.25fr);
+}
+
+.memberConsumptionRecordTable .drawerTableHeader,
+.memberConsumptionRecordTable article {
+  grid-template-columns:
+    minmax(104px, 0.7fr)
+    minmax(130px, 0.95fr)
+    minmax(84px, 0.56fr)
+    minmax(150px, 1.1fr)
+    minmax(120px, 0.82fr)
+    minmax(86px, 0.54fr);
+}
+
+.memberConsumptionRecordTable .drawerTableHeader > span:last-child {
+  text-align: right;
+}
+
+.memberLedgerEmpty {
+  display: grid;
+  min-height: 96px;
+  place-items: center;
+  color: var(--workspace-muted, #74747a);
+  font-size: 10px;
+}
+
+.consumptionFilterTrigger {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 8px;
+  background: var(--workspace-surface, #fff);
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.consumptionFilterTrigger:hover,
+.consumptionFilterTrigger[aria-expanded="true"] {
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
+.consumptionFilterTrigger svg {
+  width: 12px;
+  height: 12px;
+}
+
+.consumptionFilterTrigger strong {
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--workspace-text, #171719);
+  color: var(--workspace-surface, #fff);
+  font-size: 8px;
+}
+
+.consumptionFilterPanel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr)) auto;
+  align-items: end;
+  gap: 10px 12px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 11px;
+  background: color-mix(
+    in srgb,
+    var(--workspace-surface, #fff) 92%,
+    var(--workspace-hover, rgba(23, 23, 25, 0.055))
+  );
+}
+
+.memberLedgerScroll > .consumptionFilterPanel {
+  margin: 12px 12px 0;
+}
+
+.consumptionFilterPanel label {
+  display: grid;
+  gap: 5px;
+}
+
+.consumptionFilterPanel label > span {
+  color: var(--workspace-muted, #74747a);
+  font-size: 8px;
   font-weight: 680;
 }
 
-.drawerFilterBar select {
-  min-height: 30px;
-  min-width: 118px;
+.consumptionFilterPanel select {
+  width: 100%;
+  min-height: 31px;
   padding: 0 28px 0 9px;
   border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
   border-radius: 7px;
+  outline: 0;
+  background: var(--workspace-surface, #fff);
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 9px;
+}
+
+.consumptionFilterPanel select:focus {
+  border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.22));
+}
+
+.clearConsumptionFilters {
+  width: fit-content;
+  min-height: 28px;
+  align-self: end;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--workspace-muted, #74747a);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.clearConsumptionFilters:hover:not(:disabled) {
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  color: var(--workspace-text, #171719);
+}
+
+.clearConsumptionFilters:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.memberFilterSelect {
+  min-height: 30px;
+  min-width: 122px;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 8px;
   outline: 0;
   background: var(--workspace-surface, #fff);
   color: var(--workspace-text, #171719);
@@ -1136,62 +1576,23 @@
   cursor: pointer;
 }
 
-.drawerFilterBar select:hover,
-.drawerFilterBar select:focus {
+.memberFilterSelect:hover,
+.memberFilterSelect:focus {
   border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.22));
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.035));
 }
 
-.drawerFilterBar select:focus-visible {
+.memberFilterSelect:focus-visible {
   outline: 3px solid rgba(106, 106, 236, 0.2);
   outline-offset: 2px;
-}
-
-.drawerSummaryGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-  border-radius: 12px;
-}
-
-.drawerIncomeSummary {
-  grid-template-columns: minmax(240px, 360px);
-  width: min(360px, 100%);
-}
-
-.drawerAllocationSummary {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.drawerSummaryGrid article {
-  display: grid;
-  min-height: 78px;
-  align-content: center;
-  gap: 8px;
-  padding: 0 18px;
-}
-
-.drawerSummaryGrid article + article {
-  border-left: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-}
-
-.drawerSummaryGrid span {
-  color: var(--workspace-muted, #74747a);
-  font-size: 9px;
-  font-weight: 680;
-}
-
-.drawerSummaryGrid strong {
-  color: var(--workspace-text, #171719);
-  font-size: 20px;
-  letter-spacing: 0;
 }
 
 .drawerSectionHeading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 24px 0 10px;
+  gap: 16px;
+  margin: 4px 0 12px;
 }
 
 .drawerSectionHeading h3 {
@@ -1203,6 +1604,38 @@
 .drawerSectionHeading span {
   color: var(--workspace-muted, #74747a);
   font-size: 9px;
+}
+
+.drawerSectionHeading .drawerSectionStats {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  border-radius: 8px;
+  background: color-mix(
+    in srgb,
+    var(--workspace-surface, #fff) 88%,
+    var(--workspace-hover, rgba(23, 23, 25, 0.055))
+  );
+  color: var(--workspace-muted, #74747a);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.drawerSectionStats strong {
+  color: var(--workspace-text, #171719);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.drawerSectionStats i {
+  width: 1px;
+  height: 12px;
+  margin: 0 2px;
+  background: var(--workspace-border, rgba(23, 23, 25, 0.11));
 }
 
 .allocationRecords { display: grid; border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11)); border-radius: 12px; }
@@ -1280,23 +1713,25 @@
 .allocationRecordTable .drawerTableHeader,
 .allocationRecordTable article {
   grid-template-columns:
+    minmax(0, 0.68fr)
     minmax(0, 0.72fr)
-    minmax(0, 0.82fr)
-    minmax(0, 0.45fr)
-    minmax(0, 0.62fr)
-    minmax(0, 0.64fr)
-    minmax(0, 1.45fr);
+    minmax(0, 0.46fr)
+    minmax(0, 0.58fr)
+    minmax(0, 0.94fr)
+    minmax(0, 0.52fr)
+    minmax(0, 1.12fr);
 }
 
 .consumptionRecords .drawerTableHeader,
 .consumptionRecords article {
   grid-template-columns:
-    minmax(0, 0.72fr)
-    minmax(0, 0.76fr)
-    minmax(0, 0.9fr)
-    minmax(0, 1.55fr)
-    minmax(0, 0.55fr)
-    minmax(0, 0.62fr);
+    minmax(0, 0.68fr)
+    minmax(0, 0.7fr)
+    minmax(0, 0.86fr)
+    minmax(0, 0.56fr)
+    minmax(0, 0.92fr)
+    minmax(0, 0.78fr)
+    minmax(0, 0.54fr);
 }
 
 .consumptionRecords .drawerTableHeader > span:last-child {
@@ -1305,18 +1740,39 @@
 
 .allocationRecords article > strong { font-size: 12px; }
 .allocationAction {
-  display: inline-flex;
-  grid-auto-flow: column;
+  display: inline-flex !important;
+  width: fit-content;
+  min-height: 24px;
   align-items: center;
-  justify-content: start;
-  gap: 4px;
-  color: var(--workspace-muted, #74747a);
-  font-size: 9px;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 740;
 }
 
-.allocationAction svg {
-  width: 12px;
-  height: 12px;
+.allocationGrant {
+  background: color-mix(in srgb, #267a58 11%, transparent);
+  color: #267a58;
+}
+
+.allocationReclaim {
+  background: color-mix(in srgb, #a85c4d 10%, transparent);
+  color: #a85c4d;
+}
+
+.allocationValidity {
+  display: grid;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.allocationValidity strong {
+  font-size: 10px;
+}
+
+.allocationValidity small {
+  white-space: nowrap;
 }
 
 .ledgerTime,
@@ -1334,42 +1790,27 @@
   white-space: nowrap;
 }
 
-.consumptionTask {
-  display: grid !important;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: center;
-  gap: 6px !important;
-}
-
-.consumptionTask > svg {
-  width: 13px;
-  height: 13px;
+.taskTypeCell {
   color: var(--workspace-muted, #74747a);
+  font-size: 9px;
+  font-weight: 680;
 }
 
-.consumptionTask > span {
-  display: grid;
+.modelCell {
   min-width: 0;
-  gap: 3px;
 }
 
-.consumptionTask small {
+.modelCell strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.settlementStatus {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 24px;
-  align-items: center;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, #267a58 10%, transparent);
-  color: #267a58;
+.generationSpecCell {
+  color: var(--workspace-muted, #74747a);
   font-size: 9px;
-  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .consumedAmount {
@@ -1400,6 +1841,34 @@
   --workspace-hover: rgba(244, 244, 245, 0.07);
 }
 
+:global(html[data-theme="dark"]) .creditBalanceOverview {
+  background: #1b1c20;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+:global(html[data-theme="dark"]) .creditBalanceLabel svg {
+  color: #a8c6bd;
+}
+
+:global(html[data-theme="dark"]) .creditBalanceAction {
+  border-color: rgba(244, 244, 245, 0.14);
+  background: rgba(244, 244, 245, 0.055);
+  box-shadow: none;
+}
+
+:global(html[data-theme="dark"]) .creditBalanceAction:hover {
+  border-color: rgba(168, 198, 189, 0.34);
+  background: rgba(244, 244, 245, 0.09);
+}
+
+:global(html[data-theme="dark"]) .creditCompositionBar {
+  background: #35373d;
+}
+
+:global(html[data-theme="dark"]) .creditCompositionBar .memberBalanceSegment {
+  box-shadow: inset 2px 0 0 #35373d;
+}
+
 :global(html[data-theme="dark"]) .poolBalanceMetric strong {
   color: #a8c6bd;
 }
@@ -1408,12 +1877,10 @@
   color: #d1d2d7;
 }
 
-:global(html[data-theme="dark"]) .grantCreditAction .creditAdjustmentIcon {
-  background: rgba(137, 177, 164, 0.15);
-}
-
-:global(html[data-theme="dark"]) .grantCreditAction .creditAdjustmentIcon svg {
-  color: #a8c6bd;
+:global(html[data-theme="dark"]) .creditAdjustmentFooter .creditAdjustmentConfirm {
+  border-color: #f4f4f5;
+  background: #f4f4f5;
+  color: #15161a;
 }
 
 .sidebar nav a:focus-visible,
@@ -1427,6 +1894,7 @@
 .accountOptions button:focus-visible,
 .rowAction button:focus-visible,
 .sectionHeaderAction:focus-visible,
+.creditBalanceAction:focus-visible,
 .creditDrawer button:focus-visible {
   outline: 3px solid rgba(106, 106, 236, 0.28);
   outline-offset: 2px;
