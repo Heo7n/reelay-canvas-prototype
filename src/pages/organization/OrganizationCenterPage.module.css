@@ -1293,11 +1293,13 @@
 .drawerCloseButton:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
 .drawerCloseButton svg { width: 18px; height: 18px; }
 
+.creditRangeMenu,
 .creditExportMenu {
   position: relative;
   margin-bottom: 4px;
 }
 
+.creditRangeMenu summary,
 .creditExportMenu summary {
   display: inline-flex;
   height: 32px;
@@ -1314,26 +1316,31 @@
   list-style: none;
 }
 
+.creditRangeMenu summary::-webkit-details-marker,
 .creditExportMenu summary::-webkit-details-marker { display: none; }
+.creditRangeMenu summary svg,
 .creditExportMenu summary svg { width: 14px; height: 14px; }
+.creditRangeMenu summary svg:last-child,
 .creditExportMenu summary svg:last-child {
   width: 11px;
   color: var(--workspace-muted, #74747a);
   transition: transform 160ms ease;
 }
+.creditRangeMenu[open] summary,
 .creditExportMenu[open] summary {
   border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.22));
   background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
 }
+.creditRangeMenu[open] summary svg:last-child,
 .creditExportMenu[open] summary svg:last-child { transform: rotate(180deg); }
 
+.creditRangeMenu > div,
 .creditExportMenu > div {
   position: absolute;
   z-index: 30;
   top: calc(100% + 7px);
   right: 0;
   display: grid;
-  width: 272px;
   padding: 6px;
   border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
   border-radius: 10px;
@@ -1341,25 +1348,61 @@
   box-shadow: 0 18px 44px rgba(17, 18, 22, 0.17);
 }
 
-.creditExportRange {
+.creditRangeMenu > div { width: 272px; }
+.creditExportMenu > div { width: 230px; }
+
+.creditRangeOptions {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  margin: 1px 3px 5px;
-  padding: 7px 6px 10px;
-  border-bottom: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+  gap: 2px;
 }
 
-.creditExportRange > span,
-.creditExportCustomDates label > span {
+.creditRangeOptions button {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--workspace-text, #171719);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.creditRangeOptions button:hover,
+.creditRangeOptions button[aria-pressed="true"] {
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+}
+
+.creditRangeOptions button[aria-pressed="true"] {
+  font-weight: 720;
+}
+
+.creditRangeOptions button > svg {
+  width: 13px;
+  height: 13px;
+  color: #6f8f77;
+}
+
+.creditRangeCustomDates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 5px;
+  padding: 10px 4px 4px;
+  border-top: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
+}
+
+.creditRangeCustomDates label > span {
   color: var(--workspace-muted, #74747a);
   font-size: 9px;
   font-weight: 620;
 }
 
-.creditExportRange select,
-.creditExportCustomDates input {
+.creditRangeCustomDates input {
   width: 100%;
   min-width: 0;
   height: 30px;
@@ -1372,20 +1415,13 @@
   font-size: 9px;
 }
 
-.creditExportCustomDates {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-  padding: 2px 9px 8px;
-}
-
-.creditExportCustomDates label {
+.creditRangeCustomDates label {
   display: grid;
   min-width: 0;
   gap: 5px;
 }
 
-.creditExportCustomDates > small {
+.creditRangeCustomDates > small {
   grid-column: 1 / -1;
   color: #c43b3b;
   font-size: 8px;
@@ -1446,6 +1482,12 @@
 .drawerTabs {
   display: flex;
   gap: 24px;
+}
+
+.drawerTabActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .drawerTabs button {
@@ -1721,32 +1763,6 @@
 .clearConsumptionFilters:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-.memberFilterSelect {
-  min-height: 30px;
-  min-width: 122px;
-  padding: 0 28px 0 9px;
-  border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.11));
-  border-radius: 8px;
-  outline: 0;
-  background: var(--workspace-surface, #fff);
-  color: var(--workspace-text, #171719);
-  font: inherit;
-  font-size: 9px;
-  font-weight: 680;
-  cursor: pointer;
-}
-
-.memberFilterSelect:hover,
-.memberFilterSelect:focus {
-  border-color: var(--workspace-border-strong, rgba(23, 23, 25, 0.22));
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.035));
-}
-
-.memberFilterSelect:focus-visible {
-  outline: 3px solid rgba(106, 106, 236, 0.2);
-  outline-offset: 2px;
 }
 
 .drawerSectionHeading {
@@ -2058,6 +2074,7 @@
 .sectionHeaderAction:focus-visible,
 .creditBalanceAction:focus-visible,
 .creditDrawer button:focus-visible,
+.creditRangeMenu summary:focus-visible,
 .creditExportMenu summary:focus-visible {
   outline: 3px solid rgba(106, 106, 236, 0.28);
   outline-offset: 2px;

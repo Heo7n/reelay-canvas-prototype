@@ -222,23 +222,49 @@ describe("organization center", () => {
     expect(within(creditDialog).queryByText("入账笔数")).toBeNull();
     expect(within(creditDialog).getByRole("table", { name: "组织积分入账记录" })).toBeInTheDocument();
     expect(within(creditDialog).getByRole("columnheader", { name: "来源与说明" })).toBeInTheDocument();
+    const rangeButton = within(creditDialog).getByRole("button", {
+      name: "筛选记录时间，当前全部时间",
+    });
+    fireEvent.click(rangeButton);
+    const ledgerRangeMenu = within(creditDialog).getByRole("group", {
+      name: "记录时间范围",
+    });
+    expect(within(ledgerRangeMenu).getByRole("button", { name: "全部时间" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(within(ledgerRangeMenu).getByRole("button", { name: "自定义" }));
+    fireEvent.change(within(creditDialog).getByLabelText("记录开始日期"), {
+      target: { value: "2026-06-01" },
+    });
+    fireEvent.change(within(creditDialog).getByLabelText("记录结束日期"), {
+      target: { value: "2026-06-30" },
+    });
+    expect(within(creditDialog).getByText("2026-06-20")).toBeInTheDocument();
+    expect(within(creditDialog).queryByText("2026-07-20")).toBeNull();
+    fireEvent.click(within(creditDialog).getByRole("tab", { name: "分配记录" }));
+    expect(within(creditDialog).getByText("当前时间范围内暂无分配记录")).toBeInTheDocument();
+    expect(within(creditDialog).getByRole("button", {
+      name: "筛选记录时间，当前2026-06-01 至 2026-06-30",
+    })).toBeInTheDocument();
+    fireEvent.click(within(creditDialog).getByRole("tab", { name: "入账记录" }));
+    fireEvent.click(within(ledgerRangeMenu).getByRole("button", { name: "全部时间" }));
+
     const creditExportButton = within(creditDialog).getByRole("button", {
       name: "导出积分账户流水",
     });
     fireEvent.click(creditExportButton);
-    const exportRangeSelect = within(creditDialog).getByRole("combobox", {
-      name: "导出时间范围",
-    });
-    expect(exportRangeSelect).toHaveValue("all");
+    const exportMenu = creditExportButton.closest("details");
+    expect(exportMenu).not.toBeNull();
+    expect(within(exportMenu as HTMLDetailsElement).queryByRole("combobox", {
+      name: "记录时间范围",
+    })).toBeNull();
     expect(within(creditDialog).getByRole("button", {
       name: "导出全部积分账户流水为 Excel",
     })).toBeInTheDocument();
     expect(within(creditDialog).getByRole("button", {
       name: "导出当前入账记录为 CSV",
     })).toBeInTheDocument();
-    fireEvent.change(exportRangeSelect, { target: { value: "custom" } });
-    expect(within(creditDialog).getByLabelText("导出开始日期")).toBeInTheDocument();
-    expect(within(creditDialog).getByLabelText("导出结束日期")).toBeInTheDocument();
     fireEvent.click(creditExportButton);
 
     fireEvent.click(within(creditDialog).getByRole("tab", { name: "分配记录" }));
@@ -246,19 +272,7 @@ describe("organization center", () => {
     expect(within(creditDialog).getByRole("heading", { name: "发放与回收明细" })).toBeInTheDocument();
     expect(within(creditDialog).queryByText("全部成员账户")).toBeNull();
     expect(within(creditDialog).getByText(/共 10 笔/)).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue("");
-    fireEvent.change(screen.getByRole("combobox", { name: "筛选成员" }), {
-      target: { value: "creator@reelay.test" },
-    });
-    expect(screen.getByRole("dialog", { name: "积分变动记录" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "分配记录" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("dialog", { name: "Hoo 账户记录" })).toBeNull();
-    expect(screen.getByRole("combobox", { name: "筛选成员" })).toHaveValue(
-      "creator@reelay.test",
-    );
-    fireEvent.change(screen.getByRole("combobox", { name: "筛选成员" }), {
-      target: { value: "" },
-    });
+    expect(within(creditDialog).queryByRole("combobox", { name: "筛选成员" })).toBeNull();
     expect(within(creditDialog).getByText(/已发放/)).toBeInTheDocument();
     expect(within(creditDialog).getByText(/已回收/)).toBeInTheDocument();
     expect(within(creditDialog).queryByText("可分配余额")).toBeNull();
