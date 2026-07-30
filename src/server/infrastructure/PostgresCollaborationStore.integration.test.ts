@@ -45,6 +45,18 @@ async function login(app: FastifyInstance, account: string): Promise<string> {
 beforeAll(async () => {
   adminPool = new Pool({ connectionString: adminUrl.toString(), max: 1, application_name: "reelay-test-admin" });
   if (!/^[a-z0-9_]+$/.test(databaseName)) throw new Error("Unsafe test database name.");
+  await adminPool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        CREATE ROLE anon NOLOGIN;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        CREATE ROLE authenticated NOLOGIN;
+      END IF;
+    END
+    $$
+  `);
   await adminPool.query(`CREATE DATABASE "${databaseName}"`);
 
   const setupPool = createPool();
@@ -58,6 +70,7 @@ beforeAll(async () => {
       "0006_account_roles.sql",
       "0007_project_soft_delete.sql",
       "0008_account_contacts.sql",
+      "0009_server_only_data_access.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);
