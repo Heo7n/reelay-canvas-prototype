@@ -12,6 +12,14 @@
 
 不要为了“保险”默认通读所有长文档。只有改动会改变对应边界时，才读取和更新对应文档。
 
+多个 Codex 会话并行时，每个会话应使用独立 worktree；同一目录只能同时处于一个分支状态，不能把它当成多个会话的共享分支容器。开始工作或准备合并前运行：
+
+```powershell
+npm run worktrees
+```
+
+该命令会列出每个 worktree 的目录、分支、未提交改动、远端领先 / 落后状态和最后一次提交，并展开所有脏文件。不要在另一个会话仍有未提交改动时切换、删除或复用它的 worktree。
+
 ## 2. 上下文路由
 
 | 改动范围 | 必读内容 | 常见代码位置 |
@@ -21,6 +29,7 @@
 | React 应用壳、路由、页面迁移 | `adr/0001-application-runtime-and-migration.md`；相关 `product-expansion-plan.md` 章节 | `src/app/`、`src/pages/`、`src/infrastructure/http/` |
 | Session、Workspace、Membership、Project、共享后端 | ADR 的领域和后端章节；扩展计划的数据边界章节 | `src/domain/`、`src/application/`、后续服务端目录 |
 | 资产、生成任务、积分、跨项目 Agent | `product-expansion-plan.md` 的对应领域章节和相关护栏 | 对应 domain/application 模块 |
+| Vercel / Supabase 公网预览 | `vercel-supabase-preview.md`；涉及服务边界时再读后端 ADR | `api/`、`src/server/`、`vercel.json`、数据库迁移 |
 | 只改文档 | 被修改文档及其直接引用 | `docs/` |
 
 文档职责：

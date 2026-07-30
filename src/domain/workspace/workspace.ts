@@ -16,3 +16,10 @@ export interface Membership {
   actorId: ActorId;
   role: MembershipRole;
 }
+
+export interface OrganizationMember {
+  userId: ActorId;
+  displayName: string;
+  loginIdentifier: string | null;
+  role: MembershipRole;
+}

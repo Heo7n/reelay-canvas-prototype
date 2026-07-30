@@ -6,7 +6,8 @@ import {
 
 import type { SessionActor } from "../domain/identity/session";
 import type { ProjectSummary } from "../domain/project/project";
-import type { Workspace } from "../domain/workspace/workspace";
+import type { OrganizationMember, Workspace } from "../domain/workspace/workspace";
+import type { WorkspaceContext } from "../application/workspaces/WorkspaceContextGateway";
 import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { routePaths } from "./routes";
 import type { ApplicationServices } from "./services";
@@ -16,6 +17,17 @@ export interface WorkspaceRouteData {
   currentWorkspace: Workspace;
   projects: ProjectSummary[];
   workspaces: Workspace[];
+}
+
+export interface OrganizationRouteData {
+  actor: SessionActor;
+  currentWorkspace: Workspace;
+  members: OrganizationMember[];
+  workspaces: Workspace[];
+}
+
+export interface OrganizationMembersRouteData {
+  members: OrganizationMember[];
 }
 
 export interface LoginActionData {
@@ -81,21 +93,37 @@ async function loadWorkspaceData(
   services: ApplicationServices,
   args: LoaderFunctionArgs,
 ): Promise<WorkspaceRouteData> {
-  const context = await getSessionContext(services);
-  if (!context.actor) throw loginRedirect(args.request);
+  const workspaceId = args.params.workspaceId;
+  if (!workspaceId) throw new Response("Workspace not found", { status: 404 });
+
+  let context: WorkspaceContext;
+  try {
+    context = await services.workspaceContextGateway.load(workspaceId);
+  } catch (error) {
+    if (error instanceof HttpRequestError && error.status === 401) {
+      throw loginRedirect(args.request);
+    }
+    if (error instanceof HttpRequestError && (error.status === 403 || error.status === 404)) {
+      const sessionContext = await getSessionContext(services);
+      if (!sessionContext.actor) throw loginRedirect(args.request);
+      const defaultWorkspace = selectDefaultWorkspace(sessionContext.workspaces);
+      throw redirect(defaultWorkspace
+        ? routePaths.workspaceHome(defaultWorkspace.id)
+        : routePaths.noWorkspace());
+    }
+    throw error;
+  }
 
   const defaultWorkspace = selectDefaultWorkspace(context.workspaces);
   if (!defaultWorkspace) throw redirect(routePaths.noWorkspace());
 
-  const currentWorkspace = context.workspaces.find((workspace) => workspace.id === args.params.workspaceId);
+  const currentWorkspace = context.workspaces.find((workspace) => workspace.id === workspaceId);
   if (!currentWorkspace) throw redirect(routePaths.workspaceHome(defaultWorkspace.id));
-
-  const projects = await services.projectRepository.listByWorkspace(currentWorkspace.id);
 
   return {
     actor: context.actor,
     currentWorkspace,
-    projects,
+    projects: context.projects,
     workspaces: context.workspaces,
   };
 }
@@ -144,8 +172,6 @@ export function createRouteHandlers(services: ApplicationServices) {
     },
 
     accountAction: async ({ request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
-      const session = await services.sessionGateway.getCurrent();
-      if (!session.actor) throw loginRedirect(request);
       const formData = await request.formData();
       const contactEmail = String(formData.get("contactEmail") ?? "").trim() || null;
       const contactPhone = String(formData.get("contactPhone") ?? "").trim() || null;
@@ -169,13 +195,34 @@ export function createRouteHandlers(services: ApplicationServices) {
 
     workspaceLoader: (args: LoaderFunctionArgs) => loadWorkspaceData(services, args),
 
+    organizationLoader: async (args: LoaderFunctionArgs): Promise<OrganizationMembersRouteData> => {
+      const workspaceId = args.params.workspaceId;
+      if (!workspaceId) throw new Response("Workspace not found", { status: 404 });
+      try {
+        return {
+          members: await services.organizationRepository.listMembers(workspaceId),
+        };
+      } catch (error) {
+        if (error instanceof HttpRequestError && error.status === 401) {
+          throw loginRedirect(args.request);
+        }
+        if (error instanceof HttpRequestError && (error.status === 403 || error.status === 404)) {
+          const sessionContext = await getSessionContext(services);
+          if (!sessionContext.actor) throw loginRedirect(args.request);
+          const defaultWorkspace = selectDefaultWorkspace(sessionContext.workspaces);
+          throw redirect(defaultWorkspace
+            ? routePaths.workspaceHome(defaultWorkspace.id)
+            : routePaths.noWorkspace());
+        }
+        throw error;
+      }
+    },
+
     workspaceAction: async ({ params, request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
-      const session = await services.sessionGateway.getCurrent();
-      if (!session.actor) throw loginRedirect(request);
       const formData = await request.formData();
       const intent = String(formData.get("intent") ?? "");
       const workspaceId = params.workspaceId ?? "";
-      if (!workspaceId || !session.actor.workspaceIds.includes(workspaceId)) {
+      if (!workspaceId) {
         return { error: "当前账号无权修改此工作空间。" };
       }
 
@@ -211,15 +258,6 @@ export function createRouteHandlers(services: ApplicationServices) {
         if (error instanceof HttpRequestError) return { error: error.message };
         return { error: "项目操作失败，请稍后重试。" };
       }
-    },
-
-    canvasLoader: async (args: LoaderFunctionArgs) => {
-      const data = await loadWorkspaceData(services, args);
-      const projectId = args.params.projectId;
-      if (!projectId) throw new Response("Project not found", { status: 404 });
-      const project = await services.projectRepository.getById(data.currentWorkspace.id, projectId);
-      if (!project) throw new Response("Project not found", { status: 404 });
-      return { ...data, project };
     },
   };
 }

@@ -46,6 +46,21 @@ export const WorkspaceListResponseDtoSchema = z
   })
   .strict();
 
+export const OrganizationMemberDtoSchema = z
+  .object({
+    userId: IdentifierSchema,
+    displayName: z.string().trim().min(1).max(160),
+    loginIdentifier: z.string().trim().min(1).max(320).nullable(),
+    role: z.enum(["owner", "admin", "member"]),
+  })
+  .strict();
+
+export const OrganizationMemberListResponseDtoSchema = z
+  .object({
+    members: z.array(OrganizationMemberDtoSchema),
+  })
+  .strict();
+
 export const ProjectDtoSchema = z
   .object({
     id: IdentifierSchema,
@@ -61,6 +76,14 @@ export const ProjectDtoSchema = z
 export const ProjectListResponseDtoSchema = z
   .object({
     projects: z.array(ProjectDtoSchema),
+  })
+  .strict();
+
+export const WorkspaceContextResponseDtoSchema = z
+  .object({
+    actor: SessionActorDtoSchema,
+    projects: z.array(ProjectDtoSchema),
+    workspaces: z.array(WorkspaceDtoSchema),
   })
   .strict();
 

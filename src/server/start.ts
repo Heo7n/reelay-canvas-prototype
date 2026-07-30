@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { buildServer } from "./app";
 import type { CollaborationStore } from "./application/CollaborationStore";
 import { createPostgresPool } from "./db/config";
@@ -12,14 +14,17 @@ function createStore(): CollaborationStore {
 }
 
 async function start(): Promise<void> {
-  const port = Number.parseInt(process.env.REELAY_SERVER_PORT ?? "5175", 10);
-  const host = process.env.REELAY_SERVER_HOST ?? "127.0.0.1";
+  const isProduction = process.env.NODE_ENV === "production";
+  const port = Number.parseInt(process.env.PORT ?? process.env.REELAY_SERVER_PORT ?? "5175", 10);
+  const host = process.env.REELAY_SERVER_HOST ?? (isProduction ? "0.0.0.0" : "127.0.0.1");
+  const configuredStaticRoot = process.env.REELAY_STATIC_ROOT?.trim();
+  const staticRoot = configuredStaticRoot || (isProduction ? path.resolve("dist/shell") : undefined);
   const store = createStore();
   let app;
 
   try {
     await store.ping();
-    app = await buildServer({ logger: true, store });
+    app = await buildServer({ logger: true, staticRoot, store });
   } catch (error) {
     await store.close();
     throw error;

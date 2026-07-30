@@ -2,7 +2,7 @@ import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildServer } from "./app";
-import { DEMO_PASSWORD } from "./demo-fixtures";
+import { createDemoSeed, DEMO_PASSWORD } from "./demo-fixtures";
 import { InMemoryCollaborationStore } from "./infrastructure/InMemoryCollaborationStore";
 
 function getCookie(response: LightMyRequestResponse): string {
@@ -33,13 +33,18 @@ describe("organization project access API", () => {
     await app.close();
   });
 
-  it("signs in five demo accounts that all belong to one organization", async () => {
+  it("signs in ten demo accounts that all belong to one organization", async () => {
     const accounts = [
       { account: "creator@reelay.test", role: "owner" },
       { account: "linjing@reelay.test", role: "admin" },
+      { account: "liran@reelay.test", role: "admin" },
       { account: "chenxi@reelay.test", role: "member" },
       { account: "zhouyu@reelay.test", role: "member" },
       { account: "suhe@reelay.test", role: "member" },
+      { account: "wangyin@reelay.test", role: "member" },
+      { account: "xuzhe@reelay.test", role: "member" },
+      { account: "yelan@reelay.test", role: "member" },
+      { account: "shenan@reelay.test", role: "member" },
     ];
 
     for (const { account, role } of accounts) {
@@ -49,6 +54,111 @@ describe("organization project access API", () => {
       expect(response.json().workspaces).toEqual([
         { id: "workspace-organization-reelay", kind: "organization", name: "星海视觉工作室", currentUserRole: role },
       ]);
+    }
+  });
+
+  it("returns workspace route context in one authenticated response", async () => {
+    const cookie = await login(app, "creator@reelay.test");
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/workspaces/workspace-organization-reelay/context",
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      actor: expect.objectContaining({
+        account: "creator@reelay.test",
+        workspaceIds: ["workspace-organization-reelay"],
+      }),
+      projects: expect.arrayContaining([
+        expect.objectContaining({ workspaceId: "workspace-organization-reelay" }),
+      ]),
+      workspaces: [
+        expect.objectContaining({
+          id: "workspace-organization-reelay",
+          currentUserRole: "owner",
+        }),
+      ],
+    });
+  });
+
+  it("lists organization members only for a workspace in the current session scope", async () => {
+    const seed = createDemoSeed();
+    seed.workspaces.push({
+      id: "workspace-existing-but-forbidden",
+      kind: "organization",
+      name: "不可访问的组织",
+    });
+    const scopedApp = await buildServer({ store: new InMemoryCollaborationStore(seed) });
+
+    try {
+      const ownerCookie = await login(scopedApp, "creator@reelay.test");
+      const response = await scopedApp.inject({
+        method: "GET",
+        url: "/api/workspaces/workspace-organization-reelay/members",
+        headers: { cookie: ownerCookie },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const members = response.json().members;
+      expect(members).toHaveLength(10);
+      expect(members.map((member: { role: string }) => member.role)).toEqual([
+        "owner",
+        "admin",
+        "admin",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+      ]);
+      expect(members).toEqual(expect.arrayContaining([
+        {
+          userId: "actor-tianmaochao",
+          displayName: "Hoo",
+          loginIdentifier: "creator@reelay.test",
+          role: "owner",
+        },
+        {
+          userId: "actor-linjing",
+          displayName: "林静",
+          loginIdentifier: "linjing@reelay.test",
+          role: "admin",
+        },
+        {
+          userId: "actor-liran",
+          displayName: "李然",
+          loginIdentifier: "liran@reelay.test",
+          role: "admin",
+        },
+        expect.objectContaining({ userId: "actor-chenxi", role: "member" }),
+        expect.objectContaining({ userId: "actor-shenan", role: "member" }),
+        expect.objectContaining({ userId: "actor-suhe", role: "member" }),
+        expect.objectContaining({ userId: "actor-wangyin", role: "member" }),
+        expect.objectContaining({ userId: "actor-xuzhe", role: "member" }),
+        expect.objectContaining({ userId: "actor-yelan", role: "member" }),
+        expect.objectContaining({ userId: "actor-zhouyu", role: "member" }),
+      ]));
+
+      const forbidden = await scopedApp.inject({
+        method: "GET",
+        url: "/api/workspaces/workspace-existing-but-forbidden/members",
+        headers: { cookie: ownerCookie },
+      });
+      expect(forbidden.statusCode).toBe(403);
+      expect(forbidden.json().error.code).toBe("workspace_forbidden");
+
+      const anonymous = await scopedApp.inject({
+        method: "GET",
+        url: "/api/workspaces/workspace-organization-reelay/members",
+      });
+      expect(anonymous.statusCode).toBe(401);
+      expect(anonymous.json().error.code).toBe("session_required");
+    } finally {
+      await scopedApp.close();
     }
   });
 

@@ -1,9 +1,10 @@
 import { ChevronRight } from "lucide-react";
-import { Link, useActionData, useLoaderData } from "react-router-dom";
+import { Link, useActionData } from "react-router-dom";
 import { useState } from "react";
 
 import { routePaths } from "../../app/routes";
-import type { WorkspaceActionData, WorkspaceRouteData } from "../../app/route-data";
+import type { WorkspaceActionData } from "../../app/route-data";
+import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { NewProjectCard } from "../../shared/ui/NewProjectCard";
 import { ProjectCard } from "../../shared/ui/ProjectCard";
@@ -16,7 +17,7 @@ import { capabilities, heroSlides, type Capability, type HeroSlide } from "./hom
 import styles from "./WorkspacePages.module.css";
 
 export function WorkspaceHomePage() {
-  const data = useLoaderData() as WorkspaceRouteData;
+  const data = useWorkspaceRouteData();
   const actionData = useActionData() as WorkspaceActionData | undefined;
   const [activeSlide, setActiveSlide] = useState(1);
   const [prompt, setPrompt] = useState("");

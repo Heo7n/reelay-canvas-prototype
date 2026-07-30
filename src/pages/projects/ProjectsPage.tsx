@@ -1,9 +1,10 @@
-import { ArrowLeft, Search } from "lucide-react";
-import { Link, useActionData, useLoaderData, useSearchParams } from "react-router-dom";
+import { ChevronLeft, Search } from "lucide-react";
+import { Link, useActionData, useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 
-import type { WorkspaceActionData, WorkspaceRouteData } from "../../app/route-data";
+import type { WorkspaceActionData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
+import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { NewProjectCard } from "../../shared/ui/NewProjectCard";
 import { ProjectCard } from "../../shared/ui/ProjectCard";
@@ -12,7 +13,7 @@ import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
 import styles from "../home/WorkspacePages.module.css";
 
 export function ProjectsPage() {
-  const data = useLoaderData() as WorkspaceRouteData;
+  const data = useWorkspaceRouteData();
   const actionData = useActionData() as WorkspaceActionData | undefined;
   const [query, setQuery] = useState("");
   const [searchParams] = useSearchParams();
@@ -32,7 +33,7 @@ export function ProjectsPage() {
       <main className={styles.projectsMain}>
         <div className={styles.projectsHeading}>
           <Link className={styles.backLink} to={routePaths.workspaceHome(data.currentWorkspace.id)}>
-            <ArrowLeft aria-hidden="true" />
+            <ChevronLeft aria-hidden="true" />
             <span>返回</span>
           </Link>
           <span className={styles.headingDivider} aria-hidden="true" />

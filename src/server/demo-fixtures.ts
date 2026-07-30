@@ -51,6 +51,12 @@ export function createDemoSeed(): DemoSeed {
         displayName: "林静",
       },
       {
+        account: "liran@reelay.test",
+        password: DEMO_PASSWORD,
+        actorId: "actor-liran",
+        displayName: "李然",
+      },
+      {
         account: "chenxi@reelay.test",
         password: DEMO_PASSWORD,
         actorId: "actor-chenxi",
@@ -68,6 +74,30 @@ export function createDemoSeed(): DemoSeed {
         actorId: "actor-suhe",
         displayName: "苏禾",
       },
+      {
+        account: "wangyin@reelay.test",
+        password: DEMO_PASSWORD,
+        actorId: "actor-wangyin",
+        displayName: "王茵",
+      },
+      {
+        account: "xuzhe@reelay.test",
+        password: DEMO_PASSWORD,
+        actorId: "actor-xuzhe",
+        displayName: "许哲",
+      },
+      {
+        account: "yelan@reelay.test",
+        password: DEMO_PASSWORD,
+        actorId: "actor-yelan",
+        displayName: "叶澜",
+      },
+      {
+        account: "shenan@reelay.test",
+        password: DEMO_PASSWORD,
+        actorId: "actor-shenan",
+        displayName: "沈岸",
+      },
     ],
     workspaces: [
       { id: "workspace-organization-reelay", kind: "organization", name: "星海视觉工作室" },
@@ -75,9 +105,14 @@ export function createDemoSeed(): DemoSeed {
     memberships: [
       { workspaceId: "workspace-organization-reelay", actorId: "actor-tianmaochao", role: "owner" },
       { workspaceId: "workspace-organization-reelay", actorId: "actor-linjing", role: "admin" },
+      { workspaceId: "workspace-organization-reelay", actorId: "actor-liran", role: "admin" },
       { workspaceId: "workspace-organization-reelay", actorId: "actor-chenxi", role: "member" },
       { workspaceId: "workspace-organization-reelay", actorId: "actor-zhouyu", role: "member" },
       { workspaceId: "workspace-organization-reelay", actorId: "actor-suhe", role: "member" },
+      { workspaceId: "workspace-organization-reelay", actorId: "actor-wangyin", role: "member" },
+      { workspaceId: "workspace-organization-reelay", actorId: "actor-xuzhe", role: "member" },
+      { workspaceId: "workspace-organization-reelay", actorId: "actor-yelan", role: "member" },
+      { workspaceId: "workspace-organization-reelay", actorId: "actor-shenan", role: "member" },
     ],
     projects: [
       {

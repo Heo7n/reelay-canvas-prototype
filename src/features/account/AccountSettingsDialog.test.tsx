@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -50,13 +50,13 @@ function renderDialog(action = async ({ request }: { request: Request }) => {
 }
 
 describe("AccountSettingsDialog", () => {
-  it("shows the requested account sections without subscription or device-management placeholders", () => {
+  it("keeps personal account settings focused on profile and credit records", () => {
     renderDialog();
 
     expect(screen.getByRole("dialog", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "个人主页" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "积分记录" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "用量看板" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用量看板" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "账户信息" })).toBeInTheDocument();
     expect(screen.queryByDisplayValue("creator@reelay.test")).not.toBeInTheDocument();
     expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();
@@ -67,26 +67,24 @@ describe("AccountSettingsDialog", () => {
     expect(screen.queryByText("设备管理")).toBeNull();
   });
 
-  it("saves valid optional contact details only after explicit confirmation", async () => {
+  it("automatically saves valid optional contact details", async () => {
     const submitted = vi.fn();
     renderDialog(async ({ request }) => {
       submitted(Object.fromEntries(await request.formData()));
       return { ok: true, notice: "联系资料已保存。" };
     });
 
-    fireEvent.change(screen.getByLabelText(/联系邮箱/), { target: { value: "owner@example.com" } });
-    fireEvent.change(screen.getByLabelText(/手机号码/), { target: { value: "+86 138 0000 0000" } });
-    expect(submitted).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "保存资料" }));
+    fireEvent.change(screen.getByLabelText("邮箱"), { target: { value: "owner@example.com" } });
+    fireEvent.change(screen.getByLabelText("手机"), { target: { value: "+86 138 0000 0000" } });
+    fireEvent.blur(screen.getByLabelText("手机"));
     await waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
     expect(submitted).toHaveBeenCalledWith({
       contactEmail: "owner@example.com",
       contactPhone: "+86 138 0000 0000",
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("联系资料已保存。");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已自动保存"));
     expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存资料" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "保存资料" })).not.toBeInTheDocument();
   });
 
   it("does not submit invalid contact details", async () => {
@@ -96,33 +94,72 @@ describe("AccountSettingsDialog", () => {
       return { ok: true };
     });
 
-    const emailInput = screen.getByLabelText(/联系邮箱/);
+    const emailInput = screen.getByLabelText("邮箱");
     fireEvent.change(emailInput, { target: { value: "invalid-email" } });
     expect(emailInput).toBeInvalid();
-    fireEvent.click(screen.getByRole("button", { name: "保存资料" }));
+    fireEvent.blur(emailInput);
 
     await new Promise((resolve) => window.setTimeout(resolve, 20));
     expect(submitted).not.toHaveBeenCalled();
   });
 
-  it("clears a previous success message as soon as contact details change again", async () => {
+  it("clears a previous auto-save message as soon as contact details change again", async () => {
     renderDialog(async ({ request }) => {
       await request.formData();
       return { ok: true, notice: "联系资料已保存。" };
     });
 
-    const emailInput = screen.getByLabelText(/联系邮箱/);
+    const emailInput = screen.getByLabelText("邮箱");
     fireEvent.change(emailInput, { target: { value: "owner@example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存资料" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("联系资料已保存。"));
+    fireEvent.blur(emailInput);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已自动保存"));
 
     fireEvent.change(emailInput, { target: { value: "changed@example.com" } });
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存资料" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "保存资料" })).not.toBeInTheDocument();
   });
 
-  it("keeps credits and usage honest while their persistent sources do not exist", () => {
+  it("preserves newer edits while a previous auto-save request is in flight", async () => {
+    const submitted: Array<Record<string, FormDataEntryValue>> = [];
+    let releaseFirstSave: (() => void) | null = null;
+    const firstSave = new Promise<void>((resolve) => {
+      releaseFirstSave = resolve;
+    });
+    renderDialog(async ({ request }) => {
+      submitted.push(Object.fromEntries(await request.formData()));
+      if (submitted.length === 1) await firstSave;
+      return { ok: true, notice: "联系资料已保存。" };
+    });
+
+    const emailInput = screen.getByLabelText("邮箱");
+    fireEvent.change(emailInput, { target: { value: "first@example.com" } });
+    fireEvent.blur(emailInput);
+    await waitFor(() => expect(submitted).toHaveLength(1));
+
+    fireEvent.change(emailInput, { target: { value: "latest@example.com" } });
+    fireEvent.blur(emailInput);
+    expect(emailInput).toHaveValue("latest@example.com");
+
+    await act(async () => {
+      releaseFirstSave?.();
+      await firstSave;
+    });
+
+    await waitFor(() => expect(submitted).toHaveLength(2));
+    expect(submitted[0]).toEqual({
+      contactEmail: "first@example.com",
+      contactPhone: "",
+    });
+    expect(submitted[1]).toEqual({
+      contactEmail: "latest@example.com",
+      contactPhone: "",
+    });
+    expect(emailInput).toHaveValue("latest@example.com");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已自动保存"));
+  });
+
+  it("keeps personal credit records honest while the persistent ledger does not exist", () => {
     renderDialog();
 
     fireEvent.click(screen.getByRole("button", { name: "积分记录" }));
@@ -130,9 +167,6 @@ describe("AccountSettingsDialog", () => {
     expect(screen.getByText("暂无积分记录")).toBeInTheDocument();
     expect(screen.getByText("未接入账本")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "用量看板" }));
-    expect(screen.getByRole("heading", { name: "用量看板" })).toBeInTheDocument();
-    expect(screen.getByText("尚无可统计数据")).toBeInTheDocument();
-    expect(screen.getByText(/组织用量/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "用量看板" })).not.toBeInTheDocument();
   });
 });

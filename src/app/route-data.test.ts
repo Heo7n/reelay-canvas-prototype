@@ -3,6 +3,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router-dom";
 
 import type { ProjectSummary } from "../domain/project/project";
 import type { Workspace } from "../domain/workspace/workspace";
+import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { createRouteHandlers } from "./route-data";
 import type { ApplicationServices } from "./services";
 
@@ -29,6 +30,15 @@ const projects: ProjectSummary[] = [
   },
 ];
 
+const members = [
+  {
+    userId: "actor-one",
+    displayName: "Demo One",
+    loginIdentifier: "creator@reelay.test",
+    role: "owner" as const,
+  },
+];
+
 function createServices(signedIn = true): ApplicationServices {
   return {
     accountRepository: {
@@ -44,10 +54,23 @@ function createServices(signedIn = true): ApplicationServices {
         content: input.content,
       })),
     },
+    organizationRepository: {
+      listMembers: vi.fn(async () => members),
+    },
     sessionGateway: {
       getCurrent: vi.fn(async () => ({ actor: signedIn ? actor : null })),
       signInWithPassword: vi.fn(async () => ({ actor })),
       signOut: vi.fn(async () => undefined),
+    },
+    workspaceContextGateway: {
+      load: vi.fn(async (workspaceId) => {
+        if (!signedIn) throw new HttpRequestError(401, "session_required", "Sign in required.");
+        return {
+          actor,
+          projects: projects.filter((project) => project.workspaceId === workspaceId),
+          workspaces,
+        };
+      }),
     },
     workspaceRepository: {
       listForActor: vi.fn(async () => workspaces),
@@ -122,7 +145,7 @@ describe("application route data", () => {
     expect((response as Response).headers.get("Location")).toBe(returnTo);
   });
 
-  it("loads projects once for the organization workspace in the route", async () => {
+  it("loads the workspace route through one aggregated request", async () => {
     const services = createServices();
     const handlers = createRouteHandlers(services);
     const data = await handlers.workspaceLoader(
@@ -131,8 +154,27 @@ describe("application route data", () => {
 
     expect(data.currentWorkspace.id).toBe("workspace-organization");
     expect(data.projects).toEqual(projects);
-    expect(services.projectRepository.listByWorkspace).toHaveBeenCalledOnce();
-    expect(services.projectRepository.listByWorkspace).toHaveBeenCalledWith("workspace-organization");
+    expect(services.workspaceContextGateway.load).toHaveBeenCalledOnce();
+    expect(services.workspaceContextGateway.load).toHaveBeenCalledWith("workspace-organization");
+    expect(services.sessionGateway.getCurrent).not.toHaveBeenCalled();
+    expect(services.workspaceRepository.listForActor).not.toHaveBeenCalled();
+    expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("loads organization members without coupling the organization route to projects", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const data = await handlers.organizationLoader(
+      loaderArgs(
+        "http://reelay.local/app/w/workspace-organization/organization",
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(data.members).toEqual(members);
+    expect(services.organizationRepository.listMembers).toHaveBeenCalledWith("workspace-organization");
+    expect(services.workspaceContextGateway.load).not.toHaveBeenCalled();
+    expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
   });
 
   it("uses the route workspace as the authority for project mutations", async () => {
@@ -186,6 +228,26 @@ describe("application route data", () => {
       contactEmail: "reports@example.com",
       contactPhone: "+86 138 0000 0000",
     });
+    expect(services.sessionGateway.getCurrent).not.toHaveBeenCalled();
     expect(response).toEqual({ ok: true, notice: "联系资料已保存。" });
+  });
+
+  it("lets the project endpoint perform the authoritative session check", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    await handlers.workspaceAction(
+      actionArgs(
+        "http://reelay.local/app/w/workspace-organization/projects",
+        { intent: "rename", projectId: "project-one", name: "Renamed film" },
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(services.sessionGateway.getCurrent).not.toHaveBeenCalled();
+    expect(services.projectRepository.update).toHaveBeenCalledWith(
+      "workspace-organization",
+      "project-one",
+      { name: "Renamed film" },
+    );
   });
 });

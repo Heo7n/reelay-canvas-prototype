@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createHttpServices } from "./createHttpServices";
 import { HttpAccountRepository } from "./HttpAccountRepository";
 import { HttpCanvasDocumentRepository } from "./HttpCanvasDocumentRepository";
+import { HttpOrganizationRepository } from "./HttpOrganizationRepository";
 import { HttpProjectRepository } from "./HttpProjectRepository";
 import { HttpSessionGateway } from "./HttpSessionGateway";
 import {
@@ -11,6 +12,7 @@ import {
   type FetchLike,
 } from "./HttpApiClient";
 import { HttpWorkspaceRepository } from "./HttpWorkspaceRepository";
+import { HttpWorkspaceContextGateway } from "./HttpWorkspaceContextGateway";
 
 interface PlannedResponse {
   body?: unknown;
@@ -57,6 +59,13 @@ const organizationDto = {
   kind: "organization",
   name: "Reelay",
   currentUserRole: "owner",
+};
+
+const organizationMemberDto = {
+  userId: "actor-owner",
+  displayName: "Owner",
+  loginIdentifier: "owner@reelay.test",
+  role: "owner",
 };
 
 const projectDto = {
@@ -128,6 +137,28 @@ describe("HttpWorkspaceRepository", () => {
   });
 });
 
+describe("HttpWorkspaceContextGateway", () => {
+  it("loads the signed-in actor, workspaces and projects in one request", async () => {
+    const transport = createFetchQueue({
+      body: {
+        actor: actorDto,
+        projects: [projectDto],
+        workspaces: [organizationDto],
+      },
+    });
+    const gateway = new HttpWorkspaceContextGateway({ baseUrl: "/backend", fetch: transport.fetch });
+
+    await expect(gateway.load("workspace/shared")).resolves.toEqual({
+      actor: actorDto,
+      projects: [projectDto],
+      workspaces: [organizationDto],
+    });
+    expect(transport.requests.map((request) => request.url)).toEqual([
+      "/backend/api/workspaces/workspace%2Fshared/context",
+    ]);
+  });
+});
+
 describe("HttpAccountRepository", () => {
   it("persists optional contact channels without treating the login identifier as an email", async () => {
     const updatedActor = {
@@ -149,6 +180,47 @@ describe("HttpAccountRepository", () => {
       contactEmail: "reports@example.com",
       contactPhone: "+86 138 0000 0000",
     });
+  });
+});
+
+describe("HttpOrganizationRepository", () => {
+  it("returns validated members from the workspace-scoped endpoint", async () => {
+    const transport = createFetchQueue({
+      body: {
+        members: [
+          organizationMemberDto,
+          {
+            userId: "actor-invited",
+            displayName: "Invited member",
+            loginIdentifier: null,
+            role: "member",
+          },
+        ],
+      },
+    });
+    const repository = new HttpOrganizationRepository({ baseUrl: "/backend/", fetch: transport.fetch });
+
+    await expect(repository.listMembers("workspace/shared")).resolves.toEqual([
+      organizationMemberDto,
+      {
+        userId: "actor-invited",
+        displayName: "Invited member",
+        loginIdentifier: null,
+        role: "member",
+      },
+    ]);
+    expect(transport.requests[0]?.url).toBe("/backend/api/workspaces/workspace%2Fshared/members");
+  });
+
+  it("rejects unknown organization roles before they enter the domain", async () => {
+    const transport = createFetchQueue({
+      body: { members: [{ ...organizationMemberDto, role: "editor" }] },
+    });
+    const repository = new HttpOrganizationRepository({ fetch: transport.fetch });
+
+    await expect(repository.listMembers("workspace-shared")).rejects.toBeInstanceOf(
+      HttpResponseValidationError,
+    );
   });
 });
 
@@ -330,6 +402,8 @@ describe("createHttpServices", () => {
     await expect(services.sessionGateway.getCurrent()).resolves.toEqual({ actor: null });
     expect(services.canvasDocumentRepository).toBeInstanceOf(HttpCanvasDocumentRepository);
     expect(services.accountRepository).toBeInstanceOf(HttpAccountRepository);
+    expect(services.workspaceContextGateway).toBeInstanceOf(HttpWorkspaceContextGateway);
+    expect(services.organizationRepository).toBeInstanceOf(HttpOrganizationRepository);
     expect(services.workspaceRepository).toBeInstanceOf(HttpWorkspaceRepository);
     expect(services.projectRepository).toBeInstanceOf(HttpProjectRepository);
     expect(transport.requests[0]?.url).toBe("/shared-api/api/session");

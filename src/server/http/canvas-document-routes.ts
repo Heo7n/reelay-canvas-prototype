@@ -81,7 +81,9 @@ export async function registerCanvasDocumentRoutes(
           actorId: actor.id,
           projectId,
           canvasId,
-          ...body.data,
+          schemaVersion: body.data.schemaVersion,
+          expectedRevision: body.data.expectedRevision,
+          content: body.data.content ?? null,
         });
         return reply.code(body.data.expectedRevision === 0 ? 201 : 200).send({ document });
       } catch (error) {

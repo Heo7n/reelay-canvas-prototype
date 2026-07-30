@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import type { HeroSlide } from "./home-content";
 import styles from "./WorkspacePages.module.css";
@@ -11,12 +12,54 @@ interface HeroCarouselProps {
 }
 
 export function HeroCarousel({ activeIndex, onActiveIndexChange, onChooseSlide, slides }: HeroCarouselProps) {
+  const [isInteractionPaused, setIsInteractionPaused] = useState(false);
+  const [canAutoPlay, setCanAutoPlay] = useState(true);
+
+  useEffect(() => {
+    const reducedMotionQuery = typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
+
+    function syncAutoPlayPreference(): void {
+      setCanAutoPlay(!document.hidden && !reducedMotionQuery?.matches);
+    }
+
+    syncAutoPlayPreference();
+    document.addEventListener("visibilitychange", syncAutoPlayPreference);
+    reducedMotionQuery?.addEventListener("change", syncAutoPlayPreference);
+
+    return () => {
+      document.removeEventListener("visibilitychange", syncAutoPlayPreference);
+      reducedMotionQuery?.removeEventListener("change", syncAutoPlayPreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!canAutoPlay || isInteractionPaused || slides.length < 2) return undefined;
+
+    const timer = window.setTimeout(() => {
+      onActiveIndexChange((activeIndex + 1) % slides.length);
+    }, 4_000);
+
+    return () => window.clearTimeout(timer);
+  }, [activeIndex, canAutoPlay, isInteractionPaused, onActiveIndexChange, slides.length]);
+
   function move(direction: -1 | 1): void {
     onActiveIndexChange((activeIndex + direction + slides.length) % slides.length);
   }
 
   return (
-    <section className={styles.hero} aria-label="Reelay 创作能力">
+    <section
+      className={styles.hero}
+      aria-label="Reelay 创作能力"
+      aria-roledescription="carousel"
+      onPointerEnter={() => setIsInteractionPaused(true)}
+      onPointerLeave={() => setIsInteractionPaused(false)}
+      onFocusCapture={() => setIsInteractionPaused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsInteractionPaused(false);
+      }}
+    >
       <button className={`${styles.heroArrow} ${styles.heroArrowLeft}`} type="button" aria-label="上一项" onClick={() => move(-1)}>
         <ChevronLeft aria-hidden="true" />
       </button>

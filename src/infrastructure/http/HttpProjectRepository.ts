@@ -10,7 +10,7 @@ import { HttpApiClient, type HttpAdapterOptions, HttpRequestError } from "./Http
 
 type ProjectDto = (typeof ProjectResponseDtoSchema)["_output"]["project"];
 
-function toProject(project: ProjectDto): ProjectSummary {
+export function toProject(project: ProjectDto): ProjectSummary {
   return {
     id: project.id,
     workspaceId: project.workspaceId,

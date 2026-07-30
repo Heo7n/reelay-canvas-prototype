@@ -45,6 +45,18 @@ async function login(app: FastifyInstance, account: string): Promise<string> {
 beforeAll(async () => {
   adminPool = new Pool({ connectionString: adminUrl.toString(), max: 1, application_name: "reelay-test-admin" });
   if (!/^[a-z0-9_]+$/.test(databaseName)) throw new Error("Unsafe test database name.");
+  await adminPool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        CREATE ROLE anon NOLOGIN;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        CREATE ROLE authenticated NOLOGIN;
+      END IF;
+    END
+    $$
+  `);
   await adminPool.query(`CREATE DATABASE "${databaseName}"`);
 
   const setupPool = createPool();
@@ -58,6 +70,7 @@ beforeAll(async () => {
       "0006_account_roles.sql",
       "0007_project_soft_delete.sql",
       "0008_account_contacts.sql",
+      "0009_server_only_data_access.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);
@@ -78,6 +91,64 @@ afterAll(async () => {
 });
 
 describe("PostgreSQL collaboration persistence", () => {
+  it("reads organization members from memberships, users, and password identities", async () => {
+    const app = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
+
+    try {
+      const ownerCookie = await login(app, "creator@reelay.test");
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/workspaces/workspace-organization-reelay/members",
+        headers: { cookie: ownerCookie },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const members = response.json().members;
+      expect(members).toHaveLength(10);
+      expect(members.map((member: { role: string }) => member.role)).toEqual([
+        "owner",
+        "admin",
+        "admin",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+        "member",
+      ]);
+      expect(members).toEqual(expect.arrayContaining([
+        {
+          userId: "actor-tianmaochao",
+          displayName: "Hoo",
+          loginIdentifier: "creator@reelay.test",
+          role: "owner",
+        },
+        {
+          userId: "actor-linjing",
+          displayName: "林静",
+          loginIdentifier: "linjing@reelay.test",
+          role: "admin",
+        },
+        {
+          userId: "actor-liran",
+          displayName: "李然",
+          loginIdentifier: "liran@reelay.test",
+          role: "admin",
+        },
+        expect.objectContaining({ userId: "actor-chenxi", role: "member" }),
+        expect.objectContaining({ userId: "actor-shenan", role: "member" }),
+        expect.objectContaining({ userId: "actor-suhe", role: "member" }),
+        expect.objectContaining({ userId: "actor-wangyin", role: "member" }),
+        expect.objectContaining({ userId: "actor-xuzhe", role: "member" }),
+        expect.objectContaining({ userId: "actor-yelan", role: "member" }),
+        expect.objectContaining({ userId: "actor-zhouyu", role: "member" }),
+      ]));
+    } finally {
+      await app.close();
+    }
+  });
+
   it("reconciles only fixed demo project memberships to the fixture", async () => {
     const pool = createPool();
     const seed = createDemoSeed();

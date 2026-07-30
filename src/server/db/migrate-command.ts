@@ -1,8 +1,8 @@
-import { createPostgresPool } from "./config";
+import { createPostgresPool, getMigrationDatabaseUrl } from "./config";
 import { runMigrations } from "./migrate";
 
 async function main(): Promise<void> {
-  const pool = createPostgresPool();
+  const pool = createPostgresPool(getMigrationDatabaseUrl());
   try {
     const applied = await runMigrations(pool);
     console.log(applied.length > 0 ? `Applied migrations: ${applied.join(", ")}` : "Database schema is current.");

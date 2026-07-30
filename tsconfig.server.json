@@ -17,6 +17,7 @@
   },
   "include": [
     "src/domain/**/*.ts",
-    "src/server/**/*.ts"
+    "src/server/**/*.ts",
+    "api/**/*.ts"
   ]
 }

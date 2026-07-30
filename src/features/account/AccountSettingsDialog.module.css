@@ -115,22 +115,29 @@
 }
 .demoBadge svg { width: 13px; height: 13px; }
 
-.profileSummary {
+.profileLayout {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid #e7e7e8;
-  border-radius: 8px;
-  background: #fafafa;
+  border: 1px solid #e9e9e8;
+  border-radius: 10px;
+  background: #f8f8f7;
+}
+.profileSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 108px;
+  gap: 16px;
+  padding: 0 24px;
+  min-width: 0;
 }
 .identityCard {
   display: flex;
   min-width: 0;
-  min-height: 104px;
   align-items: center;
   gap: 14px;
-  padding: 20px 24px;
+  padding: 20px 0;
 }
 .largeAvatar {
   display: grid;
@@ -155,40 +162,69 @@
   align-items: center;
   gap: 18px;
   min-height: 48px;
-  border-bottom: 1px solid #eeeeed;
 }
 .detailsList dt { display: flex; align-items: center; gap: 8px; color: #55555b; font-size: 12px; }
 .detailsList dt svg { width: 14px; height: 14px; }
 .detailsList dd { margin: 0; color: #2f2f34; font-size: 12px; text-align: right; overflow-wrap: anywhere; }
 .membershipDetails {
   align-content: center;
-  padding: 14px 24px;
-  border-left: 1px solid #e7e7e8;
+  padding: 12px 0;
 }
 .membershipDetails > div {
   grid-template-columns: 82px minmax(0, 1fr);
   min-height: 38px;
 }
-.membershipDetails > div:last-child { border-bottom: 0; }
 
 .subsectionHeading { display: grid; gap: 5px; margin-top: 4px; }
 .subsectionHeading h3 { margin: 0; font-size: 14px; }
 .subsectionHeading p { margin: 0; color: #77777d; font-size: 11px; line-height: 1.55; }
 
 .contactForm {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 14px;
+  gap: 16px;
+  padding: 18px 24px 22px;
 }
-.contactForm > label { display: grid; gap: 7px; }
-.contactForm > label > span { display: flex; align-items: center; gap: 7px; color: #3f3f44; font-size: 12px; font-weight: 700; }
-.contactForm > label > span svg { width: 14px; height: 14px; }
-.contactForm > label > span small { color: #99999f; font-size: 10px; font-weight: 620; }
+.contactForm::before {
+  position: absolute;
+  top: 0;
+  right: 24px;
+  left: 24px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(23, 23, 25, 0.09) 8%,
+    rgba(23, 23, 25, 0.09) 92%,
+    transparent
+  );
+  content: "";
+}
+.contactForm > label {
+  position: relative;
+  display: block;
+  padding: 0;
+}
+.contactForm > label > span {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 12px;
+  padding-right: 10px;
+  transform: translateY(-50%);
+  border-right: 1px solid rgba(23, 23, 25, 0.11);
+  color: #707076;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  pointer-events: none;
+}
+.contactForm > label:focus-within > span { color: #5f5fcf; }
 .contactForm input {
   width: 100%;
-  height: 42px;
-  padding: 0 12px;
+  height: 44px;
+  padding: 0 12px 0 64px;
   border: 1px solid #dbdbdd;
   border-radius: 9px;
   outline: none;
@@ -199,34 +235,12 @@
 }
 .contactForm input:focus { border-color: #7777e9; box-shadow: 0 0 0 3px rgba(110, 110, 255, 0.12); }
 .contactForm input:invalid:not(:placeholder-shown) { border-color: #ca6b74; }
-.contactFooter {
-  display: flex;
-  min-height: 42px;
-  grid-column: 1 / -1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin-top: 2px;
-}
 .formFeedback {
-  min-width: 0;
-  flex: 1 1 auto;
+  position: absolute;
+  right: 26px;
+  bottom: 8px;
+  min-height: 14px;
 }
-.contactFooter button {
-  min-width: 98px;
-  min-height: 38px;
-  flex: 0 0 auto;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 9px;
-  background: #171719;
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 720;
-  cursor: pointer;
-}
-.contactFooter button:disabled { cursor: not-allowed; opacity: 0.45; }
 .formError,
 .formSuccess,
 .formStatus {
@@ -294,34 +308,8 @@
 .emptyTable strong { color: #55555b; font-size: 13px; }
 .emptyTable span { max-width: 330px; font-size: 11px; line-height: 1.55; }
 
-.chartShell {
-  position: relative;
-  min-height: 310px;
-  overflow: hidden;
-  border: 1px solid #e7e7e8;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fff, #fafafa);
-}
-.chartGrid { position: absolute; inset: 22px 24px; display: grid; align-content: space-between; }
-.chartGrid span { display: block; border-top: 1px dashed #e5e5e6; }
-.chartEmpty {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 9px;
-  padding: 30px;
-  color: #8d8d93;
-  text-align: center;
-}
-.chartEmpty svg { width: 28px; height: 28px; }
-.chartEmpty strong { color: #55555b; font-size: 13px; }
-.chartEmpty span { max-width: 440px; font-size: 11px; line-height: 1.65; }
-
 .sidebar nav button:focus-visible,
-.closeButton:focus-visible,
-.contactFooter button:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
+.closeButton:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
 
 :global(html[data-theme="dark"]) .dialog,
 :global(html[data-theme="dark"]) .content { background: #17181c; color: #f4f4f5; }
@@ -334,7 +322,7 @@
 :global(html[data-theme="dark"]) .closeButton:hover { background: #292a30; color: #fff; }
 :global(html[data-theme="dark"]) .sectionHeading,
 :global(html[data-theme="dark"]) .detailsList > div,
-:global(html[data-theme="dark"]) .membershipDetails { border-color: #2f3035; }
+:global(html[data-theme="dark"]) .identityCard { border-color: #2f3035; }
 :global(html[data-theme="dark"]) .sectionHeading p,
 :global(html[data-theme="dark"]) .identityCopy small,
 :global(html[data-theme="dark"]) .subsectionHeading p { color: #a1a1a8; }
@@ -344,16 +332,25 @@
 :global(html[data-theme="dark"]) .detailsList dt,
 :global(html[data-theme="dark"]) .detailsList dd,
 :global(html[data-theme="dark"]) .contactForm > label > span { color: #d2d2d6; }
+:global(html[data-theme="dark"]) .contactForm > label > span { border-color: rgba(244, 244, 245, 0.14); }
+:global(html[data-theme="dark"]) .contactForm > label:focus-within > span { color: #aaaaff; }
 :global(html[data-theme="dark"]) .contactForm input { border-color: #3b3c42; background: #202126; color: #f4f4f5; }
-:global(html[data-theme="dark"]) .contactFooter button { background: #f4f4f5; color: #171719; }
-:global(html[data-theme="dark"]) .profileSummary { border-color: #303137; background: #1d1e23; }
+:global(html[data-theme="dark"]) .profileLayout { border-color: #303137; background: #1d1e23; }
+:global(html[data-theme="dark"]) .profileSummary,
+:global(html[data-theme="dark"]) .contactForm { background: transparent; }
+:global(html[data-theme="dark"]) .contactForm::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(244, 244, 245, 0.11) 8%,
+    rgba(244, 244, 245, 0.11) 92%,
+    transparent
+  );
+}
 :global(html[data-theme="dark"]) .metricGrid article,
-:global(html[data-theme="dark"]) .tableShell,
-:global(html[data-theme="dark"]) .chartShell { border-color: #303137; background: #1d1e23; }
+:global(html[data-theme="dark"]) .tableShell { border-color: #303137; background: #1d1e23; }
 :global(html[data-theme="dark"]) .tableHeader { border-color: #303137; background: #222328; }
-:global(html[data-theme="dark"]) .emptyTable strong,
-:global(html[data-theme="dark"]) .chartEmpty strong { color: #d5d5d9; }
-:global(html[data-theme="dark"]) .chartGrid span { border-color: #303137; }
+:global(html[data-theme="dark"]) .emptyTable strong { color: #d5d5d9; }
 
 @media (max-height: 760px) {
   .dialog { height: calc(100vh - 36px); }
@@ -361,13 +358,20 @@
 }
 
 @media (max-width: 860px) {
-  .profileSummary,
-  .contactForm { grid-template-columns: 1fr; }
-  .membershipDetails {
-    padding-top: 4px;
-    border-top: 1px solid #e7e7e8;
-    border-left: 0;
+  .backdrop { padding: 18px; }
+  .dialog {
+    width: calc(100vw - 36px);
+    grid-template-columns: 164px minmax(0, 1fr);
   }
+  .content { padding-right: 24px; padding-left: 24px; }
+  .closeButton { margin-right: -8px; }
+  .profileLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .profileSummary { padding-right: 16px; padding-left: 16px; }
+  .contactForm { padding-right: 16px; padding-left: 16px; }
+  .contactForm::before { right: 16px; left: 16px; }
+  .formFeedback { right: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

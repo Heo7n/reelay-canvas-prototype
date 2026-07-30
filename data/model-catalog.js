@@ -159,7 +159,7 @@ window.REELAY_MODEL_CATALOG = Object.freeze(
       badge: "15s",
       capabilities: {
         aspects: ["16:9", "9:16", "1:1"],
-        qualities: ["720p", "1080p"],
+        qualities: ["720p", "1080p", "4K"],
         durations: ["3s", "5s", "8s", "10s", "15s"],
         counts: [1, 2, 4],
       },

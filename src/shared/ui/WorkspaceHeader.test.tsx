@@ -24,6 +24,26 @@ const workspace = {
 afterEach(cleanup);
 
 describe("workspace account menu", () => {
+  it("can keep only the brand on focused management surfaces", () => {
+    const router = createMemoryRouter([
+      {
+        path: "*",
+        element: (
+          <WorkspaceHeader
+            actor={actor}
+            currentWorkspace={workspace}
+            onNotice={vi.fn()}
+            showAccount={false}
+          />
+        ),
+      },
+    ], { initialEntries: ["/w/workspace-organization/organization"] });
+    render(<RouterProvider router={router} />);
+
+    expect(screen.getByRole("link", { name: /Reelay/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("打开账户菜单")).toBeNull();
+  });
+
   it("keeps credits inside the complete profile menu instead of a separate header control", () => {
     const router = createMemoryRouter([
       {
@@ -44,8 +64,9 @@ describe("workspace account menu", () => {
     expect(screen.queryByText("个人空间")).toBeNull();
     expect(screen.getByTitle("星海视觉工作室")).toBeInTheDocument();
     expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();
-    const organizationEntry = screen.getByRole("button", { name: "进入星海视觉工作室组织管理界面" });
+    const organizationEntry = screen.getByRole("link", { name: "进入星海视觉工作室组织管理界面" });
     expect(organizationEntry).toHaveTextContent("主账户");
+    expect(organizationEntry).toHaveAttribute("href", "/w/workspace-organization/organization");
     expect(screen.queryByText("所属组织")).toBeNull();
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(screen.getByRole("button", { name: "账号设置" })).toBeInTheDocument();
@@ -73,7 +94,7 @@ describe("workspace account menu", () => {
     render(<RouterProvider router={router} />);
 
     fireEvent.pointerEnter(screen.getByLabelText("打开账户菜单"));
-    expect(screen.getByRole("button", { name: "进入星海视觉工作室组织管理界面" })).toHaveTextContent(label);
+    expect(screen.getByRole("link", { name: "进入星海视觉工作室组织管理界面" })).toHaveTextContent(label);
   });
 
   it("opens the routed account settings dialog from the profile menu", () => {

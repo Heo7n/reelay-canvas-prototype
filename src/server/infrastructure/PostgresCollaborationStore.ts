@@ -15,7 +15,13 @@ import type {
   ProjectSummary,
   ProjectUserRole,
 } from "../../domain/project/project";
-import type { MembershipRole, Workspace, WorkspaceId, WorkspaceKind } from "../../domain/workspace/workspace";
+import type {
+  MembershipRole,
+  OrganizationMember,
+  Workspace,
+  WorkspaceId,
+  WorkspaceKind,
+} from "../../domain/workspace/workspace";
 import type {
   CollaborationStore,
   CreateProjectInput,
@@ -44,6 +50,13 @@ interface WorkspaceRow extends QueryResultRow {
   name: string;
 }
 
+interface OrganizationMemberRow extends QueryResultRow {
+  user_id: string;
+  display_name: string;
+  login_identifier: string | null;
+  role: MembershipRole;
+}
+
 interface ProjectRow extends QueryResultRow {
   id: string;
   workspace_id: string;
@@ -68,6 +81,15 @@ interface CanvasDocumentRevisionRow extends QueryResultRow {
 
 function mapWorkspace(row: WorkspaceRow): Workspace {
   return { id: row.id, kind: row.kind, name: row.name, currentUserRole: row.current_user_role };
+}
+
+function mapOrganizationMember(row: OrganizationMemberRow): OrganizationMember {
+  return {
+    userId: row.user_id,
+    displayName: row.display_name,
+    loginIdentifier: row.login_identifier,
+    role: row.role,
+  };
 }
 
 function mapProject(row: ProjectRow): ProjectSummary {
@@ -256,6 +278,31 @@ export class PostgresCollaborationStore implements CollaborationStore {
       [workspaceId],
     );
     return result.rows[0] ? mapWorkspace(result.rows[0]) : null;
+  }
+
+  async listOrganizationMembers(workspaceId: WorkspaceId): Promise<OrganizationMember[]> {
+    const result = await this.pool.query<OrganizationMemberRow>(
+      `SELECT
+         membership.user_id,
+         users.display_name,
+         login_identity.identifier AS login_identifier,
+         membership.role
+       FROM memberships AS membership
+       JOIN users ON users.id = membership.user_id
+       LEFT JOIN LATERAL (
+         SELECT identifier
+         FROM password_identities
+         WHERE password_identities.user_id = users.id
+         ORDER BY password_identities.created_at, password_identities.id
+         LIMIT 1
+       ) AS login_identity ON true
+       WHERE membership.workspace_id = $1
+       ORDER BY
+         CASE membership.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+         membership.user_id`,
+      [workspaceId],
+    );
+    return result.rows.map(mapOrganizationMember);
   }
 
   async listProjects(actorId: ActorId, workspaceId: WorkspaceId): Promise<ProjectSummary[]> {
