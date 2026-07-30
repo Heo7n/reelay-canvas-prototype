@@ -52,8 +52,15 @@ describe("organization credit demo ledger", () => {
       expect(record.projectName).toBeTruthy();
       expect(record.taskType).toBeTruthy();
       expect(record.modelName).toBeTruthy();
-      expect(record.specification).toBeTruthy();
-      expect(record.settlementStatus).toBe("settled");
+      expect(record.generationSpec?.resolution).toBeTruthy();
+      expect(record.generationSpec?.aspectRatio).toMatch(/^\d+:\d+$/);
+      expect(
+        Boolean(record.generationSpec?.imageCount)
+        || Boolean(record.generationSpec?.durationSeconds),
+      ).toBe(true);
     }
+    expect(consumptionRecords.some((record) => record.generationSpec?.resolution === "4K")).toBe(
+      true,
+    );
   });
 });

@@ -1,4 +1,10 @@
-import { ArrowRight, History, SlidersHorizontal, WalletCards } from "lucide-react";
+import {
+  ArrowRight,
+  FileText,
+  History,
+  SlidersHorizontal,
+  WalletCards,
+} from "lucide-react";
 import { useState } from "react";
 
 import type { OrganizationMember } from "../../domain/workspace/workspace";
@@ -6,7 +12,6 @@ import { CreditAdjustmentPopover } from "./CreditAdjustmentPopover";
 import { CreditDetailDrawer, type CreditDrawerKind } from "./CreditDetailDrawer";
 import styles from "./OrganizationCenterPage.module.css";
 import {
-  getLatestMemberCreditRecord,
   getMemberCreditBalance,
   ORGANIZATION_CREDIT_SUMMARY,
 } from "./organization-credit-data";
@@ -19,6 +24,7 @@ interface OrganizationCreditsSectionProps {
 interface DrawerState {
   kind: CreditDrawerKind;
   memberAccount?: string;
+  accountView?: boolean;
 }
 
 interface AdjustmentState {
@@ -36,7 +42,6 @@ export function OrganizationCreditsSection({
   const allocations = members.map((member) => ({
     member,
     amount: getMemberCreditBalance(member),
-    latestRecord: getLatestMemberCreditRecord(member),
   }));
   const availablePoolShare = (
     ORGANIZATION_CREDIT_SUMMARY.unallocated / ORGANIZATION_CREDIT_SUMMARY.available
@@ -45,69 +50,75 @@ export function OrganizationCreditsSection({
   return (
     <section className={styles.section} aria-labelledby="organization-credits-title">
       <h1 id="organization-credits-title" className={styles.srOnly}>积分管理</h1>
-      <div className={styles.creditSectionToolbar}>
-        <span>组织余额与成员账户</span>
-        <button
-          className={styles.sectionHeaderAction}
-          type="button"
-          aria-label="查看积分流水"
-          onClick={() => setDrawerState({ kind: "income" })}
-        >
-          <History aria-hidden="true" />
-          积分流水
-          <ArrowRight aria-hidden="true" />
-        </button>
-      </div>
-
-      <div className={styles.creditBalanceOverview}>
-        <div className={styles.creditBalanceTotal}>
-          <span className={styles.creditBalanceLabel}>
-            <span><WalletCards aria-hidden="true" />组织积分余额</span>
-          </span>
-          <strong>
-            {ORGANIZATION_CREDIT_SUMMARY.available.toLocaleString("zh-CN")}
-          </strong>
-          <span className={styles.creditBalanceFooter}>
-            <small>组织当前尚未消耗的全部积分</small>
-          </span>
-        </div>
-
-        <div className={styles.creditComposition}>
-          <span className={styles.creditCompositionHeading}>
-            <strong>余额构成</strong>
-          </span>
-          <div
-            className={styles.creditCompositionBar}
-            role="img"
-            aria-label={`可分配余额 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}，所有成员账户余额 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}`}
-          >
-            <span
-              className={styles.poolBalanceSegment}
-              style={{ width: `${availablePoolShare}%` }}
-            />
-            <span
-              className={styles.memberBalanceSegment}
-              style={{ width: `${100 - availablePoolShare}%` }}
-            />
-          </div>
-          <div className={styles.creditCompositionLegend}>
-            <div className={`${styles.compositionMetric} ${styles.poolBalanceMetric}`}>
-              <span className={styles.poolBalanceMarker} aria-hidden="true" />
-              <span>
-                <small>可分配余额</small>
-                <strong>
-                  {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
-                </strong>
+      <div className={styles.creditOverviewSection}>
+        <h2 className={styles.creditOverviewTitle}>组织积分账户</h2>
+        <div className={styles.creditBalanceOverview}>
+          <div className={styles.creditBalanceTotal}>
+            <div className={styles.creditBalanceTotalContent}>
+              <span className={styles.creditBalanceLabel}>
+                <span><WalletCards aria-hidden="true" />积分余量</span>
               </span>
+              <strong>
+                {ORGANIZATION_CREDIT_SUMMARY.available.toLocaleString("zh-CN")}
+              </strong>
+              <span className={styles.creditBalanceFooter}>
+                <small>组织当前尚未消耗的全部积分</small>
+              </span>
+              <button
+                className={styles.creditBalanceAction}
+                type="button"
+                aria-label="查看积分变动记录"
+                onClick={() => setDrawerState({ kind: "income" })}
+              >
+                <span className={styles.creditBalanceActionIcon}>
+                  <FileText aria-hidden="true" />
+                </span>
+                <span>积分变动记录</span>
+                <ArrowRight aria-hidden="true" />
+              </button>
             </div>
-            <div className={`${styles.compositionMetric} ${styles.memberBalanceMetric}`}>
-              <span className={styles.memberBalanceMarker} aria-hidden="true" />
-              <span>
-                <small>所有成员账户余额</small>
-                <strong>
-                  {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}
-                </strong>
-              </span>
+          </div>
+
+          <div className={styles.creditComposition}>
+            <span className={styles.creditCompositionHeading}>
+              <strong>余量构成</strong>
+            </span>
+            <div
+              className={styles.creditCompositionLegend}
+              style={{
+                gridTemplateColumns: `${availablePoolShare}fr ${100 - availablePoolShare}fr`,
+              }}
+            >
+              <div className={`${styles.compositionMetric} ${styles.poolBalanceMetric}`}>
+                <span>
+                  <small>未分配积分</small>
+                  <strong>
+                    {ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}
+                  </strong>
+                </span>
+              </div>
+              <div className={`${styles.compositionMetric} ${styles.memberBalanceMetric}`}>
+                <span>
+                  <small>成员账户积分</small>
+                  <strong>
+                    {ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}
+                  </strong>
+                </span>
+              </div>
+            </div>
+            <div
+              className={styles.creditCompositionBar}
+              role="img"
+              aria-label={`未分配积分 ${ORGANIZATION_CREDIT_SUMMARY.unallocated.toLocaleString("zh-CN")}，成员账户积分 ${ORGANIZATION_CREDIT_SUMMARY.allocated.toLocaleString("zh-CN")}`}
+            >
+              <span
+                className={styles.poolBalanceSegment}
+                style={{ width: `${availablePoolShare}%` }}
+              />
+              <span
+                className={styles.memberBalanceSegment}
+                style={{ width: `${100 - availablePoolShare}%` }}
+              />
             </div>
           </div>
         </div>
@@ -115,36 +126,27 @@ export function OrganizationCreditsSection({
 
       <div className={styles.allocationSection}>
         <div className={styles.subsectionHeading}>
-          <h2>成员余额</h2>
-          <button
-            className={styles.sectionHeaderAction}
-            type="button"
-            aria-label="查看分配明细"
-            onClick={() => setDrawerState({ kind: "allocation" })}
-          >
-            <History aria-hidden="true" />
-            分配明细
-            <ArrowRight aria-hidden="true" />
-          </button>
+          <h2>成员积分账户</h2>
         </div>
 
         <div className={styles.allocationTable}>
           <div className={styles.allocationTableHeader} aria-hidden="true">
             <span>成员</span>
+            <span>账号</span>
             <span>角色</span>
             <span>可用余额</span>
             <span>操作</span>
           </div>
-          {allocations.map(({ member, amount, latestRecord }) => (
+          {allocations.map(({ member, amount }) => (
             <div className={styles.allocationRow} key={member.userId}>
               <span className={styles.memberIdentity}>
                 <span className={styles.memberAvatar} aria-hidden="true">{member.displayName.slice(0, 1)}</span>
                 <strong>{member.displayName}</strong>
               </span>
+              <span className={styles.memberAccount}>{member.loginIdentifier ?? "—"}</span>
               <span>{member.role === "owner" ? "主账户" : member.role === "admin" ? "管理员" : "成员"}</span>
               <span className={styles.memberCreditBalance}>
                 <strong>{amount.toLocaleString("zh-CN")}</strong>
-                <small>{latestRecord?.date.slice(5, 10).replace("-", "/")} 最近变动</small>
               </span>
               <span className={styles.creditRowActions}>
                 <button
@@ -168,14 +170,15 @@ export function OrganizationCreditsSection({
                 <button
                   className={styles.creditDetailAction}
                   type="button"
-                  aria-label={`查看 ${member.displayName} 的积分明细`}
+                  aria-label={`查看 ${member.displayName} 的账户变动记录`}
                   onClick={() => setDrawerState({
-                    kind: "consumption",
+                    kind: "allocation",
                     memberAccount: member.loginIdentifier ?? undefined,
+                    accountView: true,
                   })}
                 >
                   <History aria-hidden="true" />
-                  明细
+                  记录
                 </button>
               </span>
             </div>
@@ -186,14 +189,17 @@ export function OrganizationCreditsSection({
       <CreditDetailDrawer
         kind={drawerState?.kind ?? null}
         memberAccount={drawerState?.memberAccount}
+        accountView={drawerState?.accountView}
         members={members}
         onKindChange={(kind) => setDrawerState((current) => ({
           kind,
           memberAccount: current?.memberAccount,
+          accountView: current?.accountView,
         }))}
         onMemberFilterChange={(memberAccount) => setDrawerState({
           kind: drawerState?.kind === "consumption" ? "consumption" : "allocation",
           memberAccount,
+          accountView: false,
         })}
         onClose={() => setDrawerState(null)}
       />
@@ -203,14 +209,15 @@ export function OrganizationCreditsSection({
           anchor={adjustmentState.anchor}
           member={adjustmentState.member}
           balance={adjustmentState.balance}
+          availablePool={ORGANIZATION_CREDIT_SUMMARY.unallocated}
           onClose={() => setAdjustmentState(null)}
-          onGrant={(member) => {
+          onGrant={(member, amount) => {
             setAdjustmentState(null);
-            onNotice(`${member.displayName} 的积分发放流程将在额度规则确认后接入。`);
+            onNotice(`已为 ${member.displayName} 提交 ${amount.toLocaleString("zh-CN")} 积分发放。`);
           }}
-          onReclaim={(member) => {
+          onReclaim={(member, amount) => {
             setAdjustmentState(null);
-            onNotice(`${member.displayName} 的积分回收流程将在额度规则确认后接入。`);
+            onNotice(`已为 ${member.displayName} 提交 ${amount.toLocaleString("zh-CN")} 积分回收。`);
           }}
         />
       ) : null}
