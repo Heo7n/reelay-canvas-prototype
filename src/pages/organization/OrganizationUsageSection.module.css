@@ -705,17 +705,15 @@
 }
 
 .exportButton {
-  display: inline-flex;
+  display: grid;
+  width: 34px;
   height: 34px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
+  padding: 0;
+  place-items: center;
   border: 1px solid var(--workspace-border);
   border-radius: 8px;
   background: var(--workspace-surface);
   color: var(--workspace-text);
-  font-size: 9px;
-  font-weight: 680;
   cursor: pointer;
 }
 
