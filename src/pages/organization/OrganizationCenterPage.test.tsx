@@ -320,8 +320,55 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getAllByRole("button", { name: /查看.*消耗明细/ })[0]);
     expect(screen.getByRole("dialog", { name: "视频生成" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "模型用量" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "计费结构" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "使用成员" }))
+      .not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    const sourceList = screen.getByLabelText("消耗来源排名");
+    fireEvent.click(
+      within(sourceList).getByRole("button", {
+        name: "查看Seedance 2.0用量汇总",
+      }),
+    );
+    expect(screen.getByRole("dialog", { name: "Seedance 2.0 用量" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "计费规格" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用成员" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "关联项目" }));
+    expect(screen.getByRole("button", { name: "关联项目" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "项目" }));
+    const projectSourceList = screen.getByLabelText("消耗来源排名");
+    fireEvent.click(
+      within(projectSourceList).getAllByRole("button", {
+        name: /查看.*用量汇总/,
+      })[0],
+    );
+    const projectDrawer = screen.getByRole("dialog");
+    expect(within(projectDrawer).getByText("统计范围")).toBeInTheDocument();
+    expect(within(projectDrawer).getByText("近 30 天")).toBeInTheDocument();
+    fireEvent.click(
+      within(projectDrawer).getByRole("button", { name: "项目全周期" }),
+    );
+    expect(within(projectDrawer).getByText("项目全周期")).toBeInTheDocument();
+    expect(
+      within(projectDrawer).getByRole("button", { name: "返回期间统计" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(projectDrawer).getByRole("button", { name: "返回期间统计" }),
+    );
+    expect(within(projectDrawer).getByText("近 30 天")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
+
     expect(screen.getByRole("link", { name: "查看积分明细" })).toBeInTheDocument();
   });
 

@@ -1627,7 +1627,7 @@
 
 .usageDrawer {
   display: grid;
-  width: min(720px, calc(100vw - 96px));
+  width: min(680px, calc(100vw - 72px));
   height: 100%;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -1636,18 +1636,30 @@
   color: var(--workspace-text);
 }
 
+.compositionUsageDrawer {
+  --usage-drawer-summary-accent: color-mix(
+    in srgb,
+    var(--usage-accent) 8%,
+    transparent
+  );
+}
+
+.sourceUsageDrawer {
+  --usage-drawer-summary-accent: transparent;
+}
+
 .usageDrawerHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
-  padding: 22px 28px 18px;
+  padding: 20px 24px 16px;
   border-bottom: 1px solid var(--workspace-border);
 }
 
-.usageDrawerHeader > span {
+.usageDrawerHeading {
   display: grid;
-  gap: 6px;
+  gap: 7px;
 }
 
 .usageDrawerBreadcrumb {
@@ -1676,14 +1688,14 @@
 .usageDrawerHeader h2 {
   margin: 0;
   color: var(--workspace-text);
-  font-size: 20px;
+  font-size: 19px;
   line-height: 1.2;
   letter-spacing: 0;
 }
 
 .usageDrawerHeader p { margin: 0; }
 
-.usageDrawerHeader button {
+.usageDrawerCloseButton {
   display: inline-grid;
   width: 32px;
   height: 32px;
@@ -1696,31 +1708,101 @@
   cursor: pointer;
 }
 
-.usageDrawerHeader button:hover { background: var(--workspace-hover); }
-.usageDrawerHeader button svg { width: 17px; height: 17px; }
+.usageDrawerCloseButton:hover { background: var(--workspace-hover); }
+.usageDrawerCloseButton svg { width: 17px; height: 17px; }
+
+.projectScopeRow {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.projectRangeLabel {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--workspace-subtle);
+  font-size: 10px;
+}
+
+.projectRangeLabel svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--usage-accent);
+}
+
+.projectRangeLabel strong {
+  overflow: hidden;
+  color: var(--workspace-text);
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectLifecycleAction {
+  display: inline-flex;
+  min-height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--workspace-muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+.projectLifecycleAction:hover {
+  color: var(--usage-accent);
+}
+
+.projectLifecycleAction svg {
+  width: 13px;
+  height: 13px;
+}
 
 .usageAnalysisContent {
   min-height: 0;
   overflow: auto;
-  padding: 22px 28px 30px;
+  padding: 0 24px 28px;
   overscroll-behavior: contain;
 }
 
 .usageAnalysisSummary {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(150px, 1.15fr) minmax(140px, 1fr) auto;
+  align-items: stretch;
+  border-bottom: 1px solid var(--workspace-border);
 }
 
 .usageAnalysisSummary article {
+  position: relative;
   display: grid;
   min-height: 82px;
   align-content: center;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--workspace-hover) 36%, transparent);
+  gap: 6px;
+  padding: 14px 18px;
+}
+
+.usageAnalysisSummary article:first-child {
+  padding-left: 0;
+}
+
+.usageAnalysisSummary article:not(:first-child)::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 0;
+  width: 1px;
+  background: var(--workspace-border);
+  content: "";
 }
 
 .usageAnalysisSummary small {
@@ -1732,28 +1814,50 @@
 .usageAnalysisSummary strong {
   overflow: hidden;
   color: var(--workspace-text);
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.usageAnalysisSummary article:first-child strong {
-  color: var(--usage-accent);
+.usageSummaryPrimary {
+  background: linear-gradient(
+    90deg,
+    var(--usage-drawer-summary-accent),
+    transparent 82%
+  );
 }
 
-.usageAnalysisSummary article:last-child strong {
+.usageSummaryPrimary strong {
+  color: var(--usage-accent);
+  font-size: 21px;
+}
+
+.usageSummaryContext {
+  min-width: 116px;
+}
+
+.usageSummaryContext strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  color: var(--workspace-text);
+  font-size: 16px;
+}
+
+.usageSummaryContext strong span {
   color: var(--workspace-muted);
-  font-size: 18px;
+  font-size: 10px;
+  font-weight: 560;
 }
 
 .usageAnalysisBreakdown {
-  margin-top: 28px;
+  margin-top: 22px;
 }
 
 .usageAnalysisBreakdown > header {
   display: flex;
-  min-height: 48px;
+  min-height: 54px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -1779,6 +1883,7 @@
 .usageAnalysisBreakdown > header > small {
   color: var(--workspace-subtle);
   font-size: 9px;
+  line-height: 1.45;
 }
 
 .usageAnalysisTable {
@@ -1829,8 +1934,8 @@
 }
 
 .usageAnalysisModelRow {
-  min-height: 46px;
-  padding: 6px 12px;
+  min-height: 48px;
+  padding: 7px 12px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--workspace-hover) 28%, transparent);
 }
@@ -1853,7 +1958,7 @@
 
 .usageAnalysisSpecRows {
   display: grid;
-  margin: 4px 10px 0 18px;
+  margin: 5px 10px 0 18px;
   overflow: hidden;
   border-left: 2px solid color-mix(in srgb, var(--usage-accent) 28%, transparent);
   border-radius: 0 6px 6px 0;
@@ -1884,19 +1989,22 @@
 
 .sourceDetailContent {
   display: grid;
-  gap: 26px;
-  margin-top: 28px;
+  gap: 20px;
+  margin-top: 18px;
 }
 
 .sourceSpecificationSection,
+.sourceCompositionSection,
+.sourceRelatedSection,
 .sourceDetailRanking {
   min-width: 0;
 }
 
 .sourceSpecificationSection > header,
-.sourceDetailRanking > header {
+.sourceCompositionSection > header,
+.sourceRelatedSection > header {
   display: flex;
-  min-height: 48px;
+  min-height: 52px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -1904,29 +2012,39 @@
 }
 
 .sourceSpecificationSection > header > span,
-.sourceDetailRanking > header {
+.sourceCompositionSection > header > span,
+.sourceRelatedSection > header > span {
   min-width: 0;
 }
 
 .sourceSpecificationSection h3,
 .sourceSpecificationSection p,
-.sourceDetailRanking h3,
-.sourceDetailRanking p {
+.sourceCompositionSection h3,
+.sourceCompositionSection p,
+.sourceRelatedSection h3,
+.sourceRelatedSection p {
   margin: 0;
 }
 
 .sourceSpecificationSection h3,
-.sourceDetailRanking h3 {
+.sourceCompositionSection h3,
+.sourceRelatedSection h3 {
   color: var(--workspace-text);
   font-size: 13px;
 }
 
 .sourceSpecificationSection p,
 .sourceSpecificationSection header small,
-.sourceDetailRanking p {
+.sourceCompositionSection p,
+.sourceRelatedSection p {
   margin-top: 3px;
   color: var(--workspace-subtle);
   font-size: 9px;
+  line-height: 1.45;
+}
+
+.sourceRelatedSection {
+  padding-top: 2px;
 }
 
 .sourceSpecificationTable {
@@ -1935,7 +2053,7 @@
 
 .sourceSpecificationTable > div {
   display: grid;
-  min-height: 44px;
+  min-height: 47px;
   grid-template-columns: minmax(180px, 1fr) 120px 110px;
   align-items: center;
   gap: 16px;
@@ -1976,29 +2094,82 @@
 
 .sourceSpecificationTable strong { font-weight: 630; }
 
-.sourceRelatedGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+.sourceRelatedTabs {
+  display: inline-grid;
+  flex: 0 0 auto;
+  grid-auto-flow: column;
+  padding: 2px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--workspace-hover) 58%, transparent);
 }
 
-.sourceDetailRanking > header {
-  display: grid;
-  align-content: center;
-  justify-content: stretch;
+.sourceRelatedTabs button {
+  min-width: 72px;
+  height: 27px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--workspace-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 560;
+  white-space: nowrap;
 }
 
-.sourceDetailRanking > div {
+.sourceRelatedTabs button:hover {
+  color: var(--workspace-text);
+}
+
+.sourceRelatedTabs .activeSourceRelatedTab {
+  background: var(--workspace-surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+  color: var(--workspace-text);
+}
+
+.sourceDetailRanking {
   display: grid;
+}
+
+.sourceDetailTableHeader,
+.sourceDetailRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 88px;
+  align-items: center;
+  gap: 14px;
+}
+
+.sourceDetailTableHeader {
+  min-height: 34px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--workspace-border);
+  color: var(--workspace-subtle);
+  font-size: 9px;
+  font-weight: 560;
+}
+
+.sourceDetailTableHeader span:not(:first-child) {
+  text-align: right;
+}
+
+.sourceDetailRanking > div:last-child {
+  display: grid;
+}
+
+.sourceDetailEmpty {
+  display: grid;
+  min-height: 94px;
+  margin: 0;
+  place-items: center;
+  color: var(--workspace-subtle);
+  font-size: 10px;
 }
 
 .sourceDetailRow {
-  display: grid;
-  min-height: 48px;
-  grid-template-columns: minmax(0, 1fr) 90px 78px;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 4px;
+  min-height: 49px;
+  padding: 8px 6px;
   border-bottom: 1px solid var(--workspace-border);
 }
 
@@ -2022,7 +2193,7 @@
 .sourceDetailIdentity {
   display: grid;
   min-width: 0;
-  gap: 7px;
+  gap: 8px;
 }
 
 .sourceDetailIdentity > strong {
@@ -2062,7 +2233,8 @@
 .compositionRow:focus-visible,
 .typeLegend button:focus-visible,
 .compositionFooter a:focus-visible,
-.usageDrawerHeader button:focus-visible {
+.usageDrawerHeader button:focus-visible,
+.sourceRelatedTabs button:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--usage-accent) 32%, transparent);
   outline-offset: 2px;
 }
@@ -2115,9 +2287,6 @@
 
   .compositionOutput { display: none; }
 
-  .sourceRelatedGrid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

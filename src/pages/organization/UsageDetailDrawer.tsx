@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { ArrowUpRight, CalendarRange, ChevronLeft, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -11,6 +11,7 @@ import {
 import styles from "./OrganizationUsageSection.module.css";
 
 interface UsageDetailDrawerProps {
+  allRecords: UsageRecord[];
   composition: UsageCompositionItem[];
   dimension: UsageDimension;
   item: UsageCompositionItem | null;
@@ -201,38 +202,42 @@ function formatTaskCount(value: number): string {
 
 function SourceRanking({
   items,
-  title,
-  description,
+  identityLabel,
 }: {
   items: UsageCompositionItem[];
-  title: string;
-  description: string;
+  identityLabel: string;
 }) {
   return (
-    <section className={styles.sourceDetailRanking}>
-      <header>
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </header>
-      <div>
-        {items.map((entry) => (
-          <div key={entry.id} className={styles.sourceDetailRow}>
-            <span className={styles.sourceDetailIdentity}>
-              <strong>{entry.label}</strong>
-              <i aria-hidden="true">
-                <span style={{ width: `${Math.max(3, entry.share * 100)}%` }} />
-              </i>
-            </span>
-            <span>{formatOutput(entry)}</span>
-            <strong>{entry.credits.toLocaleString("zh-CN")}</strong>
-          </div>
-        ))}
+    <div className={styles.sourceDetailRanking}>
+      <div className={styles.sourceDetailTableHeader} aria-hidden="true">
+        <span>{identityLabel}</span>
+        <span>占比</span>
+        <span>积分</span>
       </div>
-    </section>
+      {items.length > 0 ? (
+        <div>
+          {items.map((entry) => (
+            <div key={entry.id} className={styles.sourceDetailRow}>
+              <span className={styles.sourceDetailIdentity}>
+                <strong>{entry.label}</strong>
+                <i aria-hidden="true">
+                  <span style={{ width: `${Math.max(3, entry.share * 100)}%` }} />
+                </i>
+              </span>
+              <span>{(entry.share * 100).toFixed(1)}%</span>
+              <strong>{entry.credits.toLocaleString("zh-CN")}</strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className={styles.sourceDetailEmpty}>当前范围内暂无关联数据</p>
+      )}
+    </div>
   );
 }
 
 export function UsageDetailDrawer({
+  allRecords,
   composition,
   dimension,
   item,
@@ -242,10 +247,28 @@ export function UsageDetailDrawer({
 }: UsageDetailDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [relatedDimension, setRelatedDimension] =
+    useState<"member" | "project" | "model">("member");
+  const [projectScope, setProjectScope] =
+    useState<"period" | "lifecycle">("period");
+  const analysisRecords = dimension === "project" && projectScope === "lifecycle"
+    ? allRecords
+    : records;
+  const analysisComposition = useMemo(
+    () => dimension === "project" && projectScope === "lifecycle"
+      ? getUsageComposition(allRecords, "project")
+      : composition,
+    [allRecords, composition, dimension, projectScope],
+  );
   const filteredRecords = useMemo(() => {
     if (!item) return [];
-    return filterByCompositionItem(records, composition, dimension, item);
-  }, [composition, dimension, item, records]);
+    return filterByCompositionItem(
+      analysisRecords,
+      analysisComposition,
+      dimension,
+      item,
+    );
+  }, [analysisComposition, analysisRecords, dimension, item]);
   const modelBreakdown = useMemo(
     () => getModelBreakdown(filteredRecords),
     [filteredRecords],
@@ -286,17 +309,85 @@ export function UsageDetailDrawer({
     (total, model) => total + model.specifications.length,
     0,
   );
-  const relatedCount = dimension === "member"
-    ? projectBreakdown.length
-    : dimension === "project"
-      ? memberBreakdown.length
-      : activeTasks;
-  const relatedCountLabel = dimension === "member"
-    ? "活跃项目"
-    : dimension === "project"
-      ? "参与成员"
-      : "任务数";
+  const relatedCount = dimension === "model"
+    ? specificationCount
+    : dimension === "member"
+      ? projectBreakdown.length
+      : dimension === "project"
+        ? memberBreakdown.length
+        : activeTasks;
+  const relatedCountLabel = dimension === "model"
+    ? "计费规格"
+    : dimension === "member"
+      ? "活跃项目"
+      : dimension === "project"
+        ? "参与成员"
+        : "任务数";
+  const relatedCountSuffix = dimension === "model"
+    ? "项"
+    : dimension === "member"
+      ? "个"
+      : dimension === "project"
+        ? "位"
+        : "次";
   const selectedModel = modelBreakdown[0] ?? null;
+  const relatedOptions = dimension === "model"
+    ? [
+        {
+          id: "member" as const,
+          label: "使用成员",
+          items: memberBreakdown,
+          description: "按成员积分消耗排序",
+        },
+        {
+          id: "project" as const,
+          label: "关联项目",
+          items: projectBreakdown,
+          description: "查看该模型主要用于哪些项目",
+        },
+      ]
+    : dimension === "member"
+      ? [
+          {
+            id: "model" as const,
+            label: "使用模型",
+            items: sourceModelBreakdown,
+            description: "该成员使用的图片与视频生成模型",
+          },
+          {
+            id: "project" as const,
+            label: "关联项目",
+            items: projectBreakdown,
+            description: "查看该成员参与的项目",
+          },
+        ]
+      : dimension === "project"
+        ? [
+            {
+              id: "model" as const,
+              label: "使用模型",
+              items: sourceModelBreakdown,
+              description: "项目内使用的图片与视频生成模型",
+            },
+            {
+              id: "member" as const,
+              label: "参与成员",
+              items: memberBreakdown,
+              description: "查看项目内的成员使用分布",
+            },
+          ]
+        : [];
+  const activeRelatedOption = relatedOptions.find(
+    (option) => option.id === relatedDimension,
+  ) ?? relatedOptions[0];
+
+  useEffect(() => {
+    setProjectScope("period");
+    if (dimension === "model") setRelatedDimension("member");
+    if (dimension === "member" || dimension === "project") {
+      setRelatedDimension("model");
+    }
+  }, [dimension, item?.id]);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -324,6 +415,7 @@ export function UsageDetailDrawer({
     ? "消耗构成"
     : `消耗来源 · ${dimensionLabels[dimension]}`;
   const identityLabel = item.id === "enhancement" ? "处理工具" : "模型";
+  const relatedSectionTitle = dimension === "model" ? "使用分布" : "归因分布";
 
   return createPortal(
     <div
@@ -334,7 +426,11 @@ export function UsageDetailDrawer({
     >
       <aside
         ref={drawerRef}
-        className={styles.usageDrawer}
+        className={`${styles.usageDrawer} ${
+          dimension === "type"
+            ? styles.compositionUsageDrawer
+            : styles.sourceUsageDrawer
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="usage-detail-title"
@@ -356,24 +452,57 @@ export function UsageDetailDrawer({
         }}
       >
         <header className={styles.usageDrawerHeader}>
-          <span>
+          <span className={styles.usageDrawerHeading}>
             <small className={styles.usageDrawerBreadcrumb}>
-              <span>{rangeLabel}</span>
-              <span aria-hidden="true">/</span>
+              {dimension !== "project" ? (
+                <>
+                  <span>{rangeLabel}</span>
+                  <span aria-hidden="true">/</span>
+                </>
+              ) : null}
               <span>{contextLabel}</span>
             </small>
             <div className={styles.usageDrawerTitle}>
-              <h2 id="usage-detail-title">{item.label}</h2>
+              <h2 id="usage-detail-title">
+                {dimension === "type" ? item.label : `${item.label} 用量`}
+              </h2>
             </div>
-            <p>
-              {dimension === "type"
-                ? "汇总当前时间范围内的产出与积分消耗"
-                : "从当前来源查看构成、产出与关联使用情况"}
-            </p>
+            {dimension === "project" ? (
+              <div className={styles.projectScopeRow}>
+                <span className={styles.projectRangeLabel}>
+                  <CalendarRange aria-hidden="true" />
+                  <span>统计范围</span>
+                  <strong>
+                    {projectScope === "lifecycle" ? "项目全周期" : rangeLabel}
+                  </strong>
+                </span>
+                <button
+                  type="button"
+                  className={styles.projectLifecycleAction}
+                  onClick={() =>
+                    setProjectScope((current) =>
+                      current === "period" ? "lifecycle" : "period"
+                    )}
+                >
+                  {projectScope === "period" ? (
+                    <>
+                      项目全周期
+                      <ArrowUpRight aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      <ChevronLeft aria-hidden="true" />
+                      返回期间统计
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : null}
           </span>
           <button
             ref={closeButtonRef}
             type="button"
+            className={styles.usageDrawerCloseButton}
             aria-label="关闭消耗明细"
             onClick={onClose}
           >
@@ -386,7 +515,7 @@ export function UsageDetailDrawer({
             className={styles.usageAnalysisSummary}
             aria-label={`${item.label}用量概览`}
           >
-            <article>
+            <article className={styles.usageSummaryPrimary}>
               <small>积分消耗</small>
               <strong>{activeCredits.toLocaleString("zh-CN")}</strong>
             </article>
@@ -400,9 +529,12 @@ export function UsageDetailDrawer({
                 })}
               </strong>
             </article>
-            <article>
+            <article className={styles.usageSummaryContext}>
               <small>{relatedCountLabel}</small>
-              <strong>{formatTaskCount(relatedCount)}</strong>
+              <strong>
+                {formatTaskCount(relatedCount)}
+                <span>{relatedCountSuffix}</span>
+              </strong>
             </article>
           </section>
 
@@ -410,11 +542,11 @@ export function UsageDetailDrawer({
             <section className={styles.usageAnalysisBreakdown}>
               <header>
                 <span>
-                  <h3>{identityLabel}用量</h3>
-                  <p>按实际计费维度汇总，规格明细已完整展开</p>
+                  <h3>计费结构</h3>
+                  <p>按{identityLabel}展开影响扣费的规格，不重复呈现任务流水</p>
                 </span>
                 <small>
-                  {modelBreakdown.length} {identityLabel} · {specificationCount} 规格
+                  {modelBreakdown.length} 个{identityLabel} · {specificationCount} 项规格
                 </small>
               </header>
 
@@ -469,7 +601,7 @@ export function UsageDetailDrawer({
                   <header>
                     <span>
                       <h3>计费规格</h3>
-                      <p>仅保留影响费用的规格维度</p>
+                      <p>仅保留影响扣费的参数维度，产出为所选期间累计值</p>
                     </span>
                     <small>{selectedModel.specifications.length} 项规格</small>
                   </header>
@@ -489,57 +621,55 @@ export function UsageDetailDrawer({
                   </div>
                 </section>
               ) : (
-                <SourceRanking
-                  title="消耗构成"
-                  description="查看该来源的业务类型分布"
-                  items={typeBreakdown}
-                />
+                <section className={styles.sourceCompositionSection}>
+                  <header>
+                    <span>
+                      <h3>消耗构成</h3>
+                      <p>
+                        {dimension === "member"
+                          ? "该成员在所选期间把积分用于哪些能力"
+                          : projectScope === "lifecycle"
+                            ? "该项目全周期的能力消费结构"
+                            : "该项目在当前期间的能力消费结构"}
+                      </p>
+                    </span>
+                  </header>
+                  <SourceRanking items={typeBreakdown} identityLabel="类型" />
+                </section>
               )}
 
-              <div className={styles.sourceRelatedGrid}>
-                {dimension === "model" ? (
-                  <>
-                    <SourceRanking
-                      title="主要使用成员"
-                      description="按积分消耗排序"
-                      items={memberBreakdown}
-                    />
-                    <SourceRanking
-                      title="关联项目"
-                      description="按项目汇总该模型用量"
-                      items={projectBreakdown}
-                    />
-                  </>
-                ) : null}
-                {dimension === "member" ? (
-                  <>
-                    <SourceRanking
-                      title="使用模型"
-                      description="该成员使用的图片与视频生成模型"
-                      items={sourceModelBreakdown}
-                    />
-                    <SourceRanking
-                      title="关联项目"
-                      description="该成员参与的项目"
-                      items={projectBreakdown}
-                    />
-                  </>
-                ) : null}
-                {dimension === "project" ? (
-                  <>
-                    <SourceRanking
-                      title="使用模型"
-                      description="项目内使用的图片与视频生成模型"
-                      items={sourceModelBreakdown}
-                    />
-                    <SourceRanking
-                      title="参与成员"
-                      description="按成员贡献汇总"
-                      items={memberBreakdown}
-                    />
-                  </>
-                ) : null}
-              </div>
+              {activeRelatedOption ? (
+                <section className={styles.sourceRelatedSection}>
+                  <header>
+                    <span>
+                      <h3>{relatedSectionTitle}</h3>
+                      <p>{activeRelatedOption.description}</p>
+                    </span>
+                    <div
+                      className={styles.sourceRelatedTabs}
+                      aria-label={`${relatedSectionTitle}维度`}
+                    >
+                      {relatedOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={option.id === activeRelatedOption.id
+                            ? styles.activeSourceRelatedTab
+                            : ""}
+                          aria-pressed={option.id === activeRelatedOption.id}
+                          onClick={() => setRelatedDimension(option.id)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </header>
+                  <SourceRanking
+                    items={activeRelatedOption.items}
+                    identityLabel={activeRelatedOption.label}
+                  />
+                </section>
+              ) : null}
             </div>
           )}
         </div>

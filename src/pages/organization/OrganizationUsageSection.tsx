@@ -847,6 +847,7 @@ export function OrganizationUsageSection({
       </section>
 
       <UsageDetailDrawer
+        allRecords={demoData.records}
         composition={selectedBreakdown?.composition ?? []}
         dimension={selectedBreakdown?.dimension ?? "type"}
         item={selectedBreakdown?.item ?? null}
