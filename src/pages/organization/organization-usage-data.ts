@@ -146,6 +146,28 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
   },
   {
     activityKind: "video",
+    activityLabel: "文生视频",
+    modelId: "seedance-2",
+    modelName: "Seedance 2.0",
+    specification: "720p · 5s",
+    weight: 8,
+    baseCredits: 380,
+    outputImages: 0,
+    outputVideoSeconds: 5,
+  },
+  {
+    activityKind: "video",
+    activityLabel: "文生视频",
+    modelId: "seedance-2",
+    modelName: "Seedance 2.0",
+    specification: "4K · 10s",
+    weight: 3,
+    baseCredits: 1_080,
+    outputImages: 0,
+    outputVideoSeconds: 10,
+  },
+  {
+    activityKind: "video",
     activityLabel: "图生视频",
     modelId: "seedance-2-fast",
     modelName: "Seedance 2.0 Fast",
@@ -157,12 +179,45 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
   },
   {
     activityKind: "video",
+    activityLabel: "图生视频",
+    modelId: "seedance-2-fast",
+    modelName: "Seedance 2.0 Fast",
+    specification: "480p · 5s",
+    weight: 6,
+    baseCredits: 240,
+    outputImages: 0,
+    outputVideoSeconds: 5,
+  },
+  {
+    activityKind: "video",
     activityLabel: "参考生视频",
     modelId: "kling-video-3",
     modelName: "Kling Video 3.0",
     specification: "1080p · 10s",
     weight: 6,
     baseCredits: 660,
+    outputImages: 0,
+    outputVideoSeconds: 10,
+  },
+  {
+    activityKind: "video",
+    activityLabel: "参考生视频",
+    modelId: "kling-video-3",
+    modelName: "Kling Video 3.0",
+    specification: "720p · 5s",
+    weight: 4,
+    baseCredits: 390,
+    outputImages: 0,
+    outputVideoSeconds: 5,
+  },
+  {
+    activityKind: "video",
+    activityLabel: "参考生视频",
+    modelId: "kling-video-3",
+    modelName: "Kling Video 3.0",
+    specification: "4K · 10s",
+    weight: 3,
+    baseCredits: 1_020,
     outputImages: 0,
     outputVideoSeconds: 10,
   },
@@ -189,13 +244,46 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     outputVideoSeconds: 8,
   },
   {
+    activityKind: "video",
+    activityLabel: "参考生视频",
+    modelId: "veo-3-1",
+    modelName: "Veo 3.1",
+    specification: "720p · 8s",
+    weight: 2,
+    baseCredits: 650,
+    outputImages: 0,
+    outputVideoSeconds: 8,
+  },
+  {
     activityKind: "image",
     activityLabel: "图片生成",
     modelId: "gpt-image-2",
     modelName: "GPT Image 2",
-    specification: "2K · 16:9 · 4 张",
-    weight: 15,
+    specification: "高 · 2K · 16:9 · 4 张",
+    weight: 12,
     baseCredits: 168,
+    outputImages: 4,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "image",
+    activityLabel: "图片生成",
+    modelId: "gpt-image-2",
+    modelName: "GPT Image 2",
+    specification: "中 · 2K · 1:1 · 2 张",
+    weight: 8,
+    baseCredits: 88,
+    outputImages: 2,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "image",
+    activityLabel: "图片生成",
+    modelId: "gpt-image-2",
+    modelName: "GPT Image 2",
+    specification: "低 · 1K · 3:2 · 4 张",
+    weight: 5,
+    baseCredits: 48,
     outputImages: 4,
     outputVideoSeconds: 0,
   },
@@ -213,10 +301,32 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
   {
     activityKind: "image",
     activityLabel: "图片生成",
+    modelId: "nano-banana-pro",
+    modelName: "Nano Banana Pro",
+    specification: "4K · 16:9 · 1 张",
+    weight: 6,
+    baseCredits: 120,
+    outputImages: 1,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "image",
+    activityLabel: "图片生成",
     modelId: "midjourney-v8-1",
     modelName: "Midjourney V8.1",
     specification: "2K · 16:9 · 4 张",
     weight: 10,
+    baseCredits: 112,
+    outputImages: 4,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "image",
+    activityLabel: "图片生成",
+    modelId: "midjourney-v8-1",
+    modelName: "Midjourney V8.1",
+    specification: "2K · 1:1 · 4 张",
+    weight: 7,
     baseCredits: 112,
     outputImages: 4,
     outputVideoSeconds: 0,
@@ -233,6 +343,17 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     outputVideoSeconds: 0,
   },
   {
+    activityKind: "image",
+    activityLabel: "图片生成",
+    modelId: "seedream-5-lite",
+    modelName: "Seedream 5.0 Lite",
+    specification: "2K · 16:9 · 4 张",
+    weight: 6,
+    baseCredits: 68,
+    outputImages: 4,
+    outputVideoSeconds: 0,
+  },
+  {
     activityKind: "enhancement",
     activityLabel: "高清放大",
     modelId: "reelay-hd",
@@ -242,6 +363,39 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     baseCredits: 54,
     outputImages: 1,
     outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "enhancement",
+    activityLabel: "高清放大",
+    modelId: "reelay-hd",
+    modelName: "Reelay HD",
+    specification: "4× · 8K",
+    weight: 4,
+    baseCredits: 92,
+    outputImages: 1,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "enhancement",
+    activityLabel: "提升帧率",
+    modelId: "reelay-frameboost",
+    modelName: "Reelay FrameBoost",
+    specification: "1080p · 60fps · 10s",
+    weight: 5,
+    baseCredits: 86,
+    outputImages: 0,
+    outputVideoSeconds: 10,
+  },
+  {
+    activityKind: "enhancement",
+    activityLabel: "视频去字幕",
+    modelId: "reelay-clean",
+    modelName: "Reelay Clean",
+    specification: "1080p · 10s",
+    weight: 4,
+    baseCredits: 72,
+    outputImages: 0,
+    outputVideoSeconds: 10,
   },
   {
     activityKind: "agent",
@@ -254,12 +408,34 @@ const USAGE_TEMPLATES: UsageTemplate[] = [
     outputImages: 0,
     outputVideoSeconds: 0,
   },
+  {
+    activityKind: "agent",
+    activityLabel: "Agent 处理",
+    modelId: "reelay-agent",
+    modelName: "Reelay Agent",
+    specification: "镜头规划 · 1 次",
+    weight: 6,
+    baseCredits: 38,
+    outputImages: 0,
+    outputVideoSeconds: 0,
+  },
+  {
+    activityKind: "agent",
+    activityLabel: "Agent 处理",
+    modelId: "reelay-agent",
+    modelName: "Reelay Agent",
+    specification: "提示词润色 · 1 次",
+    weight: 5,
+    baseCredits: 24,
+    outputImages: 0,
+    outputVideoSeconds: 0,
+  },
 ];
 
 export const USAGE_ACTIVITY_LABELS: Record<UsageActivityKind, string> = {
   image: "图片生成",
   video: "视频生成",
-  enhancement: "编辑增强",
+  enhancement: "媒体处理",
   agent: "Agent 处理",
 };
 
@@ -669,10 +845,15 @@ export function getUsageComposition(
   records: UsageRecord[],
   dimension: UsageDimension,
 ): UsageCompositionItem[] {
+  const dimensionRecords = dimension === "model"
+    ? records.filter((record) =>
+        record.activityKind === "image" || record.activityKind === "video"
+      )
+    : records;
   const groups = new Map<string, UsageCompositionItem>();
-  const total = Math.max(0, totalCredits(records));
+  const total = Math.max(0, totalCredits(dimensionRecords));
 
-  records.forEach((record) => {
+  dimensionRecords.forEach((record) => {
     const id = dimension === "type"
       ? record.activityKind
       : dimension === "member"
@@ -729,33 +910,13 @@ export function getUsageComposition(
         return order.indexOf(left.id as UsageActivityKind)
           - order.indexOf(right.id as UsageActivityKind);
       }
-      return right.credits - left.credits;
+      const creditOrder = right.credits - left.credits;
+      return creditOrder !== 0
+        ? creditOrder
+        : left.label.localeCompare(right.label, "zh-CN");
     });
 
-  if (dimension === "type" || sortedItems.length <= 5) return sortedItems;
-
-  const visibleItems = sortedItems.slice(0, 5);
-  const remainingItems = sortedItems.slice(5);
-  const otherCredits = remainingItems.reduce((sum, item) => sum + item.credits, 0);
-  const detailUnit = dimension === "member"
-    ? "位成员"
-    : dimension === "project"
-      ? "个项目"
-      : "个模型";
-
-  return [
-    ...visibleItems,
-    {
-      id: `other-${dimension}`,
-      label: "其他",
-      detail: `其余 ${remainingItems.length} ${detailUnit}`,
-      credits: otherCredits,
-      share: total > 0 ? otherCredits / total : 0,
-      imageCount: remainingItems.reduce((sum, item) => sum + item.imageCount, 0),
-      videoSeconds: remainingItems.reduce((sum, item) => sum + item.videoSeconds, 0),
-      tasks: remainingItems.reduce((sum, item) => sum + item.tasks, 0),
-    },
-  ];
+  return sortedItems;
 }
 
 export function getUsageTrend(records: UsageRecord[], range: DateRange): UsageTrendPoint[] {
@@ -917,9 +1078,81 @@ function escapeXml(value: string | number): string {
     .replaceAll("\"", "&quot;");
 }
 
-export function buildUsageExcelXml(records: UsageRecord[]): string {
-  const csv = buildUsageCsv(records).replace(/^\uFEFF/, "");
-  const rows = csv.split("\n").map((row) => row.split(",").map((cell) => cell.replace(/^"|"$/g, "").replaceAll("\"\"", "\"")));
-  const body = rows.map((row) => `<Row>${row.map((cell) => `<Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`).join("")}</Row>`).join("");
-  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="组织用量"><Table>${body}</Table></Worksheet></Workbook>`;
+function buildExcelWorksheet(
+  name: string,
+  rows: Array<Array<string | number>>,
+): string {
+  const body = rows
+    .map((row) => `<Row>${row.map((cell) => `<Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`).join("")}</Row>`)
+    .join("");
+  return `<Worksheet ss:Name="${escapeXml(name)}"><Table>${body}</Table></Worksheet>`;
+}
+
+export function buildUsageExcelXml(
+  records: UsageRecord[],
+  rangeLabel?: string,
+): string {
+  const netCredits = records.reduce((total, record) => total + record.credits, 0);
+  const settledTasks = records.filter((record) => record.status === "settled").length;
+  const imageCount = records.reduce((total, record) => total + record.outputImages, 0);
+  const videoSeconds = records.reduce((total, record) => total + record.outputVideoSeconds, 0);
+  const dailyUsage = new Map<
+    string,
+    { credits: number; records: number; imageCount: number; videoSeconds: number }
+  >();
+  records.forEach((record) => {
+    const date = localDateKey(new Date(record.occurredAt));
+    const current = dailyUsage.get(date) ?? {
+      credits: 0,
+      records: 0,
+      imageCount: 0,
+      videoSeconds: 0,
+    };
+    current.credits += record.credits;
+    current.records += 1;
+    current.imageCount += record.outputImages;
+    current.videoSeconds += record.outputVideoSeconds;
+    dailyUsage.set(date, current);
+  });
+  const overviewRows: Array<Array<string | number>> = [
+    ["指标", "数值"],
+    ...(rangeLabel ? [["统计范围", rangeLabel]] : []),
+    ["积分消耗", netCredits],
+    ["已结算任务", settledTasks],
+    ["图片产出", imageCount],
+    ["视频产出（秒）", videoSeconds],
+  ];
+  const dailyRows: Array<Array<string | number>> = [
+    ["日期", "积分消耗", "记录数", "图片张数", "视频时长（秒）"],
+    ...Array.from(dailyUsage.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, usage]) => [
+        date,
+        usage.credits,
+        usage.records,
+        usage.imageCount,
+        usage.videoSeconds,
+      ]),
+  ];
+  const buildRankingRows = (dimension: UsageDimension): Array<Array<string | number>> => [
+    ["名称", "积分消耗", "占比", "任务数", "图片张数", "视频时长（秒）"],
+    ...getUsageComposition(records, dimension).map((item) => [
+      item.label,
+      item.credits,
+      `${(item.share * 100).toFixed(1)}%`,
+      item.tasks,
+      item.imageCount,
+      item.videoSeconds,
+    ]),
+  ];
+  const worksheets = [
+    buildExcelWorksheet("组织用量", overviewRows),
+    buildExcelWorksheet("每日用量", dailyRows),
+    buildExcelWorksheet("消耗构成", buildRankingRows("type")),
+    buildExcelWorksheet("模型排行", buildRankingRows("model")),
+    buildExcelWorksheet("成员排行", buildRankingRows("member")),
+    buildExcelWorksheet("项目排行", buildRankingRows("project")),
+  ].join("");
+
+  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">${worksheets}</Workbook>`;
 }

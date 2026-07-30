@@ -1,16 +1,16 @@
 import {
   ArrowRight,
   ArrowUpRight,
-  BarChart3,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
-  FileDown,
+  Search,
 } from "lucide-react";
 import {
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
   useRef,
@@ -26,7 +26,6 @@ import {
 } from "./UsageActivityChart";
 import { UsageDetailDrawer } from "./UsageDetailDrawer";
 import {
-  buildUsageCsv,
   buildUsageExcelXml,
   addOrganizationDays,
   createOrganizationUsageDemoData,
@@ -93,18 +92,17 @@ const TYPE_COLOR_VARIABLES: Record<string, string> = {
 };
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
+const percentFormatter = new Intl.NumberFormat("zh-CN", {
+  style: "percent",
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 const shortDateFormatter = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
   timeZone: ORGANIZATION_TIME_ZONE,
 });
-const compactDateFormatter = new Intl.DateTimeFormat("zh-CN", {
-  month: "2-digit",
-  day: "2-digit",
-  timeZone: ORGANIZATION_TIME_ZONE,
-});
-
 function createPickerSelection(
   kind: PickerRangePreset,
   now: Date,
@@ -142,6 +140,16 @@ function formatVideoDuration(seconds: number): string {
   return `${seconds} 秒`;
 }
 
+function formatCompositionOutput(item: UsageCompositionItem): string {
+  if (item.videoSeconds > 0) {
+    return `${numberFormatter.format(item.videoSeconds)}s`;
+  }
+  if (item.imageCount > 0) {
+    return `${numberFormatter.format(item.imageCount)} 张`;
+  }
+  return `${numberFormatter.format(item.tasks)} 次`;
+}
+
 function formatForecast(days: number | null): string {
   if (days === null) return "数据不足";
   return `约 ${numberFormatter.format(days)} 天`;
@@ -166,7 +174,7 @@ function appliedRangeName(preset: UsageRangePreset, picker: PickerSelection | nu
 
 function formatActualRange(start: Date, end: Date): string {
   const displayEnd = new Date(Math.max(start.getTime(), end.getTime() - 1));
-  return `${compactDateFormatter.format(start)}–${compactDateFormatter.format(displayEnd)}`;
+  return `${shortDateFormatter.format(start)}–${shortDateFormatter.format(displayEnd)}`;
 }
 
 function downloadFile(content: string, fileName: string, mimeType: string): void {
@@ -216,12 +224,15 @@ export function OrganizationUsageSection({
   const [activityAnchor, setActivityAnchor] = useState(now);
   const [sourceDimension, setSourceDimension] =
     useState<Exclude<UsageDimension, "type">>("model");
+  const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceSearchOpen, setSourceSearchOpen] = useState(false);
   const [selectedBreakdown, setSelectedBreakdown] =
     useState<SelectedBreakdown | null>(null);
+  const [highlightedTypeId, setHighlightedTypeId] = useState<string | null>(null);
 
-  const exportMenuRef = useRef<HTMLDetailsElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const pickerTriggerRef = useRef<HTMLButtonElement>(null);
+  const sourceListRef = useRef<HTMLDivElement>(null);
 
   const range = useMemo(
     () => getUsageRange(
@@ -269,6 +280,17 @@ export function OrganizationUsageSection({
     () => getUsageComposition(rangeRecords, sourceDimension),
     [rangeRecords, sourceDimension],
   );
+  const activeSourceLabel = SOURCE_DIMENSIONS.find(
+    (item) => item.id === sourceDimension,
+  )?.label ?? "来源";
+  const sourceSearchAvailable = sourceComposition.length > 0;
+  const filteredSourceComposition = useMemo(() => {
+    const query = sourceQuery.trim().toLocaleLowerCase("zh-CN");
+    if (!query) return sourceComposition;
+    return sourceComposition.filter((item) =>
+      `${item.label} ${item.detail}`.toLocaleLowerCase("zh-CN").includes(query)
+    );
+  }, [sourceComposition, sourceQuery]);
   const activityDays = useMemo(
     () => getHeatmapDays(demoData.records, activityAnchor),
     [activityAnchor, demoData.records],
@@ -291,11 +313,18 @@ export function OrganizationUsageSection({
     0,
     typeComposition.reduce((total, item) => total + item.credits, 0),
   );
+  const highlightedType = typeComposition.find(
+    (item) => item.id === highlightedTypeId,
+  ) ?? null;
   let donutOffset = 0;
   const donutSegments = typeComposition.map((item) => {
     const start = donutOffset;
     donutOffset += item.share * 100;
-    return `${TYPE_COLOR_VARIABLES[item.id] ?? "var(--workspace-muted)"} ${
+    const color = TYPE_COLOR_VARIABLES[item.id] ?? "var(--workspace-muted)";
+    const displayedColor = highlightedType && highlightedType.id !== item.id
+      ? `color-mix(in srgb, ${color} 24%, var(--workspace-surface))`
+      : color;
+    return `${displayedColor} ${
       start.toFixed(2)
     }% ${donutOffset.toFixed(2)}%`;
   });
@@ -305,19 +334,39 @@ export function OrganizationUsageSection({
       : "conic-gradient(var(--workspace-border) 0 100%)",
   } as CSSProperties;
 
+  const previewDonutSegment = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const diameter = Math.min(bounds.width, bounds.height);
+    const x = event.clientX - bounds.left - bounds.width / 2;
+    const y = event.clientY - bounds.top - bounds.height / 2;
+    const radius = Math.hypot(x, y);
+    const outerRadius = diameter / 2;
+    const innerRadius = diameter * (52 / 172);
+
+    if (radius < innerRadius || radius > outerRadius || totalTypeCredits === 0) {
+      setHighlightedTypeId(null);
+      return;
+    }
+
+    const angle = (Math.atan2(y, x) * 180 / Math.PI + 90 + 360) % 360;
+    const targetShare = angle / 360;
+    let cumulativeShare = 0;
+    const nextType = typeComposition.find((item) => {
+      cumulativeShare += item.share;
+      return targetShare <= cumulativeShare;
+    });
+    setHighlightedTypeId(nextType?.id ?? null);
+  };
+
   useEffect(() => {
     const closeFloatingControls = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!exportMenuRef.current?.contains(target)) {
-        exportMenuRef.current?.removeAttribute("open");
-      }
       if (pickerOpen && !pickerRef.current?.contains(target)) {
         setPickerOpen(false);
       }
     };
     const closeFloatingControlsOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      exportMenuRef.current?.removeAttribute("open");
       if (pickerOpen) {
         setPickerOpen(false);
         pickerTriggerRef.current?.focus();
@@ -333,6 +382,9 @@ export function OrganizationUsageSection({
 
   useEffect(() => {
     setSelectedBreakdown(null);
+    setSourceQuery("");
+    setSourceSearchOpen(false);
+    sourceListRef.current?.scrollTo?.({ top: 0 });
   }, [range, sourceDimension]);
 
   const openPicker = () => {
@@ -359,22 +411,13 @@ export function OrganizationUsageSection({
     });
   };
 
-  const exportRecords = (format: "csv" | "excel") => {
+  const exportUsageReport = () => {
     const stamp = formatUsageDateInput(now);
-    if (format === "csv") {
-      downloadFile(
-        buildUsageCsv(rangeRecords),
-        `Reelay-组织用量-${stamp}.csv`,
-        "text/csv;charset=utf-8",
-      );
-    } else {
-      downloadFile(
-        buildUsageExcelXml(rangeRecords),
-        `Reelay-组织用量-${stamp}.xls`,
-        "application/vnd.ms-excel;charset=utf-8",
-      );
-    }
-    exportMenuRef.current?.removeAttribute("open");
+    downloadFile(
+      buildUsageExcelXml(rangeRecords, actualRangeLabel),
+      `Reelay-用量报表-${stamp}.xls`,
+      "application/vnd.ms-excel;charset=utf-8",
+    );
   };
 
   const activityPanel = (
@@ -473,30 +516,20 @@ export function OrganizationUsageSection({
         <header className={styles.periodHeader}>
           <span className={styles.periodTitle}>
             <h2 id="usage-period-title">期间分析</h2>
-            <small>
-              <CalendarDays aria-hidden="true" />
-              {actualRangeLabel}
-            </small>
+            <small>{actualRangeLabel}</small>
           </span>
           <div className={styles.periodControls}>
             <div className={styles.toolbarMeta}>
-              <details ref={exportMenuRef} className={styles.exportMenu}>
-                <summary aria-label="导出当前时间范围的数据">
-                  <Download aria-hidden="true" />
-                  导出
-                  <ChevronDown aria-hidden="true" />
-                </summary>
-                <div>
-                  <button type="button" onClick={() => exportRecords("csv")}>
-                    <FileDown aria-hidden="true" />
-                    <span><strong>CSV</strong><small>{actualRangeLabel} 数据</small></span>
-                  </button>
-                  <button type="button" onClick={() => exportRecords("excel")}>
-                    <BarChart3 aria-hidden="true" />
-                    <span><strong>Excel</strong><small>{actualRangeLabel} 数据</small></span>
-                  </button>
-                </div>
-              </details>
+              <button
+                type="button"
+                className={styles.exportButton}
+                aria-label={`导出 ${actualRangeLabel} 用量报表`}
+                title={`导出 ${actualRangeLabel} 用量报表`}
+                onClick={exportUsageReport}
+              >
+                <Download aria-hidden="true" />
+                导出用量报表
+              </button>
             </div>
 
             <div className={styles.rangeControl} aria-label="统计时间范围">
@@ -622,7 +655,17 @@ export function OrganizationUsageSection({
           </div>
         </header>
 
-        <section className={styles.analysisGrid} aria-label="消耗构成与消耗走势">
+        <section className={styles.trendSection} aria-labelledby="usage-trend-title">
+          <header className={styles.analysisHeading}>
+            <span>
+              <h3 id="usage-trend-title">消耗走势</h3>
+              <small>{activeRangeLabel}的积分消耗变化</small>
+            </span>
+          </header>
+          <UsageTrendChart points={trend} rangeLabel={actualRangeLabel} />
+        </section>
+
+        <section className={styles.breakdownGrid} aria-label="消耗构成与消耗来源">
           <section className={styles.typeSection} aria-labelledby="usage-type-title">
             <header className={styles.analysisHeading}>
               <span>
@@ -631,10 +674,23 @@ export function OrganizationUsageSection({
               </span>
             </header>
             <div className={styles.typeCompositionLayout}>
-              <div className={styles.typeDonut} style={donutStyle} aria-hidden="true">
+              <div
+                className={styles.typeDonut}
+                style={donutStyle}
+                aria-hidden="true"
+                onPointerMove={previewDonutSegment}
+                onPointerLeave={() => setHighlightedTypeId(null)}
+              >
                 <span>
-                  <small>本期消耗</small>
-                  <strong>{numberFormatter.format(totalTypeCredits)}</strong>
+                  <small>{highlightedType?.label ?? "本期消耗"}</small>
+                  <strong>
+                    {numberFormatter.format(
+                      highlightedType?.credits ?? totalTypeCredits,
+                    )}
+                  </strong>
+                  {highlightedType ? (
+                    <em>{(highlightedType.share * 100).toFixed(1)}%</em>
+                  ) : null}
                 </span>
               </div>
               <div className={styles.typeLegend}>
@@ -642,7 +698,16 @@ export function OrganizationUsageSection({
                   <button
                     key={item.id}
                     type="button"
+                    data-active={highlightedTypeId === item.id || undefined}
+                    data-dimmed={
+                      Boolean(highlightedTypeId && highlightedTypeId !== item.id)
+                      || undefined
+                    }
                     aria-label={`查看${item.label}消耗明细`}
+                    onPointerEnter={() => setHighlightedTypeId(item.id)}
+                    onPointerLeave={() => setHighlightedTypeId(null)}
+                    onFocus={() => setHighlightedTypeId(item.id)}
+                    onBlur={() => setHighlightedTypeId(null)}
                     onClick={() => setSelectedBreakdown({
                       composition: typeComposition,
                       dimension: "type",
@@ -656,7 +721,10 @@ export function OrganizationUsageSection({
                           ?? "var(--workspace-muted)",
                       }}
                     />
-                    <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{formatCompositionOutput(item)}</small>
+                    </span>
                     <span>
                       <strong>{numberFormatter.format(item.credits)}</strong>
                       <small>{(item.share * 100).toFixed(1)}%</small>
@@ -667,79 +735,116 @@ export function OrganizationUsageSection({
             </div>
           </section>
 
-          <section className={styles.trendSection} aria-labelledby="usage-trend-title">
-            <header className={styles.analysisHeading}>
+          <section className={styles.sourceSection} aria-labelledby="usage-composition-title">
+            <header className={styles.compositionHeader}>
               <span>
-                <h3 id="usage-trend-title">消耗走势</h3>
-                <small>{activeRangeLabel}的积分消耗变化</small>
+                <h3 id="usage-composition-title">消耗来源</h3>
+                <p>按模型、成员或项目定位积分使用集中度</p>
               </span>
+              <div className={styles.sourceHeaderActions}>
+                {sourceSearchAvailable ? (
+                  <div className={styles.sourceSearchControl}>
+                    {sourceSearchOpen ? (
+                      <label className={styles.sourceSearch}>
+                        <Search aria-hidden="true" />
+                        <input
+                          type="search"
+                          value={sourceQuery}
+                          autoFocus
+                          placeholder={`搜索${activeSourceLabel}`}
+                          aria-label={`搜索${activeSourceLabel}`}
+                          onChange={(event) => setSourceQuery(event.target.value)}
+                        />
+                      </label>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={styles.sourceSearchTrigger}
+                      aria-label={`${sourceSearchOpen ? "收起" : "搜索"}${activeSourceLabel}`}
+                      aria-pressed={sourceSearchOpen}
+                      title={`${sourceSearchOpen ? "收起" : "搜索"}${activeSourceLabel}`}
+                      onClick={() => {
+                        setSourceSearchOpen((open) => !open);
+                        if (sourceSearchOpen) setSourceQuery("");
+                      }}
+                    >
+                      <Search aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : null}
+                <div className={styles.dimensionTabs} aria-label="消耗来源分析维度">
+                  {SOURCE_DIMENSIONS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={sourceDimension === item.id ? styles.activeDimension : ""}
+                      aria-pressed={sourceDimension === item.id}
+                      onClick={() => {
+                        setSourceDimension(item.id);
+                        setSourceQuery("");
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </header>
-            <UsageTrendChart points={trend} rangeLabel={actualRangeLabel} />
+
+            <div className={styles.sourceListRegion}>
+              <div
+                ref={sourceListRef}
+                className={styles.compositionList}
+                aria-label="消耗来源排名"
+              >
+                <div className={styles.sourceColumnHeader} aria-hidden="true">
+                  <span>{activeSourceLabel}</span>
+                  <span>占比</span>
+                  <span>积分</span>
+                  <span />
+                </div>
+                {filteredSourceComposition.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={styles.compositionRow}
+                    aria-label={`查看${item.label}用量汇总`}
+                    onClick={() => setSelectedBreakdown({
+                      composition: sourceComposition,
+                      dimension: sourceDimension,
+                      item,
+                    })}
+                  >
+                    <span className={styles.compositionIdentity}>
+                      <strong>{item.label}</strong>
+                      {sourceDimension !== "model" ? <small>{item.detail}</small> : null}
+                    </span>
+                    <span className={styles.compositionTrack} aria-hidden="true">
+                      <i style={{ width: `${Math.max(2, item.share * 100)}%` }} />
+                    </span>
+                    <span className={styles.compositionShare}>
+                      {percentFormatter.format(item.share)}
+                    </span>
+                    <span className={styles.compositionValue}>
+                      <strong>{numberFormatter.format(item.credits)}</strong>
+                    </span>
+                    <ArrowUpRight className={styles.compositionAction} aria-hidden="true" />
+                  </button>
+                ))}
+                {filteredSourceComposition.length === 0 ? (
+                  <p className={styles.sourceEmpty}>没有匹配的来源</p>
+                ) : null}
+              </div>
+            </div>
+            <footer className={styles.compositionFooter}>
+              <span>需要核对具体任务与扣费记录？</span>
+              <Link to="../credits">
+                查看积分明细
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </footer>
           </section>
         </section>
-
-        <header className={styles.compositionHeader}>
-          <span>
-            <h3 id="usage-composition-title">消耗来源</h3>
-            <p>按模型、成员或项目定位积分使用集中度</p>
-          </span>
-          <div className={styles.dimensionTabs} aria-label="消耗来源分析维度">
-            {SOURCE_DIMENSIONS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={sourceDimension === item.id ? styles.activeDimension : ""}
-                aria-pressed={sourceDimension === item.id}
-                onClick={() => setSourceDimension(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <div className={styles.compositionList}>
-          {sourceComposition.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={styles.compositionRow}
-              aria-label={`查看${item.label}消耗明细`}
-              onClick={() => setSelectedBreakdown({
-                composition: sourceComposition,
-                dimension: sourceDimension,
-                item,
-              })}
-            >
-              <span className={styles.compositionIdentity}>
-                <strong>{item.label}</strong>
-                <small>{item.detail}</small>
-              </span>
-              <span className={styles.compositionTrack} aria-hidden="true">
-                <i style={{ width: `${Math.max(2, item.share * 100)}%` }} />
-              </span>
-              <span className={styles.compositionValue}>
-                <strong>{numberFormatter.format(item.credits)}</strong>
-                <small>{(item.share * 100).toFixed(1)}%</small>
-              </span>
-              <small className={styles.compositionOutput}>
-                {item.videoSeconds > 0
-                  ? `${formatVideoDuration(item.videoSeconds)} 视频`
-                  : item.imageCount > 0
-                    ? `${numberFormatter.format(item.imageCount)} 张图片`
-                    : ""}
-              </small>
-              <ArrowUpRight className={styles.compositionAction} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-        <footer className={styles.compositionFooter}>
-          <span>需要核对具体任务与扣费记录？</span>
-          <Link to="../credits">
-            查看积分明细
-            <ArrowRight aria-hidden="true" />
-          </Link>
-        </footer>
       </section>
 
       <UsageDetailDrawer

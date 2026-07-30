@@ -225,18 +225,27 @@ describe("organization usage demo data", () => {
     expect(previousWindow.some((day) => day.credits > 0)).toBe(true);
   });
 
-  it("groups the same period by member, project, and model without changing totals", () => {
+  it("groups source dimensions with a model-only generation scope", () => {
     const demo = createOrganizationUsageDemoData(members, now);
     const records = filterUsageRecords(demo.records, getUsageRange("month", now));
     const total = records.reduce((sum, record) => sum + record.credits, 0);
 
-    for (const dimension of ["member", "project", "model"] as const) {
+    for (const dimension of ["member", "project"] as const) {
       const composition = getUsageComposition(records, dimension);
       expect(composition.reduce((sum, item) => sum + item.credits, 0)).toBe(total);
     }
 
-    expect(getUsageComposition(records, "model").at(-1)?.label).toBe("其他");
-    expect(getUsageComposition(records, "model")).toHaveLength(6);
+    const modelComposition = getUsageComposition(records, "model");
+    const generationCredits = records
+      .filter((record) => record.activityKind === "image" || record.activityKind === "video")
+      .reduce((sum, record) => sum + record.credits, 0);
+    expect(modelComposition.reduce((sum, item) => sum + item.credits, 0))
+      .toBe(generationCredits);
+    expect(modelComposition.some((item) => item.label === "其他")).toBe(false);
+    expect(modelComposition.length).toBeGreaterThan(5);
+    expect(
+      modelComposition.some((item) => item.label.startsWith("Reelay")),
+    ).toBe(false);
   });
 
   it("applies ledger filters and produces useful export files", () => {
@@ -254,6 +263,10 @@ describe("organization usage demo data", () => {
     ))).toBe(true);
     expect(buildUsageCsv(records.slice(0, 2))).toContain("成员,账号,项目");
     expect(buildUsageCsv(records.slice(0, 2))).toContain("林静");
-    expect(buildUsageExcelXml(records.slice(0, 2))).toContain('ss:Name="组织用量"');
+    const report = buildUsageExcelXml(records.slice(0, 2));
+    expect(report).toContain('ss:Name="组织用量"');
+    expect(report).toContain('ss:Name="每日用量"');
+    expect(report).toContain('ss:Name="消耗构成"');
+    expect(report).not.toContain('ss:Name="用量明细"');
   });
 });

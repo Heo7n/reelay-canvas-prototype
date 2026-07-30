@@ -285,9 +285,9 @@ describe("organization center", () => {
     const compositionHeading = screen.getByRole("heading", { name: "消耗构成" });
     const trendHeading = screen.getByRole("heading", { name: "消耗走势" });
     const sourceHeading = screen.getByRole("heading", { name: "消耗来源" });
-    expect(compositionHeading.compareDocumentPosition(trendHeading))
+    expect(trendHeading.compareDocumentPosition(compositionHeading))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(trendHeading.compareDocumentPosition(sourceHeading))
+    expect(compositionHeading.compareDocumentPosition(sourceHeading))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByRole("button", { name: "近 30 天" })).toHaveAttribute(
       "aria-pressed",
@@ -319,8 +319,8 @@ describe("organization center", () => {
     fireEvent.click(screen.getByRole("button", { name: "成员" }));
     expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getAllByRole("button", { name: /查看.*消耗明细/ })[0]);
-    expect(screen.getByRole("dialog", { name: /消耗明细/ })).toBeInTheDocument();
-    expect(screen.getByRole("table", { name: /消耗记录/ })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "视频生成" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "模型用量" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
     expect(screen.getByRole("link", { name: "查看积分明细" })).toBeInTheDocument();
   });

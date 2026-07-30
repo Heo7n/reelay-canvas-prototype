@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { UsageTrendPoint } from "./organization-usage-data";
 import styles from "./OrganizationUsageSection.module.css";
 
@@ -15,9 +16,32 @@ export function UsageTrendChart({
   points,
   rangeLabel,
 }: UsageTrendChartProps) {
-  const width = 720;
-  const height = 176;
-  const inset = { top: 16, right: 12, bottom: 28, left: 50 };
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(720);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const height = 198;
+  const inset = { top: 18, right: 10, bottom: 30, left: 46 };
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return undefined;
+
+    const updateWidth = () => {
+      setWidth(Math.max(480, Math.round(chart.getBoundingClientRect().width)));
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(chart);
+    return () => observer.disconnect();
+  }, []);
+
   const plotWidth = width - inset.left - inset.right;
   const plotHeight = height - inset.top - inset.bottom;
   const maximum = Math.max(1, ...points.map((point) => Math.max(0, point.credits)));
@@ -39,12 +63,39 @@ export function UsageTrendChart({
     Math.floor((points.length - 1) / 2),
     points.length - 1,
   ])].filter((index) => index >= 0 && index < points.length);
+  const hoveredPoint = hoveredIndex === null ? null : chartPoints[hoveredIndex];
+  const tooltipAlignment = hoveredPoint
+    ? hoveredPoint.x < width * 0.28
+      ? "start"
+      : hoveredPoint.x > width * 0.72
+        ? "end"
+        : "center"
+    : "center";
 
   return (
-    <div className={styles.trendChart}>
+    <div
+      ref={chartRef}
+      className={styles.trendChart}
+      onMouseLeave={() => setHoveredIndex(null)}
+      onMouseMove={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const localX = event.clientX - bounds.left;
+        const localY = event.clientY - bounds.top;
+        const isWithinPlot = localX >= inset.left
+          && localX <= width - inset.right
+          && localY >= inset.top
+          && localY <= inset.top + plotHeight;
+        if (!isWithinPlot || chartPoints.length === 0) {
+          setHoveredIndex(null);
+          return;
+        }
+        const progress = (localX - inset.left) / plotWidth;
+        setHoveredIndex(Math.round(progress * (chartPoints.length - 1)));
+      }}
+    >
       <svg
         role="img"
-        aria-label={`${rangeLabel}积分消耗趋势`}
+        aria-label={`${rangeLabel}积分消耗走势`}
         viewBox={`0 0 ${width} ${height}`}
       >
         {[0, 0.5, 1].map((ratio) => {
@@ -88,6 +139,18 @@ export function UsageTrendChart({
           </circle>
         ))}
 
+        {hoveredPoint ? (
+          <g className={styles.trendHoverIndicator} aria-hidden="true">
+            <line
+              x1={hoveredPoint.x}
+              x2={hoveredPoint.x}
+              y1={inset.top}
+              y2={inset.top + plotHeight}
+            />
+            <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="4" />
+          </g>
+        ) : null}
+
         {labelIndexes.map((index) => {
           const point = chartPoints[index];
           return (
@@ -105,6 +168,28 @@ export function UsageTrendChart({
           );
         })}
       </svg>
+      {hoveredPoint ? (
+        <div
+          className={styles.trendHoverCard}
+          data-align={tooltipAlignment}
+          style={{ left: `${hoveredPoint.x}px` }}
+          role="status"
+        >
+          <span>{formatTrendPointDate(hoveredPoint.key, hoveredPoint.label)}</span>
+          <strong>{hoveredPoint.credits.toLocaleString("zh-CN")} 积分</strong>
+          <span>{hoveredPoint.tasks} 项任务</span>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function formatTrendPointDate(key: string, fallback: string): string {
+  if (/^\d{4}-\d{2}-\d{2}-\d{2}$/.test(key)) {
+    const [year, month, day, hour] = key.split("-");
+    return `${year}/${month}/${day} ${hour}:00`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(key)) return key.replaceAll("-", "/");
+  if (/^\d{4}-\d{2}$/.test(key)) return key.replace("-", "/");
+  return fallback;
 }
