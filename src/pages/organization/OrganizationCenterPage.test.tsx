@@ -222,6 +222,24 @@ describe("organization center", () => {
     expect(within(creditDialog).queryByText("入账笔数")).toBeNull();
     expect(within(creditDialog).getByRole("table", { name: "组织积分入账记录" })).toBeInTheDocument();
     expect(within(creditDialog).getByRole("columnheader", { name: "来源与说明" })).toBeInTheDocument();
+    const creditExportButton = within(creditDialog).getByRole("button", {
+      name: "导出积分账户流水",
+    });
+    fireEvent.click(creditExportButton);
+    const exportRangeSelect = within(creditDialog).getByRole("combobox", {
+      name: "导出时间范围",
+    });
+    expect(exportRangeSelect).toHaveValue("all");
+    expect(within(creditDialog).getByRole("button", {
+      name: "导出全部积分账户流水为 Excel",
+    })).toBeInTheDocument();
+    expect(within(creditDialog).getByRole("button", {
+      name: "导出当前入账记录为 CSV",
+    })).toBeInTheDocument();
+    fireEvent.change(exportRangeSelect, { target: { value: "custom" } });
+    expect(within(creditDialog).getByLabelText("导出开始日期")).toBeInTheDocument();
+    expect(within(creditDialog).getByLabelText("导出结束日期")).toBeInTheDocument();
+    fireEvent.click(creditExportButton);
 
     fireEvent.click(within(creditDialog).getByRole("tab", { name: "分配记录" }));
     expect(within(creditDialog).getByRole("tab", { name: "分配记录" })).toHaveAttribute("aria-selected", "true");
@@ -304,6 +322,9 @@ describe("organization center", () => {
     expect(within(memberDialog).getByRole("heading", { name: "额度变动" })).toBeInTheDocument();
     expect(within(memberDialog).getByRole("heading", { name: "消耗明细" })).toBeInTheDocument();
     expect(within(memberDialog).queryByRole("tab")).toBeNull();
+    expect(within(memberDialog).queryByRole("button", {
+      name: "导出积分账户流水",
+    })).toBeNull();
     expect(within(memberDialog).queryByRole("combobox", { name: "筛选成员" })).toBeNull();
     expect(within(memberDialog).getByRole("table", { name: "Hoo额度变动记录" })).toBeInTheDocument();
     expect(

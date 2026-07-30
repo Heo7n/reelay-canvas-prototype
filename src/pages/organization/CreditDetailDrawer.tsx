@@ -1,6 +1,10 @@
 import {
   ArrowDownLeft,
+  ChevronDown,
   CreditCard,
+  Download,
+  FileDown,
+  FileSpreadsheet,
   ListFilter,
   RotateCcw,
   Sparkles,
@@ -21,6 +25,11 @@ import {
   type CreditGenerationTaskType,
   type CreditIncomeKind,
 } from "./organization-credit-data";
+import {
+  buildCreditLedgerCsv,
+  buildCreditLedgerExcelXml,
+  type CreditLedgerExportData,
+} from "./organization-credit-export";
 
 export type CreditDrawerKind = "income" | "allocation" | "consumption";
 
@@ -42,6 +51,8 @@ interface ConsumptionFilters {
   taskType: CreditGenerationTaskType | "";
   modelName: string;
 }
+
+type CreditExportRange = "all" | "month" | "quarter" | "custom";
 
 const emptyConsumptionFilters: ConsumptionFilters = {
   taskType: "",
@@ -70,6 +81,89 @@ const incomeLabels: Record<CreditIncomeKind, string> = {
   grant: "赠送",
   adjustment: "调整",
 };
+
+const exportKindLabels: Record<CreditDrawerKind, string> = {
+  income: "入账记录",
+  allocation: "分配记录",
+  consumption: "消耗记录",
+};
+
+const exportRangeLabels: Record<CreditExportRange, string> = {
+  all: "全部时间",
+  month: "本月",
+  quarter: "近 3 个月",
+  custom: "自定义",
+};
+
+const organizationAllocationRecords = CREDIT_ALLOCATION_RECORDS.filter(
+  (record) => record.action !== "consume",
+);
+const organizationConsumptionRecords = CREDIT_ALLOCATION_RECORDS.filter(
+  (record) => record.action === "consume",
+);
+const organizationExportData: CreditLedgerExportData = {
+  incomeRecords: CREDIT_INCOME_RECORDS,
+  allocationRecords: organizationAllocationRecords,
+  consumptionRecords: organizationConsumptionRecords,
+};
+
+function downloadFile(content: string, fileName: string, mimeType: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getExportDateStamp(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+  }).format(new Date());
+}
+
+function getExportRangeBounds(
+  range: CreditExportRange,
+  customStart: string,
+  customEnd: string,
+): { start?: string; end?: string } {
+  if (range === "all") return {};
+  if (range === "custom") return { start: customStart, end: customEnd };
+  const end = getExportDateStamp();
+  const [year, month] = end.split("-").map(Number);
+  const monthOffset = range === "quarter" ? 2 : 0;
+  const start = new Date(Date.UTC(year, month - 1 - monthOffset, 1))
+    .toISOString()
+    .slice(0, 10);
+  return { start, end };
+}
+
+function filterRecordsByExportRange<T extends { date: string }>(
+  records: T[],
+  range: CreditExportRange,
+  customStart: string,
+  customEnd: string,
+): T[] {
+  const { start, end } = getExportRangeBounds(range, customStart, customEnd);
+  if (!start && !end) return records;
+  return records.filter((record) => {
+    const date = record.date.slice(0, 10);
+    return (!start || date >= start) && (!end || date <= end);
+  });
+}
+
+function formatExportRangeLabel(
+  range: CreditExportRange,
+  customStart: string,
+  customEnd: string,
+): string {
+  if (range === "all") return exportRangeLabels.all;
+  const { start, end } = getExportRangeBounds(range, customStart, customEnd);
+  if (!start || !end) return exportRangeLabels[range];
+  return `${start} 至 ${end}`;
+}
 
 function formatGenerationSpec(record: CreditAllocationRecord) {
   const spec = record.generationSpec;
@@ -112,10 +206,17 @@ export function CreditDetailDrawer({
 }: CreditDetailDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const exportMenuRef = useRef<HTMLDetailsElement>(null);
   const [consumptionFilters, setConsumptionFilters] = useState<ConsumptionFilters>(
     emptyConsumptionFilters,
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportRange, setExportRange] = useState<CreditExportRange>("all");
+  const [customExportStart, setCustomExportStart] = useState(
+    () => `${getExportDateStamp().slice(0, 7)}-01`,
+  );
+  const [customExportEnd, setCustomExportEnd] = useState(getExportDateStamp);
 
   useEffect(() => {
     if (!kind) return undefined;
@@ -124,12 +225,24 @@ export function CreditDetailDrawer({
     document.body.style.overflow = "hidden";
     closeButtonRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (exportMenuRef.current?.open) {
+        exportMenuRef.current.removeAttribute("open");
+        return;
+      }
+      onClose();
+    };
+    const closeExportMenu = (event: PointerEvent) => {
+      if (!exportMenuRef.current?.contains(event.target as Node)) {
+        exportMenuRef.current?.removeAttribute("open");
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", closeExportMenu);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", closeExportMenu);
       if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
     };
   }, [kind, onClose]);
@@ -169,10 +282,81 @@ export function CreditDetailDrawer({
     + (!isMemberLedger && memberAccount ? 1 : 0);
   const modelOptionRecords = isMemberLedger
     ? consumptionRecords
-    : CREDIT_ALLOCATION_RECORDS.filter((record) => record.action === "consume");
+    : organizationConsumptionRecords;
   const modelOptions = Array.from(new Set(modelOptionRecords.map((record) => record.modelName)))
     .filter((model): model is string => Boolean(model))
     .sort((left, right) => left.localeCompare(right, "zh-CN"));
+  const currentExportData: CreditLedgerExportData = {
+    incomeRecords: CREDIT_INCOME_RECORDS,
+    allocationRecords,
+    consumptionRecords: filteredConsumptionRecords,
+  };
+  const fullRangeExportData: CreditLedgerExportData = {
+    incomeRecords: filterRecordsByExportRange(
+      organizationExportData.incomeRecords,
+      exportRange,
+      customExportStart,
+      customExportEnd,
+    ),
+    allocationRecords: filterRecordsByExportRange(
+      organizationExportData.allocationRecords,
+      exportRange,
+      customExportStart,
+      customExportEnd,
+    ),
+    consumptionRecords: filterRecordsByExportRange(
+      organizationExportData.consumptionRecords,
+      exportRange,
+      customExportStart,
+      customExportEnd,
+    ),
+  };
+  const currentRangeExportData: CreditLedgerExportData = {
+    incomeRecords: filterRecordsByExportRange(
+      currentExportData.incomeRecords,
+      exportRange,
+      customExportStart,
+      customExportEnd,
+    ),
+    allocationRecords: filterRecordsByExportRange(
+      currentExportData.allocationRecords,
+      exportRange,
+      customExportStart,
+      customExportEnd,
+    ),
+    consumptionRecords: filterRecordsByExportRange(
+      currentExportData.consumptionRecords,
+      exportRange,
+      customExportStart,
+      customExportEnd,
+    ),
+  };
+  const exportRangeLabel = formatExportRangeLabel(
+    exportRange,
+    customExportStart,
+    customExportEnd,
+  );
+  const exportRangeIsValid = exportRange !== "custom"
+    || Boolean(customExportStart && customExportEnd && customExportStart <= customExportEnd);
+  const exportRecords = (format: "csv" | "excel") => {
+    if (!exportRangeIsValid) return;
+    const stamp = getExportDateStamp();
+    const rangeLabel = exportRangeLabel.replaceAll(" ", "");
+    if (format === "excel") {
+      downloadFile(
+        buildCreditLedgerExcelXml(fullRangeExportData),
+        `Reelay-组织积分账户流水-${rangeLabel}-${stamp}.xls`,
+        "application/vnd.ms-excel;charset=utf-8",
+      );
+    } else {
+      downloadFile(
+        buildCreditLedgerCsv(kind, currentRangeExportData),
+        `Reelay-积分流水-${exportKindLabels[kind]}-${rangeLabel}-${stamp}.csv`,
+        "text/csv;charset=utf-8",
+      );
+    }
+    exportMenuRef.current?.removeAttribute("open");
+  };
   const memberFilterSelect = (
     <select
       className={styles.memberFilterSelect}
@@ -285,7 +469,7 @@ export function CreditDetailDrawer({
         onKeyDown={(event) => {
           if (event.key !== "Tab") return;
           const focusable = drawerRef.current?.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, a[href], [tabindex]:not([tabindex="-1"])',
           );
           if (!focusable?.length) return;
           const first = focusable[0];
@@ -313,46 +497,138 @@ export function CreditDetailDrawer({
               <p>查看组织积分的入账、内部额度分配与任务消耗</p>
             )}
           </span>
-          <button ref={closeButtonRef} type="button" aria-label="关闭详情" onClick={onClose}>
+          <button
+            ref={closeButtonRef}
+            className={styles.drawerCloseButton}
+            type="button"
+            aria-label="关闭详情"
+            onClick={onClose}
+          >
             <X aria-hidden="true" />
           </button>
         </header>
 
         {!isMemberLedger ? (
-          <div className={styles.drawerTabs} role="tablist" aria-label="积分变动记录类型">
-          <button
-            id="credit-tab-income"
-            type="button"
-            role="tab"
-            aria-controls="credit-panel-income"
-            aria-selected={kind === "income"}
-            className={kind === "income" ? styles.activeDrawerTab : undefined}
-            onClick={() => onKindChange("income")}
-          >
-            入账记录
-          </button>
-          <button
-            id="credit-tab-allocation"
-            type="button"
-            role="tab"
-            aria-controls="credit-panel-allocation"
-            aria-selected={kind === "allocation"}
-            className={kind === "allocation" ? styles.activeDrawerTab : undefined}
-            onClick={() => onKindChange("allocation")}
-          >
-            分配记录
-          </button>
-          <button
-            id="credit-tab-consumption"
-            type="button"
-            role="tab"
-            aria-controls="credit-panel-consumption"
-            aria-selected={kind === "consumption"}
-            className={kind === "consumption" ? styles.activeDrawerTab : undefined}
-            onClick={() => onKindChange("consumption")}
-          >
-            消耗记录
-          </button>
+          <div className={styles.drawerTabBar}>
+            <div className={styles.drawerTabs} role="tablist" aria-label="积分变动记录类型">
+              <button
+                id="credit-tab-income"
+                type="button"
+                role="tab"
+                aria-controls="credit-panel-income"
+                aria-selected={kind === "income"}
+                className={kind === "income" ? styles.activeDrawerTab : undefined}
+                onClick={() => onKindChange("income")}
+              >
+                入账记录
+              </button>
+              <button
+                id="credit-tab-allocation"
+                type="button"
+                role="tab"
+                aria-controls="credit-panel-allocation"
+                aria-selected={kind === "allocation"}
+                className={kind === "allocation" ? styles.activeDrawerTab : undefined}
+                onClick={() => onKindChange("allocation")}
+              >
+                分配记录
+              </button>
+              <button
+                id="credit-tab-consumption"
+                type="button"
+                role="tab"
+                aria-controls="credit-panel-consumption"
+                aria-selected={kind === "consumption"}
+                className={kind === "consumption" ? styles.activeDrawerTab : undefined}
+                onClick={() => onKindChange("consumption")}
+              >
+                消耗记录
+              </button>
+            </div>
+            <details
+              ref={exportMenuRef}
+              className={styles.creditExportMenu}
+              onToggle={(event) => setExportMenuOpen(event.currentTarget.open)}
+            >
+              <summary
+                role="button"
+                aria-expanded={exportMenuOpen}
+                aria-label="导出积分账户流水"
+              >
+                <Download aria-hidden="true" />
+                <span>导出流水</span>
+                <ChevronDown aria-hidden="true" />
+              </summary>
+              <div>
+                <label className={styles.creditExportRange}>
+                  <span>时间范围</span>
+                  <select
+                    aria-label="导出时间范围"
+                    value={exportRange}
+                    onChange={(event) => {
+                      setExportRange(event.target.value as CreditExportRange);
+                    }}
+                  >
+                    <option value="all">全部时间</option>
+                    <option value="month">本月</option>
+                    <option value="quarter">近 3 个月</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                </label>
+                {exportRange === "custom" ? (
+                  <div className={styles.creditExportCustomDates}>
+                    <label>
+                      <span>开始日期</span>
+                      <input
+                        type="date"
+                        aria-label="导出开始日期"
+                        value={customExportStart}
+                        max={customExportEnd}
+                        onChange={(event) => setCustomExportStart(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>结束日期</span>
+                      <input
+                        type="date"
+                        aria-label="导出结束日期"
+                        value={customExportEnd}
+                        min={customExportStart}
+                        max={getExportDateStamp()}
+                        onChange={(event) => setCustomExportEnd(event.target.value)}
+                      />
+                    </label>
+                    {!exportRangeIsValid ? (
+                      <small role="alert">结束日期不能早于开始日期</small>
+                    ) : null}
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label="导出全部积分账户流水为 Excel"
+                  disabled={!exportRangeIsValid}
+                  onClick={() => exportRecords("excel")}
+                >
+                  <FileSpreadsheet aria-hidden="true" />
+                  <span>
+                    <strong>Excel</strong>
+                    <small>{exportRangeLabel} · 全部账户流水</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`导出当前${exportKindLabels[kind]}为 CSV`}
+                  disabled={!exportRangeIsValid}
+                  onClick={() => exportRecords("csv")}
+                >
+                  <FileDown aria-hidden="true" />
+                  <span>
+                    <strong>CSV</strong>
+                    <small>{exportRangeLabel} · 当前页签及筛选</small>
+                  </span>
+                </button>
+              </div>
+            </details>
           </div>
         ) : null}
 
