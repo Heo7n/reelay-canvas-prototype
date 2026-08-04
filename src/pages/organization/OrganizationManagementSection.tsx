@@ -51,6 +51,7 @@ export function OrganizationManagementSection({
   const currentRole = workspace.currentUserRole ?? "member";
   const canEditOrganization = currentRole === "owner";
   const canControlAccounts = currentRole === "owner" || currentRole === "admin";
+  const isMemberView = currentRole === "member";
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   const filteredMembers = normalizedQuery
     ? members.filter((member) => (
@@ -104,8 +105,8 @@ export function OrganizationManagementSection({
   }
 
   return (
-    <section className={styles.section} aria-labelledby="organization-management-title">
-      <h1 id="organization-management-title" className={styles.srOnly}>组织管理</h1>
+    <section className={styles.section} aria-labelledby="organization-information-title">
+      <h1 id="organization-information-title" className={styles.srOnly}>组织信息</h1>
 
       <article className={styles.organizationCard}>
         {canEditOrganization ? (
@@ -185,7 +186,7 @@ export function OrganizationManagementSection({
 
       <div className={styles.membersSection}>
         <div className={styles.subsectionHeading}>
-          <h2>成员管理</h2>
+          <h2>{isMemberView ? "组织成员" : "成员管理"}</h2>
           <label className={styles.searchBox}>
             <Search aria-hidden="true" />
             <span className={styles.srOnly}>搜索组织成员</span>
@@ -193,18 +194,18 @@ export function OrganizationManagementSection({
               type="search"
               value={query}
               maxLength={80}
-              placeholder="搜索成员或登录账号"
+              placeholder={isMemberView ? "搜索成员或账号邮箱" : "搜索成员或登录账号"}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
           </label>
         </div>
 
-        <div className={styles.memberTable}>
+        <div className={`${styles.memberTable} ${isMemberView ? styles.memberDirectoryTable : ""}`}>
           <div className={styles.memberTableHeader} aria-hidden="true">
             <span>成员</span>
-            <span>账号</span>
+            <span>{isMemberView ? "账号邮箱" : "账号"}</span>
             <span>角色</span>
-            <span>管理</span>
+            {!isMemberView ? <span>管理</span> : null}
           </div>
           {filteredMembers.map((member) => {
             const isCurrentActor = member.userId === actor.id;
@@ -213,7 +214,7 @@ export function OrganizationManagementSection({
             const isDisabled = disabledMemberIds.has(member.userId);
             return (
               <div
-                className={`${styles.memberRow} ${isDisabled ? styles.memberRowDisabled : ""}`}
+                className={`${styles.memberRow} ${isMemberView ? styles.memberDirectoryRow : ""} ${isDisabled ? styles.memberRowDisabled : ""}`}
                 key={member.userId}
                 data-account-disabled={isDisabled ? "true" : undefined}
               >
@@ -260,7 +261,7 @@ export function OrganizationManagementSection({
                     </span>
                   )}
                 </span>
-                <span className={styles.rowAction}>
+                {!isMemberView ? <span className={styles.rowAction}>
                   {canControlAccounts && member.role !== "owner" ? (
                     <button
                       type="button"
@@ -281,7 +282,7 @@ export function OrganizationManagementSection({
                   ) : (
                     <small>{member.role === "owner" ? "所有权账号" : "—"}</small>
                   )}
-                </span>
+                </span> : null}
               </div>
             );
           })}

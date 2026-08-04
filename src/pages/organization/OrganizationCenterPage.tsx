@@ -1,4 +1,4 @@
-import { BarChart3, Building2, ChevronLeft, CircleDollarSign, UsersRound } from "lucide-react";
+import { BarChart3, Building2, ChevronLeft, CircleDollarSign, Info } from "lucide-react";
 import { Link, NavLink, Outlet, useLoaderData } from "react-router-dom";
 
 import type { OrganizationMembersRouteData, OrganizationRouteData } from "../../app/route-data";
@@ -31,13 +31,13 @@ export function OrganizationCenterPage() {
   const { notice, showNotice } = useTransientNotice();
   const workspaceId = data.currentWorkspace.id;
   const currentRole = data.currentWorkspace.currentUserRole ?? "member";
-  const canViewUsage = currentRole === "owner" || currentRole === "admin";
+  const canManageOrganization = currentRole === "owner" || currentRole === "admin";
 
   const navigation = [
     {
       id: "management",
-      label: "组织管理",
-      icon: UsersRound,
+      label: "组织信息",
+      icon: Info,
       to: routePaths.organization(workspaceId),
       end: true,
     },
@@ -56,7 +56,9 @@ export function OrganizationCenterPage() {
       end: false,
     },
   ] as const;
-  const visibleNavigation = navigation.filter((item) => item.id !== "usage" || canViewUsage);
+  const visibleNavigation = navigation.filter((item) => (
+    item.id === "management" || canManageOrganization
+  ));
 
   return (
     <div className={styles.organizationShell}>

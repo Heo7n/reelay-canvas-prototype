@@ -69,12 +69,11 @@ describe("organization center", () => {
   it("keeps organization information and member management on one page", async () => {
     renderSection("management");
 
-    expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "成员管理" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByText("2 位成员")).toBeInTheDocument();
     expect(screen.getByText("组织 ID：REELAY-7X29M4")).toBeInTheDocument();
-    expect(screen.queryByText("组织信息")).toBeNull();
     expect(screen.queryByText(/当前身份/)).toBeNull();
     expect(screen.queryByText("2 位组织成员")).toBeNull();
     expect(screen.queryByLabelText("打开账户菜单")).toBeNull();
@@ -140,7 +139,7 @@ describe("organization center", () => {
     };
     renderSection("management", adminData);
 
-    expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "调整 Hoo 的组织角色" })).toBeNull();
     expect(screen.queryByRole("button", { name: "调整 林静 的组织角色" })).toBeNull();
     expect(screen.getByRole("button", { name: "调整 陈曦 的组织角色" })).toBeInTheDocument();
@@ -379,6 +378,10 @@ describe("organization center", () => {
       "aria-pressed",
       "true",
     );
+    expect(
+      screen.getByRole("button", { name: /导出 .* 用量报表/ })
+        .compareDocumentPosition(screen.getByRole("button", { name: "近 30 天" })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByRole("button", { name: "每日" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "每周" }));
     expect(screen.getByRole("button", { name: "每周" })).toHaveAttribute("aria-pressed", "true");
@@ -407,6 +410,8 @@ describe("organization center", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /查看.*消耗明细/ })[0]);
     expect(screen.getByRole("dialog", { name: "视频生成" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "计费结构" })).toBeInTheDocument();
+    expect(screen.getByText("任务数量")).toBeInTheDocument();
+    expect(screen.getAllByText(/\d+ 次/).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "使用成员" }))
       .not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
@@ -581,25 +586,48 @@ describe("organization center", () => {
     expect(screen.queryByRole("dialog", { name: "选择日期范围" })).toBeNull();
   });
 
-  it("keeps organization usage private from regular members", async () => {
-    renderSection("usage", {
+  it("gives regular members a read-only organization directory and redirects restricted sections", async () => {
+    const memberData: OrganizationRouteData = {
       ...routeData,
+      actor: {
+        ...routeData.actor,
+        id: "actor-chenxi",
+        displayName: "陈曦",
+        account: "chenxi@reelay.test",
+      },
       currentWorkspace: {
         ...routeData.currentWorkspace,
         currentUserRole: "member",
       },
-    });
+      members: [
+        ...routeData.members,
+        {
+          userId: "actor-chenxi",
+          displayName: "陈曦",
+          loginIdentifier: "chenxi@reelay.test",
+          role: "member",
+        },
+      ],
+    };
+    const router = renderSection("usage", memberData);
 
-    expect(await screen.findByText("此页面仅对主账户与管理员开放")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "组织成员" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "组织信息" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "积分管理" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "用量看板" })).not.toBeInTheDocument();
-    expect(screen.queryByText("可用积分")).not.toBeInTheDocument();
+    expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();
+    expect(screen.getByText("linjing@reelay.test")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /调整 .* 的组织角色/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /管理 .* 的账号/ })).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/w/workspace-organization-reelay/organization");
   });
 
   it("reuses organization data while switching between center sections", async () => {
     const loader = vi.fn(async () => routeData);
     renderSection("management", routeData, loader);
 
-    expect(await screen.findByRole("heading", { name: "组织管理" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
     expect(loader).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole("link", { name: "积分管理" }));

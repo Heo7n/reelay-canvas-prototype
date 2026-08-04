@@ -60,11 +60,11 @@ describe("workspace account menu", () => {
     fireEvent.pointerEnter(profileTrigger);
 
     expect(profileTrigger).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByLabelText("积分详情")).toHaveTextContent("3000");
+    expect(screen.getByRole("button", { name: "查看我的积分" })).toHaveTextContent("3000");
     expect(screen.queryByText("个人空间")).toBeNull();
     expect(screen.getByTitle("星海视觉工作室")).toBeInTheDocument();
     expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();
-    const organizationEntry = screen.getByRole("link", { name: "进入星海视觉工作室组织管理界面" });
+    const organizationEntry = screen.getByRole("link", { name: "进入星海视觉工作室组织信息" });
     expect(organizationEntry).toHaveTextContent("主账户");
     expect(organizationEntry).toHaveAttribute("href", "/w/workspace-organization/organization");
     expect(screen.queryByText("所属组织")).toBeNull();
@@ -94,7 +94,7 @@ describe("workspace account menu", () => {
     render(<RouterProvider router={router} />);
 
     fireEvent.pointerEnter(screen.getByLabelText("打开账户菜单"));
-    expect(screen.getByRole("link", { name: "进入星海视觉工作室组织管理界面" })).toHaveTextContent(label);
+    expect(screen.getByRole("link", { name: "进入星海视觉工作室组织信息" })).toHaveTextContent(label);
   });
 
   it("opens the routed account settings dialog from the profile menu", () => {
@@ -112,5 +112,22 @@ describe("workspace account menu", () => {
 
     expect(screen.getByRole("dialog", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "账户信息" })).toBeInTheDocument();
+  });
+
+  it("opens personal credits directly from the credit summary", () => {
+    const router = createMemoryRouter([
+      {
+        path: "*",
+        action: async () => null,
+        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} onNotice={vi.fn()} />,
+      },
+    ], { initialEntries: ["/w/workspace-organization"] });
+    render(<RouterProvider router={router} />);
+
+    fireEvent.pointerEnter(screen.getByLabelText("打开账户菜单"));
+    fireEvent.click(screen.getByRole("button", { name: "查看我的积分" }));
+
+    expect(screen.getByRole("dialog", { name: "账号设置" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的积分" })).toBeInTheDocument();
   });
 });

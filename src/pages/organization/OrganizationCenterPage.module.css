@@ -488,6 +488,16 @@
   text-align: right;
 }
 
+.memberDirectoryTable .memberTableHeader,
+.memberDirectoryRow {
+  grid-template-columns: minmax(180px, 0.9fr) minmax(210px, 1.2fr) 132px;
+}
+
+.memberDirectoryTable .memberTableHeader > span:last-child {
+  padding-right: 0;
+  text-align: left;
+}
+
 .memberRow + .memberRow { border-top: 1px solid var(--workspace-border); }
 .memberRow:hover { background: color-mix(in srgb, var(--workspace-hover) 54%, transparent); }
 
