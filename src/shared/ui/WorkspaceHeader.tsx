@@ -19,7 +19,10 @@ import { Form, Link } from "react-router-dom";
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { routePaths } from "../../app/routes";
-import { AccountSettingsDialog } from "../../features/account/AccountSettingsDialog";
+import {
+  AccountSettingsDialog,
+  type AccountSection,
+} from "../../features/account/AccountSettingsDialog";
 import { useTheme } from "../theme/theme";
 import { Brand } from "./Brand";
 import styles from "./WorkspaceHeader.module.css";
@@ -142,6 +145,7 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [accountSettingsSection, setAccountSettingsSection] = useState<AccountSection>("profile");
   const [profileOpen, setProfileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const profileRef = useRef<HTMLDetailsElement>(null);
@@ -239,7 +243,7 @@ export function WorkspaceHeader({
                   <Link
                     className={`${styles.menuItem} ${styles.membership}`}
                     to={routePaths.organization(currentWorkspace.id)}
-                    aria-label={`进入${currentWorkspace.name}组织管理界面`}
+                    aria-label={`进入${currentWorkspace.name}组织信息`}
                     onClick={closeProfile}
                   >
                     <Building2 aria-hidden="true" />
@@ -249,14 +253,23 @@ export function WorkspaceHeader({
                   </Link>
 
                   <div className={styles.overviewDivider} aria-hidden="true" />
-                  <div className={styles.creditSummary} aria-label="积分详情">
+                  <button
+                    className={styles.creditSummary}
+                    type="button"
+                    aria-label="查看我的积分"
+                    onClick={() => {
+                      closeProfile();
+                      setAccountSettingsSection("credits");
+                      setAccountSettingsOpen(true);
+                    }}
+                  >
                     <CircleDollarSign aria-hidden="true" />
                     <span className={styles.creditCopy}>
                       <span className={styles.creditLabel}>可用积分</span>
                       <small>累计消耗 0 积分</small>
                     </span>
                     <strong>3000</strong>
-                  </div>
+                  </button>
                 </div>
 
                 <div className={styles.menuList}>
@@ -265,6 +278,7 @@ export function WorkspaceHeader({
                     type="button"
                     onClick={() => {
                       closeProfile();
+                      setAccountSettingsSection("profile");
                       setAccountSettingsOpen(true);
                     }}
                   >
@@ -327,6 +341,7 @@ export function WorkspaceHeader({
       {showAccount ? (
         <AccountSettingsDialog
           actor={actor}
+          initialSection={accountSettingsSection}
           workspace={currentWorkspace}
           open={accountSettingsOpen}
           onClose={() => setAccountSettingsOpen(false)}
