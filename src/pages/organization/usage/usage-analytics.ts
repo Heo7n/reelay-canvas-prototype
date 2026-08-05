@@ -29,9 +29,7 @@ const dayKeyFormatter = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
   timeZone: ORGANIZATION_TIME_ZONE,
 });
-const shortDayFormatter = new Intl.DateTimeFormat("zh-CN", {
-  month: "2-digit",
-  day: "2-digit",
+const weekdayFormatter = new Intl.DateTimeFormat("zh-CN", {
   weekday: "short",
   timeZone: ORGANIZATION_TIME_ZONE,
 });
@@ -106,7 +104,7 @@ export function buildUsageTimeline(
       const key = dayKey(cursor);
       points.set(key, emptyPoint(
         key,
-        shortDayFormatter.format(cursor).replaceAll("/", "-"),
+        `${key.slice(5)}（${weekdayFormatter.format(cursor)}）`,
         fullDayFormatter.format(cursor),
       ));
     }
@@ -159,7 +157,7 @@ export function buildUsageTypeViewModels(records: UsageRecord[]): UsageTypeViewM
       imageCount: 0,
       videoSeconds: 0,
       tasks: 0,
-      outputLabel: "生成时长",
+      outputLabel: "输出时长",
     },
     image: {
       id: "image",
@@ -170,7 +168,7 @@ export function buildUsageTypeViewModels(records: UsageRecord[]): UsageTypeViewM
       imageCount: 0,
       videoSeconds: 0,
       tasks: 0,
-      outputLabel: "生成数量",
+      outputLabel: "输出数量",
     },
     processing: {
       id: "processing",
@@ -181,7 +179,7 @@ export function buildUsageTypeViewModels(records: UsageRecord[]): UsageTypeViewM
       imageCount: 0,
       videoSeconds: 0,
       tasks: 0,
-      outputLabel: "处理次数",
+      outputLabel: "输出次数",
     },
   };
 
@@ -204,4 +202,3 @@ export function typeOutputValue(item: UsageTypeViewModel): number {
   if (item.id === "image") return item.imageCount;
   return item.tasks;
 }
-

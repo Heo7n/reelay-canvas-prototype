@@ -28,6 +28,29 @@ function compactNumber(value: number): string {
   return numberFormatter.format(value);
 }
 
+function axisLabel(point: UsageTimelinePoint): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(point.key)
+    ? point.key.slice(5)
+    : point.label;
+}
+
+function smoothLinePath(points: { x: number; y: number }[]): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+
+  return points.reduce((path, point, index) => {
+    if (index === 0) return `M${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+    const previous = points[index - 1];
+    const beforePrevious = points[index - 2] ?? previous;
+    const next = points[index + 1] ?? point;
+    const control1X = previous.x + (point.x - beforePrevious.x) / 6;
+    const control1Y = previous.y + (point.y - beforePrevious.y) / 6;
+    const control2X = point.x - (next.x - previous.x) / 6;
+    const control2Y = point.y - (next.y - previous.y) / 6;
+    return `${path} C${control1X.toFixed(1)},${control1Y.toFixed(1)} ${control2X.toFixed(1)},${control2Y.toFixed(1)} ${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }, "");
+}
+
 export function UsageDistributionChart({
   points,
   horizontal = false,
@@ -82,24 +105,25 @@ export function UsageDistributionChart({
     );
   }
 
-  const chartHeight = 250;
+  const chartHeight = 296;
   const chartTop = 18;
-  const chartBottom = 40;
+  const chartBottom = 46;
   const plotHeight = chartHeight - chartTop - chartBottom;
   const visiblePointCount = Math.min(15, Math.max(1, points.length));
-  const slotWidth = Math.max(46, (viewportWidth || 860) / visiblePointCount);
+  const slotWidth = Math.max(32, (viewportWidth || 860) / (visiblePointCount + 0.5));
   const chartWidth = Math.max(viewportWidth || 860, points.length * slotWidth);
-  const barWidth = Math.max(22, Math.min(30, slotWidth * 0.52));
+  const barWidth = Math.max(18, Math.min(26, slotWidth * 0.52));
   const yTicks = [1, 0.75, 0.5, 0.25, 0];
   const activePoint = activeIndex === null ? null : points[activeIndex];
   const activeX = activeIndex === null
     ? 0
     : (activeIndex + 0.5) * (chartWidth / Math.max(1, points.length));
-  const linePath = points.map((point, index) => {
+  const linePoints = points.map((point, index) => {
     const x = (index + 0.5) * (chartWidth / Math.max(1, points.length));
     const y = chartTop + plotHeight - (point.total / maximum) * plotHeight;
-    return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+    return { x, y };
+  });
+  const linePath = smoothLinePath(linePoints);
 
   return (
     <div className={styles.stackedChart} aria-label={`${rangeLabel}积分消耗分布`}>
@@ -156,7 +180,7 @@ export function UsageDistributionChart({
                   })}
                   <rect x={(index * slot)} y="0" width={slot} height={chartHeight - 28} className={styles.hitArea} />
                   <text x={(index + 0.5) * slot} y={chartHeight - 17} textAnchor="middle" className={styles.xLabel}>
-                    {point.label.replace(/\s*周.$/, "")}
+                    {axisLabel(point)}
                   </text>
                 </g>
               );

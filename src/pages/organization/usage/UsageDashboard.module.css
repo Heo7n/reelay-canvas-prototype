@@ -85,30 +85,34 @@
 .datePopover footer button { height: 32px; padding: 0 13px; border: 1px solid var(--workspace-border); border-radius: 8px; background: var(--workspace-surface); color: var(--workspace-text); cursor: pointer; }
 .datePopover footer .applyButton { border-color: #171719; background: #171719; color: #fff; }
 
-.analysisGrid { display: grid; grid-template-columns: minmax(360px, .76fr) minmax(520px, 1.24fr); gap: 14px; margin-top: 12px; }
-.typePanel, .timePanel { min-width: 0; min-height: 342px; padding: 16px; border: 1px solid var(--workspace-border); border-radius: 14px; background: color-mix(in srgb, var(--workspace-surface) 74%, #fafaf9); box-shadow: 0 8px 22px rgba(20, 22, 26, 0.025); }
-.typePanel > h3, .panelHeading h3 { margin: 0; color: var(--workspace-text); font-size: 14px; font-weight: 720; }
-.typeCards { display: grid; gap: 8px; margin-top: 12px; }
-.typeCard { display: grid; min-height: 82px; grid-template-columns: 40px minmax(92px, 1fr) minmax(68px, .65fr) minmax(72px, .7fr) 12px; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--workspace-border); border-radius: 10px; background: var(--workspace-surface); transition: border-color .16s ease, background .16s ease; }
+.analysisGrid { display: grid; grid-template-columns: minmax(400px, .9fr) minmax(520px, 1.1fr); gap: 14px; margin-top: 12px; }
+.typePanel, .timePanel { min-width: 0; min-height: 372px; padding: 18px; border: 1px solid var(--workspace-border); border-radius: 14px; background: color-mix(in srgb, var(--workspace-surface) 74%, #fafaf9); box-shadow: 0 8px 22px rgba(20, 22, 26, 0.025); }
+.typePanel > h3, .panelHeading h3 { margin: 0; color: var(--workspace-text); font-size: 15px; font-weight: 720; }
+.typeCards { display: grid; gap: 9px; margin-top: 14px; }
+.typeCard { display: grid; min-height: 94px; grid-template-columns: 50px minmax(110px, 1fr) minmax(78px, .66fr) minmax(84px, .72fr) 14px; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--workspace-border); border-radius: 11px; background: var(--workspace-surface); transition: border-color .16s ease, background .16s ease; }
 .typeCard:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
-.typeIcon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 9px; background: color-mix(in srgb, var(--usage-video) 9%, var(--workspace-surface)); color: var(--usage-video); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-video) 10%, transparent); }
-.typeIcon svg { width: 19px; }
+.typeIcon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 11px; background: linear-gradient(145deg, color-mix(in srgb, var(--usage-video) 16%, var(--workspace-surface)), color-mix(in srgb, var(--usage-video) 5%, var(--workspace-surface))); color: var(--usage-video); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-video) 12%, transparent); }
+.typeIcon svg { width: 24px; }
 .typeCard[data-kind="image"] .typeIcon { background: color-mix(in srgb, var(--usage-image) 11%, var(--workspace-surface)); color: var(--usage-image); }
 .typeCard[data-kind="processing"] .typeIcon { background: color-mix(in srgb, var(--usage-processing) 11%, var(--workspace-surface)); color: var(--usage-processing); }
-.typeName { display: grid; gap: 5px; }
-.typeName strong { color: var(--workspace-text); font-size: 12px; }
-.typeCredits strong, .typeOutput strong { font-size: 12px; }
-.typeName span, .typeCredits span, .typeOutput span { color: var(--workspace-subtle); font-size: 9px; }
-.typeName > i { width: 100%; height: 4px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--workspace-muted) 14%, transparent); }
+.typeName { display: grid; gap: 6px; }
+.typeName strong { color: var(--workspace-text); font-size: 14px; }
+.typeCredits strong { font-size: 16px; }
+.typeOutput strong { font-size: 15px; }
+.typeName span, .typeCredits span, .typeOutput span { color: var(--workspace-subtle); font-size: 10px; }
+.typeName span { color: var(--usage-video); }
+.typeCard[data-kind="image"] .typeName span { color: var(--usage-image); }
+.typeCard[data-kind="processing"] .typeName span { color: var(--usage-processing); }
+.typeName > i { width: 100%; height: 5px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--workspace-muted) 14%, transparent); }
 .typeName b { display: block; height: 100%; border-radius: inherit; background: var(--usage-video); }
 .typeCard[data-kind="image"] .typeName b { background: var(--usage-image); }
 .typeCard[data-kind="processing"] .typeName b { background: var(--usage-processing); }
-.typeCredits, .typeOutput { position: relative; display: grid; gap: 4px; padding-left: 9px; font-variant-numeric: tabular-nums; }
-.typeCredits::before, .typeOutput::before { position: absolute; top: 50%; left: 0; width: 1px; height: 34px; transform: translateY(-50%); background: var(--workspace-border); content: ""; }
+.typeCredits, .typeOutput { position: relative; display: grid; gap: 5px; padding-left: 11px; font-variant-numeric: tabular-nums; }
+.typeCredits::before, .typeOutput::before { position: absolute; top: 50%; left: 0; width: 1px; height: 42px; transform: translateY(-50%); background: var(--workspace-border); content: ""; }
 .typeCredits strong { color: var(--usage-video); }
 .typeCard[data-kind="image"] .typeCredits strong { color: var(--usage-image); }
 .typeCard[data-kind="processing"] .typeCredits strong { color: var(--usage-processing); }
-.typeChevron { width: 16px; color: var(--workspace-subtle); }
+.typeChevron { width: 18px; color: var(--workspace-subtle); }
 
 .panelHeading { min-height: 22px; }
 .panelHeading > span { color: var(--workspace-subtle); font-size: 10px; }
@@ -117,8 +121,9 @@
 @media (max-width: 1260px) {
   .overviewCard { grid-template-columns: 48px minmax(120px, .8fr) 1px minmax(138px, 1fr); gap: 13px; padding-inline: 16px; }
   .overviewIcon { width: 42px; height: 42px; }
-  .analysisGrid { grid-template-columns: minmax(330px, .76fr) minmax(450px, 1.24fr); }
-  .typeCard { grid-template-columns: 46px minmax(84px, 1fr) 68px 64px 12px; gap: 8px; padding-inline: 10px; }
+  .analysisGrid { grid-template-columns: minmax(370px, .88fr) minmax(460px, 1.12fr); }
+  .typeCard { grid-template-columns: 46px minmax(92px, 1fr) 70px 72px 12px; gap: 8px; padding-inline: 10px; }
+  .typeIcon { width: 44px; height: 44px; }
 }
 
 @media (max-width: 980px) {
