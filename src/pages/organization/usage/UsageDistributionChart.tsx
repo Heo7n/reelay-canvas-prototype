@@ -83,9 +83,9 @@ export function UsageDistributionChart({
     );
   }
 
-  const chartHeight = 296;
+  const chartHeight = 250;
   const chartTop = 18;
-  const chartBottom = 46;
+  const chartBottom = 40;
   const plotHeight = chartHeight - chartTop - chartBottom;
   const visiblePointCount = Math.min(15, Math.max(1, points.length));
   const slotWidth = Math.max(46, (viewportWidth || 860) / visiblePointCount);

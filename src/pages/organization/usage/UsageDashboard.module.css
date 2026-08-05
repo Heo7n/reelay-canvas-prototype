@@ -4,8 +4,8 @@
   --usage-image: #25bca1;
   --usage-processing: #7955e8;
   display: grid;
-  max-width: 1480px;
-  gap: 22px;
+  max-width: 1060px;
+  gap: 0;
   margin: 0 auto;
   color: var(--workspace-text);
 }
@@ -29,7 +29,7 @@
   justify-content: space-between;
   gap: 20px;
 }
-.overviewHeading h2, .analysisHeading h2 { margin: 0; font-size: 25px; font-weight: 730; line-height: 1.2; letter-spacing: -.025em; }
+.overviewHeading h2, .analysisHeading h2 { margin: 0; font-size: 15px; font-weight: 720; line-height: 1.3; letter-spacing: -.02em; }
 .overviewActions { display: flex; align-items: center; gap: 10px; color: var(--workspace-muted); font-size: 12px; }
 .refreshButton, .exportButton { display: inline-flex; height: 34px; align-items: center; justify-content: center; border: 1px solid var(--workspace-border); border-radius: 8px; background: var(--workspace-surface); color: var(--workspace-text); cursor: pointer; }
 .refreshButton { width: 34px; border-color: transparent; background: transparent; color: var(--usage-accent); }
@@ -39,38 +39,36 @@
 .exportButton:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
 .exportButton svg { width: 16px; }
 
-.overviewGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.overviewGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
 .overviewCard {
   position: relative;
   display: grid;
-  min-height: 130px;
+  min-height: 108px;
   overflow: hidden;
-  grid-template-columns: 74px minmax(150px, .78fr) 1px minmax(180px, 1fr);
+  grid-template-columns: 52px minmax(130px, .78fr) 1px minmax(150px, 1fr);
   align-items: center;
-  gap: 24px;
-  padding: 18px 28px;
-  border: 1px solid color-mix(in srgb, var(--usage-accent) 25%, var(--workspace-border));
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 88% -10%, color-mix(in srgb, #b8d3ff 24%, transparent) 0 18%, transparent 42%),
-    linear-gradient(125deg, color-mix(in srgb, #edf4ff 65%, var(--workspace-surface)), var(--workspace-surface) 72%);
-  box-shadow: 0 10px 28px rgb(48 91 160 / 6%);
+  gap: 16px;
+  padding: 15px 20px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--workspace-surface) 52%, #f7f7f6);
+  box-shadow: 0 8px 22px rgba(20, 22, 26, 0.025);
 }
-.overviewCard:nth-child(2) { --usage-card-accent: #5875ee; }
-.overviewIcon { display: grid; width: 66px; height: 66px; place-items: center; border-radius: 50%; background: linear-gradient(145deg, color-mix(in srgb, var(--usage-card-accent, var(--usage-accent)) 18%, var(--workspace-surface)), color-mix(in srgb, var(--usage-card-accent, var(--usage-accent)) 5%, var(--workspace-surface))); color: var(--usage-card-accent, var(--usage-accent)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-card-accent, var(--usage-accent)) 12%, transparent), 0 9px 24px color-mix(in srgb, var(--usage-card-accent, var(--usage-accent)) 13%, transparent); }
-.overviewIcon svg { width: 32px; height: 32px; stroke-width: 1.85; filter: drop-shadow(0 5px 8px rgb(52 120 246 / 17%)); }
-.overviewMetric { position: relative; z-index: 1; display: grid; align-content: center; gap: 5px; }
-.overviewMetric > span { display: inline-flex; align-items: center; gap: 5px; color: var(--workspace-muted); font-size: 14px; font-weight: 550; }
+.overviewCard:nth-child(2) { --usage-card-accent: #66707c; }
+.overviewIcon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 12px; background: color-mix(in srgb, var(--usage-card-accent, #65776f) 9%, var(--workspace-surface)); color: var(--usage-card-accent, #65776f); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-card-accent, #65776f) 10%, transparent); }
+.overviewIcon svg { width: 22px; height: 22px; stroke-width: 1.75; }
+.overviewMetric { position: relative; z-index: 1; display: grid; align-content: center; gap: 4px; }
+.overviewMetric > span { display: inline-flex; align-items: center; gap: 5px; color: var(--workspace-muted); font-size: 11px; font-weight: 650; }
 .overviewMetric > span svg { width: 13px; }
-.overviewMetric strong { color: var(--workspace-text); font-size: clamp(30px, 2.2vw, 38px); font-weight: 720; line-height: 1.08; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.overviewMetric strong { color: var(--workspace-text); font-size: clamp(26px, 1.9vw, 31px); font-weight: 720; line-height: 1.05; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
 :global(html[data-theme="dark"]) .overviewMetric strong { color: var(--workspace-text); }
-.overviewMetric small { color: var(--workspace-subtle); font-size: 12px; }
-.metricDivider { width: 1px; height: 72px; background: color-mix(in srgb, var(--usage-accent) 17%, var(--workspace-border)); }
-.cardGlow { position: absolute; top: -58px; right: 8px; width: 190px; height: 190px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--usage-card-accent, var(--usage-accent)) 10%, transparent), transparent 68%); }
+.overviewMetric small { color: var(--workspace-subtle); font-size: 10px; }
+.metricDivider { width: 1px; height: 48px; background: var(--workspace-border); }
+.cardGlow { display: none; }
 
-.analysisHeading { margin-top: 2px; padding-top: 2px; }
+.analysisHeading { margin-top: 26px; }
 .rangeTabs { display: flex; border: 1px solid var(--workspace-border); border-radius: 8px; }
-.rangeTabs > button, .dateRangeControl > button { display: inline-flex; height: 34px; min-width: 82px; align-items: center; justify-content: center; gap: 5px; padding: 0 14px; border: 0; border-right: 1px solid var(--workspace-border); background: var(--workspace-surface); color: var(--workspace-muted); cursor: pointer; }
+.rangeTabs > button, .dateRangeControl > button { display: inline-flex; height: 32px; min-width: 72px; align-items: center; justify-content: center; gap: 5px; padding: 0 12px; border: 0; border-right: 1px solid var(--workspace-border); background: var(--workspace-surface); color: var(--workspace-muted); font-size: 10px; cursor: pointer; }
 .rangeTabs > button:first-child { border-radius: 7px 0 0 7px; }
 .rangeTabs button[aria-pressed="true"] { background: color-mix(in srgb, var(--usage-accent) 7%, var(--workspace-surface)); color: var(--usage-accent); font-weight: 650; }
 .dateRangeControl { position: relative; }
@@ -86,48 +84,40 @@
 .datePopover footer button { height: 32px; padding: 0 13px; border: 1px solid var(--workspace-border); border-radius: 8px; background: var(--workspace-surface); color: var(--workspace-text); cursor: pointer; }
 .datePopover footer .applyButton { border-color: #171719; background: #171719; color: #fff; }
 
-.analysisGrid { display: grid; grid-template-columns: minmax(420px, .92fr) minmax(550px, 1.2fr); gap: 20px; }
-.typePanel, .timePanel { min-width: 0; min-height: 408px; padding: 20px; border: 1px solid color-mix(in srgb, var(--usage-accent) 15%, var(--workspace-border)); border-radius: 12px; background: linear-gradient(180deg, color-mix(in srgb, #f8fbff 46%, var(--workspace-surface)), var(--workspace-surface)); box-shadow: 0 10px 28px rgb(36 72 128 / 5%); }
-.typePanel > h3, .panelHeading h3 { margin: 0; color: var(--workspace-text); font-size: 18px; font-weight: 700; }
-.typeCards { display: grid; gap: 12px; margin-top: 16px; }
-.typeCard { display: grid; min-height: 92px; grid-template-columns: 48px minmax(104px, 1fr) minmax(72px, .62fr) minmax(78px, .72fr) 14px; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid color-mix(in srgb, var(--usage-accent) 13%, var(--workspace-border)); border-radius: 11px; background: color-mix(in srgb, var(--workspace-surface) 97%, #f3f7ff); box-shadow: 0 6px 18px rgb(48 91 160 / 4%); transition: border-color .18s ease, box-shadow .18s ease; }
-.typeCard:hover { border-color: color-mix(in srgb, var(--usage-accent) 24%, var(--workspace-border)); box-shadow: 0 9px 22px rgb(48 91 160 / 7%); }
-.typeIcon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 11px; background: linear-gradient(145deg, color-mix(in srgb, var(--usage-video) 18%, var(--workspace-surface)), color-mix(in srgb, var(--usage-video) 5%, var(--workspace-surface))); color: var(--usage-video); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-video) 13%, transparent); }
-.typeIcon svg { width: 24px; }
+.analysisGrid { display: grid; grid-template-columns: minmax(360px, .76fr) minmax(520px, 1.24fr); gap: 14px; margin-top: 12px; }
+.typePanel, .timePanel { min-width: 0; min-height: 342px; padding: 16px; border: 1px solid var(--workspace-border); border-radius: 14px; background: color-mix(in srgb, var(--workspace-surface) 74%, #fafaf9); box-shadow: 0 8px 22px rgba(20, 22, 26, 0.025); }
+.typePanel > h3, .panelHeading h3 { margin: 0; color: var(--workspace-text); font-size: 14px; font-weight: 720; }
+.typeCards { display: grid; gap: 8px; margin-top: 12px; }
+.typeCard { display: grid; min-height: 82px; grid-template-columns: 40px minmax(92px, 1fr) minmax(68px, .65fr) minmax(72px, .7fr) 12px; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--workspace-border); border-radius: 10px; background: var(--workspace-surface); transition: border-color .16s ease, background .16s ease; }
+.typeCard:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
+.typeIcon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 9px; background: color-mix(in srgb, var(--usage-video) 9%, var(--workspace-surface)); color: var(--usage-video); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-video) 10%, transparent); }
+.typeIcon svg { width: 19px; }
 .typeCard[data-kind="image"] .typeIcon { background: color-mix(in srgb, var(--usage-image) 11%, var(--workspace-surface)); color: var(--usage-image); }
 .typeCard[data-kind="processing"] .typeIcon { background: color-mix(in srgb, var(--usage-processing) 11%, var(--workspace-surface)); color: var(--usage-processing); }
-.typeName { display: grid; gap: 7px; }
-.typeName strong { color: var(--workspace-text); font-size: 14px; }
-.typeCredits strong, .typeOutput strong { font-size: 13px; }
-.typeName span, .typeCredits span, .typeOutput span { color: var(--workspace-subtle); font-size: 11px; }
-.typeName > i { width: 100%; height: 5px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--workspace-muted) 14%, transparent); }
+.typeName { display: grid; gap: 5px; }
+.typeName strong { color: var(--workspace-text); font-size: 12px; }
+.typeCredits strong, .typeOutput strong { font-size: 12px; }
+.typeName span, .typeCredits span, .typeOutput span { color: var(--workspace-subtle); font-size: 9px; }
+.typeName > i { width: 100%; height: 4px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--workspace-muted) 14%, transparent); }
 .typeName b { display: block; height: 100%; border-radius: inherit; background: var(--usage-video); }
 .typeCard[data-kind="image"] .typeName b { background: var(--usage-image); }
 .typeCard[data-kind="processing"] .typeName b { background: var(--usage-processing); }
-.typeCredits, .typeOutput { position: relative; display: grid; gap: 5px; padding-left: 11px; font-variant-numeric: tabular-nums; }
-.typeCredits::before, .typeOutput::before { position: absolute; top: 50%; left: 0; width: 1px; height: 42px; transform: translateY(-50%); background: color-mix(in srgb, var(--usage-accent) 13%, var(--workspace-border)); content: ""; }
+.typeCredits, .typeOutput { position: relative; display: grid; gap: 4px; padding-left: 9px; font-variant-numeric: tabular-nums; }
+.typeCredits::before, .typeOutput::before { position: absolute; top: 50%; left: 0; width: 1px; height: 34px; transform: translateY(-50%); background: var(--workspace-border); content: ""; }
 .typeCredits strong { color: var(--usage-video); }
 .typeCard[data-kind="image"] .typeCredits strong { color: var(--usage-image); }
 .typeCard[data-kind="processing"] .typeCredits strong { color: var(--usage-processing); }
 .typeChevron { width: 16px; color: var(--workspace-subtle); }
 
-.panelHeading { min-height: 26px; }
-.panelHeading > span { color: var(--workspace-subtle); font-size: 12px; }
-.panelHeading > span strong { margin: 0 6px; color: var(--workspace-text); font-size: 20px; font-variant-numeric: tabular-nums; }
+.panelHeading { min-height: 22px; }
+.panelHeading > span { color: var(--workspace-subtle); font-size: 10px; }
+.panelHeading > span strong { margin: 0 5px; color: var(--workspace-text); font-size: 16px; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 1260px) {
-  .overviewCard { grid-template-columns: 60px minmax(130px, .8fr) 1px minmax(150px, 1fr); gap: 18px; padding-inline: 20px; }
-  .overviewIcon { width: 54px; height: 54px; }
-  .analysisGrid { grid-template-columns: minmax(370px, .84fr) minmax(480px, 1.16fr); }
+  .overviewCard { grid-template-columns: 48px minmax(120px, .8fr) 1px minmax(138px, 1fr); gap: 13px; padding-inline: 16px; }
+  .overviewIcon { width: 42px; height: 42px; }
+  .analysisGrid { grid-template-columns: minmax(330px, .76fr) minmax(450px, 1.24fr); }
   .typeCard { grid-template-columns: 46px minmax(84px, 1fr) 68px 64px 12px; gap: 8px; padding-inline: 10px; }
-}
-
-@media (min-width: 1780px) {
-  .typeCard { grid-template-columns: 62px minmax(130px, 1fr) 116px 104px 18px; gap: 16px; padding-inline: 15px; }
-  .typeIcon { width: 56px; height: 56px; }
-  .typeIcon svg { width: 27px; }
-  .typeName strong, .typeCredits strong, .typeOutput strong { font-size: 15px; }
-  .typeCredits, .typeOutput { padding-left: 16px; }
 }
 
 @media (max-width: 980px) {

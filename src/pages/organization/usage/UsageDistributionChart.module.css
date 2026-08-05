@@ -1,32 +1,32 @@
 .horizontalChart {
   display: grid;
-  min-height: 324px;
+  min-height: 270px;
   grid-template-rows: 1fr auto;
-  margin-top: 13px;
-  padding: 12px 8px 2px 0;
+  margin-top: 10px;
+  padding: 8px 6px 0 0;
 }
 
 .horizontalRows {
   display: grid;
   align-content: space-between;
-  gap: 13px;
+  gap: 8px;
 }
 
 .horizontalRow {
   display: grid;
-  grid-template-columns: 88px minmax(160px, 1fr) 76px;
+  grid-template-columns: 78px minmax(150px, 1fr) 66px;
   align-items: center;
-  gap: 12px;
-  min-height: 30px;
-  font-size: 13px;
+  gap: 10px;
+  min-height: 26px;
+  font-size: 11px;
 }
 
 .dayLabel { color: var(--workspace-muted); }
-.horizontalRow strong { color: var(--workspace-text); font-size: 13px; font-weight: 680; text-align: right; font-variant-numeric: tabular-nums; }
+.horizontalRow strong { color: var(--workspace-text); font-size: 11px; font-weight: 680; text-align: right; font-variant-numeric: tabular-nums; }
 
 .horizontalTrack {
   position: relative;
-  height: 17px;
+  height: 12px;
   overflow: hidden;
   border-radius: 3px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--usage-accent) 5%, transparent), color-mix(in srgb, var(--usage-accent) 2%, transparent));
@@ -52,7 +52,7 @@
 .horizontalAxis {
   display: grid;
   grid-template-columns: repeat(5, 1fr) auto;
-  margin: 11px 75px 0 100px;
+  margin: 9px 64px 0 88px;
   color: var(--workspace-subtle);
   font-size: 11px;
 }
@@ -65,9 +65,9 @@
   position: relative;
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr);
-  grid-template-rows: 310px 30px;
-  min-height: 340px;
-  margin-top: 13px;
+  grid-template-rows: 264px 26px;
+  min-height: 290px;
+  margin-top: 10px;
 }
 
 .yAxis {
@@ -98,8 +98,8 @@
   scrollbar-color: color-mix(in srgb, var(--workspace-muted) 35%, transparent) transparent;
 }
 
-.plotCanvas { position: relative; height: 296px; }
-.plotSvg { display: block; width: 100%; height: 296px; overflow: visible; }
+.plotCanvas { position: relative; height: 250px; }
+.plotSvg { display: block; width: 100%; height: 250px; overflow: visible; }
 .gridLine { stroke: var(--workspace-border); stroke-dasharray: 4 4; stroke-width: 1; }
 .video { fill: #5c8ef7; background: #5c8ef7; }
 .image { fill: #62caae; background: #62caae; }
@@ -140,7 +140,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 24px;
+  gap: 18px;
   color: var(--workspace-muted);
   font-size: 11px;
 }
