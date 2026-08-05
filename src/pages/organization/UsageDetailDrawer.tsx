@@ -519,7 +519,7 @@ export function UsageDetailDrawer({
               <small>积分消耗</small>
               <strong>{activeCredits.toLocaleString("zh-CN")}</strong>
             </article>
-            <article>
+            <article className={styles.usageSummaryOutput}>
               <small>产出</small>
               <strong>
                 {formatOutput({
@@ -556,6 +556,7 @@ export function UsageDetailDrawer({
                   aria-hidden="true"
                 >
                   <span>{identityLabel} / 计费规格</span>
+                  <span>任务数量</span>
                   <span>产出</span>
                   <span>积分消耗</span>
                   <span>占比</span>
@@ -568,7 +569,10 @@ export function UsageDetailDrawer({
                     >
                       <div className={styles.usageAnalysisModelRow}>
                         <strong>{model.label}</strong>
-                        <span>{formatOutput(model)}</span>
+                        <span>{model.tasks.toLocaleString("zh-CN")} 次</span>
+                        <span className={styles.usageAnalysisOutputValue}>
+                          {formatOutput(model)}
+                        </span>
                         <span>{model.credits.toLocaleString("zh-CN")}</span>
                         <span>{(model.share * 100).toFixed(1)}%</span>
                       </div>
@@ -579,7 +583,12 @@ export function UsageDetailDrawer({
                             className={styles.usageAnalysisSpecRow}
                           >
                             <span>{specification.label}</span>
-                            <span>{formatOutput(specification)}</span>
+                            <span>
+                              {specification.tasks.toLocaleString("zh-CN")} 次
+                            </span>
+                            <span className={styles.usageAnalysisOutputValue}>
+                              {formatOutput(specification)}
+                            </span>
                             <span>
                               {specification.credits.toLocaleString("zh-CN")}
                             </span>

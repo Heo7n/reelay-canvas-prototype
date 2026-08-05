@@ -1777,7 +1777,7 @@
 
 .usageAnalysisSummary {
   display: grid;
-  grid-template-columns: minmax(150px, 1.15fr) minmax(140px, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
   border-bottom: 1px solid var(--workspace-border);
 }
@@ -1821,16 +1821,17 @@
 }
 
 .usageSummaryPrimary {
-  background: linear-gradient(
-    90deg,
-    var(--usage-drawer-summary-accent),
-    transparent 82%
-  );
+  background: transparent;
 }
 
 .usageSummaryPrimary strong {
   color: var(--usage-accent);
   font-size: 21px;
+}
+
+.usageSummaryOutput strong {
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
 }
 
 .usageSummaryContext {
@@ -1896,10 +1897,11 @@
   display: grid;
   width: 100%;
   grid-template-columns:
-    minmax(220px, 1fr)
-    90px
+    minmax(180px, 1fr)
+    70px
+    84px
     88px
-    78px;
+    70px;
   align-items: center;
   gap: 12px;
 }
@@ -1954,6 +1956,12 @@
   font-size: 11px;
   font-weight: 580;
   font-variant-numeric: tabular-nums;
+}
+
+.usageAnalysisModelRow .usageAnalysisOutputValue,
+.usageAnalysisSpecRow .usageAnalysisOutputValue {
+  color: var(--usage-accent);
+  font-weight: 700;
 }
 
 .usageAnalysisSpecRows {

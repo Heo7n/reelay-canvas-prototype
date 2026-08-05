@@ -5,13 +5,14 @@ import { CircleDollarSign, UserRound, X } from "lucide-react";
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { AccountProfileSection } from "./AccountProfileSection";
-import { CreditRecordsSection } from "./CreditRecordsSection";
+import { PersonalUsageSection } from "./PersonalUsageSection";
 import styles from "./AccountSettingsDialog.module.css";
 
-type AccountSection = "profile" | "credits";
+export type AccountSection = "profile" | "credits";
 
 interface AccountSettingsDialogProps {
   actor: SessionActor;
+  initialSection?: AccountSection;
   onClose: () => void;
   open: boolean;
   workspace: Workspace;
@@ -19,28 +20,30 @@ interface AccountSettingsDialogProps {
 
 const sectionItems = [
   { id: "profile", label: "个人主页", icon: UserRound },
-  { id: "credits", label: "积分记录", icon: CircleDollarSign },
+  { id: "credits", label: "我的积分", icon: CircleDollarSign },
 ] as const;
 
 export function AccountSettingsDialog({
   actor,
+  initialSection = "profile",
   onClose,
   open,
   workspace,
 }: AccountSettingsDialogProps) {
-  const [activeSection, setActiveSection] = useState<AccountSection>("profile");
+  const [activeSection, setActiveSection] = useState<AccountSection>(initialSection);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return undefined;
+    setActiveSection(initialSection);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     closeButtonRef.current?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [open]);
+  }, [initialSection, open]);
 
   if (!open) return null;
 
@@ -105,7 +108,7 @@ export function AccountSettingsDialog({
             <X aria-hidden="true" />
           </button>
           {activeSection === "profile" ? <AccountProfileSection actor={actor} workspace={workspace} /> : null}
-          {activeSection === "credits" ? <CreditRecordsSection /> : null}
+          {activeSection === "credits" ? <PersonalUsageSection actor={actor} /> : null}
         </div>
       </div>
     </div>,

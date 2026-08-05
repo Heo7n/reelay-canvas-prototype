@@ -519,6 +519,18 @@ export function OrganizationUsageSection({
             <small>{actualRangeLabel}</small>
           </span>
           <div className={styles.periodControls}>
+            <div className={styles.toolbarMeta}>
+              <button
+                type="button"
+                className={styles.exportButton}
+                aria-label={`导出 ${actualRangeLabel} 用量报表`}
+                title={`导出 ${actualRangeLabel} 用量报表`}
+                onClick={exportUsageReport}
+              >
+                <Download aria-hidden="true" />
+              </button>
+            </div>
+
             <div className={styles.rangeControl} aria-label="统计时间范围">
               {FIXED_RANGE_ITEMS.map((item) => (
                 <button
@@ -638,18 +650,6 @@ export function OrganizationUsageSection({
                   </div>
                 ) : null}
               </div>
-            </div>
-
-            <div className={styles.toolbarMeta}>
-              <button
-                type="button"
-                className={styles.exportButton}
-                aria-label={`导出 ${actualRangeLabel} 用量报表`}
-                title={`导出 ${actualRangeLabel} 用量报表`}
-                onClick={exportUsageReport}
-              >
-                <Download aria-hidden="true" />
-              </button>
             </div>
           </div>
         </header>

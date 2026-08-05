@@ -50,12 +50,13 @@ function renderDialog(action = async ({ request }: { request: Request }) => {
 }
 
 describe("AccountSettingsDialog", () => {
-  it("keeps personal account settings focused on profile and credit records", () => {
+  it("keeps personal account settings focused on profile and personal credits", () => {
     renderDialog();
 
     expect(screen.getByRole("dialog", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "个人主页" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "积分记录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "我的积分" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "我的用量" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "用量看板" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "账户信息" })).toBeInTheDocument();
     expect(screen.queryByDisplayValue("creator@reelay.test")).not.toBeInTheDocument();
@@ -159,14 +160,63 @@ describe("AccountSettingsDialog", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已自动保存"));
   });
 
-  it("keeps personal credit records honest while the persistent ledger does not exist", () => {
+  it("combines personal analysis and gain or consumption entries under personal credits", () => {
     renderDialog();
 
-    fireEvent.click(screen.getByRole("button", { name: "积分记录" }));
-    expect(screen.getByRole("heading", { name: "积分记录" })).toBeInTheDocument();
-    expect(screen.getByText("暂无积分记录")).toBeInTheDocument();
-    expect(screen.getByText("未接入账本")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "我的积分" }));
+    expect(screen.getByRole("heading", { name: "我的积分" })).toBeInTheDocument();
+    expect(screen.getByText("可用积分")).toBeInTheDocument();
+    expect(screen.getByText("本月获得")).toBeInTheDocument();
+    expect(screen.getByText("本月消耗")).toBeInTheDocument();
 
-    expect(screen.queryByRole("button", { name: "用量看板" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "积分流水" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("积分变化")).toBeInTheDocument();
+    expect(screen.getByText("任务类型")).toBeInTheDocument();
+    expect(screen.getByText("模型")).toBeInTheDocument();
+    expect(screen.getByText("生成规格")).toBeInTheDocument();
+    const ledgerFilter = screen.getByRole("button", {
+      name: "筛选个人积分流水，当前无筛选",
+    });
+    fireEvent.click(ledgerFilter);
+    expect(screen.getByRole("button", { name: "获得" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "消耗" })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "选择个人流水开始日期，当前未选择",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "选择个人流水结束日期，当前未选择",
+    })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /个人流水/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "获得" }));
+    expect(screen.getByRole("button", {
+      name: "筛选个人积分流水，当前1项筛选",
+    })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全部" }));
+    expect(screen.getAllByText("组织发放").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("任务消耗").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", {
+      name: "筛选个人积分流水，当前无筛选",
+    })).toBeInTheDocument();
+    expect(screen.getByText(/^共 \d+ 条$/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "第 1 页" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    expect(screen.getByRole("button", { name: "第 2 页" })).toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(screen.getByRole("tab", { name: "用量分析" }));
+    expect(screen.getByRole("tab", { name: "用量分析" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("消耗积分")).toBeInTheDocument();
+    expect(screen.getByText("任务数量")).toBeInTheDocument();
+    expect(screen.getByText("平均单任务")).toBeInTheDocument();
+    expect(screen.getByText("消耗构成")).toBeInTheDocument();
+    expect(screen.getByText("消耗来源")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "日明细" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "按项目" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "按模型" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "近 30 天个人积分消耗走势" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "日明细" }));
+    expect(screen.getByRole("table", { name: "近 30 天个人每日用量明细" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "按模型" }));
+    expect(screen.getByRole("button", { name: "按模型" })).toHaveAttribute("aria-pressed", "true");
   });
 });

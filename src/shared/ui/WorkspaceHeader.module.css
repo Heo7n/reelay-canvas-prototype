@@ -78,11 +78,18 @@
 
 .creditSummary {
   display: grid;
+  width: 100%;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 11px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
+.creditSummary:hover { background: color-mix(in srgb, var(--workspace-text, #171719) 4%, transparent); }
 .creditSummary > svg { width: 15px; height: 15px; color: var(--workspace-muted, #77777d); }
 .creditCopy { display: grid; min-width: 0; gap: 2px; text-align: left; }
 .creditLabel { color: var(--workspace-muted, #77777d); font-size: 12px; font-weight: 720; }
@@ -219,7 +226,8 @@
 
 .accountTrigger:focus-visible,
 .menuItem:focus-visible,
-.helpLink:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
+.helpLink:focus-visible,
+.creditSummary:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: -3px; }
 
 @media (max-width: 680px) {
   .header { height: 64px; padding: 12px 16px; }
