@@ -63,21 +63,20 @@ export function UsageDistributionChart({
     return (
       <div className={styles.horizontalChart} aria-label={`${rangeLabel}每日积分消耗`}>
         <div className={styles.horizontalRows}>
-          {displayPoints.map((point) => (
-            <div key={point.key} className={styles.horizontalRow}>
-              <span className={styles.dayLabel}>{point.label}</span>
-              <span className={styles.horizontalTrack} aria-hidden="true">
-                <i style={{ width: `${Math.max(point.total > 0 ? 3 : 0, point.total / maximum * 100)}%` }} />
-              </span>
-              <strong>{numberFormatter.format(point.total)}</strong>
-            </div>
-          ))}
-        </div>
-        <div className={styles.horizontalAxis} aria-hidden="true">
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-            <span key={ratio}>{compactNumber(maximum * ratio)}</span>
-          ))}
-          <em>积分</em>
+          {displayPoints.map((point) => {
+            const barPercent = Math.max(point.total > 0 ? 3 : 0, point.total / maximum * 100);
+            return (
+              <div key={point.key} className={styles.horizontalRow}>
+                <span className={styles.dayLabel}>{point.label}</span>
+                <span className={styles.horizontalTrack}>
+                  <i aria-hidden="true" style={{ width: `${barPercent}%` }} />
+                  <strong style={{ left: `calc(${barPercent}% + 9px)` }}>
+                    {numberFormatter.format(point.total)}
+                  </strong>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
