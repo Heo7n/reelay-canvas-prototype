@@ -4,7 +4,7 @@
 
 ## 当前定位
 
-- 当前稳定基线位于 `D:\Software\codePro\0707` 的 `main`，已合入“角色差异化的组织视角 + 个人我的积分”功能。`D:\Software\codePro\0707-usage-dashboard-next` 是基于旧 `main` 的未完成实验 worktree，存在大量未提交且已被用户判定为改崩的用量看板改动；接手时不要直接合并、切换或删除它，除非先单独审查并确认其中仍需保留的内容。
+- 当前稳定基线位于 `D:\Software\codePro\0707` 的 `main`，已合入“角色差异化的组织视角 + 个人我的积分”功能。此前改崩的用量看板实验 worktree 与本地分支已经清理，不再作为可恢复或可合并来源；后续用量看板调整必须从当前稳定基线建立新分支。
 - 当前本地主链路是 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。登录、主页和项目库只保留 React 正式路由；旧静态双轨已经删除，`index.html` 仅作为迁移期画布 iframe。
 - 公网原型已部署到 `https://reelay-canvas-prototype.vercel.app`。Vercel Hobby
   提供同源静态页面和 Fastify API，Supabase Free PostgreSQL 保存服务端状态；
