@@ -349,140 +349,53 @@ describe("organization center", () => {
     renderSection("usage");
 
     expect(await screen.findByRole("heading", { name: "用量看板" })).toBeInTheDocument();
-    expect(screen.queryByText("演示数据 · 更新于 5 分钟前")).toBeNull();
+    expect(screen.getByRole("heading", { name: "概览" })).toBeInTheDocument();
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
     expect(screen.getByText("预计可用")).toBeInTheDocument();
-    expect(screen.getByText(/按近 30 天日均消耗/))
-      .toHaveTextContent("按近 30 天日均消耗估算");
-    expect(screen.getByText("近 30 天日均")).toBeInTheDocument();
-    expect(screen.getByText("历史日均")).toBeInTheDocument();
-    expect(screen.queryByText(/较历史日均/)).toBeNull();
-    const overviewHeading = screen.getByRole("heading", { name: "概览" });
-    const activityHeading = screen.getByRole("heading", { name: "长期活动" });
-    const periodHeading = screen.getByRole("heading", { name: "期间分析" });
-    expect(overviewHeading.compareDocumentPosition(activityHeading))
-      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(activityHeading.compareDocumentPosition(periodHeading))
-      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(screen.queryByText("图片产出")).not.toBeInTheDocument();
-    expect(screen.queryByText("视频产出")).not.toBeInTheDocument();
-    const compositionHeading = screen.getByRole("heading", { name: "消耗构成" });
-    const trendHeading = screen.getByRole("heading", { name: "消耗走势" });
-    const sourceHeading = screen.getByRole("heading", { name: "消耗来源" });
-    expect(trendHeading.compareDocumentPosition(compositionHeading))
-      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(compositionHeading.compareDocumentPosition(sourceHeading))
-      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(screen.getByRole("button", { name: "近 30 天" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(
-      screen.getByRole("button", { name: /导出 .* 用量报表/ })
-        .compareDocumentPosition(screen.getByRole("button", { name: "近 30 天" })),
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(screen.getByRole("button", { name: "每日" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "每周" }));
-    expect(screen.getByRole("button", { name: "每周" })).toHaveAttribute("aria-pressed", "true");
-    const weeklyChart = screen.getByRole("group", { name: "近 365 天每周积分消耗趋势" });
-    expect(within(weeklyChart).getAllByRole("button")[0]).toHaveAccessibleName(
-      /\d+月\d+日–\d+月\d+日/,
-    );
-    expect(within(weeklyChart).getAllByRole("button")[0]).not.toHaveAccessibleName(
-      /较前一周/,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "累计" }));
-    expect(screen.getByRole("img", { name: "近 365 天按周累计积分消耗" })).toBeInTheDocument();
-    const cumulativeTarget = screen.getAllByRole("button", {
-      name: /累计 .* 积分，本周增加 .* 积分/,
-    })[8];
-    fireEvent.mouseEnter(cumulativeTarget);
-    const cumulativeTooltip = screen.getByText(/^累计 /).parentElement;
-    expect(cumulativeTooltip).toHaveTextContent(/累计 .*本周 \+/);
+    expect(screen.getByText("按近30天日均估算")).toBeInTheDocument();
+    expect(screen.getByText("近30天日均")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出报表" })).toBeInTheDocument();
 
-    expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "成员" }));
-    expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getAllByRole("button", { name: /查看.*消耗明细/ })[0]);
-    expect(screen.getByRole("dialog", { name: "视频生成" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "计费结构" })).toBeInTheDocument();
-    expect(screen.getByText("任务数量")).toBeInTheDocument();
-    expect(screen.getAllByText(/\d+ 次/).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "使用成员" }))
-      .not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "用量分析" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消耗类型" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "时间分布" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "消耗来源" })).toBeInTheDocument();
+    expect(screen.getByText("视频生成")).toBeInTheDocument();
+    expect(screen.getByText("图片生成")).toBeInTheDocument();
+    expect(screen.getByText("媒体处理")).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "近7天" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("近7天每日积分消耗")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "按项目" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "按模型" }));
+    expect(screen.getByRole("button", { name: "按模型" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getAllByRole("button", { name: /查看.*用量详情/ })[0]);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "模型" }));
-    const sourceList = screen.getByLabelText("消耗来源排名");
-    fireEvent.click(
-      within(sourceList).getByRole("button", {
-        name: "查看Seedance 2.0用量汇总",
-      }),
-    );
-    expect(screen.getByRole("dialog", { name: "Seedance 2.0 用量" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "计费规格" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "使用成员" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "关联项目" }));
-    expect(screen.getByRole("button", { name: "关联项目" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
+    fireEvent.click(screen.getByRole("button", { name: "近30天" }));
+    expect(screen.getByRole("button", { name: "近30天" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: /近30天每日堆叠柱形图/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /总消耗.*积分/ })).toHaveLength(30);
 
-    fireEvent.click(screen.getByRole("button", { name: "项目" }));
-    const projectSourceList = screen.getByLabelText("消耗来源排名");
-    fireEvent.click(
-      within(projectSourceList).getAllByRole("button", {
-        name: /查看.*用量汇总/,
-      })[0],
-    );
-    const projectDrawer = screen.getByRole("dialog");
-    expect(within(projectDrawer).getByText("统计范围")).toBeInTheDocument();
-    expect(within(projectDrawer).getByText("近 30 天")).toBeInTheDocument();
-    fireEvent.click(
-      within(projectDrawer).getByRole("button", { name: "项目全周期" }),
-    );
-    expect(within(projectDrawer).getByText("项目全周期")).toBeInTheDocument();
-    expect(
-      within(projectDrawer).getByRole("button", { name: "返回期间统计" }),
-    ).toBeInTheDocument();
-    fireEvent.click(
-      within(projectDrawer).getByRole("button", { name: "返回期间统计" }),
-    );
-    expect(within(projectDrawer).getByText("近 30 天")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
-
-    expect(screen.getByRole("link", { name: "查看积分明细" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "按成员" }));
+    expect(screen.getByRole("button", { name: "按成员" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("applies usage date ranges only after confirmation and remembers the selection", async () => {
     renderSection("usage");
     await screen.findByRole("heading", { name: "用量看板" });
 
-    const rolling30Button = screen.getByRole("button", { name: "近 30 天" });
-    expect(rolling30Button).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "今天" }));
-    expect(screen.getByRole("button", { name: "今天" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    const rolling7Button = screen.getByRole("button", { name: "近7天" });
+    expect(rolling7Button).toHaveAttribute("aria-pressed", "true");
 
     const dateRangeButton = screen.getByRole("button", { name: "日期范围" });
     fireEvent.click(dateRangeButton);
     const dialog = screen.getByRole("dialog", { name: "选择日期范围" });
     const startInput = within(dialog).getByLabelText("开始日期") as HTMLInputElement;
     const endInput = within(dialog).getByLabelText("结束日期") as HTMLInputElement;
-    const monthQuickButton = within(dialog).getByRole("button", { name: "本月" });
-    expect(startInput.compareDocumentPosition(monthQuickButton))
-      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     const current = new Date();
     expect(startInput.value).toBe(
       `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-01`,
@@ -493,69 +406,13 @@ describe("organization center", () => {
       }`,
     );
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "上月" }));
-    expect(screen.getByRole("button", { name: "今天" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    fireEvent.change(startInput, { target: { value: endInput.value } });
+    expect(rolling7Button).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
     expect(screen.queryByRole("dialog", { name: "选择日期范围" })).toBeNull();
-    expect(screen.getByRole("button", { name: "日期范围" })).toBeInTheDocument();
+    expect(dateRangeButton).toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.click(screen.getByRole("button", { name: "日期范围" }));
-    fireEvent.click(
-      within(screen.getByRole("dialog", { name: "选择日期范围" }))
-        .getByRole("button", { name: "本月" }),
-    );
-    fireEvent.click(
-      within(screen.getByRole("dialog", { name: "选择日期范围" }))
-        .getByRole("button", { name: "应用" }),
-    );
-    expect(screen.getByRole("button", { name: "本月" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "本月" }));
-    fireEvent.click(
-      within(screen.getByRole("dialog", { name: "选择日期范围" }))
-        .getByRole("button", { name: "全部历史" }),
-    );
-    fireEvent.click(
-      within(screen.getByRole("dialog", { name: "选择日期范围" }))
-        .getByRole("button", { name: "应用" }),
-    );
-    expect(screen.getByRole("button", { name: "全部历史" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "全部历史" }));
-    const reopenedDialog = screen.getByRole("dialog", { name: "选择日期范围" });
-    const historyStartInput = within(reopenedDialog).getByLabelText("开始日期");
-    const historyEndInput = within(reopenedDialog).getByLabelText("结束日期");
-    expect(historyStartInput).not.toBeDisabled();
-    expect(historyEndInput).not.toBeDisabled();
-    expect(historyStartInput).not.toHaveValue("");
-    fireEvent.change(historyStartInput, { target: { value: endInput.value } });
-    expect(
-      within(reopenedDialog).getByRole("button", { name: "全部历史" }),
-    ).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(within(reopenedDialog).getByRole("button", { name: "取消" }));
-    expect(screen.getByRole("button", { name: "全部历史" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "全部历史" }));
-    const previousMonthDialog = screen.getByRole("dialog", { name: "选择日期范围" });
-    fireEvent.click(within(previousMonthDialog).getByRole("button", { name: "上月" }));
-    fireEvent.click(within(previousMonthDialog).getByRole("button", { name: "应用" }));
-    expect(screen.getByRole("button", { name: "上月" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "上月" }));
-    expect(
-      within(screen.getByRole("dialog", { name: "选择日期范围" }))
-        .getByRole("button", { name: "上月" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "选择日期范围" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "上月" }));
+    fireEvent.click(dateRangeButton);
     const customDialog = screen.getByRole("dialog", { name: "选择日期范围" });
     const todayValue = `${current.getFullYear()}-${
       String(current.getMonth() + 1).padStart(2, "0")
@@ -572,16 +429,14 @@ describe("organization center", () => {
       within(screen.getByRole("dialog", { name: "选择日期范围" }))
         .getByRole("button", { name: "应用" }),
     );
-    const compactToday = `${String(current.getMonth() + 1).padStart(2, "0")}/${
-      String(current.getDate()).padStart(2, "0")
-    }`;
-    const customRangeButton = screen.getByRole("button", {
-      name: `${compactToday}–${compactToday}`,
-    });
-    fireEvent.click(customRangeButton);
+    expect(dateRangeButton).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(dateRangeButton);
     const retainedDialog = screen.getByRole("dialog", { name: "选择日期范围" });
     expect(within(retainedDialog).getByLabelText("开始日期")).toHaveValue(todayValue);
     expect(within(retainedDialog).getByLabelText("结束日期")).toHaveValue(todayValue);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "选择日期范围" })).toBeNull();
+    fireEvent.click(dateRangeButton);
     fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("dialog", { name: "选择日期范围" })).toBeNull();
   });

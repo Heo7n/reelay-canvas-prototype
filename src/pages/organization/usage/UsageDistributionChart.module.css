@@ -1,0 +1,155 @@
+.horizontalChart {
+  display: grid;
+  min-height: 324px;
+  grid-template-rows: 1fr auto;
+  margin-top: 13px;
+  padding: 12px 8px 2px 0;
+}
+
+.horizontalRows {
+  display: grid;
+  align-content: space-between;
+  gap: 13px;
+}
+
+.horizontalRow {
+  display: grid;
+  grid-template-columns: 88px minmax(160px, 1fr) 76px;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+  font-size: 13px;
+}
+
+.dayLabel { color: var(--workspace-muted); }
+.horizontalRow strong { color: var(--workspace-text); font-size: 13px; font-weight: 680; text-align: right; font-variant-numeric: tabular-nums; }
+
+.horizontalTrack {
+  position: relative;
+  height: 17px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--usage-accent) 5%, transparent), color-mix(in srgb, var(--usage-accent) 2%, transparent));
+}
+
+.horizontalTrack::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--workspace-border) calc(25% - 1px) 25%);
+  opacity: .48;
+}
+
+.horizontalTrack i {
+  position: relative;
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #6694f5, #a8c3ff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #5f8df4 18%, transparent);
+}
+
+.horizontalAxis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr) auto;
+  margin: 11px 75px 0 100px;
+  color: var(--workspace-subtle);
+  font-size: 11px;
+}
+
+.horizontalAxis span { transform: translateX(-50%); }
+.horizontalAxis span:first-child { transform: none; }
+.horizontalAxis em { font-style: normal; }
+
+.stackedChart {
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  grid-template-rows: 310px 30px;
+  min-height: 340px;
+  margin-top: 13px;
+}
+
+.yAxis {
+  position: relative;
+  grid-row: 1;
+  color: var(--workspace-subtle);
+  font-size: 11px;
+}
+
+.yAxis small {
+  position: absolute;
+  top: 0;
+  left: 1px;
+  color: var(--workspace-muted);
+}
+
+.yAxis span {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.plotScroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--workspace-muted) 35%, transparent) transparent;
+}
+
+.plotCanvas { position: relative; height: 296px; }
+.plotSvg { display: block; width: 100%; height: 296px; overflow: visible; }
+.gridLine { stroke: var(--workspace-border); stroke-dasharray: 4 4; stroke-width: 1; }
+.video { fill: #5c8ef7; background: #5c8ef7; }
+.image { fill: #62caae; background: #62caae; }
+.processing { fill: #8c6fe6; background: #8c6fe6; }
+.hitArea { fill: transparent; cursor: default; }
+.xLabel { fill: var(--workspace-subtle); font-size: 10.5px; }
+.totalLine { fill: none; stroke: #78a7ff; stroke-width: 1.7; }
+.totalPoint { fill: #78a7ff; stroke: var(--workspace-surface); stroke-width: 1.5; }
+
+.tooltip {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  display: grid;
+  width: 164px;
+  gap: 7px;
+  padding: 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--workspace-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--workspace-surface) 96%, transparent);
+  box-shadow: 0 12px 30px rgb(25 34 48 / 14%);
+  color: var(--workspace-text);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+.tooltip[data-edge="start"] { transform: translateX(-12%); }
+.tooltip[data-edge="end"] { transform: translateX(-88%); }
+.tooltip strong { padding-bottom: 3px; font-size: 12px; }
+.tooltip span { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; color: var(--workspace-muted); font-size: 11px; }
+.tooltip i { width: 7px; height: 7px; border-radius: 2px; }
+.tooltip b { color: var(--workspace-text); font-weight: 650; font-variant-numeric: tabular-nums; }
+.totalDot { border-radius: 50% !important; background: #78a7ff; }
+
+.legend {
+  grid-column: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  color: var(--workspace-muted);
+  font-size: 11px;
+}
+
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; border-radius: 2px; }
+.lineLegend { width: 18px !important; height: 2px !important; border-radius: 999px !important; background: #78a7ff; }
+
+@media (max-width: 1120px) {
+  .horizontalRow { grid-template-columns: 82px minmax(120px, 1fr) 60px; gap: 8px; }
+  .horizontalAxis { margin-left: 90px; }
+}
