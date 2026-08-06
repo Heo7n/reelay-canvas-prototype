@@ -45,6 +45,7 @@ function renderSection(
   section: OrganizationSection,
   data: OrganizationRouteData = routeData,
   loader: () => Promise<OrganizationRouteData> = async () => data,
+  returnTo?: string,
 ) {
   const suffix = section === "management" ? "" : `/${section}`;
   const initialEntry = `/w/workspace-organization-reelay/organization${suffix}`;
@@ -59,7 +60,20 @@ function renderSection(
         { path: "usage", element: <OrganizationSectionRoute section="usage" /> },
       ],
     },
-  ], { initialEntries: [initialEntry] });
+    {
+      path: "/w/:workspaceId/projects/:projectId/canvases/:canvasId",
+      element: <p>canvas origin</p>,
+    },
+    {
+      path: "/w/:workspaceId",
+      element: <p>workspace origin</p>,
+    },
+  ], {
+    initialEntries: [{
+      pathname: initialEntry,
+      state: returnTo ? { organizationReturnTo: returnTo } : undefined,
+    }],
+  });
 
   render(<RouterProvider router={router} />);
   return router;
@@ -71,7 +85,7 @@ describe("organization center", () => {
 
     expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "成员管理" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByText("2 位成员")).toBeInTheDocument();
     expect(screen.getByText("组织 ID：REELAY-7X29M4")).toBeInTheDocument();
     expect(screen.queryByText(/当前身份/)).toBeNull();
@@ -103,6 +117,17 @@ describe("organization center", () => {
     expect(screen.getByRole("button", { name: "恢复账号" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "恢复账号" }));
     expect(screen.queryByText("已停用")).toBeNull();
+  });
+
+  it("returns to the recorded application source after switching organization sections", async () => {
+    const canvasPath = "/w/workspace-organization-reelay/projects/project-one/canvases/main";
+    renderSection("management", routeData, async () => routeData, canvasPath);
+
+    fireEvent.click(await screen.findByRole("link", { name: "积分管理" }));
+    expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+
+    expect(await screen.findByText("canvas origin")).toBeInTheDocument();
   });
 
   it("closes the temporary role selector after clicking elsewhere", async () => {

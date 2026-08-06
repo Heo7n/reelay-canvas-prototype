@@ -1,5 +1,5 @@
 import { BarChart3, Building2, ChevronLeft, CircleDollarSign, Info } from "lucide-react";
-import { Link, NavLink, Outlet, useLoaderData } from "react-router-dom";
+import { NavLink, Outlet, useLoaderData, useLocation, useNavigate } from "react-router-dom";
 
 import type { OrganizationMembersRouteData, OrganizationRouteData } from "../../app/route-data";
 import { routePaths } from "../../app/routes";
@@ -19,7 +19,13 @@ const roleLabels = {
   member: "成员",
 } as const;
 
+interface OrganizationNavigationState {
+  organizationReturnTo?: string;
+}
+
 export function OrganizationCenterPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const workspaceData = useWorkspaceRouteData();
   const organizationData = useLoaderData() as OrganizationMembersRouteData;
   const data: OrganizationRouteData = {
@@ -59,6 +65,19 @@ export function OrganizationCenterPage() {
   const visibleNavigation = navigation.filter((item) => (
     item.id === "management" || canManageOrganization
   ));
+  const navigationState = location.state as OrganizationNavigationState | null;
+  const workspaceRoot = routePaths.workspaceHome(workspaceId);
+  const organizationRoot = routePaths.organization(workspaceId);
+  const requestedReturnTo = navigationState?.organizationReturnTo;
+  const returnTo = typeof requestedReturnTo === "string"
+    && (requestedReturnTo === workspaceRoot || requestedReturnTo.startsWith(`${workspaceRoot}/`))
+    && requestedReturnTo !== organizationRoot
+    && !requestedReturnTo.startsWith(`${organizationRoot}/`)
+    ? requestedReturnTo
+    : workspaceRoot;
+  const returnFromOrganizationCenter = () => {
+    navigate(returnTo, { replace: true });
+  };
 
   return (
     <div className={styles.organizationShell}>
@@ -70,22 +89,13 @@ export function OrganizationCenterPage() {
       />
 
       <main className={styles.organizationMain}>
-        <div className={styles.pageHeading}>
-          <Link to={routePaths.workspaceHome(workspaceId)}>
-            <ChevronLeft aria-hidden="true" />
-            <span>返回</span>
-          </Link>
-          <span aria-hidden="true" />
-          <strong>组织中心</strong>
-        </div>
-
         <div className={styles.centerLayout}>
           <aside className={styles.sidebar}>
             <div className={styles.organizationIdentity}>
               <span className={styles.organizationAvatar} aria-hidden="true">
                 <Building2 />
               </span>
-              <span>
+              <span className={styles.organizationCopy}>
                 <strong>{data.currentWorkspace.name}</strong>
                 <small>{roleLabels[currentRole]}</small>
               </span>
@@ -99,6 +109,8 @@ export function OrganizationCenterPage() {
                     key={item.id}
                     className={({ isActive }) => isActive ? styles.activeNavItem : ""}
                     end={item.end}
+                    replace
+                    state={{ organizationReturnTo: returnTo }}
                     to={item.to}
                   >
                     <Icon aria-hidden="true" />
@@ -107,6 +119,18 @@ export function OrganizationCenterPage() {
                 );
               })}
             </nav>
+
+            <div className={styles.sidebarFooter}>
+              <button
+                aria-label="返回"
+                className={styles.backUtility}
+                onClick={returnFromOrganizationCenter}
+                type="button"
+              >
+                <ChevronLeft aria-hidden="true" />
+                <span>返回</span>
+              </button>
+            </div>
           </aside>
 
           <div className={styles.content}>

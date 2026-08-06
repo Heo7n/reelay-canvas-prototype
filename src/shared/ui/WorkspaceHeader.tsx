@@ -14,7 +14,7 @@ import {
   Settings,
   Sun,
 } from "lucide-react";
-import { Form, Link } from "react-router-dom";
+import { Form, Link, useLocation } from "react-router-dom";
 
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -143,6 +143,7 @@ export function WorkspaceHeader({
   onNotice,
   showAccount = true,
 }: WorkspaceHeaderProps) {
+  const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [accountSettingsSection, setAccountSettingsSection] = useState<AccountSection>("profile");
@@ -242,6 +243,9 @@ export function WorkspaceHeader({
                 <div className={styles.accountOverview}>
                   <Link
                     className={`${styles.menuItem} ${styles.membership}`}
+                    state={{
+                      organizationReturnTo: `${location.pathname}${location.search}${location.hash}`,
+                    }}
                     to={routePaths.organization(currentWorkspace.id)}
                     aria-label={`进入${currentWorkspace.name}组织信息`}
                     onClick={closeProfile}

@@ -72,6 +72,11 @@ describe("workspace account menu", () => {
     expect(screen.getByRole("button", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "帮助中心" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "退出账号" })).toBeInTheDocument();
+
+    fireEvent.click(organizationEntry);
+    expect(router.state.location.state).toEqual({
+      organizationReturnTo: "/w/workspace-organization",
+    });
   });
 
   it.each([

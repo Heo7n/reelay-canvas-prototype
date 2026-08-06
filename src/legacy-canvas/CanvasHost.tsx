@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import type { CanvasDocumentRepository } from "../application/canvases/CanvasDocumentRepository";
 import { routePaths } from "../app/routes";
@@ -29,9 +29,10 @@ type DocumentLoadState =
   | { status: "error"; reason: "load" | "unavailable" };
 
 type PersistenceStatus = "loading" | "saved" | "dirty" | "saving" | "error";
-type NavigationTarget = "home" | "projects" | "logout";
+type NavigationTarget = "home" | "projects" | "organization" | "logout";
 
 export function CanvasHost({ context, onLogout, onOpenAccountSettings, repository }: CanvasHostProps) {
+  const location = useLocation();
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const initializedReadyGenerationRef = useRef(0);
@@ -77,10 +78,18 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       onLogout?.();
       return;
     }
+    if (target === "organization") {
+      navigate(routePaths.organization(safeContext.workspaceId), {
+        state: {
+          organizationReturnTo: `${location.pathname}${location.search}${location.hash}`,
+        },
+      });
+      return;
+    }
     navigate(target === "home"
       ? routePaths.workspaceHome(safeContext.workspaceId)
       : routePaths.projects(safeContext.workspaceId));
-  }, [navigate, onLogout, safeContext.workspaceId]);
+  }, [location.hash, location.pathname, location.search, navigate, onLogout, safeContext.workspaceId]);
 
   const queueNavigation = useCallback((target: NavigationTarget): void => {
     pendingNavigationRef.current = target;
