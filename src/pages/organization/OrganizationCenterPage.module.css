@@ -19,6 +19,12 @@
   color: var(--workspace-text);
 }
 
+.organizationShell > header {
+  height: 56px;
+  padding-block: 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 62%, transparent);
+}
+
 :global(html[data-theme="dark"]) .organizationShell {
   --workspace-bg: #0b0c0f;
   --workspace-surface: #15161a;
@@ -48,34 +54,11 @@
   width: min(1440px, calc(100% - 64px));
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   margin: 0 auto;
-  padding: 16px 0 24px;
+  padding: 14px 0 22px;
   overflow: hidden;
 }
-
-.pageHeading {
-  display: flex;
-  height: 38px;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 22px;
-}
-
-.pageHeading a {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  gap: 5px;
-  color: var(--workspace-text);
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.pageHeading a:hover { color: var(--workspace-muted); }
-.pageHeading a svg { width: 16px; height: 16px; }
-.pageHeading > span { width: 1px; height: 18px; background: var(--workspace-border-strong); }
-.pageHeading > strong { font-size: 13px; }
 
 .centerLayout {
   display: grid;
@@ -93,7 +76,7 @@
   min-height: 0;
   flex-direction: column;
   overflow-y: auto;
-  padding: 24px 15px;
+  padding: 15px 15px 24px;
   border-right: 1px solid var(--workspace-border);
   background: color-mix(in srgb, var(--workspace-bg) 66%, var(--workspace-surface));
 }
@@ -103,7 +86,7 @@
   grid-template-columns: 42px minmax(0, 1fr);
   align-items: center;
   gap: 11px;
-  padding: 0 8px 22px;
+  padding: 0 8px 18px;
   border-bottom: 1px solid var(--workspace-border);
 }
 
@@ -124,7 +107,7 @@
 }
 
 .organizationAvatar svg { width: 20px; height: 20px; }
-.organizationIdentity > span:last-child { display: grid; min-width: 0; gap: 4px; }
+.organizationCopy { display: grid; min-width: 0; gap: 4px; }
 .organizationIdentity strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .organizationIdentity small { color: var(--workspace-muted); font-size: 10px; }
 
@@ -156,6 +139,42 @@
 .sidebar nav a svg { width: 16px; height: 16px; }
 .sidebar nav .activeNavItem { background: var(--workspace-text); color: var(--workspace-bg); }
 .sidebar nav .activeNavItem:hover { background: var(--workspace-text); color: var(--workspace-bg); }
+
+.sidebarFooter {
+  margin-top: auto;
+  padding: 17px 4px 0;
+  border-top: 1px solid var(--workspace-border);
+}
+
+.backUtility {
+  display: grid;
+  width: 100%;
+  min-height: 38px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--workspace-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.16s ease;
+}
+
+.backUtility:hover {
+  color: var(--workspace-text);
+}
+
+.backUtility svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
 
 .content {
   min-width: 0;
@@ -2072,7 +2091,7 @@
 }
 
 .sidebar nav a:focus-visible,
-.pageHeading a:focus-visible,
+.backUtility:focus-visible,
 .creditRowActions button:focus-visible,
 .creditAdjustmentPopover button:focus-visible,
 .organizationAvatarEditor:focus-visible,

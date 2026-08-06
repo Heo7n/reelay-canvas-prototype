@@ -6564,12 +6564,8 @@ profileMenu?.addEventListener("click", (event) => {
     return;
   }
   if (action === "organization") {
-    showConfirmDialog({
-      title: state.identity.workspaceName,
-      body: "组织管理页面将在下一阶段接入。当前可在这里确认账号的组织归属与角色。",
-      confirmText: "知道了",
-      showCancel: false,
-    });
+    closeProfileMenu();
+    requestHostNavigation("organization");
     return;
   }
   if (action) {
