@@ -1,12 +1,9 @@
 import {
-  Box,
   ChevronRight,
-  FolderKanban,
   Image as ImageIcon,
   Play,
   Search,
   SlidersHorizontal,
-  UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -52,12 +49,42 @@ function modelType(records: UsageRecord[], modelId: string): string {
   return "处理";
 }
 
+function SourceArt({ dimension }: { dimension: SourceDimension }) {
+  if (dimension === "project") {
+    return (
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="5" y="8" width="16" height="19" rx="3" fill="currentColor" fillOpacity=".2" />
+        <path d="M8 7.5h12a2 2 0 0 1 2 2V27H6V9.5a2 2 0 0 1 2-2Z" fill="currentColor" />
+        <path d="M10 12h2v2h-2zm5 0h2v2h-2zm-5 5h2v2h-2zm5 0h2v2h-2zm-5 5h2v2h-2zm5 0h2v2h-2z" fill="#fff" fillOpacity=".9" />
+        <path d="M21 16h4a2 2 0 0 1 2 2v9h-6Z" fill="currentColor" fillOpacity=".67" />
+        <path d="M3.5 27.5h25" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+    );
+  }
+  if (dimension === "model") {
+    return (
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <path d="m16 4 11 6.2v12.4L16 29 5 22.6V10.2Z" fill="currentColor" fillOpacity=".18" />
+        <path d="m16 4 11 6.2L16 17 5 10.2Z" fill="currentColor" />
+        <path d="M16 17v12L5 22.6V10.2Z" fill="currentColor" fillOpacity=".58" />
+        <path d="M16 17v12l11-6.4V10.2Z" fill="currentColor" fillOpacity=".78" />
+        <path d="m10 8 11 6.4" stroke="#fff" strokeOpacity=".58" strokeWidth="1.3" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="11" r="6" fill="currentColor" />
+      <path d="M5.5 27c.8-7 4.6-10.5 10.5-10.5S25.7 20 26.5 27Z" fill="currentColor" fillOpacity=".72" />
+      <circle cx="16" cy="11" r="3" fill="#fff" fillOpacity=".16" />
+    </svg>
+  );
+}
+
 function SourceIdentity({ item, dimension }: { item: UsageCompositionItem; dimension: SourceDimension }) {
   return (
     <span className={styles.identity}>
-      <i aria-hidden="true">
-        {dimension === "project" ? <FolderKanban /> : dimension === "model" ? <Box /> : <UserRound />}
-      </i>
+      <i aria-hidden="true"><SourceArt dimension={dimension} /></i>
       <span>
         <strong>{item.label}</strong>
         {dimension === "member" ? <small>{item.detail}</small> : null}
@@ -137,14 +164,15 @@ export function UsageSourceTable({
           {dimension === "model" ? <span>类型</span> : null}
           <span>消耗积分</span>
           <span>占比</span>
-          <span>{dimension === "model" ? "调用次数" : dimension === "project" ? "产出规模" : "任务数"}</span>
+          <span>{dimension === "model" ? "调用次数" : dimension === "project" ? "任务量" : "任务数"}</span>
           {dimension === "model" ? <span>单次平均消耗</span> : dimension === "member" ? <span>产出规模</span> : null}
           <span aria-hidden="true" />
         </div>
         {filtered.map((item) => {
           const itemRecords = records.filter((record) => getRecordDimensionId(record, dimension) === item.id);
           const processingTasks = itemRecords.filter((record) =>
-            record.activityKind === "enhancement" || record.activityKind === "agent"
+            record.status === "settled"
+            && (record.activityKind === "enhancement" || record.activityKind === "agent")
           ).length;
           return (
             <button
@@ -158,18 +186,25 @@ export function UsageSourceTable({
               {dimension === "model" ? (
                 <span><em data-kind={modelType(records, item.id)}>{modelType(records, item.id)}</em></span>
               ) : null}
-              <strong className={styles.credits}>{numberFormatter.format(item.credits)}</strong>
-              <span className={styles.share}>
-                <i aria-hidden="true"><b style={{ width: `${Math.max(3, item.share * 100)}%` }} /></i>
+              <span className={styles.creditsCell}>
+                <strong className={styles.credits}>{numberFormatter.format(item.credits)}</strong>
+                {dimension === "project" ? (
+                  <i className={styles.creditBar} aria-hidden="true">
+                    <b style={{ width: `${Math.max(3, item.share * 100)}%` }} />
+                  </i>
+                ) : null}
+              </span>
+              <span className={styles.share} data-compact={dimension === "project" || undefined}>
+                {dimension !== "project" ? <i aria-hidden="true"><b style={{ width: `${Math.max(3, item.share * 100)}%` }} /></i> : null}
                 <strong>{percentFormatter.format(item.share)}</strong>
               </span>
               {dimension === "model" ? (
                 <span className={styles.metric}>{numberFormatter.format(item.tasks)}</span>
               ) : dimension === "project" ? (
-                <span className={styles.outputScale}>
-                  {item.videoSeconds > 0 ? <em><Play />视频 {numberFormatter.format(item.videoSeconds)}s</em> : null}
-                  {item.imageCount > 0 ? <em><ImageIcon />图片 {numberFormatter.format(item.imageCount)}张</em> : null}
-                  {processingTasks > 0 ? <em><SlidersHorizontal />处理 {numberFormatter.format(processingTasks)}次</em> : null}
+                <span className={styles.outputScale} data-project="true">
+                  <em data-kind="video"><Play /><span>视频</span><strong>{numberFormatter.format(item.videoSeconds)}</strong><small>s</small></em>
+                  <em data-kind="image"><ImageIcon /><span>图片</span><strong>{numberFormatter.format(item.imageCount)}</strong><small>张</small></em>
+                  <em data-kind="processing"><SlidersHorizontal /><span>媒体处理</span><strong>{numberFormatter.format(processingTasks)}</strong><small>次</small></em>
                 </span>
               ) : (
                 <span className={styles.metric}>{numberFormatter.format(item.tasks)}</span>

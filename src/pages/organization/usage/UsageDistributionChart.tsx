@@ -44,9 +44,11 @@ function smoothLinePath(points: { x: number; y: number }[]): string {
     const beforePrevious = points[index - 2] ?? previous;
     const next = points[index + 1] ?? point;
     const control1X = previous.x + (point.x - beforePrevious.x) / 6;
-    const control1Y = previous.y + (point.y - beforePrevious.y) / 6;
+    const lowerY = Math.min(previous.y, point.y);
+    const upperY = Math.max(previous.y, point.y);
+    const control1Y = Math.min(upperY, Math.max(lowerY, previous.y + (point.y - beforePrevious.y) / 6));
     const control2X = point.x - (next.x - previous.x) / 6;
-    const control2Y = point.y - (next.y - previous.y) / 6;
+    const control2Y = Math.min(upperY, Math.max(lowerY, point.y - (next.y - previous.y) / 6));
     return `${path} C${control1X.toFixed(1)},${control1Y.toFixed(1)} ${control2X.toFixed(1)},${control2Y.toFixed(1)} ${point.x.toFixed(1)},${point.y.toFixed(1)}`;
   }, "");
 }
@@ -118,6 +120,10 @@ export function UsageDistributionChart({
   const activeX = activeIndex === null
     ? 0
     : (activeIndex + 0.5) * (chartWidth / Math.max(1, points.length));
+  const activeY = activePoint
+    ? chartTop + plotHeight - (activePoint.total / maximum) * plotHeight
+    : 0;
+  const tooltipPlacement = activeY > chartTop + plotHeight * 0.48 ? "above" : "below";
   const linePoints = points.map((point, index) => {
     const x = (index + 0.5) * (chartWidth / Math.max(1, points.length));
     const y = chartTop + plotHeight - (point.total / maximum) * plotHeight;
@@ -189,23 +195,36 @@ export function UsageDistributionChart({
             {points.map((point, index) => {
               const x = (index + 0.5) * (chartWidth / Math.max(1, points.length));
               const y = chartTop + plotHeight - (point.total / maximum) * plotHeight;
-              return <circle key={point.key} cx={x} cy={y} r="3.5" className={styles.totalPoint} />;
+              return (
+                <circle
+                  key={point.key}
+                  cx={x}
+                  cy={y}
+                  r={activeIndex === index ? "4.8" : "3.8"}
+                  className={styles.totalPoint}
+                  data-active={activeIndex === index || undefined}
+                />
+              );
             })}
           </svg>
           {activePoint ? (
             <div
               className={styles.tooltip}
               data-edge={activeIndex !== null && activeIndex < 2 ? "start" : activeIndex !== null && activeIndex > points.length - 3 ? "end" : undefined}
-              style={{ left: `${activeX}px` }}
+              data-placement={tooltipPlacement}
+              style={{ left: `${activeX}px`, top: `${activeY}px` }}
             >
-              <strong>{activePoint.fullLabel}</strong>
-              <span><i className={styles.totalDot} />总消耗 <b>{numberFormatter.format(activePoint.total)}</b></span>
-              {SEGMENTS.map((segment) => (
-                <span key={segment.id}>
-                  <i className={segment.className} />{segment.label}
-                  <b>{numberFormatter.format(activePoint.segments[segment.id])}</b>
-                </span>
-              ))}
+              <strong>{activePoint.label}</strong>
+              <span><i className={styles.totalDot} />消耗积分 <b>{numberFormatter.format(activePoint.total)}</b></span>
+              <span><i className={styles.taskDot} />任务数量 <b>{numberFormatter.format(activePoint.tasks)}</b></span>
+              <div className={styles.tooltipComposition} aria-label="消耗成分">
+                {SEGMENTS.map((segment) => (
+                  <span key={segment.id} title={`${segment.label} ${numberFormatter.format(activePoint.segments[segment.id])}`}>
+                    <i className={segment.className} />
+                    {compactNumber(activePoint.segments[segment.id])}
+                  </span>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>

@@ -363,7 +363,7 @@ describe("organization center", () => {
     expect(screen.getByRole("heading", { name: "消耗来源" })).toBeInTheDocument();
     expect(screen.getByText("视频生成")).toBeInTheDocument();
     expect(screen.getByText("图片生成")).toBeInTheDocument();
-    expect(screen.getByText("媒体处理")).toBeInTheDocument();
+    expect(screen.getAllByText("媒体处理").length).toBeGreaterThan(0);
 
     expect(screen.getByRole("button", { name: "近7天" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("近7天每日积分消耗")).toBeInTheDocument();

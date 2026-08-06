@@ -2,13 +2,8 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
-  Database,
   Download,
-  Image as ImageIcon,
-  Play,
   RefreshCw,
-  SlidersHorizontal,
-  TrendingUp,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -88,10 +83,76 @@ function formatEstimatedDays(days: number | null): string {
   return days === null ? "—" : `约 ${numberFormatter.format(days)} 天`;
 }
 
+function OverviewArt({ kind }: { kind: "credits" | "trend" }) {
+  if (kind === "credits") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <defs>
+          <linearGradient id="usage-credit-art" x1="8" y1="5" x2="39" y2="43" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#85a9ff" />
+            <stop offset="1" stopColor="#3478f6" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="24" cy="13" rx="12" ry="5.5" fill="url(#usage-credit-art)" />
+        <path d="M12 13v8c0 3 5.4 5.5 12 5.5S36 24 36 21v-8" fill="url(#usage-credit-art)" opacity=".83" />
+        <path d="M12 22v8c0 3 5.4 5.5 12 5.5S36 33 36 30v-8" fill="url(#usage-credit-art)" opacity=".68" />
+        <path d="M12 31v4c0 3 5.4 5.5 12 5.5S36 38 36 35v-4" fill="url(#usage-credit-art)" opacity=".5" />
+        <path d="M12 13c0 3 5.4 5.5 12 5.5S36 16 36 13M12 22c0 3 5.4 5.5 12 5.5S36 25 36 22M12 31c0 3 5.4 5.5 12 5.5S36 34 36 31" fill="none" stroke="#fff" strokeOpacity=".78" strokeWidth="1.3" />
+        <path d="M39 8v5M36.5 10.5h5" stroke="#7fa7ff" strokeLinecap="round" strokeWidth="1.7" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <linearGradient id="usage-trend-art" x1="9" y1="39" x2="39" y2="8" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#7f9fdc" />
+          <stop offset="1" stopColor="#4c78c8" />
+        </linearGradient>
+      </defs>
+      <rect x="9" y="29" width="5" height="10" rx="2.5" fill="#b9cae8" />
+      <rect x="19" y="23" width="5" height="16" rx="2.5" fill="#91addc" />
+      <rect x="29" y="14" width="5" height="25" rx="2.5" fill="url(#usage-trend-art)" />
+      <path d="m10 25 10-7 8 3 10-12" fill="none" stroke="url(#usage-trend-art)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
+      <circle cx="10" cy="25" r="2.3" fill="#fff" stroke="#7194d1" strokeWidth="1.8" />
+      <circle cx="20" cy="18" r="2.3" fill="#fff" stroke="#7194d1" strokeWidth="1.8" />
+      <circle cx="28" cy="21" r="2.3" fill="#fff" stroke="#7194d1" strokeWidth="1.8" />
+      <circle cx="38" cy="9" r="2.3" fill="#fff" stroke="#4c78c8" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 function typeIcon(id: string) {
-  if (id === "video") return <Play aria-hidden="true" />;
-  if (id === "image") return <ImageIcon aria-hidden="true" />;
-  return <SlidersHorizontal aria-hidden="true" />;
+  if (id === "video") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <defs><linearGradient id="usage-video-art" x1="11" y1="8" x2="38" y2="40"><stop stopColor="#77c1ff" /><stop offset=".55" stopColor="#388cf7" /><stop offset="1" stopColor="#1767ec" /></linearGradient></defs>
+        <path d="M16 10.5c-3-1.8-6.8.4-6.8 4v19c0 3.6 3.8 5.8 6.8 4l19-11c3.1-1.8 3.1-6.2 0-8l-19-11Z" fill="url(#usage-video-art)" />
+        <path d="m15 13 17 10-17 10Z" fill="#fff" fillOpacity=".16" />
+      </svg>
+    );
+  }
+  if (id === "image") {
+    return (
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <defs><linearGradient id="usage-image-art" x1="8" y1="7" x2="40" y2="42"><stop stopColor="#8ee9dd" /><stop offset=".55" stopColor="#35c8b5" /><stop offset="1" stopColor="#0cae99" /></linearGradient></defs>
+        <rect x="7" y="7" width="34" height="34" rx="9" fill="url(#usage-image-art)" />
+        <circle cx="17" cy="17" r="4" fill="#fff" fillOpacity=".92" />
+        <path d="m11 35 9-11 6 6 4-5 7 10Z" fill="#fff" fillOpacity=".85" />
+        <path d="M9 11c5-3 15-4 25-1" fill="none" stroke="#fff" strokeLinecap="round" strokeOpacity=".36" strokeWidth="2" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <defs><linearGradient id="usage-process-art" x1="8" y1="10" x2="40" y2="38"><stop stopColor="#a98cff" /><stop offset=".55" stopColor="#805ce9" /><stop offset="1" stopColor="#6138d4" /></linearGradient></defs>
+      <rect x="8" y="9" width="32" height="30" rx="9" fill="url(#usage-process-art)" fillOpacity=".12" />
+      <path d="M11 16h26M11 24h26M11 32h26" stroke="url(#usage-process-art)" strokeLinecap="round" strokeWidth="3" />
+      <circle cx="20" cy="16" r="4" fill="#fff" stroke="#8a68ed" strokeWidth="2.5" />
+      <circle cx="30" cy="24" r="4" fill="#fff" stroke="#7751df" strokeWidth="2.5" />
+      <circle cx="17" cy="32" r="4" fill="#fff" stroke="#6940d8" strokeWidth="2.5" />
+    </svg>
+  );
 }
 
 export function OrganizationUsageSection({
@@ -242,7 +303,7 @@ export function OrganizationUsageSection({
 
       <div className={styles.overviewGrid}>
         <article className={styles.overviewCard}>
-          <i className={styles.overviewIcon}><Database aria-hidden="true" /></i>
+          <i className={styles.overviewIcon}><OverviewArt kind="credits" /></i>
           <div className={styles.overviewMetric}>
             <span>可用积分</span>
             <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
@@ -256,7 +317,7 @@ export function OrganizationUsageSection({
           <span className={styles.cardGlow} aria-hidden="true" />
         </article>
         <article className={styles.overviewCard}>
-          <i className={styles.overviewIcon}><TrendingUp aria-hidden="true" /></i>
+          <i className={styles.overviewIcon}><OverviewArt kind="trend" /></i>
           <div className={styles.overviewMetric}>
             <span>今日已消耗</span>
             <strong>{numberFormatter.format(todayCredits)}</strong>
