@@ -520,9 +520,10 @@ function monthKey(value: Date): string {
 
 function clampEventHour(now: Date, dayOffset: number, eventIndex: number): number {
   if (dayOffset !== 0) return 8 + ((eventIndex * 3 + dayOffset) % 13);
+  const latestCompletedHour = Math.max(0, shiftToOrganizationTime(now).getUTCHours() - 1);
   return Math.max(
     0,
-    Math.min(shiftToOrganizationTime(now).getUTCHours(), 8 + eventIndex * 2),
+    Math.min(latestCompletedHour, 8 + eventIndex * 2),
   );
 }
 
@@ -545,31 +546,20 @@ function weightedIndex(weights: number[], seed: number): number {
 
 function getDailyEventCount(date: Date, dayOffset: number): number {
   const dayOfWeek = shiftToOrganizationTime(date).getUTCDay();
-  const weekendFactor = dayOfWeek === 0 ? 0.28 : dayOfWeek === 6 ? 0.48 : 1;
-  const recentGrowth = 0.72 + Math.max(0, 1 - dayOffset / DEMO_HISTORY_DAYS) * 0.38;
-  const seasonalFactor = 0.82 + Math.sin((dayOffset + 11) / 17) * 0.18;
-  const campaignPhase = dayOffset % 103;
-  const campaignFactor = campaignPhase < 6
-    ? 3.4
-    : campaignPhase < 14
-      ? 1.62
-      : 1;
-  const quietPhase = dayOffset % 149;
-  const absenceChance = dayOfWeek === 0 || dayOfWeek === 6 ? 0.24 : 0.07;
+  if (dayOfWeek === 6) return 0;
   const activitySeed = deterministicUnit(dayOffset * 97 + 31);
+  return dayOfWeek === 0
+    ? 6 + Math.floor(activitySeed * 3)
+    : 9 + Math.floor(activitySeed * 5);
+}
 
-  // A short production pause makes holidays and between-campaign gaps visible in the annual trend.
-  if (dayOffset > 0 && quietPhase >= 92 && quietPhase <= 105) return 0;
-  if (dayOffset > 0 && activitySeed < absenceChance) return 0;
-
-  const intensity = weekendFactor
-    * recentGrowth
-    * seasonalFactor
-    * campaignFactor;
-  return Math.max(
-    1,
-    Math.min(12, Math.round(1 + intensity * (1.4 + activitySeed * 2.4))),
-  );
+function getDailyCreditTarget(date: Date, dayOffset: number): number {
+  const dayOfWeek = shiftToOrganizationTime(date).getUTCDay();
+  if (dayOfWeek === 6) return 0;
+  const volumeSeed = deterministicUnit(dayOffset * 151 + 73);
+  return dayOfWeek === 0
+    ? Math.round(5_200 + volumeSeed * 1_200)
+    : Math.round(6_500 + volumeSeed * 3_200);
 }
 
 export function createOrganizationUsageDemoData(
@@ -586,6 +576,7 @@ export function createOrganizationUsageDemoData(
   for (let dayOffset = 0; dayOffset < DEMO_HISTORY_DAYS; dayOffset += 1) {
     const date = addOrganizationDays(today, -dayOffset);
     const eventCount = getDailyEventCount(date, dayOffset);
+    const dayRecordStart = records.length;
 
     for (let eventIndex = 0; eventIndex < eventCount; eventIndex += 1) {
       const seed = dayOffset * 131 + eventIndex * 29;
@@ -618,6 +609,19 @@ export function createOrganizationUsageDemoData(
         outputVideoSeconds: template.outputVideoSeconds,
         status: "settled",
       });
+    }
+
+    const dayRecords = records.slice(dayRecordStart);
+    const dailyTarget = getDailyCreditTarget(date, dayOffset);
+    const unscaledTotal = dayRecords.reduce((sum, record) => sum + record.credits, 0);
+    if (dailyTarget > 0 && unscaledTotal > 0) {
+      const scale = dailyTarget / unscaledTotal;
+      let scaledTotal = 0;
+      dayRecords.forEach((record) => {
+        record.credits = Math.max(1, Math.round(record.credits * scale));
+        scaledTotal += record.credits;
+      });
+      dayRecords[0].credits += dailyTarget - scaledTotal;
     }
 
     if (dayOffset > 0 && dayOffset % 43 === 9) {

@@ -112,9 +112,14 @@ export function buildUsageTimeline(
     for (let cursor = startOfWeek(range.start); cursor < range.end; cursor = addDays(cursor, 7)) {
       const key = dayKey(cursor);
       const end = addDays(cursor, 6);
+      const startLabel = key.slice(5).replace("-", "/");
+      const endKey = dayKey(end);
+      const endLabel = key.slice(5, 7) === endKey.slice(5, 7)
+        ? endKey.slice(8)
+        : endKey.slice(5).replace("-", "/");
       points.set(key, emptyPoint(
         key,
-        `${dayKey(cursor).slice(5).replace("-", "/")}–${dayKey(end).slice(5).replace("-", "/")}`,
+        `${startLabel}–${endLabel}`,
         `${fullDayFormatter.format(cursor)} 至 ${fullDayFormatter.format(end)}`,
       ));
     }
