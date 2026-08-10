@@ -1,4 +1,5 @@
 .panel {
+  --share-cell-inset: clamp(12px, 1.25vw, 24px);
   margin-top: 18px;
   overflow: hidden;
   border: 1px solid var(--workspace-border);
@@ -20,7 +21,7 @@
 .header h3 { margin: 0; color: var(--workspace-text); font-size: 15px; font-weight: 720; }
 .actions { display: flex; align-items: center; gap: 8px; }
 .searchButton, .tabs button {
-  height: 32px;
+  height: 34px;
   border: 1px solid var(--workspace-border);
   background: var(--workspace-surface);
   color: var(--workspace-muted);
@@ -32,37 +33,37 @@
 .searchField svg { width: 14px; color: var(--workspace-muted); }
 .searchField input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--workspace-text); }
 .tabs { display: flex; overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 8px; }
-.tabs button { min-width: 74px; padding: 0 14px; border: 0; border-right: 1px solid var(--workspace-border); cursor: pointer; }
+.tabs button { width: 78px; min-width: 78px; padding: 0 13px; border: 0; border-right: 1px solid var(--workspace-border); font-size: 11px; cursor: pointer; }
 .tabs button:last-child { border-right: 0; }
 .tabs button[aria-pressed="true"] { background: color-mix(in srgb, var(--usage-accent) 8%, var(--workspace-surface)); color: var(--usage-accent); font-weight: 650; }
 
-.table { min-width: 780px; max-height: 282px; overflow-y: auto; }
+.table { width: 100%; min-width: 0; max-height: 338px; overflow-y: auto; }
 .tableHeader, .row {
   display: grid;
-  min-height: 46px;
-  grid-template-columns: minmax(220px, 1.15fr) 150px minmax(190px, .9fr) minmax(300px, 1.35fr) 24px;
+  min-height: 50px;
+  grid-template-columns: minmax(160px, 1fr) 100px minmax(118px, .75fr) minmax(300px, 1.45fr) 18px;
   align-items: center;
-  column-gap: 18px;
+  column-gap: 16px;
   padding: 0 18px;
 }
 .table[data-dimension="project"] .tableHeader,
 .table[data-dimension="project"] .row {
-  grid-template-columns: minmax(180px, 1.05fr) minmax(170px, .85fr) 75px minmax(330px, 1.5fr) 18px;
-  column-gap: 14px;
+  grid-template-columns: minmax(155px, 26fr) minmax(86px, 13fr) minmax(118px, 16fr) minmax(310px, 41fr) 18px;
+  column-gap: 16px;
   padding-inline: 18px;
 }
-.table[data-dimension="project"] { max-height: 332px; }
+.table[data-dimension="project"] { max-height: 338px; }
 .table[data-dimension="model"] .tableHeader,
 .table[data-dimension="model"] .row {
-  grid-template-columns: minmax(200px, 1.15fr) 72px 130px minmax(180px, .9fr) 100px 130px 24px;
+  grid-template-columns: minmax(150px, 24fr) 70px minmax(86px, 13fr) minmax(118px, 17fr) minmax(72px, 14fr) minmax(90px, 18fr) 18px;
 }
 .table[data-dimension="member"] .tableHeader,
 .table[data-dimension="member"] .row {
-  grid-template-columns: minmax(230px, 1.2fr) 130px minmax(180px, .9fr) 92px minmax(200px, 1fr) 24px;
+  grid-template-columns: minmax(160px, 25fr) minmax(86px, 14fr) minmax(124px, 18fr) minmax(310px, 39fr) 18px;
 }
 .tableHeader { min-height: 38px; background: color-mix(in srgb, var(--workspace-bg) 72%, var(--workspace-surface)); color: var(--workspace-muted); font-size: 10px; font-weight: 650; }
 .row { width: 100%; border: 0; border-top: 1px solid var(--workspace-border); background: transparent; color: var(--workspace-text); text-align: left; cursor: pointer; }
-.table[data-dimension="project"] .row { min-height: 58px; }
+.table[data-dimension="project"] .row { min-height: 50px; }
 .row:hover { background: var(--workspace-hover); }
 .identity { display: flex; min-width: 0; align-items: center; gap: 11px; }
 .identity > i { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 8px; background: color-mix(in srgb, #65776f 8%, var(--workspace-surface)); color: #65776f; box-shadow: inset 0 0 0 1px color-mix(in srgb, #65776f 9%, transparent); }
@@ -73,21 +74,32 @@
 .identity strong { overflow: hidden; color: var(--workspace-text); text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .table[data-dimension="project"] .identity strong { font-size: 12px; font-weight: 650; }
 .identity small { overflow: hidden; color: var(--workspace-subtle); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.creditsCell { display: flex; min-width: 0; align-items: center; gap: 18px; }
+.creditsCell { display: flex; min-width: 0; align-items: center; justify-content: flex-end; text-align: right; }
 .credits, .metric { color: var(--workspace-text); font-size: 12px; font-variant-numeric: tabular-nums; }
-.table[data-dimension="project"] .credits { min-width: 72px; font-size: 12.5px; font-weight: 650; }
-.creditBar { display: block; width: min(118px, 45%); height: 5px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--workspace-muted) 15%, transparent); }
-.creditBar b { display: block; height: 100%; border-radius: inherit; background: var(--usage-accent); }
-.share { display: grid; grid-template-columns: minmax(80px, 1fr) 52px; align-items: center; gap: 10px; }
-.share[data-compact="true"] { display: block; }
+.table[data-dimension="project"] .credits { font-size: 12.5px; font-weight: 650; }
+.share { display: grid; box-sizing: border-box; width: 100%; grid-template-columns: minmax(0, 1fr) 42px; align-items: center; gap: 8px; padding-inline: var(--share-cell-inset); }
+.share[data-compact="true"] { grid-template-columns: minmax(0, 1fr) 42px; }
 .share > i { height: 4px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--workspace-muted) 15%, transparent); }
+.share[data-compact="true"] > i { order: 1; width: 100%; }
 .share b { display: block; height: 100%; border-radius: inherit; background: var(--usage-accent); }
 .share strong { font-size: 11px; font-variant-numeric: tabular-nums; }
-.table[data-dimension="project"] .share strong { font-size: 12px; font-weight: 620; }
+.table[data-dimension="project"] .share strong { order: 2; font-size: 11px; font-weight: 650; text-align: right; }
+.table[data-dimension="project"] .tableHeader > span:nth-child(2),
+.table[data-dimension="model"] .tableHeader > span:nth-child(3),
+.table[data-dimension="member"] .tableHeader > span:nth-child(2) { justify-self: end; text-align: right; }
+.table[data-dimension="project"] .tableHeader > span:nth-child(3),
+.table[data-dimension="model"] .tableHeader > span:nth-child(4),
+.table[data-dimension="member"] .tableHeader > span:nth-child(3) { box-sizing: border-box; width: 100%; justify-self: stretch; padding-inline: var(--share-cell-inset); text-align: left; }
+.table[data-dimension="project"] .tableHeader > span:nth-child(4),
+.table[data-dimension="member"] .tableHeader > span:nth-child(4) { width: 100%; text-align: center; }
+.table[data-dimension="model"] .tableHeader > span:nth-child(5),
+.table[data-dimension="model"] .tableHeader > span:nth-child(6) { justify-self: end; text-align: right; }
+.table[data-dimension="model"] .metric,
+.table[data-dimension="member"] .metric { justify-self: end; text-align: right; }
 .outputScale { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .outputScale em { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--workspace-border); border-radius: 6px; color: var(--workspace-muted); font-size: 10px; font-style: normal; }
 .outputScale svg { width: 12px; }
-.outputScale[data-project="true"] { display: grid; grid-template-columns: repeat(3, minmax(96px, 1fr)); gap: 8px; }
+.outputScale[data-project="true"] { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .outputScale[data-project="true"] em { min-width: 0; height: 32px; justify-content: flex-start; gap: 5px; padding: 0 9px; background: var(--workspace-surface); }
 .outputScale[data-project="true"] svg { width: 18px; height: 18px; padding: 3px; border-radius: 5px; background: color-mix(in srgb, var(--usage-video) 11%, var(--workspace-surface)); color: var(--usage-video); }
 .outputScale[data-project="true"] em[data-kind="image"] svg { background: color-mix(in srgb, var(--usage-image) 11%, var(--workspace-surface)); color: var(--usage-image); }
@@ -105,4 +117,5 @@
 @media (max-width: 1180px) {
   .panel { overflow-x: auto; }
   .header { min-width: 780px; }
+  .table { min-width: 780px; }
 }

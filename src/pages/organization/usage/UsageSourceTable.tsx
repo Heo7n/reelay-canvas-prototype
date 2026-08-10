@@ -53,11 +53,12 @@ function SourceArt({ dimension }: { dimension: SourceDimension }) {
   if (dimension === "project") {
     return (
       <svg viewBox="0 0 32 32" aria-hidden="true">
-        <rect x="5" y="8" width="16" height="19" rx="3" fill="currentColor" fillOpacity=".2" />
-        <path d="M8 7.5h12a2 2 0 0 1 2 2V27H6V9.5a2 2 0 0 1 2-2Z" fill="currentColor" />
-        <path d="M10 12h2v2h-2zm5 0h2v2h-2zm-5 5h2v2h-2zm5 0h2v2h-2zm-5 5h2v2h-2zm5 0h2v2h-2z" fill="#fff" fillOpacity=".9" />
-        <path d="M21 16h4a2 2 0 0 1 2 2v9h-6Z" fill="currentColor" fillOpacity=".67" />
-        <path d="M3.5 27.5h25" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        <path d="M4.5 10A3.5 3.5 0 0 1 8 6.5h5.1l2.5 2.8H24A3.5 3.5 0 0 1 27.5 13v10.5A3.5 3.5 0 0 1 24 27H8a3.5 3.5 0 0 1-3.5-3.5Z" fill="currentColor" fillOpacity=".2" />
+        <path d="M4.5 12.2h23v11.3A3.5 3.5 0 0 1 24 27H8a3.5 3.5 0 0 1-3.5-3.5Z" fill="currentColor" />
+        <rect x="8.5" y="15.5" width="4.2" height="7.5" rx="1.2" fill="#fff" fillOpacity=".92" />
+        <rect x="13.9" y="15.5" width="4.2" height="5" rx="1.2" fill="#fff" fillOpacity=".72" />
+        <rect x="19.3" y="15.5" width="4.2" height="6.3" rx="1.2" fill="#fff" fillOpacity=".84" />
+        <path d="M8.5 10h7.7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
       </svg>
     );
   }
@@ -164,8 +165,8 @@ export function UsageSourceTable({
           {dimension === "model" ? <span>类型</span> : null}
           <span>消耗积分</span>
           <span>占比</span>
-          <span>{dimension === "model" ? "调用次数" : dimension === "project" ? "任务量" : "任务数"}</span>
-          {dimension === "model" ? <span>单次平均消耗</span> : dimension === "member" ? <span>产出规模</span> : null}
+          <span>{dimension === "model" ? "调用次数" : "任务量"}</span>
+          {dimension === "model" ? <span>单次平均消耗</span> : null}
           <span aria-hidden="true" />
         </div>
         {filtered.map((item) => {
@@ -188,34 +189,22 @@ export function UsageSourceTable({
               ) : null}
               <span className={styles.creditsCell}>
                 <strong className={styles.credits}>{numberFormatter.format(item.credits)}</strong>
-                {dimension === "project" ? (
-                  <i className={styles.creditBar} aria-hidden="true">
-                    <b style={{ width: `${Math.max(3, item.share * 100)}%` }} />
-                  </i>
-                ) : null}
               </span>
               <span className={styles.share} data-compact={dimension === "project" || undefined}>
-                {dimension !== "project" ? <i aria-hidden="true"><b style={{ width: `${Math.max(3, item.share * 100)}%` }} /></i> : null}
+                <i aria-hidden="true"><b style={{ width: `${Math.max(3, item.share * 100)}%` }} /></i>
                 <strong>{percentFormatter.format(item.share)}</strong>
               </span>
               {dimension === "model" ? (
                 <span className={styles.metric}>{numberFormatter.format(item.tasks)}</span>
-              ) : dimension === "project" ? (
+              ) : (
                 <span className={styles.outputScale} data-project="true">
                   <em data-kind="video"><Play /><span>视频</span><strong>{numberFormatter.format(item.videoSeconds)}</strong><small>s</small></em>
                   <em data-kind="image"><ImageIcon /><span>图片</span><strong>{numberFormatter.format(item.imageCount)}</strong><small>张</small></em>
                   <em data-kind="processing"><SlidersHorizontal /><span>媒体处理</span><strong>{numberFormatter.format(processingTasks)}</strong><small>次</small></em>
                 </span>
-              ) : (
-                <span className={styles.metric}>{numberFormatter.format(item.tasks)}</span>
               )}
               {dimension === "model" ? (
                 <span className={styles.metric}>{item.tasks > 0 ? (item.credits / item.tasks).toFixed(2) : "—"}</span>
-              ) : dimension === "member" ? (
-                <span className={styles.outputScale}>
-                  {item.videoSeconds > 0 ? <em><Play />{numberFormatter.format(item.videoSeconds)}s</em> : null}
-                  {item.imageCount > 0 ? <em><ImageIcon />{numberFormatter.format(item.imageCount)}张</em> : null}
-                </span>
               ) : null}
               <ChevronRight className={styles.chevron} aria-hidden="true" />
             </button>
