@@ -377,7 +377,7 @@ describe("organization center", () => {
     expect(screen.getByRole("heading", { name: "概览" })).toBeInTheDocument();
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
-    expect(screen.getByText("预计可用")).toBeInTheDocument();
+    expect(screen.getByText("预计可用天数")).toBeInTheDocument();
     expect(screen.getByText("按近30天日均估算")).toBeInTheDocument();
     expect(screen.getByText("近30天日均")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出报表" })).toBeInTheDocument();

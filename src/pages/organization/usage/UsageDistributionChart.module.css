@@ -1,6 +1,6 @@
 .horizontalChart {
   display: grid;
-  min-height: 288px;
+  min-height: 340px;
   grid-template-rows: 1fr;
   margin-top: 10px;
   padding: 8px 4px 2px 0;
@@ -36,8 +36,8 @@
   height: 100%;
   overflow: hidden;
   border-radius: 3px;
-  background: linear-gradient(90deg, #6694f5, #a8c3ff);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #5f8df4 18%, transparent);
+  background: linear-gradient(90deg, var(--usage-accent), color-mix(in srgb, var(--usage-accent) 58%, #fff));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-accent) 14%, transparent);
 }
 
 .horizontalTrack strong {
@@ -85,6 +85,9 @@
 .plotScroller {
   overflow-x: auto;
   overflow-y: hidden;
+  padding-bottom: 4px;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--workspace-muted) 35%, transparent) transparent;
 }
@@ -96,21 +99,19 @@
 .plotCanvas { position: relative; height: 296px; }
 .plotSvg { display: block; width: 100%; height: 296px; overflow: visible; }
 .gridLine { stroke: var(--workspace-border); stroke-dasharray: 4 4; stroke-width: 1; }
-.video { fill: #5c8ef7; background: #5c8ef7; }
-.image { fill: #62caae; background: #62caae; }
-.processing { fill: #8c6fe6; background: #8c6fe6; }
+.video { fill: var(--usage-video); background: var(--usage-video); }
+.image { fill: var(--usage-image); background: var(--usage-image); }
+.processing { fill: var(--usage-processing); background: var(--usage-processing); }
 .hitArea { fill: transparent; cursor: default; }
 .xLabel { fill: var(--workspace-subtle); font-size: 10.5px; }
-.totalLine { fill: none; stroke: #8eb4ff; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; opacity: .92; }
-.totalPoint { fill: #8eb4ff; stroke: var(--workspace-surface); stroke-width: 2; transition: r .12s ease, fill .12s ease; }
-.totalPoint[data-active="true"] { fill: #6f9ff9; stroke-width: 2.5; }
 
 .tooltip {
   --tooltip-x: -50%;
+  --tooltip-arrow-x: 50%;
   position: absolute;
   z-index: 3;
   display: grid;
-  width: 178px;
+  width: 176px;
   gap: 6px;
   padding: 10px 11px 9px;
   transform: translate(var(--tooltip-x), 12px);
@@ -123,20 +124,16 @@
   backdrop-filter: blur(10px);
 }
 
-.tooltip::before { position: absolute; top: -5px; left: 50%; width: 9px; height: 9px; transform: translateX(-50%) rotate(45deg); border-top: 1px solid var(--workspace-border); border-left: 1px solid var(--workspace-border); background: var(--workspace-surface); content: ""; }
-.tooltip[data-edge="start"] { --tooltip-x: -12%; }
-.tooltip[data-edge="end"] { --tooltip-x: -88%; }
+.tooltip::before { position: absolute; top: -5px; left: var(--tooltip-arrow-x); width: 9px; height: 9px; transform: translateX(-50%) rotate(45deg); border-top: 1px solid var(--workspace-border); border-left: 1px solid var(--workspace-border); background: var(--workspace-surface); content: ""; }
+.tooltip[data-edge="start"] { --tooltip-x: -12%; --tooltip-arrow-x: 12%; }
+.tooltip[data-edge="end"] { --tooltip-x: -88%; --tooltip-arrow-x: 88%; }
 .tooltip[data-placement="above"] { transform: translate(var(--tooltip-x), calc(-100% - 12px)); }
 .tooltip[data-placement="above"]::before { top: auto; bottom: -5px; transform: translateX(-50%) rotate(225deg); }
 .tooltip strong { padding-bottom: 2px; font-size: 12px; font-weight: 680; }
 .tooltip > span { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; color: var(--workspace-muted); font-size: 11px; }
 .tooltip i { width: 7px; height: 7px; border-radius: 2px; }
 .tooltip b { color: var(--workspace-text); font-weight: 650; font-variant-numeric: tabular-nums; }
-.totalDot { border-radius: 50% !important; background: #78a7ff; }
-.taskDot { border-radius: 50% !important; background: #b7cbf8; }
-.tooltipComposition { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding-top: 6px; border-top: 1px solid var(--workspace-border); }
-.tooltipComposition span { display: inline-flex; min-width: 0; align-items: center; gap: 4px; color: var(--workspace-subtle); font-size: 9px; font-variant-numeric: tabular-nums; }
-.tooltipComposition i { flex: 0 0 auto; }
+.totalDot { border-radius: 50% !important; background: var(--usage-accent); }
 
 .legend {
   grid-column: 2;
@@ -150,7 +147,6 @@
 
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 9px; height: 9px; border-radius: 2px; }
-.lineLegend { width: 18px !important; height: 2px !important; border-radius: 999px !important; background: #78a7ff; }
 
 @media (max-width: 1120px) {
   .horizontalRow { grid-template-columns: 88px minmax(120px, 1fr); gap: 8px; }

@@ -19,38 +19,31 @@ const SEGMENTS = [
 function niceMaximum(value: number): number {
   if (value <= 0) return 100;
   const magnitude = 10 ** Math.floor(Math.log10(value));
-  return Math.ceil(value / magnitude) * magnitude;
+  const normalized = value / magnitude;
+  const factor = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+    .find((candidate) => candidate >= normalized) ?? 10;
+  return factor * magnitude;
 }
 
 function compactNumber(value: number): string {
-  if (value >= 10_000) return `${Math.round(value / 1_000)}k`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 5_000 ? 0 : 1)}k`;
+  if (value >= 1_000) {
+    const scaled = value / 1_000;
+    return `${Number.isInteger(scaled) ? scaled.toFixed(0) : scaled.toFixed(1)}k`;
+  }
   return numberFormatter.format(value);
 }
 
 function axisLabel(point: UsageTimelinePoint): string {
+  if (point.label.includes("–") || point.label.includes("年")) return point.label;
   return /^\d{4}-\d{2}-\d{2}$/.test(point.key)
     ? point.key.slice(5)
     : point.label;
 }
 
-function smoothLinePath(points: { x: number; y: number }[]): string {
-  if (points.length === 0) return "";
-  if (points.length === 1) return `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
-
-  return points.reduce((path, point, index) => {
-    if (index === 0) return `M${point.x.toFixed(1)},${point.y.toFixed(1)}`;
-    const previous = points[index - 1];
-    const beforePrevious = points[index - 2] ?? previous;
-    const next = points[index + 1] ?? point;
-    const control1X = previous.x + (point.x - beforePrevious.x) / 6;
-    const lowerY = Math.min(previous.y, point.y);
-    const upperY = Math.max(previous.y, point.y);
-    const control1Y = Math.min(upperY, Math.max(lowerY, previous.y + (point.y - beforePrevious.y) / 6));
-    const control2X = point.x - (next.x - previous.x) / 6;
-    const control2Y = Math.min(upperY, Math.max(lowerY, point.y - (next.y - previous.y) / 6));
-    return `${path} C${control1X.toFixed(1)},${control1Y.toFixed(1)} ${control2X.toFixed(1)},${control2Y.toFixed(1)} ${point.x.toFixed(1)},${point.y.toFixed(1)}`;
-  }, "");
+function minimumSlotWidth(points: UsageTimelinePoint[]): number {
+  if (points.some((point) => point.label.includes("年"))) return 78;
+  if (points.some((point) => point.label.includes("–"))) return 70;
+  return 38;
 }
 
 export function UsageDistributionChart({
@@ -60,6 +53,7 @@ export function UsageDistributionChart({
 }: UsageDistributionChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const maximum = useMemo(
     () => niceMaximum(Math.max(0, ...points.map((point) => point.total)) * 1.08),
@@ -69,7 +63,9 @@ export function UsageDistributionChart({
 
   useEffect(() => {
     if (horizontal || !scrollRef.current) return;
-    scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    const nextScrollLeft = scrollRef.current.scrollWidth - scrollRef.current.clientWidth;
+    scrollRef.current.scrollLeft = nextScrollLeft;
+    setScrollLeft(nextScrollLeft);
   }, [horizontal, points.length, viewportWidth]);
 
   useEffect(() => {
@@ -112,7 +108,10 @@ export function UsageDistributionChart({
   const chartBottom = 46;
   const plotHeight = chartHeight - chartTop - chartBottom;
   const visiblePointCount = Math.min(15, Math.max(1, points.length));
-  const slotWidth = Math.max(32, (viewportWidth || 860) / (visiblePointCount + 0.5));
+  const slotWidth = Math.max(
+    minimumSlotWidth(points),
+    (viewportWidth || 860) / (visiblePointCount + 0.5),
+  );
   const chartWidth = Math.max(viewportWidth || 860, points.length * slotWidth);
   const barWidth = Math.max(18, Math.min(26, slotWidth * 0.52));
   const yTicks = [1, 0.75, 0.5, 0.25, 0];
@@ -121,15 +120,17 @@ export function UsageDistributionChart({
     ? 0
     : (activeIndex + 0.5) * (chartWidth / Math.max(1, points.length));
   const activeY = activePoint
-    ? chartTop + plotHeight - (activePoint.total / maximum) * plotHeight
+    ? Math.max(chartTop + 2, chartTop + plotHeight - (activePoint.total / maximum) * plotHeight - 9)
     : 0;
+  const activeViewportX = activeX - scrollLeft;
+  const tooltipEdge = activeIndex === null || viewportWidth <= 0
+    ? undefined
+    : activeViewportX < 98
+      ? "start"
+      : activeViewportX > viewportWidth - 98
+        ? "end"
+        : undefined;
   const tooltipPlacement = activeY > chartTop + plotHeight * 0.48 ? "above" : "below";
-  const linePoints = points.map((point, index) => {
-    const x = (index + 0.5) * (chartWidth / Math.max(1, points.length));
-    const y = chartTop + plotHeight - (point.total / maximum) * plotHeight;
-    return { x, y };
-  });
-  const linePath = smoothLinePath(linePoints);
 
   return (
     <div className={styles.stackedChart} aria-label={`${rangeLabel}积分消耗分布`}>
@@ -141,7 +142,11 @@ export function UsageDistributionChart({
           </span>
         ))}
       </div>
-      <div ref={scrollRef} className={styles.plotScroller}>
+      <div
+        ref={scrollRef}
+        className={styles.plotScroller}
+        onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
+      >
         <div className={styles.plotCanvas} style={{ width: `${chartWidth}px` }}>
           <svg
             className={styles.plotSvg}
@@ -191,47 +196,28 @@ export function UsageDistributionChart({
                 </g>
               );
             })}
-            <path d={linePath} className={styles.totalLine} />
-            {points.map((point, index) => {
-              const x = (index + 0.5) * (chartWidth / Math.max(1, points.length));
-              const y = chartTop + plotHeight - (point.total / maximum) * plotHeight;
-              return (
-                <circle
-                  key={point.key}
-                  cx={x}
-                  cy={y}
-                  r={activeIndex === index ? "4.8" : "3.8"}
-                  className={styles.totalPoint}
-                  data-active={activeIndex === index || undefined}
-                />
-              );
-            })}
           </svg>
           {activePoint ? (
             <div
               className={styles.tooltip}
-              data-edge={activeIndex !== null && activeIndex < 2 ? "start" : activeIndex !== null && activeIndex > points.length - 3 ? "end" : undefined}
+              data-edge={tooltipEdge}
               data-placement={tooltipPlacement}
               style={{ left: `${activeX}px`, top: `${activeY}px` }}
             >
               <strong>{activePoint.label}</strong>
-              <span><i className={styles.totalDot} />消耗积分 <b>{numberFormatter.format(activePoint.total)}</b></span>
-              <span><i className={styles.taskDot} />任务数量 <b>{numberFormatter.format(activePoint.tasks)}</b></span>
-              <div className={styles.tooltipComposition} aria-label="消耗成分">
-                {SEGMENTS.map((segment) => (
-                  <span key={segment.id} title={`${segment.label} ${numberFormatter.format(activePoint.segments[segment.id])}`}>
-                    <i className={segment.className} />
-                    {compactNumber(activePoint.segments[segment.id])}
-                  </span>
-                ))}
-              </div>
+              <span><i className={styles.totalDot} />总消耗 <b>{numberFormatter.format(activePoint.total)}</b></span>
+              {SEGMENTS.map((segment) => (
+                <span key={segment.id}>
+                  <i className={segment.className} />{segment.label}
+                  <b>{numberFormatter.format(activePoint.segments[segment.id])}</b>
+                </span>
+              ))}
             </div>
           ) : null}
         </div>
       </div>
       <div className={styles.legend} aria-hidden="true">
         {SEGMENTS.map((segment) => <span key={segment.id}><i className={segment.className} />{segment.label}</span>)}
-        <span><i className={styles.lineLegend} />总消耗</span>
       </div>
     </div>
   );

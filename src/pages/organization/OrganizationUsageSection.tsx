@@ -1,8 +1,8 @@
 import {
-  CalendarDays,
   ChevronDown,
   ChevronRight,
   Download,
+  Info,
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -89,8 +89,8 @@ function OverviewArt({ kind }: { kind: "credits" | "trend" }) {
       <svg viewBox="0 0 48 48" aria-hidden="true">
         <defs>
           <linearGradient id="usage-credit-art" x1="8" y1="5" x2="39" y2="43" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#85a9ff" />
-            <stop offset="1" stopColor="#3478f6" />
+            <stop stopColor="#8b9de2" />
+            <stop offset="1" stopColor="#5770cf" />
           </linearGradient>
         </defs>
         <ellipse cx="24" cy="13" rx="12" ry="5.5" fill="url(#usage-credit-art)" />
@@ -98,7 +98,7 @@ function OverviewArt({ kind }: { kind: "credits" | "trend" }) {
         <path d="M12 22v8c0 3 5.4 5.5 12 5.5S36 33 36 30v-8" fill="url(#usage-credit-art)" opacity=".68" />
         <path d="M12 31v4c0 3 5.4 5.5 12 5.5S36 38 36 35v-4" fill="url(#usage-credit-art)" opacity=".5" />
         <path d="M12 13c0 3 5.4 5.5 12 5.5S36 16 36 13M12 22c0 3 5.4 5.5 12 5.5S36 25 36 22M12 31c0 3 5.4 5.5 12 5.5S36 34 36 31" fill="none" stroke="#fff" strokeOpacity=".78" strokeWidth="1.3" />
-        <path d="M39 8v5M36.5 10.5h5" stroke="#7fa7ff" strokeLinecap="round" strokeWidth="1.7" />
+        <path d="M39 8v5M36.5 10.5h5" stroke="#8092dc" strokeLinecap="round" strokeWidth="1.7" />
       </svg>
     );
   }
@@ -238,8 +238,7 @@ export function OrganizationUsageSection({
   );
   const totalRangeCredits = timeline.reduce((total, point) => total + point.total, 0);
   const displayRangeLabel = rangeLabel(rangePreset, customRange);
-  const horizontalTimeline = rangePreset === "rolling7"
-    || (rangePreset === "custom" && timeline.length <= 7);
+  const horizontalTimeline = rangePreset === "rolling7";
 
   useEffect(() => {
     const closePicker = (event: PointerEvent) => {
@@ -304,29 +303,27 @@ export function OrganizationUsageSection({
       <div className={styles.overviewGrid}>
         <article className={styles.overviewCard}>
           <i className={styles.overviewIcon}><OverviewArt kind="credits" /></i>
-          <div className={styles.overviewMetric}>
+          <div className={styles.overviewMetric} data-accent="true">
             <span>可用积分</span>
             <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
           </div>
           <div className={styles.metricDivider} aria-hidden="true" />
           <div className={styles.overviewMetric}>
-            <span>预计可用 <CalendarDays aria-hidden="true" /></span>
+            <span>预计可用天数 <Info aria-hidden="true" /></span>
             <strong>{formatEstimatedDays(summary.estimatedDaysRecent)}</strong>
             <small>按近30天日均估算</small>
           </div>
-          <span className={styles.cardGlow} aria-hidden="true" />
-        </article>
-        <article className={styles.overviewCard}>
-          <i className={styles.overviewIcon}><OverviewArt kind="trend" /></i>
-          <div className={styles.overviewMetric}>
+          <div className={styles.metricDivider} aria-hidden="true" />
+          <div className={styles.overviewMetric} data-compact="true">
             <span>今日已消耗</span>
             <strong>{numberFormatter.format(todayCredits)}</strong>
           </div>
           <div className={styles.metricDivider} aria-hidden="true" />
-          <div className={styles.overviewMetric}>
+          <div className={styles.overviewMetric} data-compact="true">
             <span>近30天日均</span>
             <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
           </div>
+          <span className={styles.cardGlow} aria-hidden="true" />
         </article>
       </div>
 
@@ -423,7 +420,9 @@ export function OrganizationUsageSection({
         <section className={styles.timePanel} aria-labelledby="usage-time-title">
           <header className={styles.panelHeading}>
             <h3 id="usage-time-title">时间分布</h3>
-            <span>{displayRangeLabel}总消耗 <strong>{numberFormatter.format(totalRangeCredits)}</strong> 积分</span>
+            <span className={styles.rangeTotal}>
+              <span>总消耗 <strong>{numberFormatter.format(totalRangeCredits)}</strong> 积分</span>
+            </span>
           </header>
           <UsageDistributionChart
             horizontal={horizontalTimeline}
