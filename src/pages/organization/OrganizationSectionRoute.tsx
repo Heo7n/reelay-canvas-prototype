@@ -1,4 +1,4 @@
-import { Navigate, useOutletContext } from "react-router-dom";
+import { Navigate, useLocation, useOutletContext } from "react-router-dom";
 
 import { routePaths } from "../../app/routes";
 import { OrganizationCreditsSection } from "./OrganizationCreditsSection";
@@ -13,6 +13,7 @@ interface OrganizationSectionRouteProps {
 }
 
 export function OrganizationSectionRoute({ section }: OrganizationSectionRouteProps) {
+  const location = useLocation();
   const { data, showNotice } = useOutletContext<OrganizationCenterOutletContext>();
 
   if (section === "management") {
@@ -33,6 +34,7 @@ export function OrganizationSectionRoute({ section }: OrganizationSectionRoutePr
     return (
       <Navigate
         replace
+        state={location.state}
         to={routePaths.organization(data.currentWorkspace.id)}
       />
     );

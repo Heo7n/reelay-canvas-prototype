@@ -94,7 +94,7 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:navigate"),
     protocolVersion: z.literal(1),
-    target: z.enum(["home", "projects", "logout"]),
+    target: z.enum(["home", "projects", "organization", "logout"]),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

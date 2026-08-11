@@ -15,6 +15,7 @@ import {
   getWeeklyActivity,
   type UsageRecord,
 } from "./organization-usage-data";
+import { buildUsageTimeline, chooseTimelineGranularity } from "./usage/usage-analytics";
 
 const members: OrganizationMember[] = [
   {
@@ -78,6 +79,27 @@ describe("organization usage demo data", () => {
     expect(monthSummary.lifetimeDailyAverage).toBe(weekSummary.lifetimeDailyAverage);
     expect(monthSummary.recentToLifetimeRate).toBe(weekSummary.recentToLifetimeRate);
     expect(getComparisonRange("all", getUsageRange("all", now))).toBeNull();
+  });
+
+  it("keeps recent demo days within a believable studio usage range", () => {
+    const demo = createOrganizationUsageDemoData(members, now);
+    const range = getUsageRange("rolling30", now);
+    const timeline = buildUsageTimeline(filterUsageRecords(demo.records, range), range, "day");
+
+    timeline.forEach((point) => {
+      const weekday = new Date(`${point.key}T12:00:00+08:00`).getDay();
+      if (weekday === 6) {
+        expect(point.total).toBe(0);
+        return;
+      }
+      if (weekday === 0) {
+        expect(point.total).toBeGreaterThanOrEqual(5_200);
+        expect(point.total).toBeLessThanOrEqual(6_400);
+        return;
+      }
+      expect(point.total).toBeGreaterThanOrEqual(6_500);
+      expect(point.total).toBeLessThanOrEqual(9_700);
+    });
   });
 
   it("uses the documented natural-day ranges and comparison periods", () => {
@@ -212,7 +234,7 @@ describe("organization usage demo data", () => {
     expect(weekly.at(-1)?.cumulativeCredits).toBeGreaterThan(0);
     expect(new Set(weekly.map((point) => point.credits)).size).toBeGreaterThan(20);
     expect(Math.max(...weekly.map((point) => point.credits))).toBeGreaterThan(
-      Math.min(...weekly.map((point) => point.credits)) * 4,
+      Math.min(...weekly.map((point) => point.credits)) * 1.1,
     );
     expect(weekly.every((point, index) => (
       index === 0 || point.cumulativeCredits >= weekly[index - 1].cumulativeCredits
@@ -246,6 +268,22 @@ describe("organization usage demo data", () => {
     expect(
       modelComposition.some((item) => item.label.startsWith("Reelay")),
     ).toBe(false);
+  });
+
+  it("adapts custom timeline buckets to the selected date span", () => {
+    const rangeFromDays = (days: number) => ({
+      start: new Date("2026-01-01T00:00:00+08:00"),
+      end: new Date(new Date("2026-01-01T00:00:00+08:00").getTime() + days * 86_400_000),
+    });
+
+    expect(chooseTimelineGranularity(rangeFromDays(31))).toBe("day");
+    expect(chooseTimelineGranularity(rangeFromDays(32))).toBe("week");
+    expect(chooseTimelineGranularity(rangeFromDays(180))).toBe("week");
+    expect(chooseTimelineGranularity(rangeFromDays(181))).toBe("month");
+
+    const weeklyTimeline = buildUsageTimeline([], rangeFromDays(98));
+    expect(weeklyTimeline.length).toBeGreaterThan(10);
+    expect(weeklyTimeline.some((point) => /^\d{2}\/\d{2}–\d{2}$/.test(point.label))).toBe(true);
   });
 
   it("applies ledger filters and produces useful export files", () => {

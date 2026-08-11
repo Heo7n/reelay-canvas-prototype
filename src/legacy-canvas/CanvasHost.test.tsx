@@ -65,7 +65,13 @@ function render(ui: ReactElement) {
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.pathname}</output>;
+  const state = location.state as { organizationReturnTo?: string } | null;
+  return (
+    <>
+      <output data-testid="location">{location.pathname}</output>
+      <output data-testid="organization-return-to">{state?.organizationReturnTo ?? ""}</output>
+    </>
+  );
 }
 
 function dispatchCanvasMessage(frame: HTMLIFrameElement, data: unknown): void {
@@ -101,7 +107,7 @@ const dirtyMessage = (dirty: boolean) => ({
   dirty,
 });
 
-const navigateMessage = (target: "home" | "projects" | "logout") => ({
+const navigateMessage = (target: "home" | "projects" | "organization" | "logout") => ({
   source: "reelay-legacy-canvas",
   type: "canvas:navigate",
   protocolVersion: 1,
@@ -417,6 +423,24 @@ describe("CanvasHost", () => {
     act(() => dispatchCanvasMessage(frame, navigateMessage("logout")));
 
     expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens organization center with the current canvas recorded as its return target", async () => {
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        context={editableContext}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    await waitFor(() => expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved"));
+
+    act(() => dispatchCanvasMessage(frame, navigateMessage("organization")));
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/w/organization-1/organization");
+    expect(screen.getByTestId("organization-return-to")).toHaveTextContent(
+      "/w/organization-1/projects/project-1/canvases/main",
+    );
   });
 
   it("hands the legacy account action to the routed account dialog", async () => {

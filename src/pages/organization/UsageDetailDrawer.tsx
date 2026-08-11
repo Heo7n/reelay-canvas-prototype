@@ -49,7 +49,10 @@ interface ModelBreakdown {
 }
 
 function getDimensionId(record: UsageRecord, dimension: UsageDimension): string {
-  if (dimension === "type") return record.activityKind;
+  if (dimension === "type") {
+    if (record.activityKind === "video" || record.activityKind === "image") return record.activityKind;
+    return "processing";
+  }
   if (dimension === "member") return record.memberId;
   if (dimension === "project") return record.projectId;
   return record.modelId;
@@ -64,7 +67,8 @@ function filterByCompositionItem(
   if (!composition.some((entry) => entry.id === item.id)) return [];
 
   return records.filter(
-    (record) => getDimensionId(record, dimension) === item.id,
+    (record) => getDimensionId(record, dimension) === item.id
+      && (dimension !== "type" || record.credits > 0),
   );
 }
 
