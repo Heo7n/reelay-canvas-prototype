@@ -403,7 +403,7 @@ describe("organization center", () => {
     fireEvent.click(screen.getByRole("button", { name: "近30天" }));
     expect(screen.getByRole("button", { name: "近30天" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("img", { name: /近30天每日堆叠柱形图/ })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /总消耗.*积分/ })).toHaveLength(30);
+    expect(screen.queryByRole("button", { name: /总消耗.*积分/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "按成员" }));
     expect(screen.getByRole("button", { name: "按成员" })).toHaveAttribute("aria-pressed", "true");

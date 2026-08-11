@@ -1,8 +1,8 @@
 .usageSection {
   --usage-accent: #5770cf;
-  --usage-video: #6078c8;
-  --usage-image: #5a9a8b;
-  --usage-processing: #8473b1;
+  --usage-video: #6174bc;
+  --usage-image: #688f86;
+  --usage-processing: #7d7896;
   display: grid;
   width: 100%;
   max-width: none;
@@ -40,46 +40,44 @@
 .exportButton:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
 .exportButton svg { width: 16px; }
 
-.overviewGrid { margin-top: 12px; }
+.overviewGrid { margin-top: 10px; }
 .overviewCard {
   --overview-tint: #5770cf;
   position: relative;
   display: grid;
-  min-height: 112px;
+  min-height: 96px;
   overflow: hidden;
-  grid-template-columns: 60px repeat(3, minmax(0, 1fr) 1px) minmax(0, 1fr);
+  grid-template-columns: 50px repeat(3, minmax(0, 1fr) 1px) minmax(0, 1fr);
   align-items: center;
-  gap: 18px;
-  padding: 16px 24px;
-  border: 1px solid color-mix(in srgb, var(--overview-tint) 20%, var(--workspace-border));
-  border-radius: 14px;
+  gap: 16px;
+  padding: 13px 20px;
+  border: 1px solid color-mix(in srgb, var(--overview-tint) 11%, var(--workspace-border));
+  border-radius: 10px;
   background:
-    linear-gradient(112deg, color-mix(in srgb, var(--overview-tint) 6%, var(--workspace-surface)), transparent 50%),
+    linear-gradient(108deg, color-mix(in srgb, var(--overview-tint) 3%, var(--workspace-surface)), transparent 44%),
     var(--workspace-surface);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--overview-tint) 7%, transparent),
-    0 10px 24px color-mix(in srgb, #536486 7%, transparent);
+  box-shadow: 0 6px 18px rgba(29, 36, 52, 0.025);
 }
-.overviewIcon { position: relative; z-index: 1; display: grid; width: 58px; height: 58px; place-items: center; border-radius: 50%; background: radial-gradient(circle at 34% 28%, color-mix(in srgb, #fff 96%, var(--overview-tint)), color-mix(in srgb, var(--overview-tint) 11%, var(--workspace-surface)) 72%); color: var(--overview-tint); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--overview-tint) 9%, transparent), 0 8px 20px color-mix(in srgb, var(--overview-tint) 11%, transparent); }
-.overviewIcon::after { position: absolute; top: 1px; right: -11px; width: 1px; height: 56px; background: color-mix(in srgb, var(--overview-tint) 14%, var(--workspace-border)); content: ""; }
-.overviewIcon svg { width: 42px; height: 42px; filter: drop-shadow(0 6px 9px color-mix(in srgb, var(--overview-tint) 20%, transparent)); }
+.overviewIcon { position: relative; z-index: 1; display: grid; width: 46px; height: 46px; place-items: center; border-radius: 12px; background: color-mix(in srgb, var(--overview-tint) 7%, var(--workspace-surface)); color: var(--overview-tint); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--overview-tint) 8%, transparent); }
+.overviewIcon::after { position: absolute; top: -3px; right: -11px; width: 1px; height: 52px; background: color-mix(in srgb, var(--overview-tint) 9%, var(--workspace-border)); content: ""; }
+.overviewIcon svg { width: 34px; height: 34px; filter: saturate(.72); }
 .overviewMetric { position: relative; z-index: 1; display: grid; min-width: 0; align-content: center; gap: 4px; }
 .overviewMetric > span { display: inline-flex; align-items: center; gap: 6px; color: color-mix(in srgb, var(--workspace-text) 84%, var(--workspace-muted)); font-size: 11px; font-weight: 620; }
 .overviewMetric > span svg { width: 13px; color: var(--workspace-subtle); }
-.overviewMetric strong { color: var(--workspace-text); font-size: clamp(25px, 1.65vw, 30px); font-weight: 720; line-height: 1.05; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.overviewMetric strong { color: var(--workspace-text); font-size: clamp(23px, 1.48vw, 28px); font-weight: 710; line-height: 1.05; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .overviewMetric[data-accent="true"] strong { color: var(--overview-tint); }
-.overviewMetric[data-compact="true"] strong { font-size: clamp(23px, 1.45vw, 27px); }
+.overviewMetric[data-compact="true"] strong { font-size: clamp(21px, 1.35vw, 25px); }
 :global(html[data-theme="dark"]) .overviewMetric strong { color: var(--workspace-text); }
 .overviewMetric[data-accent="true"] strong { color: var(--overview-tint); }
 .overviewMetric small { color: var(--workspace-subtle); font-size: 10.5px; }
-.metricDivider { position: relative; z-index: 1; width: 1px; height: 54px; background: color-mix(in srgb, var(--overview-tint) 14%, var(--workspace-border)); }
-.cardGlow { position: absolute; top: -28px; right: -22px; display: block; width: 220px; height: 132px; transform: rotate(-7deg); border-radius: 62% 38% 54% 46% / 48% 55% 45% 52%; background: radial-gradient(ellipse at 38% 60%, color-mix(in srgb, var(--overview-tint) 7%, transparent), transparent 68%); pointer-events: none; }
+.metricDivider { position: relative; z-index: 1; width: 1px; height: 46px; background: color-mix(in srgb, var(--overview-tint) 8%, var(--workspace-border)); }
+.cardGlow { display: none; }
 
-.analysisHeading { margin-top: 26px; }
+.analysisHeading { margin-top: 20px; }
 .rangeTabs { display: flex; border: 1px solid var(--workspace-border); border-radius: 8px; }
 .rangeTabs > button, .dateRangeControl > button { display: inline-flex; height: 34px; min-width: 78px; align-items: center; justify-content: center; gap: 5px; padding: 0 13px; border: 0; border-right: 1px solid var(--workspace-border); background: var(--workspace-surface); color: var(--workspace-muted); font-size: 11px; cursor: pointer; }
 .rangeTabs > button:first-child { border-radius: 7px 0 0 7px; }
-.rangeTabs button[aria-pressed="true"] { background: color-mix(in srgb, var(--usage-accent) 7%, var(--workspace-surface)); color: var(--usage-accent); font-weight: 650; }
+.rangeTabs button[aria-pressed="true"] { background: var(--workspace-text); color: var(--workspace-bg); font-weight: 650; }
 .dateRangeControl { position: relative; }
 .dateRangeControl > button { min-width: 112px; border-right: 0; border-radius: 0 7px 7px 0; }
 .dateRangeControl svg { width: 14px; }
@@ -93,35 +91,46 @@
 .datePopover footer button { height: 32px; padding: 0 13px; border: 1px solid var(--workspace-border); border-radius: 8px; background: var(--workspace-surface); color: var(--workspace-text); cursor: pointer; }
 .datePopover footer .applyButton { border-color: #171719; background: #171719; color: #fff; }
 
-.analysisGrid { display: grid; grid-template-columns: minmax(360px, 2fr) minmax(0, 3fr); gap: 14px; margin-top: 12px; }
-.typePanel, .timePanel { min-width: 0; min-height: 372px; padding: 18px; border: 1px solid var(--workspace-border); border-radius: 14px; background: color-mix(in srgb, var(--workspace-surface) 74%, #fafaf9); box-shadow: 0 8px 22px rgba(20, 22, 26, 0.025); }
+.analysisGrid { display: grid; grid-template-columns: minmax(292px, .74fr) minmax(0, 1.7fr); gap: 12px; margin-top: 10px; }
+.typePanel, .timePanel { min-width: 0; min-height: 340px; padding: 16px; border: 1px solid var(--workspace-border); border-radius: 10px; background: var(--workspace-surface); box-shadow: none; }
 .typePanel { display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .typePanel > h3, .panelHeading h3 { margin: 0; color: var(--workspace-text); font-size: 15px; font-weight: 720; }
-.typeCards { display: grid; min-height: 0; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
-.typeCard { display: grid; min-height: 0; grid-template-columns: 48px minmax(94px, 1fr) minmax(68px, .62fr) minmax(76px, .68fr) 14px; align-items: center; gap: 8px; padding: 11px 10px; border: 1px solid var(--workspace-border); border-radius: 11px; background: var(--workspace-surface); transition: border-color .16s ease, background .16s ease; }
-.typeCard:hover { border-color: var(--workspace-border-strong); background: var(--workspace-hover); }
-.typeIcon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 11px; background: linear-gradient(145deg, color-mix(in srgb, var(--usage-video) 10%, var(--workspace-surface)), color-mix(in srgb, var(--usage-video) 3%, var(--workspace-surface))); color: var(--usage-video); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-video) 9%, transparent); }
-.typeIcon svg { width: 36px; height: 36px; filter: drop-shadow(0 4px 6px color-mix(in srgb, currentColor 10%, transparent)); }
-.typeCard[data-kind="image"] .typeIcon { background: color-mix(in srgb, var(--usage-image) 8%, var(--workspace-surface)); color: var(--usage-image); }
-.typeCard[data-kind="processing"] .typeIcon { background: color-mix(in srgb, var(--usage-processing) 8%, var(--workspace-surface)); color: var(--usage-processing); }
-.typeName { display: grid; gap: 6px; }
-.typeName strong { color: var(--workspace-text); font-size: 14px; }
-.typeCredits strong { font-size: 16px; }
-.typeOutput strong { font-size: 15px; }
-.typeName span, .typeCredits span, .typeOutput span { color: var(--workspace-subtle); font-size: 10px; }
-.typeName span { color: var(--usage-video); }
-.typeCard[data-kind="image"] .typeName span { color: var(--usage-image); }
-.typeCard[data-kind="processing"] .typeName span { color: var(--usage-processing); }
-.typeName > i { width: 100%; height: 5px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--workspace-muted) 14%, transparent); }
-.typeName b { display: block; height: 100%; border-radius: inherit; background: var(--usage-video); }
-.typeCard[data-kind="image"] .typeName b { background: var(--usage-image); }
-.typeCard[data-kind="processing"] .typeName b { background: var(--usage-processing); }
-.typeCredits, .typeOutput { position: relative; display: grid; gap: 5px; padding-left: 11px; font-variant-numeric: tabular-nums; }
-.typeCredits::before, .typeOutput::before { position: absolute; top: 50%; left: 0; width: 1px; height: 42px; transform: translateY(-50%); background: var(--workspace-border); content: ""; }
-.typeCredits strong { color: var(--usage-video); }
-.typeCard[data-kind="image"] .typeCredits strong { color: var(--usage-image); }
-.typeCard[data-kind="processing"] .typeCredits strong { color: var(--usage-processing); }
-.typeChevron { width: 18px; color: var(--workspace-subtle); }
+.typeCards { display: grid; min-height: 0; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.typeCard {
+  --type-color: var(--usage-video);
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  grid-template-columns: 46px minmax(0, 1fr) 56px 14px;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--workspace-border) 88%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--workspace-surface) 96%, var(--workspace-bg));
+  color: var(--workspace-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.typeCard[data-kind="image"] { --type-color: var(--usage-image); }
+.typeCard[data-kind="processing"] { --type-color: var(--usage-processing); }
+.typeCard:hover { border-color: color-mix(in srgb, var(--type-color) 30%, var(--workspace-border)); background: color-mix(in srgb, var(--type-color) 3%, var(--workspace-surface)); box-shadow: 0 5px 14px rgb(31 40 58 / 5%); }
+.typeCard:focus-visible { outline: 2px solid color-mix(in srgb, var(--type-color) 68%, transparent); outline-offset: 2px; }
+.typeIcon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 11px; background: color-mix(in srgb, var(--type-color) 10%, var(--workspace-surface)); color: var(--type-color); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--type-color) 12%, transparent); }
+.typeIcon svg { width: 23px; height: 23px; stroke-width: 1.8; }
+.typeSummary { display: grid; min-width: 0; gap: 6px; }
+.typeSummary > strong { overflow: hidden; color: var(--workspace-text); font-size: 13.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.typeSummary > span { color: var(--workspace-subtle); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.typeSummary > span b { margin-right: 3px; color: var(--workspace-text); font-size: 15px; font-weight: 700; }
+.typeShare { position: relative; display: grid; width: 54px; height: 54px; place-items: center; color: var(--type-color); }
+.typeShare svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transform: rotate(-90deg); }
+.typeShare circle { fill: none; stroke-width: 5; }
+.typeShareTrack { stroke: color-mix(in srgb, var(--workspace-muted) 12%, transparent); }
+.typeShareValue { stroke: currentColor; stroke-linecap: round; stroke-dasharray: 100; transition: stroke-dashoffset .22s ease; }
+.typeShare > strong { position: relative; color: var(--type-color); font-size: 11px; font-weight: 720; font-variant-numeric: tabular-nums; }
+.typeChevron { width: 17px; color: var(--workspace-subtle); stroke-width: 1.8; }
 
 .panelHeading { min-height: 22px; }
 .panelHeading > span { color: var(--workspace-subtle); font-size: 10px; }
@@ -130,15 +139,16 @@
 .panelHeading .rangeTotal strong { margin: 0 4px; color: var(--workspace-text); font-size: 16px; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 1260px) {
-  .overviewCard { min-height: 106px; grid-template-columns: 54px repeat(3, minmax(0, 1fr) 1px) minmax(0, 1fr); gap: 13px; padding: 14px 18px; }
-  .overviewIcon { width: 52px; height: 52px; }
-  .overviewIcon::after { top: 0; right: -8px; height: 52px; }
-  .overviewIcon svg { width: 38px; height: 38px; }
-  .overviewMetric strong { font-size: clamp(23px, 2.15vw, 28px); }
-  .overviewMetric[data-compact="true"] strong { font-size: clamp(21px, 1.85vw, 25px); }
-  .analysisGrid { grid-template-columns: minmax(340px, 2fr) minmax(0, 3fr); }
-  .typeCard { grid-template-columns: 46px minmax(92px, 1fr) 70px 72px 12px; gap: 8px; padding-inline: 10px; }
-  .typeIcon { width: 44px; height: 44px; }
+  .overviewCard { min-height: 94px; grid-template-columns: 48px repeat(3, minmax(0, 1fr) 1px) minmax(0, 1fr); gap: 12px; padding: 12px 16px; }
+  .overviewIcon { width: 44px; height: 44px; }
+  .overviewIcon::after { top: -2px; right: -8px; height: 48px; }
+  .overviewIcon svg { width: 32px; height: 32px; }
+  .overviewMetric strong { font-size: clamp(22px, 2vw, 27px); }
+  .overviewMetric[data-compact="true"] strong { font-size: clamp(20px, 1.72vw, 24px); }
+  .analysisGrid { grid-template-columns: minmax(292px, .76fr) minmax(0, 1.64fr); }
+  .typeCard { grid-template-columns: 44px minmax(0, 1fr) 52px 12px; gap: 9px; padding-inline: 10px; }
+  .typeIcon { width: 42px; height: 42px; }
+  .typeShare { width: 50px; height: 50px; }
 }
 
 @media (max-width: 980px) {

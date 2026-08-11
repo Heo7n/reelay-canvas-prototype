@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { UsageTimelinePoint } from "./usage-analytics";
 import styles from "./UsageDistributionChart.module.css";
@@ -10,6 +10,10 @@ interface UsageDistributionChartProps {
 }
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
+const TOOLTIP_WIDTH = 168;
+const PLOT_OFFSET_X = 46;
+const TOOLTIP_MARGIN = 0;
+const TOOLTIP_ARROW_MARGIN = 4.5;
 const SEGMENTS = [
   { id: "video" as const, label: "视频生成", className: styles.video },
   { id: "image" as const, label: "图片生成", className: styles.image },
@@ -34,16 +38,16 @@ function compactNumber(value: number): string {
 }
 
 function axisLabel(point: UsageTimelinePoint): string {
-  if (point.label.includes("–") || point.label.includes("年")) return point.label;
+  if (point.label.includes("—") || point.label.includes("年")) return point.label;
   return /^\d{4}-\d{2}-\d{2}$/.test(point.key)
-    ? point.key.slice(5)
+    ? `${Number(point.key.slice(5, 7))}月${Number(point.key.slice(8, 10))}日`
     : point.label;
 }
 
 function minimumSlotWidth(points: UsageTimelinePoint[]): number {
   if (points.some((point) => point.label.includes("年"))) return 78;
-  if (points.some((point) => point.label.includes("–"))) return 70;
-  return 38;
+  if (points.some((point) => point.label.includes("—"))) return 70;
+  return points.length <= 31 ? 28 : 38;
 }
 
 export function UsageDistributionChart({
@@ -65,7 +69,7 @@ export function UsageDistributionChart({
     if (horizontal || !scrollRef.current) return;
     const nextScrollLeft = scrollRef.current.scrollWidth - scrollRef.current.clientWidth;
     scrollRef.current.scrollLeft = nextScrollLeft;
-    setScrollLeft(nextScrollLeft);
+    setScrollLeft(scrollRef.current.scrollLeft);
   }, [horizontal, points.length, viewportWidth]);
 
   useEffect(() => {
@@ -103,33 +107,49 @@ export function UsageDistributionChart({
     );
   }
 
-  const chartHeight = 296;
+  const chartHeight = 268;
   const chartTop = 18;
   const chartBottom = 46;
   const plotHeight = chartHeight - chartTop - chartBottom;
-  const visiblePointCount = Math.min(15, Math.max(1, points.length));
+  const visiblePointCount = points.length <= 31
+    ? Math.max(1, points.length)
+    : Math.min(15, Math.max(1, points.length));
   const slotWidth = Math.max(
     minimumSlotWidth(points),
     (viewportWidth || 860) / (visiblePointCount + 0.5),
   );
   const chartWidth = Math.max(viewportWidth || 860, points.length * slotWidth);
-  const barWidth = Math.max(18, Math.min(26, slotWidth * 0.52));
+  const barWidth = Math.max(16, Math.min(26, slotWidth * 0.56));
+  const labelStep = points.length > 20 ? Math.ceil(points.length / 10) : 1;
   const yTicks = [1, 0.75, 0.5, 0.25, 0];
   const activePoint = activeIndex === null ? null : points[activeIndex];
   const activeX = activeIndex === null
     ? 0
     : (activeIndex + 0.5) * (chartWidth / Math.max(1, points.length));
   const activeY = activePoint
-    ? Math.max(chartTop + 2, chartTop + plotHeight - (activePoint.total / maximum) * plotHeight - 9)
+    ? Math.max(chartTop + 2, chartTop + plotHeight - (activePoint.total / maximum) * plotHeight)
     : 0;
   const activeViewportX = activeX - scrollLeft;
-  const tooltipEdge = activeIndex === null || viewportWidth <= 0
-    ? undefined
-    : activeViewportX < 98
-      ? "start"
-      : activeViewportX > viewportWidth - 98
-        ? "end"
-        : undefined;
+  const plotViewportWidth = viewportWidth || 860;
+  const tooltipTargetX = PLOT_OFFSET_X + activeViewportX;
+  const tooltipMinLeft = PLOT_OFFSET_X + TOOLTIP_MARGIN;
+  const tooltipMaxLeft = Math.max(
+    tooltipMinLeft,
+    PLOT_OFFSET_X + plotViewportWidth - TOOLTIP_WIDTH - TOOLTIP_MARGIN,
+  );
+  const tooltipLeft = Math.max(
+    tooltipMinLeft,
+    Math.min(tooltipTargetX - TOOLTIP_WIDTH / 2, tooltipMaxLeft),
+  );
+  const tooltipArrowX = Math.max(
+    TOOLTIP_ARROW_MARGIN,
+    Math.min(tooltipTargetX - tooltipLeft, TOOLTIP_WIDTH - TOOLTIP_ARROW_MARGIN),
+  );
+  const tooltipStyle = {
+    left: `${tooltipLeft}px`,
+    top: `${activeY}px`,
+    "--tooltip-arrow-x": `${tooltipArrowX}px`,
+  } as CSSProperties;
   const tooltipPlacement = activeY > chartTop + plotHeight * 0.48 ? "above" : "below";
 
   return (
@@ -165,13 +185,8 @@ export function UsageDistributionChart({
               return (
                 <g
                   key={point.key}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${point.fullLabel}，总消耗${numberFormatter.format(point.total)}积分`}
                   onPointerEnter={() => setActiveIndex(index)}
                   onPointerLeave={() => setActiveIndex(null)}
-                  onFocus={() => setActiveIndex(index)}
-                  onBlur={() => setActiveIndex(null)}
                 >
                   {SEGMENTS.map((segment) => {
                     const value = point.segments[segment.id];
@@ -190,32 +205,38 @@ export function UsageDistributionChart({
                     );
                   })}
                   <rect x={(index * slot)} y="0" width={slot} height={chartHeight - 28} className={styles.hitArea} />
-                  <text x={(index + 0.5) * slot} y={chartHeight - 17} textAnchor="middle" className={styles.xLabel}>
-                    {axisLabel(point)}
-                  </text>
+                  {index % labelStep === 0 || index === points.length - 1 ? (
+                    <text
+                      x={index === 0 ? 3 : index === points.length - 1 ? chartWidth - 3 : (index + 0.5) * slot}
+                      y={chartHeight - 17}
+                      textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+                      className={styles.xLabel}
+                    >
+                      {axisLabel(point)}
+                    </text>
+                  ) : null}
                 </g>
               );
             })}
           </svg>
-          {activePoint ? (
-            <div
-              className={styles.tooltip}
-              data-edge={tooltipEdge}
-              data-placement={tooltipPlacement}
-              style={{ left: `${activeX}px`, top: `${activeY}px` }}
-            >
-              <strong>{activePoint.label}</strong>
-              <span><i className={styles.totalDot} />总消耗 <b>{numberFormatter.format(activePoint.total)}</b></span>
-              {SEGMENTS.map((segment) => (
-                <span key={segment.id}>
-                  <i className={segment.className} />{segment.label}
-                  <b>{numberFormatter.format(activePoint.segments[segment.id])}</b>
-                </span>
-              ))}
-            </div>
-          ) : null}
         </div>
       </div>
+      {activePoint ? (
+        <div
+          className={styles.tooltip}
+          data-placement={tooltipPlacement}
+          style={tooltipStyle}
+        >
+          <strong>{activePoint.label}</strong>
+          <span><i className={styles.totalDot} />总消耗 <b>{numberFormatter.format(activePoint.total)}</b></span>
+          {SEGMENTS.map((segment) => (
+            <span key={segment.id}>
+              <i className={segment.className} />{segment.label}
+              <b>{numberFormatter.format(activePoint.segments[segment.id])}</b>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className={styles.legend} aria-hidden="true">
         {SEGMENTS.map((segment) => <span key={segment.id}><i className={segment.className} />{segment.label}</span>)}
       </div>

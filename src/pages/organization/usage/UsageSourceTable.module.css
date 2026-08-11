@@ -1,16 +1,16 @@
 .panel {
   --share-cell-inset: clamp(12px, 1.25vw, 24px);
-  margin-top: 18px;
+  margin-top: 12px;
   overflow: hidden;
   border: 1px solid var(--workspace-border);
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--workspace-surface);
-  box-shadow: 0 8px 22px rgba(20, 22, 26, 0.025);
+  box-shadow: none;
 }
 
 .header {
   display: flex;
-  min-height: 50px;
+  min-height: 46px;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
@@ -35,12 +35,12 @@
 .tabs { display: flex; overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 8px; }
 .tabs button { width: 78px; min-width: 78px; padding: 0 13px; border: 0; border-right: 1px solid var(--workspace-border); font-size: 11px; cursor: pointer; }
 .tabs button:last-child { border-right: 0; }
-.tabs button[aria-pressed="true"] { background: color-mix(in srgb, var(--usage-accent) 8%, var(--workspace-surface)); color: var(--usage-accent); font-weight: 650; }
+.tabs button[aria-pressed="true"] { background: color-mix(in srgb, var(--workspace-text) 6%, var(--workspace-surface)); color: var(--workspace-text); font-weight: 650; }
 
 .table { width: 100%; min-width: 0; max-height: 338px; overflow-y: auto; }
 .tableHeader, .row {
   display: grid;
-  min-height: 50px;
+  min-height: 46px;
   grid-template-columns: minmax(160px, 1fr) 100px minmax(118px, .75fr) minmax(300px, 1.45fr) 18px;
   align-items: center;
   column-gap: 16px;
@@ -61,15 +61,15 @@
 .table[data-dimension="member"] .row {
   grid-template-columns: minmax(160px, 25fr) minmax(86px, 14fr) minmax(124px, 18fr) minmax(310px, 39fr) 18px;
 }
-.tableHeader { min-height: 38px; background: color-mix(in srgb, var(--workspace-bg) 72%, var(--workspace-surface)); color: var(--workspace-muted); font-size: 10px; font-weight: 650; }
+.tableHeader { min-height: 36px; background: color-mix(in srgb, var(--workspace-bg) 56%, var(--workspace-surface)); color: var(--workspace-muted); font-size: 10px; font-weight: 650; }
 .row { width: 100%; border: 0; border-top: 1px solid var(--workspace-border); background: transparent; color: var(--workspace-text); text-align: left; cursor: pointer; }
-.table[data-dimension="project"] .row { min-height: 50px; }
+.table[data-dimension="project"] .row { min-height: 46px; }
 .row:hover { background: var(--workspace-hover); }
 .identity { display: flex; min-width: 0; align-items: center; gap: 11px; }
 .identity > i { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 8px; background: color-mix(in srgb, #65776f 8%, var(--workspace-surface)); color: #65776f; box-shadow: inset 0 0 0 1px color-mix(in srgb, #65776f 9%, transparent); }
-.table[data-dimension="project"] .identity > i { width: 34px; height: 34px; background: color-mix(in srgb, var(--usage-accent) 10%, var(--workspace-surface)); color: var(--usage-accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-accent) 11%, transparent); }
+.table[data-dimension="project"] .identity > i { width: 30px; height: 30px; background: color-mix(in srgb, var(--usage-accent) 7%, var(--workspace-surface)); color: color-mix(in srgb, var(--usage-accent) 82%, var(--workspace-muted)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-accent) 7%, transparent); }
 .identity svg { width: 19px; height: 19px; }
-.table[data-dimension="project"] .identity svg { width: 22px; height: 22px; filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--usage-accent) 20%, transparent)); }
+.table[data-dimension="project"] .identity svg { width: 18px; height: 18px; }
 .identity > span { display: grid; min-width: 0; gap: 2px; }
 .identity strong { overflow: hidden; color: var(--workspace-text); text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .table[data-dimension="project"] .identity strong { font-size: 12px; font-weight: 650; }
@@ -100,10 +100,10 @@
 .outputScale em { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--workspace-border); border-radius: 6px; color: var(--workspace-muted); font-size: 10px; font-style: normal; }
 .outputScale svg { width: 12px; }
 .outputScale[data-project="true"] { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.outputScale[data-project="true"] em { min-width: 0; height: 32px; justify-content: flex-start; gap: 5px; padding: 0 9px; background: var(--workspace-surface); }
-.outputScale[data-project="true"] svg { width: 18px; height: 18px; padding: 3px; border-radius: 5px; background: color-mix(in srgb, var(--usage-video) 11%, var(--workspace-surface)); color: var(--usage-video); }
-.outputScale[data-project="true"] em[data-kind="image"] svg { background: color-mix(in srgb, var(--usage-image) 11%, var(--workspace-surface)); color: var(--usage-image); }
-.outputScale[data-project="true"] em[data-kind="processing"] svg { background: color-mix(in srgb, var(--usage-processing) 11%, var(--workspace-surface)); color: var(--usage-processing); }
+.outputScale[data-project="true"] em { min-width: 0; height: 28px; justify-content: flex-start; gap: 5px; padding: 0 7px; border-color: color-mix(in srgb, var(--workspace-border) 78%, transparent); background: color-mix(in srgb, var(--workspace-bg) 32%, var(--workspace-surface)); }
+.outputScale[data-project="true"] svg { width: 16px; height: 16px; padding: 3px; border-radius: 4px; background: color-mix(in srgb, var(--usage-video) 7%, var(--workspace-surface)); color: var(--usage-video); }
+.outputScale[data-project="true"] em[data-kind="image"] svg { background: color-mix(in srgb, var(--usage-image) 7%, var(--workspace-surface)); color: var(--usage-image); }
+.outputScale[data-project="true"] em[data-kind="processing"] svg { background: color-mix(in srgb, var(--usage-processing) 7%, var(--workspace-surface)); color: var(--usage-processing); }
 .outputScale[data-project="true"] span { color: var(--workspace-muted); }
 .outputScale[data-project="true"] strong { margin-left: auto; color: var(--workspace-text); font-size: 11px; font-weight: 620; font-variant-numeric: tabular-nums; }
 .outputScale[data-project="true"] small { color: var(--workspace-subtle); font-size: 9px; }

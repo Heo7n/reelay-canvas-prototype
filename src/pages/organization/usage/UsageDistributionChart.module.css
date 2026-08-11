@@ -1,9 +1,9 @@
 .horizontalChart {
   display: grid;
-  min-height: 340px;
+  min-height: 306px;
   grid-template-rows: 1fr;
   margin-top: 10px;
-  padding: 8px 4px 2px 0;
+  padding: 6px 4px 0 0;
 }
 
 .horizontalRows {
@@ -24,10 +24,10 @@
 .dayLabel { color: var(--workspace-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .horizontalTrack {
   position: relative;
-  height: 17px;
+  height: 16px;
   margin-right: 48px;
   border-radius: 3px;
-  background: transparent;
+  background: color-mix(in srgb, var(--workspace-muted) 7%, transparent);
 }
 
 .horizontalTrack i {
@@ -36,8 +36,7 @@
   height: 100%;
   overflow: hidden;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--usage-accent), color-mix(in srgb, var(--usage-accent) 58%, #fff));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--usage-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--usage-accent) 84%, var(--workspace-surface));
 }
 
 .horizontalTrack strong {
@@ -56,8 +55,8 @@
   position: relative;
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr);
-  grid-template-rows: 310px 30px;
-  min-height: 340px;
+  grid-template-rows: 280px 26px;
+  min-height: 306px;
   margin-top: 10px;
 }
 
@@ -96,41 +95,40 @@
 .plotScroller::-webkit-scrollbar-track { border-radius: 999px; background: color-mix(in srgb, var(--workspace-muted) 8%, transparent); }
 .plotScroller::-webkit-scrollbar-thumb { border-radius: 999px; background: color-mix(in srgb, var(--workspace-muted) 30%, transparent); }
 
-.plotCanvas { position: relative; height: 296px; }
-.plotSvg { display: block; width: 100%; height: 296px; overflow: visible; }
+.plotCanvas { position: relative; height: 268px; }
+.plotSvg { display: block; width: 100%; height: 268px; overflow: visible; }
 .gridLine { stroke: var(--workspace-border); stroke-dasharray: 4 4; stroke-width: 1; }
 .video { fill: var(--usage-video); background: var(--usage-video); }
 .image { fill: var(--usage-image); background: var(--usage-image); }
 .processing { fill: var(--usage-processing); background: var(--usage-processing); }
-.hitArea { fill: transparent; cursor: default; }
+.hitArea { fill: transparent; }
 .xLabel { fill: var(--workspace-subtle); font-size: 10.5px; }
 
 .tooltip {
-  --tooltip-x: -50%;
+  --tooltip-bg: color-mix(in srgb, var(--workspace-surface) 98%, var(--workspace-bg));
   --tooltip-arrow-x: 50%;
   position: absolute;
-  z-index: 3;
+  z-index: 8;
   display: grid;
-  width: 176px;
-  gap: 6px;
-  padding: 10px 11px 9px;
-  transform: translate(var(--tooltip-x), 12px);
-  border: 1px solid var(--workspace-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--workspace-surface) 96%, transparent);
-  box-shadow: 0 9px 22px rgb(25 34 48 / 13%);
+  box-sizing: border-box;
+  width: 168px;
+  gap: 5px;
+  padding: 11px 12px 10px;
+  transform: translateY(12px);
+  border: 1px solid color-mix(in srgb, var(--workspace-border) 82%, transparent);
+  border-radius: 9px;
+  background: var(--tooltip-bg);
+  box-shadow: 0 12px 30px rgb(25 34 48 / 14%);
   color: var(--workspace-text);
   pointer-events: none;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
 }
 
-.tooltip::before { position: absolute; top: -5px; left: var(--tooltip-arrow-x); width: 9px; height: 9px; transform: translateX(-50%) rotate(45deg); border-top: 1px solid var(--workspace-border); border-left: 1px solid var(--workspace-border); background: var(--workspace-surface); content: ""; }
-.tooltip[data-edge="start"] { --tooltip-x: -12%; --tooltip-arrow-x: 12%; }
-.tooltip[data-edge="end"] { --tooltip-x: -88%; --tooltip-arrow-x: 88%; }
-.tooltip[data-placement="above"] { transform: translate(var(--tooltip-x), calc(-100% - 12px)); }
+.tooltip::before { position: absolute; top: -5px; left: var(--tooltip-arrow-x); width: 9px; height: 9px; transform: translateX(-50%) rotate(45deg); border-top: 1px solid color-mix(in srgb, var(--workspace-border) 82%, transparent); border-left: 1px solid color-mix(in srgb, var(--workspace-border) 82%, transparent); background: var(--tooltip-bg); content: ""; }
+.tooltip[data-placement="above"] { transform: translateY(calc(-100% - 12px)); }
 .tooltip[data-placement="above"]::before { top: auto; bottom: -5px; transform: translateX(-50%) rotate(225deg); }
-.tooltip strong { padding-bottom: 2px; font-size: 12px; font-weight: 680; }
-.tooltip > span { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; color: var(--workspace-muted); font-size: 11px; }
+.tooltip strong { margin-bottom: 2px; padding-bottom: 7px; border-bottom: 1px solid color-mix(in srgb, var(--workspace-border) 72%, transparent); font-size: 12px; font-weight: 700; }
+.tooltip > span { display: grid; min-height: 18px; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; color: var(--workspace-muted); font-size: 11px; }
 .tooltip i { width: 7px; height: 7px; border-radius: 2px; }
 .tooltip b { color: var(--workspace-text); font-weight: 650; font-variant-numeric: tabular-nums; }
 .totalDot { border-radius: 50% !important; background: var(--usage-accent); }

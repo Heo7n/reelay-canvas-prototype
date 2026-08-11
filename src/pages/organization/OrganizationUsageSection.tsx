@@ -2,8 +2,11 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Image as ImageIcon,
   Info,
   RefreshCw,
+  Video,
+  WandSparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -27,7 +30,6 @@ import {
   buildUsageTimeline,
   buildUsageTypeViewModels,
   chooseTimelineGranularity,
-  typeOutputValue,
 } from "./usage/usage-analytics";
 import styles from "./usage/UsageDashboard.module.css";
 
@@ -46,7 +48,7 @@ interface CustomRange {
 
 interface SelectedBreakdown {
   composition: UsageCompositionItem[];
-  dimension: SourceDimension;
+  dimension: UsageDimension;
   item: UsageCompositionItem;
 }
 
@@ -123,36 +125,9 @@ function OverviewArt({ kind }: { kind: "credits" | "trend" }) {
 }
 
 function typeIcon(id: string) {
-  if (id === "video") {
-    return (
-      <svg viewBox="0 0 48 48" aria-hidden="true">
-        <defs><linearGradient id="usage-video-art" x1="11" y1="8" x2="38" y2="40"><stop stopColor="#77c1ff" /><stop offset=".55" stopColor="#388cf7" /><stop offset="1" stopColor="#1767ec" /></linearGradient></defs>
-        <path d="M16 10.5c-3-1.8-6.8.4-6.8 4v19c0 3.6 3.8 5.8 6.8 4l19-11c3.1-1.8 3.1-6.2 0-8l-19-11Z" fill="url(#usage-video-art)" />
-        <path d="m15 13 17 10-17 10Z" fill="#fff" fillOpacity=".16" />
-      </svg>
-    );
-  }
-  if (id === "image") {
-    return (
-      <svg viewBox="0 0 48 48" aria-hidden="true">
-        <defs><linearGradient id="usage-image-art" x1="8" y1="7" x2="40" y2="42"><stop stopColor="#8ee9dd" /><stop offset=".55" stopColor="#35c8b5" /><stop offset="1" stopColor="#0cae99" /></linearGradient></defs>
-        <rect x="7" y="7" width="34" height="34" rx="9" fill="url(#usage-image-art)" />
-        <circle cx="17" cy="17" r="4" fill="#fff" fillOpacity=".92" />
-        <path d="m11 35 9-11 6 6 4-5 7 10Z" fill="#fff" fillOpacity=".85" />
-        <path d="M9 11c5-3 15-4 25-1" fill="none" stroke="#fff" strokeLinecap="round" strokeOpacity=".36" strokeWidth="2" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden="true">
-      <defs><linearGradient id="usage-process-art" x1="8" y1="10" x2="40" y2="38"><stop stopColor="#a98cff" /><stop offset=".55" stopColor="#805ce9" /><stop offset="1" stopColor="#6138d4" /></linearGradient></defs>
-      <rect x="8" y="9" width="32" height="30" rx="9" fill="url(#usage-process-art)" fillOpacity=".12" />
-      <path d="M11 16h26M11 24h26M11 32h26" stroke="url(#usage-process-art)" strokeLinecap="round" strokeWidth="3" />
-      <circle cx="20" cy="16" r="4" fill="#fff" stroke="#8a68ed" strokeWidth="2.5" />
-      <circle cx="30" cy="24" r="4" fill="#fff" stroke="#7751df" strokeWidth="2.5" />
-      <circle cx="17" cy="32" r="4" fill="#fff" stroke="#6940d8" strokeWidth="2.5" />
-    </svg>
-  );
+  if (id === "video") return <Video aria-hidden="true" />;
+  if (id === "image") return <ImageIcon aria-hidden="true" />;
+  return <WandSparkles aria-hidden="true" />;
 }
 
 export function OrganizationUsageSection({
@@ -396,23 +371,35 @@ export function OrganizationUsageSection({
           <h3 id="usage-type-title">消耗类型</h3>
           <div className={styles.typeCards}>
             {typeComposition.map((item) => (
-              <article key={item.id} className={styles.typeCard} data-kind={item.id}>
+              <button
+                key={item.id}
+                type="button"
+                className={styles.typeCard}
+                data-kind={item.id}
+                aria-label={`查看${item.label}用量明细`}
+                onClick={() => setSelectedBreakdown({ composition: typeComposition, dimension: "type", item })}
+              >
                 <i className={styles.typeIcon}>{typeIcon(item.id)}</i>
-                <div className={styles.typeName}>
+                <div className={styles.typeSummary}>
                   <strong>{item.label}</strong>
-                  <span>{(item.share * 100).toFixed(1)}%</span>
-                  <i aria-hidden="true"><b style={{ width: `${Math.max(3, item.share * 100)}%` }} /></i>
+                  <span><b>{numberFormatter.format(item.credits)}</b> 积分</span>
                 </div>
-                <div className={styles.typeCredits}>
-                  <strong>{numberFormatter.format(item.credits)}</strong>
-                  <span>积分</span>
-                </div>
-                <div className={styles.typeOutput}>
-                  <strong>{numberFormatter.format(typeOutputValue(item))}{item.id === "video" ? "s" : item.id === "image" ? "张" : "次"}</strong>
-                  <span>{item.outputLabel}</span>
-                </div>
+                <span className={styles.typeShare} aria-label={`占比${(item.share * 100).toFixed(1)}%`}>
+                  <svg viewBox="0 0 48 48" aria-hidden="true">
+                    <circle className={styles.typeShareTrack} cx="24" cy="24" r="19" pathLength="100" />
+                    <circle
+                      className={styles.typeShareValue}
+                      cx="24"
+                      cy="24"
+                      r="19"
+                      pathLength="100"
+                      style={{ strokeDashoffset: 100 - item.share * 100 }}
+                    />
+                  </svg>
+                  <strong>{(item.share * 100).toFixed(1)}%</strong>
+                </span>
                 <ChevronRight className={styles.typeChevron} aria-hidden="true" />
-              </article>
+              </button>
             ))}
           </div>
         </section>
