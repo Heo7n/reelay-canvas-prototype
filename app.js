@@ -1851,7 +1851,7 @@ function nodePortMarkup(node) {
   const input = node.kind === "generator"
     ? '<button class="node-port node-port-input" data-node-port="input" type="button" aria-label="连接上游素材"></button>'
     : "";
-  const output = getEditableMedia(node)
+  const output = node.kind === "generator" || getEditableMedia(node)
     ? '<button class="node-port node-port-output" data-node-port="output" type="button" aria-label="连接到下游节点"></button>'
     : "";
   return `${input}${output}`;
@@ -1895,6 +1895,9 @@ function renderConnections() {
     if (hasFocusedContext && !isActive && !isRelated) group.classList.add("is-muted");
     group.dataset.connectionId = connection.id;
 
+    const underlay = document.createElementNS(namespace, "path");
+    underlay.classList.add("connection-underlay");
+    underlay.setAttribute("d", pathData);
     const path = document.createElementNS(namespace, "path");
     path.classList.add("connection-path");
     path.setAttribute("d", pathData);
@@ -1908,7 +1911,7 @@ function renderConnections() {
       state.activeConnectionId = connection.id;
       render();
     });
-    group.append(path, hitPath);
+    group.append(underlay, path, hitPath);
     connectionPaths.appendChild(group);
   });
 
@@ -1931,7 +1934,7 @@ function createConnection(sourceNodeId, targetNodeId, { recordUndo = true } = {}
   const result = canvasConnections.canConnect(state.connections, state.nodes, sourceNodeId, targetNodeId);
   if (!result.ok) return null;
   const source = state.nodes.find((node) => node.id === sourceNodeId);
-  if (!getEditableMedia(source)) return null;
+  if (!source || (source.kind !== "generator" && !getEditableMedia(source))) return null;
   if (recordUndo) {
     pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
   }
@@ -4661,7 +4664,7 @@ function getConnectionTargetAt(clientX, clientY, sourceNodeId) {
 function beginConnectionDrag(event, sourceNodeId) {
   if (event.button !== 0 || !requireCanvasMutation()) return;
   const source = state.nodes.find((node) => node.id === sourceNodeId);
-  if (!source || !getEditableMedia(source)) return;
+  if (!source || (source.kind !== "generator" && !getEditableMedia(source))) return;
   event.preventDefault();
   event.stopPropagation();
   closeConnectionCreateMenu();
@@ -4678,6 +4681,7 @@ function beginConnectionDrag(event, sourceNodeId) {
   };
   state.activeConnectionId = null;
   shell.classList.add("connecting");
+  nodeLayer.querySelector(`.canvas-node[data-id="${source.id}"]`)?.classList.add("connection-origin");
   try {
     shell.setPointerCapture(event.pointerId);
   } catch {
@@ -4709,6 +4713,9 @@ function finishConnectionDrag(event) {
     event.clientY - action.startClientY,
   ) >= 8;
   clearConnectionTarget();
+  nodeLayer.querySelectorAll(".connection-origin").forEach((element) => {
+    element.classList.remove("connection-origin");
+  });
   shell.classList.remove("connecting");
   state.action = null;
   try {
