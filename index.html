@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260722-account-panel" />
+    <link rel="stylesheet" href="./styles.css?v=20260811-context-links-2" />
   </head>
   <body>
     <main class="app-shell">
@@ -191,7 +191,20 @@
       <section class="canvas-shell" id="canvasShell">
         <div class="canvas-grid" id="canvasGrid" aria-hidden="true"></div>
         <div class="canvas-stage" id="canvasStage">
+          <svg class="connection-layer" id="connectionLayer" aria-hidden="true">
+            <g id="connectionPaths"></g>
+            <path class="connection-preview hidden" id="connectionPreview"></path>
+          </svg>
           <div class="node-layer" id="nodeLayer"></div>
+        </div>
+        <div class="connection-create-menu hidden" id="connectionCreateMenu" role="menu" aria-label="创建下游节点">
+          <span class="connection-create-label">创建下游节点</span>
+          <button type="button" role="menuitem" data-connection-create="image" data-canvas-mutation>
+            <i data-lucide="image" aria-hidden="true"></i><span>图片生成</span>
+          </button>
+          <button type="button" role="menuitem" data-connection-create="video" data-canvas-mutation>
+            <i data-lucide="video" aria-hidden="true"></i><span>视频生成</span>
+          </button>
         </div>
         <div class="selection-box hidden" id="selectionBox"></div>
         <div class="selection-toolbar hidden" id="selectionToolbar">
@@ -338,7 +351,8 @@
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
     <script src="./data/model-catalog.js?v=20260710-undo-feedback"></script>
     <script src="./src/config/prototype-config.js?v=20260716-foundation-modularization"></script>
+    <script src="./src/legacy-canvas/canvas-connections.js?v=20260811-context-links"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260722-allow-list"></script>
-    <script src="./app.js?v=20260716-foundation-modularization"></script>
+    <script src="./app.js?v=20260811-context-links"></script>
   </body>
 </html>

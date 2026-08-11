@@ -128,6 +128,20 @@ test("the canvas document codec persists only explicit content fields and restor
             mediaMenuOpen: true,
           },
         ],
+        connections: [
+          {
+            id: "connection-1",
+            sourceNodeId: "asset-node-1",
+            targetNodeId: "generator-1",
+            createdAt: "2026-08-11T08:00:00.000Z",
+            mediaType: "audio",
+            unknownConnectionField: "must-not-persist",
+          },
+          { id: "missing-target", sourceNodeId: "asset-node-1", targetNodeId: "missing-node" },
+          { id: "self-edge", sourceNodeId: "generator-1", targetNodeId: "generator-1" },
+          { id: "connection-1", sourceNodeId: "generator-1", targetNodeId: "asset-node-1" },
+          { id: "duplicate-edge", sourceNodeId: "asset-node-1", targetNodeId: "generator-1" },
+        ],
         groups: [
           {
             id: "group-1",
@@ -152,10 +166,11 @@ test("the canvas document codec persists only explicit content fields and restor
   const assetNode = canvas.nodes[1];
   const generatedAsset = generator.generatedAsset;
   const referenceAsset = generator.assets[0];
+  const connection = canvas.connections[0];
   const group = canvas.groups[0];
 
   assert.deepEqual(sortedKeys(snapshot), ["activeCanvasId", "canvases", "kind", "lastPreset", "version"]);
-  assert.deepEqual(sortedKeys(canvas), ["groups", "id", "name", "nodes", "viewport", "zCounter"]);
+  assert.deepEqual(sortedKeys(canvas), ["connections", "groups", "id", "name", "nodes", "viewport", "zCounter"]);
   assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
   assert.deepEqual(sortedKeys(generator), [
     "activeAssetId", "aspect", "assets", "count", "duration", "generatedAsset", "groupId", "id", "kind",
@@ -167,6 +182,13 @@ test("the canvas document codec persists only explicit content fields and restor
     "name", "source", "type", "url", "width",
   ]);
   assert.deepEqual(sortedKeys(referenceAsset), sortedKeys(generatedAsset));
+  assert.deepEqual(sortedKeys(connection), ["createdAt", "id", "sourceNodeId", "targetNodeId"]);
+  assert.deepEqual(plain(canvas.connections), [{
+    id: "connection-1",
+    sourceNodeId: "asset-node-1",
+    targetNodeId: "generator-1",
+    createdAt: "2026-08-11T08:00:00.000Z",
+  }]);
   assert.deepEqual(sortedKeys(group), ["height", "id", "name", "nodeIds", "width", "x", "y", "z"]);
   assert.deepEqual(sortedKeys(snapshot.lastPreset), [
     "aspect", "count", "duration", "mode", "model", "quality", "resolution",
@@ -177,7 +199,7 @@ test("the canvas document codec persists only explicit content fields and restor
   for (const forbiddenKey of [
     "credits", "generating", "generationTaskId", "promptLarge", "promptInputHeight", "mediaMenuOpen",
     "panel", "modelFilter", "layoutMenuOpen", "unknownRootField", "unknownCanvasField", "unknownNodeField",
-    "unknownAssetField", "unknownGroupField", "undoStack",
+    "unknownAssetField", "unknownConnectionField", "unknownGroupField", "undoStack", "mediaType",
   ]) {
     assert.equal(JSON.stringify(snapshot).includes(`\"${forbiddenKey}\"`), false, forbiddenKey);
   }
@@ -211,6 +233,12 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(restoredAssetNode.expanded, false);
   assert.equal(restoredAssetNode.panel, null);
   assert.equal(restoredAssetNode.mediaMenuOpen, false);
+  assert.deepEqual(plain(restoredCanvas.connections), [{
+    id: "connection-1",
+    sourceNodeId: "asset-node-1",
+    targetNodeId: "generator-1",
+    createdAt: "2026-08-11T08:00:00.000Z",
+  }]);
   assert.deepEqual(plain(restoredCanvas.groups[0].nodeIds), ["generator-1"]);
 });
 
@@ -246,6 +274,11 @@ test("the codec rejects unknown versions and normalizes hostile or invalid conte
           },
           { id: "unknown-kind", kind: "widget", x: 1, y: 2 },
         ],
+        connections: [
+          { id: "missing-source", sourceNodeId: "missing", targetNodeId: "asset-safe" },
+          { id: "missing-target", sourceNodeId: "asset-safe", targetNodeId: "unknown-kind" },
+          { id: "self-edge", sourceNodeId: "asset-safe", targetNodeId: "asset-safe" },
+        ],
         groups: [
           {
             id: "group-safe",
@@ -274,6 +307,7 @@ test("the codec rejects unknown versions and normalizes hostile or invalid conte
   assert.equal(canvas.scale, 1.5);
   assert.equal(canvas.zCounter, 1);
   assert.equal(canvas.nodes.length, 1);
+  assert.deepEqual(plain(canvas.connections), []);
   assert.equal(node.x, 0);
   assert.equal(node.y, 0);
   assert.equal(node.z, 1);
@@ -286,4 +320,22 @@ test("the codec rejects unknown versions and normalizes hostile or invalid conte
   assert.equal(canvas.groups[0].width, 1);
   assert.equal(canvas.groups[0].height, 1);
   assert.equal(canvas.groups[0].z, 1);
+});
+
+test("the codec restores legacy version-one canvases without a connections field", () => {
+  const restored = codec.restoreSnapshot({
+    kind: "reelay-legacy-canvas",
+    version: 1,
+    activeCanvasId: "legacy-canvas",
+    canvases: [{
+      id: "legacy-canvas",
+      name: "Legacy canvas",
+      nodes: [],
+      groups: [],
+      viewport: { tx: 0, ty: 0, scale: 1 },
+      zCounter: 1,
+    }],
+  });
+
+  assert.deepEqual(plain(restored.canvases[0].connections), []);
 });

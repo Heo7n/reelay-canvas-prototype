@@ -7,6 +7,10 @@ const appFavicon = document.querySelector("#appFavicon");
 const canvasGrid = document.querySelector("#canvasGrid");
 const stage = document.querySelector("#canvasStage");
 const nodeLayer = document.querySelector("#nodeLayer");
+const connectionLayer = document.querySelector("#connectionLayer");
+const connectionPaths = document.querySelector("#connectionPaths");
+const connectionPreview = document.querySelector("#connectionPreview");
+const connectionCreateMenu = document.querySelector("#connectionCreateMenu");
 const canvasTools = document.querySelector("#canvasTools");
 const canvasToolButtons = document.querySelectorAll("[data-canvas-tool]");
 const canvasToolPopovers = document.querySelectorAll("[data-canvas-popover]");
@@ -174,10 +178,13 @@ const state = {
   ty: 0,
   scale: 1,
   nodes: [],
+  connections: [],
   groups: [],
   selectedIds: new Set(),
   activeGroupId: null,
   activeId: null,
+  activeConnectionId: null,
+  connectionDrop: null,
   zCounter: 1,
   lastPreset: {
     mode: "image",
@@ -250,6 +257,8 @@ const canvasPersistence = {
 
 const canvasDocumentCodec = window.REELAY_CANVAS_DOCUMENT_CODEC;
 if (!canvasDocumentCodec) throw new Error("Canvas document codec is unavailable.");
+const canvasConnections = window.REELAY_CANVAS_CONNECTIONS;
+if (!canvasConnections) throw new Error("Canvas connection helpers are unavailable.");
 
 function isCanvasMutationAllowed() {
   return canvasPersistence.accessMode === "standalone" || canvasPersistence.accessMode === "editable";
@@ -372,6 +381,7 @@ function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
     id: crypto.randomUUID(),
     name,
     nodes: [],
+    connections: [],
     groups: [],
     tx: 0,
     ty: 0,
@@ -389,6 +399,7 @@ function saveActiveCanvasState() {
   const canvas = getActiveCanvas();
   if (!canvas) return;
   canvas.nodes = state.nodes;
+  canvas.connections = state.connections;
   canvas.groups = state.groups;
   canvas.tx = state.tx;
   canvas.ty = state.ty;
@@ -400,6 +411,7 @@ function saveActiveCanvasState() {
 function loadCanvasState(canvas) {
   if (!canvas) return;
   state.nodes = canvas.nodes;
+  state.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
   state.groups = canvas.groups;
   state.tx = canvas.tx;
   state.ty = canvas.ty;
@@ -408,6 +420,8 @@ function loadCanvasState(canvas) {
   state.undoStack = canvas.undoStack || [];
   state.selectedIds = new Set();
   state.activeId = null;
+  state.activeConnectionId = null;
+  state.connectionDrop = null;
   state.activeGroupId = null;
   state.mediaToolbarNodeId = null;
   state.libraryTargetNodeId = null;
@@ -432,6 +446,7 @@ function syncProjectNavigation() {
 function initializeCanvases() {
   const initialCanvas = createCanvasRecord("画布 1");
   initialCanvas.nodes = state.nodes;
+  initialCanvas.connections = state.connections;
   initialCanvas.groups = state.groups;
   initialCanvas.tx = state.tx;
   initialCanvas.ty = state.ty;
@@ -461,6 +476,7 @@ function hydrateCanvasDocumentSnapshot(content) {
   if (!restored) return false;
   state.canvases = restored.canvases;
   state.canvases.forEach((canvas) => {
+    canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
     canvas.nodes.forEach((node) => {
       if (node.kind === "generator") normalizeNodeParameters(node);
     });
@@ -712,6 +728,7 @@ function applyTransform() {
   window.clearTimeout(state.overlaySyncTimer);
   state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
   syncZoomControl();
+  renderConnections();
   renderSelectionToolbar();
   renderMinimap();
   scheduleCanvasDocumentSave();
@@ -1483,6 +1500,9 @@ function setSelection(ids, activeId = null, options = {}) {
   if (!options.keepGroup) {
     state.activeGroupId = null;
   }
+  if (!options.keepConnection) {
+    state.activeConnectionId = null;
+  }
 }
 
 function clearSelection() {
@@ -1808,6 +1828,135 @@ function mediaMeta(node) {
 function getEditableMedia(node) {
   if (node.kind === "asset") return getActiveAsset(node);
   return node.generatedAsset || null;
+}
+
+function cloneConnectionState(connection) {
+  return { ...connection };
+}
+
+function getIncomingConnections(nodeId) {
+  return state.connections.filter((connection) => connection.targetNodeId === nodeId);
+}
+
+function getConnectionPortPoint(node, side) {
+  const layout = getNodeLayout(node);
+  const mediaLeft = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  return {
+    x: side === "input" ? mediaLeft : mediaLeft + layout.mediaWidth,
+    y: node.y + layout.mediaHeight / 2,
+  };
+}
+
+function nodePortMarkup(node) {
+  const input = node.kind === "generator"
+    ? '<button class="node-port node-port-input" data-node-port="input" type="button" aria-label="连接上游素材"></button>'
+    : "";
+  const output = getEditableMedia(node)
+    ? '<button class="node-port node-port-output" data-node-port="output" type="button" aria-label="连接到下游节点"></button>'
+    : "";
+  return `${input}${output}`;
+}
+
+function getRelatedConnectionNodeIds() {
+  const selected = state.selectedIds;
+  const related = new Set(selected);
+  state.connections.forEach((connection) => {
+    if (selected.has(connection.sourceNodeId) || selected.has(connection.targetNodeId)) {
+      related.add(connection.sourceNodeId);
+      related.add(connection.targetNodeId);
+    }
+  });
+  return related;
+}
+
+function renderConnections() {
+  if (!connectionPaths || !connectionPreview) return;
+  state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
+  connectionPaths.replaceChildren();
+
+  const namespace = "http://www.w3.org/2000/svg";
+  const relatedNodeIds = getRelatedConnectionNodeIds();
+  const hasFocusedContext = Boolean(state.activeConnectionId || state.selectedIds.size);
+
+  state.connections.forEach((connection) => {
+    const source = state.nodes.find((node) => node.id === connection.sourceNodeId);
+    const target = state.nodes.find((node) => node.id === connection.targetNodeId);
+    if (!source || !target) return;
+    const pathData = canvasConnections.getBezierPath(
+      getConnectionPortPoint(source, "output"),
+      getConnectionPortPoint(target, "input"),
+    );
+    const group = document.createElementNS(namespace, "g");
+    const isActive = state.activeConnectionId === connection.id;
+    const isRelated = relatedNodeIds.has(source.id) && relatedNodeIds.has(target.id);
+    group.classList.add("connection-group");
+    if (isActive) group.classList.add("is-active");
+    if (isRelated) group.classList.add("is-related");
+    if (hasFocusedContext && !isActive && !isRelated) group.classList.add("is-muted");
+    group.dataset.connectionId = connection.id;
+
+    const path = document.createElementNS(namespace, "path");
+    path.classList.add("connection-path");
+    path.setAttribute("d", pathData);
+    const hitPath = document.createElementNS(namespace, "path");
+    hitPath.classList.add("connection-hit-path");
+    hitPath.setAttribute("d", pathData);
+    hitPath.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelection([], null, { keepConnection: true });
+      state.activeConnectionId = connection.id;
+      render();
+    });
+    group.append(path, hitPath);
+    connectionPaths.appendChild(group);
+  });
+
+  const action = state.action;
+  if (action?.type === "connect") {
+    connectionPreview.setAttribute(
+      "d",
+      canvasConnections.getBezierPath(action.start, action.current),
+    );
+    connectionPreview.classList.remove("hidden");
+  } else {
+    connectionPreview.classList.add("hidden");
+    connectionPreview.removeAttribute("d");
+  }
+  shell.classList.toggle("connection-low-detail", state.scale < 0.45);
+}
+
+function createConnection(sourceNodeId, targetNodeId, { recordUndo = true } = {}) {
+  if (!requireCanvasMutation()) return null;
+  const result = canvasConnections.canConnect(state.connections, state.nodes, sourceNodeId, targetNodeId);
+  if (!result.ok) return null;
+  const source = state.nodes.find((node) => node.id === sourceNodeId);
+  if (!getEditableMedia(source)) return null;
+  if (recordUndo) {
+    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
+  }
+  const connection = {
+    id: crypto.randomUUID(),
+    sourceNodeId,
+    targetNodeId,
+    mediaType: getNodeMediaType(source),
+  };
+  state.connections.push(connection);
+  state.activeConnectionId = connection.id;
+  return connection;
+}
+
+function removeConnection(connectionId, { recordUndo = true } = {}) {
+  if (!requireCanvasMutation()) return false;
+  const connection = state.connections.find((item) => item.id === connectionId);
+  if (!connection) return false;
+  if (recordUndo) {
+    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
+  }
+  state.connections = state.connections.filter((item) => item.id !== connectionId);
+  if (state.activeConnectionId === connectionId) state.activeConnectionId = null;
+  render();
+  return true;
 }
 
 function getNodeMediaType(node) {
@@ -2967,8 +3116,7 @@ function assetMediaContent(asset) {
 }
 
 function assetShelf(node) {
-  if (!node.assets?.length) return "";
-  const assets = node.assets
+  const assets = (node.assets || [])
     .map(
       (asset) => `
         <div class="asset-card ${asset.type} ${node.activeAssetId === asset.id ? "active" : ""}" data-action="focus-asset" data-value="${asset.id}" role="button" tabindex="0">
@@ -2982,7 +3130,25 @@ function assetShelf(node) {
       `,
     )
     .join("");
-  return `<div class="asset-shelf">${assets}</div>`;
+  const linkedReferences = getIncomingConnections(node.id)
+    .map((connection) => {
+      const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
+      const asset = source ? getEditableMedia(source) : null;
+      if (!source || !asset) return "";
+      return `
+        <div class="asset-card linked-reference ${asset.type}" data-action="focus-linked-source" data-value="${connection.id}" role="button" tabindex="0">
+          <div class="asset-thumb">${assetPreview(asset)}</div>
+          <div class="asset-meta">
+            <span>${escapeHtml(getMediaTitle(source, asset) || getAssetDisplayName(asset))}</span>
+            <small><i data-lucide="link-2" aria-hidden="true"></i>画布引用 · ${assetTypeLabel(asset.type)}</small>
+          </div>
+          <button class="asset-remove" data-action="remove-linked-source" data-value="${connection.id}" data-canvas-mutation type="button" title="断开连接" aria-label="断开连接">×</button>
+        </div>
+      `;
+    })
+    .join("");
+  if (!assets && !linkedReferences) return "";
+  return `<div class="asset-shelf">${linkedReferences}${assets}</div>`;
 }
 
 function addFilesToGeneratorNode(node, files) {
@@ -3122,6 +3288,7 @@ function render() {
       syncCanvasNodeElement(element, node);
     }
   }
+  renderConnections();
   updateEmptyState();
   syncProjectNavigation();
   renderSelectionToolbar();
@@ -3138,6 +3305,17 @@ function getNodeRenderSignature(node) {
     Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId"].includes(key)),
   );
   renderState.mediaToolbarVisible = shouldShowMediaEditToolbar(node);
+  renderState.linkedReferences = getIncomingConnections(node.id).map((connection) => {
+    const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
+    const asset = source ? getEditableMedia(source) : null;
+    return {
+      id: connection.id,
+      sourceNodeId: connection.sourceNodeId,
+      type: asset?.type || null,
+      url: asset?.url || null,
+      name: source && asset ? getMediaTitle(source, asset) || getAssetDisplayName(asset) : null,
+    };
+  });
   return JSON.stringify(renderState);
 }
 
@@ -3387,6 +3565,7 @@ function createAssetNodeElement(node) {
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
       ${assetMediaContent(asset)}
+      ${nodePortMarkup(node)}
     </section>
   `;
 
@@ -3441,6 +3620,7 @@ function createGeneratorNodeElement(node) {
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
       ${generatorMediaContent(node)}
+      ${nodePortMarkup(node)}
     </section>
     ${promptPanel}
   `;
@@ -3478,6 +3658,13 @@ function bindNodeEvents(el, node) {
   bindMediaTitleEvents(el, node);
   bindAudioEvents(el);
   bindMediaToolbarEvents(el, node);
+  el.querySelector(".node-port-output")?.addEventListener("pointerdown", (event) => {
+    beginConnectionDrag(event, node.id);
+  });
+  el.querySelector(".node-port-input")?.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
 }
 
 function showActionToast(message) {
@@ -4295,6 +4482,7 @@ const generationLockedActions = new Set([
   "material-panel",
   "material",
   "remove-material",
+  "remove-linked-source",
   "focus-asset",
   "model-panel",
   "param-panel",
@@ -4307,6 +4495,21 @@ const generationLockedActions = new Set([
 ]);
 
 function handleAction(node, action, value) {
+  if (action === "focus-linked-source") {
+    const connection = state.connections.find((item) => item.id === value);
+    const source = connection && state.nodes.find((item) => item.id === connection.sourceNodeId);
+    if (!source) return;
+    collapseInactiveNodes(source.id);
+    bringNodesToFront([source]);
+    setSelection([source.id], source.id);
+    render();
+    return;
+  }
+  if (action === "remove-linked-source") {
+    if (node.generating) return;
+    removeConnection(value);
+    return;
+  }
   if (node.kind !== "generator") return;
   const persistentActions = new Set([
     "material",
@@ -4419,6 +4622,121 @@ function handleAction(node, action, value) {
   render();
 }
 
+function closeConnectionCreateMenu() {
+  if (!connectionCreateMenu) return;
+  connectionCreateMenu.classList.add("hidden");
+  state.connectionDrop = null;
+}
+
+function openConnectionCreateMenu(sourceNodeId, clientX, clientY) {
+  if (!connectionCreateMenu) return;
+  const shellRect = shell.getBoundingClientRect();
+  const menuWidth = 266;
+  const menuHeight = 104;
+  const left = clamp(clientX - shellRect.left + 14, 12, shellRect.width - menuWidth - 12);
+  const top = clamp(clientY - shellRect.top + 14, 72, shellRect.height - menuHeight - 12);
+  state.connectionDrop = { sourceNodeId, clientX, clientY };
+  connectionCreateMenu.style.left = `${left}px`;
+  connectionCreateMenu.style.top = `${top}px`;
+  connectionCreateMenu.classList.remove("hidden");
+  refreshIcons();
+}
+
+function clearConnectionTarget() {
+  nodeLayer.querySelectorAll(".connection-target").forEach((element) => {
+    element.classList.remove("connection-target");
+  });
+}
+
+function getConnectionTargetAt(clientX, clientY, sourceNodeId) {
+  const targetElement = document.elementFromPoint(clientX, clientY);
+  const nodeElement = targetElement instanceof Element ? targetElement.closest(".canvas-node") : null;
+  if (!nodeElement) return null;
+  const node = state.nodes.find((item) => item.id === nodeElement.dataset.id);
+  if (!node || node.kind !== "generator") return null;
+  const result = canvasConnections.canConnect(state.connections, state.nodes, sourceNodeId, node.id);
+  return result.ok ? node : null;
+}
+
+function beginConnectionDrag(event, sourceNodeId) {
+  if (event.button !== 0 || !requireCanvasMutation()) return;
+  const source = state.nodes.find((node) => node.id === sourceNodeId);
+  if (!source || !getEditableMedia(source)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeConnectionCreateMenu();
+  const start = getConnectionPortPoint(source, "output");
+  state.action = {
+    type: "connect",
+    pointerId: event.pointerId,
+    sourceNodeId,
+    start,
+    current: start,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    targetNodeId: null,
+  };
+  state.activeConnectionId = null;
+  shell.classList.add("connecting");
+  try {
+    shell.setPointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture is an enhancement; the window listeners keep the drag alive.
+  }
+  renderConnections();
+}
+
+function moveConnectionDrag(event) {
+  const action = state.action;
+  if (action?.type !== "connect") return;
+  event.preventDefault();
+  action.current = screenToWorld(event.clientX, event.clientY);
+  const target = getConnectionTargetAt(event.clientX, event.clientY, action.sourceNodeId);
+  action.targetNodeId = target?.id || null;
+  clearConnectionTarget();
+  if (target) {
+    nodeLayer.querySelector(`.canvas-node[data-id="${target.id}"]`)?.classList.add("connection-target");
+    action.current = getConnectionPortPoint(target, "input");
+  }
+  renderConnections();
+}
+
+function finishConnectionDrag(event) {
+  const action = state.action;
+  if (action?.type !== "connect") return;
+  const moved = Math.hypot(
+    event.clientX - action.startClientX,
+    event.clientY - action.startClientY,
+  ) >= 8;
+  clearConnectionTarget();
+  shell.classList.remove("connecting");
+  state.action = null;
+  try {
+    shell.releasePointerCapture(event.pointerId);
+  } catch {
+    // The browser may release capture before the window pointerup event.
+  }
+
+  if (action.targetNodeId) {
+    const connection = createConnection(action.sourceNodeId, action.targetNodeId);
+    if (connection) {
+      const target = state.nodes.find((node) => node.id === action.targetNodeId);
+      if (target) {
+        target.expanded = true;
+        target.panel = null;
+        bringNodesToFront([target]);
+        setSelection([target.id], target.id, { keepConnection: true });
+      }
+      render();
+      return;
+    }
+  }
+  renderConnections();
+  if (moved && isConnectionDropSurface(document.elementFromPoint(event.clientX, event.clientY))) {
+    openConnectionCreateMenu(action.sourceNodeId, event.clientX, event.clientY);
+  }
+}
+
 function handleNodePointerDown(event, nodeId) {
   if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
     event.preventDefault();
@@ -4434,7 +4752,7 @@ function handleNodePointerDown(event, nodeId) {
   const node = state.nodes.find((item) => item.id === nodeId);
   if (!node) return;
 
-  const isControl = target.closest("button, textarea, input, [contenteditable='true'], .panel-popover, .material-panel, .asset-card, audio, .media-title, .media-spec");
+  const isControl = target.closest("button, textarea, input, [contenteditable='true'], .panel-popover, .material-panel, .asset-card, audio, .media-title, .media-spec, .node-port");
   if (isControl) {
     state.activeId = nodeId;
     const hadMediaToolbar = state.mediaToolbarNodeId === node.id;
@@ -4501,15 +4819,21 @@ function handleNodePointerDown(event, nodeId) {
   render();
 }
 
-function addNodeAt(clientX, clientY, mode = "image") {
+function addNodeAt(clientX, clientY, mode = "image", options = {}) {
   if (!requireCanvasMutation()) return null;
   const world = screenToWorld(clientX, clientY);
-  const node = defaultGeneratorNode(0, 0, state.lastPreset.mode || mode);
-  applyPreset(node, state.lastPreset);
+  const useLastPreset = options.useLastPreset !== false;
+  const node = defaultGeneratorNode(0, 0, useLastPreset ? state.lastPreset.mode || mode : mode);
+  if (useLastPreset) applyPreset(node, state.lastPreset);
   const layout = getNodeLayout(node);
   const totalHeight = layout.mediaHeight + layoutRules.panelGap + layout.panelHeight;
-  node.x = world.x - layout.nodeWidth / 2;
-  node.y = world.y - totalHeight / 2;
+  if (options.anchor === "input") {
+    node.x = world.x - (layout.nodeWidth - layout.mediaWidth) / 2;
+    node.y = world.y - layout.mediaHeight / 2;
+  } else {
+    node.x = world.x - layout.nodeWidth / 2;
+    node.y = world.y - totalHeight / 2;
+  }
   collapseAllGeneratorPanels();
   state.nodes.push(node);
   bringNodesToFront([node]);
@@ -4596,7 +4920,13 @@ function cloneCanvasContent(source) {
     id: groupIdMap.get(sourceGroup.id),
     nodeIds: sourceGroup.nodeIds.map((id) => nodeIdMap.get(id)).filter(Boolean),
   }));
-  return { nodes, groups };
+  const connections = (source.connections || []).map((connection) => ({
+    ...cloneConnectionState(connection),
+    id: crypto.randomUUID(),
+    sourceNodeId: nodeIdMap.get(connection.sourceNodeId),
+    targetNodeId: nodeIdMap.get(connection.targetNodeId),
+  })).filter((connection) => connection.sourceNodeId && connection.targetNodeId);
+  return { nodes, groups, connections };
 }
 
 function pushUndoAction(action) {
@@ -4647,10 +4977,16 @@ function deleteSelectedNodes(confirmed = false) {
   const deletedGroups = state.groups
     .filter((group) => group.nodeIds.some((id) => state.selectedIds.has(id)))
     .map((group) => cloneGroupState(group));
+  const deletedConnections = state.connections
+    .filter((connection) => selectedNodeIds.has(connection.sourceNodeId) || selectedNodeIds.has(connection.targetNodeId))
+    .map(cloneConnectionState);
 
   if (!deleted.length) return;
-  pushUndoAction({ type: "delete", deleted, deletedGroups });
+  pushUndoAction({ type: "delete", deleted, deletedGroups, deletedConnections });
   state.nodes = state.nodes.filter((node) => !state.selectedIds.has(node.id));
+  state.connections = state.connections.filter(
+    (connection) => !selectedNodeIds.has(connection.sourceNodeId) && !selectedNodeIds.has(connection.targetNodeId),
+  );
   state.groups = state.groups.filter((group) => !deletedGroups.some((item) => item.id === group.id));
   clearSelection();
   state.activeGroupId = null;
@@ -4700,7 +5036,14 @@ function undoLastAction() {
     const restoredGroupIds = new Set(restoredGroups.map((group) => group.id));
     state.groups = state.groups.filter((group) => !restoredGroupIds.has(group.id));
     state.groups.push(...restoredGroups);
+    state.connections.push(...(action.deletedConnections || []).map(cloneConnectionState));
+    state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
     setSelection(restored.map((node) => node.id), restored[0]?.id || null);
+  }
+
+  if (action.type === "connections") {
+    state.connections = canvasConnections.normalizeConnections(action.connections, state.nodes);
+    state.activeConnectionId = null;
   }
 
   if (action.type === "move") {
@@ -5347,6 +5690,7 @@ function duplicateCanvas(canvasId) {
     name: `${source.name} 副本`,
     nodes: content.nodes,
     groups: content.groups,
+    connections: content.connections,
     tx: source.tx,
     ty: source.ty,
     scale: source.scale,
@@ -5400,10 +5744,12 @@ function resetPrototypeProject() {
   state.projectName = "Untitled";
   state.nodes = [];
   state.groups = [];
+  state.connections = [];
   state.undoStack = [];
   state.selectedIds = new Set();
   state.activeId = null;
   state.activeGroupId = null;
+  state.activeConnectionId = null;
   state.mediaToolbarNodeId = null;
   state.tx = 0;
   state.ty = 0;
@@ -5720,7 +6066,35 @@ function requestRunGroup(group) {
 }
 
 function isCanvasSurface(target) {
-  return target === shell || target === stage || target === nodeLayer;
+  return target === shell || target === stage || target === nodeLayer || target === connectionLayer;
+}
+
+function isConnectionDropSurface(target) {
+  if (!(target instanceof Element) || !shell.contains(target)) return false;
+  return !target.closest(
+    [
+      ".canvas-node",
+      ".connection-group",
+      ".connection-create-menu",
+      ".selection-toolbar",
+      ".group-toolbar",
+      ".canvas-controls",
+      ".left-rail",
+      ".top-bar",
+      ".top-actions",
+      ".asset-library-panel",
+      ".agent-dock",
+      ".agent-panel",
+      ".profile-menu",
+      ".confirm-layer",
+      "button",
+      "input",
+      "textarea",
+      "select",
+      "audio",
+      "video",
+    ].join(", "),
+  );
 }
 
 function shouldBypassCanvasWheel(target) {
@@ -5928,6 +6302,7 @@ function moveDraggedNodes(action, event) {
       nodeElement.style.zIndex = String(node.z);
     }
   }
+  renderConnections();
   renderSelectionToolbar();
   renderMinimap();
 }
@@ -6085,6 +6460,11 @@ function handlePointerMove(event) {
   const action = state.action;
   if (!action) return;
 
+  if (action.type === "connect") {
+    moveConnectionDrag(event);
+    return;
+  }
+
   if (action.type === "drag-candidate") {
     const distance = Math.hypot(event.clientX - action.startClientX, event.clientY - action.startClientY);
     if (distance < 4) return;
@@ -6150,6 +6530,11 @@ function finishPointerInteraction(event) {
   const action = state.action;
   if (!action) return;
 
+  if (action.type === "connect") {
+    finishConnectionDrag(event);
+    return;
+  }
+
   if (action.type === "marquee") {
     selectionBox.classList.add("hidden");
     if (!action.moved) {
@@ -6184,6 +6569,8 @@ function finishPointerInteraction(event) {
 shell.addEventListener("pointerdown", (event) => {
   if (!isCanvasSurface(event.target)) return;
 
+  closeConnectionCreateMenu();
+
   if (event.button === 1 || state.isSpaceDown) {
     event.preventDefault();
     beginPan(event);
@@ -6207,8 +6594,32 @@ window.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointercancel", finishPointerInteraction);
 
 shell.addEventListener("dblclick", (event) => {
-  if (event.target instanceof Element && event.target.closest(".canvas-node")) return;
+  if (event.target instanceof Element && event.target.closest(".canvas-node, .connection-create-menu")) return;
   addNodeAt(event.clientX, event.clientY);
+});
+
+connectionCreateMenu?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+
+connectionCreateMenu?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
+  const drop = state.connectionDrop;
+  if (!button || !drop) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const mode = button.dataset.connectionCreate === "video" ? "video" : "image";
+  const sourceNodeId = drop.sourceNodeId;
+  const node = addNodeAt(drop.clientX, drop.clientY, mode, {
+    useLastPreset: false,
+    anchor: "input",
+  });
+  closeConnectionCreateMenu();
+  if (!node) return;
+  createConnection(sourceNodeId, node.id);
+  node.expanded = true;
+  setSelection([node.id], node.id, { keepConnection: true });
+  render();
 });
 
 window.addEventListener(
@@ -6249,6 +6660,11 @@ window.addEventListener("keydown", (event) => {
   const target = event.target;
   const isTyping = target instanceof Element && target.closest("input, textarea, [contenteditable='true']");
   if (isTyping) return;
+  if (event.key === "Escape" && !connectionCreateMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    closeConnectionCreateMenu();
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
     undoLastAction();
@@ -6258,6 +6674,12 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "Space") {
     state.isSpaceDown = true;
     shell.classList.add("space-pan");
+  }
+
+  if ((event.key === "Delete" || event.key === "Backspace") && state.activeConnectionId && !state.selectedIds.size && !state.activeGroupId) {
+    event.preventDefault();
+    removeConnection(state.activeConnectionId);
+    return;
   }
 
   if ((event.key === "Delete" || event.key === "Backspace") && (state.selectedIds.size || state.activeGroupId)) {
