@@ -27,7 +27,7 @@
   height: 16px;
   margin-right: 48px;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--workspace-muted) 7%, transparent);
+  background: color-mix(in srgb, var(--workspace-muted) 5.5%, transparent);
 }
 
 .horizontalTrack i {
@@ -36,7 +36,7 @@
   height: 100%;
   overflow: hidden;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--usage-accent) 84%, var(--workspace-surface));
+  background: #9eabe1;
 }
 
 .horizontalTrack strong {
@@ -97,10 +97,10 @@
 
 .plotCanvas { position: relative; height: 268px; }
 .plotSvg { display: block; width: 100%; height: 268px; overflow: visible; }
-.gridLine { stroke: var(--workspace-border); stroke-dasharray: 4 4; stroke-width: 1; }
-.video { fill: var(--usage-video); background: var(--usage-video); }
-.image { fill: var(--usage-image); background: var(--usage-image); }
-.processing { fill: var(--usage-processing); background: var(--usage-processing); }
+.gridLine { stroke: color-mix(in srgb, var(--workspace-border) 78%, transparent); stroke-dasharray: 4 4; stroke-width: 1; }
+.video { fill: color-mix(in srgb, var(--usage-video) 88%, #aebbea); background: color-mix(in srgb, var(--usage-video) 88%, #aebbea); }
+.image { fill: color-mix(in srgb, var(--usage-image) 88%, #c1cdec); background: color-mix(in srgb, var(--usage-image) 88%, #c1cdec); }
+.processing { fill: color-mix(in srgb, var(--usage-processing) 88%, #d0ccea); background: color-mix(in srgb, var(--usage-processing) 88%, #d0ccea); }
 .hitArea { fill: transparent; }
 .xLabel { fill: var(--workspace-subtle); font-size: 10.5px; }
 
@@ -131,7 +131,7 @@
 .tooltip > span { display: grid; min-height: 18px; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; color: var(--workspace-muted); font-size: 11px; }
 .tooltip i { width: 7px; height: 7px; border-radius: 2px; }
 .tooltip b { color: var(--workspace-text); font-weight: 650; font-variant-numeric: tabular-nums; }
-.totalDot { border-radius: 50% !important; background: var(--usage-accent); }
+.totalDot { border-radius: 50% !important; background: color-mix(in srgb, var(--workspace-text) 88%, #353741); }
 
 .legend {
   grid-column: 2;

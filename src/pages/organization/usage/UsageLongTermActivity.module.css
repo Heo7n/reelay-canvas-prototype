@@ -1,0 +1,92 @@
+.activity {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 10px 12px;
+}
+
+.heading {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-inline: 10px;
+}
+
+.heading h3 {
+  margin: 0;
+  color: var(--workspace-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.headingTools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rangeHint {
+  color: var(--workspace-subtle);
+  font-size: 10px;
+}
+
+.modeTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--workspace-border) 82%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--workspace-bg) 42%, var(--workspace-surface));
+}
+
+.modeTabs button {
+  min-width: 50px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--workspace-muted);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: background .16s ease, box-shadow .16s ease, color .16s ease;
+}
+
+.modeTabs button:hover {
+  color: var(--workspace-text);
+}
+
+.modeTabs button[aria-pressed="true"] {
+  background: var(--workspace-surface);
+  box-shadow: 0 1px 4px rgb(28 34 48 / 7%);
+  color: var(--usage-accent);
+  font-weight: 680;
+}
+
+.modeTabs button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--usage-accent) 52%, transparent);
+  outline-offset: 1px;
+}
+
+.chartViewport {
+  min-width: 0;
+  overflow: visible;
+  container-type: inline-size;
+}
+
+@media (max-width: 720px) {
+  .activity { padding-inline: 14px; }
+  .heading { align-items: flex-start; }
+  .headingTools { align-items: flex-end; gap: 6px; }
+  .rangeHint { display: none; }
+  .modeTabs button { min-width: 44px; padding-inline: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modeTabs button { transition: none; }
+}

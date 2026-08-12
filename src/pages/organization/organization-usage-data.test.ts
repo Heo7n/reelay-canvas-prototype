@@ -85,11 +85,14 @@ describe("organization usage demo data", () => {
     const demo = createOrganizationUsageDemoData(members, now);
     const range = getUsageRange("rolling30", now);
     const timeline = buildUsageTimeline(filterUsageRecords(demo.records, range), range, "day");
+    const saturdayTotals: number[] = [];
 
     timeline.forEach((point) => {
       const weekday = new Date(`${point.key}T12:00:00+08:00`).getDay();
       if (weekday === 6) {
-        expect(point.total).toBe(0);
+        saturdayTotals.push(point.total);
+        expect(point.total === 0 || point.total >= 2_800).toBe(true);
+        expect(point.total).toBeLessThanOrEqual(5_200);
         return;
       }
       if (weekday === 0) {
@@ -100,6 +103,8 @@ describe("organization usage demo data", () => {
       expect(point.total).toBeGreaterThanOrEqual(6_500);
       expect(point.total).toBeLessThanOrEqual(9_700);
     });
+
+    expect(saturdayTotals.some((total) => total > 0)).toBe(true);
   });
 
   it("uses the documented natural-day ranges and comparison periods", () => {
