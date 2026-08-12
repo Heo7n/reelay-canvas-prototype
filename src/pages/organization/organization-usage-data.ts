@@ -544,10 +544,18 @@ function weightedIndex(weights: number[], seed: number): number {
   return Math.max(0, weights.length - 1);
 }
 
+function isOccasionalSaturdayRestDay(dayOffset: number): boolean {
+  return deterministicUnit(dayOffset * 193 + 109) < 0.14;
+}
+
 function getDailyEventCount(date: Date, dayOffset: number): number {
   const dayOfWeek = shiftToOrganizationTime(date).getUTCDay();
-  if (dayOfWeek === 6) return 0;
   const activitySeed = deterministicUnit(dayOffset * 97 + 31);
+  if (dayOfWeek === 6) {
+    return isOccasionalSaturdayRestDay(dayOffset)
+      ? 0
+      : 3 + Math.floor(activitySeed * 4);
+  }
   return dayOfWeek === 0
     ? 6 + Math.floor(activitySeed * 3)
     : 9 + Math.floor(activitySeed * 5);
@@ -555,8 +563,12 @@ function getDailyEventCount(date: Date, dayOffset: number): number {
 
 function getDailyCreditTarget(date: Date, dayOffset: number): number {
   const dayOfWeek = shiftToOrganizationTime(date).getUTCDay();
-  if (dayOfWeek === 6) return 0;
   const volumeSeed = deterministicUnit(dayOffset * 151 + 73);
+  if (dayOfWeek === 6) {
+    return isOccasionalSaturdayRestDay(dayOffset)
+      ? 0
+      : Math.round(2_800 + volumeSeed * 2_400);
+  }
   return dayOfWeek === 0
     ? Math.round(5_200 + volumeSeed * 1_200)
     : Math.round(6_500 + volumeSeed * 3_200);

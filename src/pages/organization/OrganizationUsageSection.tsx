@@ -1,12 +1,12 @@
 import {
   ChevronDown,
   ChevronRight,
+  Clapperboard,
   Download,
-  Image as ImageIcon,
+  Images,
   Info,
   RefreshCw,
-  Video,
-  WandSparkles,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,6 +18,7 @@ import {
   filterUsageRecords,
   formatUsageDateInput,
   getUsageComposition,
+  getHeatmapDays,
   getUsageRange,
   getUsageSummary,
   type UsageCompositionItem,
@@ -25,6 +26,7 @@ import {
   type UsageRangePreset,
 } from "./organization-usage-data";
 import { UsageDistributionChart } from "./usage/UsageDistributionChart";
+import { UsageLongTermActivity } from "./usage/UsageLongTermActivity";
 import { UsageSourceTable } from "./usage/UsageSourceTable";
 import {
   buildUsageTimeline,
@@ -91,8 +93,8 @@ function OverviewArt({ kind }: { kind: "credits" | "trend" }) {
       <svg viewBox="0 0 48 48" aria-hidden="true">
         <defs>
           <linearGradient id="usage-credit-art" x1="8" y1="5" x2="39" y2="43" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#8b9de2" />
-            <stop offset="1" stopColor="#5770cf" />
+            <stop stopColor="#aebbea" />
+            <stop offset="1" stopColor="#7489d8" />
           </linearGradient>
         </defs>
         <ellipse cx="24" cy="13" rx="12" ry="5.5" fill="url(#usage-credit-art)" />
@@ -100,7 +102,7 @@ function OverviewArt({ kind }: { kind: "credits" | "trend" }) {
         <path d="M12 22v8c0 3 5.4 5.5 12 5.5S36 33 36 30v-8" fill="url(#usage-credit-art)" opacity=".68" />
         <path d="M12 31v4c0 3 5.4 5.5 12 5.5S36 38 36 35v-4" fill="url(#usage-credit-art)" opacity=".5" />
         <path d="M12 13c0 3 5.4 5.5 12 5.5S36 16 36 13M12 22c0 3 5.4 5.5 12 5.5S36 25 36 22M12 31c0 3 5.4 5.5 12 5.5S36 34 36 31" fill="none" stroke="#fff" strokeOpacity=".78" strokeWidth="1.3" />
-        <path d="M39 8v5M36.5 10.5h5" stroke="#8092dc" strokeLinecap="round" strokeWidth="1.7" />
+        <path d="M39 8v5M36.5 10.5h5" stroke="#92a2e0" strokeLinecap="round" strokeWidth="1.7" />
       </svg>
     );
   }
@@ -125,9 +127,9 @@ function OverviewArt({ kind }: { kind: "credits" | "trend" }) {
 }
 
 function typeIcon(id: string) {
-  if (id === "video") return <Video aria-hidden="true" />;
-  if (id === "image") return <ImageIcon aria-hidden="true" />;
-  return <WandSparkles aria-hidden="true" />;
+  if (id === "video") return <Clapperboard aria-hidden="true" />;
+  if (id === "image") return <Images aria-hidden="true" />;
+  return <SlidersHorizontal aria-hidden="true" />;
 }
 
 export function OrganizationUsageSection({
@@ -136,8 +138,9 @@ export function OrganizationUsageSection({
 }: OrganizationUsageSectionProps) {
   const [refreshedAt, setRefreshedAt] = useState(() => new Date());
   const [rangePreset, setRangePreset] = useState<DashboardRange>("rolling7");
-  const [sourceDimension, setSourceDimension] = useState<SourceDimension>("project");
+  const [sourceDimension, setSourceDimension] = useState<SourceDimension>("model");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const [selectedBreakdown, setSelectedBreakdown] = useState<SelectedBreakdown | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -186,6 +189,10 @@ export function OrganizationUsageSection({
   );
   const todayRecords = useMemo(
     () => filterUsageRecords(demoData.records, getUsageRange("today", refreshedAt)),
+    [demoData.records, refreshedAt],
+  );
+  const longTermActivityDays = useMemo(
+    () => getHeatmapDays(demoData.records, refreshedAt),
     [demoData.records, refreshedAt],
   );
   const summary = useMemo(
@@ -276,30 +283,63 @@ export function OrganizationUsageSection({
       </header>
 
       <div className={styles.overviewGrid}>
-        <article className={styles.overviewCard}>
-          <i className={styles.overviewIcon}><OverviewArt kind="credits" /></i>
-          <div className={styles.overviewMetric} data-accent="true">
-            <span>可用积分</span>
-            <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
+        <article className={styles.overviewCard} data-expanded={activityExpanded}>
+          <div className={styles.overviewMetricsRow}>
+            <div className={styles.overviewMetricGroup}>
+              <i className={styles.overviewIcon}><OverviewArt kind="credits" /></i>
+              <div className={styles.overviewMetric} data-accent="true">
+                <span>可用积分</span>
+                <strong>{numberFormatter.format(demoData.availableCredits)}</strong>
+              </div>
+            </div>
+            <div className={styles.metricDivider} aria-hidden="true" />
+            <div className={styles.overviewMetric}>
+              <span>
+                预计可用天数
+                <button
+                  type="button"
+                  className={styles.metricHelp}
+                  aria-label="预计可用天数说明"
+                  aria-describedby="estimated-days-help"
+                >
+                  <Info aria-hidden="true" />
+                  <span id="estimated-days-help" role="tooltip">按近30天日均消耗估算</span>
+                </button>
+              </span>
+              <strong>{formatEstimatedDays(summary.estimatedDaysRecent)}</strong>
+            </div>
+            <div className={styles.metricDivider} aria-hidden="true" />
+            <div className={styles.overviewMetric} data-compact="true">
+              <span>今日已消耗</span>
+              <strong>{numberFormatter.format(todayCredits)}</strong>
+            </div>
+            <div className={styles.metricDivider} aria-hidden="true" />
+            <div className={styles.overviewMetric} data-compact="true">
+              <span>近30天日均</span>
+              <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
+            </div>
           </div>
-          <div className={styles.metricDivider} aria-hidden="true" />
-          <div className={styles.overviewMetric}>
-            <span>预计可用天数 <Info aria-hidden="true" /></span>
-            <strong>{formatEstimatedDays(summary.estimatedDaysRecent)}</strong>
-            <small>按近30天日均估算</small>
-          </div>
-          <div className={styles.metricDivider} aria-hidden="true" />
-          <div className={styles.overviewMetric} data-compact="true">
-            <span>今日已消耗</span>
-            <strong>{numberFormatter.format(todayCredits)}</strong>
-          </div>
-          <div className={styles.metricDivider} aria-hidden="true" />
-          <div className={styles.overviewMetric} data-compact="true">
-            <span>近30天日均</span>
-            <strong>{numberFormatter.format(summary.recentDailyAverage)}</strong>
+          <div
+            id="long-term-activity-region"
+            className={styles.longTermActivityRegion}
+            aria-hidden={!activityExpanded}
+            inert={!activityExpanded}
+          >
+            <UsageLongTermActivity days={longTermActivityDays} />
           </div>
           <span className={styles.cardGlow} aria-hidden="true" />
         </article>
+        <button
+          type="button"
+          className={styles.activityToggle}
+          aria-label={activityExpanded ? "收起长期活动" : "展开长期活动"}
+          aria-expanded={activityExpanded}
+          aria-controls="long-term-activity-region"
+          onClick={() => setActivityExpanded((expanded) => !expanded)}
+          onPointerUp={(event) => event.currentTarget.blur()}
+        >
+          <ChevronDown aria-hidden="true" />
+        </button>
       </div>
 
       <header className={styles.analysisHeading}>
