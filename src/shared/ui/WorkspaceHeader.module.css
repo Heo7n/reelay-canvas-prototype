@@ -71,35 +71,63 @@
 
 .accountOverview {
   display: grid;
-  overflow: hidden;
-  border-radius: 12px;
-  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  gap: 2px;
+  padding-block: 5px;
+  border-block: 1px solid color-mix(in srgb, var(--workspace-text, #171719) 8%, transparent);
 }
 
-.creditSummary {
+.overviewRow {
   display: grid;
   width: 100%;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  min-height: 42px;
+  grid-template-columns: 18px minmax(0, 1fr) auto 14px;
   align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
+  gap: 8px;
+  padding: 0 10px;
   border: 0;
+  border-radius: 9px;
   background: transparent;
-  color: inherit;
+  color: var(--workspace-text, #171719);
   font: inherit;
+  text-align: left;
+  text-decoration: none;
   cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
 }
-.creditSummary:hover { background: color-mix(in srgb, var(--workspace-text, #171719) 4%, transparent); }
-.creditSummary > svg { width: 15px; height: 15px; color: var(--workspace-muted, #77777d); }
-.creditCopy { display: grid; min-width: 0; gap: 2px; text-align: left; }
-.creditLabel { color: var(--workspace-muted, #77777d); font-size: 12px; font-weight: 720; }
-.creditCopy small { color: var(--workspace-muted, #77777d); font-size: 11px; }
-.creditSummary strong { color: var(--workspace-text, #171719); font-size: 20px; line-height: 1; }
-
-.overviewDivider {
-  height: 1px;
-  margin: 0 12px;
-  background: color-mix(in srgb, var(--workspace-text, #171719) 6%, transparent);
+.overviewRow:hover { background: var(--workspace-hover, rgba(23, 23, 25, 0.055)); }
+.overviewRow > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--workspace-muted, #77777d);
+  transition: color 0.14s ease, transform 0.14s ease;
+}
+.overviewRow > svg:last-child { justify-self: end; }
+.overviewRow:hover > svg:first-child { color: var(--workspace-text, #171719); }
+.overviewRow:hover > svg:last-child {
+  color: var(--workspace-text, #171719);
+}
+.overviewLabel {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--workspace-text, #171719);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overviewMeta {
+  color: var(--workspace-muted, #77777d);
+  font-size: 11px;
+  font-weight: 620;
+  white-space: nowrap;
+}
+.creditValue {
+  color: var(--workspace-text, #171719);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 780;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .menuList { display: grid; gap: 2px; }
@@ -127,22 +155,6 @@
 .menuItem svg { width: 15px; height: 15px; }
 .menuItem > svg:last-child:not(:first-child) { grid-column: 4; justify-self: end; }
 .menuItem small { grid-column: 3 / 5; justify-self: end; color: var(--workspace-muted, #77777d); font-size: 10px; }
-.membership {
-  min-height: 42px;
-  padding-inline: 12px;
-  border-radius: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.membershipName {
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-.membership small { grid-column: 3; }
-.membership:hover,
-.membership:focus-visible {
-  background: transparent;
-}
 .signOut { color: #d64c58; }
 .profile form { margin: 0; }
 
@@ -227,7 +239,7 @@
 .accountTrigger:focus-visible,
 .menuItem:focus-visible,
 .helpLink:focus-visible,
-.creditSummary:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: -3px; }
+.overviewRow:focus-visible { outline: 3px solid rgba(87, 112, 207, 0.24); outline-offset: -3px; }
 
 @media (max-width: 680px) {
   .header { height: 64px; padding: 12px 16px; }

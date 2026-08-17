@@ -242,7 +242,7 @@ export function WorkspaceHeader({
 
                 <div className={styles.accountOverview}>
                   <Link
-                    className={`${styles.menuItem} ${styles.membership}`}
+                    className={styles.overviewRow}
                     state={{
                       organizationReturnTo: `${location.pathname}${location.search}${location.hash}`,
                     }}
@@ -251,14 +251,13 @@ export function WorkspaceHeader({
                     onClick={closeProfile}
                   >
                     <Building2 aria-hidden="true" />
-                    <span className={styles.membershipName}>{currentWorkspace.name}</span>
-                    <small>{membershipRoleLabels[membershipRole]}</small>
+                    <span className={styles.overviewLabel}>{currentWorkspace.name}</span>
+                    <span className={styles.overviewMeta}>{membershipRoleLabels[membershipRole]}</span>
                     <ChevronRight aria-hidden="true" />
                   </Link>
 
-                  <div className={styles.overviewDivider} aria-hidden="true" />
                   <button
-                    className={styles.creditSummary}
+                    className={styles.overviewRow}
                     type="button"
                     aria-label="查看我的积分"
                     onClick={() => {
@@ -268,11 +267,9 @@ export function WorkspaceHeader({
                     }}
                   >
                     <CircleDollarSign aria-hidden="true" />
-                    <span className={styles.creditCopy}>
-                      <span className={styles.creditLabel}>可用积分</span>
-                      <small>累计消耗 0 积分</small>
-                    </span>
-                    <strong>3000</strong>
+                    <span className={styles.overviewLabel}>可用积分</span>
+                    <strong className={styles.creditValue}>3,000</strong>
+                    <ChevronRight aria-hidden="true" />
                   </button>
                 </div>
 
