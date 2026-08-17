@@ -105,23 +105,25 @@
 .outputScale[data-project="true"] {
   display: grid;
   box-sizing: border-box;
-  width: fit-content;
-  max-width: 100%;
-  grid-auto-columns: max-content;
-  grid-auto-flow: column;
-  justify-self: center;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-self: stretch;
   gap: 0;
   padding: 4px 5px;
   border: 1px solid color-mix(in srgb, var(--workspace-border) 54%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--workspace-bg) 21%, var(--workspace-surface));
 }
-.outputScale[data-project="true"] em {
-  min-width: max-content;
+.row > .outputScale[data-project="true"] > em[data-kind] {
+  display: grid;
+  min-width: 0;
   height: 24px;
-  justify-content: flex-start;
+  grid-template-columns: 22px max-content minmax(3ch, 1fr) max-content;
+  align-items: center;
+  justify-content: stretch;
   gap: 5px;
-  padding: 0 10px;
+  padding: 0 9px;
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--workspace-border) 62%, transparent);
   border-radius: 0;
@@ -131,8 +133,8 @@
 .outputScale[data-project="true"] svg { width: 16px; height: 16px; padding: 3px; border-radius: 4px; background: color-mix(in srgb, var(--usage-video) 5%, var(--workspace-surface)); color: var(--usage-video); }
 .outputScale[data-project="true"] em[data-kind="image"] svg { background: color-mix(in srgb, var(--usage-image) 5%, var(--workspace-surface)); color: var(--usage-image); }
 .outputScale[data-project="true"] em[data-kind="processing"] svg { background: color-mix(in srgb, var(--usage-processing) 5%, var(--workspace-surface)); color: var(--usage-processing); }
-.outputScale[data-project="true"] span { color: var(--workspace-muted); }
-.outputScale[data-project="true"] strong { margin-left: 5px; color: var(--workspace-text); font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.outputScale[data-project="true"] span { overflow: hidden; color: var(--workspace-muted); text-overflow: ellipsis; }
+.outputScale[data-project="true"] strong { min-width: 0; justify-self: end; margin-left: 0; color: var(--workspace-text); font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .outputScale[data-project="true"] small { color: var(--workspace-subtle); font-size: 9px; }
 .row > span > em[data-kind] { display: inline-flex; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, #62caae 13%, var(--workspace-surface)); color: #2f8c74; font-size: 10px; font-style: normal; }
 .row > span > em[data-kind="视频"] { background: color-mix(in srgb, #5c8ef7 12%, var(--workspace-surface)); color: #416fcf; }
