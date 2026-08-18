@@ -20,17 +20,40 @@
   vector-effect: non-scaling-stroke;
 }
 
+.connection-group:hover .connection-path {
+  stroke: color-mix(in srgb, #5c7cfa 64%, var(--text, #18191c));
+  opacity: 0.9;
+  stroke-width: 1.7;
+}
+
 .connection-underlay {
   stroke: color-mix(in srgb, var(--bg, #fff) 88%, transparent);
   stroke-width: 4.5;
   opacity: 0.76;
-  transition: opacity 140ms ease;
+  transition: opacity 160ms ease;
 }
 
 .connection-path {
   stroke: color-mix(in srgb, var(--text-muted, #8a8d94) 48%, transparent);
   stroke-width: 1.35;
-  transition: stroke 140ms ease, opacity 140ms ease, stroke-width 140ms ease;
+  transition: stroke 160ms ease, opacity 160ms ease, stroke-width 160ms ease;
+}
+
+.connection-group.is-new .connection-underlay,
+.connection-group.is-new .connection-path {
+  animation: connection-settle 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes connection-settle {
+  from {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    opacity: 0.38;
+  }
+  to {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
 }
 
 .connection-hit-path {
@@ -60,6 +83,45 @@
   stroke-width: 2;
 }
 
+.connection-cut-control {
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.connection-group.is-active .connection-cut-control {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.connection-cut-surface {
+  fill: var(--panel-solid, #fff);
+  stroke: color-mix(in srgb, var(--text, #18191c) 20%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 2px 5px rgb(0 0 0 / 14%));
+  transition: fill 120ms ease, stroke 120ms ease;
+}
+
+.connection-cut-mark {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text, #18191c) 72%, transparent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.connection-cut-control:hover .connection-cut-surface {
+  fill: color-mix(in srgb, #ef4444 8%, var(--panel-solid, #fff));
+  stroke: color-mix(in srgb, #ef4444 48%, transparent);
+}
+
+.connection-cut-control:hover .connection-cut-mark {
+  stroke: #dc3e45;
+}
+
 .connection-preview {
   fill: none;
   stroke: color-mix(in srgb, #5c7cfa 84%, var(--text, #18191c));
@@ -71,21 +133,58 @@
   filter: drop-shadow(0 1px 2px rgb(92 124 250 / 24%));
 }
 
+.connection-preview-endpoint {
+  fill: var(--panel-solid, #fff);
+  stroke: color-mix(in srgb, #5c7cfa 88%, var(--text, #18191c));
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgb(92 124 250 / 22%));
+  transition: r 120ms ease;
+}
+
+.connection-preview-endpoint.is-snapped {
+  r: 5.25px;
+  fill: color-mix(in srgb, #5c7cfa 12%, var(--panel-solid, #fff));
+}
+
+.node-port-zone {
+  --port-zone-width: calc(36px * var(--connection-ui-scale, 1));
+  --port-zone-height: calc(56px * var(--connection-ui-scale, 1));
+  position: absolute;
+  top: 50%;
+  width: var(--port-zone-width);
+  height: var(--port-zone-height);
+  pointer-events: auto;
+  touch-action: none;
+  transform: translateY(-50%);
+  z-index: 8;
+}
+
+.node-port-zone-input {
+  right: calc(100% - (8px * var(--connection-ui-scale, 1)));
+}
+
+.node-port-zone-output {
+  left: calc(100% - (8px * var(--connection-ui-scale, 1)));
+}
+
 .node-port {
   --port-accent: #5c7cfa;
   position: absolute;
-  top: 50%;
-  width: 24px;
-  height: 24px;
+  top: var(--port-y, 50%);
+  left: var(--port-x, 50%);
+  width: calc(21px * var(--connection-ui-scale, 1));
+  height: calc(21px * var(--connection-ui-scale, 1));
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--text, #18191c) 24%, transparent);
+  border: calc(1px * var(--connection-ui-scale, 1)) solid color-mix(in srgb, var(--text, #18191c) 24%, transparent);
   border-radius: 50%;
   background: color-mix(in srgb, var(--panel-solid, #fff) 96%, transparent);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 13%);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%) scale(0.72);
-  transition: opacity 120ms ease, transform 140ms ease, border-color 120ms ease, background 120ms ease, box-shadow 140ms ease;
+  transform: translate(-50%, -50%) scale(0.72);
+  transition: left 36ms linear, top 36ms linear, opacity 110ms ease, transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 130ms ease, background 130ms ease, box-shadow 150ms ease;
   cursor: crosshair;
   touch-action: none;
   z-index: 8;
@@ -97,66 +196,97 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 8px;
-  height: 1.5px;
+  width: calc(7.5px * var(--connection-ui-scale, 1));
+  height: calc(1.25px * var(--connection-ui-scale, 1));
   border-radius: 999px;
   background: color-mix(in srgb, var(--text, #18191c) 76%, transparent);
   transform: translate(-50%, -50%);
   transition: background 120ms ease, transform 140ms ease;
 }
 
+.node-port.is-connected {
+  border-color: color-mix(in srgb, var(--text, #18191c) 34%, transparent);
+}
+
 .node-port::after {
   transform: translate(-50%, -50%) rotate(90deg);
 }
 
-.node-port-input { left: -12px; }
-.node-port-output { right: -12px; }
+.node-port-input { --port-x: 27.778%; }
+.node-port-output { --port-x: 72.222%; }
 
-.canvas-node:hover .node-port,
+.node-port-zone:hover .node-port,
 .canvas-node.selected .node-port,
-.canvas-shell.connecting .node-port-input {
+.node-port.is-drag-origin,
+.node-port.is-valid-target {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(-50%) scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }
 
-.canvas-node:hover .node-port:hover,
-.canvas-node.selected .node-port:hover {
+.node-port-zone:hover .node-port {
   border-color: color-mix(in srgb, var(--port-accent) 76%, transparent);
-  box-shadow: 0 3px 10px rgb(0 0 0 / 15%), 0 0 0 4px rgb(92 124 250 / 9%);
-  transform: translateY(-50%) scale(1.06);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%), 0 0 0 3px rgb(92 124 250 / 7%);
+  transform: translate(-50%, -50%) scale(1.03);
 }
 
-.canvas-shell.connecting .node-port-output {
-  opacity: 0.18;
-  pointer-events: none;
+.canvas-node.selected .node-port {
+  border-color: color-mix(in srgb, var(--text, #18191c) 32%, transparent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
 }
 
-.canvas-shell.connecting .canvas-node.connection-origin .node-port-output {
+.canvas-shell.connecting .canvas-node.connection-origin .node-port.is-drag-origin {
   opacity: 1;
-  transform: translateY(-50%) scale(1.08);
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1.08);
   border-color: var(--port-accent);
   box-shadow: 0 0 0 5px rgb(92 124 250 / 12%);
 }
 
-.node-port.is-valid-target,
-.canvas-node.connection-target .node-port-input {
+.node-port.is-valid-target {
   border-color: var(--port-accent);
   background: var(--port-accent);
   box-shadow: 0 0 0 5px rgb(92 124 250 / 14%);
-  transform: translateY(-50%) scale(1.12);
+  transform: translate(-50%, -50%) scale(1.14);
 }
 
 .node-port.is-valid-target::before,
-.node-port.is-valid-target::after,
-.canvas-node.connection-target .node-port-input::before,
-.canvas-node.connection-target .node-port-input::after {
+.node-port.is-valid-target::after {
   background: white;
 }
 
-.canvas-shell.connection-low-detail .connection-layer,
-.canvas-shell.connection-low-detail .node-port {
-  display: none;
+.canvas-shell.connecting .canvas-node.connection-target .media-frame::before {
+  content: "";
+  position: absolute;
+  z-index: 21;
+  inset: calc(-5px * var(--connection-ui-scale, 1));
+  border: calc(2px * var(--connection-ui-scale, 1)) solid color-mix(in srgb, #5c7cfa 84%, transparent);
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 calc(4px * var(--connection-ui-scale, 1)) rgb(92 124 250 / 10%),
+    0 8px 24px rgb(92 124 250 / 12%);
+  opacity: 1;
+  pointer-events: none;
+  animation: connection-target-ready 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes connection-target-ready {
+  from {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.canvas-shell.connection-low-detail .connection-layer {
+  opacity: 0.46;
+}
+
+.canvas-shell.connection-low-detail .node-port-zone {
+  display: block;
 }
 
 .connection-create-menu {
@@ -222,4 +352,20 @@ html[data-theme="dark"] .connection-create-menu {
 
 html[data-theme="dark"] .connection-underlay {
   stroke: rgb(6 7 9 / 78%);
+}
+
+html[data-theme="dark"] .connection-cut-surface {
+  fill: #242528;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-group.is-new .connection-underlay,
+  .connection-group.is-new .connection-path {
+    animation: none;
+  }
+
+
+  .canvas-shell.connecting .canvas-node.connection-target .media-frame::before {
+    animation: none;
+  }
 }

@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260811-context-links-2" />
+  <link rel="stylesheet" href="./styles.css?v=20260817-port-scale-3" />
+  <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260817-edge-feedback-1" />
   </head>
   <body>
     <main class="app-shell">
@@ -194,6 +195,7 @@
           <svg class="connection-layer" id="connectionLayer" aria-hidden="true">
             <g id="connectionPaths"></g>
             <path class="connection-preview hidden" id="connectionPreview"></path>
+            <circle class="connection-preview-endpoint hidden" id="connectionPreviewEndpoint" r="4"></circle>
           </svg>
           <div class="node-layer" id="nodeLayer"></div>
         </div>
@@ -351,8 +353,18 @@
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
     <script src="./data/model-catalog.js?v=20260710-undo-feedback"></script>
     <script src="./src/config/prototype-config.js?v=20260716-foundation-modularization"></script>
-    <script src="./src/legacy-canvas/canvas-connections.js?v=20260811-context-links"></script>
-    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260722-allow-list"></script>
-    <script src="./app.js?v=20260811-context-links"></script>
+    <script src="./src/legacy-canvas/canvas-connections.js?v=20260812-context-links-7"></script>
+    <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260812-context-links-2"></script>
+    <script src="./src/legacy-canvas/canvas-connection-renderer.js?v=20260818-progressive-split-1"></script>
+    <script src="./src/legacy-canvas/canvas-layer-reconciler.js?v=20260818-progressive-split-2"></script>
+    <script src="./src/legacy-canvas/canvas-node-interaction.js?v=20260818-progressive-split-3"></script>
+    <script src="./src/legacy-canvas/canvas-node-pointer-controller.js?v=20260818-progressive-split-4"></script>
+    <script src="./src/legacy-canvas/canvas-node-drag-controller.js?v=20260818-progressive-split-5"></script>
+    <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260818-progressive-split-6"></script>
+    <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
+    <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260818-progressive-split-8"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260818-progressive-split-9"></script>
+    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260812-context-links-5"></script>
+    <script src="./app.js?v=20260818-progressive-split-9"></script>
   </body>
 </html>

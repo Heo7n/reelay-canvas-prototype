@@ -67,7 +67,20 @@
         : source?.mode;
       if (!id || !MEDIA_TYPES.has(mediaType)) continue;
       if (!canConnect(normalized, nodes, sourceNodeId, targetNodeId).ok) continue;
-      normalized.push({ id, sourceNodeId, targetNodeId, mediaType });
+      const connection = { id, sourceNodeId, targetNodeId, mediaType };
+      if (Number.isFinite(candidate.sourceRatio)) {
+        connection.sourceRatio = Math.max(0.08, Math.min(0.92, candidate.sourceRatio));
+      }
+      if (Number.isFinite(candidate.targetRatio)) {
+        connection.targetRatio = Math.max(0.08, Math.min(0.92, candidate.targetRatio));
+      }
+      if (typeof candidate.sourcePortId === "string" && candidate.sourcePortId.trim()) {
+        connection.sourcePortId = candidate.sourcePortId.trim().slice(0, 240);
+      }
+      if (typeof candidate.targetPortId === "string" && candidate.targetPortId.trim()) {
+        connection.targetPortId = candidate.targetPortId.trim().slice(0, 240);
+      }
+      normalized.push(connection);
     }
     return normalized;
   }

@@ -164,6 +164,20 @@
       seenEdges.add(edgeKey);
 
       const connection = { id, sourceNodeId, targetNodeId };
+      if (Number.isFinite(candidate.sourceRatio)) {
+        connection.sourceRatio = finiteNumber(candidate.sourceRatio, 0.5, 0.08, 0.92);
+      }
+      if (Number.isFinite(candidate.targetRatio)) {
+        connection.targetRatio = finiteNumber(candidate.targetRatio, 0.5, 0.08, 0.92);
+      }
+      if (typeof candidate.sourcePortId === "string") {
+        const sourcePortId = boundedString(candidate.sourcePortId, "", 240).trim();
+        if (sourcePortId) connection.sourcePortId = sourcePortId;
+      }
+      if (typeof candidate.targetPortId === "string") {
+        const targetPortId = boundedString(candidate.targetPortId, "", 240).trim();
+        if (targetPortId) connection.targetPortId = targetPortId;
+      }
       if (typeof candidate.createdAt === "string") {
         const createdAt = boundedString(candidate.createdAt, "", 80).trim();
         if (createdAt) connection.createdAt = createdAt;
