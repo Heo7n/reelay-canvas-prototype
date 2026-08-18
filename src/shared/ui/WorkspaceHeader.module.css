@@ -54,7 +54,7 @@
   display: grid;
   width: 286px;
   max-height: calc(100vh - 92px);
-  gap: 12px;
+  gap: 0;
   overflow: visible;
   padding: 14px;
   border: 1px solid var(--workspace-border, rgba(23, 23, 25, 0.12));
@@ -72,8 +72,9 @@
 .accountOverview {
   display: grid;
   gap: 2px;
-  padding-block: 5px;
-  border-block: 1px solid color-mix(in srgb, var(--workspace-text, #171719) 8%, transparent);
+  margin-top: 12px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--workspace-text, #171719) 8%, transparent);
 }
 
 .overviewRow {
@@ -155,7 +156,7 @@
 .menuItem svg { width: 15px; height: 15px; }
 .menuItem > svg:last-child:not(:first-child) { grid-column: 4; justify-self: end; }
 .menuItem small { grid-column: 3 / 5; justify-self: end; color: var(--workspace-muted, #77777d); font-size: 10px; }
-.signOut { color: #d64c58; }
+.signOut { margin-top: 4px; color: #d64c58; }
 .profile form { margin: 0; }
 
 .appearanceItem { grid-template-columns: 18px minmax(0, 1fr) 58px; }
