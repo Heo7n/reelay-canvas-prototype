@@ -267,7 +267,7 @@ export function WorkspaceHeader({
                     }}
                   >
                     <CircleDollarSign aria-hidden="true" />
-                    <span className={styles.overviewLabel}>可用积分</span>
+                    <span className={styles.overviewLabel}>我的积分</span>
                     <strong className={styles.creditValue}>3,000</strong>
                     <ChevronRight aria-hidden="true" />
                   </button>
