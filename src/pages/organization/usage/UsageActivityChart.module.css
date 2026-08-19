@@ -1,0 +1,216 @@
+.activityChart {
+  --activity-cell-size: calc((100cqw - 104px) / 53);
+  --activity-chart-height: calc(var(--activity-cell-size) * 7 + 12px);
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  height: calc(var(--activity-chart-height) + 21px);
+  grid-template-rows: var(--activity-chart-height) 18px;
+  row-gap: 3px;
+  padding: 0;
+}
+
+.annualPlot {
+  position: relative;
+  grid-row: 1;
+  width: 100%;
+  height: var(--activity-chart-height);
+  min-width: 0;
+  justify-self: center;
+}
+
+.heatmapGrid {
+  display: grid;
+  height: auto;
+  align-self: center;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(53, var(--activity-cell-size));
+  grid-template-rows: repeat(7, var(--activity-cell-size));
+  column-gap: 2px;
+  row-gap: 2px;
+}
+
+.heatmapEmpty,
+.heatmapDay {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+  align-self: start;
+  padding: 0;
+  border: 0;
+  border-radius: 2.5px;
+}
+
+.heatmapDay {
+  position: relative;
+  background: color-mix(in srgb, var(--workspace-muted) 7%, var(--workspace-surface));
+  cursor: crosshair;
+  transition: filter .12s ease, transform .12s ease;
+}
+
+.heatmapDay[data-level="1"] { background: color-mix(in srgb, var(--usage-accent) 20%, var(--workspace-surface)); }
+.heatmapDay[data-level="2"] { background: color-mix(in srgb, var(--usage-accent) 38%, var(--workspace-surface)); }
+.heatmapDay[data-level="3"] { background: color-mix(in srgb, var(--usage-accent) 59%, var(--workspace-surface)); }
+.heatmapDay[data-level="4"] { background: color-mix(in srgb, var(--usage-accent) 82%, var(--workspace-surface)); }
+.heatmapDay:hover { z-index: 4; filter: saturate(1.08); transform: scale(1.13); }
+
+.activityMonthAxis {
+  display: grid;
+  grid-row: 2;
+  width: 100%;
+  min-height: 18px;
+  grid-template-columns: repeat(53, var(--activity-cell-size));
+  column-gap: 2px;
+  align-items: start;
+  justify-self: center;
+  color: var(--workspace-subtle);
+  font-size: 8.5px;
+  font-weight: 580;
+}
+
+.activityMonthAxis span { width: 32px; white-space: nowrap; }
+
+.lineCanvas {
+  overflow: visible;
+}
+
+.lineCanvas svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.activityGuideLines line {
+  stroke: color-mix(in srgb, var(--workspace-border) 72%, transparent);
+  stroke-dasharray: 3 6;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.trendArea {
+  fill: color-mix(in srgb, var(--usage-accent) 7%, transparent);
+  stroke: none;
+}
+
+.trendLine {
+  fill: none;
+  stroke: color-mix(in srgb, var(--usage-accent) 72%, var(--workspace-muted));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineCanvas[data-mode="cumulative"] .trendArea {
+  fill: color-mix(in srgb, var(--usage-accent) 10%, transparent);
+}
+
+.lineCanvas[data-mode="cumulative"] .trendLine {
+  stroke: var(--usage-accent);
+  stroke-width: 2;
+}
+
+.activeGuide line {
+  stroke: color-mix(in srgb, var(--usage-accent) 38%, transparent);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.activeGuide circle {
+  fill: var(--workspace-surface);
+  stroke: var(--usage-accent);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineTarget {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: calc(100% / 53);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: crosshair;
+  transform: translateX(-50%);
+}
+
+.chartTooltip {
+  position: absolute;
+  z-index: 8;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  display: none;
+  min-height: 30px;
+  min-width: max-content;
+  max-width: 280px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--workspace-text) 12%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--workspace-text) 92%, #111318);
+  box-shadow: 0 9px 24px rgb(10 12 18 / 18%);
+  color: var(--workspace-bg);
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity .1s ease, transform .1s ease;
+  white-space: nowrap;
+}
+
+:global(html[data-theme="dark"]) .chartTooltip { background: #f4f5f8; color: #181a1f; }
+.tooltipDate { color: currentColor; font-size: 10px; font-weight: 660; }
+.tooltipSeparator { color: color-mix(in srgb, currentColor 38%, transparent); }
+.tooltipValue { color: currentColor; font-size: 10px; font-weight: 620; }
+.tooltipSecondary { padding-left: 6px; border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent); color: color-mix(in srgb, currentColor 72%, transparent); font-size: 9px; }
+
+.heatmapDay:hover .chartTooltip,
+.heatmapDay:focus-visible .chartTooltip {
+  display: flex;
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.heatmapDay[data-tooltip-side="bottom"] .chartTooltip {
+  top: calc(100% + 7px);
+  bottom: auto;
+}
+
+.lineTooltip {
+  z-index: 5;
+  display: flex;
+  top: max(39px, var(--point-y));
+  bottom: auto;
+  left: var(--point-x);
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
+.lineTooltip[data-tooltip-align="start"] { right: auto; left: 0; transform: translate(0, calc(-100% - 8px)); }
+.lineTooltip[data-tooltip-align="end"] { right: 0; left: auto; transform: translate(0, calc(-100% - 8px)); }
+
+.heatmapDay[data-tooltip-align="start"] .chartTooltip { right: auto; left: 0; transform: translate(0, 4px); }
+.heatmapDay[data-tooltip-align="end"] .chartTooltip { right: 0; left: auto; transform: translate(0, 4px); }
+.heatmapDay[data-tooltip-align="start"]:hover .chartTooltip,
+.heatmapDay[data-tooltip-align="start"]:focus-visible .chartTooltip,
+.heatmapDay[data-tooltip-align="end"]:hover .chartTooltip,
+.heatmapDay[data-tooltip-align="end"]:focus-visible .chartTooltip { transform: translate(0, 0); }
+
+.heatmapDay:focus-visible,
+.lineTarget:focus-visible { outline: 2px solid color-mix(in srgb, var(--usage-accent) 60%, transparent); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .heatmapDay,
+  .chartTooltip { transition: none; }
+}

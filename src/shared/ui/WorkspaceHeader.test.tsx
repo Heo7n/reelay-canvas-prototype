@@ -60,7 +60,9 @@ describe("workspace account menu", () => {
     fireEvent.pointerEnter(profileTrigger);
 
     expect(profileTrigger).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: "查看我的积分" })).toHaveTextContent("3000");
+    expect(screen.getByRole("button", { name: "查看我的积分" })).toHaveTextContent("3,000");
+    expect(screen.getByRole("button", { name: "查看我的积分" })).toHaveTextContent("我的积分");
+    expect(screen.queryByText("累计消耗 0 积分")).toBeNull();
     expect(screen.queryByText("个人空间")).toBeNull();
     expect(screen.getByTitle("星海视觉工作室")).toBeInTheDocument();
     expect(screen.getByText("creator@reelay.test")).toBeInTheDocument();

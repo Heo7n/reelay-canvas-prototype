@@ -378,7 +378,7 @@ describe("organization center", () => {
     expect(screen.getByText("可用积分")).toBeInTheDocument();
     expect(screen.getByText("100,000")).toBeInTheDocument();
     expect(screen.getByText("预计可用天数")).toBeInTheDocument();
-    expect(screen.getByText("按近30天日均估算")).toBeInTheDocument();
+    expect(screen.getByText("按近30天日均消耗估算")).toBeInTheDocument();
     expect(screen.getByText("近30天日均")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出报表" })).toBeInTheDocument();
 
@@ -392,10 +392,10 @@ describe("organization center", () => {
 
     expect(screen.getByRole("button", { name: "近7天" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("近7天每日积分消耗")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "按项目" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "模型" })).toHaveAttribute("aria-pressed", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "按模型" }));
-    expect(screen.getByRole("button", { name: "按模型" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "项目" }));
+    expect(screen.getByRole("button", { name: "项目" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getAllByRole("button", { name: /查看.*用量详情/ })[0]);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭消耗明细" }));
@@ -405,8 +405,8 @@ describe("organization center", () => {
     expect(screen.getByRole("img", { name: /近30天每日堆叠柱形图/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /总消耗.*积分/ })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "按成员" }));
-    expect(screen.getByRole("button", { name: "按成员" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "成员" }));
+    expect(screen.getByRole("button", { name: "成员" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("applies usage date ranges only after confirmation and remembers the selection", async () => {

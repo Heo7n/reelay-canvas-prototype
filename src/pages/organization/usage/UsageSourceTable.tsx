@@ -5,7 +5,7 @@ import {
   Search,
   SlidersHorizontal,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   UsageCompositionItem,
@@ -31,9 +31,9 @@ const percentFormatter = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 1,
 });
 const dimensions: { id: SourceDimension; label: string }[] = [
-  { id: "project", label: "按项目" },
-  { id: "model", label: "按模型" },
-  { id: "member", label: "按成员" },
+  { id: "model", label: "模型" },
+  { id: "project", label: "项目" },
+  { id: "member", label: "成员" },
 ];
 
 function getRecordDimensionId(record: UsageRecord, dimension: SourceDimension): string {
@@ -103,6 +103,20 @@ export function UsageSourceTable({
 }: UsageSourceTableProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchControlRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+
+    const closeSearch = (event: PointerEvent) => {
+      if (searchControlRef.current?.contains(event.target as Node)) return;
+      setSearchOpen(false);
+      setQuery("");
+    };
+
+    document.addEventListener("pointerdown", closeSearch);
+    return () => document.removeEventListener("pointerdown", closeSearch);
+  }, [searchOpen]);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("zh-CN");
     if (!normalized) return composition;
@@ -116,9 +130,19 @@ export function UsageSourceTable({
       <header className={styles.header}>
         <h3 id="usage-source-title">消耗来源</h3>
         <div className={styles.actions}>
-          {searchOpen ? (
-            <label className={styles.searchField}>
+          <div ref={searchControlRef} className={styles.searchControl} data-open={searchOpen}>
+            <button
+              type="button"
+              aria-label={searchOpen ? "收起搜索" : "搜索消耗来源"}
+              aria-expanded={searchOpen}
+              onClick={() => {
+                setSearchOpen((open) => !open);
+                if (searchOpen) setQuery("");
+              }}
+            >
               <Search aria-hidden="true" />
+            </button>
+            {searchOpen ? (
               <input
                 autoFocus
                 type="search"
@@ -126,21 +150,15 @@ export function UsageSourceTable({
                 placeholder="搜索"
                 aria-label="搜索消耗来源"
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setQuery("");
+                    setSearchOpen(false);
+                  }
+                }}
               />
-            </label>
-          ) : null}
-          <button
-            type="button"
-            className={styles.searchButton}
-            aria-label={searchOpen ? "收起搜索" : "搜索消耗来源"}
-            aria-pressed={searchOpen}
-            onClick={() => {
-              setSearchOpen((open) => !open);
-              if (searchOpen) setQuery("");
-            }}
-          >
-            <Search aria-hidden="true" />
-          </button>
+            ) : null}
+          </div>
           <div className={styles.tabs} aria-label="消耗来源维度">
             {dimensions.map((item) => (
               <button

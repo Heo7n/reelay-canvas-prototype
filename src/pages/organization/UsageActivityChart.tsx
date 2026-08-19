@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties } from "react";
 
 import type { HeatmapDay } from "./organization-usage-data";
-import styles from "./OrganizationUsageSection.module.css";
+import styles from "./usage/UsageActivityChart.module.css";
 
 export type UsageActivityMode = "calendar" | "weekly" | "cumulative";
 
@@ -87,8 +87,11 @@ function getActivityWeeks(days: HeatmapDay[], leadingSlots: number): ActivityWee
   });
 }
 
-function getLinePoints(weeks: ActivityWeek[]) {
-  const maximum = Math.max(1, ...weeks.map((week) => week.cumulativeCredits));
+function getLinePoints(weeks: ActivityWeek[], mode: Exclude<UsageActivityMode, "calendar">) {
+  const valueOf = (week: ActivityWeek) => (
+    mode === "weekly" ? week.credits : week.cumulativeCredits
+  );
+  const maximum = Math.max(1, ...weeks.map(valueOf));
   const chartHeight = LINE_BASELINE_Y - LINE_PADDING_TOP;
 
   return weeks.map((week, index) => ({
@@ -96,7 +99,7 @@ function getLinePoints(weeks: ActivityWeek[]) {
     x: ((index + 0.5) / COLUMN_COUNT) * LINE_WIDTH,
     y: LINE_PADDING_TOP
       + chartHeight
-      - (week.cumulativeCredits / maximum) * chartHeight,
+      - (valueOf(week) / maximum) * chartHeight,
   }));
 }
 
@@ -121,8 +124,10 @@ export function UsageActivityChart({
     () => getActivityWeeks(days, leadingSlots),
     [days, leadingSlots],
   );
-  const linePoints = useMemo(() => getLinePoints(weeks), [weeks]);
-  const weeklyMaximum = Math.max(1, ...weeks.map((week) => week.credits));
+  const linePoints = useMemo(
+    () => getLinePoints(weeks, mode === "calendar" ? "weekly" : mode),
+    [mode, weeks],
+  );
   const activeLinePoint = activeLineIndex === null ? null : linePoints[activeLineIndex];
 
   return (
@@ -144,6 +149,7 @@ export function UsageActivityChart({
                 className={styles.heatmapDay}
                 data-level={day.level}
                 data-tooltip-align={getTooltipAlignment(column)}
+                data-tooltip-side={(leadingSlots + index) % 7 >= 4 ? "top" : "bottom"}
                 type="button"
                 aria-label={`${dateFormatter.format(day.date)}，${numberFormatter.format(day.credits)} 积分`}
               >
@@ -165,45 +171,17 @@ export function UsageActivityChart({
         </div>
       ) : null}
 
-      {mode === "weekly" ? (
+      {mode !== "calendar" ? (
         <div
-          className={`${styles.annualPlot} ${styles.weeklyBars}`}
-          role="group"
-          aria-label="近 365 天每周积分消耗趋势"
-        >
-          {weeks.map((week, index) => (
-            <button
-              key={week.key}
-              style={{
-                "--bar-height": `${Math.max(2, (week.credits / weeklyMaximum) * 100)}%`,
-              } as CSSProperties}
-              data-tooltip-align={getTooltipAlignment(index)}
-              type="button"
-              aria-label={`${week.label}，${numberFormatter.format(week.credits)} 积分`}
-            >
-              <i aria-hidden="true" />
-              <span className={styles.chartTooltip} aria-hidden="true">
-                <strong className={styles.tooltipDate}>{week.label}</strong>
-                <span className={styles.tooltipSeparator}>·</span>
-                <span className={styles.tooltipValue}>
-                  {numberFormatter.format(week.credits)} 积分
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {mode === "cumulative" ? (
-        <div
-          className={`${styles.annualPlot} ${styles.cumulativeCanvas}`}
+          className={`${styles.annualPlot} ${styles.lineCanvas}`}
+          data-mode={mode}
           onMouseLeave={() => setActiveLineIndex(null)}
         >
           <svg
             viewBox={`0 0 ${LINE_WIDTH} ${LINE_HEIGHT}`}
             preserveAspectRatio="none"
             role="img"
-            aria-label="近 365 天按周累计积分消耗"
+            aria-label={mode === "weekly" ? "近 365 天每周积分消耗趋势" : "近 365 天按周累计积分消耗"}
           >
             <g className={styles.activityGuideLines} aria-hidden="true">
               {[0, 1, 2, 3].map((line) => {
@@ -221,12 +199,12 @@ export function UsageActivityChart({
               })}
             </g>
             <path
-              className={styles.cumulativeArea}
+              className={styles.trendArea}
               d={`${buildPath(linePoints)} L ${linePoints.at(-1)?.x ?? 0} ${LINE_BASELINE_Y} L ${linePoints[0]?.x ?? 0} ${LINE_BASELINE_Y} Z`}
             />
-            <path className={styles.cumulativeLine} d={buildPath(linePoints)} />
+            <path className={styles.trendLine} d={buildPath(linePoints)} />
             {activeLinePoint ? (
-              <g className={styles.activeCumulativeGuide} aria-hidden="true">
+              <g className={styles.activeGuide} aria-hidden="true">
                 <line
                   x1={activeLinePoint.x}
                   x2={activeLinePoint.x}
@@ -240,13 +218,15 @@ export function UsageActivityChart({
           {linePoints.map((point, index) => (
             <button
               key={point.key}
-              className={styles.cumulativeTarget}
+              className={styles.lineTarget}
               data-tooltip-align={getTooltipAlignment(index)}
               style={{
                 left: `${((index + 0.5) / COLUMN_COUNT) * 100}%`,
               }}
               type="button"
-              aria-label={`${point.label}，累计 ${numberFormatter.format(point.cumulativeCredits)} 积分，本周增加 ${numberFormatter.format(point.credits)} 积分`}
+              aria-label={mode === "weekly"
+                ? `${point.label}，${numberFormatter.format(point.credits)} 积分`
+                : `${point.label}，累计 ${numberFormatter.format(point.cumulativeCredits)} 积分，本周增加 ${numberFormatter.format(point.credits)} 积分`}
               onBlur={() => setActiveLineIndex(null)}
               onFocus={() => setActiveLineIndex(index)}
               onMouseEnter={() => setActiveLineIndex(index)}
@@ -254,7 +234,7 @@ export function UsageActivityChart({
           ))}
           {activeLinePoint && activeLineIndex !== null ? (
             <span
-              className={`${styles.chartTooltip} ${styles.cumulativeTooltip}`}
+              className={`${styles.chartTooltip} ${styles.lineTooltip}`}
               data-tooltip-align={getTooltipAlignment(activeLineIndex)}
               style={{
                 "--point-x": `${((activeLineIndex + 0.5) / COLUMN_COUNT) * 100}%`,
@@ -265,11 +245,15 @@ export function UsageActivityChart({
               <strong className={styles.tooltipDate}>{activeLinePoint.label}</strong>
               <span className={styles.tooltipSeparator}>·</span>
               <span className={styles.tooltipValue}>
-                累计 {numberFormatter.format(activeLinePoint.cumulativeCredits)}
+                {mode === "weekly"
+                  ? `${numberFormatter.format(activeLinePoint.credits)} 积分`
+                  : `累计 ${numberFormatter.format(activeLinePoint.cumulativeCredits)}`}
               </span>
-              <span className={styles.tooltipSecondary}>
-                本周 +{numberFormatter.format(activeLinePoint.credits)}
-              </span>
+              {mode === "cumulative" ? (
+                <span className={styles.tooltipSecondary}>
+                  本周 +{numberFormatter.format(activeLinePoint.credits)}
+                </span>
+              ) : null}
             </span>
           ) : null}
         </div>
