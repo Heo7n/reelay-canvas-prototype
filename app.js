@@ -282,6 +282,8 @@ const canvasLayerReconcilerFactory = window.REELAY_CANVAS_LAYER_RECONCILER;
 if (!canvasLayerReconcilerFactory) throw new Error("Canvas layer reconciler is unavailable.");
 const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
 if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
+const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
+if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
 const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectionRenderer({
   paths: connectionPaths,
   preview: connectionPreview,
@@ -2054,16 +2056,10 @@ function getMediaToolLabel(toolId, type) {
   return type === "video" ? "画质增强" : "HD 放大";
 }
 
-function mediaToolButton(toolId, type, showLabel) {
+function getMediaToolPresentation(toolId, type) {
   const definition = mediaToolDefinitions[toolId];
-  if (!definition) return "";
-  const label = getMediaToolLabel(toolId, type);
-  return `
-    <button class="media-tool-button ${showLabel ? "with-label" : ""}" type="button" data-media-tool="${toolId}" title="${label}" aria-label="${label}">
-      <i data-lucide="${definition.icon}" aria-hidden="true"></i>
-      ${showLabel ? `<span>${label}</span>` : ""}
-    </button>
-  `;
+  if (!definition) return null;
+  return { id: toolId, icon: definition.icon, label: getMediaToolLabel(toolId, type) };
 }
 
 function mediaEditToolbar(node, layout) {
@@ -2073,46 +2069,14 @@ function mediaEditToolbar(node, layout) {
   const preference = state.mediaToolPreferences[type] || defaultMediaToolPreferences[type];
   const showLabels = preference.showLabels && layout.mediaWidth >= 440;
   const unpinned = mediaToolsByType[type].filter((tool) => !preference.tools.includes(tool));
-  return `
-    <div class="media-edit-toolbar ${showLabels ? "show-labels" : "compact"}" data-media-toolbar="true" style="--toolbar-scale: ${layout.toolbarScale}">
-      <div class="media-tool-primary">
-        ${preference.tools.map((tool) => mediaToolButton(tool, type, showLabels)).join("")}
-      </div>
-      <div class="media-tool-actions">
-        <button class="media-tool-button" type="button" data-media-tool="toggle-more" title="更多工具" aria-label="更多工具">
-          <i data-lucide="ellipsis" aria-hidden="true"></i>
-        </button>
-        <span class="media-tool-separator" aria-hidden="true"></span>
-        <button class="media-tool-button" type="button" data-media-tool="download" title="下载" aria-label="下载">
-          <i data-lucide="download" aria-hidden="true"></i>
-        </button>
-      </div>
-      ${
-        node.mediaMenuOpen
-          ? `
-            <div class="media-tool-menu">
-              ${unpinned
-                .map(
-                  (tool) => `
-                    <button type="button" data-media-tool="${tool}">
-                      <i data-lucide="${mediaToolDefinitions[tool].icon}" aria-hidden="true"></i>
-                      <span>${getMediaToolLabel(tool, type)}</span>
-                    </button>
-                  `,
-                )
-                .join("")}
-              <div class="media-tool-menu-separator"></div>
-              <button type="button" data-media-tool="customize">
-                <i data-lucide="settings-2" aria-hidden="true"></i>
-                <span>自定义工具栏</span>
-                <i data-lucide="chevron-right" aria-hidden="true"></i>
-              </button>
-            </div>
-          `
-          : ""
-      }
-    </div>
-  `;
+  return canvasMediaToolbarView.renderMediaToolbar({
+    visible: true,
+    toolbarScale: layout.toolbarScale,
+    showLabels,
+    menuOpen: node.mediaMenuOpen,
+    pinnedTools: preference.tools.map((tool) => getMediaToolPresentation(tool, type)).filter(Boolean),
+    unpinnedTools: unpinned.map((tool) => getMediaToolPresentation(tool, type)).filter(Boolean),
+  });
 }
 
 function assetPreview(asset) {
