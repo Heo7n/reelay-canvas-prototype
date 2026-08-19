@@ -4,6 +4,7 @@
   "private": true,
   "description": "Reelay local application shell and AIGC canvas prototype",
   "scripts": {
+    "dev:canvas": "vite --config vite.canvas.config.ts",
     "dev:shell": "vite --config vite.shell.config.ts",
     "dev:server": "tsx watch src/server/start.ts",
     "start:server": "tsx src/server/start.ts",
@@ -28,6 +29,8 @@
     "check:css": "node scripts/check-css.mjs",
     "check:html": "node scripts/check-html.mjs",
     "test": "node --test tests/model-config.test.mjs tests/static-contracts.test.mjs tests/canvas-document-codec.test.mjs tests/canvas-connections.test.mjs tests/legacy-canvas-connection-interaction.test.mjs tests/legacy-canvas-layer-reconciler.test.mjs tests/legacy-canvas-node-interaction.test.mjs tests/legacy-canvas-node-pointer-controller.test.mjs tests/legacy-canvas-node-drag-controller.test.mjs tests/legacy-canvas-group-interaction-controller.test.mjs tests/legacy-canvas-pointer-interaction-controller.test.mjs tests/legacy-canvas-pointer-dispatch-controller.test.mjs tests/legacy-canvas-asset-library-model.test.mjs tests/legacy-canvas-readonly.test.mjs",
+    "test:canvas": "node --test tests/static-contracts.test.mjs tests/canvas-connections.test.mjs tests/legacy-canvas-connection-interaction.test.mjs tests/legacy-canvas-layer-reconciler.test.mjs tests/legacy-canvas-node-interaction.test.mjs tests/legacy-canvas-node-pointer-controller.test.mjs tests/legacy-canvas-node-drag-controller.test.mjs tests/legacy-canvas-group-interaction-controller.test.mjs tests/legacy-canvas-pointer-interaction-controller.test.mjs tests/legacy-canvas-pointer-dispatch-controller.test.mjs",
+    "check:canvas": "npm run check:js && npm run check:css && npm run check:html && npm run test:canvas",
     "check:legacy": "npm run check:js && npm run check:config && npm run check:css && npm run check:html && npm test",
     "verify:shell": "npm run check:shell && npm run build:shell",
     "check": "npm run check:legacy && npm run check:shell && npm run check:server"
