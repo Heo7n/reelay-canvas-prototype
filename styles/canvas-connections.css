@@ -87,10 +87,10 @@
   opacity: 0;
   pointer-events: none;
   cursor: pointer;
-  transition: opacity 120ms ease, transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 100ms ease;
 }
 
-.connection-group.is-active .connection-cut-control {
+.connection-group:hover .connection-cut-control {
   opacity: 1;
   pointer-events: auto;
 }
@@ -111,6 +111,10 @@
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
+}
+
+.connection-cut-handle {
+  fill: none;
 }
 
 .connection-cut-control:hover .connection-cut-surface {
@@ -157,6 +161,7 @@
   height: var(--port-zone-height);
   pointer-events: auto;
   touch-action: none;
+  cursor: crosshair;
   transform: translateY(-50%);
   z-index: 8;
 }
@@ -185,7 +190,7 @@
   pointer-events: none;
   transform: translate(-50%, -50%) scale(0.72);
   transition: left 36ms linear, top 36ms linear, opacity 110ms ease, transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 130ms ease, background 130ms ease, box-shadow 150ms ease;
-  cursor: crosshair;
+  cursor: inherit;
   touch-action: none;
   z-index: 8;
 }

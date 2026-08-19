@@ -4741,7 +4741,7 @@ function moveConnectionDrag(event) {
     const targetPort = action.portRegistry.find((port) => port.id === candidate.targetPortId);
     if (targetPort) action.current = screenToWorld(targetPort.anchor.x, targetPort.anchor.y);
   }
-  renderConnectionPreview();
+  canvasConnectionRenderer.renderPreview(state.action, canvasConnections.getBezierPath);
 }
 
 function finishConnectionDrag(event) {
@@ -6276,8 +6276,8 @@ const canvasGroupInteractionController = canvasGroupInteractionControllerFactory
 
 const canvasPointerInteractionController = canvasPointerInteractionControllerFactory.createCanvasPointerInteractionController({
   interaction: canvasNodeInteraction,
-  requestFrame: requestAnimationFrame,
-  cancelFrame: cancelAnimationFrame,
+  requestFrame: (callback) => window.requestAnimationFrame(callback),
+  cancelFrame: (frameId) => window.cancelAnimationFrame(frameId),
   getAction: () => state.action,
   getViewport: () => ({ tx: state.tx, ty: state.ty }),
   setAction: (action) => {

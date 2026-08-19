@@ -17,6 +17,19 @@
     const onRemove = typeof options?.onRemove === "function" ? options.onRemove : () => {};
     if (!paths || !preview) return null;
 
+    function getPointerPoint(event) {
+      const matrix = paths.getScreenCTM?.();
+      if (!matrix || typeof window.DOMPoint !== "function") return null;
+      return new window.DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+    }
+
+    function positionCutControl(group, point) {
+      const control = group.querySelector(".connection-cut-control");
+      if (!control || !point) return;
+      const scale = Number(group.dataset.controlScale) || 1;
+      control.setAttribute("transform", `translate(${point.x} ${point.y}) scale(${scale})`);
+    }
+
     function createGroup() {
       const group = createSvgElement("g", "connection-group");
       const underlay = createSvgElement("path", "connection-underlay");
@@ -29,6 +42,12 @@
         event.stopPropagation();
         if (group.dataset.connectionId) onSelect(group.dataset.connectionId);
       });
+      hitPath.addEventListener("pointerenter", (event) => {
+        positionCutControl(group, getPointerPoint(event));
+      });
+      hitPath.addEventListener("pointermove", (event) => {
+        positionCutControl(group, getPointerPoint(event));
+      });
 
       const cutControl = createSvgElement("g", "connection-cut-control");
       cutControl.setAttribute("role", "button");
@@ -39,9 +58,19 @@
       const cutSurface = createSvgElement("circle", "connection-cut-surface");
       cutSurface.setAttribute("r", "11");
       const cutMarkA = createSvgElement("path", "connection-cut-mark");
-      cutMarkA.setAttribute("d", "M -3 -3 L 3 3");
+      cutMarkA.setAttribute("d", "M -1.8 -2 L 4.2 2.4");
       const cutMarkB = createSvgElement("path", "connection-cut-mark");
-      cutMarkB.setAttribute("d", "M 3 -3 L -3 3");
+      cutMarkB.setAttribute("d", "M -1.8 2 L 4.2 -2.4");
+      const cutHandleA = createSvgElement("circle", "connection-cut-mark");
+      cutHandleA.classList.add("connection-cut-handle");
+      cutHandleA.setAttribute("cx", "-3.25");
+      cutHandleA.setAttribute("cy", "-3");
+      cutHandleA.setAttribute("r", "1.55");
+      const cutHandleB = createSvgElement("circle", "connection-cut-mark");
+      cutHandleB.classList.add("connection-cut-handle");
+      cutHandleB.setAttribute("cx", "-3.25");
+      cutHandleB.setAttribute("cy", "3");
+      cutHandleB.setAttribute("r", "1.55");
 
       cutControl.addEventListener("pointerdown", (event) => {
         event.preventDefault();
@@ -52,7 +81,7 @@
         event.stopPropagation();
         if (group.dataset.connectionId) onRemove(group.dataset.connectionId);
       });
-      cutControl.append(cutTitle, cutSurface, cutMarkA, cutMarkB);
+      cutControl.append(cutTitle, cutSurface, cutMarkA, cutMarkB, cutHandleA, cutHandleB);
       group.append(underlay, path, hitPath, cutControl);
       return group;
     }
@@ -77,6 +106,7 @@
         const isActive = input.activeConnectionId === connection.id;
         const isRelated = input.relatedConnectionIds.has(connection.id);
         group.dataset.connectionId = connection.id;
+        group.dataset.controlScale = input.controlScale;
         group.classList.toggle("is-active", isActive);
         group.classList.toggle("is-related", isRelated);
         group.classList.toggle("is-new", input.recentConnectionId === connection.id);
@@ -86,10 +116,10 @@
         );
         group.querySelectorAll(".connection-underlay, .connection-path, .connection-hit-path")
           .forEach((element) => element.setAttribute("d", pathData));
-        group.querySelector(".connection-cut-control")?.setAttribute(
-          "transform",
-          `translate(${(points.source.x + points.target.x) / 2} ${(points.source.y + points.target.y) / 2}) scale(${input.controlScale})`,
-        );
+        positionCutControl(group, {
+          x: (points.source.x + points.target.x) / 2,
+          y: (points.source.y + points.target.y) / 2,
+        });
       });
 
       existingGroups.forEach((group) => group.remove());

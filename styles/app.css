@@ -2871,8 +2871,12 @@ html[data-theme="light"] .group-resize-handle {
   background: var(--node-media-bg);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
   overflow: visible;
-  cursor: move;
+  cursor: grab;
   -webkit-user-drag: none;
+}
+
+.canvas-shell.dragging .canvas-node .media-frame {
+  cursor: grabbing;
 }
 
 .media-frame.has-asset {
