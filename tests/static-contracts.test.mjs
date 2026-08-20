@@ -146,6 +146,33 @@ test("model data, config and document codec load before the application", () => 
   );
 });
 
+test("native animation-frame APIs retain their browser receiver", () => {
+  assert.match(appSource, /requestFrame:\s*\(callback\)\s*=>\s*window\.requestAnimationFrame\(callback\)/);
+  assert.match(appSource, /cancelFrame:\s*\(frameId\)\s*=>\s*window\.cancelAnimationFrame\(frameId\)/);
+  assert.doesNotMatch(appSource, /requestFrame:\s*requestAnimationFrame/);
+  assert.doesNotMatch(appSource, /cancelFrame:\s*cancelAnimationFrame/);
+});
+
+test("connection drag preview delegates to the connection renderer", () => {
+  assert.match(
+    appSource,
+    /function moveConnectionDrag[\s\S]*?canvasConnectionRenderer\.renderPreview\(state\.action, canvasConnections\.getBezierPath\)/,
+  );
+  assert.doesNotMatch(appSource, /\brenderConnectionPreview\s*\(/);
+});
+
+test("connection affordances preserve fixed-screen pointer feedback", async () => {
+  const [rendererSource, connectionStyles] = await Promise.all([
+    readFile(new URL("src/legacy-canvas/canvas-connection-renderer.js", root), "utf8"),
+    readFile(new URL("styles/canvas-connections.css", root), "utf8"),
+  ]);
+  assert.match(rendererSource, /pointermove[\s\S]*?getPointerPoint\(event\)/);
+  assert.match(rendererSource, /connection-cut-handle/);
+  assert.match(connectionStyles, /\.node-port-zone\s*\{[\s\S]*?cursor:\s*crosshair/);
+  assert.match(connectionStyles, /\.connection-group:hover \.connection-cut-control/);
+  assert.match(appSource, /--connection-ui-scale/);
+});
+
 test("the hosted legacy canvas uses its local icon subset instead of the full vendor bundle", () => {
   assert.doesNotMatch(html, /vendor\/lucide/i);
   assert.match(appSource, /const fallbackIconPaths = \{/);

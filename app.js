@@ -7,6 +7,12 @@ const appFavicon = document.querySelector("#appFavicon");
 const canvasGrid = document.querySelector("#canvasGrid");
 const stage = document.querySelector("#canvasStage");
 const nodeLayer = document.querySelector("#nodeLayer");
+const connectionLayer = document.querySelector("#connectionLayer");
+const connectionPaths = document.querySelector("#connectionPaths");
+const connectionPreview = document.querySelector("#connectionPreview");
+const connectionPreviewEndpoint = document.querySelector("#connectionPreviewEndpoint");
+const connectionCreateMenu = document.querySelector("#connectionCreateMenu");
+const nodeCreateMenu = document.querySelector("#nodeCreateMenu");
 const canvasTools = document.querySelector("#canvasTools");
 const canvasToolButtons = document.querySelectorAll("[data-canvas-tool]");
 const canvasToolPopovers = document.querySelectorAll("[data-canvas-popover]");
@@ -47,7 +53,7 @@ const profileOrganizationName = document.querySelector("#profileOrganizationName
 const profileOrganizationRole = document.querySelector("#profileOrganizationRole");
 const emptyState = document.querySelector("#emptyState");
 const emptyCreateMain = document.querySelector(".empty-create-main");
-const emptyCreateSub = document.querySelector(".empty-create-sub");
+const emptyCreateSecondary = document.querySelector(".empty-create-secondary");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
 const selectionToolbar = document.querySelector("#selectionToolbar");
@@ -174,10 +180,15 @@ const state = {
   ty: 0,
   scale: 1,
   nodes: [],
+  connections: [],
   groups: [],
   selectedIds: new Set(),
   activeGroupId: null,
   activeId: null,
+  activeConnectionId: null,
+  recentConnectionId: null,
+  recentConnectionTimer: 0,
+  connectionDrop: null,
   zCounter: 1,
   lastPreset: {
     mode: "image",
@@ -190,6 +201,8 @@ const state = {
   },
   action: null,
   pendingUploadNodeId: null,
+  pendingCanvasUploadPoint: null,
+  nodeCreatePoint: null,
   isSpaceDown: false,
   undoStack: [],
   generationTasks: new Map(),
@@ -250,6 +263,63 @@ const canvasPersistence = {
 
 const canvasDocumentCodec = window.REELAY_CANVAS_DOCUMENT_CODEC;
 if (!canvasDocumentCodec) throw new Error("Canvas document codec is unavailable.");
+const canvasConnections = window.REELAY_CANVAS_CONNECTIONS;
+if (!canvasConnections) throw new Error("Canvas connection helpers are unavailable.");
+const canvasConnectionInteraction = window.REELAY_CANVAS_CONNECTION_INTERACTION;
+if (!canvasConnectionInteraction) throw new Error("Canvas connection interaction helpers are unavailable.");
+const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
+if (!canvasNodeInteraction) throw new Error("Canvas node interaction helpers are unavailable.");
+const canvasNodePointerControllerFactory = window.REELAY_CANVAS_NODE_POINTER_CONTROLLER;
+if (!canvasNodePointerControllerFactory) throw new Error("Canvas node pointer controller is unavailable.");
+const canvasNodeDragControllerFactory = window.REELAY_CANVAS_NODE_DRAG_CONTROLLER;
+if (!canvasNodeDragControllerFactory) throw new Error("Canvas node drag controller is unavailable.");
+const canvasGroupInteractionControllerFactory = window.REELAY_CANVAS_GROUP_INTERACTION_CONTROLLER;
+if (!canvasGroupInteractionControllerFactory) throw new Error("Canvas group interaction controller is unavailable.");
+const canvasPointerInteractionControllerFactory = window.REELAY_CANVAS_POINTER_INTERACTION_CONTROLLER;
+if (!canvasPointerInteractionControllerFactory) throw new Error("Canvas pointer interaction controller is unavailable.");
+const canvasPointerDispatchControllerFactory = window.REELAY_CANVAS_POINTER_DISPATCH_CONTROLLER;
+if (!canvasPointerDispatchControllerFactory) throw new Error("Canvas pointer dispatch controller is unavailable.");
+const canvasConnectionRendererFactory = window.REELAY_CANVAS_CONNECTION_RENDERER;
+if (!canvasConnectionRendererFactory) throw new Error("Canvas connection renderer is unavailable.");
+const canvasLayerReconcilerFactory = window.REELAY_CANVAS_LAYER_RECONCILER;
+if (!canvasLayerReconcilerFactory) throw new Error("Canvas layer reconciler is unavailable.");
+const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
+if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
+const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
+if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
+const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectionRenderer({
+  paths: connectionPaths,
+  preview: connectionPreview,
+  previewEndpoint: connectionPreviewEndpoint,
+  onSelect(connectionId) {
+    setSelection([], null, { keepConnection: true });
+    state.activeConnectionId = connectionId;
+    render();
+  },
+  onRemove: removeConnection,
+});
+if (!canvasConnectionRenderer) throw new Error("Canvas connection renderer could not initialize.");
+const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler({
+  layer: nodeLayer,
+  groups: {
+    getId: (group) => group.id,
+    getSignature: getGroupRenderSignature,
+    createElement: createGroupFrameElement,
+    syncElement: syncGroupFrameElement,
+  },
+  nodes: {
+    getId: (node) => node.id,
+    getSignature: getNodeRenderSignature,
+    createElement: createNodeElement,
+    syncElement: syncCanvasNodeElement,
+    prepareItem(node) {
+      if (node.kind !== "generator") return;
+      normalizeNodeParameters(node);
+      node.credits = getCost(node) ?? 0;
+    },
+  },
+});
+if (!canvasLayerReconciler) throw new Error("Canvas layer reconciler could not initialize.");
 
 function isCanvasMutationAllowed() {
   return canvasPersistence.accessMode === "standalone" || canvasPersistence.accessMode === "editable";
@@ -276,10 +346,12 @@ function syncCanvasAccessUi() {
     input.readOnly = locked;
     input.setAttribute("aria-readonly", String(locked));
   });
-  if (emptyCreateMain && emptyCreateSub) {
+  if (emptyCreateMain) {
     const readonly = mode === "readonly";
-    emptyCreateMain.textContent = readonly ? "此画布暂无内容" : "双击画布";
-    emptyCreateSub.textContent = readonly ? "只读模式下不可新建节点" : "自由生成节点";
+    emptyCreateMain.textContent = readonly ? "画布暂无内容" : "双击画布";
+    if (emptyCreateSecondary) {
+      emptyCreateSecondary.textContent = readonly ? "" : "自由生成节点";
+    }
   }
   if (!canvasAccessStatus) return;
   const labels = {
@@ -372,6 +444,7 @@ function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
     id: crypto.randomUUID(),
     name,
     nodes: [],
+    connections: [],
     groups: [],
     tx: 0,
     ty: 0,
@@ -389,6 +462,7 @@ function saveActiveCanvasState() {
   const canvas = getActiveCanvas();
   if (!canvas) return;
   canvas.nodes = state.nodes;
+  canvas.connections = state.connections;
   canvas.groups = state.groups;
   canvas.tx = state.tx;
   canvas.ty = state.ty;
@@ -400,6 +474,7 @@ function saveActiveCanvasState() {
 function loadCanvasState(canvas) {
   if (!canvas) return;
   state.nodes = canvas.nodes;
+  state.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
   state.groups = canvas.groups;
   state.tx = canvas.tx;
   state.ty = canvas.ty;
@@ -408,6 +483,8 @@ function loadCanvasState(canvas) {
   state.undoStack = canvas.undoStack || [];
   state.selectedIds = new Set();
   state.activeId = null;
+  state.activeConnectionId = null;
+  state.connectionDrop = null;
   state.activeGroupId = null;
   state.mediaToolbarNodeId = null;
   state.libraryTargetNodeId = null;
@@ -432,6 +509,7 @@ function syncProjectNavigation() {
 function initializeCanvases() {
   const initialCanvas = createCanvasRecord("画布 1");
   initialCanvas.nodes = state.nodes;
+  initialCanvas.connections = state.connections;
   initialCanvas.groups = state.groups;
   initialCanvas.tx = state.tx;
   initialCanvas.ty = state.ty;
@@ -461,6 +539,7 @@ function hydrateCanvasDocumentSnapshot(content) {
   if (!restored) return false;
   state.canvases = restored.canvases;
   state.canvases.forEach((canvas) => {
+    canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
     canvas.nodes.forEach((node) => {
       if (node.kind === "generator") normalizeNodeParameters(node);
     });
@@ -706,12 +785,16 @@ function showZoomValueTip() {
 
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
+  const inverseCanvasScale = (1 / state.scale).toFixed(4);
+  shell.style.setProperty("--connection-ui-scale", inverseCanvasScale);
+  shell.style.setProperty("--node-meta-ui-scale", inverseCanvasScale);
   saveActiveCanvasState();
   updateCanvasGrid();
   syncPromptPanelLayouts();
   window.clearTimeout(state.overlaySyncTimer);
   state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
   syncZoomControl();
+  renderConnections();
   renderSelectionToolbar();
   renderMinimap();
   scheduleCanvasDocumentSave();
@@ -1116,7 +1199,7 @@ function getMediaSize(ratio) {
 function getNodeLayout(node) {
   const ratio = getMediaRatio(node);
   const { mediaWidth, mediaHeight } = getMediaSize(ratio);
-  const toolbarScale = clamp(1 / state.scale, 0.5, 2.2);
+  const toolbarScale = clamp(1 / state.scale, 0.5, 4);
 
   if (node.kind === "asset") {
     return {
@@ -1139,7 +1222,7 @@ function getNodeLayout(node) {
       )
     : layoutRules.normalPanelHeight;
   const targetScreenWidth = clamp(mediaWidth * state.scale + 72, 500, 760);
-  const promptScale = clamp(targetScreenWidth / (panelWidth * state.scale), 0.5, 2.2);
+  const promptScale = clamp(targetScreenWidth / (panelWidth * state.scale), 0.5, 4);
   const nodeWidth = Math.max(mediaWidth, panelWidth);
   const nodeHeight = mediaHeight + (node.expanded ? layoutRules.panelGap + panelHeight * promptScale : 0);
 
@@ -1169,10 +1252,6 @@ function getNodeBounds(node) {
     width: layout.nodeWidth + promptOverflow * 2,
     height: layout.nodeHeight,
   };
-}
-
-function rectsIntersect(a, b) {
-  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
 }
 
 function getGroupById(groupId) {
@@ -1483,6 +1562,9 @@ function setSelection(ids, activeId = null, options = {}) {
   if (!options.keepGroup) {
     state.activeGroupId = null;
   }
+  if (!options.keepConnection) {
+    state.activeConnectionId = null;
+  }
 }
 
 function clearSelection() {
@@ -1577,6 +1659,7 @@ const fallbackIconPaths = {
   "moon": '<path d="M21 13.2A7.5 7.5 0 1 1 10.8 3 6 6 0 0 0 21 13.2z"/>',
   "more-horizontal": '<path d="M5 12h.01"/><path d="M12 12h.01"/><path d="M19 12h.01"/>',
   "mouse-pointer-click": '<path d="m4 4 7 17 2-7 7-2z"/><path d="M15 4h5"/><path d="M18 2v5"/>',
+  "mouse-pointer-2": '<path d="M4 4l7.1 17 2.5-7.4L21 11z"/>',
   "panel-left-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 9-3 3 3 3"/>',
   "panel-right-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="m8 9 3 3-3 3"/>',
   "paperclip": '<path d="m21 8.5-9.5 9.5a5 5 0 0 1-7.1-7.1l10-10a3.3 3.3 0 0 1 4.7 4.7L9.5 15a1.7 1.7 0 0 1-2.4-2.4L16 3.8"/>',
@@ -1585,6 +1668,7 @@ const fallbackIconPaths = {
   "pin-off": '<path d="m2 2 20 20"/><path d="M12 17v5"/><path d="M6 17h12"/><path d="M9 3h6l-1 5 4 4-2 2"/><path d="M8 12l-2 .5 5-5"/>',
   "play": '<path d="m8 5 12 7-12 7z"/>',
   "play-square": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
+  "square-play": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
   "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
   "rotate-cw": '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
   "scan": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/>',
@@ -1600,6 +1684,7 @@ const fallbackIconPaths = {
   "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
   "trash-2": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
   "ungroup": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 4h3a3 3 0 0 1 3 3v3"/><path d="M10 20H7a3 3 0 0 1-3-3v-3"/>',
+  "upload": '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14a2 2 0 0 0 2-2v-3"/><path d="M3 15v3a2 2 0 0 0 2 2"/>',
   "user-round": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   "users-round": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
   "video": '<path d="M15 10.5 21 7v10l-6-3.5z"/><rect x="3" y="6" width="12" height="12" rx="2"/>',
@@ -1787,16 +1872,30 @@ function mediaMeta(node) {
   const asset = getActiveAsset(node);
   const type = node.kind === "asset" ? asset?.type : node.mode;
   const title = getMediaTitle(node, asset);
+  const typeLabel = node.kind === "generator" && !title
+    ? node.mode === "video" ? "Video" : "Image"
+    : "";
+  const displayTitle = title || typeLabel;
   const spec = getMediaSpec(node, asset);
-  if (!title && !spec) return "";
+  if (!displayTitle && !spec) return "";
+  if (typeLabel && !spec) {
+    return `
+      <div class="media-meta generator-type-meta">
+        <div class="media-title">
+          <i data-lucide="${mediaIconName(type)}" aria-hidden="true"></i>
+          <span class="media-name">${escapeHtml(typeLabel)}</span>
+        </div>
+      </div>
+    `;
+  }
 
   return `
-    <div class="media-meta">
+    <div class="media-meta ${typeLabel ? "generator-type-meta" : ""}">
       ${
-        title
+        displayTitle
           ? `<div class="media-title" data-title-shell="true" role="button" tabindex="0" title="双击重命名">
               <i data-lucide="${mediaIconName(type)}" aria-hidden="true"></i>
-              <span class="media-name" data-media-title="true">${escapeHtml(title)}</span>
+              <span class="media-name" data-media-title="true">${escapeHtml(displayTitle)}</span>
             </div>`
           : ""
       }
@@ -1808,6 +1907,144 @@ function mediaMeta(node) {
 function getEditableMedia(node) {
   if (node.kind === "asset") return getActiveAsset(node);
   return node.generatedAsset || null;
+}
+
+function cloneConnectionState(connection) {
+  return { ...connection };
+}
+
+function getIncomingConnections(nodeId) {
+  return state.connections.filter((connection) => connection.targetNodeId === nodeId);
+}
+
+function getConnectionPortPoint(node, side) {
+  const layout = getNodeLayout(node);
+  const mediaLeft = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  return {
+    x: side === "input" ? mediaLeft : mediaLeft + layout.mediaWidth,
+    y: node.y + layout.mediaHeight / 2,
+  };
+}
+
+function getConnectionPortId(nodeId, side) {
+  return `${nodeId}:${side}`;
+}
+
+function nodePortMarkup(node) {
+  const input = node.kind === "generator"
+    ? '<span class="node-port-zone node-port-zone-input" data-node-port-zone="input"><button class="node-port node-port-input" data-node-port="input" data-port-ratio="0.5" type="button" aria-label="连接上游素材"></button></span>'
+    : "";
+  const output = node.kind === "generator" || getEditableMedia(node)
+    ? '<span class="node-port-zone node-port-zone-output" data-node-port-zone="output"><button class="node-port node-port-output" data-node-port="output" data-port-ratio="0.5" type="button" aria-label="连接到下游节点"></button></span>'
+    : "";
+  return `${input}${output}`;
+}
+
+function getConnectionContext() {
+  const selected = new Set(state.selectedIds);
+  const incomingNodeIds = new Set();
+  const outgoingNodeIds = new Set();
+  const relatedConnectionIds = new Set();
+  state.connections.forEach((connection) => {
+    incomingNodeIds.add(connection.targetNodeId);
+    outgoingNodeIds.add(connection.sourceNodeId);
+    if (selected.has(connection.sourceNodeId) || selected.has(connection.targetNodeId)) {
+      relatedConnectionIds.add(connection.id);
+    }
+  });
+  return {
+    incomingNodeIds,
+    outgoingNodeIds,
+    relatedConnectionIds,
+  };
+}
+
+function syncConnectionContextClasses(context) {
+  nodeLayer.querySelectorAll(".canvas-node").forEach((element) => {
+    const nodeId = element.dataset.id;
+    const inputPort = element.querySelector(".node-port-input");
+    const outputPort = element.querySelector(".node-port-output");
+    inputPort?.classList.toggle("is-connected", context.incomingNodeIds.has(nodeId));
+    outputPort?.classList.toggle("is-connected", context.outgoingNodeIds.has(nodeId));
+  });
+}
+
+function renderConnections() {
+  if (!connectionPaths || !connectionPreview) return;
+  state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
+
+  const context = getConnectionContext();
+  const hasFocusedContext = Boolean(state.activeConnectionId || state.selectedIds.size);
+  canvasConnectionRenderer.renderConnections({
+    connections: state.connections,
+    activeConnectionId: state.activeConnectionId,
+    relatedConnectionIds: context.relatedConnectionIds,
+    recentConnectionId: state.recentConnectionId,
+    hasFocusedContext,
+    controlScale: clamp(1 / state.scale, 0.72, 2.4),
+    getPath: canvasConnections.getBezierPath,
+    resolvePoints(connection) {
+      const source = state.nodes.find((node) => node.id === connection.sourceNodeId);
+      const target = state.nodes.find((node) => node.id === connection.targetNodeId);
+      if (!source || !target) return null;
+      return {
+        source: getConnectionPortPoint(source, "output"),
+        target: getConnectionPortPoint(target, "input"),
+      };
+    },
+  });
+  canvasConnectionRenderer.renderPreview(state.action, canvasConnections.getBezierPath);
+  syncConnectionContextClasses(context);
+  shell.classList.toggle("connection-compact-detail", state.scale >= 0.34 && state.scale < 0.56);
+  shell.classList.toggle("connection-low-detail", state.scale < 0.34);
+}
+
+function createConnection(
+  sourceNodeId,
+  targetNodeId,
+  { recordUndo = true, sourceRatio = 0.5, targetRatio = 0.5 } = {},
+) {
+  if (!requireCanvasMutation()) return null;
+  const result = canvasConnections.canConnect(state.connections, state.nodes, sourceNodeId, targetNodeId);
+  if (!result.ok) return null;
+  const source = state.nodes.find((node) => node.id === sourceNodeId);
+  if (!source || (source.kind !== "generator" && !getEditableMedia(source))) return null;
+  if (recordUndo) {
+    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
+  }
+  const connection = {
+    id: crypto.randomUUID(),
+    sourceNodeId,
+    targetNodeId,
+    mediaType: getNodeMediaType(source),
+    sourcePortId: getConnectionPortId(sourceNodeId, "output"),
+    targetPortId: getConnectionPortId(targetNodeId, "input"),
+    sourceRatio: clamp(sourceRatio, 0.08, 0.92),
+    targetRatio: clamp(targetRatio, 0.08, 0.92),
+  };
+  state.connections.push(connection);
+  state.activeConnectionId = connection.id;
+  state.recentConnectionId = connection.id;
+  window.clearTimeout(state.recentConnectionTimer);
+  state.recentConnectionTimer = window.setTimeout(() => {
+    if (state.recentConnectionId !== connection.id) return;
+    state.recentConnectionId = null;
+    renderConnections();
+  }, 220);
+  return connection;
+}
+
+function removeConnection(connectionId, { recordUndo = true } = {}) {
+  if (!requireCanvasMutation()) return false;
+  const connection = state.connections.find((item) => item.id === connectionId);
+  if (!connection) return false;
+  if (recordUndo) {
+    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
+  }
+  state.connections = state.connections.filter((item) => item.id !== connectionId);
+  if (state.activeConnectionId === connectionId) state.activeConnectionId = null;
+  render();
+  return true;
 }
 
 function getNodeMediaType(node) {
@@ -1829,16 +2066,10 @@ function getMediaToolLabel(toolId, type) {
   return type === "video" ? "画质增强" : "HD 放大";
 }
 
-function mediaToolButton(toolId, type, showLabel) {
+function getMediaToolPresentation(toolId, type) {
   const definition = mediaToolDefinitions[toolId];
-  if (!definition) return "";
-  const label = getMediaToolLabel(toolId, type);
-  return `
-    <button class="media-tool-button ${showLabel ? "with-label" : ""}" type="button" data-media-tool="${toolId}" title="${label}" aria-label="${label}">
-      <i data-lucide="${definition.icon}" aria-hidden="true"></i>
-      ${showLabel ? `<span>${label}</span>` : ""}
-    </button>
-  `;
+  if (!definition) return null;
+  return { id: toolId, icon: definition.icon, label: getMediaToolLabel(toolId, type) };
 }
 
 function mediaEditToolbar(node, layout) {
@@ -1848,46 +2079,14 @@ function mediaEditToolbar(node, layout) {
   const preference = state.mediaToolPreferences[type] || defaultMediaToolPreferences[type];
   const showLabels = preference.showLabels && layout.mediaWidth >= 440;
   const unpinned = mediaToolsByType[type].filter((tool) => !preference.tools.includes(tool));
-  return `
-    <div class="media-edit-toolbar ${showLabels ? "show-labels" : "compact"}" data-media-toolbar="true" style="--toolbar-scale: ${layout.toolbarScale}">
-      <div class="media-tool-primary">
-        ${preference.tools.map((tool) => mediaToolButton(tool, type, showLabels)).join("")}
-      </div>
-      <div class="media-tool-actions">
-        <button class="media-tool-button" type="button" data-media-tool="toggle-more" title="更多工具" aria-label="更多工具">
-          <i data-lucide="ellipsis" aria-hidden="true"></i>
-        </button>
-        <span class="media-tool-separator" aria-hidden="true"></span>
-        <button class="media-tool-button" type="button" data-media-tool="download" title="下载" aria-label="下载">
-          <i data-lucide="download" aria-hidden="true"></i>
-        </button>
-      </div>
-      ${
-        node.mediaMenuOpen
-          ? `
-            <div class="media-tool-menu">
-              ${unpinned
-                .map(
-                  (tool) => `
-                    <button type="button" data-media-tool="${tool}">
-                      <i data-lucide="${mediaToolDefinitions[tool].icon}" aria-hidden="true"></i>
-                      <span>${getMediaToolLabel(tool, type)}</span>
-                    </button>
-                  `,
-                )
-                .join("")}
-              <div class="media-tool-menu-separator"></div>
-              <button type="button" data-media-tool="customize">
-                <i data-lucide="settings-2" aria-hidden="true"></i>
-                <span>自定义工具栏</span>
-                <i data-lucide="chevron-right" aria-hidden="true"></i>
-              </button>
-            </div>
-          `
-          : ""
-      }
-    </div>
-  `;
+  return canvasMediaToolbarView.renderMediaToolbar({
+    visible: true,
+    toolbarScale: layout.toolbarScale,
+    showLabels,
+    menuOpen: node.mediaMenuOpen,
+    pinnedTools: preference.tools.map((tool) => getMediaToolPresentation(tool, type)).filter(Boolean),
+    unpinnedTools: unpinned.map((tool) => getMediaToolPresentation(tool, type)).filter(Boolean),
+  });
 }
 
 function assetPreview(asset) {
@@ -1964,28 +2163,21 @@ function getActiveAssetLibraryScope() {
 }
 
 function ensureGlobalLibraryScope() {
-  if (!["personal", "organization", "official"].includes(state.libraryScope)) {
-    state.libraryScope = "personal";
-  }
+  state.libraryScope = canvasAssetLibraryModel.normalizeGlobalScope(state.libraryScope);
 }
 
 function normalizeLibrarySearch(value = state.librarySearch) {
-  return String(value || "").trim().toLowerCase();
+  return canvasAssetLibraryModel.normalizeSearch(value);
 }
 
 function assetMatchesLibrarySearch(asset, query = normalizeLibrarySearch()) {
-  if (!query) return true;
-  return [
+  return canvasAssetLibraryModel.matchesSearch([
     getAssetDisplayName(asset),
     asset.name,
     assetTypeLabel(asset.type),
     asset.source,
     getAssetOriginLabel(asset),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(query);
+  ], query);
 }
 
 function createCanvasNodeLibraryItem(node, parentGroupId = null) {
@@ -2011,103 +2203,44 @@ function createCanvasNodeLibraryItem(node, parentGroupId = null) {
 }
 
 function getCanvasElementItems() {
-  const groupedNodeIds = new Set();
-  const groupItems = state.groups
-    .map((group) => {
-      const nodes = getGroupNodes(group);
-      const bounds = getGroupBounds(group);
-      if (!bounds) return null;
-      nodes.forEach((node) => groupedNodeIds.add(node.id));
-      return {
-        id: group.id,
-        kind: "group",
-        type: "group",
-        icon: "layers-3",
-        title: group.name || "新建组",
-        subtitle: `${nodes.length} 个节点`,
-        meta: `${Math.round(bounds.width)} × ${Math.round(bounds.height)}`,
-        collapsed: state.libraryCollapsedGroups.has(group.id),
-        children: nodes.map((node) => createCanvasNodeLibraryItem(node, group.id)),
-      };
-    })
-    .filter(Boolean);
-
-  const ungroupedNodeItems = state.nodes
-    .filter((node) => !groupedNodeIds.has(node.id))
-    .map((node) => createCanvasNodeLibraryItem(node));
-
-  return [...groupItems, ...ungroupedNodeItems];
-}
-
-function canvasItemMatchesLibraryFilter(item) {
-  if (state.libraryFilter === "all") return true;
-  if (state.libraryFilter === "generator") return item.nodeKind === "generator";
-  return item.type === state.libraryFilter;
-}
-
-function canvasItemMatchesLibrarySearch(item, query = normalizeLibrarySearch()) {
-  if (!query) return true;
-  return [item.title, item.subtitle, item.meta, item.type]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(query);
+  return canvasAssetLibraryModel.buildCanvasElementItems({
+    nodes: state.nodes,
+    groups: state.groups,
+    collapsedGroupIds: state.libraryCollapsedGroups,
+    getGroupNodes,
+    getGroupBounds,
+    createNodeItem: createCanvasNodeLibraryItem,
+  });
 }
 
 function filterCanvasElementTree(items, query = normalizeLibrarySearch()) {
-  return items
-    .map((item) => {
-      if (item.kind !== "group") {
-        return canvasItemMatchesLibraryFilter(item) && canvasItemMatchesLibrarySearch(item, query) ? item : null;
-      }
-
-      const matchesSelf = canvasItemMatchesLibraryFilter(item) && canvasItemMatchesLibrarySearch(item, query);
-      const visibleChildren = (item.children || []).filter(
-        (child) => canvasItemMatchesLibraryFilter(child) && canvasItemMatchesLibrarySearch(child, query),
-      );
-
-      if (state.libraryFilter === "group") {
-        return matchesSelf ? { ...item, children: [] } : null;
-      }
-
-      if (matchesSelf || visibleChildren.length) {
-        return {
-          ...item,
-          children: matchesSelf && !query && state.libraryFilter === "all" ? item.children : visibleChildren,
-        };
-      }
-
-      return null;
-    })
-    .filter(Boolean);
+  return canvasAssetLibraryModel.filterCanvasElementTree(items, {
+    filter: state.libraryFilter,
+    query,
+  });
 }
 
 function countCanvasElementRows(items) {
-  return items.reduce((count, item) => count + 1 + (item.collapsed ? 0 : item.children?.length || 0), 0);
+  return canvasAssetLibraryModel.countCanvasElementRows(items);
 }
 
 function getAssetCategory(asset) {
-  if (!asset) return "material";
-  if (asset.category && assetCategoryLabels[asset.category]) return asset.category;
-  if (asset.type === "audio") return "material";
-  const text = [asset.displayName, asset.name, asset.source, asset.type].filter(Boolean).join(" ").toLowerCase();
-  if (/角色|人物|人像|模特|机器人|character|portrait|person|avatar|model/.test(text)) return "character";
-  if (/场景|城市|街道|风景|scene|city|street|landscape|environment/.test(text)) return "scene";
-  if (/道具|物品|产品|prop|object|product|item/.test(text)) return "prop";
-  return "material";
+  return canvasAssetLibraryModel.getAssetCategory(asset, { categoryLabels: assetCategoryLabels });
 }
 
 function countAssetsByCategory(assets) {
-  return assetCategoryFilters.reduce((result, [id]) => {
-    result[id] = assets.filter((asset) => getAssetCategory(asset) === id).length;
-    return result;
-  }, {});
+  return canvasAssetLibraryModel.countAssetsByCategory(assets, assetCategoryFilters, {
+    categoryLabels: assetCategoryLabels,
+  });
 }
 
 function getPreferredAssetFilter(assets = []) {
-  if (assetCategoryLabels[state.libraryFilter]) return state.libraryFilter;
-  const counts = countAssetsByCategory(assets);
-  return assetCategoryFilters.find(([id]) => counts[id] > 0)?.[0] || assetCategoryFilters[0][0];
+  return canvasAssetLibraryModel.getPreferredAssetFilter({
+    assets,
+    currentFilter: state.libraryFilter,
+    filters: assetCategoryFilters,
+    categoryLabels: assetCategoryLabels,
+  });
 }
 
 function renderAssetLibraryModeTabs({ canvasTotal, projectAssetTotal, scopeTotals, isGlobalView }) {
@@ -2229,7 +2362,7 @@ function renderCanvasLibraryList(items, allItems) {
         <div>
           <i data-lucide="${hasAny ? "filter-x" : "mouse-pointer-click"}" aria-hidden="true"></i>
           <strong>${hasAny ? "没有匹配的画布元素" : "画布还没有元素"}</strong>
-          <span>${hasAny ? "调整搜索或筛选条件" : "双击画布创建生成节点，或拖入图片、视频、音频素材"}</span>
+          <span>${hasAny ? "调整搜索或筛选条件" : "双击画布添加节点，或拖入图片、视频、音频素材"}</span>
         </div>
       </div>
     `;
@@ -2335,93 +2468,11 @@ function getGlobalLibraryScopeDetails() {
 }
 
 function buildGlobalAssetFolders(allAssets = []) {
-  const audioAssets = allAssets.filter((asset) => asset.type === "audio");
-  const visualAssets = allAssets.filter((asset) => asset.type !== "audio");
-  const generatedAssets = allAssets.filter((asset) => asset.source === "generated");
-  const sourceAssets = allAssets.filter((asset) => asset.source !== "generated");
-
-  const foldersByScope = {
-    personal: [
-      {
-        id: "personal-library",
-        icon: "folder",
-        title: "个人常用",
-        body: "自己跨项目复用的图片、视频、音频与参考素材。",
-        assets: allAssets,
-      },
-      {
-        id: "personal-generated",
-        icon: "folder",
-        title: "生成沉淀",
-        body: "从画布结果保存来的可复用生成资产。",
-        assets: generatedAssets,
-      },
-      {
-        id: "personal-inbox",
-        icon: "folder",
-        title: "待整理",
-        body: "稍后再归档的临时资产入口。",
-        assets: [],
-      },
-    ],
-    organization: [
-      {
-        id: "organization-shared",
-        icon: "folder",
-        title: "团队共享",
-        body: "同组织成员共用的项目素材与规范资产。",
-        assets: allAssets,
-      },
-      {
-        id: "organization-brand",
-        icon: "folder",
-        title: "品牌资料",
-        body: "后续用于沉淀品牌视觉、字体、产品图和标准片段。",
-        assets: sourceAssets.filter((asset) => asset.type !== "audio"),
-      },
-      {
-        id: "organization-audio",
-        icon: "folder",
-        title: "声音资料",
-        body: "后续用于管理组织内共享音效与旁白素材。",
-        assets: audioAssets,
-      },
-    ],
-    official: [
-      {
-        id: "official-starters",
-        icon: "folder",
-        title: "官方示例包",
-        body: "官方提供的可直接拖入画布的视觉素材包。",
-        assets: visualAssets,
-      },
-      {
-        id: "official-sound",
-        icon: "folder",
-        title: "声音与氛围",
-        body: "官方公共音效、氛围声与后续音乐素材入口。",
-        assets: audioAssets,
-      },
-      {
-        id: "official-workflows",
-        icon: "folder",
-        title: "工作流模板",
-        body: "后续承载官方推荐的素材组合与生成流程。",
-        assets: [],
-      },
-    ],
-  };
-
-  return foldersByScope[state.libraryScope] || foldersByScope.personal;
+  return canvasAssetLibraryModel.buildGlobalAssetFolders({ assets: allAssets, scope: state.libraryScope });
 }
 
 function folderMatchesLibrarySearch(folder, query) {
-  if (!query) return true;
-  return [folder.title, folder.body]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(query);
+  return canvasAssetLibraryModel.folderMatchesSearch(folder, query);
 }
 
 function renderGlobalFolderAsset(asset, targetNode, mode = "preview") {
@@ -2902,14 +2953,26 @@ function generatorMediaContent(node) {
     `;
   }
 
-  return `
-    <div class="upload-stack">
-      <div class="media-placeholder">
-        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  const placeholderIcon =
+    node.mode === "video"
+      ? `
+        <svg class="upload-icon video-placeholder-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4" y="5" width="16" height="14" rx="3" stroke="currentColor" stroke-width="2"/>
+          <path d="M10 9.2L15.2 12 10 14.8V9.2Z" fill="currentColor"/>
+        </svg>
+      `
+      : `
+        <svg class="upload-icon image-placeholder-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="4" y="5" width="16" height="14" rx="3" stroke="currentColor" stroke-width="2"/>
           <path d="M7 16l3.2-3.2 2.3 2.2 2.2-2.7L18 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <circle cx="16.5" cy="8.5" r="1.3" fill="currentColor"/>
         </svg>
+      `;
+
+  return `
+    <div class="upload-stack">
+      <div class="media-placeholder">
+        ${placeholderIcon}
       </div>
     </div>
   `;
@@ -2967,8 +3030,7 @@ function assetMediaContent(asset) {
 }
 
 function assetShelf(node) {
-  if (!node.assets?.length) return "";
-  const assets = node.assets
+  const assets = (node.assets || [])
     .map(
       (asset) => `
         <div class="asset-card ${asset.type} ${node.activeAssetId === asset.id ? "active" : ""}" data-action="focus-asset" data-value="${asset.id}" role="button" tabindex="0">
@@ -2982,7 +3044,25 @@ function assetShelf(node) {
       `,
     )
     .join("");
-  return `<div class="asset-shelf">${assets}</div>`;
+  const linkedReferences = getIncomingConnections(node.id)
+    .map((connection) => {
+      const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
+      const asset = source ? getEditableMedia(source) : null;
+      if (!source || !asset) return "";
+      return `
+        <div class="asset-card linked-reference ${asset.type}" data-action="focus-linked-source" data-value="${connection.id}" role="button" tabindex="0">
+          <div class="asset-thumb">${assetPreview(asset)}</div>
+          <div class="asset-meta">
+            <span>${escapeHtml(getMediaTitle(source, asset) || getAssetDisplayName(asset))}</span>
+            <small><i data-lucide="link-2" aria-hidden="true"></i>画布引用 · ${assetTypeLabel(asset.type)}</small>
+          </div>
+          <button class="asset-remove" data-action="remove-linked-source" data-value="${connection.id}" data-canvas-mutation type="button" title="断开连接" aria-label="断开连接">×</button>
+        </div>
+      `;
+    })
+    .join("");
+  if (!assets && !linkedReferences) return "";
+  return `<div class="asset-shelf">${linkedReferences}${assets}</div>`;
 }
 
 function addFilesToGeneratorNode(node, files) {
@@ -3053,6 +3133,7 @@ function openLocalAssetPicker(node) {
   if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
   state.pendingUploadNodeId = node.id;
+  state.pendingCanvasUploadPoint = null;
   localAssetInput.value = "";
   localAssetInput.click();
 }
@@ -3074,54 +3155,8 @@ function hasDraggedLibraryAsset(event) {
 function render() {
   saveActiveCanvasState();
   syncGroups();
-  const liveGroupIds = new Set(state.groups.map((group) => group.id));
-  const liveNodeIds = new Set(state.nodes.map((node) => node.id));
-
-  nodeLayer.querySelectorAll(".group-frame").forEach((element) => {
-    if (!liveGroupIds.has(element.dataset.groupId)) element.remove();
-  });
-  nodeLayer.querySelectorAll(".canvas-node").forEach((element) => {
-    if (!liveNodeIds.has(element.dataset.id)) element.remove();
-  });
-
-  for (const group of state.groups) {
-    const signature = getGroupRenderSignature(group);
-    let frame = nodeLayer.querySelector(`.group-frame[data-group-id="${group.id}"]`);
-    if (!frame || frame.dataset.renderSignature !== signature) {
-      const nextFrame = createGroupFrameElement(group);
-      if (!nextFrame) continue;
-      nextFrame.dataset.renderSignature = signature;
-      if (frame) {
-        frame.replaceWith(nextFrame);
-      } else {
-        nodeLayer.appendChild(nextFrame);
-      }
-      frame = nextFrame;
-    } else {
-      syncGroupFrameElement(frame, group);
-    }
-  }
-
-  for (const node of state.nodes) {
-    if (node.kind === "generator") {
-      normalizeNodeParameters(node);
-      node.credits = getCost(node) ?? 0;
-    }
-    const signature = getNodeRenderSignature(node);
-    let element = nodeLayer.querySelector(`.canvas-node[data-id="${node.id}"]`);
-    if (!element || element.dataset.renderSignature !== signature) {
-      const nextElement = createNodeElement(node);
-      nextElement.dataset.renderSignature = signature;
-      if (element) {
-        element.replaceWith(nextElement);
-      } else {
-        nodeLayer.appendChild(nextElement);
-      }
-      element = nextElement;
-    } else {
-      syncCanvasNodeElement(element, node);
-    }
-  }
+  canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
+  renderConnections();
   updateEmptyState();
   syncProjectNavigation();
   renderSelectionToolbar();
@@ -3138,6 +3173,17 @@ function getNodeRenderSignature(node) {
     Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId"].includes(key)),
   );
   renderState.mediaToolbarVisible = shouldShowMediaEditToolbar(node);
+  renderState.linkedReferences = getIncomingConnections(node.id).map((connection) => {
+    const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
+    const asset = source ? getEditableMedia(source) : null;
+    return {
+      id: connection.id,
+      sourceNodeId: connection.sourceNodeId,
+      type: asset?.type || null,
+      url: asset?.url || null,
+      name: source && asset ? getMediaTitle(source, asset) || getAssetDisplayName(asset) : null,
+    };
+  });
   return JSON.stringify(renderState);
 }
 
@@ -3246,46 +3292,16 @@ function bindGroupFrameEvents(el, group) {
 
     const resizeHandle = event.target.closest("[data-group-resize]");
     if (resizeHandle) {
-      const bounds = getGroupBounds(group);
-      if (!bounds) return;
-      state.action = {
-        type: "resize-group",
-        pointerId: event.pointerId,
-        groupId: group.id,
-        handle: resizeHandle.dataset.groupResize,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        origin: {
-          x: bounds.left,
-          y: bounds.top,
-          width: bounds.width,
-          height: bounds.height,
-        },
-        origins: getGroupNodes(group).map((node) => ({ id: node.id, x: node.x, y: node.y })),
-        groups: state.groups.map((item) => cloneGroupState(item)),
-        captureTarget: shell,
-      };
-      setActiveGroup(group.id);
-      shell.setPointerCapture(event.pointerId);
-      render();
+      canvasGroupInteractionController.beginResize(
+        group,
+        event,
+        resizeHandle.dataset.groupResize,
+        shell,
+      );
       return;
     }
 
-    const nodes = getGroupNodes(group);
-    const bounds = getGroupBounds(group);
-    setActiveGroup(group.id);
-    state.action = {
-      type: "group-drag-candidate",
-      pointerId: event.pointerId,
-      groupId: group.id,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      groupOrigin: bounds ? { x: bounds.left, y: bounds.top } : { x: group.x || 0, y: group.y || 0 },
-      origins: nodes.map((node) => ({ id: node.id, x: node.x, y: node.y })),
-      groups: state.groups.map((item) => cloneGroupState(item)),
-    };
-    shell.setPointerCapture(event.pointerId);
-    render();
+    canvasGroupInteractionController.beginDrag(group, event, shell);
   });
 
   el.addEventListener("click", (event) => {
@@ -3387,6 +3403,7 @@ function createAssetNodeElement(node) {
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
       ${assetMediaContent(asset)}
+      ${nodePortMarkup(node)}
     </section>
   `;
 
@@ -3441,6 +3458,7 @@ function createGeneratorNodeElement(node) {
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
       ${generatorMediaContent(node)}
+      ${nodePortMarkup(node)}
     </section>
     ${promptPanel}
   `;
@@ -3478,6 +3496,21 @@ function bindNodeEvents(el, node) {
   bindMediaTitleEvents(el, node);
   bindAudioEvents(el);
   bindMediaToolbarEvents(el, node);
+  el.querySelectorAll("[data-node-port-zone]").forEach((zone) => {
+    const side = zone.dataset.nodePortZone;
+    zone.addEventListener("pointermove", (event) => {
+      if (state.action?.type === "connect") return;
+      positionNodePortAtPointer(zone, event.clientX, event.clientY);
+    });
+    zone.addEventListener("pointerleave", () => {
+      if (state.action?.type === "connect") return;
+      resetNodePortPosition(zone);
+    });
+    zone.addEventListener("pointerdown", (event) => {
+      positionNodePortAtPointer(zone, event.clientX, event.clientY);
+      beginConnectionDrag(event, node.id, side);
+    });
+  });
 }
 
 function showActionToast(message) {
@@ -4295,6 +4328,7 @@ const generationLockedActions = new Set([
   "material-panel",
   "material",
   "remove-material",
+  "remove-linked-source",
   "focus-asset",
   "model-panel",
   "param-panel",
@@ -4307,6 +4341,21 @@ const generationLockedActions = new Set([
 ]);
 
 function handleAction(node, action, value) {
+  if (action === "focus-linked-source") {
+    const connection = state.connections.find((item) => item.id === value);
+    const source = connection && state.nodes.find((item) => item.id === connection.sourceNodeId);
+    if (!source) return;
+    collapseInactiveNodes(source.id);
+    bringNodesToFront([source]);
+    setSelection([source.id], source.id);
+    render();
+    return;
+  }
+  if (action === "remove-linked-source") {
+    if (node.generating) return;
+    removeConnection(value);
+    return;
+  }
   if (node.kind !== "generator") return;
   const persistentActions = new Set([
     "material",
@@ -4419,24 +4468,357 @@ function handleAction(node, action, value) {
   render();
 }
 
-function handleNodePointerDown(event, nodeId) {
-  if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
-    event.preventDefault();
-    event.stopPropagation();
-    beginPan(event);
-    return;
+function closeConnectionCreateMenu() {
+  if (!connectionCreateMenu) return;
+  connectionCreateMenu.classList.add("hidden");
+  state.connectionDrop = null;
+}
+
+function closeNodeCreateMenu(options = {}) {
+  if (nodeCreateMenu) {
+    nodeCreateMenu.classList.add("hidden");
+    nodeCreateMenu.querySelectorAll("[data-node-create]").forEach((button) => button.classList.remove("is-preview"));
+  }
+  state.nodeCreatePoint = null;
+  if (!options.keepUploadPoint) state.pendingCanvasUploadPoint = null;
+}
+
+function closeCanvasCreateMenus() {
+  closeConnectionCreateMenu();
+  closeNodeCreateMenu();
+}
+
+function openNodeCreateMenu(clientX, clientY) {
+  if (!nodeCreateMenu || !requireCanvasMutation()) return;
+  closeConnectionCreateMenu();
+  const shellRect = shell.getBoundingClientRect();
+  const menuWidth = 236;
+  const menuHeight = 202;
+  const left = clamp(clientX - shellRect.left + 12, 12, shellRect.width - menuWidth - 12);
+  const top = clamp(clientY - shellRect.top + 12, 72, shellRect.height - menuHeight - 12);
+  state.nodeCreatePoint = { clientX, clientY };
+  state.pendingCanvasUploadPoint = null;
+  nodeCreateMenu.style.left = `${left}px`;
+  nodeCreateMenu.style.top = `${top}px`;
+  nodeCreateMenu.classList.remove("hidden");
+  setNodeCreatePreview(nodeCreateMenu.querySelector("[data-node-create]"));
+  refreshIcons();
+  window.getSelection()?.removeAllRanges();
+  nodeCreateMenu.focus({ preventScroll: true });
+}
+
+function setNodeCreatePreview(button) {
+  if (!nodeCreateMenu) return;
+  nodeCreateMenu.querySelectorAll("[data-node-create]").forEach((item) => {
+    item.classList.toggle("is-preview", item === button);
+  });
+}
+
+function openConnectionCreateMenu(originNodeId, originSide, originRatio, clientX, clientY) {
+  if (!connectionCreateMenu) return;
+  const shellRect = shell.getBoundingClientRect();
+  const menuWidth = 266;
+  const menuHeight = 104;
+  const left = clamp(clientX - shellRect.left + 14, 12, shellRect.width - menuWidth - 12);
+  const top = clamp(clientY - shellRect.top + 14, 72, shellRect.height - menuHeight - 12);
+  state.connectionDrop = { originNodeId, originSide, originRatio, clientX, clientY };
+  const label = connectionCreateMenu.querySelector(".connection-create-label");
+  if (label) label.textContent = originSide === "input" ? "创建上游节点" : "创建下游节点";
+  connectionCreateMenu.style.left = `${left}px`;
+  connectionCreateMenu.style.top = `${top}px`;
+  connectionCreateMenu.classList.remove("hidden");
+  refreshIcons();
+}
+
+function getConnectionPortDomEntry(zone) {
+  const nodeElement = zone?.closest(".canvas-node");
+  const mediaFrame = zone?.closest(".media-frame");
+  const side = zone?.dataset.nodePortZone;
+  const port = zone?.querySelector(".node-port");
+  const nodeId = nodeElement?.dataset.id;
+  if (!nodeElement || !mediaFrame || !port || !nodeId || !["input", "output"].includes(side)) {
+    return null;
+  }
+  const frameRect = mediaFrame.getBoundingClientRect();
+  const interactionSide = side === "input" ? "left" : "right";
+  return {
+    id: getConnectionPortId(nodeId, side),
+    nodeId,
+    side,
+    interactionSide,
+    nodeElement,
+    mediaFrame,
+    zone,
+    port,
+    frameRect,
+    definition: {
+      id: getConnectionPortId(nodeId, side),
+      nodeId,
+      side: interactionSide,
+      anchor: {
+        x: interactionSide === "left" ? frameRect.left : frameRect.right,
+        y: frameRect.top + frameRect.height / 2,
+      },
+    },
+  };
+}
+
+function buildConnectionPortRegistry() {
+  const elements = new Map();
+  const definitions = [];
+  nodeLayer.querySelectorAll("[data-node-port-zone]").forEach((zone) => {
+    const entry = getConnectionPortDomEntry(zone);
+    if (!entry) return;
+    elements.set(entry.id, entry);
+    definitions.push(entry.definition);
+  });
+  return {
+    ports: canvasConnectionInteraction.buildPortRegistry(definitions),
+    elements,
+  };
+}
+
+function setConnectionPortScreenPoint(entry, point) {
+  if (!entry || !point) return 0.5;
+  const zoneRect = entry.zone.getBoundingClientRect();
+  const localX = clamp(point.x - zoneRect.left, 0, zoneRect.width);
+  const localY = clamp(point.y - zoneRect.top, 0, zoneRect.height);
+  entry.port.dataset.portRatio = "0.5";
+  entry.port.style.setProperty("--port-x", `${((localX / zoneRect.width) * 100).toFixed(2)}%`);
+  entry.port.style.setProperty("--port-y", `${((localY / zoneRect.height) * 100).toFixed(2)}%`);
+  return 0.5;
+}
+
+function positionNodePortAtPointer(zone, clientX, clientY) {
+  const entry = getConnectionPortDomEntry(zone);
+  if (!entry) return 0.5;
+  const registry = canvasConnectionInteraction.buildPortRegistry([entry.definition]);
+  const point = canvasConnectionInteraction.clampPointerToPort({ x: clientX, y: clientY }, registry[0]);
+  return point ? setConnectionPortScreenPoint(entry, point) : 0.5;
+}
+
+function resetNodePortPosition(zone) {
+  const port = zone?.querySelector(".node-port");
+  if (!port) return;
+  port.dataset.portRatio = "0.5";
+  port.style.removeProperty("--port-x");
+  port.style.removeProperty("--port-y");
+}
+
+function resetAllNodePortPositions() {
+  nodeLayer.querySelectorAll("[data-node-port-zone]").forEach(resetNodePortPosition);
+}
+
+function clearConnectionTarget(action = state.action) {
+  const targetEntry = action?.portElements?.get(action.targetPortId);
+  if (targetEntry) {
+    targetEntry.nodeElement.classList.remove("connection-target");
+    targetEntry.port.classList.remove("is-valid-target");
+    resetNodePortPosition(targetEntry.zone);
+  }
+  if (action?.type === "connect") action.targetPortId = null;
+}
+
+function clearConnectionOrigin(action = state.action) {
+  const originEntry = action?.portElements?.get(action.originPortId);
+  originEntry?.nodeElement.classList.remove("connection-origin");
+  originEntry?.port.classList.remove("is-drag-origin");
+}
+
+function markConnectionTarget(action, candidate) {
+  if (action.targetPortId && action.targetPortId !== candidate?.targetPortId) {
+    clearConnectionTarget(action);
+  }
+  if (!candidate) return;
+  const entry = action.portElements.get(candidate.targetPortId);
+  if (!entry) return;
+  action.targetPortId = candidate.targetPortId;
+  setConnectionPortScreenPoint(entry, candidate.point);
+  action.targetRatio = 0.5;
+  entry.nodeElement.classList.add("connection-target");
+  entry.port.classList.add("is-valid-target");
+}
+
+function findConnectionBodyTarget(action, clientX, clientY) {
+  if (action?.type !== "connect") return null;
+  const targetSide = action.originPort.side === "right" ? "left" : "right";
+  const frame = document.elementsFromPoint(clientX, clientY)
+    .map((element) => element instanceof Element ? element.closest(".media-frame") : null)
+    .find((element) => {
+      const nodeId = element?.closest(".canvas-node")?.dataset.id;
+      return nodeId && nodeId !== action.originNodeId;
+    });
+  const targetNodeId = frame?.closest(".canvas-node")?.dataset.id;
+  if (!targetNodeId) return null;
+
+  const port = action.portRegistry.find((entry) => (
+    entry.nodeId === targetNodeId
+    && entry.side === targetSide
+    && action.validPortIds.has(entry.id)
+  ));
+  if (!port) return null;
+  const direction = canvasConnectionInteraction.resolveConnectionDirection(action.originPort, port);
+  if (!direction) return null;
+  return {
+    targetPortId: port.id,
+    targetNodeId: port.nodeId,
+    point: port.restCenter,
+    distance: 0,
+    direction,
+  };
+}
+
+function beginConnectionDrag(event, originNodeId, originSide = "output") {
+  if (event.button !== 0 || !requireCanvasMutation()) return;
+  const origin = state.nodes.find((node) => node.id === originNodeId);
+  const canStartFromInput = originSide === "input" && origin?.kind === "generator";
+  const canStartFromOutput = originSide === "output"
+    && (origin?.kind === "generator" || getEditableMedia(origin));
+  if (!origin || (!canStartFromInput && !canStartFromOutput)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeCanvasCreateMenus();
+  const registry = buildConnectionPortRegistry();
+  const originPortId = getConnectionPortId(originNodeId, originSide);
+  const originPort = registry.ports.find((port) => port.id === originPortId);
+  const originEntry = registry.elements.get(originPortId);
+  if (!originPort || !originEntry) return;
+  const originScreenPoint = canvasConnectionInteraction.clampPointerToPort(
+    { x: event.clientX, y: event.clientY },
+    originPort,
+    { requireActivation: false },
+  ) || originPort.restCenter;
+  setConnectionPortScreenPoint(originEntry, originScreenPoint);
+  const originRatio = 0.5;
+  const start = screenToWorld(originPort.anchor.x, originPort.anchor.y);
+  const validPortIds = new Set();
+  registry.ports.forEach((port) => {
+    const direction = canvasConnectionInteraction.resolveConnectionDirection(originPort, port);
+    if (!direction) return;
+    if (canvasConnections.canConnect(
+      state.connections,
+      state.nodes,
+      direction.sourceNodeId,
+      direction.targetNodeId,
+    ).ok) validPortIds.add(port.id);
+  });
+  state.action = {
+    type: "connect",
+    pointerId: event.pointerId,
+    originNodeId,
+    originSide,
+    originPortId,
+    originPort,
+    originRatio,
+    portRegistry: registry.ports,
+    portElements: registry.elements,
+    validPortIds,
+    start,
+    current: start,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    sourceNodeId: null,
+    targetNodeId: null,
+    targetPortId: null,
+    targetRatio: 0.5,
+  };
+  state.activeConnectionId = null;
+  shell.classList.add("connecting");
+  shell.classList.toggle("connecting-from-input", originSide === "input");
+  shell.classList.toggle("connecting-from-output", originSide === "output");
+  originEntry.nodeElement.classList.add("connection-origin");
+  originEntry.port.classList.add("is-drag-origin");
+  try {
+    shell.setPointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture is an enhancement; the window listeners keep the drag alive.
+  }
+  renderConnections();
+}
+
+function moveConnectionDrag(event) {
+  const action = state.action;
+  if (action?.type !== "connect") return;
+  event.preventDefault?.();
+  action.current = screenToWorld(event.clientX, event.clientY);
+  const portCandidate = canvasConnectionInteraction.selectSnapCandidate({
+    pointer: { x: event.clientX, y: event.clientY },
+    origin: action.originPort,
+    registry: action.portRegistry,
+    previousTargetId: action.targetPortId,
+    canConnect: (_direction, port) => action.validPortIds.has(port.id),
+  });
+  const candidate = portCandidate || findConnectionBodyTarget(action, event.clientX, event.clientY);
+  markConnectionTarget(action, candidate);
+  action.sourceNodeId = candidate?.direction.sourceNodeId || null;
+  action.targetNodeId = candidate?.direction.targetNodeId || null;
+  if (candidate) {
+    const targetPort = action.portRegistry.find((port) => port.id === candidate.targetPortId);
+    if (targetPort) action.current = screenToWorld(targetPort.anchor.x, targetPort.anchor.y);
+  }
+  canvasConnectionRenderer.renderPreview(state.action, canvasConnections.getBezierPath);
+}
+
+function finishConnectionDrag(event) {
+  const action = state.action;
+  if (action?.type !== "connect") return;
+  const moved = Math.hypot(
+    event.clientX - action.startClientX,
+    event.clientY - action.startClientY,
+  ) >= 8;
+  clearConnectionTarget(action);
+  clearConnectionOrigin(action);
+  shell.classList.remove("connecting");
+  shell.classList.remove("connecting-from-input", "connecting-from-output");
+  state.action = null;
+  action.portElements.forEach((entry) => resetNodePortPosition(entry.zone));
+  try {
+    shell.releasePointerCapture(event.pointerId);
+  } catch {
+    // The browser may release capture before the window pointerup event.
   }
 
-  if (event.button !== 0) return;
-  event.stopPropagation();
+  if (action.targetNodeId) {
+    const connection = createConnection(action.sourceNodeId, action.targetNodeId, {
+      sourceRatio: action.originSide === "input" ? action.targetRatio : action.originRatio,
+      targetRatio: action.originSide === "input" ? action.originRatio : action.targetRatio,
+    });
+    if (connection) {
+      const target = state.nodes.find((node) => node.id === action.targetNodeId);
+      if (target) {
+        target.expanded = true;
+        target.panel = null;
+        bringNodesToFront([target]);
+        setSelection([target.id], target.id, { keepConnection: true });
+      }
+      render();
+      return;
+    }
+  }
+  renderConnections();
+  if (moved && isConnectionDropSurface(document.elementFromPoint(event.clientX, event.clientY))) {
+    openConnectionCreateMenu(
+      action.originNodeId,
+      action.originSide,
+      action.originRatio,
+      event.clientX,
+      event.clientY,
+    );
+  }
+}
 
-  const target = event.target;
-  const node = state.nodes.find((item) => item.id === nodeId);
-  if (!node) return;
-
-  const isControl = target.closest("button, textarea, input, [contenteditable='true'], .panel-popover, .material-panel, .asset-card, audio, .media-title, .media-spec");
-  if (isControl) {
-    state.activeId = nodeId;
+const canvasNodePointerController = canvasNodePointerControllerFactory.createCanvasNodePointerController({
+  interaction: canvasNodeInteraction,
+  isSpaceDown: () => state.isSpaceDown,
+  beginPan,
+  getNode: (nodeId) => state.nodes.find((item) => item.id === nodeId),
+  getSelectedIds: () => [...state.selectedIds],
+  getSelectedNodes: () => state.nodes.filter((item) => state.selectedIds.has(item.id)),
+  getGroupSnapshots: () => state.groups.map((group) => cloneGroupState(group)),
+  canMutate: isCanvasMutationAllowed,
+  isEditableMedia: (node) => Boolean(getEditableMedia(node)),
+  handleControlPointer: ({ target, node }) => {
+    state.activeId = node.id;
     const hadMediaToolbar = state.mediaToolbarNodeId === node.id;
     if (target.closest(".media-spec") && getEditableMedia(node)) {
       state.mediaToolbarNodeId = node.id;
@@ -4447,69 +4829,50 @@ function handleNodePointerDown(event, nodeId) {
     if (!hadMediaToolbar && state.mediaToolbarNodeId === node.id && !target.closest(".media-edit-toolbar")) {
       render();
     }
-    return;
-  }
-
-  const wasSelected = state.selectedIds.has(nodeId);
-  let nextSelection = [...state.selectedIds];
-
-  if (event.shiftKey) {
-    if (wasSelected && state.selectedIds.size > 1) {
-      nextSelection = nextSelection.filter((id) => id !== nodeId);
-    } else if (!wasSelected) {
-      nextSelection.push(nodeId);
-    }
-  } else if (!wasSelected || state.selectedIds.size <= 1) {
-    nextSelection = [nodeId];
-  }
-
-  setSelection(nextSelection, nodeId);
-  collapseInactiveNodes(nodeId);
-
-  const editableMediaClicked = Boolean(target.closest(".media-frame") && getEditableMedia(node));
-  state.mediaToolbarNodeId = editableMediaClicked ? node.id : null;
-
-  if (!isCanvasMutationAllowed()) {
-    render();
-    return;
-  }
-
-  if (node.kind === "generator" && !node.generating && target.closest(".media-frame")) {
+  },
+  applySelection: (nextSelection, node) => {
+    setSelection(nextSelection, node.id);
+    collapseInactiveNodes(node.id);
+  },
+  setMediaToolbarNodeId: (nodeId) => {
+    state.mediaToolbarNodeId = nodeId;
+  },
+  expandGenerator: (node) => {
     node.expanded = true;
     node.panel = null;
     rememberPreset(node);
-  }
+  },
+  promoteNodes: bringNodesToFront,
+  setAction: (action) => {
+    state.action = action;
+  },
+  capturePointer: (pointerId) => shell.setPointerCapture(pointerId),
+  render,
+});
 
-  const selectedNodes = state.nodes.filter((item) => state.selectedIds.has(item.id));
-  const activeNode = selectedNodes.find((item) => item.id === nodeId);
-  const nodesToPromote = selectedNodes.filter((item) => item.id !== nodeId);
-  if (activeNode) nodesToPromote.push(activeNode);
-  bringNodesToFront(nodesToPromote);
-
-  state.action = {
-    type: "drag-candidate",
-    pointerId: event.pointerId,
-    ids: selectedNodes.map((item) => item.id),
-    activeId: nodeId,
-    altKey: event.altKey,
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    origins: selectedNodes.map((item) => ({ id: item.id, x: item.x, y: item.y })),
-    groups: state.groups.map((group) => cloneGroupState(group)),
-  };
-  shell.setPointerCapture(event.pointerId);
-  render();
+function handleNodePointerDown(event, nodeId) {
+  canvasNodePointerController.handlePointerDown(event, nodeId);
 }
 
-function addNodeAt(clientX, clientY, mode = "image") {
+function addNodeAt(clientX, clientY, mode = "image", options = {}) {
   if (!requireCanvasMutation()) return null;
   const world = screenToWorld(clientX, clientY);
-  const node = defaultGeneratorNode(0, 0, state.lastPreset.mode || mode);
-  applyPreset(node, state.lastPreset);
+  const useLastPreset = options.useLastPreset !== false;
+  const node = defaultGeneratorNode(0, 0, useLastPreset ? state.lastPreset.mode || mode : mode);
+  if (useLastPreset) applyPreset(node, state.lastPreset);
   const layout = getNodeLayout(node);
   const totalHeight = layout.mediaHeight + layoutRules.panelGap + layout.panelHeight;
-  node.x = world.x - layout.nodeWidth / 2;
-  node.y = world.y - totalHeight / 2;
+  const portOffset = 32;
+  if (options.anchor === "input") {
+    node.x = world.x - (layout.nodeWidth - layout.mediaWidth) / 2 + portOffset;
+    node.y = world.y - layout.mediaHeight / 2;
+  } else if (options.anchor === "output") {
+    node.x = world.x - (layout.nodeWidth - layout.mediaWidth) / 2 - layout.mediaWidth - portOffset;
+    node.y = world.y - layout.mediaHeight / 2;
+  } else {
+    node.x = world.x - layout.nodeWidth / 2;
+    node.y = world.y - totalHeight / 2;
+  }
   collapseAllGeneratorPanels();
   state.nodes.push(node);
   bringNodesToFront([node]);
@@ -4596,7 +4959,13 @@ function cloneCanvasContent(source) {
     id: groupIdMap.get(sourceGroup.id),
     nodeIds: sourceGroup.nodeIds.map((id) => nodeIdMap.get(id)).filter(Boolean),
   }));
-  return { nodes, groups };
+  const connections = (source.connections || []).map((connection) => ({
+    ...cloneConnectionState(connection),
+    id: crypto.randomUUID(),
+    sourceNodeId: nodeIdMap.get(connection.sourceNodeId),
+    targetNodeId: nodeIdMap.get(connection.targetNodeId),
+  })).filter((connection) => connection.sourceNodeId && connection.targetNodeId);
+  return { nodes, groups, connections };
 }
 
 function pushUndoAction(action) {
@@ -4647,10 +5016,16 @@ function deleteSelectedNodes(confirmed = false) {
   const deletedGroups = state.groups
     .filter((group) => group.nodeIds.some((id) => state.selectedIds.has(id)))
     .map((group) => cloneGroupState(group));
+  const deletedConnections = state.connections
+    .filter((connection) => selectedNodeIds.has(connection.sourceNodeId) || selectedNodeIds.has(connection.targetNodeId))
+    .map(cloneConnectionState);
 
   if (!deleted.length) return;
-  pushUndoAction({ type: "delete", deleted, deletedGroups });
+  pushUndoAction({ type: "delete", deleted, deletedGroups, deletedConnections });
   state.nodes = state.nodes.filter((node) => !state.selectedIds.has(node.id));
+  state.connections = state.connections.filter(
+    (connection) => !selectedNodeIds.has(connection.sourceNodeId) && !selectedNodeIds.has(connection.targetNodeId),
+  );
   state.groups = state.groups.filter((group) => !deletedGroups.some((item) => item.id === group.id));
   clearSelection();
   state.activeGroupId = null;
@@ -4700,7 +5075,14 @@ function undoLastAction() {
     const restoredGroupIds = new Set(restoredGroups.map((group) => group.id));
     state.groups = state.groups.filter((group) => !restoredGroupIds.has(group.id));
     state.groups.push(...restoredGroups);
+    state.connections.push(...(action.deletedConnections || []).map(cloneConnectionState));
+    state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
     setSelection(restored.map((node) => node.id), restored[0]?.id || null);
+  }
+
+  if (action.type === "connections") {
+    state.connections = canvasConnections.normalizeConnections(action.connections, state.nodes);
+    state.activeConnectionId = null;
   }
 
   if (action.type === "move") {
@@ -5347,6 +5729,7 @@ function duplicateCanvas(canvasId) {
     name: `${source.name} 副本`,
     nodes: content.nodes,
     groups: content.groups,
+    connections: content.connections,
     tx: source.tx,
     ty: source.ty,
     scale: source.scale,
@@ -5400,10 +5783,12 @@ function resetPrototypeProject() {
   state.projectName = "Untitled";
   state.nodes = [];
   state.groups = [];
+  state.connections = [];
   state.undoStack = [];
   state.selectedIds = new Set();
   state.activeId = null;
   state.activeGroupId = null;
+  state.activeConnectionId = null;
   state.mediaToolbarNodeId = null;
   state.tx = 0;
   state.ty = 0;
@@ -5417,6 +5802,8 @@ function resetPrototypeProject() {
   state.libraryFilter = "all";
   state.libraryCollapsedGroups = new Set();
   state.pendingUploadNodeId = null;
+  state.pendingCanvasUploadPoint = null;
+  state.nodeCreatePoint = null;
   state.canvasMoreTargetId = null;
   hideUndoToast();
   initializeCanvases();
@@ -5720,7 +6107,36 @@ function requestRunGroup(group) {
 }
 
 function isCanvasSurface(target) {
-  return target === shell || target === stage || target === nodeLayer;
+  return target === shell || target === stage || target === nodeLayer || target === connectionLayer;
+}
+
+function isConnectionDropSurface(target) {
+  if (!(target instanceof Element) || !shell.contains(target)) return false;
+  return !target.closest(
+    [
+      ".canvas-node",
+      ".connection-group",
+      ".connection-create-menu",
+      ".node-create-menu",
+      ".selection-toolbar",
+      ".group-toolbar",
+      ".canvas-controls",
+      ".left-rail",
+      ".top-bar",
+      ".top-actions",
+      ".asset-library-panel",
+      ".agent-dock",
+      ".agent-panel",
+      ".profile-menu",
+      ".confirm-layer",
+      "button",
+      "input",
+      "textarea",
+      "select",
+      "audio",
+      "video",
+    ].join(", "),
+  );
 }
 
 function shouldBypassCanvasWheel(target) {
@@ -5752,6 +6168,8 @@ function shouldBypassCanvasWheel(target) {
         ".toolbar-dropdown",
         ".selection-toolbar",
         ".group-toolbar",
+        ".connection-create-menu",
+        ".node-create-menu",
         ".confirm-dialog",
         "input",
         "textarea",
@@ -5774,40 +6192,11 @@ function getNormalizedWheelDeltaY(event) {
 }
 
 function beginPan(event) {
-  state.action = {
-    type: "pan",
-    pointerId: event.pointerId,
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    tx: state.tx,
-    ty: state.ty,
-  };
-  shell.classList.add("dragging");
-  try {
-    shell.setPointerCapture(event.pointerId);
-  } catch {
-    try {
-      event.currentTarget?.setPointerCapture?.(event.pointerId);
-    } catch {
-      // Some synthetic or browser-specific pointer events cannot be captured.
-    }
-  }
+  canvasPointerInteractionController.beginPan(event, shell);
 }
 
 function beginMarquee(event) {
-  const rect = shell.getBoundingClientRect();
-  state.action = {
-    type: "marquee",
-    pointerId: event.pointerId,
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    localStartX: event.clientX - rect.left,
-    localStartY: event.clientY - rect.top,
-    additive: event.shiftKey,
-    baseSelection: new Set(state.selectedIds),
-    moved: false,
-  };
-  shell.setPointerCapture(event.pointerId);
+  canvasPointerInteractionController.beginMarquee(event, shell);
 }
 
 function beginMinimapDrag(event) {
@@ -5845,173 +6234,181 @@ function moveMinimapDrag(event) {
   centerCanvasOnWorld(pointerWorld.x + action.offsetX, pointerWorld.y + action.offsetY);
 }
 
-function updateSelectionBox(action, event) {
-  const rect = shell.getBoundingClientRect();
-  const localX = event.clientX - rect.left;
-  const localY = event.clientY - rect.top;
-  const left = Math.min(action.localStartX, localX);
-  const top = Math.min(action.localStartY, localY);
-  const width = Math.abs(localX - action.localStartX);
-  const height = Math.abs(localY - action.localStartY);
-
-  selectionBox.style.left = `${left}px`;
-  selectionBox.style.top = `${top}px`;
-  selectionBox.style.width = `${width}px`;
-  selectionBox.style.height = `${height}px`;
-  selectionBox.classList.remove("hidden");
-}
-
-function selectNodesInMarquee(action, event) {
-  const a = screenToWorld(action.startClientX, action.startClientY);
-  const b = screenToWorld(event.clientX, event.clientY);
-  const marquee = {
-    left: Math.min(a.x, b.x),
-    top: Math.min(a.y, b.y),
-    right: Math.max(a.x, b.x),
-    bottom: Math.max(a.y, b.y),
-  };
-  const hitIds = state.nodes.filter((node) => rectsIntersect(marquee, getNodeBounds(node))).map((node) => node.id);
-  const selectedIds = action.additive ? [...action.baseSelection, ...hitIds] : hitIds;
-  setSelection(selectedIds);
-  collapseAllGeneratorPanels();
-}
-
-function promoteDragCandidate(action, event) {
-  const sourceNodes = action.ids
-    .map((id) => state.nodes.find((node) => node.id === id))
-    .filter(Boolean);
-  if (!sourceNodes.length) {
-    state.action = null;
-    return;
-  }
-
-  let draggedNodes = sourceNodes;
-  let origins = action.origins;
-
-  if (action.altKey) {
-    draggedNodes = sourceNodes.map((node) => cloneNode(node));
-    state.nodes.push(...draggedNodes);
-    origins = draggedNodes.map((node) => ({ id: node.id, x: node.x, y: node.y }));
-    setSelection(draggedNodes.map((node) => node.id), draggedNodes.find((node) => node.kind === "generator")?.id || draggedNodes[0].id);
-    render();
-  }
-
-  bringNodesToFront(draggedNodes);
-  state.action = {
-    type: "drag-nodes",
-    pointerId: action.pointerId,
-    ids: draggedNodes.map((node) => node.id),
-    startClientX: action.startClientX,
-    startClientY: action.startClientY,
-    origins,
-    groups: action.groups,
-    isDuplicate: action.altKey,
-  };
-  shell.classList.add("dragging");
-  moveDraggedNodes(state.action, event);
-}
-
-function moveDraggedNodes(action, event) {
-  const dx = (event.clientX - action.startClientX) / state.scale;
-  const dy = (event.clientY - action.startClientY) / state.scale;
-  action.moved = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
-
-  for (const origin of action.origins) {
-    const node = state.nodes.find((item) => item.id === origin.id);
-    if (!node) continue;
-    node.x = origin.x + dx;
-    node.y = origin.y + dy;
+const canvasNodeDragController = canvasNodeDragControllerFactory.createCanvasNodeDragController({
+  interaction: canvasNodeInteraction,
+  getScale: () => state.scale,
+  getNode: (nodeId) => state.nodes.find((node) => node.id === nodeId),
+  cloneNode,
+  addNodes: (nodes) => state.nodes.push(...nodes),
+  selectNodes: setSelection,
+  promoteNodes: bringNodesToFront,
+  setAction: (action) => {
+    state.action = action;
+  },
+  setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
+  applyNodePosition: (position) => {
+    const node = state.nodes.find((item) => item.id === position.id);
+    if (!node) return;
+    node.x = position.x;
+    node.y = position.y;
     const nodeElement = nodeLayer.querySelector(`[data-id="${node.id}"]`);
     if (nodeElement) {
       nodeElement.style.left = `${node.x}px`;
       nodeElement.style.top = `${node.y}px`;
       nodeElement.style.zIndex = String(node.z);
     }
-  }
-  renderSelectionToolbar();
-  renderMinimap();
+  },
+  renderMovement: () => {
+    renderConnections();
+    renderSelectionToolbar();
+    renderMinimap();
+  },
+  updateGroupMembership: updateDraggedNodeGroupMembership,
+  pushUndoAction,
+  render,
+});
+
+const canvasGroupInteractionController = canvasGroupInteractionControllerFactory.createCanvasGroupInteractionController({
+  getScale: () => state.scale,
+  getGroup: getGroupById,
+  getGroupBounds,
+  getGroupNodes,
+  getGroupSnapshots: () => state.groups.map((group) => cloneGroupState(group)),
+  setActiveGroup,
+  setAction: (action) => {
+    state.action = action;
+  },
+  setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
+  capturePointer: (target, pointerId) => target.setPointerCapture(pointerId),
+  applyGroupFrame: (groupId, frame) => {
+    const group = getGroupById(groupId);
+    if (group) Object.assign(group, frame);
+  },
+  applyNodePosition: (nodeId, position) => {
+    const node = state.nodes.find((item) => item.id === nodeId);
+    if (node) Object.assign(node, position);
+  },
+  minWidth: groupFrameRules.minWidth,
+  minHeight: groupFrameRules.minHeight,
+  pushUndoAction,
+  render,
+});
+
+const canvasPointerInteractionController = canvasPointerInteractionControllerFactory.createCanvasPointerInteractionController({
+  interaction: canvasNodeInteraction,
+  requestFrame: (callback) => window.requestAnimationFrame(callback),
+  cancelFrame: (frameId) => window.cancelAnimationFrame(frameId),
+  getAction: () => state.action,
+  getViewport: () => ({ tx: state.tx, ty: state.ty }),
+  setAction: (action) => {
+    state.action = action;
+  },
+  setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
+  capturePointer: (target, pointer) => {
+    try {
+      target.setPointerCapture(pointer.pointerId);
+    } catch {
+      try {
+        pointer.currentTarget?.setPointerCapture?.(pointer.pointerId);
+      } catch {
+        // Synthetic pointer events and some browsers cannot always capture here.
+      }
+    }
+  },
+  applyViewport: ({ tx, ty }) => {
+    state.tx = tx;
+    state.ty = ty;
+    applyTransform();
+  },
+  getShellRect: () => shell.getBoundingClientRect(),
+  getSelection: () => state.selectedIds,
+  getNodes: () => state.nodes,
+  getNodeBounds,
+  screenToWorld,
+  showMarquee: (rect) => {
+    selectionBox.style.left = `${rect.left}px`;
+    selectionBox.style.top = `${rect.top}px`;
+    selectionBox.style.width = `${rect.width}px`;
+    selectionBox.style.height = `${rect.height}px`;
+    selectionBox.classList.remove("hidden");
+  },
+  hideMarquee: () => selectionBox.classList.add("hidden"),
+  setSelection,
+  clearSelection,
+  collapseGeneratorPanels: collapseAllGeneratorPanels,
+  render,
+});
+
+const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.createCanvasPointerDispatchController({
+  getAction: () => state.action,
+  schedule: (action, pointer, move) => canvasPointerInteractionController.schedule(action, pointer, move),
+  flush: (action, pointer, move) => canvasPointerInteractionController.flush(action, pointer, move),
+  hasCrossedDragThreshold: canvasNodeInteraction.hasCrossedDragThreshold,
+  moveConnection: (_action, pointer) => moveConnectionDrag(pointer),
+  finishConnection: finishConnectionDrag,
+  promoteNodeDrag: promoteDragCandidate,
+  promoteGroupDrag,
+  moveGroup: moveGroupNodes,
+  resizeGroup: resizeGroupFrame,
+  moveNodes: moveDraggedNodes,
+  moveMarquee: moveMarqueeSelection,
+  movePan: moveCanvasPan,
+  moveMinimap: moveMinimapDrag,
+  resizeAssetLibrary: setAssetLibraryWidth,
+  resizeAgent: setAgentWidth,
+  finishMarquee: (action) => canvasPointerInteractionController.finishMarquee(action),
+  finishNodeDrag: (action) => canvasNodeDragController.finish(action),
+  finishGroup: (action) => canvasGroupInteractionController.finish(action),
+  finishAssetLibraryResize: syncPromptPanelLayouts,
+  clearAction: () => {
+    state.action = null;
+  },
+  setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
+  releasePointer: (target, pointer) => {
+    try {
+      (target || shell).releasePointerCapture(pointer.pointerId);
+    } catch {
+      // Pointer capture may already be released by the browser.
+    }
+  },
+  isCanvasSurface,
+  closeConnectionCreateMenu: closeCanvasCreateMenus,
+  isSpaceDown: () => state.isSpaceDown,
+  beginPan,
+  getActiveNode,
+  closeNodePanel: (node) => {
+    node.panel = null;
+  },
+  beginMarquee,
+  render,
+});
+
+function promoteDragCandidate(action, event) {
+  canvasNodeDragController.promote(action, event);
+}
+
+function moveDraggedNodes(action, event) {
+  canvasNodeDragController.move(action, event);
 }
 
 function promoteGroupDrag(action, event) {
-  const group = getGroupById(action.groupId);
-  if (!group) {
-    state.action = null;
-    return;
-  }
-  state.action = {
-    type: "drag-group",
-    pointerId: action.pointerId,
-    groupId: action.groupId,
-    startClientX: action.startClientX,
-    startClientY: action.startClientY,
-    groupOrigin: action.groupOrigin,
-    origins: action.origins,
-    groups: action.groups,
-  };
-  shell.classList.add("dragging");
-  moveGroupNodes(state.action, event);
+  canvasGroupInteractionController.promoteDrag(action, event);
 }
 
 function moveGroupNodes(action, event) {
-  const dx = (event.clientX - action.startClientX) / state.scale;
-  const dy = (event.clientY - action.startClientY) / state.scale;
-  action.moved = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
-  const group = getGroupById(action.groupId);
-  if (group && action.groupOrigin) {
-    group.x = action.groupOrigin.x + dx;
-    group.y = action.groupOrigin.y + dy;
-  }
-  for (const origin of action.origins) {
-    const node = state.nodes.find((item) => item.id === origin.id);
-    if (!node) continue;
-    node.x = origin.x + dx;
-    node.y = origin.y + dy;
-  }
-  render();
+  canvasGroupInteractionController.move(action, event);
+}
+
+function moveCanvasPan(action, event) {
+  canvasPointerInteractionController.movePan(action, event);
+}
+
+function moveMarqueeSelection(action, event) {
+  canvasPointerInteractionController.moveMarquee(action, event);
 }
 
 function resizeGroupFrame(action, event) {
-  const group = getGroupById(action.groupId);
-  if (!group) return;
-
-  const dx = (event.clientX - action.startClientX) / state.scale;
-  const dy = (event.clientY - action.startClientY) / state.scale;
-  action.moved = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
-  const handle = action.handle || "";
-  let nextX = action.origin.x;
-  let nextY = action.origin.y;
-  let nextWidth = action.origin.width;
-  let nextHeight = action.origin.height;
-
-  if (handle.includes("e")) {
-    nextWidth = action.origin.width + dx;
-  }
-  if (handle.includes("s")) {
-    nextHeight = action.origin.height + dy;
-  }
-  if (handle.includes("w")) {
-    nextX = action.origin.x + dx;
-    nextWidth = action.origin.width - dx;
-  }
-  if (handle.includes("n")) {
-    nextY = action.origin.y + dy;
-    nextHeight = action.origin.height - dy;
-  }
-
-  if (nextWidth < groupFrameRules.minWidth) {
-    if (handle.includes("w")) nextX = action.origin.x + action.origin.width - groupFrameRules.minWidth;
-    nextWidth = groupFrameRules.minWidth;
-  }
-  if (nextHeight < groupFrameRules.minHeight) {
-    if (handle.includes("n")) nextY = action.origin.y + action.origin.height - groupFrameRules.minHeight;
-    nextHeight = groupFrameRules.minHeight;
-  }
-
-  group.x = nextX;
-  group.y = nextY;
-  group.width = nextWidth;
-  group.height = nextHeight;
-  render();
+  canvasGroupInteractionController.resize(action, event);
 }
 
 function rectContainsPoint(rect, point) {
@@ -6082,123 +6479,15 @@ function updateDraggedNodeGroupMembership(ids) {
 }
 
 function handlePointerMove(event) {
-  const action = state.action;
-  if (!action) return;
-
-  if (action.type === "drag-candidate") {
-    const distance = Math.hypot(event.clientX - action.startClientX, event.clientY - action.startClientY);
-    if (distance < 4) return;
-    promoteDragCandidate(action, event);
-    return;
-  }
-
-  if (action.type === "group-drag-candidate") {
-    const distance = Math.hypot(event.clientX - action.startClientX, event.clientY - action.startClientY);
-    if (distance < 4) return;
-    promoteGroupDrag(action, event);
-    return;
-  }
-
-  if (action.type === "drag-group") {
-    moveGroupNodes(action, event);
-    return;
-  }
-
-  if (action.type === "resize-group") {
-    resizeGroupFrame(action, event);
-    return;
-  }
-
-  if (action.type === "drag-nodes") {
-    moveDraggedNodes(action, event);
-    return;
-  }
-
-  if (action.type === "marquee") {
-    const distance = Math.hypot(event.clientX - action.startClientX, event.clientY - action.startClientY);
-    if (distance < 4) return;
-    action.moved = true;
-    updateSelectionBox(action, event);
-    selectNodesInMarquee(action, event);
-    render();
-    return;
-  }
-
-  if (action.type === "pan") {
-    state.tx = action.tx + event.clientX - action.startClientX;
-    state.ty = action.ty + event.clientY - action.startClientY;
-    applyTransform();
-    return;
-  }
-
-  if (action.type === "minimap-drag") {
-    moveMinimapDrag(event);
-    return;
-  }
-
-  if (action.type === "resize-asset-library") {
-    setAssetLibraryWidth(action.startWidth + event.clientX - action.startClientX);
-    return;
-  }
-
-  if (action.type === "resize-agent") {
-    setAgentWidth(action.startWidth + action.startClientX - event.clientX);
-  }
+  canvasPointerDispatchController.handleMove(event);
 }
 
 function finishPointerInteraction(event) {
-  const action = state.action;
-  if (!action) return;
-
-  if (action.type === "marquee") {
-    selectionBox.classList.add("hidden");
-    if (!action.moved) {
-      clearSelection();
-      collapseAllGeneratorPanels();
-    }
-    render();
-  } else if (action.type === "drag-nodes") {
-    updateDraggedNodeGroupMembership(action.ids);
-    if (action.moved && !action.isDuplicate) {
-      pushUndoAction({ type: "move", positions: action.origins, groups: action.groups });
-    }
-    render();
-  } else if (action.type === "drag-group" || action.type === "resize-group") {
-    if (action.moved) {
-      pushUndoAction({ type: "move", positions: action.origins || [], groups: action.groups });
-    }
-    render();
-  } else if (action.type === "resize-asset-library") {
-    syncPromptPanelLayouts();
-  }
-
-  state.action = null;
-  shell.classList.remove("dragging");
-  try {
-    (action.captureTarget || shell).releasePointerCapture(event.pointerId);
-  } catch {
-    // Pointer capture may already be released by the browser.
-  }
+  canvasPointerDispatchController.finish(event);
 }
 
 shell.addEventListener("pointerdown", (event) => {
-  if (!isCanvasSurface(event.target)) return;
-
-  if (event.button === 1 || state.isSpaceDown) {
-    event.preventDefault();
-    beginPan(event);
-    return;
-  }
-
-  if (event.button !== 0) return;
-  const activeNode = getActiveNode();
-  if (activeNode?.kind === "generator" && activeNode.panel) {
-    activeNode.panel = null;
-    render();
-    return;
-  }
-
-  beginMarquee(event);
+  canvasPointerDispatchController.handleSurfacePointerDown(event);
 });
 
 window.addEventListener("pointermove", handlePointerMove);
@@ -6207,8 +6496,114 @@ window.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointercancel", finishPointerInteraction);
 
 shell.addEventListener("dblclick", (event) => {
-  if (event.target instanceof Element && event.target.closest(".canvas-node")) return;
-  addNodeAt(event.clientX, event.clientY);
+  if (event.target instanceof Element && event.target.closest(".canvas-node, .connection-create-menu, .node-create-menu")) return;
+  event.preventDefault();
+  window.getSelection()?.removeAllRanges();
+  openNodeCreateMenu(event.clientX, event.clientY);
+});
+
+nodeCreateMenu?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+
+nodeCreateMenu?.addEventListener("pointerover", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-create]") : null;
+  if (button) setNodeCreatePreview(button);
+});
+
+nodeCreateMenu?.addEventListener("pointerleave", () => {
+  setNodeCreatePreview(nodeCreateMenu.querySelector("[data-node-create]"));
+});
+
+nodeCreateMenu?.addEventListener("focusin", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-create]") : null;
+  if (button) setNodeCreatePreview(button);
+});
+
+nodeCreateMenu?.addEventListener("keydown", (event) => {
+  const buttons = [...nodeCreateMenu.querySelectorAll("[data-node-create]")];
+  if (!buttons.length) return;
+  const currentIndex = buttons.findIndex((button) => button.classList.contains("is-preview"));
+  let nextIndex = currentIndex < 0 ? 0 : currentIndex;
+
+  if (event.key === "ArrowDown") nextIndex = (nextIndex + 1) % buttons.length;
+  else if (event.key === "ArrowUp") nextIndex = (nextIndex - 1 + buttons.length) % buttons.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = buttons.length - 1;
+  else if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    buttons[nextIndex].click();
+    return;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  setNodeCreatePreview(buttons[nextIndex]);
+  buttons[nextIndex].focus({ preventScroll: true });
+});
+
+nodeCreateMenu?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-create]") : null;
+  const point = state.nodeCreatePoint;
+  if (!button || !point) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (button.dataset.nodeCreate === "upload") {
+    state.pendingUploadNodeId = null;
+    state.pendingCanvasUploadPoint = point;
+    localAssetInput.value = "";
+    closeNodeCreateMenu({ keepUploadPoint: true });
+    localAssetInput.click();
+    return;
+  }
+
+  const mode = button.dataset.nodeCreate === "video" ? "video" : "image";
+  closeNodeCreateMenu();
+  addNodeAt(point.clientX, point.clientY, mode, { useLastPreset: false });
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (nodeCreateMenu?.classList.contains("hidden")) return;
+  if (event.target instanceof Element && event.target.closest("#nodeCreateMenu")) return;
+  closeNodeCreateMenu();
+});
+
+connectionCreateMenu?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+
+connectionCreateMenu?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
+  const drop = state.connectionDrop;
+  if (!button || !drop) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const mode = button.dataset.connectionCreate === "video" ? "video" : "image";
+  const originNodeId = drop.originNodeId;
+  const node = addNodeAt(drop.clientX, drop.clientY, mode, {
+    useLastPreset: false,
+    anchor: drop.originSide === "input" ? "output" : "input",
+  });
+  closeConnectionCreateMenu();
+  if (!node) return;
+  if (drop.originSide === "input") {
+    createConnection(node.id, originNodeId, {
+      sourceRatio: 0.5,
+      targetRatio: drop.originRatio,
+    });
+  } else {
+    createConnection(originNodeId, node.id, {
+      sourceRatio: drop.originRatio,
+      targetRatio: 0.5,
+    });
+  }
+  node.expanded = true;
+  setSelection([node.id], node.id, { keepConnection: true });
+  render();
 });
 
 window.addEventListener(
@@ -6249,6 +6644,16 @@ window.addEventListener("keydown", (event) => {
   const target = event.target;
   const isTyping = target instanceof Element && target.closest("input, textarea, [contenteditable='true']");
   if (isTyping) return;
+  if (event.key === "Escape" && !nodeCreateMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    closeNodeCreateMenu();
+    return;
+  }
+  if (event.key === "Escape" && !connectionCreateMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    closeConnectionCreateMenu();
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
     undoLastAction();
@@ -6258,6 +6663,12 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "Space") {
     state.isSpaceDown = true;
     shell.classList.add("space-pan");
+  }
+
+  if ((event.key === "Delete" || event.key === "Backspace") && state.activeConnectionId && !state.selectedIds.size && !state.activeGroupId) {
+    event.preventDefault();
+    removeConnection(state.activeConnectionId);
+    return;
   }
 
   if ((event.key === "Delete" || event.key === "Backspace") && (state.selectedIds.size || state.activeGroupId)) {
@@ -6281,8 +6692,14 @@ document.addEventListener("dragstart", (event) => {
 localAssetInput.addEventListener("change", (event) => {
   const files = event.currentTarget.files || [];
   const node = state.nodes.find((item) => item.id === state.pendingUploadNodeId);
-  if (node) addFilesToGeneratorNode(node, files);
+  const canvasPoint = state.pendingCanvasUploadPoint;
+  if (node) {
+    addFilesToGeneratorNode(node, files);
+  } else if (canvasPoint && files.length) {
+    addMediaNodesFromFiles(files, canvasPoint.clientX, canvasPoint.clientY);
+  }
   state.pendingUploadNodeId = null;
+  state.pendingCanvasUploadPoint = null;
 });
 
 window.addEventListener("dragover", (event) => {

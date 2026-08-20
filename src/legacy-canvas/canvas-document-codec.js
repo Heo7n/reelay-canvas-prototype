@@ -138,12 +138,62 @@
     };
   }
 
+  function serializeConnections(candidates, nodeIds) {
+    if (!Array.isArray(candidates)) return [];
+    const seenIds = new Set();
+    const seenEdges = new Set();
+    const connections = [];
+
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== "object") continue;
+      const id = requiredId(candidate.id);
+      const sourceNodeId = requiredId(candidate.sourceNodeId);
+      const targetNodeId = requiredId(candidate.targetNodeId);
+      if (
+        !id
+        || !sourceNodeId
+        || !targetNodeId
+        || sourceNodeId === targetNodeId
+        || !nodeIds.has(sourceNodeId)
+        || !nodeIds.has(targetNodeId)
+      ) continue;
+
+      const edgeKey = `${sourceNodeId}\u0000${targetNodeId}`;
+      if (seenIds.has(id) || seenEdges.has(edgeKey)) continue;
+      seenIds.add(id);
+      seenEdges.add(edgeKey);
+
+      const connection = { id, sourceNodeId, targetNodeId };
+      if (Number.isFinite(candidate.sourceRatio)) {
+        connection.sourceRatio = finiteNumber(candidate.sourceRatio, 0.5, 0.08, 0.92);
+      }
+      if (Number.isFinite(candidate.targetRatio)) {
+        connection.targetRatio = finiteNumber(candidate.targetRatio, 0.5, 0.08, 0.92);
+      }
+      if (typeof candidate.sourcePortId === "string") {
+        const sourcePortId = boundedString(candidate.sourcePortId, "", 240).trim();
+        if (sourcePortId) connection.sourcePortId = sourcePortId;
+      }
+      if (typeof candidate.targetPortId === "string") {
+        const targetPortId = boundedString(candidate.targetPortId, "", 240).trim();
+        if (targetPortId) connection.targetPortId = targetPortId;
+      }
+      if (typeof candidate.createdAt === "string") {
+        const createdAt = boundedString(candidate.createdAt, "", 80).trim();
+        if (createdAt) connection.createdAt = createdAt;
+      }
+      connections.push(connection);
+    }
+    return connections;
+  }
+
   function serializeCanvas(candidate, index) {
     if (!candidate || typeof candidate !== "object") return null;
     const id = requiredId(candidate.id);
     if (!id) return null;
     const nodes = Array.isArray(candidate.nodes) ? candidate.nodes.map(serializeNode).filter(Boolean) : [];
     const nodeIds = new Set(nodes.map((node) => node.id));
+    const connections = serializeConnections(candidate.connections, nodeIds);
     const groups = Array.isArray(candidate.groups)
       ? candidate.groups.map((group) => serializeGroup(group, nodeIds)).filter(Boolean)
       : [];
@@ -159,6 +209,7 @@
       id,
       name: boundedString(candidate.name, `画布 ${index + 1}`, 200).trim() || `画布 ${index + 1}`,
       nodes,
+      connections,
       groups,
       viewport: {
         tx: finiteNumber(viewport.tx, 0, -MAX_COORDINATE, MAX_COORDINATE),
@@ -239,6 +290,7 @@
       id: canvas.id,
       name: canvas.name,
       nodes: canvas.nodes.map((node) => restoreNode(node, promptInputHeight)),
+      connections: canvas.connections,
       groups: canvas.groups,
       tx: canvas.viewport.tx,
       ty: canvas.viewport.ty,

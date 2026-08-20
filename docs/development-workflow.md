@@ -48,6 +48,7 @@ npm run worktrees
 
 | 改动范围 | 快速检查 |
 | --- | --- |
+| 旧画布端口、连线、拖拽、框选等局部交互 | `npm run check:canvas` |
 | 迁移期旧画布 JS / 配置 / HTML / CSS | `npm run check:legacy` |
 | React / TypeScript 应用壳或领域层 | `npm run check:shell` |
 | 共享服务、会话或项目 API | `npm run check:server` |
@@ -66,6 +67,7 @@ git diff --check
 
 视觉与行为检查按影响面执行：
 
+- 旧画布局部视觉和手势迭代使用 `npm run dev:canvas` 启动独立预览，不要求同时启动 React 应用壳、API 或 Docker。浏览器只复验本次改动直接影响的手势；完整手势矩阵留到代码里程碑或合并前。
 - 改到可见 UI：检查相关页面、响应式状态、浅色/深色和控制台。
 - 改到账户或积分：检查当前 mock 刷新契约；引入持久账本后改为余额、扣费和退款幂等检查。
 - 改到生成、撤销、画布归属或项目资产：检查不会跨画布或跨项目写入。

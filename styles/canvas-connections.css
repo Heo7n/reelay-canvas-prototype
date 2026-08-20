@@ -1,0 +1,559 @@
+.connection-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.node-layer {
+  z-index: 2;
+}
+
+.connection-underlay,
+.connection-path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.connection-group:hover .connection-path {
+  stroke: color-mix(in srgb, #5c7cfa 64%, var(--text, #18191c));
+  opacity: 0.9;
+  stroke-width: 1.7;
+}
+
+.connection-underlay {
+  stroke: color-mix(in srgb, var(--bg, #fff) 88%, transparent);
+  stroke-width: 4.5;
+  opacity: 0.76;
+  transition: opacity 160ms ease;
+}
+
+.connection-path {
+  stroke: color-mix(in srgb, var(--text-muted, #8a8d94) 48%, transparent);
+  stroke-width: 1.35;
+  transition: stroke 160ms ease, opacity 160ms ease, stroke-width 160ms ease;
+}
+
+.connection-group.is-new .connection-underlay,
+.connection-group.is-new .connection-path {
+  animation: connection-settle 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes connection-settle {
+  from {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    opacity: 0.38;
+  }
+  to {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+.connection-hit-path {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.connection-group.is-muted .connection-path {
+  opacity: 0.16;
+}
+
+.connection-group.is-muted .connection-underlay {
+  opacity: 0.24;
+}
+
+.connection-group.is-related .connection-path,
+.connection-group.is-active .connection-path {
+  stroke: color-mix(in srgb, #5c7cfa 76%, var(--text, #18191c));
+  opacity: 0.95;
+}
+
+.connection-group.is-active .connection-path {
+  stroke-width: 2;
+}
+
+.connection-cut-control {
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 100ms ease;
+}
+
+.connection-group:hover .connection-cut-control {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.connection-cut-surface {
+  fill: var(--panel-solid, #fff);
+  stroke: color-mix(in srgb, var(--text, #18191c) 20%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 2px 5px rgb(0 0 0 / 14%));
+  transition: fill 120ms ease, stroke 120ms ease;
+}
+
+.connection-cut-mark {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text, #18191c) 72%, transparent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.connection-cut-handle {
+  fill: none;
+}
+
+.connection-cut-control:hover .connection-cut-surface {
+  fill: color-mix(in srgb, #ef4444 8%, var(--panel-solid, #fff));
+  stroke: color-mix(in srgb, #ef4444 48%, transparent);
+}
+
+.connection-cut-control:hover .connection-cut-mark {
+  stroke: #dc3e45;
+}
+
+.connection-preview {
+  fill: none;
+  stroke: color-mix(in srgb, #5c7cfa 84%, var(--text, #18191c));
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgb(92 124 250 / 24%));
+}
+
+.connection-preview-endpoint {
+  fill: var(--panel-solid, #fff);
+  stroke: color-mix(in srgb, #5c7cfa 88%, var(--text, #18191c));
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgb(92 124 250 / 22%));
+  transition: r 120ms ease;
+}
+
+.connection-preview-endpoint.is-snapped {
+  r: 5.25px;
+  fill: color-mix(in srgb, #5c7cfa 12%, var(--panel-solid, #fff));
+}
+
+.node-port-zone {
+  position: absolute;
+  top: 50%;
+  width: 36px;
+  height: 56px;
+  margin-top: -28px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
+  zoom: var(--connection-ui-scale, 1);
+  z-index: 8;
+}
+
+.node-port-zone-input {
+  right: 100%;
+}
+
+.node-port-zone-output {
+  left: 100%;
+}
+
+.node-port {
+  --port-accent: #5c7cfa;
+  --port-enter-x: 0px;
+  --port-size: 22px;
+  --port-stroke: 1px;
+  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 30%, transparent);
+  position: absolute;
+  top: var(--port-y, 50%);
+  left: var(--port-x, 50%);
+  box-sizing: border-box;
+  width: var(--port-size);
+  height: var(--port-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel-solid, #fff) 97%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
+    0 1px 3px rgb(0 0 0 / 8%);
+  opacity: 0;
+  pointer-events: none;
+  translate: calc(-50% + var(--port-enter-x)) -50%;
+  transition:
+    left 36ms linear,
+    top 36ms linear,
+    opacity 105ms ease-out,
+    translate 150ms cubic-bezier(0.2, 0.85, 0.2, 1),
+    background 130ms ease,
+    box-shadow 150ms ease;
+  cursor: inherit;
+  touch-action: none;
+  z-index: 8;
+}
+
+.node-port::before,
+.node-port::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 1.25px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text, #18191c) 66%, transparent);
+  transform: translate(-50%, -50%);
+  transition: background 120ms ease, transform 140ms ease;
+}
+
+.node-port.is-connected {
+  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 34%, transparent);
+}
+
+.node-port::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.node-port-input {
+  --port-x: 50%;
+  --port-enter-x: 8px;
+}
+
+.node-port-output {
+  --port-x: 50%;
+  --port-enter-x: -8px;
+}
+
+.node-port-zone:hover .node-port,
+.media-frame:hover .node-port,
+.canvas-node.selected .node-port,
+.node-port.is-drag-origin,
+.node-port.is-valid-target {
+  --port-enter-x: 0px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.node-port-zone:hover .node-port {
+  --port-stroke-color: color-mix(in srgb, var(--port-accent) 76%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
+    0 1px 4px rgb(0 0 0 / 12%),
+    0 0 0 3px rgb(92 124 250 / 7%);
+}
+
+.canvas-node:not(.selected) .media-frame:hover .node-port {
+  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 28%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
+    0 1px 3px rgb(0 0 0 / 10%);
+}
+
+.canvas-node.selected .node-port {
+  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 32%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
+    0 1px 3px rgb(0 0 0 / 10%);
+}
+
+.canvas-shell.connecting .canvas-node.connection-origin .node-port.is-drag-origin {
+  opacity: 1;
+  pointer-events: auto;
+  --port-stroke-color: var(--port-accent);
+  box-shadow:
+    inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
+    0 0 0 5px rgb(92 124 250 / 12%);
+}
+
+.node-port.is-valid-target {
+  --port-stroke-color: var(--port-accent);
+  background: var(--port-accent);
+  box-shadow:
+    inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
+    0 0 0 5px rgb(92 124 250 / 14%);
+}
+
+.node-port.is-valid-target::before,
+.node-port.is-valid-target::after {
+  background: white;
+}
+
+.canvas-shell.connecting .canvas-node.connection-target .media-frame::before {
+  content: "";
+  position: absolute;
+  z-index: 21;
+  inset: calc(-5px * var(--connection-ui-scale, 1));
+  border: calc(2px * var(--connection-ui-scale, 1)) solid color-mix(in srgb, #5c7cfa 84%, transparent);
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 calc(4px * var(--connection-ui-scale, 1)) rgb(92 124 250 / 10%),
+    0 8px 24px rgb(92 124 250 / 12%);
+  opacity: 1;
+  pointer-events: none;
+  animation: connection-target-ready 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes connection-target-ready {
+  from {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.canvas-shell.connection-low-detail .connection-layer {
+  opacity: 0.46;
+}
+
+.canvas-shell.connection-low-detail .node-port-zone {
+  display: block;
+}
+
+.connection-create-menu {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(112px, 1fr));
+  gap: 6px;
+  min-width: 250px;
+  padding: 8px;
+  border: 1px solid var(--border, rgb(127 127 127 / 22%));
+  border-radius: 8px;
+  background: var(--panel-solid, #fff);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 16%);
+  z-index: 70;
+}
+
+.connection-create-menu.hidden {
+  display: none;
+}
+
+.connection-create-label {
+  grid-column: 1 / -1;
+  padding: 2px 6px 5px;
+  color: var(--text-muted, #777b84);
+  font-size: 12px;
+}
+
+.connection-create-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text, #18191c);
+  cursor: pointer;
+}
+
+.connection-create-menu button:hover,
+.connection-create-menu button:focus-visible {
+  background: var(--button-hover, rgb(127 127 127 / 10%));
+  outline: none;
+}
+
+.connection-create-menu svg { width: 16px; height: 16px; }
+
+.node-create-menu {
+  position: absolute;
+  z-index: 72;
+  display: grid;
+  width: 236px;
+  padding: 8px;
+  border: 1px solid var(--border, rgb(127 127 127 / 22%));
+  border-radius: 12px;
+  background: var(--panel-solid, #fff);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 10%);
+  transform-origin: top left;
+  animation: node-create-enter 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+}
+
+.node-create-menu.hidden {
+  display: none;
+}
+
+.node-create-menu:focus {
+  outline: none;
+}
+
+.node-create-menu button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text, #18191c);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 130ms ease;
+}
+
+.node-create-menu button[data-node-create="upload"] {
+  position: relative;
+  margin-top: 10px;
+}
+
+.node-create-menu button[data-node-create="upload"]::before {
+  position: absolute;
+  top: -6px;
+  right: 4px;
+  left: 4px;
+  height: 1px;
+  background: var(--border-subtle, rgb(127 127 127 / 18%));
+  content: "";
+  pointer-events: none;
+}
+
+.node-create-menu button.is-preview,
+.node-create-menu button:hover,
+.node-create-menu button:focus-visible {
+  background: var(--button-hover, rgb(127 127 127 / 7%));
+  outline: none;
+}
+
+.node-create-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-muted, rgb(127 127 127 / 6%));
+  transition: background-color 130ms ease;
+}
+
+.node-create-icon svg {
+  width: 21px;
+  height: 21px;
+  color: var(--text-secondary, #4f535b);
+  stroke-width: 1.7;
+}
+
+.node-create-menu [data-node-create="video"] .node-create-icon svg polygon,
+.node-create-menu [data-node-create="video"] .node-create-icon svg path:last-child {
+  fill: currentColor;
+  stroke-width: 1.35;
+}
+
+.node-create-copy {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 34px;
+  overflow: hidden;
+}
+
+.node-create-title {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 620;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  transform: translateY(-50%);
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+}
+
+.node-create-description {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  color: var(--text-muted, #777b84);
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.25;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 120ms ease,
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+}
+
+.node-create-menu button.is-preview .node-create-description,
+.node-create-menu button:hover .node-create-description,
+.node-create-menu button:focus-visible .node-create-description {
+  opacity: 0.72;
+  transform: translateY(0);
+}
+
+.node-create-menu button.is-preview .node-create-title,
+.node-create-menu button:hover .node-create-title,
+.node-create-menu button:focus-visible .node-create-title {
+  transform: translateY(-16px);
+}
+
+@keyframes node-create-enter {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.asset-card.linked-reference {
+  border-style: dashed;
+}
+
+.asset-card.linked-reference .asset-meta small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+html[data-theme="dark"] .node-port,
+html[data-theme="dark"] .connection-create-menu,
+html[data-theme="dark"] .node-create-menu {
+  background: #242528;
+}
+
+html[data-theme="dark"] .connection-underlay {
+  stroke: rgb(6 7 9 / 78%);
+}
+
+html[data-theme="dark"] .connection-cut-surface {
+  fill: #242528;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-create-menu {
+    animation: none;
+  }
+
+  .connection-group.is-new .connection-underlay,
+  .connection-group.is-new .connection-path {
+    animation: none;
+  }
+
+
+  .canvas-shell.connecting .canvas-node.connection-target .media-frame::before {
+    animation: none;
+  }
+}

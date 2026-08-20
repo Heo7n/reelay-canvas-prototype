@@ -4,10 +4,22 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, codec, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, nodeInteraction, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, codec, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-connections.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-connection-interaction.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-connection-renderer.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-layer-reconciler.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-node-interaction.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-node-drag-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-group-interaction-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-pointer-interaction-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-asset-library-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-toolbar-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-document-codec.js", root), "utf8"),
   readFile(new URL("app.js", root), "utf8"),
 ]);
@@ -39,6 +51,18 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
 
   window.eval(catalog);
   window.eval(config);
+  window.eval(connections);
+  window.eval(connectionInteraction);
+  window.eval(connectionRenderer);
+  window.eval(layerReconciler);
+  window.eval(nodeInteraction);
+  window.eval(nodePointerController);
+  window.eval(nodeDragController);
+  window.eval(groupInteractionController);
+  window.eval(pointerInteractionController);
+  window.eval(pointerDispatchController);
+  window.eval(assetLibraryModel);
+  window.eval(mediaToolbarView);
   window.eval(codec);
   window.eval(app);
 
@@ -117,8 +141,8 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   assert.equal(window.document.querySelector("#profileName").textContent, "林静");
   assert.equal(window.document.querySelector("#profileEmail").textContent, "linjing@reelay.test");
   assert.equal(window.document.querySelector("#profileOrganizationRole").textContent, "管理员");
-  assert.equal(window.document.querySelector(".empty-create-main").textContent, "此画布暂无内容");
-  assert.equal(window.document.querySelector(".empty-create-sub").textContent, "只读模式下不可新建节点");
+  assert.equal(window.document.querySelector(".empty-create-main").textContent, "画布暂无内容");
+  assert.equal(window.document.querySelector(".empty-create-sub"), null);
   assert.equal(node.querySelector(".prompt-panel"), null);
 
   shell.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true, clientX: 400, clientY: 300 }));
