@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-  <link rel="stylesheet" href="./styles.css?v=20260818-connection-cursor-1" />
-  <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260818-connection-cursor-1" />
+  <link rel="stylesheet" href="./styles.css?v=20260819-fixed-screen-ui-12" />
+  <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260820-fixed-screen-ui-14" />
   </head>
   <body>
     <main class="app-shell">
@@ -105,7 +105,7 @@
                       <div class="shortcut-row"><span>空格 + 拖动</span><kbd>平移画布</kbd></div>
                       <div class="shortcut-row"><span>鼠标滚轮</span><kbd>平移画布</kbd></div>
                       <div class="shortcut-row"><span>Ctrl/Cmd + 滚轮</span><kbd>缩放</kbd></div>
-                      <div class="shortcut-row"><span>双击画布</span><kbd>新建节点</kbd></div>
+                      <div class="shortcut-row"><span>双击画布</span><kbd>添加节点</kbd></div>
                       <div class="shortcut-row"><span>拖拽空白</span><kbd>框选</kbd></div>
                       <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
                       <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
@@ -208,6 +208,29 @@
             <i data-lucide="video" aria-hidden="true"></i><span>视频生成</span>
           </button>
         </div>
+        <div class="node-create-menu hidden" id="nodeCreateMenu" role="menu" aria-label="添加节点" tabindex="-1">
+          <button type="button" role="menuitem" data-node-create="image" data-canvas-mutation>
+            <span class="node-create-icon"><i data-lucide="image" aria-hidden="true"></i></span>
+            <span class="node-create-copy">
+              <span class="node-create-title">图片</span>
+              <span class="node-create-description">添加图片生成节点</span>
+            </span>
+          </button>
+          <button type="button" role="menuitem" data-node-create="video" data-canvas-mutation>
+            <span class="node-create-icon"><i data-lucide="square-play" aria-hidden="true"></i></span>
+            <span class="node-create-copy">
+              <span class="node-create-title">视频</span>
+              <span class="node-create-description">添加视频生成节点</span>
+            </span>
+          </button>
+          <button type="button" role="menuitem" data-node-create="upload" data-canvas-mutation>
+            <span class="node-create-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+            <span class="node-create-copy">
+              <span class="node-create-title">上传</span>
+              <span class="node-create-description">支持图片、视频、音频文件</span>
+            </span>
+          </button>
+        </div>
         <div class="selection-box hidden" id="selectionBox"></div>
         <div class="selection-toolbar hidden" id="selectionToolbar">
           <span class="selection-toolbar-count" id="selectionCount">0 个节点</span>
@@ -252,11 +275,15 @@
         </div>
         <div class="empty-state" id="emptyState">
           <div class="empty-create" aria-hidden="true">
-            <span class="empty-create-icon">
-              <i data-lucide="mouse-pointer-click" aria-hidden="true"></i>
+            <span class="empty-create-prompt">
+              <span class="empty-create-icon">
+                <img class="empty-create-glyph" src="./assets/canvas-empty-cursor.png" alt="" />
+              </span>
+              <span class="empty-create-copy">
+                <span class="empty-create-main">双击画布</span>
+                <span class="empty-create-secondary">自由生成节点</span>
+              </span>
             </span>
-            <span class="empty-create-main">双击画布</span>
-            <span class="empty-create-sub">自由生成节点</span>
           </div>
         </div>
         <div class="canvas-tools" id="canvasTools">
@@ -366,6 +393,6 @@
     <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260818-progressive-split-9"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260819-progressive-split-10"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260812-context-links-5"></script>
-    <script src="./app.js?v=20260819-media-toolbar-view-1"></script>
+    <script src="./app.js?v=20260820-fixed-screen-ui-14"></script>
   </body>
 </html>

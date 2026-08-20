@@ -12,6 +12,7 @@ const connectionPaths = document.querySelector("#connectionPaths");
 const connectionPreview = document.querySelector("#connectionPreview");
 const connectionPreviewEndpoint = document.querySelector("#connectionPreviewEndpoint");
 const connectionCreateMenu = document.querySelector("#connectionCreateMenu");
+const nodeCreateMenu = document.querySelector("#nodeCreateMenu");
 const canvasTools = document.querySelector("#canvasTools");
 const canvasToolButtons = document.querySelectorAll("[data-canvas-tool]");
 const canvasToolPopovers = document.querySelectorAll("[data-canvas-popover]");
@@ -52,7 +53,7 @@ const profileOrganizationName = document.querySelector("#profileOrganizationName
 const profileOrganizationRole = document.querySelector("#profileOrganizationRole");
 const emptyState = document.querySelector("#emptyState");
 const emptyCreateMain = document.querySelector(".empty-create-main");
-const emptyCreateSub = document.querySelector(".empty-create-sub");
+const emptyCreateSecondary = document.querySelector(".empty-create-secondary");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
 const selectionToolbar = document.querySelector("#selectionToolbar");
@@ -200,6 +201,8 @@ const state = {
   },
   action: null,
   pendingUploadNodeId: null,
+  pendingCanvasUploadPoint: null,
+  nodeCreatePoint: null,
   isSpaceDown: false,
   undoStack: [],
   generationTasks: new Map(),
@@ -343,10 +346,12 @@ function syncCanvasAccessUi() {
     input.readOnly = locked;
     input.setAttribute("aria-readonly", String(locked));
   });
-  if (emptyCreateMain && emptyCreateSub) {
+  if (emptyCreateMain) {
     const readonly = mode === "readonly";
-    emptyCreateMain.textContent = readonly ? "此画布暂无内容" : "双击画布";
-    emptyCreateSub.textContent = readonly ? "只读模式下不可新建节点" : "自由生成节点";
+    emptyCreateMain.textContent = readonly ? "画布暂无内容" : "双击画布";
+    if (emptyCreateSecondary) {
+      emptyCreateSecondary.textContent = readonly ? "" : "自由生成节点";
+    }
   }
   if (!canvasAccessStatus) return;
   const labels = {
@@ -780,7 +785,9 @@ function showZoomValueTip() {
 
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
-  shell.style.setProperty("--connection-ui-scale", clamp(1 / state.scale, 0.5, 5).toFixed(4));
+  const inverseCanvasScale = (1 / state.scale).toFixed(4);
+  shell.style.setProperty("--connection-ui-scale", inverseCanvasScale);
+  shell.style.setProperty("--node-meta-ui-scale", inverseCanvasScale);
   saveActiveCanvasState();
   updateCanvasGrid();
   syncPromptPanelLayouts();
@@ -1652,6 +1659,7 @@ const fallbackIconPaths = {
   "moon": '<path d="M21 13.2A7.5 7.5 0 1 1 10.8 3 6 6 0 0 0 21 13.2z"/>',
   "more-horizontal": '<path d="M5 12h.01"/><path d="M12 12h.01"/><path d="M19 12h.01"/>',
   "mouse-pointer-click": '<path d="m4 4 7 17 2-7 7-2z"/><path d="M15 4h5"/><path d="M18 2v5"/>',
+  "mouse-pointer-2": '<path d="M4 4l7.1 17 2.5-7.4L21 11z"/>',
   "panel-left-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 9-3 3 3 3"/>',
   "panel-right-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="m8 9 3 3-3 3"/>',
   "paperclip": '<path d="m21 8.5-9.5 9.5a5 5 0 0 1-7.1-7.1l10-10a3.3 3.3 0 0 1 4.7 4.7L9.5 15a1.7 1.7 0 0 1-2.4-2.4L16 3.8"/>',
@@ -1660,6 +1668,7 @@ const fallbackIconPaths = {
   "pin-off": '<path d="m2 2 20 20"/><path d="M12 17v5"/><path d="M6 17h12"/><path d="M9 3h6l-1 5 4 4-2 2"/><path d="M8 12l-2 .5 5-5"/>',
   "play": '<path d="m8 5 12 7-12 7z"/>',
   "play-square": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
+  "square-play": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
   "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
   "rotate-cw": '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
   "scan": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/>',
@@ -1675,6 +1684,7 @@ const fallbackIconPaths = {
   "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
   "trash-2": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
   "ungroup": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 4h3a3 3 0 0 1 3 3v3"/><path d="M10 20H7a3 3 0 0 1-3-3v-3"/>',
+  "upload": '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14a2 2 0 0 0 2-2v-3"/><path d="M3 15v3a2 2 0 0 0 2 2"/>',
   "user-round": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   "users-round": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
   "video": '<path d="M15 10.5 21 7v10l-6-3.5z"/><rect x="3" y="6" width="12" height="12" rx="2"/>',
@@ -2352,7 +2362,7 @@ function renderCanvasLibraryList(items, allItems) {
         <div>
           <i data-lucide="${hasAny ? "filter-x" : "mouse-pointer-click"}" aria-hidden="true"></i>
           <strong>${hasAny ? "没有匹配的画布元素" : "画布还没有元素"}</strong>
-          <span>${hasAny ? "调整搜索或筛选条件" : "双击画布创建生成节点，或拖入图片、视频、音频素材"}</span>
+          <span>${hasAny ? "调整搜索或筛选条件" : "双击画布添加节点，或拖入图片、视频、音频素材"}</span>
         </div>
       </div>
     `;
@@ -3123,6 +3133,7 @@ function openLocalAssetPicker(node) {
   if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
   state.pendingUploadNodeId = node.id;
+  state.pendingCanvasUploadPoint = null;
   localAssetInput.value = "";
   localAssetInput.click();
 }
@@ -4463,6 +4474,46 @@ function closeConnectionCreateMenu() {
   state.connectionDrop = null;
 }
 
+function closeNodeCreateMenu(options = {}) {
+  if (nodeCreateMenu) {
+    nodeCreateMenu.classList.add("hidden");
+    nodeCreateMenu.querySelectorAll("[data-node-create]").forEach((button) => button.classList.remove("is-preview"));
+  }
+  state.nodeCreatePoint = null;
+  if (!options.keepUploadPoint) state.pendingCanvasUploadPoint = null;
+}
+
+function closeCanvasCreateMenus() {
+  closeConnectionCreateMenu();
+  closeNodeCreateMenu();
+}
+
+function openNodeCreateMenu(clientX, clientY) {
+  if (!nodeCreateMenu || !requireCanvasMutation()) return;
+  closeConnectionCreateMenu();
+  const shellRect = shell.getBoundingClientRect();
+  const menuWidth = 236;
+  const menuHeight = 202;
+  const left = clamp(clientX - shellRect.left + 12, 12, shellRect.width - menuWidth - 12);
+  const top = clamp(clientY - shellRect.top + 12, 72, shellRect.height - menuHeight - 12);
+  state.nodeCreatePoint = { clientX, clientY };
+  state.pendingCanvasUploadPoint = null;
+  nodeCreateMenu.style.left = `${left}px`;
+  nodeCreateMenu.style.top = `${top}px`;
+  nodeCreateMenu.classList.remove("hidden");
+  setNodeCreatePreview(nodeCreateMenu.querySelector("[data-node-create]"));
+  refreshIcons();
+  window.getSelection()?.removeAllRanges();
+  nodeCreateMenu.focus({ preventScroll: true });
+}
+
+function setNodeCreatePreview(button) {
+  if (!nodeCreateMenu) return;
+  nodeCreateMenu.querySelectorAll("[data-node-create]").forEach((item) => {
+    item.classList.toggle("is-preview", item === button);
+  });
+}
+
 function openConnectionCreateMenu(originNodeId, originSide, originRatio, clientX, clientY) {
   if (!connectionCreateMenu) return;
   const shellRect = shell.getBoundingClientRect();
@@ -4626,7 +4677,7 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   if (!origin || (!canStartFromInput && !canStartFromOutput)) return;
   event.preventDefault();
   event.stopPropagation();
-  closeConnectionCreateMenu();
+  closeCanvasCreateMenus();
   const registry = buildConnectionPortRegistry();
   const originPortId = getConnectionPortId(originNodeId, originSide);
   const originPort = registry.ports.find((port) => port.id === originPortId);
@@ -5751,6 +5802,8 @@ function resetPrototypeProject() {
   state.libraryFilter = "all";
   state.libraryCollapsedGroups = new Set();
   state.pendingUploadNodeId = null;
+  state.pendingCanvasUploadPoint = null;
+  state.nodeCreatePoint = null;
   state.canvasMoreTargetId = null;
   hideUndoToast();
   initializeCanvases();
@@ -6064,6 +6117,7 @@ function isConnectionDropSurface(target) {
       ".canvas-node",
       ".connection-group",
       ".connection-create-menu",
+      ".node-create-menu",
       ".selection-toolbar",
       ".group-toolbar",
       ".canvas-controls",
@@ -6114,6 +6168,8 @@ function shouldBypassCanvasWheel(target) {
         ".toolbar-dropdown",
         ".selection-toolbar",
         ".group-toolbar",
+        ".connection-create-menu",
+        ".node-create-menu",
         ".confirm-dialog",
         "input",
         "textarea",
@@ -6316,7 +6372,7 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
     }
   },
   isCanvasSurface,
-  closeConnectionCreateMenu,
+  closeConnectionCreateMenu: closeCanvasCreateMenus,
   isSpaceDown: () => state.isSpaceDown,
   beginPan,
   getActiveNode,
@@ -6440,8 +6496,80 @@ window.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointercancel", finishPointerInteraction);
 
 shell.addEventListener("dblclick", (event) => {
-  if (event.target instanceof Element && event.target.closest(".canvas-node, .connection-create-menu")) return;
-  addNodeAt(event.clientX, event.clientY);
+  if (event.target instanceof Element && event.target.closest(".canvas-node, .connection-create-menu, .node-create-menu")) return;
+  event.preventDefault();
+  window.getSelection()?.removeAllRanges();
+  openNodeCreateMenu(event.clientX, event.clientY);
+});
+
+nodeCreateMenu?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+
+nodeCreateMenu?.addEventListener("pointerover", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-create]") : null;
+  if (button) setNodeCreatePreview(button);
+});
+
+nodeCreateMenu?.addEventListener("pointerleave", () => {
+  setNodeCreatePreview(nodeCreateMenu.querySelector("[data-node-create]"));
+});
+
+nodeCreateMenu?.addEventListener("focusin", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-create]") : null;
+  if (button) setNodeCreatePreview(button);
+});
+
+nodeCreateMenu?.addEventListener("keydown", (event) => {
+  const buttons = [...nodeCreateMenu.querySelectorAll("[data-node-create]")];
+  if (!buttons.length) return;
+  const currentIndex = buttons.findIndex((button) => button.classList.contains("is-preview"));
+  let nextIndex = currentIndex < 0 ? 0 : currentIndex;
+
+  if (event.key === "ArrowDown") nextIndex = (nextIndex + 1) % buttons.length;
+  else if (event.key === "ArrowUp") nextIndex = (nextIndex - 1 + buttons.length) % buttons.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = buttons.length - 1;
+  else if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    buttons[nextIndex].click();
+    return;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  setNodeCreatePreview(buttons[nextIndex]);
+  buttons[nextIndex].focus({ preventScroll: true });
+});
+
+nodeCreateMenu?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-create]") : null;
+  const point = state.nodeCreatePoint;
+  if (!button || !point) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (button.dataset.nodeCreate === "upload") {
+    state.pendingUploadNodeId = null;
+    state.pendingCanvasUploadPoint = point;
+    localAssetInput.value = "";
+    closeNodeCreateMenu({ keepUploadPoint: true });
+    localAssetInput.click();
+    return;
+  }
+
+  const mode = button.dataset.nodeCreate === "video" ? "video" : "image";
+  closeNodeCreateMenu();
+  addNodeAt(point.clientX, point.clientY, mode, { useLastPreset: false });
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (nodeCreateMenu?.classList.contains("hidden")) return;
+  if (event.target instanceof Element && event.target.closest("#nodeCreateMenu")) return;
+  closeNodeCreateMenu();
 });
 
 connectionCreateMenu?.addEventListener("pointerdown", (event) => {
@@ -6516,6 +6644,11 @@ window.addEventListener("keydown", (event) => {
   const target = event.target;
   const isTyping = target instanceof Element && target.closest("input, textarea, [contenteditable='true']");
   if (isTyping) return;
+  if (event.key === "Escape" && !nodeCreateMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    closeNodeCreateMenu();
+    return;
+  }
   if (event.key === "Escape" && !connectionCreateMenu?.classList.contains("hidden")) {
     event.preventDefault();
     closeConnectionCreateMenu();
@@ -6559,8 +6692,14 @@ document.addEventListener("dragstart", (event) => {
 localAssetInput.addEventListener("change", (event) => {
   const files = event.currentTarget.files || [];
   const node = state.nodes.find((item) => item.id === state.pendingUploadNodeId);
-  if (node) addFilesToGeneratorNode(node, files);
+  const canvasPoint = state.pendingCanvasUploadPoint;
+  if (node) {
+    addFilesToGeneratorNode(node, files);
+  } else if (canvasPoint && files.length) {
+    addMediaNodesFromFiles(files, canvasPoint.clientX, canvasPoint.clientY);
+  }
   state.pendingUploadNodeId = null;
+  state.pendingCanvasUploadPoint = null;
 });
 
 window.addEventListener("dragover", (event) => {

@@ -141,8 +141,8 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   assert.equal(window.document.querySelector("#profileName").textContent, "林静");
   assert.equal(window.document.querySelector("#profileEmail").textContent, "linjing@reelay.test");
   assert.equal(window.document.querySelector("#profileOrganizationRole").textContent, "管理员");
-  assert.equal(window.document.querySelector(".empty-create-main").textContent, "此画布暂无内容");
-  assert.equal(window.document.querySelector(".empty-create-sub").textContent, "只读模式下不可新建节点");
+  assert.equal(window.document.querySelector(".empty-create-main").textContent, "画布暂无内容");
+  assert.equal(window.document.querySelector(".empty-create-sub"), null);
   assert.equal(node.querySelector(".prompt-panel"), null);
 
   shell.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true, clientX: 400, clientY: 300 }));
