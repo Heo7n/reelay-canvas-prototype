@@ -85,6 +85,28 @@
     return normalized;
   }
 
+  function planBatchConnections(connections, nodes, sourceNodeIds, targetNodeId) {
+    const working = Array.isArray(connections) ? connections.slice() : [];
+    const validSourceIds = [];
+    const rejected = [];
+    const seen = new Set();
+    for (const sourceNodeId of Array.isArray(sourceNodeIds) ? sourceNodeIds : []) {
+      if (!sourceNodeId || seen.has(sourceNodeId)) continue;
+      seen.add(sourceNodeId);
+      const result = canConnect(working, nodes, sourceNodeId, targetNodeId);
+      if (!result.ok) {
+        rejected.push({ sourceNodeId, reason: result.reason });
+        continue;
+      }
+      validSourceIds.push(sourceNodeId);
+      working.push({ sourceNodeId, targetNodeId });
+    }
+    return Object.freeze({
+      validSourceIds: Object.freeze(validSourceIds),
+      rejected: Object.freeze(rejected.map((item) => Object.freeze(item))),
+    });
+  }
+
   function getBezierPath(source, target) {
     const distance = Math.max(0, target.x - source.x);
     const controlOffset = Math.max(72, Math.min(240, distance * 0.48 || Math.abs(target.y - source.y) * 0.34));
@@ -95,6 +117,7 @@
     canConnect,
     getBezierPath,
     normalizeConnections,
+    planBatchConnections,
     wouldCreateCycle,
   });
 }(typeof globalThis === "object" ? globalThis : window));

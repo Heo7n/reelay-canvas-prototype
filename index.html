@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-  <link rel="stylesheet" href="./styles.css?v=20260819-fixed-screen-ui-12" />
-  <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260820-fixed-screen-ui-14" />
+  <link rel="stylesheet" href="./styles.css?v=20260821-selection-download-1" />
+  <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260824-node-target-edge-scan-5" />
   </head>
   <body>
     <main class="app-shell">
@@ -194,18 +194,28 @@
         <div class="canvas-stage" id="canvasStage">
           <svg class="connection-layer" id="connectionLayer" aria-hidden="true">
             <g id="connectionPaths"></g>
+            <g id="batchConnectionPreviewPaths"></g>
             <path class="connection-preview hidden" id="connectionPreview"></path>
             <circle class="connection-preview-endpoint hidden" id="connectionPreviewEndpoint" r="4"></circle>
           </svg>
           <div class="node-layer" id="nodeLayer"></div>
         </div>
-        <div class="connection-create-menu hidden" id="connectionCreateMenu" role="menu" aria-label="创建下游节点">
+        <div class="connection-target-glow" id="connectionTargetGlow" aria-hidden="true"></div>
+        <div class="connection-create-menu hidden" id="connectionCreateMenu" role="menu" aria-label="创建下游节点" tabindex="-1">
           <span class="connection-create-label">创建下游节点</span>
           <button type="button" role="menuitem" data-connection-create="image" data-canvas-mutation>
-            <i data-lucide="image" aria-hidden="true"></i><span>图片生成</span>
+            <span class="node-create-icon"><i data-lucide="image" aria-hidden="true"></i></span>
+            <span class="node-create-copy">
+              <span class="node-create-title">图片</span>
+              <span class="node-create-description">添加图片生成节点</span>
+            </span>
           </button>
           <button type="button" role="menuitem" data-connection-create="video" data-canvas-mutation>
-            <i data-lucide="video" aria-hidden="true"></i><span>视频生成</span>
+            <span class="node-create-icon"><i data-lucide="square-play" aria-hidden="true"></i></span>
+            <span class="node-create-copy">
+              <span class="node-create-title">视频</span>
+              <span class="node-create-description">添加视频生成节点</span>
+            </span>
           </button>
         </div>
         <div class="node-create-menu hidden" id="nodeCreateMenu" role="menu" aria-label="添加节点" tabindex="-1">
@@ -232,46 +242,41 @@
           </button>
         </div>
         <div class="selection-box hidden" id="selectionBox"></div>
-        <div class="selection-toolbar hidden" id="selectionToolbar">
-          <span class="selection-toolbar-count" id="selectionCount">0 个节点</span>
-          <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button text-button" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
+        <div class="multi-selection-frame hidden" id="multiSelectionFrame">
+          <button
+            class="multi-selection-port"
+            id="multiSelectionPort"
+            type="button"
+            data-selection-connect-output
+            data-canvas-mutation
+            aria-label="连接所有选中节点到共同下游"
+          >
+            <span class="multi-selection-port-mark" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="selection-toolbar hidden" id="selectionToolbar" role="toolbar" aria-label="多选节点操作">
+          <button class="icon-toolbar-button text-button selection-toolbar-group" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
             <i data-lucide="combine" aria-hidden="true"></i>
             <span>打组</span>
             <span class="toolbar-tip">打组</span>
           </button>
-          <div class="toolbar-menu-wrap" data-toolbar-menu="layout">
-            <button class="icon-toolbar-button text-button" type="button" data-selection-action="toggle-sort" data-canvas-mutation aria-label="整理布局" aria-haspopup="menu">
-              <i data-lucide="layout-grid" aria-hidden="true"></i>
-              <span>整理布局</span>
-              <i data-lucide="chevron-down" aria-hidden="true"></i>
-              <span class="toolbar-tip">整理布局</span>
-            </button>
-            <div class="toolbar-dropdown hidden" id="selectionSortMenu" role="menu">
-              <button type="button" data-sort-layout="grid" data-canvas-mutation><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
-              <button type="button" data-sort-layout="horizontal" data-canvas-mutation><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
-              <button type="button" data-sort-layout="vertical" data-canvas-mutation><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
-            </div>
-          </div>
-          <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button" type="button" data-selection-action="add-library" data-canvas-mutation aria-label="批量保存到素材库">
+          <button class="icon-toolbar-button text-button" type="button" data-selection-action="add-library" data-canvas-mutation aria-label="保存到素材">
             <i data-lucide="folder-plus" aria-hidden="true"></i>
-            <span class="toolbar-tip">批量保存到素材库</span>
+            <span>保存到素材</span>
+            <span class="toolbar-tip">保存到项目素材</span>
           </button>
-          <div class="toolbar-menu-wrap" data-toolbar-menu="download">
-            <button class="icon-toolbar-button" type="button" data-selection-action="toggle-download" aria-label="下载" aria-haspopup="menu">
+          <div class="toolbar-menu-wrap selection-download-control" data-toolbar-menu="download">
+            <button class="icon-toolbar-button text-button selection-download-trigger" type="button" data-selection-action="toggle-download" aria-label="下载" aria-haspopup="menu" aria-expanded="false">
               <i data-lucide="download" aria-hidden="true"></i>
-              <span class="toolbar-tip">下载</span>
+              <span>下载</span>
+              <i class="selection-download-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
+              <span class="toolbar-tip">下载选项</span>
             </button>
             <div class="toolbar-dropdown hidden toolbar-dropdown-right" id="selectionDownloadMenu" role="menu">
               <button type="button" data-download-action="batch"><i data-lucide="download" aria-hidden="true"></i><span>批量下载</span></button>
               <button type="button" data-download-action="archive"><i data-lucide="archive" aria-hidden="true"></i><span>打包下载</span></button>
             </div>
           </div>
-          <button class="icon-toolbar-button danger" type="button" data-selection-action="delete" data-canvas-mutation aria-label="删除选中节点">
-            <i data-lucide="trash-2" aria-hidden="true"></i>
-            <span class="toolbar-tip">删除</span>
-          </button>
         </div>
         <div class="empty-state" id="emptyState">
           <div class="empty-create" aria-hidden="true">
@@ -281,7 +286,7 @@
               </span>
               <span class="empty-create-copy">
                 <span class="empty-create-main">双击画布</span>
-                <span class="empty-create-secondary">自由生成节点</span>
+                <span class="empty-create-secondary">开始自由创作</span>
               </span>
             </span>
           </div>
@@ -372,27 +377,24 @@
         </section>
       </aside>
 
-      <div class="undo-toast hidden" id="undoToast">
-        <span>已删除，可撤销</span>
-        <button id="undoDeleteBtn" type="button">撤销</button>
-      </div>
     </main>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
     <script src="./data/model-catalog.js?v=20260710-undo-feedback"></script>
-    <script src="./src/config/prototype-config.js?v=20260716-foundation-modularization"></script>
+    <script src="./src/config/prototype-config.js?v=20260821-node-proportions-4"></script>
     <script src="./src/legacy-canvas/canvas-connections.js?v=20260812-context-links-7"></script>
-    <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260812-context-links-2"></script>
-    <script src="./src/legacy-canvas/canvas-connection-renderer.js?v=20260818-progressive-split-1"></script>
+    <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260824-node-body-target-1"></script>
+    <script src="./src/legacy-canvas/canvas-connection-renderer.js?v=20260821-pending-preview-1"></script>
     <script src="./src/legacy-canvas/canvas-layer-reconciler.js?v=20260818-progressive-split-2"></script>
+    <script src="./src/legacy-canvas/canvas-spatial-selection.js?v=20260821-multi-selection-1"></script>
     <script src="./src/legacy-canvas/canvas-node-interaction.js?v=20260818-progressive-split-3"></script>
-    <script src="./src/legacy-canvas/canvas-node-pointer-controller.js?v=20260818-progressive-split-4"></script>
-    <script src="./src/legacy-canvas/canvas-node-drag-controller.js?v=20260818-progressive-split-5"></script>
+    <script src="./src/legacy-canvas/canvas-node-pointer-controller.js?v=20260821-pointer-release-1"></script>
+    <script src="./src/legacy-canvas/canvas-node-drag-controller.js?v=20260821-pointer-release-1"></script>
     <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260818-progressive-split-6"></script>
     <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
-    <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260818-progressive-split-8"></script>
+    <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260821-pointer-release-1"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260818-progressive-split-9"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260819-progressive-split-10"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260812-context-links-5"></script>
-    <script src="./app.js?v=20260820-fixed-screen-ui-14"></script>
+    <script src="./app.js?v=20260824-node-target-edge-scan-5"></script>
   </body>
 </html>

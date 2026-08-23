@@ -45,20 +45,25 @@
       });
 
       options.applySelection(nextSelection, node);
-      options.setMediaToolbarNodeId(
-        target?.closest?.(".media-frame") && options.isEditableMedia(node) ? node.id : null,
-      );
+      if (!nextSelection.includes(nodeId)) {
+        options.setMediaToolbarNodeId(null);
+        options.render();
+        return "deselected";
+      }
+      const overMediaFrame = Boolean(target?.closest?.(".media-frame"));
+      const selectedNodes = options.getSelectedNodes();
+      const isSingleSelection = selectedNodes.length === 1 && selectedNodes[0]?.id === node.id;
+      const revealMediaToolbar = overMediaFrame && isSingleSelection && options.isEditableMedia(node);
+      const revealGeneratorPanel = overMediaFrame
+        && isSingleSelection
+        && node.kind === "generator"
+        && !node.generating;
 
       if (!options.canMutate()) {
+        options.setMediaToolbarNodeId(revealMediaToolbar ? node.id : null);
         options.render();
         return "selected";
       }
-
-      if (node.kind === "generator" && !node.generating && target?.closest?.(".media-frame")) {
-        options.expandGenerator(node);
-      }
-
-      const selectedNodes = options.getSelectedNodes();
       const activeNode = selectedNodes.find((item) => item.id === nodeId);
       const nodesToPromote = selectedNodes.filter((item) => item.id !== nodeId);
       if (activeNode) nodesToPromote.push(activeNode);
@@ -74,6 +79,8 @@
         startClientY: event.clientY,
         origins: selectedNodes.map((item) => ({ id: item.id, x: item.x, y: item.y })),
         groups: options.getGroupSnapshots(),
+        revealMediaToolbar,
+        revealGeneratorPanel,
       });
       options.capturePointer(event.pointerId);
       options.render();

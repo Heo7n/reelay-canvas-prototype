@@ -9,8 +9,10 @@ const stage = document.querySelector("#canvasStage");
 const nodeLayer = document.querySelector("#nodeLayer");
 const connectionLayer = document.querySelector("#connectionLayer");
 const connectionPaths = document.querySelector("#connectionPaths");
+const batchConnectionPreviewPaths = document.querySelector("#batchConnectionPreviewPaths");
 const connectionPreview = document.querySelector("#connectionPreview");
 const connectionPreviewEndpoint = document.querySelector("#connectionPreviewEndpoint");
+const connectionTargetGlow = document.querySelector("#connectionTargetGlow");
 const connectionCreateMenu = document.querySelector("#connectionCreateMenu");
 const nodeCreateMenu = document.querySelector("#nodeCreateMenu");
 const canvasTools = document.querySelector("#canvasTools");
@@ -56,12 +58,13 @@ const emptyCreateMain = document.querySelector(".empty-create-main");
 const emptyCreateSecondary = document.querySelector(".empty-create-secondary");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
+const multiSelectionFrame = document.querySelector("#multiSelectionFrame");
+const multiSelectionPort = document.querySelector("#multiSelectionPort");
 const selectionToolbar = document.querySelector("#selectionToolbar");
 let profileMenuCloseTimer = null;
 let themeFeedbackTimer = null;
-const selectionCount = document.querySelector("#selectionCount");
-const selectionSortMenu = document.querySelector("#selectionSortMenu");
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
+const selectionDownloadTrigger = document.querySelector(".selection-download-trigger");
 const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
 const agentPanel = document.querySelector("#agentPanel");
@@ -78,8 +81,6 @@ const agentInput = document.querySelector("#agentInput");
 const agentSendButton = document.querySelector(".agent-send");
 const agentModelBtn = document.querySelector("#agentModelBtn");
 const agentModelMenu = document.querySelector("#agentModelMenu");
-const undoToast = document.querySelector("#undoToast");
-const undoDeleteBtn = document.querySelector("#undoDeleteBtn");
 const canvasAccessStatus = document.querySelector("#canvasAccessStatus");
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
@@ -245,6 +246,7 @@ const state = {
   themeMode: loadThemeMode(),
   canvasPanel: null,
   overlaySyncTimer: null,
+  groupChromeFrame: 0,
 };
 
 const canvasPersistence = {
@@ -269,6 +271,8 @@ const canvasConnectionInteraction = window.REELAY_CANVAS_CONNECTION_INTERACTION;
 if (!canvasConnectionInteraction) throw new Error("Canvas connection interaction helpers are unavailable.");
 const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
 if (!canvasNodeInteraction) throw new Error("Canvas node interaction helpers are unavailable.");
+const canvasSpatialSelection = window.REELAY_CANVAS_SPATIAL_SELECTION;
+if (!canvasSpatialSelection) throw new Error("Canvas spatial selection helpers are unavailable.");
 const canvasNodePointerControllerFactory = window.REELAY_CANVAS_NODE_POINTER_CONTROLLER;
 if (!canvasNodePointerControllerFactory) throw new Error("Canvas node pointer controller is unavailable.");
 const canvasNodeDragControllerFactory = window.REELAY_CANVAS_NODE_DRAG_CONTROLLER;
@@ -289,6 +293,7 @@ const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
 if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
 const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectionRenderer({
   paths: connectionPaths,
+  batchPreviewPaths: batchConnectionPreviewPaths,
   preview: connectionPreview,
   previewEndpoint: connectionPreviewEndpoint,
   onSelect(connectionId) {
@@ -350,7 +355,7 @@ function syncCanvasAccessUi() {
     const readonly = mode === "readonly";
     emptyCreateMain.textContent = readonly ? "画布暂无内容" : "双击画布";
     if (emptyCreateSecondary) {
-      emptyCreateSecondary.textContent = readonly ? "" : "自由生成节点";
+      emptyCreateSecondary.textContent = readonly ? "" : "开始自由创作";
     }
   }
   if (!canvasAccessStatus) return;
@@ -417,6 +422,7 @@ function clamp(value, min, max) {
 function setAssetLibraryWidth(width) {
   state.assetLibraryWidth = clamp(width, 380, Math.min(780, window.innerWidth - 96));
   appShell?.style.setProperty("--asset-panel-width", `${Math.round(state.assetLibraryWidth)}px`);
+  renderSelectionToolbar();
   renderMinimap();
 }
 
@@ -733,16 +739,16 @@ function handleHostBridgeMessage(event) {
 function screenToWorld(clientX, clientY) {
   const rect = shell.getBoundingClientRect();
   return {
-    x: (clientX - rect.left - state.tx) / state.scale,
-    y: (clientY - rect.top - state.ty) / state.scale,
+    x: (clientX - rect.left + shell.scrollLeft - state.tx) / state.scale,
+    y: (clientY - rect.top + shell.scrollTop - state.ty) / state.scale,
   };
 }
 
 function worldToScreen(x, y) {
   const rect = shell.getBoundingClientRect();
   return {
-    x: rect.left + state.tx + x * state.scale,
-    y: rect.top + state.ty + y * state.scale,
+    x: rect.left - shell.scrollLeft + state.tx + x * state.scale,
+    y: rect.top - shell.scrollTop + state.ty + y * state.scale,
   };
 }
 
@@ -786,8 +792,22 @@ function showZoomValueTip() {
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
   const inverseCanvasScale = (1 / state.scale).toFixed(4);
-  shell.style.setProperty("--connection-ui-scale", inverseCanvasScale);
-  shell.style.setProperty("--node-meta-ui-scale", inverseCanvasScale);
+  const nodeMetaScreenScale = clamp(Math.pow(state.scale, 0.08), 0.88, 1.06);
+  const nodeMetaScale = (nodeMetaScreenScale / state.scale).toFixed(4);
+  const portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale);
+  shell.style.setProperty("--connection-feedback-scale", inverseCanvasScale);
+  shell.style.setProperty("--node-meta-ui-scale", nodeMetaScale);
+  shell.style.setProperty("--group-ui-scale", nodeMetaScale);
+  shell.style.setProperty("--group-interaction-scale", inverseCanvasScale);
+  shell.style.setProperty(
+    "--port-zone-outward",
+    `${(portField.fieldOutwardRadius / state.scale).toFixed(2)}px`,
+  );
+  shell.style.setProperty(
+    "--port-zone-height",
+    `${((portField.fieldVerticalRadius * 2) / state.scale).toFixed(2)}px`,
+  );
+  scheduleGroupChromeLayout();
   saveActiveCanvasState();
   updateCanvasGrid();
   syncPromptPanelLayouts();
@@ -1221,8 +1241,16 @@ function getNodeLayout(node) {
         layoutRules.largePanelMaxHeight,
       )
     : layoutRules.normalPanelHeight;
-  const targetScreenWidth = clamp(mediaWidth * state.scale + 72, 500, 760);
-  const promptScale = clamp(targetScreenWidth / (panelWidth * state.scale), 0.5, 4);
+  const viewportWidth = shell.clientWidth || window.innerWidth || layoutRules.promptTargetScreenWidth;
+  const targetScreenWidth = Math.min(
+    layoutRules.promptTargetScreenWidth,
+    Math.max(320, viewportWidth - layoutRules.promptScreenMargin),
+  );
+  const promptScale = clamp(
+    targetScreenWidth / (panelWidth * state.scale),
+    layoutRules.promptScaleMin,
+    layoutRules.promptScaleMax,
+  );
   const nodeWidth = Math.max(mediaWidth, panelWidth);
   const nodeHeight = mediaHeight + (node.expanded ? layoutRules.panelGap + panelHeight * promptScale : 0);
 
@@ -1251,6 +1279,29 @@ function getNodeBounds(node) {
     bottom: node.y + layout.nodeHeight,
     width: layout.nodeWidth + promptOverflow * 2,
     height: layout.nodeHeight,
+  };
+}
+
+function getNodeVisualBounds(node) {
+  const layout = getNodeLayout(node);
+  const mediaLeft = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  let left = mediaLeft;
+  let right = mediaLeft + layout.mediaWidth;
+  let bottom = node.y + layout.mediaHeight;
+  if (node.kind === "generator" && node.expanded) {
+    const promptWidth = layout.panelWidth * layout.promptScale;
+    const promptLeft = node.x + (layout.nodeWidth - promptWidth) / 2;
+    left = Math.min(left, promptLeft);
+    right = Math.max(right, promptLeft + promptWidth);
+    bottom += layoutRules.panelGap + layout.panelHeight * layout.promptScale;
+  }
+  return {
+    left,
+    top: node.y,
+    right,
+    bottom,
+    width: right - left,
+    height: bottom - node.y,
   };
 }
 
@@ -1993,7 +2044,9 @@ function renderConnections() {
       };
     },
   });
-  canvasConnectionRenderer.renderPreview(state.action, canvasConnections.getBezierPath);
+  const previewAction = state.action || state.connectionDrop?.previewAction || null;
+  canvasConnectionRenderer.renderPreview(previewAction, canvasConnections.getBezierPath);
+  shell.classList.toggle("connection-pending-create", Boolean(previewAction?.pendingCreate));
   syncConnectionContextClasses(context);
   shell.classList.toggle("connection-compact-detail", state.scale >= 0.34 && state.scale < 0.56);
   shell.classList.toggle("connection-low-detail", state.scale < 0.34);
@@ -2032,6 +2085,25 @@ function createConnection(
     renderConnections();
   }, 220);
   return connection;
+}
+
+function createConnectionsBatch(sourceNodeIds, targetNodeId) {
+  const plan = canvasConnections.planBatchConnections(
+    state.connections,
+    state.nodes,
+    sourceNodeIds,
+    targetNodeId,
+  );
+  const before = state.connections.map(cloneConnectionState);
+  const created = plan.validSourceIds
+    .map((sourceNodeId) => createConnection(sourceNodeId, targetNodeId, {
+      recordUndo: false,
+      sourceRatio: 0.5,
+      targetRatio: 0.5,
+    }))
+    .filter(Boolean);
+  if (created.length) pushUndoAction({ type: "connections", connections: before });
+  return { created, rejected: plan.rejected };
 }
 
 function removeConnection(connectionId, { recordUndo = true } = {}) {
@@ -2757,8 +2829,8 @@ function syncNarrowViewportIsolation({ focusPanel = false } = {}) {
 
   const mode = assetOpen ? "asset" : "agent";
   const targets = mode === "asset"
-    ? [topBar, leftRail, topActions, shell, agentDock, undoToast]
-    : [topBar, leftRail, topActions, shell, assetLibraryPanel, projectMenu, canvasMenu, canvasMoreMenu, undoToast];
+    ? [topBar, leftRail, topActions, shell, agentDock]
+    : [topBar, leftRail, topActions, shell, assetLibraryPanel, projectMenu, canvasMenu, canvasMoreMenu];
   setNarrowViewportInertTargets(targets);
   if (focusPanel) focusNarrowViewportPanel(mode);
 }
@@ -3156,6 +3228,7 @@ function render() {
   saveActiveCanvasState();
   syncGroups();
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
+  shell.classList.toggle("group-editing", Boolean(state.activeGroupId));
   renderConnections();
   updateEmptyState();
   syncProjectNavigation();
@@ -3164,6 +3237,7 @@ function render() {
   renderAssetLibrary();
   refreshIcons();
   syncCanvasAccessUi();
+  scheduleGroupChromeLayout();
   requestAnimationFrame(syncPromptPanelLayouts);
   scheduleCanvasDocumentSave();
 }
@@ -3215,6 +3289,35 @@ function syncGroupFrameElement(element, group) {
     nodes.length ? Math.max(0, Math.min(...nodes.map((node) => node.z || 1)) - 1) : group.z || 1,
   );
   element.classList.toggle("selected", state.activeGroupId === group.id);
+  const activeResizeHandle = state.action?.type === "resize-group"
+    && state.action.groupId === group.id
+    ? state.action.handle
+    : "";
+  if (activeResizeHandle) element.dataset.activeResize = activeResizeHandle;
+  else delete element.dataset.activeResize;
+}
+
+function scheduleGroupChromeLayout() {
+  window.cancelAnimationFrame(state.groupChromeFrame);
+  state.groupChromeFrame = window.requestAnimationFrame(() => {
+    state.groupChromeFrame = 0;
+    const frame = nodeLayer.querySelector(".group-frame.selected");
+    if (!frame) return;
+    const title = frame.querySelector(".group-title");
+    const toolbar = frame.querySelector(".group-toolbar");
+    if (!title || !toolbar) return;
+    frame.style.removeProperty("--group-toolbar-lift");
+    const titleRect = title.getBoundingClientRect();
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const overlap = titleRect.right + 6 > toolbarRect.left
+      && toolbarRect.right + 6 > titleRect.left;
+    if (!overlap) return;
+    const liftScreen = titleRect.height + 6;
+    frame.style.setProperty(
+      "--group-toolbar-lift",
+      `${(liftScreen / state.scale).toFixed(2)}px`,
+    );
+  });
 }
 
 function createGroupFrameElement(group) {
@@ -3232,6 +3335,9 @@ function createGroupFrameElement(group) {
     nodes.length ? Math.max(0, Math.min(...nodes.map((node) => node.z || 1)) - 1) : group.z || 1,
   );
   el.dataset.groupId = group.id;
+  if (state.action?.type === "resize-group" && state.action.groupId === group.id) {
+    el.dataset.activeResize = state.action.handle;
+  }
   el.innerHTML = `
     <div class="group-title">${escapeHtml(group.name || "新建组")}</div>
     <div class="group-toolbar">
@@ -3254,6 +3360,10 @@ function createGroupFrameElement(group) {
       <button class="icon-toolbar-button" type="button" data-group-action="ungroup" data-canvas-mutation aria-label="解组">
         <i data-lucide="ungroup" aria-hidden="true"></i>
         <span class="toolbar-tip">解组</span>
+      </button>
+      <button class="icon-toolbar-button" type="button" data-group-action="download" aria-label="下载组内素材">
+        <i data-lucide="download" aria-hidden="true"></i>
+        <span class="toolbar-tip">下载</span>
       </button>
     </div>
     <span class="group-resize-handle north" data-group-resize="n"></span>
@@ -3331,6 +3441,10 @@ function bindGroupFrameEvents(el, group) {
     }
     if (action === "ungroup") {
       ungroup(activeGroup.id);
+      return;
+    }
+    if (action === "download") {
+      downloadNodesMedia(getGroupNodes(activeGroup));
     }
   });
 }
@@ -3361,25 +3475,84 @@ function getSelectionBounds() {
   );
 }
 
+function getSelectionVisualBounds() {
+  const selectedNodes = getSelectedNodes();
+  if (selectedNodes.length < 2) return null;
+  const bounds = selectedNodes.reduce(
+    (result, node) => {
+      const nodeBounds = getNodeVisualBounds(node);
+      return {
+        left: Math.min(result.left, nodeBounds.left),
+        top: Math.min(result.top, nodeBounds.top),
+        right: Math.max(result.right, nodeBounds.right),
+        bottom: Math.max(result.bottom, nodeBounds.bottom),
+      };
+    },
+    { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+  );
+  return {
+    ...bounds,
+    width: bounds.right - bounds.left,
+    height: bounds.bottom - bounds.top,
+  };
+}
+
 function renderSelectionToolbar() {
-  if (!selectionToolbar) return;
-  const bounds = getSelectionBounds();
-  if (!bounds) {
+  if (!selectionToolbar || !multiSelectionFrame) return;
+  const selectedNodes = getSelectedNodes();
+  const bounds = getSelectionVisualBounds();
+  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 14);
+  if (!screenRect) {
+    shell.classList.remove("multi-selection-active");
+    multiSelectionFrame.classList.add("hidden");
+    multiSelectionFrame.classList.remove("is-connecting");
+    multiSelectionPort?.removeAttribute("style");
     selectionToolbar.classList.add("hidden");
-    selectionSortMenu?.classList.add("hidden");
-    selectionDownloadMenu?.classList.add("hidden");
+    setSelectionDownloadMenuOpen(false);
     return;
   }
 
-  if (selectionCount) selectionCount.textContent = `${getSelectedNodes().length} 个节点`;
-  const shellRect = shell.getBoundingClientRect();
-  const topLeft = worldToScreen(bounds.left, bounds.top);
-  const topRight = worldToScreen(bounds.right, bounds.top);
-  const toolbarX = (topLeft.x + topRight.x) / 2 - shellRect.left;
-  const toolbarY = topLeft.y - shellRect.top - 44;
-  selectionToolbar.style.left = `${toolbarX}px`;
-  selectionToolbar.style.top = `${Math.max(74, toolbarY)}px`;
+  shell.classList.add("multi-selection-active");
+
+  const isSelectionConnecting = state.action?.type === "connect"
+    && state.action.mode === "selection-output"
+    || state.connectionDrop?.kind === "selection";
+  multiSelectionFrame.style.left = `${screenRect.left}px`;
+  multiSelectionFrame.style.top = `${screenRect.top}px`;
+  multiSelectionFrame.style.width = `${screenRect.width}px`;
+  multiSelectionFrame.style.height = `${screenRect.height}px`;
+  multiSelectionFrame.classList.remove("hidden");
+  multiSelectionFrame.classList.toggle("is-connecting", isSelectionConnecting);
+  if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
+  if (isSelectionConnecting) {
+    selectionToolbar.classList.add("hidden");
+    return;
+  }
+
+  selectionToolbar.classList.toggle(
+    "group-unavailable",
+    selectedNodes.some((node) => Boolean(node.groupId)),
+  );
   selectionToolbar.classList.remove("hidden");
+  const toolbarWidth = selectionToolbar.offsetWidth || 260;
+  const toolbarHeight = selectionToolbar.offsetHeight || 42;
+  const viewportPadding = 12;
+  const visibleLeft = Math.max(viewportPadding, screenRect.left);
+  const visibleRight = Math.min(shell.clientWidth - viewportPadding, screenRect.right);
+  const preferredCenter = visibleLeft <= visibleRight
+    ? (visibleLeft + visibleRight) / 2
+    : screenRect.centerX;
+  const toolbarX = clamp(
+    preferredCenter,
+    viewportPadding + toolbarWidth / 2,
+    shell.clientWidth - viewportPadding - toolbarWidth / 2,
+  );
+  const spaceAbove = screenRect.top - 10;
+  const toolbarY = spaceAbove - toolbarHeight >= 70
+    ? spaceAbove - toolbarHeight
+    : Math.min(shell.clientHeight - toolbarHeight - viewportPadding, screenRect.bottom + 10);
+  selectionToolbar.style.left = `${toolbarX}px`;
+  selectionToolbar.style.top = `${Math.max(70, toolbarY)}px`;
 }
 
 function createNodeElement(node) {
@@ -3507,6 +3680,12 @@ function bindNodeEvents(el, node) {
       resetNodePortPosition(zone);
     });
     zone.addEventListener("pointerdown", (event) => {
+      if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
+        event.preventDefault();
+        event.stopPropagation();
+        beginPan(event);
+        return;
+      }
       positionNodePortAtPointer(zone, event.clientX, event.clientY);
       beginConnectionDrag(event, node.id, side);
     });
@@ -4470,8 +4649,16 @@ function handleAction(node, action, value) {
 
 function closeConnectionCreateMenu() {
   if (!connectionCreateMenu) return;
+  const hadPreview = Boolean(state.connectionDrop?.previewAction);
   connectionCreateMenu.classList.add("hidden");
+  connectionCreateMenu.querySelectorAll("[data-connection-create]")
+    .forEach((button) => button.classList.remove("is-preview"));
+  delete connectionCreateMenu.dataset.placement;
   state.connectionDrop = null;
+  if (hadPreview) {
+    renderConnections();
+    renderSelectionToolbar();
+  }
 }
 
 function closeNodeCreateMenu(options = {}) {
@@ -4514,20 +4701,74 @@ function setNodeCreatePreview(button) {
   });
 }
 
-function openConnectionCreateMenu(originNodeId, originSide, originRatio, clientX, clientY) {
+function setConnectionCreatePreview(button) {
+  if (!connectionCreateMenu) return;
+  connectionCreateMenu.querySelectorAll("[data-connection-create]").forEach((item) => {
+    item.classList.toggle("is-preview", item === button);
+  });
+}
+
+function showConnectionCreateMenu(drop, labelText) {
   if (!connectionCreateMenu) return;
   const shellRect = shell.getBoundingClientRect();
-  const menuWidth = 266;
-  const menuHeight = 104;
-  const left = clamp(clientX - shellRect.left + 14, 12, shellRect.width - menuWidth - 12);
-  const top = clamp(clientY - shellRect.top + 14, 72, shellRect.height - menuHeight - 12);
-  state.connectionDrop = { originNodeId, originSide, originRatio, clientX, clientY };
+  const viewportPadding = 12;
+  const viewportTop = 72;
+  const menuEdgeOverlap = 1;
   const label = connectionCreateMenu.querySelector(".connection-create-label");
-  if (label) label.textContent = originSide === "input" ? "创建上游节点" : "创建下游节点";
-  connectionCreateMenu.style.left = `${left}px`;
-  connectionCreateMenu.style.top = `${top}px`;
+  if (label) label.textContent = labelText;
+
+  connectionCreateMenu.style.visibility = "hidden";
   connectionCreateMenu.classList.remove("hidden");
+  const menuWidth = connectionCreateMenu.offsetWidth || 236;
+  const menuHeight = connectionCreateMenu.offsetHeight || 160;
+  const localX = drop.clientX - shellRect.left;
+  const localY = drop.clientY - shellRect.top;
+  const canPlaceBelow = localY + menuHeight <= shellRect.height - viewportPadding;
+  const canPlaceAbove = localY - menuHeight >= viewportTop;
+  const placement = canPlaceBelow || !canPlaceAbove ? "below" : "above";
+  const left = clamp(
+    localX - menuWidth / 2,
+    viewportPadding,
+    shellRect.width - menuWidth - viewportPadding,
+  );
+  const top = clamp(
+    placement === "below" ? localY : localY - menuHeight,
+    viewportTop,
+    shellRect.height - menuHeight - viewportPadding,
+  );
+  const anchorClientX = shellRect.left + clamp(localX, left + 12, left + menuWidth - 12);
+  const anchorClientY = shellRect.top + (
+    placement === "below"
+      ? top + menuEdgeOverlap
+      : top + menuHeight - menuEdgeOverlap
+  );
+  if (drop.previewAction) {
+    drop.previewAction.current = screenToWorld(anchorClientX, anchorClientY);
+  }
+  state.connectionDrop = drop;
+  connectionCreateMenu.style.left = `${left + shell.scrollLeft}px`;
+  connectionCreateMenu.style.top = `${top + shell.scrollTop}px`;
+  connectionCreateMenu.dataset.placement = placement;
+  connectionCreateMenu.style.removeProperty("visibility");
+  setConnectionCreatePreview(connectionCreateMenu.querySelector("[data-connection-create]"));
   refreshIcons();
+  renderConnections();
+  renderSelectionToolbar();
+  connectionCreateMenu.focus({ preventScroll: true });
+}
+
+function openConnectionCreateMenu(originNodeId, originSide, originRatio, clientX, clientY, previewAction = null) {
+  showConnectionCreateMenu(
+    { kind: "single", originNodeId, originSide, originRatio, clientX, clientY, previewAction },
+    originSide === "input" ? "创建上游节点" : "创建下游节点",
+  );
+}
+
+function openSelectionConnectionCreateMenu(originNodeIds, clientX, clientY, previewAction = null) {
+  showConnectionCreateMenu(
+    { kind: "selection", originNodeIds: [...originNodeIds], clientX, clientY, previewAction },
+    "创建共同下游节点",
+  );
 }
 
 function getConnectionPortDomEntry(zone) {
@@ -4559,6 +4800,15 @@ function getConnectionPortDomEntry(zone) {
         x: interactionSide === "left" ? frameRect.left : frameRect.right,
         y: frameRect.top + frameRect.height / 2,
       },
+      targetRect: {
+        left: frameRect.left,
+        right: frameRect.right,
+        top: frameRect.top,
+        bottom: frameRect.bottom,
+      },
+      targetInset: clamp(14 * state.scale, 8, 20),
+      targetPriority: Number(nodeElement.style.zIndex) || 0,
+      options: canvasConnectionInteraction.getScaledPortGeometry(state.scale),
     },
   };
 }
@@ -4609,6 +4859,51 @@ function resetAllNodePortPositions() {
   nodeLayer.querySelectorAll("[data-node-port-zone]").forEach(resetNodePortPosition);
 }
 
+function hideConnectionTargetGlow() {
+  if (!connectionTargetGlow) return;
+  connectionTargetGlow.classList.remove("is-active");
+  delete connectionTargetGlow.dataset.targetPortId;
+}
+
+function showConnectionTargetGlow(entry) {
+  if (!connectionTargetGlow || !entry?.mediaFrame || !entry?.frameRect) return;
+  const targetChanged = connectionTargetGlow.dataset.targetPortId !== entry.id;
+  if (targetChanged) {
+    connectionTargetGlow.classList.remove("is-active");
+    connectionTargetGlow.dataset.targetPortId = entry.id;
+  }
+  const shellRect = shell.getBoundingClientRect();
+  const computed = window.getComputedStyle(entry.mediaFrame);
+  const worldRadius = Number.parseFloat(computed.borderTopLeftRadius) || 0;
+  const screenRadius = Math.max(4, worldRadius * state.scale);
+  const frameWidth = entry.frameRect.width;
+  const coreWindow = clamp(
+    frameWidth * 0.62,
+    Math.min(72, frameWidth * 0.58),
+    Math.min(360, frameWidth * 0.72),
+  );
+  const coreLayerWidth = frameWidth + 1.6;
+  const coreBackgroundTravel = Math.max(1, coreLayerWidth - coreWindow);
+  const coreScan = {
+    start: (-coreWindow / coreBackgroundTravel) * 100,
+    end: (coreLayerWidth / coreBackgroundTravel) * 100,
+  };
+  connectionTargetGlow.style.left = `${entry.frameRect.left - shellRect.left + shell.scrollLeft}px`;
+  connectionTargetGlow.style.top = `${entry.frameRect.top - shellRect.top + shell.scrollTop}px`;
+  connectionTargetGlow.style.width = `${entry.frameRect.width}px`;
+  connectionTargetGlow.style.height = `${entry.frameRect.height}px`;
+  connectionTargetGlow.style.setProperty("--connection-target-radius", `${screenRadius}px`);
+  connectionTargetGlow.style.setProperty("--connection-target-core-window", `${coreWindow}px`);
+  connectionTargetGlow.style.setProperty("--connection-target-core-scan-start", `${coreScan.start}%`);
+  connectionTargetGlow.style.setProperty("--connection-target-core-scan-end", `${coreScan.end}%`);
+  connectionTargetGlow.style.setProperty(
+    "--connection-target-scan-direction",
+    entry.interactionSide === "right" ? "-1" : "1",
+  );
+  if (targetChanged) void connectionTargetGlow.offsetWidth;
+  connectionTargetGlow.classList.add("is-active");
+}
+
 function clearConnectionTarget(action = state.action) {
   const targetEntry = action?.portElements?.get(action.targetPortId);
   if (targetEntry) {
@@ -4616,6 +4911,7 @@ function clearConnectionTarget(action = state.action) {
     targetEntry.port.classList.remove("is-valid-target");
     resetNodePortPosition(targetEntry.zone);
   }
+  hideConnectionTargetGlow();
   if (action?.type === "connect") action.targetPortId = null;
 }
 
@@ -4623,6 +4919,34 @@ function clearConnectionOrigin(action = state.action) {
   const originEntry = action?.portElements?.get(action.originPortId);
   originEntry?.nodeElement.classList.remove("connection-origin");
   originEntry?.port.classList.remove("is-drag-origin");
+}
+
+function syncConnectionCandidatePorts(action, visible) {
+  if (!action?.portElements || !action.validPortIds) return;
+  action.validPortIds.forEach((portId) => {
+    action.portElements.get(portId)?.port.classList.toggle("is-connectable-target", visible);
+  });
+}
+
+function clearConnectionProximity(action = state.action) {
+  const entry = action?.portElements?.get(action.nearPortId);
+  entry?.nodeElement.classList.remove("connection-near");
+  entry?.port.classList.remove("is-snap-near");
+  if (entry) resetNodePortPosition(entry.zone);
+  if (action?.type === "connect") action.nearPortId = null;
+}
+
+function markConnectionProximity(action, candidate) {
+  if (action.nearPortId && action.nearPortId !== candidate?.targetPortId) {
+    clearConnectionProximity(action);
+  }
+  if (!candidate || action.targetPortId) return;
+  const entry = action.portElements.get(candidate.targetPortId);
+  if (!entry) return;
+  action.nearPortId = candidate.targetPortId;
+  setConnectionPortScreenPoint(entry, candidate.point);
+  entry.nodeElement.classList.add("connection-near");
+  entry.port.classList.add("is-snap-near");
 }
 
 function markConnectionTarget(action, candidate) {
@@ -4634,38 +4958,101 @@ function markConnectionTarget(action, candidate) {
   if (!entry) return;
   action.targetPortId = candidate.targetPortId;
   setConnectionPortScreenPoint(entry, candidate.point);
+  showConnectionTargetGlow(entry);
   action.targetRatio = 0.5;
   entry.nodeElement.classList.add("connection-target");
   entry.port.classList.add("is-valid-target");
 }
 
-function findConnectionBodyTarget(action, clientX, clientY) {
-  if (action?.type !== "connect") return null;
-  const targetSide = action.originPort.side === "right" ? "left" : "right";
-  const frame = document.elementsFromPoint(clientX, clientY)
-    .map((element) => element instanceof Element ? element.closest(".media-frame") : null)
-    .find((element) => {
-      const nodeId = element?.closest(".canvas-node")?.dataset.id;
-      return nodeId && nodeId !== action.originNodeId;
-    });
-  const targetNodeId = frame?.closest(".canvas-node")?.dataset.id;
-  if (!targetNodeId) return null;
+function getSelectionConnectionOrigins() {
+  return getSelectedNodes()
+    .filter((node) => node.kind === "generator" || getEditableMedia(node))
+    .map((node) => ({
+      nodeId: node.id,
+      start: getConnectionPortPoint(node, "output"),
+    }));
+}
 
-  const port = action.portRegistry.find((entry) => (
-    entry.nodeId === targetNodeId
-    && entry.side === targetSide
-    && action.validPortIds.has(entry.id)
-  ));
-  if (!port) return null;
-  const direction = canvasConnectionInteraction.resolveConnectionDirection(action.originPort, port);
-  if (!direction) return null;
-  return {
-    targetPortId: port.id,
-    targetNodeId: port.nodeId,
-    point: port.restCenter,
-    distance: 0,
-    direction,
+function positionMultiSelectionPort(clientX, clientY) {
+  if (!multiSelectionFrame || !multiSelectionPort) return;
+  const frameRect = multiSelectionFrame.getBoundingClientRect();
+  multiSelectionPort.style.left = `${clientX - frameRect.left}px`;
+  multiSelectionPort.style.top = `${clientY - frameRect.top}px`;
+}
+
+function resetMultiSelectionPort() {
+  multiSelectionPort?.removeAttribute("style");
+}
+
+function beginSelectionConnectionDrag(event) {
+  if (event.button !== 0 || !requireCanvasMutation()) return;
+  const origins = getSelectionConnectionOrigins();
+  if (origins.length < 2 || origins.length !== state.selectedIds.size) return;
+  const frameRect = multiSelectionFrame?.getBoundingClientRect();
+  if (!frameRect) return;
+  const registry = buildConnectionPortRegistry();
+  const targetPlans = new Map();
+  registry.ports.forEach((port) => {
+    if (port.side !== "left") return;
+    const plan = canvasConnections.planBatchConnections(
+      state.connections,
+      state.nodes,
+      origins.map((origin) => origin.nodeId),
+      port.nodeId,
+    );
+    if (plan.validSourceIds.length === origins.length) targetPlans.set(port.id, {
+      targetNodeId: port.nodeId,
+      ...plan,
+    });
+  });
+  const anchor = {
+    x: frameRect.right,
+    y: frameRect.top + frameRect.height / 2,
   };
+  const originPort = canvasConnectionInteraction.buildPortRegistry([{
+    id: "selection:output",
+    nodeId: "__selection__",
+    side: "right",
+    anchor,
+    options: canvasConnectionInteraction.getScaledPortGeometry(state.scale),
+  }])[0];
+  if (!originPort) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  closeCanvasCreateMenus();
+  state.action = {
+    type: "connect",
+    mode: "selection-output",
+    pointerId: event.pointerId,
+    originNodeIds: origins.map((origin) => origin.nodeId),
+    origins,
+    originSide: "output",
+    originPortId: originPort.id,
+    originPort,
+    portRegistry: registry.ports,
+    portElements: registry.elements,
+    validPortIds: new Set(targetPlans.keys()),
+    targetPlans,
+    current: screenToWorld(event.clientX, event.clientY),
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    targetNodeId: null,
+    targetPortId: null,
+    nearPortId: null,
+    targetRatio: 0.5,
+  };
+  state.activeConnectionId = null;
+  shell.classList.add("connecting", "connecting-from-output", "connecting-selection");
+  syncConnectionCandidatePorts(state.action, true);
+  positionMultiSelectionPort(event.clientX, event.clientY);
+  renderSelectionToolbar();
+  try {
+    shell.setPointerCapture(event.pointerId);
+  } catch {
+    // Window listeners keep the drag alive when pointer capture is unavailable.
+  }
+  renderConnections();
 }
 
 function beginConnectionDrag(event, originNodeId, originSide = "output") {
@@ -4675,9 +5062,6 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   const canStartFromOutput = originSide === "output"
     && (origin?.kind === "generator" || getEditableMedia(origin));
   if (!origin || (!canStartFromInput && !canStartFromOutput)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  closeCanvasCreateMenus();
   const registry = buildConnectionPortRegistry();
   const originPortId = getConnectionPortId(originNodeId, originSide);
   const originPort = registry.ports.find((port) => port.id === originPortId);
@@ -4686,8 +5070,11 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   const originScreenPoint = canvasConnectionInteraction.clampPointerToPort(
     { x: event.clientX, y: event.clientY },
     originPort,
-    { requireActivation: false },
-  ) || originPort.restCenter;
+  );
+  if (!originScreenPoint) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeCanvasCreateMenus();
   setConnectionPortScreenPoint(originEntry, originScreenPoint);
   const originRatio = 0.5;
   const start = screenToWorld(originPort.anchor.x, originPort.anchor.y);
@@ -4720,6 +5107,7 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
     sourceNodeId: null,
     targetNodeId: null,
     targetPortId: null,
+    nearPortId: null,
     targetRatio: 0.5,
   };
   state.activeConnectionId = null;
@@ -4728,6 +5116,7 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   shell.classList.toggle("connecting-from-output", originSide === "output");
   originEntry.nodeElement.classList.add("connection-origin");
   originEntry.port.classList.add("is-drag-origin");
+  syncConnectionCandidatePorts(state.action, true);
   try {
     shell.setPointerCapture(event.pointerId);
   } catch {
@@ -4741,36 +5130,109 @@ function moveConnectionDrag(event) {
   if (action?.type !== "connect") return;
   event.preventDefault?.();
   action.current = screenToWorld(event.clientX, event.clientY);
-  const portCandidate = canvasConnectionInteraction.selectSnapCandidate({
-    pointer: { x: event.clientX, y: event.clientY },
+  const pointer = { x: event.clientX, y: event.clientY };
+  const canUsePort = (_direction, port) => action.validPortIds.has(port.id);
+  const bodyCandidate = canvasConnectionInteraction.selectNodeBodyCandidate({
+    pointer,
+    origin: action.originPort,
+    registry: action.portRegistry,
+    canConnect: canUsePort,
+  });
+  const portCandidate = bodyCandidate ? null : canvasConnectionInteraction.selectSnapCandidate({
+    pointer,
     origin: action.originPort,
     registry: action.portRegistry,
     previousTargetId: action.targetPortId,
-    canConnect: (_direction, port) => action.validPortIds.has(port.id),
+    canConnect: canUsePort,
   });
-  const candidate = portCandidate || findConnectionBodyTarget(action, event.clientX, event.clientY);
-  markConnectionTarget(action, candidate);
+  const candidate = bodyCandidate || portCandidate;
+  const proximityCandidate = candidate
+    ? null
+    : canvasConnectionInteraction.selectSnapProximity({
+        pointer,
+        origin: action.originPort,
+        registry: action.portRegistry,
+        canConnect: canUsePort,
+      });
+  if (candidate) {
+    clearConnectionProximity(action);
+    markConnectionTarget(action, candidate);
+  } else {
+    clearConnectionTarget(action);
+    markConnectionProximity(action, proximityCandidate);
+  }
+  if (action.mode === "selection-output") {
+    const targetPlan = candidate ? action.targetPlans.get(candidate.targetPortId) : null;
+    action.targetNodeId = targetPlan?.targetNodeId || null;
+    action.targetPlan = targetPlan || null;
+    if (candidate) {
+      const targetPort = action.portRegistry.find((port) => port.id === candidate.targetPortId);
+      if (targetPort) {
+        const targetPoint = candidate.connectionPoint || targetPort.anchor;
+        action.current = screenToWorld(targetPoint.x, targetPoint.y);
+        positionMultiSelectionPort(targetPoint.x, targetPoint.y);
+      }
+    } else {
+      positionMultiSelectionPort(event.clientX, event.clientY);
+    }
+    canvasConnectionRenderer.renderPreview(action, canvasConnections.getBezierPath);
+    return;
+  }
   action.sourceNodeId = candidate?.direction.sourceNodeId || null;
   action.targetNodeId = candidate?.direction.targetNodeId || null;
   if (candidate) {
     const targetPort = action.portRegistry.find((port) => port.id === candidate.targetPortId);
-    if (targetPort) action.current = screenToWorld(targetPort.anchor.x, targetPort.anchor.y);
+    if (targetPort) {
+      const targetPoint = candidate.connectionPoint || targetPort.anchor;
+      action.current = screenToWorld(targetPoint.x, targetPoint.y);
+    }
   }
   canvasConnectionRenderer.renderPreview(state.action, canvasConnections.getBezierPath);
 }
 
-function finishConnectionDrag(event) {
+function createPendingConnectionPreview(action, clientX, clientY) {
+  const current = screenToWorld(clientX, clientY);
+  if (action.mode === "selection-output") {
+    return {
+      type: "connect",
+      mode: "selection-output",
+      originSide: "output",
+      origins: action.origins.map((origin) => ({
+        nodeId: origin.nodeId,
+        start: { ...origin.start },
+      })),
+      current,
+      pendingCreate: true,
+      nearPortId: null,
+      targetPortId: null,
+    };
+  }
+  return {
+    type: "connect",
+    originSide: action.originSide,
+    start: { ...action.start },
+    current,
+    pendingCreate: true,
+    nearPortId: null,
+    targetPortId: null,
+  };
+}
+
+function finishConnectionDrag(event, options = {}) {
   const action = state.action;
   if (action?.type !== "connect") return;
   const moved = Math.hypot(
     event.clientX - action.startClientX,
     event.clientY - action.startClientY,
   ) >= 8;
+  clearConnectionProximity(action);
   clearConnectionTarget(action);
   clearConnectionOrigin(action);
+  syncConnectionCandidatePorts(action, false);
   shell.classList.remove("connecting");
-  shell.classList.remove("connecting-from-input", "connecting-from-output");
+  shell.classList.remove("connecting-from-input", "connecting-from-output", "connecting-selection");
   state.action = null;
+  resetMultiSelectionPort();
   action.portElements.forEach((entry) => resetNodePortPosition(entry.zone));
   try {
     shell.releasePointerCapture(event.pointerId);
@@ -4778,7 +5240,20 @@ function finishConnectionDrag(event) {
     // The browser may release capture before the window pointerup event.
   }
 
-  if (action.targetNodeId) {
+  if (!options.cancelled && action.mode === "selection-output" && action.targetNodeId) {
+    const result = createConnectionsBatch(action.originNodeIds, action.targetNodeId);
+    const target = state.nodes.find((node) => node.id === action.targetNodeId);
+    if (target && result.created.length) {
+      target.expanded = true;
+      target.panel = null;
+      bringNodesToFront([target]);
+      setSelection([target.id], target.id, { keepConnection: true });
+    }
+    render();
+    return;
+  }
+
+  if (!options.cancelled && action.targetNodeId) {
     const connection = createConnection(action.sourceNodeId, action.targetNodeId, {
       sourceRatio: action.originSide === "input" ? action.targetRatio : action.originRatio,
       targetRatio: action.originSide === "input" ? action.originRatio : action.targetRatio,
@@ -4795,16 +5270,36 @@ function finishConnectionDrag(event) {
       return;
     }
   }
-  renderConnections();
-  if (moved && isConnectionDropSurface(document.elementFromPoint(event.clientX, event.clientY))) {
+  const shouldOpenCreateMenu = !options.cancelled
+    && moved
+    && isConnectionDropSurface(document.elementFromPoint(event.clientX, event.clientY));
+  if (shouldOpenCreateMenu) {
+    const previewAction = createPendingConnectionPreview(
+      action,
+      event.clientX,
+      event.clientY,
+    );
+    if (action.mode === "selection-output") {
+      openSelectionConnectionCreateMenu(
+        action.originNodeIds,
+        event.clientX,
+        event.clientY,
+        previewAction,
+      );
+      return;
+    }
     openConnectionCreateMenu(
       action.originNodeId,
       action.originSide,
       action.originRatio,
       event.clientX,
       event.clientY,
+      previewAction,
     );
+    return;
   }
+  renderConnections();
+  renderSelectionToolbar();
 }
 
 const canvasNodePointerController = canvasNodePointerControllerFactory.createCanvasNodePointerController({
@@ -4836,11 +5331,6 @@ const canvasNodePointerController = canvasNodePointerControllerFactory.createCan
   },
   setMediaToolbarNodeId: (nodeId) => {
     state.mediaToolbarNodeId = nodeId;
-  },
-  expandGenerator: (node) => {
-    node.expanded = true;
-    node.panel = null;
-    rememberPreset(node);
   },
   promoteNodes: bringNodesToFront,
   setAction: (action) => {
@@ -5030,7 +5520,6 @@ function deleteSelectedNodes(confirmed = false) {
   clearSelection();
   state.activeGroupId = null;
   render();
-  showUndoToast();
 }
 
 function restoreGroupSnapshot(groups) {
@@ -5109,25 +5598,7 @@ function undoLastAction() {
     }
   }
 
-  hideUndoToast();
   render();
-}
-
-function showUndoToast(message = "已删除，可撤销") {
-  if (!undoToast) return;
-  const label = undoToast.querySelector("span");
-  if (label) label.textContent = message;
-  undoToast.classList.remove("hidden");
-  window.clearTimeout(showUndoToast.timeoutId);
-  showUndoToast.timeoutId = window.setTimeout(() => {
-    undoToast.classList.add("hidden");
-  }, 4200);
-}
-
-function hideUndoToast() {
-  if (!undoToast) return;
-  undoToast.classList.add("hidden");
-  window.clearTimeout(showUndoToast.timeoutId);
 }
 
 function canRestoreDialogFocus(element) {
@@ -5491,6 +5962,7 @@ function setAgentWidth(width) {
   state.agentWidth = clamp(width, minWidth, maxWidth);
   agentDock?.style.setProperty("--agent-width", `${state.agentWidth}px`);
   appShell?.style.setProperty("--agent-width", `${state.agentWidth}px`);
+  renderSelectionToolbar();
 }
 
 function setAgentOpen(open) {
@@ -5805,7 +6277,6 @@ function resetPrototypeProject() {
   state.pendingCanvasUploadPoint = null;
   state.nodeCreatePoint = null;
   state.canvasMoreTargetId = null;
-  hideUndoToast();
   initializeCanvases();
   applyTransform();
   render();
@@ -5872,6 +6343,10 @@ function groupSelectedNodes() {
   if (!requireCanvasMutation()) return;
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return;
+  if (selectedNodes.some((node) => Boolean(node.groupId))) {
+    showActionToast("组内节点不能再次打组，请先解组或选择未分组节点");
+    return;
+  }
   const groupId = crypto.randomUUID();
   const bounds = getDefaultGroupBounds(selectedNodes);
   if (!bounds) return;
@@ -5947,10 +6422,14 @@ function sortSelectedNodes(layout = "grid") {
   render();
 }
 
-function getSelectedMediaEntries() {
-  return getSelectedNodes()
+function getMediaEntriesForNodes(nodes) {
+  return nodes
     .map((node) => ({ node, asset: getEditableMedia(node) }))
     .filter((entry) => entry.asset);
+}
+
+function getSelectedMediaEntries() {
+  return getMediaEntriesForNodes(getSelectedNodes());
 }
 
 function sanitizeFileName(value) {
@@ -5962,6 +6441,7 @@ function sanitizeFileName(value) {
 }
 
 function addSelectedMediaToLibrary() {
+  if (!requireCanvasMutation()) return;
   const entries = getSelectedMediaEntries();
   if (!entries.length) {
     showActionToast("选中的节点还没有可保存素材");
@@ -5990,8 +6470,8 @@ function addSelectedMediaToLibrary() {
   showActionToast(`已保存 ${additions.length} 个素材`);
 }
 
-async function downloadSelectedMedia(packageMode = false) {
-  const entries = getSelectedMediaEntries().filter(({ asset }) => asset?.url);
+async function downloadNodesMedia(nodes, packageMode = false) {
+  const entries = getMediaEntriesForNodes(nodes).filter(({ asset }) => asset?.url);
   if (!entries.length) {
     showActionToast("选中的节点暂无可下载内容");
     return;
@@ -6001,6 +6481,10 @@ async function downloadSelectedMedia(packageMode = false) {
     await downloadAssetFile(asset, `${title}.${getAssetDownloadExtension(asset)}`);
   }
   showActionToast(packageMode ? "原型中以逐个文件模拟打包下载" : `已开始下载 ${entries.length} 个素材`);
+}
+
+async function downloadSelectedMedia(packageMode = false) {
+  return downloadNodesMedia(getSelectedNodes(), packageMode);
 }
 
 function arrangeGroup(group, layout = "grid") {
@@ -6357,11 +6841,31 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
   resizeAssetLibrary: setAssetLibraryWidth,
   resizeAgent: setAgentWidth,
   finishMarquee: (action) => canvasPointerInteractionController.finishMarquee(action),
-  finishNodeDrag: (action) => canvasNodeDragController.finish(action),
-  finishGroup: (action) => canvasGroupInteractionController.finish(action),
+  finishNodeDrag: (action, options) => canvasNodeDragController.finish(action, options),
+  finishNodeClick: (action, _pointer, options = {}) => {
+    if (options.cancelled) return;
+    const node = state.nodes.find((item) => item.id === action.activeId);
+    const canReveal = node && state.selectedIds.has(node.id) && state.selectedIds.size === 1;
+    state.mediaToolbarNodeId = canReveal && action.revealMediaToolbar ? node.id : null;
+    if (canReveal && action.revealGeneratorPanel) {
+      node.expanded = true;
+      node.panel = null;
+      rememberPreset(node);
+    }
+    render();
+  },
+  finishGroup: (action) => {
+    if (action.type === "resize-group" && action.moved) {
+      reconcileGroupFrameMembership(action.groupId);
+    }
+    canvasGroupInteractionController.finish(action);
+  },
   finishAssetLibraryResize: syncPromptPanelLayouts,
   clearAction: () => {
     state.action = null;
+    nodeLayer.querySelectorAll(".group-frame[data-active-resize]").forEach((element) => {
+      delete element.dataset.activeResize;
+    });
   },
   setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
   releasePointer: (target, pointer) => {
@@ -6384,7 +6888,7 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
 });
 
 function promoteDragCandidate(action, event) {
-  canvasNodeDragController.promote(action, event);
+  return canvasNodeDragController.promote(action, event);
 }
 
 function moveDraggedNodes(action, event) {
@@ -6411,18 +6915,6 @@ function resizeGroupFrame(action, event) {
   canvasGroupInteractionController.resize(action, event);
 }
 
-function rectContainsPoint(rect, point) {
-  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
-}
-
-function getNodeCenter(node) {
-  const bounds = getNodeBounds(node);
-  return {
-    x: bounds.left + bounds.width / 2,
-    y: bounds.top + bounds.height / 2,
-  };
-}
-
 function removeNodeFromGroup(node, groupId) {
   const group = getGroupById(groupId);
   if (group) {
@@ -6446,15 +6938,12 @@ function addNodeToGroup(node, groupId) {
 }
 
 function findGroupForNode(node) {
-  const center = getNodeCenter(node);
-  return state.groups
-    .map((group) => ({ group, bounds: getGroupBounds(group) }))
-    .filter((item) => item.bounds && rectContainsPoint(item.bounds, center))
-    .sort((a, b) => {
-      const areaA = a.bounds.width * a.bounds.height;
-      const areaB = b.bounds.width * b.bounds.height;
-      return areaA - areaB;
-    })[0]?.group || null;
+  const groupId = canvasSpatialSelection.resolveNodeGroup({
+    nodeBounds: getNodeVisualBounds(node),
+    currentGroupId: node.groupId || null,
+    groups: state.groups.map((group) => ({ id: group.id, bounds: getGroupBounds(group) })),
+  });
+  return getGroupById(groupId);
 }
 
 function updateDraggedNodeGroupMembership(ids) {
@@ -6471,6 +6960,31 @@ function updateDraggedNodeGroupMembership(ids) {
     }
     if (targetGroup) {
       addNodeToGroup(node, targetGroup.id);
+      changed = true;
+    }
+  }
+  if (changed) syncGroups();
+  return changed;
+}
+
+function reconcileGroupFrameMembership(groupId) {
+  const group = getGroupById(groupId);
+  const bounds = getGroupBounds(group);
+  if (!group || !bounds) return false;
+  let changed = false;
+  for (const node of state.nodes) {
+    if (node.groupId && node.groupId !== groupId) continue;
+    const nextGroupId = canvasSpatialSelection.resolveNodeGroup({
+      nodeBounds: getNodeVisualBounds(node),
+      currentGroupId: node.groupId || null,
+      groups: [{ id: groupId, bounds }],
+    });
+    if (nextGroupId === node.groupId) continue;
+    if (node.groupId === groupId) {
+      removeNodeFromGroup(node, groupId);
+      changed = true;
+    } else if (!node.groupId && nextGroupId === groupId) {
+      addNodeToGroup(node, groupId);
       changed = true;
     }
   }
@@ -6576,6 +7090,45 @@ connectionCreateMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 
+connectionCreateMenu?.addEventListener("pointerover", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
+  if (button) setConnectionCreatePreview(button);
+});
+
+connectionCreateMenu?.addEventListener("pointerleave", () => {
+  setConnectionCreatePreview(connectionCreateMenu.querySelector("[data-connection-create]"));
+});
+
+connectionCreateMenu?.addEventListener("focusin", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
+  if (button) setConnectionCreatePreview(button);
+});
+
+connectionCreateMenu?.addEventListener("keydown", (event) => {
+  const buttons = [...connectionCreateMenu.querySelectorAll("[data-connection-create]")];
+  if (!buttons.length) return;
+  const currentIndex = buttons.findIndex((button) => button.classList.contains("is-preview"));
+  let nextIndex = currentIndex < 0 ? 0 : currentIndex;
+
+  if (event.key === "ArrowDown") nextIndex = (nextIndex + 1) % buttons.length;
+  else if (event.key === "ArrowUp") nextIndex = (nextIndex - 1 + buttons.length) % buttons.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = buttons.length - 1;
+  else if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    buttons[nextIndex].click();
+    return;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  setConnectionCreatePreview(buttons[nextIndex]);
+  buttons[nextIndex].focus({ preventScroll: true });
+});
+
 connectionCreateMenu?.addEventListener("click", (event) => {
   const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
   const drop = state.connectionDrop;
@@ -6583,6 +7136,22 @@ connectionCreateMenu?.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopPropagation();
   const mode = button.dataset.connectionCreate === "video" ? "video" : "image";
+  if (drop.kind === "selection") {
+    const node = addNodeAt(drop.clientX, drop.clientY, mode, {
+      useLastPreset: false,
+      anchor: "input",
+    });
+    closeConnectionCreateMenu();
+    if (!node) return;
+    const result = createConnectionsBatch(drop.originNodeIds, node.id);
+    node.expanded = true;
+    setSelection([node.id], node.id, { keepConnection: true });
+    render();
+    if (result.rejected.length) {
+      showActionToast(`已连接 ${result.created.length} 个来源，跳过 ${result.rejected.length} 个无效连接`);
+    }
+    return;
+  }
   const originNodeId = drop.originNodeId;
   const node = addNodeAt(drop.clientX, drop.clientY, mode, {
     useLastPreset: false,
@@ -6652,6 +7221,12 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !connectionCreateMenu?.classList.contains("hidden")) {
     event.preventDefault();
     closeConnectionCreateMenu();
+    return;
+  }
+  if (event.key === "Escape" && !selectionDownloadMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    setSelectionDownloadMenuOpen(false);
+    selectionDownloadTrigger?.focus({ preventScroll: true });
     return;
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
@@ -6995,28 +7570,20 @@ profileMenu?.addEventListener("click", (event) => {
   }
 });
 
-function bindSelectionToolbarMenuPreview(selector, menu) {
-  const wrap = selectionToolbar?.querySelector(selector);
-  if (!wrap || !menu) return;
-  let closeTimer = null;
-  const open = () => {
-    window.clearTimeout(closeTimer);
-    menu.classList.remove("hidden");
-  };
-  const closeSoon = () => {
-    window.clearTimeout(closeTimer);
-    closeTimer = window.setTimeout(() => menu.classList.add("hidden"), 180);
-  };
-  wrap.addEventListener("pointerenter", open);
-  wrap.addEventListener("pointerleave", closeSoon);
-  menu.addEventListener("pointerenter", open);
-  menu.addEventListener("pointerleave", closeSoon);
+function setSelectionDownloadMenuOpen(open) {
+  const nextOpen = Boolean(open && selectionDownloadMenu && selectionDownloadTrigger);
+  selectionDownloadMenu?.classList.toggle("hidden", !nextOpen);
+  selectionDownloadTrigger?.setAttribute("aria-expanded", String(nextOpen));
+  selectionDownloadTrigger?.classList.toggle("active", nextOpen);
 }
 
-bindSelectionToolbarMenuPreview('[data-toolbar-menu="layout"]', selectionSortMenu);
-bindSelectionToolbarMenuPreview('[data-toolbar-menu="download"]', selectionDownloadMenu);
-
 selectionToolbar?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+
+multiSelectionPort?.addEventListener("pointerdown", beginSelectionConnectionDrag);
+multiSelectionPort?.addEventListener("click", (event) => {
+  event.preventDefault();
   event.stopPropagation();
 });
 
@@ -7024,18 +7591,18 @@ selectionToolbar?.addEventListener("click", (event) => {
   event.stopPropagation();
   const layout = event.target.closest("[data-sort-layout]")?.dataset.sortLayout;
   if (layout) {
-    selectionSortMenu?.classList.add("hidden");
     sortSelectedNodes(layout);
     return;
   }
   const downloadAction = event.target.closest("[data-download-action]")?.dataset.downloadAction;
   if (downloadAction) {
-    selectionDownloadMenu?.classList.add("hidden");
+    setSelectionDownloadMenuOpen(false);
     downloadSelectedMedia(downloadAction === "archive");
     return;
   }
   const action = event.target.closest("[data-selection-action]")?.dataset.selectionAction;
   if (action === "group") {
+    if (getSelectedNodes().some((node) => Boolean(node.groupId))) return;
     groupSelectedNodes();
     return;
   }
@@ -7047,13 +7614,8 @@ selectionToolbar?.addEventListener("click", (event) => {
     deleteSelectedNodes();
     return;
   }
-  if (action === "toggle-sort") {
-    selectionDownloadMenu?.classList.add("hidden");
-    selectionSortMenu?.classList.toggle("hidden");
-  }
   if (action === "toggle-download") {
-    selectionSortMenu?.classList.add("hidden");
-    selectionDownloadMenu?.classList.toggle("hidden");
+    setSelectionDownloadMenuOpen(selectionDownloadMenu?.classList.contains("hidden"));
   }
 });
 
@@ -7087,10 +7649,6 @@ zoomSlider?.addEventListener("input", (event) => {
   closeCanvasPanel();
   const nextValue = Number(event.currentTarget.value) / 100;
   setCanvasZoom(nextValue);
-});
-
-undoDeleteBtn?.addEventListener("click", () => {
-  undoLastAction();
 });
 
 document.querySelectorAll("[data-project-menu-button]").forEach((button) => {
@@ -7291,8 +7849,7 @@ document.addEventListener("click", (event) => {
     closeCanvasPanel();
   }
   if (!target?.closest("#selectionToolbar")) {
-    selectionSortMenu?.classList.add("hidden");
-    selectionDownloadMenu?.classList.add("hidden");
+    setSelectionDownloadMenuOpen(false);
   }
   if (!target?.closest(".group-frame")) {
     closeGroupLayoutMenus();
@@ -7307,6 +7864,7 @@ document.addEventListener("click", (event) => {
 window.addEventListener("resize", () => {
   setAssetLibraryWidth(state.assetLibraryWidth);
   syncPromptPanelLayouts();
+  renderSelectionToolbar();
   renderMinimap();
   if (
     narrowViewportQuery.matches &&

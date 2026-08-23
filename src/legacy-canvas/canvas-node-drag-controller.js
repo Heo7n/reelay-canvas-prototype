@@ -21,14 +21,17 @@
 
       let draggedNodes = sourceNodes;
       let origins = action.origins;
+      const activeIndex = Math.max(0, sourceNodes.findIndex((node) => node.id === action.activeId));
+      let activeId = action.activeId;
 
       if (action.altKey) {
         draggedNodes = sourceNodes.map(options.cloneNode);
         options.addNodes(draggedNodes);
         origins = draggedNodes.map((node) => ({ id: node.id, x: node.x, y: node.y }));
+        activeId = draggedNodes[activeIndex]?.id || draggedNodes[0]?.id || null;
         options.selectNodes(
           draggedNodes.map((node) => node.id),
-          draggedNodes.find((node) => node.kind === "generator")?.id || draggedNodes[0].id,
+          activeId,
         );
         options.render();
       }
@@ -38,11 +41,14 @@
         type: "drag-nodes",
         pointerId: action.pointerId,
         ids: draggedNodes.map((node) => node.id),
+        activeId,
         startClientX: action.startClientX,
         startClientY: action.startClientY,
         origins,
         groups: action.groups,
         isDuplicate: action.altKey,
+        revealMediaToolbar: action.revealMediaToolbar,
+        revealGeneratorPanel: action.revealGeneratorPanel,
       };
       options.setAction(dragAction);
       options.setDragging(true);
@@ -50,7 +56,7 @@
       return dragAction;
     }
 
-    function finish(action) {
+    function finish(action, finishOptions = {}) {
       options.updateGroupMembership(action.ids);
       if (action.moved && !action.isDuplicate) {
         options.pushUndoAction({
@@ -59,7 +65,7 @@
           groups: action.groups,
         });
       }
-      options.render();
+      if (finishOptions.render !== false) options.render();
     }
 
     return Object.freeze({ move, promote, finish });

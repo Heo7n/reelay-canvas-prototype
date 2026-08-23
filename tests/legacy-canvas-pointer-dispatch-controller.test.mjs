@@ -22,7 +22,10 @@ function createHarness() {
     hasCrossedDragThreshold: (_action, pointer) => pointer.clientX >= 10,
     moveConnection: mark("moveConnection"),
     finishConnection: mark("finishConnection"),
-    promoteNodeDrag: mark("promoteNodeDrag"),
+    promoteNodeDrag: (dragCandidate, pointer) => {
+      calls.push(["promoteNodeDrag", dragCandidate, pointer]);
+      return { ...dragCandidate, type: "drag-nodes", moved: true };
+    },
     promoteGroupDrag: mark("promoteGroupDrag"),
     moveGroup: mark("moveGroup"),
     resizeGroup: mark("resizeGroup"),
@@ -34,6 +37,7 @@ function createHarness() {
     resizeAgent: mark("resizeAgent"),
     finishMarquee: mark("finishMarquee"),
     finishNodeDrag: mark("finishNodeDrag"),
+    finishNodeClick: mark("finishNodeClick"),
     finishGroup: mark("finishGroup"),
     finishAssetLibraryResize: mark("finishAssetLibraryResize"),
     clearAction: () => {
@@ -87,6 +91,7 @@ test("finish flushes movement, runs the action finalizer, and releases capture",
   assert.deepEqual(harness.calls.map(([name]) => name), [
     "flush",
     "finishNodeDrag",
+    "finishNodeClick",
     "clearAction",
     "setDragging",
     "releasePointer",
@@ -94,11 +99,87 @@ test("finish flushes movement, runs the action finalizer, and releases capture",
   assert.equal(harness.calls.at(-1)[1], captureTarget);
 });
 
-test("connection finish preserves its specialized cleanup path", () => {
+test("a node panel opens only when the drag candidate finishes as a click", () => {
+  const harness = createHarness();
+  harness.setAction({ type: "drag-candidate", activeId: "node-1" });
+  harness.controller.finish({ type: "pointerup", pointerId: 6 });
+  assert.deepEqual(harness.calls.map(([name]) => name), [
+    "finishNodeClick",
+    "clearAction",
+    "setDragging",
+    "releasePointer",
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls[0].slice(1))), [
+    { type: "drag-candidate", activeId: "node-1" },
+    { type: "pointerup", pointerId: 6 },
+    { cancelled: false },
+  ]);
+  assert.equal(harness.controller.finish({ type: "pointerup", pointerId: 6 }), false);
+  assert.equal(harness.calls.filter(([name]) => name === "finishNodeClick").length, 1);
+});
+
+test("pointer cancellation does not reveal deferred node chrome", () => {
+  const harness = createHarness();
+  harness.setAction({ type: "drag-candidate", activeId: "node-1" });
+  harness.controller.finish({ type: "pointercancel", pointerId: 6 });
+  assert.equal(harness.calls[0][0], "finishNodeClick");
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls[0].at(-1))), { cancelled: true });
+});
+
+test("pointerup beyond the drag threshold reveals node chrome only after finishing the drag", () => {
+  const harness = createHarness();
+  harness.setAction({ type: "drag-candidate", activeId: "node-1" });
+  harness.controller.finish({ type: "pointerup", pointerId: 6, clientX: 12 });
+  assert.deepEqual(harness.calls.map(([name]) => name), [
+    "promoteNodeDrag",
+    "finishNodeDrag",
+    "finishNodeClick",
+    "clearAction",
+    "setDragging",
+    "releasePointer",
+  ]);
+});
+
+test("an established node drag reveals chrome after pointerup but not after cancellation", () => {
+  const completed = createHarness();
+  completed.setAction({ type: "drag-nodes", activeId: "node-1" });
+  completed.controller.finish({ type: "pointerup", pointerId: 6, clientX: 12 });
+  assert.deepEqual(completed.calls.map(([name]) => name), [
+    "flush",
+    "finishNodeDrag",
+    "finishNodeClick",
+    "clearAction",
+    "setDragging",
+    "releasePointer",
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(completed.calls[2].at(-1))), { cancelled: false });
+
+  const cancelled = createHarness();
+  cancelled.setAction({ type: "drag-nodes", activeId: "node-1" });
+  cancelled.controller.finish({ type: "pointercancel", pointerId: 6, clientX: 12 });
+  assert.deepEqual(JSON.parse(JSON.stringify(cancelled.calls[2].at(-1))), { cancelled: true });
+});
+
+test("connection pointerup flushes the last move before committing", () => {
   const harness = createHarness();
   harness.setAction({ type: "connect" });
-  harness.controller.finish({ pointerId: 8 });
+  harness.controller.finish({ type: "pointerup", pointerId: 8 });
   assert.deepEqual(harness.calls.map(([name]) => name), ["flush", "finishConnection"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls.at(-1).slice(1))), [
+    { type: "pointerup", pointerId: 8 },
+    { cancelled: false },
+  ]);
+});
+
+test("connection pointercancel skips commit work and reports cancellation", () => {
+  const harness = createHarness();
+  harness.setAction({ type: "connect" });
+  harness.controller.finish({ type: "pointercancel", pointerId: 9 });
+  assert.deepEqual(harness.calls.map(([name]) => name), ["finishConnection"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls.at(-1).slice(1))), [
+    { type: "pointercancel", pointerId: 9 },
+    { cancelled: true },
+  ]);
 });
 
 test("surface pointerdown routes pan, panel dismissal, and marquee without leaking outside", () => {

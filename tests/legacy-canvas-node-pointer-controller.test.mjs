@@ -11,12 +11,12 @@ const context = vm.createContext({});
 new vm.Script(interactionSource).runInContext(context);
 new vm.Script(controllerSource).runInContext(context);
 
-function createHarness({ canMutate = true, spaceDown = false } = {}) {
+function createHarness({ canMutate = true, spaceDown = false, selectedNodeIds = ["a", "b"] } = {}) {
   const nodes = [
     { id: "a", kind: "generator", x: 10, y: 20, expanded: false, generating: false },
     { id: "b", kind: "media", x: 80, y: 90 },
   ];
-  const selectedIds = new Set(["a", "b"]);
+  const selectedIds = new Set(selectedNodeIds);
   const calls = [];
   let action = null;
   const controller = context.REELAY_CANVAS_NODE_POINTER_CONTROLLER.createCanvasNodePointerController({
@@ -36,10 +36,6 @@ function createHarness({ canMutate = true, spaceDown = false } = {}) {
       calls.push("selection");
     },
     setMediaToolbarNodeId: (nodeId) => calls.push(`toolbar:${nodeId || "none"}`),
-    expandGenerator: (node) => {
-      node.expanded = true;
-      calls.push("expand");
-    },
     promoteNodes: (items) => calls.push(`promote:${items.map((item) => item.id).join(",")}`),
     setAction: (nextAction) => { action = nextAction; },
     capturePointer: (pointerId) => calls.push(`capture:${pointerId}`),
@@ -94,12 +90,11 @@ test("node body pointer prepares a stable drag candidate with active node promot
   assert.equal(harness.controller.handlePointerDown(pointerEvent({ target, altKey: true }), "a"), "drag-candidate");
   assert.deepEqual(harness.calls, [
     "selection",
-    "toolbar:a",
-    "expand",
     "promote:b,a",
     "capture:7",
     "render",
   ]);
+  assert.equal(harness.nodes[0].expanded, false);
   assert.deepEqual({ ...harness.getAction(), groups: undefined }, {
     type: "drag-candidate",
     pointerId: 7,
@@ -110,9 +105,33 @@ test("node body pointer prepares a stable drag candidate with active node promot
     startClientY: 140,
     origins: harness.getAction().origins,
     groups: undefined,
+    revealMediaToolbar: false,
+    revealGeneratorPanel: false,
   });
   assert.deepEqual(Array.from(harness.getAction().origins, (origin) => ({ ...origin })), [
     { id: "a", x: 10, y: 20 },
     { id: "b", x: 80, y: 90 },
   ]);
+});
+
+test("a single media-frame click defers chrome until pointer release", () => {
+  const harness = createHarness({ selectedNodeIds: ["a"] });
+  const target = { closest: (selector) => selector === ".media-frame" ? {} : null };
+  harness.controller.handlePointerDown(pointerEvent({ target }), "a");
+  assert.equal(harness.getAction().revealMediaToolbar, true);
+  assert.equal(harness.getAction().revealGeneratorPanel, true);
+  assert.equal(harness.nodes[0].expanded, false);
+  assert.doesNotMatch(harness.calls.join("|"), /toolbar|expand/);
+});
+
+test("shift-removing a node from multi-selection does not drag the remaining nodes", () => {
+  const harness = createHarness();
+  const target = { closest: (selector) => selector === ".media-frame" ? {} : null };
+  assert.equal(
+    harness.controller.handlePointerDown(pointerEvent({ target, shiftKey: true }), "a"),
+    "deselected",
+  );
+  assert.equal(harness.getAction(), null);
+  assert.deepEqual(harness.calls, ["selection", "toolbar:none", "render"]);
+  assert.equal(harness.nodes[0].expanded, false);
 });

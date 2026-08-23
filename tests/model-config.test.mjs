@@ -29,3 +29,10 @@ test("default media toolbar preferences only pin available tools", () => {
     assert.ok(preference.tools.every((tool) => config.mediaToolsByType[type].includes(tool)));
   }
 });
+
+test("prompt panels target a stable desktop reading width with bounded compensation", () => {
+  assert.equal(config.layoutRules.promptTargetScreenWidth, 800);
+  assert.equal(config.layoutRules.promptScreenMargin, 80);
+  assert.equal(config.layoutRules.promptScaleMin, 0.5);
+  assert.equal(config.layoutRules.promptScaleMax, 4);
+});

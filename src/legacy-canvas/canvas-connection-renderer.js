@@ -11,6 +11,7 @@
 
   function createConnectionRenderer(options) {
     const paths = options?.paths;
+    const batchPreviewPaths = options?.batchPreviewPaths;
     const preview = options?.preview;
     const previewEndpoint = options?.previewEndpoint;
     const onSelect = typeof options?.onSelect === "function" ? options.onSelect : () => {};
@@ -90,6 +91,7 @@
       const existingGroups = new Map(
         Array.from(paths.children, (group) => [group.dataset.connectionId, group]),
       );
+      const renderedGroups = [];
 
       input.connections.forEach((connection) => {
         const points = input.resolvePoints(connection);
@@ -114,6 +116,10 @@
           "is-muted",
           input.hasFocusedContext && !isActive && !isRelated,
         );
+        renderedGroups.push({
+          group,
+          rank: isActive ? 3 : isRelated ? 2 : input.hasFocusedContext ? 0 : 1,
+        });
         group.querySelectorAll(".connection-underlay, .connection-path, .connection-hit-path")
           .forEach((element) => element.setAttribute("d", pathData));
         positionCutControl(group, {
@@ -123,9 +129,45 @@
       });
 
       existingGroups.forEach((group) => group.remove());
+      renderedGroups
+        .sort((a, b) => a.rank - b.rank)
+        .forEach(({ group }) => paths.appendChild(group));
     }
 
     function renderPreview(action, getPath) {
+      if (action?.type === "connect" && action.mode === "selection-output") {
+        preview.classList.add("hidden");
+        preview.classList.remove("is-near-target", "is-snapped");
+        preview.removeAttribute("d");
+        previewEndpoint?.classList.add("hidden");
+        previewEndpoint?.classList.remove("is-near-target", "is-snapped");
+        previewEndpoint?.removeAttribute("cx");
+        previewEndpoint?.removeAttribute("cy");
+        if (!batchPreviewPaths) return;
+        const existing = new Map(Array.from(
+          batchPreviewPaths.children,
+          (path) => [path.dataset.sourceNodeId, path],
+        ));
+        (action.origins || []).forEach((origin) => {
+          let path = existing.get(origin.nodeId);
+          if (path) {
+            existing.delete(origin.nodeId);
+          } else {
+            path = createSvgElement("path", "connection-preview");
+            path.classList.add("selection-connection-preview");
+            batchPreviewPaths.appendChild(path);
+          }
+          path.dataset.sourceNodeId = origin.nodeId;
+          path.setAttribute("d", getPath(origin.start, action.current));
+          path.classList.toggle("is-near-target", Boolean(action.nearPortId));
+          path.classList.toggle("is-snapped", Boolean(action.targetPortId));
+          path.classList.toggle("is-pending-create", Boolean(action.pendingCreate));
+        });
+        existing.forEach((path) => path.remove());
+        return;
+      }
+
+      batchPreviewPaths?.replaceChildren();
       if (action?.type === "connect") {
         preview.setAttribute(
           "d",
@@ -134,17 +176,22 @@
             : getPath(action.start, action.current),
         );
         preview.classList.remove("hidden");
+        preview.classList.toggle("is-near-target", Boolean(action.nearPortId));
+        preview.classList.toggle("is-snapped", Boolean(action.targetPortId));
+        preview.classList.toggle("is-pending-create", Boolean(action.pendingCreate));
         previewEndpoint?.setAttribute("cx", action.current.x);
         previewEndpoint?.setAttribute("cy", action.current.y);
-        previewEndpoint?.classList.remove("hidden");
+        previewEndpoint?.classList.toggle("hidden", Boolean(action.pendingCreate));
+        previewEndpoint?.classList.toggle("is-near-target", Boolean(action.nearPortId));
         previewEndpoint?.classList.toggle("is-snapped", Boolean(action.targetPortId));
         return;
       }
 
       preview.classList.add("hidden");
+      preview.classList.remove("is-near-target", "is-snapped", "is-pending-create");
       preview.removeAttribute("d");
       previewEndpoint?.classList.add("hidden");
-      previewEndpoint?.classList.remove("is-snapped");
+      previewEndpoint?.classList.remove("is-near-target", "is-snapped");
       previewEndpoint?.removeAttribute("cx");
       previewEndpoint?.removeAttribute("cy");
     }

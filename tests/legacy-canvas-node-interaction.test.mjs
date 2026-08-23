@@ -48,6 +48,7 @@ test("drag calculations preserve node offsets at the current canvas scale", () =
 test("drag promotion uses a stable four pixel threshold", () => {
   const action = { startClientX: 10, startClientY: 10 };
   assert.equal(interaction.hasCrossedDragThreshold(action, { clientX: 12, clientY: 12 }), false);
+  assert.equal(interaction.hasCrossedDragThreshold(action, { clientX: 13.999, clientY: 10 }), false);
   assert.equal(interaction.hasCrossedDragThreshold(action, { clientX: 14, clientY: 10 }), true);
 });
 

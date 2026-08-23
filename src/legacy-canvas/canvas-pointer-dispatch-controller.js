@@ -51,9 +51,23 @@
       if (!action) return false;
 
       if (action.type === "connect") {
-        options.flush(action, pointer, options.moveConnection);
-        options.finishConnection(pointer);
+        const cancelled = pointer?.type === "pointercancel";
+        if (!cancelled) options.flush(action, pointer, options.moveConnection);
+        options.finishConnection(pointer, { cancelled });
         return true;
+      }
+
+      if (action.type === "drag-candidate") {
+        const cancelled = pointer?.type === "pointercancel";
+        if (!cancelled && options.hasCrossedDragThreshold(action, pointer)) {
+          const promotedAction = options.promoteNodeDrag(action, pointer);
+          if (promotedAction?.type === "drag-nodes") {
+            options.finishNodeDrag(promotedAction, { render: false });
+            options.finishNodeClick(promotedAction, pointer, { cancelled: false });
+          }
+        } else {
+          options.finishNodeClick(action, pointer, { cancelled });
+        }
       }
 
       const finalMove = {
@@ -66,7 +80,11 @@
       if (finalMove) options.flush(action, pointer, finalMove);
 
       if (action.type === "marquee") options.finishMarquee(action);
-      else if (action.type === "drag-nodes") options.finishNodeDrag(action);
+      else if (action.type === "drag-nodes") {
+        const cancelled = pointer?.type === "pointercancel";
+        options.finishNodeDrag(action, { render: cancelled });
+        options.finishNodeClick(action, pointer, { cancelled });
+      }
       else if (action.type === "drag-group" || action.type === "resize-group") options.finishGroup(action);
       else if (action.type === "resize-asset-library") options.finishAssetLibraryResize();
 
