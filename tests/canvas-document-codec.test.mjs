@@ -26,6 +26,9 @@ test("the canvas document codec persists only explicit content fields and restor
       quality: "high",
       duration: "4s",
       count: 2,
+      workflow: "reference-image",
+      audioEnabled: false,
+      promptOptimization: true,
       credits: 999,
     },
     canvases: [
@@ -53,6 +56,9 @@ test("the canvas document codec persists only explicit content fields and restor
             quality: "high",
             duration: "4s",
             count: 2,
+            workflow: "reference-image",
+            audioEnabled: false,
+            promptOptimization: true,
             prompt: "一艘穿越星云的飞船",
             preview: true,
             name: "星云飞船",
@@ -100,6 +106,7 @@ test("the canvas document codec persists only explicit content fields and restor
             promptInputHeight: 999,
             mediaMenuOpen: true,
             panel: "model",
+            panelAnchor: "model-panel",
             modelFilter: "video",
             unknownNodeField: "must-not-persist",
           },
@@ -173,8 +180,9 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(sortedKeys(canvas), ["connections", "groups", "id", "name", "nodes", "viewport", "zCounter"]);
   assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
   assert.deepEqual(sortedKeys(generator), [
-    "activeAssetId", "aspect", "assets", "count", "duration", "generatedAsset", "groupId", "id", "kind",
-    "lockedMode", "mode", "model", "name", "preview", "prompt", "quality", "resolution", "x", "y", "z",
+    "activeAssetId", "aspect", "assets", "audioEnabled", "count", "duration", "generatedAsset", "groupId", "id", "kind",
+    "lockedMode", "mode", "model", "name", "preview", "prompt", "promptOptimization", "quality", "resolution",
+    "workflow", "x", "y", "z",
   ]);
   assert.deepEqual(sortedKeys(assetNode), ["activeAssetId", "assets", "id", "kind", "mode", "x", "y", "z"]);
   assert.deepEqual(sortedKeys(generatedAsset), [
@@ -191,14 +199,15 @@ test("the canvas document codec persists only explicit content fields and restor
   }]);
   assert.deepEqual(sortedKeys(group), ["height", "id", "name", "nodeIds", "width", "x", "y", "z"]);
   assert.deepEqual(sortedKeys(snapshot.lastPreset), [
-    "aspect", "count", "duration", "mode", "model", "quality", "resolution",
+    "aspect", "audioEnabled", "count", "duration", "mode", "model", "promptOptimization", "quality",
+    "resolution", "workflow",
   ]);
   assert.equal(referenceAsset.url, "");
   assert.deepEqual(plain(group.nodeIds), ["generator-1"]);
 
   for (const forbiddenKey of [
     "credits", "generating", "generationTaskId", "promptLarge", "promptInputHeight", "mediaMenuOpen",
-    "panel", "modelFilter", "layoutMenuOpen", "unknownRootField", "unknownCanvasField", "unknownNodeField",
+    "panel", "panelAnchor", "modelFilter", "layoutMenuOpen", "unknownRootField", "unknownCanvasField", "unknownNodeField",
     "unknownAssetField", "unknownConnectionField", "unknownGroupField", "undoStack", "mediaType",
   ]) {
     assert.equal(JSON.stringify(snapshot).includes(`\"${forbiddenKey}\"`), false, forbiddenKey);
@@ -220,6 +229,9 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(plain(restoredCanvas.undoStack), []);
   assert.equal(restoredGenerator.prompt, "一艘穿越星云的飞船");
   assert.equal(restoredGenerator.model, "gpt-image-2");
+  assert.equal(restoredGenerator.workflow, "reference-image");
+  assert.equal(restoredGenerator.audioEnabled, false);
+  assert.equal(restoredGenerator.promptOptimization, true);
   assert.equal(restoredGenerator.generatedAsset.id, "result-1");
   assert.equal(restoredGenerator.generating, false);
   assert.equal(restoredGenerator.credits, 0);
@@ -228,6 +240,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(restoredGenerator.promptInputHeight, 144);
   assert.equal(restoredGenerator.mediaMenuOpen, false);
   assert.equal(restoredGenerator.panel, null);
+  assert.equal(Object.hasOwn(restoredGenerator, "panelAnchor"), false);
   assert.equal(restoredGenerator.modelFilter, "image");
   assert.equal(Object.hasOwn(restoredGenerator, "generationTaskId"), false);
   assert.equal(restoredAssetNode.expanded, false);
@@ -240,6 +253,9 @@ test("the canvas document codec persists only explicit content fields and restor
     createdAt: "2026-08-11T08:00:00.000Z",
   }]);
   assert.deepEqual(plain(restoredCanvas.groups[0].nodeIds), ["generator-1"]);
+  assert.equal(restored.lastPreset.workflow, "reference-image");
+  assert.equal(restored.lastPreset.audioEnabled, false);
+  assert.equal(restored.lastPreset.promptOptimization, true);
 });
 
 test("the codec rejects unknown versions and normalizes hostile or invalid content", () => {

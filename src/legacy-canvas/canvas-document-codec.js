@@ -108,6 +108,9 @@
     node.quality = boundedString(candidate.quality, "", 40);
     node.duration = boundedString(candidate.duration, "", 40);
     node.count = finiteInteger(candidate.count, 1, 1, 100);
+    node.workflow = boundedString(candidate.workflow, "", 80);
+    node.audioEnabled = candidate.audioEnabled === true;
+    node.promptOptimization = candidate.promptOptimization === true;
     node.prompt = boundedString(candidate.prompt, "", 20_000);
     node.preview = candidate.preview === true;
     node.name = boundedString(candidate.name, "", 300);
@@ -230,6 +233,9 @@
       quality: boundedString(preset.quality, "", 40),
       duration: boundedString(preset.duration, "", 40),
       count: finiteInteger(preset.count, 1, 1, 100),
+      workflow: boundedString(preset.workflow, "", 80),
+      audioEnabled: preset.audioEnabled === true,
+      promptOptimization: preset.promptOptimization === true,
     };
   }
 

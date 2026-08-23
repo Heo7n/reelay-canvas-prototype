@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, spatialSelection, nodeInteraction, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, codec, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, codec, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -12,6 +12,8 @@ const [html, catalog, config, connections, connectionInteraction, connectionRend
   readFile(new URL("src/legacy-canvas/canvas-connection-interaction.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-connection-renderer.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-layer-reconciler.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-generator-model-policy.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-popover-placement.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-spatial-selection.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-interaction.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
@@ -56,6 +58,8 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   window.eval(connectionInteraction);
   window.eval(connectionRenderer);
   window.eval(layerReconciler);
+  window.eval(generatorModelPolicy);
+  window.eval(popoverPlacement);
   window.eval(spatialSelection);
   window.eval(nodeInteraction);
   window.eval(nodePointerController);

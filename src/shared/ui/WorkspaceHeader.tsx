@@ -5,7 +5,6 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
-  CircleDollarSign,
   CircleHelp,
   Keyboard,
   LogOut,
@@ -25,6 +24,7 @@ import {
 } from "../../features/account/AccountSettingsDialog";
 import { useTheme } from "../theme/theme";
 import { Brand } from "./Brand";
+import { CreditIcon } from "./CreditIcon";
 import styles from "./WorkspaceHeader.module.css";
 
 const manualUrl = "https://reelay.tech.jetsentv.com/manual";
@@ -266,7 +266,7 @@ export function WorkspaceHeader({
                       setAccountSettingsOpen(true);
                     }}
                   >
-                    <CircleDollarSign aria-hidden="true" />
+                    <CreditIcon className={styles.creditSemanticIcon} />
                     <span className={styles.overviewLabel}>我的积分</span>
                     <strong className={styles.creditValue}>3,000</strong>
                     <ChevronRight aria-hidden="true" />

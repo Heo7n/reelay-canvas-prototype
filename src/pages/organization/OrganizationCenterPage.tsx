@@ -1,4 +1,4 @@
-import { BarChart3, Building2, ChevronLeft, CircleDollarSign, Info } from "lucide-react";
+import { BarChart3, Building2, ChevronLeft, Info } from "lucide-react";
 import { NavLink, Outlet, useLoaderData, useLocation, useNavigate } from "react-router-dom";
 
 import type { OrganizationMembersRouteData, OrganizationRouteData } from "../../app/route-data";
@@ -6,6 +6,7 @@ import { routePaths } from "../../app/routes";
 import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
+import { CreditIcon } from "../../shared/ui/CreditIcon";
 import styles from "./OrganizationCenterPage.module.css";
 
 export interface OrganizationCenterOutletContext {
@@ -50,7 +51,7 @@ export function OrganizationCenterPage() {
     {
       id: "credits",
       label: "积分管理",
-      icon: CircleDollarSign,
+      icon: CreditIcon,
       to: routePaths.organizationCredits(workspaceId),
       end: false,
     },

@@ -78,6 +78,20 @@
     audio: { tools: ["enhance", "trim", "denoise", "add-library"], showLabels: true },
   };
 
+  const generationWorkflows = {
+    image: [
+      { id: "text-to-image", label: "文生图片", icon: "type" },
+      { id: "reference-image", label: "参考生成", icon: "scan-search" },
+      { id: "image-edit", label: "图片编辑", icon: "image" },
+    ],
+    video: [
+      { id: "text-to-video", label: "文生视频", icon: "square-play" },
+      { id: "omni-reference", label: "全能参考", icon: "folder-plus" },
+      { id: "first-last-frame", label: "首尾帧", icon: "panels-top-left" },
+      { id: "image-to-video", label: "图生视频", icon: "image" },
+    ],
+  };
+
   const agentConversations = [
     {
       id: "new",
@@ -167,6 +181,7 @@
     mediaToolDefinitions,
     mediaToolsByType,
     defaultMediaToolPreferences,
+    generationWorkflows,
     agentConversations,
     layoutRules,
     canvasScaleLimits,

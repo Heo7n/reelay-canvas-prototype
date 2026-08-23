@@ -14,30 +14,36 @@ test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
     appSource,
     /account:\s*\{\s*credits:\s*3000,\s*consumedCredits:\s*0,?\s*\}/,
   );
-  assert.match(html, /id="avatarCreditBadge"[^>]*>[\s\S]*?data-lucide="sparkles"[\s\S]*?id="avatarCreditValue">3000<\/span>/);
+  assert.match(html, /id="avatarCreditBadge"[^>]*>[\s\S]*?<img[^>]*src="\.\/assets\/icons\/credit-spark\.svg"[^>]*>[\s\S]*?id="avatarCreditValue">3000<\/span>/);
   assert.doesNotMatch(html, /id="avatarCreditBadge"[^>]*(?:role="button"|tabindex=)/);
   assert.doesNotMatch(appSource, /avatarCreditBadge\?\.addEventListener/);
 });
 
-test("a successful result locks its generator node to one media modality", () => {
+test("generator nodes keep their creation modality and only expose compatible models", () => {
+  assert.match(appSource, /const generationMode = mode === "video" \? "video" : "image"/);
+  assert.match(appSource, /mode:\s*generationMode,[\s\S]*?model:\s*firstModelId\(generationMode\)/);
   assert.match(appSource, /lockedMode:\s*null/);
   assert.match(appSource, /function getNodeLockedMode\(node\)/);
   assert.match(appSource, /normalizeGeneratorMode\(node\.generatedAsset\?\.type\)/);
+  assert.match(appSource, /function getNodeGenerationMode\(node\)[\s\S]*?generatorModelPolicy\.getNodeModeContract\(node\)/);
+  assert.match(appSource, /function getCompatibleModelsForNode\(node\)[\s\S]*?generatorModelPolicy\.getCompatibleModels\(models, node\)/);
   assert.match(appSource, /node\.lockedMode = outputMode/);
   assert.match(appSource, /if \(!canUseModelForNode\(node, selected\)\)/);
-  assert.match(appSource, /const visibleTypes = lockedMode[\s\S]*types\.filter/);
-  assert.match(appSource, /disabled aria-disabled="true" title=/);
-  assert.match(appSource, /已生成\$\{lockedMode === "image" \? "图片" : "视频"\}，此节点仅可继续使用/);
-  assert.doesNotMatch(appSource, /如需切换类型，请新建节点/);
-  assert.match(appSource, /class="chip-icon"><i data-lucide="box"/);
-  assert.match(appSource, /class="model-icon">\$\{item\.icon\}/);
+  assert.doesNotMatch(appSource, /node\.mode\s*=\s*selected\.type/);
+  const modelPanelStart = appSource.indexOf("function modelPanel(node)");
+  const modelPanelEnd = appSource.indexOf("function bindModelPanelEvents", modelPanelStart);
+  assert.ok(modelPanelStart >= 0 && modelPanelEnd > modelPanelStart);
+  const modelPanelSource = appSource.slice(modelPanelStart, modelPanelEnd);
+  assert.match(modelPanelSource, /getCompatibleModelsForNode\(node\)/);
+  assert.match(modelPanelSource, /仅显示同类型模型/);
+  assert.doesNotMatch(modelPanelSource, /mode-tabs|mode-tab|data-model-filter/);
+  assert.match(appSource, /class="model-icon">\$\{escapeHtml\(item\.icon\)\}/);
   assert.match(appSource, /class="agent-model-provider">\$\{escapeHtml\(model\.icon\)\}/);
   assert.match(appSource, /"box":\s*'<path/);
   assert.match(html, /id="agentModelBtn"[\s\S]*?data-lucide="box"/);
   assert.match(appSource, /commitGenerationUndoBoundary\(canvas, node\.id\)/);
   assert.match(appSource, /action\.type === "node-update" && action\.node\?\.id === nodeId/);
-  assert.match(appCss, /\.mode-tab:disabled/);
-  assert.match(appCss, /\.model-mode-lock/);
+  assert.match(appCss, /\.model-mode-contract/);
 });
 
 test("the routed legacy canvas delegates persistence to the versioned document codec", () => {
@@ -54,13 +60,20 @@ test("background generation completion marks the project document for persistenc
   const functionEnd = appSource.indexOf("function syncGenerateButton", functionStart);
   assert.ok(functionStart >= 0 && functionEnd > functionStart);
   const functionSource = appSource.slice(functionStart, functionEnd);
-  const node = { id: "node-1", kind: "generator", generationTaskId: "task-1", name: "" };
+  const node = {
+    id: "node-1",
+    kind: "generator",
+    mode: "image",
+    model: "image-model",
+    generationTaskId: "task-1",
+    name: "",
+  };
   const canvas = { id: "background-canvas", nodes: [node] };
   const task = {
     id: "task-1",
     canvasId: canvas.id,
     nodeId: node.id,
-    parameterSnapshot: { mode: "image" },
+    parameterSnapshot: { mode: "image", model: "image-model" },
   };
   const state = {
     activeCanvasId: "active-canvas",
@@ -73,6 +86,8 @@ test("background generation completion marks the project document for persistenc
     "getGenerationTaskTarget",
     "normalizeGeneratorMode",
     "getNodeLockedMode",
+    "models",
+    "getNodeGenerationMode",
     "showActionToast",
     "createGeneratedAsset",
     "defaultGeneratedName",
@@ -85,6 +100,8 @@ test("background generation completion marks the project document for persistenc
     () => ({ canvas, node }),
     (mode) => mode,
     () => null,
+    [{ id: "image-model", type: "image" }],
+    (targetNode) => targetNode.mode,
     () => undefined,
     () => ({ type: "image", displayName: "result" }),
     () => "result",
@@ -137,11 +154,13 @@ test("model data, config and document codec load before the application", () => 
   const catalogIndex = html.indexOf("./data/model-catalog.js");
   const configIndex = html.indexOf("./src/config/prototype-config.js");
   const codecIndex = html.indexOf("./src/legacy-canvas/canvas-document-codec.js");
+  const modelPolicyIndex = html.indexOf("./src/legacy-canvas/canvas-generator-model-policy.js");
   const appIndex = html.indexOf("./app.js");
   assert.ok(
     catalogIndex >= 0 &&
     catalogIndex < configIndex &&
-    configIndex < codecIndex &&
+    configIndex < modelPolicyIndex &&
+    modelPolicyIndex < codecIndex &&
     codecIndex < appIndex,
   );
 });
@@ -220,7 +239,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /app\.js\?v=20260824-node-target-edge-scan-5/);
+  assert.match(html, /app\.js\?v=20260824-node-controls-3/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -319,7 +338,6 @@ test("node typography follows a shared title, body, control, label, and caption 
   assert.match(appCss, /\.prompt-input\s*\{[\s\S]*?font-size:\s*var\(--node-font-body\)[\s\S]*?line-height:\s*var\(--node-leading-body\)/);
   assert.match(appCss, /\.prompt-input::placeholder\s*\{[\s\S]*?font-weight:\s*560/);
   assert.match(appCss, /\.control-chip\s*\{[\s\S]*?font-size:\s*var\(--node-font-control\)/);
-  assert.match(appCss, /\.mode-tab\s*\{[\s\S]*?font-size:\s*var\(--node-font-control\)/);
 });
 
 test("multi-selection uses distinct corner chrome and one aggregate output port", async () => {

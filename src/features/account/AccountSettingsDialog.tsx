@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CircleDollarSign, UserRound, X } from "lucide-react";
+import { UserRound, X } from "lucide-react";
 
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
+import { CreditIcon } from "../../shared/ui/CreditIcon";
 import { AccountProfileSection } from "./AccountProfileSection";
 import { PersonalUsageSection } from "./PersonalUsageSection";
 import styles from "./AccountSettingsDialog.module.css";
@@ -20,7 +21,7 @@ interface AccountSettingsDialogProps {
 
 const sectionItems = [
   { id: "profile", label: "个人主页", icon: UserRound },
-  { id: "credits", label: "我的积分", icon: CircleDollarSign },
+  { id: "credits", label: "我的积分", icon: CreditIcon },
 ] as const;
 
 export function AccountSettingsDialog({

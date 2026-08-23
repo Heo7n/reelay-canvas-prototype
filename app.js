@@ -126,12 +126,17 @@ const {
   mediaToolDefinitions = {},
   mediaToolsByType = { image: [], video: [], audio: [] },
   defaultMediaToolPreferences = { image: { tools: [], showLabels: true }, video: { tools: [], showLabels: true }, audio: { tools: [], showLabels: true } },
+  generationWorkflows = { image: [], video: [] },
   agentConversations: seedAgentConversations = [{ id: "new", title: "新对话", messages: [] }],
   layoutRules = {},
   canvasScaleLimits = { min: 0.2, max: 2 },
   groupFrameRules = {},
   assetCategoryFilters = [["material", "素材"]],
 } = prototypeConfig;
+const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
+if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
+const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
+if (!canvasPopoverPlacement) throw new Error("Canvas popover placement helper is unavailable.");
 const assetCategoryLabels = Object.fromEntries(assetCategoryFilters);
 const agentConversations = structuredClone(seedAgentConversations);
 
@@ -199,6 +204,9 @@ const state = {
     quality: "480p",
     duration: "4s",
     count: 1,
+    workflow: "reference-image",
+    audioEnabled: false,
+    promptOptimization: false,
   },
   action: null,
   pendingUploadNodeId: null,
@@ -246,6 +254,7 @@ const state = {
   themeMode: loadThemeMode(),
   canvasPanel: null,
   overlaySyncTimer: null,
+  nodePopoverFrame: 0,
   groupChromeFrame: 0,
 };
 
@@ -424,10 +433,11 @@ function setAssetLibraryWidth(width) {
   appShell?.style.setProperty("--asset-panel-width", `${Math.round(state.assetLibraryWidth)}px`);
   renderSelectionToolbar();
   renderMinimap();
+  scheduleNodePopoverLayouts();
 }
 
 function firstModelId(type) {
-  return models.find((item) => item.type === type)?.id || models[0].id;
+  return models.find((item) => item.type === type)?.id || "";
 }
 
 function normalizeGeneratorMode(mode) {
@@ -441,8 +451,15 @@ function getNodeLockedMode(node) {
 }
 
 function canUseModelForNode(node, model) {
-  const lockedMode = getNodeLockedMode(node);
-  return Boolean(model) && (!lockedMode || model.type === lockedMode);
+  return generatorModelPolicy.canUseModel(models, node, model);
+}
+
+function getNodeGenerationMode(node) {
+  return generatorModelPolicy.getNodeModeContract(node);
+}
+
+function getCompatibleModelsForNode(node) {
+  return generatorModelPolicy.getCompatibleModels(models, node);
 }
 
 function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
@@ -559,6 +576,9 @@ function hydrateCanvasDocumentSnapshot(content) {
     quality: restored.lastPreset.quality || state.lastPreset.quality,
     duration: restored.lastPreset.duration || state.lastPreset.duration,
     count: clamp(restored.lastPreset.count, 1, 4),
+    workflow: restored.lastPreset.workflow || state.lastPreset.workflow,
+    audioEnabled: restored.lastPreset.audioEnabled === true,
+    promptOptimization: restored.lastPreset.promptOptimization === true,
   };
   state.libraryAssets = [];
   state.libraryView = "canvas";
@@ -844,6 +864,74 @@ function syncPromptPanelLayouts() {
   for (const node of state.nodes) {
     syncNodeVisualLayout(node);
   }
+  scheduleNodePopoverLayouts();
+}
+
+function getNodePopoverBoundary() {
+  const shellRect = shell.getBoundingClientRect();
+  const topRect = topBar?.getBoundingClientRect();
+  const libraryRect = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
+    ? assetLibraryPanel.getBoundingClientRect()
+    : null;
+  return {
+    left: Math.max(shellRect.left, libraryRect?.right || shellRect.left),
+    top: Math.max(shellRect.top, topRect?.bottom || shellRect.top),
+    right: shellRect.right - (state.agentOpen ? state.agentWidth : 0),
+    bottom: shellRect.bottom,
+  };
+}
+
+function getNodePopoverPlacements(anchorAction) {
+  if (anchorAction === "material-panel") {
+    return ["left-start", "right-start", "top-start", "bottom-start"];
+  }
+  if (anchorAction === "model-panel") {
+    return ["top-start", "bottom-start", "top", "bottom", "right-start", "left-start"];
+  }
+  if (anchorAction === "workflow-panel") {
+    return ["top-start", "bottom-start", "top", "bottom"];
+  }
+  if (anchorAction === "settings-panel") {
+    return ["top-end", "bottom-end", "top", "bottom"];
+  }
+  return ["top", "bottom", "top-start", "top-end", "bottom-start", "bottom-end"];
+}
+
+function syncNodePopoverLayout(element) {
+  const promptPanel = element?.querySelector(".prompt-panel");
+  const popover = promptPanel?.querySelector("[data-node-popover]");
+  if (!promptPanel || !popover) return;
+  const anchorAction = popover.dataset.anchorAction;
+  const anchor = promptPanel.querySelector(`[data-action="${anchorAction}"]`)
+    || promptPanel.querySelector(".control-bar");
+  if (!anchor) return;
+  const boundary = getNodePopoverBoundary();
+  const promptRect = promptPanel.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  const anchorRect = anchor.getBoundingClientRect();
+  const compositeScale = promptPanel.offsetWidth > 0 ? promptRect.width / promptPanel.offsetWidth : 1;
+  if (!popoverRect.width || !popoverRect.height || !compositeScale) return;
+  const placement = canvasPopoverPlacement.placeAnchoredPopover({
+    anchor: anchorRect,
+    floating: { width: popoverRect.width, height: popoverRect.height },
+    boundary,
+    placements: getNodePopoverPlacements(anchorAction),
+    gap: 10,
+    padding: 12,
+  });
+  if (!placement) return;
+  popover.style.left = `${((placement.left - promptRect.left) / compositeScale).toFixed(2)}px`;
+  popover.style.top = `${((placement.top - promptRect.top) / compositeScale).toFixed(2)}px`;
+  popover.style.visibility = "visible";
+  popover.dataset.placement = placement.placement;
+}
+
+function scheduleNodePopoverLayouts() {
+  cancelAnimationFrame(state.nodePopoverFrame);
+  state.nodePopoverFrame = requestAnimationFrame(() => {
+    state.nodePopoverFrame = 0;
+    nodeLayer.querySelectorAll(".canvas-node").forEach(syncNodePopoverLayout);
+  });
 }
 
 function resizePromptTextarea(textarea, node) {
@@ -1023,6 +1111,9 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     quality: "480p",
     duration: "4s",
     count: 1,
+    workflow: generationMode === "video" ? "omni-reference" : "reference-image",
+    audioEnabled: generationMode === "video",
+    promptOptimization: false,
     credits: 0,
     prompt: "",
     preview: false,
@@ -1060,7 +1151,7 @@ function defaultAssetNode(x, y, asset) {
 }
 
 function getModel(node) {
-  return models.find((item) => item.id === node.model) || models[0];
+  return generatorModelPolicy.resolveModel(models, node);
 }
 
 function getModelCapabilities(node) {
@@ -1075,17 +1166,26 @@ function getCapabilityValues(node, key) {
   return capabilities[key] || [];
 }
 
+function getWorkflowDefinitions(node) {
+  const mode = getNodeGenerationMode(node) || "image";
+  return Array.isArray(generationWorkflows[mode]) ? generationWorkflows[mode] : [];
+}
+
+function getWorkflowDefinition(node) {
+  const workflows = getWorkflowDefinitions(node);
+  return workflows.find((workflow) => workflow.id === node.workflow) || workflows[0] || null;
+}
+
 function normalizeNodeParameters(node) {
   if (!node || node.kind !== "generator") return node;
-  const lockedMode = getNodeLockedMode(node);
-  const expectedMode = lockedMode || normalizeGeneratorMode(node.mode) || "image";
-  if (lockedMode) node.lockedMode = lockedMode;
-  let model = models.find((item) => item.id === node.model);
-  if (!model || model.type !== expectedMode) {
-    node.model = firstModelId(expectedMode);
-    model = getModel(node);
+  const model = generatorModelPolicy.normalizeModelState(models, node);
+  const expectedMode = getNodeGenerationMode(node) || "image";
+  const workflows = getWorkflowDefinitions(node);
+  if (!workflows.some((workflow) => workflow.id === node.workflow)) {
+    node.workflow = workflows[0]?.id || "";
   }
-  node.mode = lockedMode || model.type;
+  node.audioEnabled = expectedMode === "video" && node.audioEnabled !== false;
+  node.promptOptimization = node.promptOptimization === true;
 
   const fieldMap = {
     aspect: "aspects",
@@ -1100,7 +1200,7 @@ function normalizeNodeParameters(node) {
       continue;
     }
     if (!values.includes(node[field])) {
-      const defaultValue = model.defaults?.[field];
+      const defaultValue = model?.defaults?.[field];
       node[field] = values.includes(defaultValue) ? defaultValue : values[0];
     }
   }
@@ -1158,7 +1258,7 @@ function getGenerationAvailability(node) {
 }
 
 function getParamLabel(node) {
-  if (node.mode === "video") {
+  if (getNodeGenerationMode(node) === "video") {
     return `${node.aspect} · ${node.quality} · ${node.duration}`;
   }
   const quality = getCapabilityValues(node, "qualities").length ? ` · ${node.quality}` : "";
@@ -1552,6 +1652,9 @@ function presetFrom(node) {
     quality: node.quality,
     duration: node.duration,
     count: node.count,
+    workflow: node.workflow,
+    audioEnabled: node.audioEnabled,
+    promptOptimization: node.promptOptimization,
   };
 }
 
@@ -1568,6 +1671,9 @@ function applyPreset(node, preset) {
   node.quality = preset.quality;
   node.duration = preset.duration;
   node.count = preset.count;
+  node.workflow = preset.workflow;
+  node.audioEnabled = preset.audioEnabled;
+  node.promptOptimization = preset.promptOptimization;
   normalizeNodeParameters(node);
   node.modelFilter = node.mode;
 }
@@ -1713,6 +1819,7 @@ const fallbackIconPaths = {
   "mouse-pointer-2": '<path d="M4 4l7.1 17 2.5-7.4L21 11z"/>',
   "panel-left-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 9-3 3 3 3"/>',
   "panel-right-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="m8 9 3 3-3 3"/>',
+  "panels-top-left": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 9v12"/>',
   "paperclip": '<path d="m21 8.5-9.5 9.5a5 5 0 0 1-7.1-7.1l10-10a3.3 3.3 0 0 1 4.7 4.7L9.5 15a1.7 1.7 0 0 1-2.4-2.4L16 3.8"/>',
   "pause": '<path d="M8 5v14"/><path d="M16 5v14"/>',
   "pin": '<path d="M12 17v5"/><path d="M6 17h12"/><path d="m8 3 8 8"/><path d="M9 3h6l-1 5 4 4-3 3-4-4-5 1z"/>',
@@ -1723,6 +1830,7 @@ const fallbackIconPaths = {
   "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
   "rotate-cw": '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
   "scan": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/>',
+  "scan-search": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="11" cy="11" r="3"/><path d="m14 14 3 3"/>',
   "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 8.6 19 19"/><path d="M8.6 15.4 19 5"/>',
   "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   "send-horizontal": '<path d="M3 12 21 4l-5 16-4-7z"/><path d="M12 13 21 4"/>',
@@ -1731,14 +1839,19 @@ const fallbackIconPaths = {
   "share-2": '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4"/><path d="m8.6 13.5 6.8 4"/>',
   "sliders-horizontal": '<path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/>',
   "sparkles": '<path d="m12 3 1.7 5.1L19 10l-5.3 1.9L12 17l-1.7-5.1L5 10l5.3-1.9z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/>',
+  "notepad-text-dashed": '<path d="M5 3h14v18H5z"/><path d="M9 3v3"/><path d="M15 3v3"/><path d="M8 10h8"/><path d="M8 14h5"/>',
   "square-plus": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/>',
   "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
+  "timer": '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/>',
+  "type": '<path d="M4 5h16"/><path d="M10 5v14"/><path d="M14 5v14"/><path d="M8 19h8"/>',
   "trash-2": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
   "ungroup": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 4h3a3 3 0 0 1 3 3v3"/><path d="M10 20H7a3 3 0 0 1-3-3v-3"/>',
   "upload": '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14a2 2 0 0 0 2-2v-3"/><path d="M3 15v3a2 2 0 0 0 2 2"/>',
   "user-round": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   "users-round": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
   "video": '<path d="M15 10.5 21 7v10l-6-3.5z"/><rect x="3" y="6" width="12" height="12" rx="2"/>',
+  "volume-2": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 9a4 4 0 0 1 0 6"/><path d="M18 6a8 8 0 0 1 0 12"/>',
+  "volume-x": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m17 10 4 4"/><path d="m21 10-4 4"/>',
   "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
 
@@ -2851,6 +2964,7 @@ function openAssetLibrary(targetNodeId = null) {
   railLibraryBtn?.setAttribute("aria-expanded", "true");
   closeProfileMenu();
   renderAssetLibrary();
+  scheduleNodePopoverLayouts();
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
 }
 
@@ -2866,6 +2980,7 @@ function closeAssetLibrary() {
   railLibraryBtn?.classList.remove("active");
   railLibraryBtn?.setAttribute("aria-expanded", "false");
   syncNarrowViewportIsolation();
+  scheduleNodePopoverLayouts();
   if (shouldRestoreFocus) railLibraryBtn?.focus();
 }
 
@@ -2968,7 +3083,7 @@ function audioWaveformBars(repeat = 1) {
 
 function createGenerationParameterSnapshot(node) {
   return {
-    mode: node.mode,
+    mode: getNodeGenerationMode(node),
     model: node.model,
     prompt: node.prompt,
     aspect: node.aspect,
@@ -2976,6 +3091,9 @@ function createGenerationParameterSnapshot(node) {
     quality: node.quality,
     duration: node.duration,
     count: node.count,
+    workflow: node.workflow,
+    audioEnabled: node.audioEnabled,
+    promptOptimization: node.promptOptimization,
     assetIds: (node.assets || []).map((asset) => asset.id),
   };
 }
@@ -3586,6 +3704,7 @@ function createAssetNodeElement(node) {
 
 function createGeneratorNodeElement(node) {
   const model = getModel(node);
+  const workflow = getWorkflowDefinition(node);
   const layout = getNodeLayout(node);
   const selected = state.selectedIds.has(node.id);
   const generationAvailability = getGenerationAvailability(node);
@@ -3601,7 +3720,7 @@ function createGeneratorNodeElement(node) {
   const promptPanel = node.expanded
     ? `
       <section class="prompt-panel ${node.promptLarge ? "large" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px;">
-        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" ${generationInputsDisabled}><span>+</span><span>素材</span></button>
+        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         <button class="expand-corner ${node.promptLarge ? "active" : ""}" data-action="toggle-large" type="button" title="${node.promptLarge ? "收起输入区" : "展开输入区"}">
           <i data-lucide="${node.promptLarge ? "minimize-2" : "maximize-2"}" aria-hidden="true"></i>
         </button>
@@ -3609,19 +3728,32 @@ function createGeneratorNodeElement(node) {
         <textarea class="prompt-input" style="${node.promptLarge ? `height: ${node.promptInputHeight}px;` : ""}" placeholder="描述你想生成的画面，也可以先添加参考素材" ${generationInputsDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
           <button class="control-chip model-chip ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
-            <span class="chip-icon"><i data-lucide="box" aria-hidden="true"></i></span><span>${model.name}</span><span>⌃</span>
+            <span class="model-chip-glyph" aria-hidden="true">${escapeHtml(model?.icon || "—")}</span>
+            <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
           </button>
-          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>${getParamLabel(node)} ⌃</button>
+          <span class="control-divider" aria-hidden="true"></span>
+          <button class="control-chip workflow-chip ${node.panel === "workflow" ? "active" : ""}" data-action="workflow-panel" type="button" ${generationInputsDisabled}>
+            <span class="control-chip-label">${escapeHtml(workflow?.label || "生成方式")}</span>
+          </button>
+          <span class="control-divider" aria-hidden="true"></span>
+          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>
+            <span class="control-chip-label">${escapeHtml(getParamLabel(node))}</span>
+            ${getNodeGenerationMode(node) === "video" ? `<i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
+          </button>
           <div class="control-spacer"></div>
-          <button class="control-chip count-chip" data-action="count" data-canvas-mutation type="button" ${generationInputsDisabled}>${node.count}x</button>
+          <button class="control-chip settings-chip ${node.panel === "utilities" ? "active" : ""}" data-action="settings-panel" type="button" title="更多生成设置" aria-label="更多生成设置" ${generationInputsDisabled}>
+            <i data-lucide="layers-3" aria-hidden="true"></i>
+          </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
-            <span class="credit-mark">▰ ${node.credits}</span>
+            <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-spark.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
             <span class="send-arrow"><i data-lucide="arrow-up" aria-hidden="true"></i></span>
           </button>
         </div>
         ${node.panel === "material" ? materialPanel() : ""}
         ${node.panel === "model" ? modelPanel(node) : ""}
+        ${node.panel === "workflow" ? workflowPanel(node) : ""}
         ${node.panel === "params" ? paramPanel(node) : ""}
+        ${node.panel === "utilities" ? settingsPanel(node) : ""}
       </section>
     `
     : "";
@@ -3659,6 +3791,7 @@ function createGeneratorNodeElement(node) {
     });
   });
   bindModelPanelEvents(el, node);
+  requestAnimationFrame(() => syncNodePopoverLayout(el));
 
   return el;
 }
@@ -4241,7 +4374,14 @@ function completeSimulatedGeneration(taskId) {
   delete node.generationTaskId;
   const outputMode = normalizeGeneratorMode(task.parameterSnapshot.mode);
   const lockedMode = getNodeLockedMode(node);
-  if (!outputMode || (lockedMode && lockedMode !== outputMode)) {
+  const taskModel = models.find((model) => model.id === task.parameterSnapshot.model);
+  const nodeMode = getNodeGenerationMode(node);
+  if (
+    !outputMode
+    || outputMode !== nodeMode
+    || taskModel?.type !== outputMode
+    || (lockedMode && lockedMode !== outputMode)
+  ) {
     if (canvas.id === state.activeCanvasId) {
       showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
       render();
@@ -4331,119 +4471,38 @@ function startSimulatedGeneration(node, options = {}) {
 }
 
 function modelPanel(node) {
-  const types = [
-    { id: "image", label: "图片" },
-    { id: "video", label: "视频" },
-  ];
-  const lockedMode = getNodeLockedMode(node);
-  const visibleTypes = lockedMode
-    ? types.filter((type) => type.id === lockedMode)
-    : types;
-  const requestedType = lockedMode || node.modelFilter || node.mode;
-  const activeType = types.some((type) => type.id === requestedType)
-    ? requestedType
-    : node.mode === "video"
-      ? "video"
-      : "image";
-  const activeIndex = Math.max(0, types.findIndex((type) => type.id === activeType));
-  const sections = visibleTypes
-    .map((type) => {
-      const options = models
-        .filter((item) => item.type === type.id)
-        .map(
-          (item) => `
-            <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" data-canvas-mutation type="button">
-              <span class="model-icon">${item.icon}</span>
-              <span>
-                <span class="model-name">${item.name}</span>
-                <span class="model-desc">${item.desc}</span>
-              </span>
-              <span class="checkmark">${node.model === item.id ? "✓" : ""}</span>
-            </button>
-          `,
-        )
-        .join("");
-      return `
-        <section class="model-section" data-model-section="${type.id}">
-          <div class="model-section-title">${type.label}模型</div>
-          ${options}
-        </section>
-      `;
-    })
+  const mode = getNodeGenerationMode(node) || "image";
+  const options = getCompatibleModelsForNode(node)
+    .map(
+      (item) => `
+        <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" data-canvas-mutation type="button">
+          <span class="model-icon">${escapeHtml(item.icon)}</span>
+          <span>
+            <span class="model-name">${escapeHtml(item.name)}</span>
+            <span class="model-desc">${escapeHtml(item.desc)}</span>
+          </span>
+          <span class="checkmark">${node.model === item.id ? "✓" : ""}</span>
+        </button>
+      `,
+    )
     .join("");
-
   return `
-    <div class="panel-popover model-panel">
+    <div class="panel-popover model-panel" data-node-popover data-anchor-action="model-panel" aria-label="${mode === "video" ? "视频" : "图片"}模型">
       <div class="panel-title">模型</div>
-      <div class="mode-tabs" style="--active-index: ${activeIndex}; --tab-count: ${types.length}">
-        <span class="mode-tab-indicator" aria-hidden="true"></span>
-        ${types
-          .map(
-            (type) => {
-              const disabled = Boolean(lockedMode && type.id !== lockedMode);
-              return `<button class="mode-tab ${activeType === type.id ? "active" : ""}" data-model-jump="${type.id}" type="button" ${disabled ? `disabled aria-disabled="true" title="此节点已锁定为${lockedMode === "image" ? "图片" : "视频"}生成"` : ""}>${type.label}</button>`;
-            },
-          )
-          .join("")}
-      </div>
-      ${lockedMode ? `<p class="model-mode-lock" role="status">已生成${lockedMode === "image" ? "图片" : "视频"}，此节点仅可继续使用${lockedMode === "image" ? "图片" : "视频"}模型</p>` : ""}
-      <div class="model-list">${sections}</div>
+      <p class="model-mode-contract">当前为${mode === "video" ? "视频" : "图片"}节点，仅显示同类型模型</p>
+      <div class="model-list">${options || `<p class="model-list-empty">当前没有可用的${mode === "video" ? "视频" : "图片"}模型</p>`}</div>
     </div>
   `;
 }
 
 function bindModelPanelEvents(element, node) {
-  const panel = element.querySelector(".model-panel");
-  const list = panel?.querySelector(".model-list");
-  const tabs = panel?.querySelector(".mode-tabs");
-  if (!panel || !list || !tabs) return;
-
-  const types = ["image", "video"];
-  const lockedMode = getNodeLockedMode(node);
-  const visibleTypes = lockedMode ? [lockedMode] : types;
-  const setActiveType = (type) => {
-    if (lockedMode && type !== lockedMode) return;
-    const index = Math.max(0, types.indexOf(type));
-    node.modelFilter = types[index];
-    tabs.style.setProperty("--active-index", String(index));
-    tabs.querySelectorAll("[data-model-jump]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.modelJump === node.modelFilter);
-    });
-  };
-
-  const jumpTo = (type, smooth = true) => {
-    const section = list.querySelector(`[data-model-section="${type}"]`);
-    if (!section) return;
-    setActiveType(type);
-    list.scrollTo({
-      top: Math.max(0, section.offsetTop - list.offsetTop - 8),
-      behavior: smooth ? "smooth" : "auto",
-    });
-  };
-
-  tabs.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-model-jump]");
-    if (!button || button.disabled) return;
-    event.stopPropagation();
-    jumpTo(button.dataset.modelJump);
-  });
-
-  list.addEventListener("scroll", () => {
-    const marker = list.scrollTop + Math.min(160, list.clientHeight * 0.48);
-    let visibleType = visibleTypes[0];
-    for (const type of visibleTypes) {
-      const section = list.querySelector(`[data-model-section="${type}"]`);
-      if (section && section.offsetTop - list.offsetTop <= marker) visibleType = type;
-    }
-    if (visibleType !== node.modelFilter) setActiveType(visibleType);
-  });
-
-  requestAnimationFrame(() => jumpTo(lockedMode || node.mode, false));
+  if (!element.querySelector(".model-panel")) return;
+  node.modelFilter = getNodeGenerationMode(node);
 }
 
 function materialPanel() {
   return `
-    <div class="material-panel">
+    <div class="material-panel" data-node-popover data-anchor-action="material-panel">
       <button class="material-option" data-action="material" data-value="local" data-canvas-mutation type="button">
         <span class="material-icon">↑</span><span>从本地上传</span>
       </button>
@@ -4457,24 +4516,62 @@ function materialPanel() {
   `;
 }
 
+function workflowPanel(node) {
+  const options = getWorkflowDefinitions(node).map((workflow) => `
+    <button class="workflow-option ${node.workflow === workflow.id ? "active" : ""}" data-action="workflow" data-value="${workflow.id}" data-canvas-mutation type="button">
+      <i data-lucide="${workflow.icon}" aria-hidden="true"></i><span>${escapeHtml(workflow.label)}</span>
+      ${node.workflow === workflow.id ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
+    </button>
+  `).join("");
+  return `
+    <section class="settings-card workflow-panel" data-node-popover data-anchor-action="workflow-panel" aria-label="生成方式">
+      ${options}
+    </section>
+  `;
+}
+
 function paramPanel(node) {
   normalizeNodeParameters(node);
+  const mode = getNodeGenerationMode(node) || "image";
   const sections = [
     parameterSection(node, "比例", "aspect", getCapabilityValues(node, "aspects")),
-    node.mode === "video"
+    mode === "video"
       ? parameterSection(node, "画质", "quality", getCapabilityValues(node, "qualities"))
       : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
-    node.mode === "image" && getCapabilityValues(node, "qualities").length
+    mode === "image" && getCapabilityValues(node, "qualities").length
       ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
       : "",
-    node.mode === "video"
+    mode === "video"
       ? parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))
       : "",
+    mode === "video" ? `
+      <section class="parameter-group parameter-audio">
+        <div class="param-heading">音频</div>
+        <div class="segmented audio-segmented" style="--option-columns: 2">
+          <button class="${node.audioEnabled ? "active" : ""}" data-action="audio" data-value="on" data-canvas-mutation type="button">开启</button>
+          <button class="${node.audioEnabled ? "" : "active"}" data-action="audio" data-value="off" data-canvas-mutation type="button">关闭</button>
+        </div>
+      </section>
+    ` : "",
   ];
   return `
-    <div class="panel-popover param-panel">
+    <section class="settings-card param-panel" data-node-popover data-anchor-action="param-panel" aria-label="生成参数">
       <div class="param-section">${sections.join("")}</div>
-    </div>
+    </section>
+  `;
+}
+
+function settingsPanel(node) {
+  return `
+    <section class="settings-card settings-utilities" data-node-popover data-anchor-action="settings-panel" aria-label="更多生成设置">
+      <button class="settings-utility-button ${node.promptOptimization ? "active" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" aria-pressed="${node.promptOptimization}">
+        <i data-lucide="notepad-text-dashed" aria-hidden="true"></i><span>提示词优化</span>
+        ${node.promptOptimization ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
+      </button>
+      <button class="settings-utility-button" type="button" disabled aria-disabled="true" title="任务调度接入后开放">
+        <i data-lucide="timer" aria-hidden="true"></i><span>定时任务</span>
+      </button>
+    </section>
   `;
 }
 
@@ -4510,9 +4607,13 @@ const generationLockedActions = new Set([
   "remove-linked-source",
   "focus-asset",
   "model-panel",
+  "workflow-panel",
   "param-panel",
-  "count",
+  "settings-panel",
   "model",
+  "workflow",
+  "audio",
+  "prompt-optimization",
   "aspect",
   "duration",
   "quality",
@@ -4540,8 +4641,10 @@ function handleAction(node, action, value) {
     "material",
     "remove-material",
     "generate",
-    "count",
     "model",
+    "workflow",
+    "audio",
+    "prompt-optimization",
     "aspect",
     "duration",
     "quality",
@@ -4549,7 +4652,16 @@ function handleAction(node, action, value) {
   ]);
   if (persistentActions.has(action) && !requireCanvasMutation()) return;
   if (node.generating && generationLockedActions.has(action)) return;
-  const undoableActions = new Set(["count", "model", "aspect", "duration", "quality", "resolution"]);
+  const undoableActions = new Set([
+    "model",
+    "workflow",
+    "audio",
+    "prompt-optimization",
+    "aspect",
+    "duration",
+    "quality",
+    "resolution",
+  ]);
   const before = undoableActions.has(action) ? cloneNodeState(node) : null;
 
   switch (action) {
@@ -4590,45 +4702,59 @@ function handleAction(node, action, value) {
       break;
     case "model-panel":
       node.expanded = true;
-      node.modelFilter = node.mode;
+      node.modelFilter = getNodeGenerationMode(node);
       node.panel = node.panel === "model" ? null : "model";
+      break;
+    case "workflow-panel":
+      node.expanded = true;
+      node.panel = node.panel === "workflow" ? null : "workflow";
       break;
     case "param-panel":
       node.expanded = true;
       node.panel = node.panel === "params" ? null : "params";
       break;
+    case "settings-panel":
+      node.expanded = true;
+      node.panel = node.panel === "utilities" ? null : "utilities";
+      break;
     case "generate":
       if (!node.prompt.trim() || node.generating) return;
       startSimulatedGeneration(node);
-      break;
-    case "count":
-      {
-        const counts = getCapabilityValues(node, "counts");
-        const currentIndex = counts.indexOf(node.count);
-        node.count = counts[(currentIndex + 1) % counts.length] || 1;
-      }
-      rememberPreset(node);
       break;
     case "model": {
       const selected = models.find((item) => item.id === value);
       if (!selected) return;
       if (!canUseModelForNode(node, selected)) {
-        const lockedMode = getNodeLockedMode(node);
-        showActionToast(`此节点已锁定为${lockedMode === "video" ? "视频" : "图片"}生成，请新建节点切换类型`);
+        const mode = getNodeGenerationMode(node);
+        showActionToast(`当前为${mode === "video" ? "视频" : "图片"}节点，请新建${selected.type === "video" ? "视频" : "图片"}节点使用该模型`);
         return;
       }
       const previousDefaultName = defaultGeneratedName(node);
       node.model = selected.id;
-      node.mode = selected.type;
       normalizeNodeParameters(node);
       if (node.preview && (!node.name || node.name === previousDefaultName)) {
         node.name = defaultGeneratedName(node);
       }
-      node.modelFilter = selected.type;
+      node.modelFilter = getNodeGenerationMode(node);
       node.panel = null;
       rememberPreset(node);
       break;
     }
+    case "workflow":
+      if (!getWorkflowDefinitions(node).some((workflow) => workflow.id === value)) return;
+      node.workflow = value;
+      node.panel = null;
+      rememberPreset(node);
+      break;
+    case "audio":
+      if (getNodeGenerationMode(node) !== "video") return;
+      node.audioEnabled = value !== "off";
+      rememberPreset(node);
+      break;
+    case "prompt-optimization":
+      node.promptOptimization = !node.promptOptimization;
+      rememberPreset(node);
+      break;
     case "aspect":
     case "duration":
     case "quality":
@@ -5963,6 +6089,7 @@ function setAgentWidth(width) {
   agentDock?.style.setProperty("--agent-width", `${state.agentWidth}px`);
   appShell?.style.setProperty("--agent-width", `${state.agentWidth}px`);
   renderSelectionToolbar();
+  scheduleNodePopoverLayouts();
 }
 
 function setAgentOpen(open) {
@@ -5989,6 +6116,7 @@ function setAgentOpen(open) {
     agentHistoryMenu?.classList.add("hidden");
   }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
+  scheduleNodePopoverLayouts();
   if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => agentInput?.focus());
   if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
 }
@@ -7228,6 +7356,15 @@ window.addEventListener("keydown", (event) => {
     setSelectionDownloadMenuOpen(false);
     selectionDownloadTrigger?.focus({ preventScroll: true });
     return;
+  }
+  if (event.key === "Escape") {
+    const openNodePanel = state.nodes.find((node) => node.kind === "generator" && node.panel);
+    if (openNodePanel) {
+      event.preventDefault();
+      openNodePanel.panel = null;
+      render();
+      return;
+    }
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();

@@ -3,11 +3,11 @@ import {
   FileText,
   History,
   SlidersHorizontal,
-  WalletCards,
 } from "lucide-react";
 import { useState } from "react";
 
 import type { OrganizationMember } from "../../domain/workspace/workspace";
+import { CreditIcon } from "../../shared/ui/CreditIcon";
 import { CreditAdjustmentPopover } from "./CreditAdjustmentPopover";
 import { CreditDetailDrawer, type CreditDrawerKind } from "./CreditDetailDrawer";
 import styles from "./OrganizationCenterPage.module.css";
@@ -56,7 +56,7 @@ export function OrganizationCreditsSection({
           <div className={styles.creditBalanceTotal}>
             <div className={styles.creditBalanceTotalContent}>
               <span className={styles.creditBalanceLabel}>
-                <span><WalletCards aria-hidden="true" />积分余量</span>
+                <span><CreditIcon className={styles.creditSemanticIcon} />积分余量</span>
               </span>
               <strong>
                 {ORGANIZATION_CREDIT_SUMMARY.available.toLocaleString("zh-CN")}
