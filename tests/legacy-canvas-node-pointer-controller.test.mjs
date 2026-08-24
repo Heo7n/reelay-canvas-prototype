@@ -114,6 +114,16 @@ test("node body pointer prepares a stable drag candidate with active node promot
   ]);
 });
 
+test("selection-frame origin is carried by the shared drag candidate", () => {
+  const harness = createHarness();
+  assert.equal(
+    harness.controller.handlePointerDown(pointerEvent(), "a", { interactionSource: "selection-frame" }),
+    "drag-candidate",
+  );
+  assert.equal(harness.getAction().interactionSource, "selection-frame");
+  assert.deepEqual(Array.from(harness.getAction().ids), ["a", "b"]);
+});
+
 test("a single media-frame click defers chrome until pointer release", () => {
   const harness = createHarness({ selectedNodeIds: ["a"] });
   const target = { closest: (selector) => selector === ".media-frame" ? {} : null };

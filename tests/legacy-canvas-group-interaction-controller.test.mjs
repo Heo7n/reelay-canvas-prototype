@@ -92,3 +92,40 @@ test("finishing a changed group records one shared movement undo entry", () => {
     groups: [{ id: "group-1", x: 20, y: 30, width: 240, height: 180 }],
   }]);
 });
+
+test("cancelling a group drag restores the frozen frame and member snapshot without undo", () => {
+  const harness = createHarness();
+  const candidate = harness.controller.beginDrag(
+    harness.group,
+    { pointerId: 10, clientX: 100, clientY: 100 },
+    {},
+  );
+  const drag = harness.controller.promoteDrag(candidate, { clientX: 140, clientY: 120 });
+  assert.deepEqual(plain(harness.group), { id: "group-1", x: 40, y: 40, width: 240, height: 180 });
+
+  harness.controller.finish(drag, { cancelled: true });
+
+  assert.deepEqual(plain(harness.group), { id: "group-1", x: 20, y: 30, width: 240, height: 180 });
+  assert.deepEqual(plain(harness.nodes), [
+    { id: "a", x: 40, y: 60 },
+    { id: "b", x: 120, y: 140 },
+  ]);
+  assert.deepEqual(harness.undoActions, []);
+});
+
+test("cancelling a group resize restores its original frame without recording undo", () => {
+  const harness = createHarness();
+  const resize = harness.controller.beginResize(
+    harness.group,
+    { pointerId: 11, clientX: 100, clientY: 100 },
+    "se",
+    {},
+  );
+  harness.controller.resize(resize, { clientX: 180, clientY: 160 });
+  assert.deepEqual(plain(harness.group), { id: "group-1", x: 20, y: 30, width: 280, height: 210 });
+
+  harness.controller.finish(resize, { cancelled: true });
+
+  assert.deepEqual(plain(harness.group), { id: "group-1", x: 20, y: 30, width: 240, height: 180 });
+  assert.deepEqual(harness.undoActions, []);
+});

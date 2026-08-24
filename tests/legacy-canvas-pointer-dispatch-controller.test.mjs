@@ -14,6 +14,7 @@ function createHarness() {
   const calls = [];
   let action = null;
   let activeNode = null;
+  let selectionFrameTarget = false;
   const mark = (name) => (...args) => calls.push([name, ...args]);
   const controller = context.REELAY_CANVAS_POINTER_DISPATCH_CONTROLLER.createCanvasPointerDispatchController({
     getAction: () => action,
@@ -26,7 +27,10 @@ function createHarness() {
       calls.push(["promoteNodeDrag", dragCandidate, pointer]);
       return { ...dragCandidate, type: "drag-nodes", moved: true };
     },
-    promoteGroupDrag: mark("promoteGroupDrag"),
+    promoteGroupDrag: (dragCandidate, pointer) => {
+      calls.push(["promoteGroupDrag", dragCandidate, pointer]);
+      return { ...dragCandidate, type: "drag-group", moved: true };
+    },
     moveGroup: mark("moveGroup"),
     resizeGroup: mark("resizeGroup"),
     moveNodes: mark("moveNodes"),
@@ -47,6 +51,11 @@ function createHarness() {
     setDragging: mark("setDragging"),
     releasePointer: mark("releasePointer"),
     isCanvasSurface: (target) => target === "canvas",
+    isSelectionFrameDragTarget: () => selectionFrameTarget,
+    beginSelectionFrameDrag: () => {
+      calls.push(["beginSelectionFrameDrag"]);
+      return true;
+    },
     closeConnectionCreateMenu: mark("closeConnectionCreateMenu"),
     isSpaceDown: () => false,
     beginPan: mark("beginPan"),
@@ -63,6 +72,7 @@ function createHarness() {
     calls,
     setAction: (nextAction) => { action = nextAction; },
     setActiveNode: (node) => { activeNode = node; },
+    setSelectionFrameTarget: (value) => { selectionFrameTarget = value; },
   };
 }
 
@@ -157,7 +167,49 @@ test("an established node drag reveals chrome after pointerup but not after canc
   const cancelled = createHarness();
   cancelled.setAction({ type: "drag-nodes", activeId: "node-1" });
   cancelled.controller.finish({ type: "pointercancel", pointerId: 6, clientX: 12 });
-  assert.deepEqual(JSON.parse(JSON.stringify(cancelled.calls[2].at(-1))), { cancelled: true });
+  assert.deepEqual(cancelled.calls.map(([name]) => name), [
+    "finishNodeDrag",
+    "finishNodeClick",
+    "clearAction",
+    "setDragging",
+    "releasePointer",
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(cancelled.calls[1].at(-1))), { cancelled: true });
+});
+
+test("group candidate promotes and commits from the terminal pointer position", () => {
+  const harness = createHarness();
+  harness.setAction({ type: "group-drag-candidate", pointerId: 12, groupId: "group-1" });
+  harness.controller.finish({ type: "pointerup", pointerId: 12, clientX: 12 });
+  assert.deepEqual(harness.calls.map(([name]) => name), [
+    "promoteGroupDrag",
+    "finishGroup",
+    "clearAction",
+    "setDragging",
+    "releasePointer",
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls[1].at(-1))), { cancelled: false });
+});
+
+test("group cancellation rolls back without flushing terminal movement", () => {
+  const harness = createHarness();
+  harness.setAction({ type: "drag-group", pointerId: 13, groupId: "group-1" });
+  harness.controller.finish({ type: "pointercancel", pointerId: 13, clientX: 30 });
+  assert.deepEqual(harness.calls.map(([name]) => name), [
+    "finishGroup",
+    "clearAction",
+    "setDragging",
+    "releasePointer",
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls[0].at(-1))), { cancelled: true });
+});
+
+test("unrelated pointers cannot move or finish the active group interaction", () => {
+  const harness = createHarness();
+  harness.setAction({ type: "drag-group", pointerId: 14, groupId: "group-1" });
+  assert.equal(harness.controller.handleMove({ pointerId: 15, clientX: 30 }), false);
+  assert.equal(harness.controller.finish({ type: "pointerup", pointerId: 15, clientX: 30 }), false);
+  assert.deepEqual(harness.calls, []);
 });
 
 test("connection pointerup flushes the last move before committing", () => {
@@ -203,4 +255,35 @@ test("surface pointerdown routes pan, panel dismissal, and marquee without leaki
   harness.setActiveNode(null);
   harness.controller.handleSurfacePointerDown({ target: "canvas", button: 0 });
   assert.equal(harness.calls.at(-1)[0], "beginMarquee");
+});
+
+test("selection-frame blank space starts aggregate dragging before marquee", () => {
+  const harness = createHarness();
+  harness.setSelectionFrameTarget(true);
+  let prevented = false;
+  assert.equal(harness.controller.handleSurfacePointerDown({
+    target: "canvas",
+    button: 0,
+    preventDefault: () => { prevented = true; },
+  }), true);
+  assert.equal(prevented, true);
+  assert.deepEqual(harness.calls.map(([name]) => name), [
+    "closeConnectionCreateMenu",
+    "beginSelectionFrameDrag",
+  ]);
+  assert.doesNotMatch(harness.calls.map(([name]) => name).join("|"), /beginMarquee/);
+});
+
+test("pan keeps priority over selection-frame dragging", () => {
+  const harness = createHarness();
+  harness.setSelectionFrameTarget(true);
+  harness.controller.handleSurfacePointerDown({
+    target: "canvas",
+    button: 1,
+    preventDefault() {},
+  });
+  assert.deepEqual(harness.calls.map(([name]) => name), [
+    "closeConnectionCreateMenu",
+    "beginPan",
+  ]);
 });

@@ -58,6 +58,7 @@ const emptyCreateMain = document.querySelector(".empty-create-main");
 const emptyCreateSecondary = document.querySelector(".empty-create-secondary");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
+const groupResizeOverlay = document.querySelector("#groupResizeOverlay");
 const multiSelectionFrame = document.querySelector("#multiSelectionFrame");
 const multiSelectionPort = document.querySelector("#multiSelectionPort");
 const selectionToolbar = document.querySelector("#selectionToolbar");
@@ -204,9 +205,8 @@ const state = {
     quality: "480p",
     duration: "4s",
     count: 1,
-    workflow: "reference-image",
+    workflow: "",
     audioEnabled: false,
-    promptOptimization: false,
   },
   action: null,
   pendingUploadNodeId: null,
@@ -215,6 +215,7 @@ const state = {
   isSpaceDown: false,
   undoStack: [],
   generationTasks: new Map(),
+  promptOptimizationTasks: new Map(),
   agentOpen: false,
   agentWidth: 420,
   zoomTipTimer: 0,
@@ -280,6 +281,8 @@ const canvasConnectionInteraction = window.REELAY_CANVAS_CONNECTION_INTERACTION;
 if (!canvasConnectionInteraction) throw new Error("Canvas connection interaction helpers are unavailable.");
 const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
 if (!canvasNodeInteraction) throw new Error("Canvas node interaction helpers are unavailable.");
+const canvasNodePlacement = window.REELAY_CANVAS_NODE_PLACEMENT;
+if (!canvasNodePlacement) throw new Error("Canvas node placement helpers are unavailable.");
 const canvasSpatialSelection = window.REELAY_CANVAS_SPATIAL_SELECTION;
 if (!canvasSpatialSelection) throw new Error("Canvas spatial selection helpers are unavailable.");
 const canvasNodePointerControllerFactory = window.REELAY_CANVAS_NODE_POINTER_CONTROLLER;
@@ -557,7 +560,6 @@ function hydrateCanvasDocumentSnapshot(content) {
   const restored = canvasDocumentCodec.restoreSnapshot(content, {
     minScale: canvasScaleLimits.min,
     maxScale: canvasScaleLimits.max,
-    promptInputHeight: layoutRules.largePromptMinHeight,
   });
   if (!restored) return false;
   state.canvases = restored.canvases;
@@ -578,7 +580,6 @@ function hydrateCanvasDocumentSnapshot(content) {
     count: clamp(restored.lastPreset.count, 1, 4),
     workflow: restored.lastPreset.workflow || state.lastPreset.workflow,
     audioEnabled: restored.lastPreset.audioEnabled === true,
-    promptOptimization: restored.lastPreset.promptOptimization === true,
   };
   state.libraryAssets = [];
   state.libraryView = "canvas";
@@ -835,6 +836,7 @@ function applyTransform() {
   state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
   syncZoomControl();
   renderConnections();
+  renderGroupResizeOverlay();
   renderSelectionToolbar();
   renderMinimap();
   scheduleCanvasDocumentSave();
@@ -858,6 +860,45 @@ function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id=
   promptPanel.style.height = `${layout.panelHeight}px`;
   promptPanel.style.setProperty("--prompt-scale", layout.promptScale.toFixed(4));
   promptPanel.style.setProperty("--prompt-extra-height", `${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px`);
+  promptPanel.style.setProperty("--prompt-composer-height", `${layout.composerHeight}px`);
+  promptPanel.style.setProperty("--prompt-advanced-height", `${layout.advancedSettingsHeight}px`);
+  promptPanel.style.setProperty("--prompt-input-top", `${layoutRules.promptInputTop}px`);
+  promptPanel.style.setProperty("--prompt-input-bottom", `${layoutRules.promptInputBottom}px`);
+}
+
+function syncPromptPanelContentHeight(node, element) {
+  if (!node || node.kind !== "generator" || !node.expanded || !element) return false;
+  const promptInput = element.querySelector(".prompt-input");
+  if (!promptInput) return false;
+
+  const previousHeight = promptInput.style.height;
+  const previousBottom = promptInput.style.bottom;
+  const previousOverflow = promptInput.style.overflowY;
+  promptInput.style.height = "0px";
+  promptInput.style.bottom = "auto";
+  promptInput.style.overflowY = "hidden";
+  const contentHeight = promptInput.scrollHeight;
+  promptInput.style.height = previousHeight;
+  promptInput.style.bottom = previousBottom;
+  promptInput.style.overflowY = previousOverflow;
+
+  const nextHeight = clamp(
+    Math.ceil(layoutRules.promptInputTop + contentHeight + layoutRules.promptInputBottom),
+    layoutRules.compactPanelHeight,
+    layoutRules.normalPanelHeight,
+  );
+  const previousPanelHeight = Number(node.promptPanelHeight) || layoutRules.compactPanelHeight;
+  const availableInputHeight = nextHeight - layoutRules.promptInputTop - layoutRules.promptInputBottom;
+  promptInput.style.overflowY = contentHeight > availableInputHeight ? "auto" : "hidden";
+  if (nextHeight === previousPanelHeight) return false;
+
+  node.promptPanelHeight = nextHeight;
+  syncNodeVisualLayout(node, element);
+  renderSelectionToolbar();
+  renderMinimap();
+  scheduleGroupChromeLayout();
+  scheduleNodePopoverLayouts();
+  return true;
 }
 
 function syncPromptPanelLayouts() {
@@ -886,15 +927,18 @@ function getNodePopoverPlacements(anchorAction) {
     return ["left-start", "right-start", "top-start", "bottom-start"];
   }
   if (anchorAction === "model-panel") {
-    return ["top-start", "bottom-start", "top", "bottom", "right-start", "left-start"];
+    return ["top-start"];
   }
-  if (anchorAction === "workflow-panel") {
-    return ["top-start", "bottom-start", "top", "bottom"];
+  if (anchorAction === "param-panel") {
+    return ["top-start"];
   }
-  if (anchorAction === "settings-panel") {
-    return ["top-end", "bottom-end", "top", "bottom"];
-  }
-  return ["top", "bottom", "top-start", "top-end", "bottom-start", "bottom-end"];
+  return ["bottom", "top", "bottom-start", "bottom-end", "top-start", "top-end"];
+}
+
+function getNodePopoverGap(anchorAction) {
+  if (anchorAction === "param-panel") return 8;
+  if (anchorAction === "model-panel") return 6;
+  return 8;
 }
 
 function syncNodePopoverLayout(element) {
@@ -907,16 +951,21 @@ function syncNodePopoverLayout(element) {
   if (!anchor) return;
   const boundary = getNodePopoverBoundary();
   const promptRect = promptPanel.getBoundingClientRect();
-  const popoverRect = popover.getBoundingClientRect();
   const anchorRect = anchor.getBoundingClientRect();
   const compositeScale = promptPanel.offsetWidth > 0 ? promptRect.width / promptPanel.offsetWidth : 1;
-  if (!popoverRect.width || !popoverRect.height || !compositeScale) return;
+  if (!compositeScale) return;
+
+  popover.style.removeProperty("max-height");
+  popover.style.removeProperty("overflow-y");
+  const popoverWidth = popover.offsetWidth * compositeScale;
+  const popoverHeight = popover.offsetHeight * compositeScale;
+  if (!popoverWidth || !popoverHeight) return;
   const placement = canvasPopoverPlacement.placeAnchoredPopover({
     anchor: anchorRect,
-    floating: { width: popoverRect.width, height: popoverRect.height },
+    floating: { width: popoverWidth, height: popoverHeight },
     boundary,
     placements: getNodePopoverPlacements(anchorAction),
-    gap: 10,
+    gap: getNodePopoverGap(anchorAction),
     padding: 12,
   });
   if (!placement) return;
@@ -926,28 +975,53 @@ function syncNodePopoverLayout(element) {
   popover.dataset.placement = placement.placement;
 }
 
+function syncAdvancedSettingTooltipLayout(trigger) {
+  const promptPanel = trigger?.closest(".prompt-panel");
+  const tooltip = trigger?.querySelector(".advanced-setting-tooltip");
+  if (!promptPanel || !tooltip) return;
+
+  const promptRect = promptPanel.getBoundingClientRect();
+  const triggerRect = trigger.getBoundingClientRect();
+  const compositeScale = promptPanel.offsetWidth > 0 ? promptRect.width / promptPanel.offsetWidth : 1;
+  if (!compositeScale) return;
+
+  const tooltipWidth = tooltip.offsetWidth * compositeScale;
+  const tooltipHeight = tooltip.offsetHeight * compositeScale;
+  if (!tooltipWidth || !tooltipHeight) return;
+
+  const placement = canvasPopoverPlacement.placeAnchoredPopover({
+    anchor: triggerRect,
+    floating: { width: tooltipWidth, height: tooltipHeight },
+    boundary: getNodePopoverBoundary(),
+    placements: ["top-start", "bottom-start"],
+    gap: 8,
+    padding: 12,
+  });
+  if (!placement) return;
+
+  tooltip.style.left = `${((placement.left - triggerRect.left) / compositeScale).toFixed(2)}px`;
+  tooltip.style.top = `${((placement.top - triggerRect.top) / compositeScale).toFixed(2)}px`;
+  tooltip.style.bottom = "auto";
+  tooltip.style.setProperty(
+    "--tooltip-arrow-left",
+    `${clamp((triggerRect.left + triggerRect.width / 2 - placement.left) / compositeScale, 12, tooltip.offsetWidth - 12).toFixed(2)}px`,
+  );
+  tooltip.dataset.placement = placement.placement;
+}
+
+function syncVisibleAdvancedSettingTooltips() {
+  nodeLayer.querySelectorAll(
+    ".advanced-setting-info:hover, .advanced-setting-info:focus-visible, .advanced-setting-info:focus-within",
+  ).forEach(syncAdvancedSettingTooltipLayout);
+}
+
 function scheduleNodePopoverLayouts() {
   cancelAnimationFrame(state.nodePopoverFrame);
   state.nodePopoverFrame = requestAnimationFrame(() => {
     state.nodePopoverFrame = 0;
     nodeLayer.querySelectorAll(".canvas-node").forEach(syncNodePopoverLayout);
+    syncVisibleAdvancedSettingTooltips();
   });
-}
-
-function resizePromptTextarea(textarea, node) {
-  if (!textarea || !node.promptLarge) return;
-  textarea.style.height = "auto";
-  const nextHeight = clamp(
-    textarea.scrollHeight,
-    layoutRules.largePromptMinHeight,
-    layoutRules.largePromptMaxHeight,
-  );
-  node.promptInputHeight = nextHeight;
-  textarea.style.height = `${nextHeight}px`;
-  textarea.style.overflowY = textarea.scrollHeight > layoutRules.largePromptMaxHeight ? "auto" : "hidden";
-  syncNodeVisualLayout(node, textarea.closest(".canvas-node"));
-  renderSelectionToolbar();
-  renderMinimap();
 }
 
 function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
@@ -1106,14 +1180,16 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     y,
     mode: generationMode,
     model: firstModelId(generationMode),
-    aspect: "16:9",
-    resolution: "2K",
-    quality: "480p",
-    duration: "4s",
+    aspect: "",
+    resolution: "",
+    quality: "",
+    duration: "",
     count: 1,
-    workflow: generationMode === "video" ? "omni-reference" : "reference-image",
+    workflow: "",
     audioEnabled: generationMode === "video",
-    promptOptimization: false,
+    promptOptimizing: false,
+    autoLinkEnabled: true,
+    assetValidationEnabled: false,
     credits: 0,
     prompt: "",
     preview: false,
@@ -1121,8 +1197,7 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     generatedAsset: null,
     lockedMode: null,
     expanded: true,
-    promptLarge: false,
-    promptInputHeight: layoutRules.largePromptMinHeight,
+    advancedSettingsExpanded: false,
     mediaMenuOpen: false,
     panel: null,
     modelFilter: generationMode,
@@ -1160,15 +1235,45 @@ function getModelCapabilities(node) {
 
 function getCapabilityValues(node, key) {
   const capabilities = getModelCapabilities(node);
-  if (key === "durations" && capabilities.durationsByQuality?.[node.quality]) {
-    return capabilities.durationsByQuality[node.quality];
-  }
   return capabilities[key] || [];
+}
+
+function getDurationCapability(node, quality = node?.quality) {
+  const capabilities = getModelCapabilities(node);
+  const candidate = capabilities.durationRangesByQuality?.[quality] || capabilities.durationRange;
+  if (!candidate || typeof candidate !== "object") return null;
+  const min = Math.max(1, Math.round(Number(candidate.min)));
+  const max = Math.max(min, Math.round(Number(candidate.max)));
+  const step = Math.max(1, Math.round(Number(candidate.step) || 1));
+  const rawMarks = Array.isArray(candidate.marks) ? candidate.marks : [min, max];
+  const marks = [...new Set(rawMarks
+    .map((value) => Math.round(Number(value)))
+    .filter((value) => Number.isFinite(value) && value >= min && value <= max))];
+  if (!marks.includes(min)) marks.unshift(min);
+  if (!marks.includes(max)) marks.push(max);
+  return { min, max, step, marks: marks.sort((a, b) => a - b) };
+}
+
+function getNormalizedDurationSeconds(node, value = node?.duration) {
+  const range = getDurationCapability(node);
+  if (!range) return null;
+  const defaultSeconds = Number.parseInt(getModel(node)?.defaults?.duration, 10);
+  const requested = Number.parseInt(value, 10);
+  const base = Number.isFinite(requested)
+    ? requested
+    : Number.isFinite(defaultSeconds) ? defaultSeconds : range.min;
+  const stepped = range.min + Math.round((base - range.min) / range.step) * range.step;
+  return clamp(stepped, range.min, range.max);
 }
 
 function getWorkflowDefinitions(node) {
   const mode = getNodeGenerationMode(node) || "image";
-  return Array.isArray(generationWorkflows[mode]) ? generationWorkflows[mode] : [];
+  const definitions = Array.isArray(generationWorkflows[mode]) ? generationWorkflows[mode] : [];
+  const supportedIds = getModelCapabilities(node).workflows;
+  if (!Array.isArray(supportedIds) || !supportedIds.length) return definitions;
+  return supportedIds
+    .map((workflowId) => definitions.find((workflow) => workflow.id === workflowId))
+    .filter(Boolean);
 }
 
 function getWorkflowDefinition(node) {
@@ -1182,16 +1287,22 @@ function normalizeNodeParameters(node) {
   const expectedMode = getNodeGenerationMode(node) || "image";
   const workflows = getWorkflowDefinitions(node);
   if (!workflows.some((workflow) => workflow.id === node.workflow)) {
-    node.workflow = workflows[0]?.id || "";
+    const defaultWorkflow = model?.defaults?.workflow;
+    node.workflow = workflows.some((workflow) => workflow.id === defaultWorkflow)
+      ? defaultWorkflow
+      : workflows[0]?.id || "";
   }
-  node.audioEnabled = expectedMode === "video" && node.audioEnabled !== false;
-  node.promptOptimization = node.promptOptimization === true;
+  const isVideoNode = expectedMode === "video";
+  node.audioEnabled = isVideoNode && node.audioEnabled !== false;
+  node.promptOptimizing = isVideoNode && node.promptOptimizing === true;
+  node.autoLinkEnabled = node.autoLinkEnabled !== false;
+  node.assetValidationEnabled = isVideoNode && node.assetValidationEnabled === true;
+  node.advancedSettingsExpanded = node.advancedSettingsExpanded === true;
 
   const fieldMap = {
     aspect: "aspects",
     resolution: "resolutions",
     quality: "qualities",
-    duration: "durations",
   };
   for (const [field, capabilityKey] of Object.entries(fieldMap)) {
     const values = getCapabilityValues(node, capabilityKey);
@@ -1204,6 +1315,10 @@ function normalizeNodeParameters(node) {
       node[field] = values.includes(defaultValue) ? defaultValue : values[0];
     }
   }
+
+  const durationSeconds = getNormalizedDurationSeconds(node);
+  if (durationSeconds === null) delete node.duration;
+  else node.duration = `${durationSeconds}s`;
 
   const counts = getCapabilityValues(node, "counts");
   if (counts.length && !counts.includes(node.count)) {
@@ -1236,10 +1351,8 @@ function getCost(node) {
   const quality = qualities.includes(node.quality) ? node.quality : qualities[0];
   const baseCost = Number(videoQualityCost[quality]);
   if (!quality || !Number.isFinite(baseCost)) return null;
-  const durations = capabilities.durationsByQuality?.[quality] || capabilities.durations || [];
-  const duration = durations.includes(node.duration) ? node.duration : durations[0];
-  const seconds = Number.parseInt(duration, 10);
-  if (!duration || !Number.isFinite(seconds)) return null;
+  const seconds = getNormalizedDurationSeconds(node);
+  if (!Number.isFinite(seconds)) return null;
   const durationMultiplier = Math.ceil(seconds / 4);
   return baseCost * durationMultiplier * count;
 }
@@ -1248,18 +1361,28 @@ function getGenerationAvailability(node) {
   const cost = getCost(node);
   const hasValidPrice = Number.isFinite(cost) && cost > 0;
   const hasPrompt = Boolean(node.prompt.trim());
-  const canGenerate = hasPrompt && !node.generating && hasValidPrice;
+  const canGenerate = hasPrompt && !node.generating && !node.promptOptimizing && hasValidPrice;
   return {
     cost,
     hasValidPrice,
     canGenerate,
-    tooltip: canGenerate ? "生成" : !hasValidPrice ? "当前模型暂不可计价" : hasPrompt ? "生成中" : "请输入提示词",
+    tooltip: canGenerate
+      ? "生成"
+      : !hasValidPrice
+        ? "当前模型暂不可计价"
+        : node.promptOptimizing
+          ? "正在优化提示词"
+          : hasPrompt
+            ? "生成中"
+            : "请输入提示词",
   };
 }
 
 function getParamLabel(node) {
   if (getNodeGenerationMode(node) === "video") {
-    return `${node.aspect} · ${node.quality} · ${node.duration}`;
+    const workflow = getWorkflowDefinition(node);
+    const workflowLabel = workflow?.label ? `${workflow.label} · ` : "";
+    return `${workflowLabel}${node.aspect} · ${node.quality} · ${node.duration}`;
   }
   const quality = getCapabilityValues(node, "qualities").length ? ` · ${node.quality}` : "";
   return `${node.aspect} · ${node.resolution}${quality}`;
@@ -1333,14 +1456,16 @@ function getNodeLayout(node) {
     };
   }
 
-  const panelWidth = clamp(mediaWidth + 72, layoutRules.normalPanelMinWidth, layoutRules.normalPanelMaxWidth);
-  const panelHeight = node.promptLarge
-    ? clamp(
-        (node.promptInputHeight || layoutRules.largePromptMinHeight) + 136,
-        layoutRules.largePanelMinHeight,
-        layoutRules.largePanelMaxHeight,
-      )
-    : layoutRules.normalPanelHeight;
+  const panelWidth = layoutRules.normalPanelWidth;
+  const composerHeight = clamp(
+    Number(node.promptPanelHeight) || layoutRules.compactPanelHeight,
+    layoutRules.compactPanelHeight,
+    layoutRules.normalPanelHeight,
+  );
+  const advancedSettingsHeight = node.advancedSettingsExpanded
+    ? layoutRules.advancedSettingsHeightByMode[getNodeGenerationMode(node)]
+    : 0;
+  const panelHeight = composerHeight + advancedSettingsHeight;
   const viewportWidth = shell.clientWidth || window.innerWidth || layoutRules.promptTargetScreenWidth;
   const targetScreenWidth = Math.min(
     layoutRules.promptTargetScreenWidth,
@@ -1359,6 +1484,8 @@ function getNodeLayout(node) {
     mediaHeight,
     panelWidth,
     panelHeight,
+    composerHeight,
+    advancedSettingsHeight,
     promptScale,
     toolbarScale,
     nodeWidth,
@@ -1405,6 +1532,20 @@ function getNodeVisualBounds(node) {
   };
 }
 
+function getNodeMembershipBounds(node) {
+  const layout = getNodeLayout(node);
+  const left = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  const top = node.y;
+  return {
+    left,
+    top,
+    right: left + layout.mediaWidth,
+    bottom: top + layout.mediaHeight,
+    width: layout.mediaWidth,
+    height: layout.mediaHeight,
+  };
+}
+
 function getGroupById(groupId) {
   return state.groups.find((group) => group.id === groupId) || null;
 }
@@ -1418,7 +1559,7 @@ function getNodesContentBounds(nodes) {
   if (!nodes.length) return null;
   const contentBounds = nodes.reduce(
     (bounds, node) => {
-      const nodeBounds = getNodeBounds(node);
+      const nodeBounds = getNodeMembershipBounds(node);
       return {
         left: Math.min(bounds.left, nodeBounds.left),
         top: Math.min(bounds.top, nodeBounds.top),
@@ -1654,7 +1795,6 @@ function presetFrom(node) {
     count: node.count,
     workflow: node.workflow,
     audioEnabled: node.audioEnabled,
-    promptOptimization: node.promptOptimization,
   };
 }
 
@@ -1673,7 +1813,6 @@ function applyPreset(node, preset) {
   node.count = preset.count;
   node.workflow = preset.workflow;
   node.audioEnabled = preset.audioEnabled;
-  node.promptOptimization = preset.promptOptimization;
   normalizeNodeParameters(node);
   node.modelFilter = node.mode;
 }
@@ -1740,6 +1879,7 @@ function collapseInactiveNodes(activeId) {
     if (node.id !== activeId) {
       node.expanded = false;
       node.panel = null;
+      node.advancedSettingsExpanded = false;
     }
   }
 }
@@ -1749,6 +1889,7 @@ function collapseAllGeneratorPanels() {
     if (node.kind !== "generator") continue;
     node.expanded = false;
     node.panel = null;
+    node.advancedSettingsExpanded = false;
   }
 }
 
@@ -1865,6 +2006,7 @@ function createFallbackIcon(name, sourceIcon) {
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", sourceIcon?.getAttribute("aria-hidden") || "true");
   svg.classList.add("lucide", `lucide-${name}`);
+  sourceIcon?.classList?.forEach((className) => svg.classList.add(className));
   svg.dataset.fallbackIcon = name;
   svg.innerHTML = fallbackIconPaths[name] || fallbackIconPaths.circle;
   return svg;
@@ -3093,7 +3235,8 @@ function createGenerationParameterSnapshot(node) {
     count: node.count,
     workflow: node.workflow,
     audioEnabled: node.audioEnabled,
-    promptOptimization: node.promptOptimization,
+    autoLinkEnabled: node.autoLinkEnabled,
+    assetValidationEnabled: node.assetValidationEnabled,
     assetIds: (node.assets || []).map((asset) => asset.id),
   };
 }
@@ -3347,6 +3490,7 @@ function render() {
   syncGroups();
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
   shell.classList.toggle("group-editing", Boolean(state.activeGroupId));
+  renderGroupResizeOverlay();
   renderConnections();
   updateEmptyState();
   syncProjectNavigation();
@@ -3407,12 +3551,6 @@ function syncGroupFrameElement(element, group) {
     nodes.length ? Math.max(0, Math.min(...nodes.map((node) => node.z || 1)) - 1) : group.z || 1,
   );
   element.classList.toggle("selected", state.activeGroupId === group.id);
-  const activeResizeHandle = state.action?.type === "resize-group"
-    && state.action.groupId === group.id
-    ? state.action.handle
-    : "";
-  if (activeResizeHandle) element.dataset.activeResize = activeResizeHandle;
-  else delete element.dataset.activeResize;
 }
 
 function scheduleGroupChromeLayout() {
@@ -3453,9 +3591,6 @@ function createGroupFrameElement(group) {
     nodes.length ? Math.max(0, Math.min(...nodes.map((node) => node.z || 1)) - 1) : group.z || 1,
   );
   el.dataset.groupId = group.id;
-  if (state.action?.type === "resize-group" && state.action.groupId === group.id) {
-    el.dataset.activeResize = state.action.handle;
-  }
   el.innerHTML = `
     <div class="group-title">${escapeHtml(group.name || "新建组")}</div>
     <div class="group-toolbar">
@@ -3484,21 +3619,15 @@ function createGroupFrameElement(group) {
         <span class="toolbar-tip">下载</span>
       </button>
     </div>
-    <span class="group-resize-handle north" data-group-resize="n"></span>
-    <span class="group-resize-handle east" data-group-resize="e"></span>
-    <span class="group-resize-handle south" data-group-resize="s"></span>
-    <span class="group-resize-handle west" data-group-resize="w"></span>
-    <span class="group-resize-handle north-east" data-group-resize="ne"></span>
-    <span class="group-resize-handle south-east" data-group-resize="se"></span>
-    <span class="group-resize-handle south-west" data-group-resize="sw"></span>
-    <span class="group-resize-handle north-west" data-group-resize="nw"></span>
   `;
-  bindGroupFrameEvents(el, group);
+  bindGroupFrameEvents(el);
   return el;
 }
 
-function bindGroupFrameEvents(el, group) {
+function bindGroupFrameEvents(el) {
   el.addEventListener("pointerdown", (event) => {
+    const liveGroup = getGroupById(el.dataset.groupId);
+    if (!liveGroup) return;
     if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
       event.preventDefault();
       event.stopPropagation();
@@ -3509,27 +3638,16 @@ function bindGroupFrameEvents(el, group) {
     if (event.button !== 0) return;
     event.stopPropagation();
     if (event.target.closest("button, .toolbar-dropdown")) {
-      setActiveGroup(group.id);
+      setActiveGroup(liveGroup.id);
       return;
     }
     if (!isCanvasMutationAllowed()) {
-      setActiveGroup(group.id);
+      setActiveGroup(liveGroup.id);
       render();
       return;
     }
 
-    const resizeHandle = event.target.closest("[data-group-resize]");
-    if (resizeHandle) {
-      canvasGroupInteractionController.beginResize(
-        group,
-        event,
-        resizeHandle.dataset.groupResize,
-        shell,
-      );
-      return;
-    }
-
-    canvasGroupInteractionController.beginDrag(group, event, shell);
+    canvasGroupInteractionController.beginDrag(liveGroup, event, shell);
   });
 
   el.addEventListener("click", (event) => {
@@ -3567,8 +3685,41 @@ function bindGroupFrameEvents(el, group) {
   });
 }
 
+function renderGroupResizeOverlay() {
+  if (!groupResizeOverlay) return;
+  const group = getGroupById(state.activeGroupId);
+  const bounds = getGroupBounds(group);
+  if (!group || !bounds || !isCanvasMutationAllowed()) {
+    groupResizeOverlay.classList.add("hidden");
+    delete groupResizeOverlay.dataset.groupId;
+    delete groupResizeOverlay.dataset.activeResize;
+    return;
+  }
+  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
+  if (!screenRect) {
+    groupResizeOverlay.classList.add("hidden");
+    return;
+  }
+  groupResizeOverlay.dataset.groupId = group.id;
+  groupResizeOverlay.style.left = `${screenRect.left}px`;
+  groupResizeOverlay.style.top = `${screenRect.top}px`;
+  groupResizeOverlay.style.width = `${screenRect.width}px`;
+  groupResizeOverlay.style.height = `${screenRect.height}px`;
+  groupResizeOverlay.classList.remove("hidden");
+  if (state.action?.type === "resize-group" && state.action.groupId === group.id) {
+    groupResizeOverlay.dataset.activeResize = state.action.handle;
+  } else {
+    delete groupResizeOverlay.dataset.activeResize;
+  }
+}
+
 function getSelectedNodes() {
   return state.nodes.filter((node) => state.selectedIds.has(node.id));
+}
+
+function isSelectionFrameDragAction(action = state.action) {
+  return action?.interactionSource === "selection-frame"
+    && (action.type === "drag-candidate" || action.type === "drag-nodes");
 }
 
 function updateEmptyState() {
@@ -3619,11 +3770,15 @@ function renderSelectionToolbar() {
   if (!selectionToolbar || !multiSelectionFrame) return;
   const selectedNodes = getSelectedNodes();
   const bounds = getSelectionVisualBounds();
-  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 14);
+  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 18);
   if (!screenRect) {
-    shell.classList.remove("multi-selection-active");
+    shell.classList.remove(
+      "multi-selection-active",
+      "selection-frame-hover",
+      "selection-frame-pressed",
+    );
     multiSelectionFrame.classList.add("hidden");
-    multiSelectionFrame.classList.remove("is-connecting");
+    multiSelectionFrame.classList.remove("is-connecting", "is-dragging");
     multiSelectionPort?.removeAttribute("style");
     selectionToolbar.classList.add("hidden");
     setSelectionDownloadMenuOpen(false);
@@ -3641,6 +3796,7 @@ function renderSelectionToolbar() {
   multiSelectionFrame.style.height = `${screenRect.height}px`;
   multiSelectionFrame.classList.remove("hidden");
   multiSelectionFrame.classList.toggle("is-connecting", isSelectionConnecting);
+  multiSelectionFrame.classList.toggle("is-dragging", isSelectionFrameDragAction());
   if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
   if (isSelectionConnecting) {
     selectionToolbar.classList.add("hidden");
@@ -3665,10 +3821,10 @@ function renderSelectionToolbar() {
     viewportPadding + toolbarWidth / 2,
     shell.clientWidth - viewportPadding - toolbarWidth / 2,
   );
-  const spaceAbove = screenRect.top - 10;
+  const spaceAbove = screenRect.top - 12;
   const toolbarY = spaceAbove - toolbarHeight >= 70
     ? spaceAbove - toolbarHeight
-    : Math.min(shell.clientHeight - toolbarHeight - viewportPadding, screenRect.bottom + 10);
+    : Math.min(shell.clientHeight - toolbarHeight - viewportPadding, screenRect.bottom + 12);
   selectionToolbar.style.left = `${toolbarX}px`;
   selectionToolbar.style.top = `${Math.max(70, toolbarY)}px`;
 }
@@ -3704,8 +3860,8 @@ function createAssetNodeElement(node) {
 
 function createGeneratorNodeElement(node) {
   const model = getModel(node);
-  const workflow = getWorkflowDefinition(node);
   const layout = getNodeLayout(node);
+  const isVideoNode = getNodeGenerationMode(node) === "video";
   const selected = state.selectedIds.has(node.id);
   const generationAvailability = getGenerationAvailability(node);
   const el = document.createElement("article");
@@ -3716,44 +3872,42 @@ function createGeneratorNodeElement(node) {
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
   const generationInputsDisabled = node.generating ? "disabled" : "";
+  const promptInputDisabled = node.generating || node.promptOptimizing ? "disabled" : "";
 
   const promptPanel = node.expanded
     ? `
-      <section class="prompt-panel ${node.promptLarge ? "large" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px;">
+      <section class="prompt-panel ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
-        <button class="expand-corner ${node.promptLarge ? "active" : ""}" data-action="toggle-large" type="button" title="${node.promptLarge ? "收起输入区" : "展开输入区"}">
-          <i data-lucide="${node.promptLarge ? "minimize-2" : "maximize-2"}" aria-hidden="true"></i>
-        </button>
         ${assetShelf(node)}
-        <textarea class="prompt-input" style="${node.promptLarge ? `height: ${node.promptInputHeight}px;` : ""}" placeholder="描述你想生成的画面，也可以先添加参考素材" ${generationInputsDisabled}>${escapeHtml(node.prompt)}</textarea>
+        <textarea class="prompt-input" placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
           <button class="control-chip model-chip ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
-            <span class="model-chip-glyph" aria-hidden="true">${escapeHtml(model?.icon || "—")}</span>
+            ${modelIconMarkup(model, "model-chip-glyph")}
             <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
           </button>
-          <span class="control-divider" aria-hidden="true"></span>
-          <button class="control-chip workflow-chip ${node.panel === "workflow" ? "active" : ""}" data-action="workflow-panel" type="button" ${generationInputsDisabled}>
-            <span class="control-chip-label">${escapeHtml(workflow?.label || "生成方式")}</span>
-          </button>
-          <span class="control-divider" aria-hidden="true"></span>
           <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>
             <span class="control-chip-label">${escapeHtml(getParamLabel(node))}</span>
-            ${getNodeGenerationMode(node) === "video" ? `<i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
+            ${getNodeGenerationMode(node) === "video" ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
           </button>
           <div class="control-spacer"></div>
-          <button class="control-chip settings-chip ${node.panel === "utilities" ? "active" : ""}" data-action="settings-panel" type="button" title="更多生成设置" aria-label="更多生成设置" ${generationInputsDisabled}>
-            <i data-lucide="layers-3" aria-hidden="true"></i>
+          ${isVideoNode ? `
+            <button class="control-chip prompt-optimization-button ${node.promptOptimizing ? "is-processing" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" title="${node.promptOptimizing ? "正在优化提示词" : node.prompt.trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="${node.promptOptimizing ? "正在优化提示词" : "提示词优化"}" aria-busy="${node.promptOptimizing}" ${node.generating || node.promptOptimizing || !node.prompt.trim() ? "disabled" : ""}>
+              <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
+              <span class="prompt-optimization-spinner" aria-hidden="true"></span>
+            </button>
+          ` : ""}
+          <button class="control-chip advanced-settings-chip ${node.advancedSettingsExpanded ? "active" : ""}" data-action="advanced-settings-toggle" type="button" title="高级设置" aria-label="高级设置" aria-expanded="${node.advancedSettingsExpanded}" aria-controls="advanced-settings-${escapeHtml(node.id)}" ${generationInputsDisabled}>
+            <svg class="advanced-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h11M4 11.5h8M4 16.5h5"/><circle cx="17" cy="15.5" r="3.1"/><path d="M17 10.8v1.2M17 19v1.2M12.3 15.5h1.2M20.5 15.5h1.2M13.7 12.2l.85.85M19.45 17.95l.85.85M20.3 12.2l-.85.85M14.55 17.95l-.85.85"/></svg>
           </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
-            <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-spark.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
-            <span class="send-arrow"><i data-lucide="arrow-up" aria-hidden="true"></i></span>
+            <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
+            <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.25 20.6V9.45L6.7 13q-.95.95-1.9 0l-.75-.75q-.95-.95 0-1.9l6.5-6.5q1.45-1.45 2.9 0l6.5 6.5q.95.95 0 1.9l-.75.75q-.95.95-1.9 0l-3.55-3.55V20.6q0 1.4-1.4 1.4h-.7q-1.4 0-1.4-1.4Z" /></svg></span>
           </button>
         </div>
         ${node.panel === "material" ? materialPanel() : ""}
         ${node.panel === "model" ? modelPanel(node) : ""}
-        ${node.panel === "workflow" ? workflowPanel(node) : ""}
         ${node.panel === "params" ? paramPanel(node) : ""}
-        ${node.panel === "utilities" ? settingsPanel(node) : ""}
+        ${node.advancedSettingsExpanded ? advancedSettingsPanel(node) : ""}
       </section>
     `
     : "";
@@ -3776,13 +3930,32 @@ function createGeneratorNodeElement(node) {
       return;
     }
     node.prompt = event.currentTarget.value;
+    syncPromptPanelContentHeight(node, el);
+    syncPromptOptimizationButton(el.querySelector(".prompt-optimization-button"), node);
     syncGenerateButton(el.querySelector(".generate-button"), node);
-    resizePromptTextarea(event.currentTarget, node);
     scheduleCanvasDocumentSave();
   });
-  if (node.promptLarge && promptInput) {
-    requestAnimationFrame(() => resizePromptTextarea(promptInput, node));
-  }
+
+  const durationRange = el.querySelector("[data-duration-range]");
+  durationRange?.addEventListener("input", (event) => {
+    const min = Number(event.currentTarget.dataset.durationMin);
+    const max = Number(event.currentTarget.max);
+    const seconds = clamp(Number(event.currentTarget.value), min, max);
+    const value = `${seconds}s`;
+    const progress = max > 0 ? (seconds / max) * 100 : 100;
+    event.currentTarget.value = String(seconds);
+    event.currentTarget.style.setProperty("--duration-progress", `${progress}%`);
+    event.currentTarget.setAttribute("aria-valuetext", value);
+    const current = event.currentTarget.closest(".parameter-duration")?.querySelector(".duration-current");
+    if (current) current.textContent = value;
+  });
+  durationRange?.addEventListener("change", (event) => {
+    const min = Number(event.currentTarget.dataset.durationMin);
+    const max = Number(event.currentTarget.max);
+    const seconds = clamp(Number(event.currentTarget.value), min, max);
+    event.currentTarget.value = String(seconds);
+    handleAction(node, "duration", `${seconds}s`);
+  });
 
   el.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -3790,8 +3963,17 @@ function createGeneratorNodeElement(node) {
       handleAction(node, event.currentTarget.dataset.action, event.currentTarget.dataset.value);
     });
   });
+  el.querySelectorAll("[data-setting-info]").forEach((trigger) => {
+    trigger.addEventListener("pointerdown", (event) => event.stopPropagation());
+    trigger.addEventListener("click", (event) => event.stopPropagation());
+    trigger.addEventListener("pointerenter", () => requestAnimationFrame(() => syncAdvancedSettingTooltipLayout(trigger)));
+    trigger.addEventListener("focus", () => requestAnimationFrame(() => syncAdvancedSettingTooltipLayout(trigger)));
+  });
   bindModelPanelEvents(el, node);
-  requestAnimationFrame(() => syncNodePopoverLayout(el));
+  requestAnimationFrame(() => {
+    const resized = syncPromptPanelContentHeight(node, el);
+    if (!resized) syncNodePopoverLayout(el);
+  });
 
   return el;
 }
@@ -4353,6 +4535,120 @@ function cancelGenerationTasks(predicate, resetNodes = true) {
   }
 }
 
+function getPromptOptimizationTaskTarget(task) {
+  if (!task || task.projectId !== state.projectId) return null;
+  const canvas = state.canvases.find((item) => item.id === task.canvasId);
+  if (!canvas) return null;
+  const node = canvas.nodes.find((item) => item.id === task.nodeId);
+  return node ? { canvas, node } : null;
+}
+
+function buildOptimizedPrompt(prompt) {
+  const normalized = String(prompt || "")
+    .trim()
+    .replace(/[\t ]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n");
+  if (!normalized) return "";
+
+  const chineseGuidance = "镜头运动自然连贯，主体动作清晰，光影层次细腻，画面节奏流畅。";
+  const englishGuidance = "Keep the camera movement coherent, the subject action clear, and the lighting and pacing visually refined.";
+  const mostlyLatin = (normalized.match(/[A-Za-z]/g)?.length || 0) > (normalized.match(/[\u3400-\u9fff]/g)?.length || 0) * 2;
+  const guidance = mostlyLatin ? englishGuidance : chineseGuidance;
+  if (normalized.includes(guidance)) return normalized;
+  const separator = mostlyLatin || /[。！？.!?]$/.test(normalized) ? "\n" : "。\n";
+  return `${normalized}${separator}${guidance}`;
+}
+
+function pushCanvasUndoAction(canvas, action) {
+  if (!canvas || !action) return;
+  const undoStack = Array.isArray(canvas.undoStack) ? canvas.undoStack : [];
+  undoStack.push(action);
+  if (undoStack.length > 50) undoStack.shift();
+  canvas.undoStack = undoStack;
+  if (canvas.id === state.activeCanvasId) state.undoStack = undoStack;
+}
+
+function cancelPromptOptimizationTask(taskId, resetNode = true) {
+  const task = state.promptOptimizationTasks.get(taskId);
+  if (!task) return;
+  window.clearTimeout(task.timeoutId);
+  if (resetNode) {
+    const target = getPromptOptimizationTaskTarget(task);
+    if (target?.node.promptOptimizing) target.node.promptOptimizing = false;
+  }
+  state.promptOptimizationTasks.delete(taskId);
+}
+
+function cancelPromptOptimizationTasks(predicate, resetNodes = true) {
+  for (const task of [...state.promptOptimizationTasks.values()]) {
+    if (predicate(task)) cancelPromptOptimizationTask(task.id, resetNodes);
+  }
+}
+
+function completePromptOptimization(taskId) {
+  const task = state.promptOptimizationTasks.get(taskId);
+  if (!task) return;
+  state.promptOptimizationTasks.delete(taskId);
+  const target = getPromptOptimizationTaskTarget(task);
+  if (!target) return;
+  const { canvas, node } = target;
+  if (node.kind !== "generator" || !node.promptOptimizing) return;
+
+  node.promptOptimizing = false;
+  if (node.prompt === task.sourcePrompt) {
+    const optimizedPrompt = buildOptimizedPrompt(task.sourcePrompt);
+    if (optimizedPrompt && optimizedPrompt !== node.prompt) {
+      node.prompt = optimizedPrompt;
+      pushCanvasUndoAction(canvas, {
+        type: "node-update",
+        node: cloneUndoNodeState(task.beforeNode),
+      });
+    }
+  }
+
+  if (canvas.id === state.activeCanvasId) render();
+  scheduleCanvasDocumentSave();
+}
+
+function startPromptOptimization(node) {
+  if (!requireCanvasMutation()) return false;
+  if (
+    node?.kind !== "generator"
+    || getNodeGenerationMode(node) !== "video"
+    || node.generating
+    || node.promptOptimizing
+  ) return false;
+  const sourcePrompt = node.prompt.trim();
+  if (!sourcePrompt) return false;
+  const canvas = getActiveCanvas();
+  if (!canvas || !canvas.nodes.includes(node)) return false;
+
+  const staleTask = [...state.promptOptimizationTasks.values()]
+    .find((task) => task.canvasId === canvas.id && task.nodeId === node.id);
+  if (staleTask) cancelPromptOptimizationTask(staleTask.id, false);
+
+  const beforeNode = cloneUndoNodeState(node);
+  beforeNode.panel = null;
+  beforeNode.promptOptimizing = false;
+  const task = {
+    id: crypto.randomUUID(),
+    projectId: state.projectId,
+    canvasId: canvas.id,
+    nodeId: node.id,
+    sourcePrompt,
+    beforeNode,
+    timeoutId: 0,
+  };
+  node.prompt = sourcePrompt;
+  node.promptOptimizing = true;
+  node.panel = null;
+  state.promptOptimizationTasks.set(task.id, task);
+  render();
+  task.timeoutId = window.setTimeout(() => completePromptOptimization(task.id), 900);
+  return true;
+}
+
 function commitGenerationUndoBoundary(canvas, nodeId) {
   if (!canvas || !nodeId) return;
   const nextUndoStack = (canvas.undoStack || []).filter(
@@ -4406,10 +4702,22 @@ function syncGenerateButton(button, node) {
   button.dataset.tooltip = availability.tooltip;
 }
 
+function syncPromptOptimizationButton(button, node) {
+  if (!button || !node) return;
+  const hasPrompt = Boolean(node.prompt.trim());
+  const disabled = node.generating || node.promptOptimizing || !hasPrompt;
+  button.disabled = disabled;
+  button.title = node.promptOptimizing
+    ? "正在优化提示词"
+    : hasPrompt
+      ? "优化提示词"
+      : "输入提示词后优化";
+}
+
 function startSimulatedGeneration(node, options = {}) {
   if (!requireCanvasMutation()) return false;
   const { charge = true } = options;
-  if (node.generating) return false;
+  if (node.generating || node.promptOptimizing) return false;
   normalizeNodeParameters(node);
   if (!node.prompt.trim()) {
     showConfirmDialog({
@@ -4475,24 +4783,35 @@ function modelPanel(node) {
   const options = getCompatibleModelsForNode(node)
     .map(
       (item) => `
-        <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" data-canvas-mutation type="button">
-          <span class="model-icon">${escapeHtml(item.icon)}</span>
+        <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" data-canvas-mutation aria-pressed="${node.model === item.id ? "true" : "false"}" type="button">
+          ${modelIconMarkup(item, "model-icon")}
           <span>
             <span class="model-name">${escapeHtml(item.name)}</span>
             <span class="model-desc">${escapeHtml(item.desc)}</span>
           </span>
-          <span class="checkmark">${node.model === item.id ? "✓" : ""}</span>
+          <i class="model-check" data-lucide="check" aria-hidden="true"></i>
         </button>
       `,
     )
     .join("");
   return `
     <div class="panel-popover model-panel" data-node-popover data-anchor-action="model-panel" aria-label="${mode === "video" ? "视频" : "图片"}模型">
-      <div class="panel-title">模型</div>
-      <p class="model-mode-contract">当前为${mode === "video" ? "视频" : "图片"}节点，仅显示同类型模型</p>
+      <p class="model-mode-contract sr-only">当前为${mode === "video" ? "视频" : "图片"}节点，仅显示同类型模型</p>
       <div class="model-list">${options || `<p class="model-list-empty">当前没有可用的${mode === "video" ? "视频" : "图片"}模型</p>`}</div>
     </div>
   `;
+}
+
+function modelIconMarkup(model, className) {
+  if (model?.iconSrc) {
+    const classes = `${className} model-brand-icon model-logo-${model.id}`;
+    if (model.iconMode === "mask") {
+      const maskSrc = new URL(model.iconSrc, document.baseURI).href;
+      return `<span class="${classes}" style="--model-icon-mask: url(&quot;${escapeHtml(maskSrc)}&quot;)" aria-hidden="true"><span class="model-brand-mask"></span></span>`;
+    }
+    return `<span class="${classes}" aria-hidden="true"><img src="${escapeHtml(model.iconSrc)}" alt="" /></span>`;
+  }
+  return `<span class="${className}" aria-hidden="true">${escapeHtml(model?.icon || "—")}</span>`;
 }
 
 function bindModelPanelEvents(element, node) {
@@ -4516,34 +4835,19 @@ function materialPanel() {
   `;
 }
 
-function workflowPanel(node) {
-  const options = getWorkflowDefinitions(node).map((workflow) => `
-    <button class="workflow-option ${node.workflow === workflow.id ? "active" : ""}" data-action="workflow" data-value="${workflow.id}" data-canvas-mutation type="button">
-      <i data-lucide="${workflow.icon}" aria-hidden="true"></i><span>${escapeHtml(workflow.label)}</span>
-      ${node.workflow === workflow.id ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
-    </button>
-  `).join("");
-  return `
-    <section class="settings-card workflow-panel" data-node-popover data-anchor-action="workflow-panel" aria-label="生成方式">
-      ${options}
-    </section>
-  `;
-}
-
 function paramPanel(node) {
   normalizeNodeParameters(node);
   const mode = getNodeGenerationMode(node) || "image";
   const sections = [
+    mode === "video" ? workflowParameterSection(node) : "",
     parameterSection(node, "比例", "aspect", getCapabilityValues(node, "aspects")),
     mode === "video"
-      ? parameterSection(node, "画质", "quality", getCapabilityValues(node, "qualities"))
+      ? parameterSection(node, "分辨率", "quality", getCapabilityValues(node, "qualities"))
       : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
     mode === "image" && getCapabilityValues(node, "qualities").length
       ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
       : "",
-    mode === "video"
-      ? parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))
-      : "",
+    mode === "video" ? durationParameterSection(node) : "",
     mode === "video" ? `
       <section class="parameter-group parameter-audio">
         <div class="param-heading">音频</div>
@@ -4555,22 +4859,101 @@ function paramPanel(node) {
     ` : "",
   ];
   return `
-    <section class="settings-card param-panel" data-node-popover data-anchor-action="param-panel" aria-label="生成参数">
+    <section class="panel-popover param-panel" data-node-popover data-anchor-action="param-panel" aria-label="综合参数">
       <div class="param-section">${sections.join("")}</div>
     </section>
   `;
 }
 
-function settingsPanel(node) {
+function workflowParameterSection(node) {
+  const workflows = getWorkflowDefinitions(node);
+  if (!workflows.length) return "";
   return `
-    <section class="settings-card settings-utilities" data-node-popover data-anchor-action="settings-panel" aria-label="更多生成设置">
-      <button class="settings-utility-button ${node.promptOptimization ? "active" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" aria-pressed="${node.promptOptimization}">
-        <i data-lucide="notepad-text-dashed" aria-hidden="true"></i><span>提示词优化</span>
-        ${node.promptOptimization ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
-      </button>
-      <button class="settings-utility-button" type="button" disabled aria-disabled="true" title="任务调度接入后开放">
-        <i data-lucide="timer" aria-hidden="true"></i><span>定时任务</span>
-      </button>
+    <section class="parameter-group parameter-workflow">
+      <div class="param-heading">生成方式</div>
+      <div class="segmented workflow-segmented" style="--option-columns: ${workflows.length}">
+        ${workflows.map((workflow) => `
+          <button class="${node.workflow === workflow.id ? "active" : ""}" data-action="workflow" data-value="${workflow.id}" data-canvas-mutation type="button">${escapeHtml(workflow.label)}</button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function durationParameterSection(node) {
+  const range = getDurationCapability(node);
+  const seconds = getNormalizedDurationSeconds(node);
+  if (!range || !Number.isFinite(seconds)) return "";
+  const progress = range.max > 0
+    ? (seconds / range.max) * 100
+    : 100;
+  const durationOffset = (value) => range.max > 0
+    ? (value / range.max) * 100
+    : 0;
+  const usesCompactScale = range.max <= 15;
+  const declaredMarks = Array.isArray(range.marks) ? range.marks : [];
+  const compactGuide = declaredMarks.reduce((nearest, value) => (
+    Math.abs(value - range.max * (2 / 3)) < Math.abs(nearest - range.max * (2 / 3)) ? value : nearest
+  ), range.max);
+  const scaleLabels = usesCompactScale
+    ? [...new Set([0, range.min, compactGuide, range.max])]
+    : [...new Set([0, ...declaredMarks, range.max])];
+  const scaleMarks = usesCompactScale
+    ? [...new Set([range.min, compactGuide])]
+    : declaredMarks.filter((value) => value > 0 && value < range.max);
+  return `
+    <section class="parameter-group parameter-duration">
+      <div class="duration-heading"><span class="param-heading">时长</span><span class="duration-current">${seconds}s</span></div>
+      <input class="duration-range-input" data-duration-range data-duration-min="${range.min}" type="range" min="0" max="${range.max}" step="${range.step}" value="${seconds}" style="--duration-progress: ${progress}%" aria-label="时长" aria-valuemin="${range.min}" aria-valuetext="${seconds}s" />
+      <div class="duration-scale ${usesCompactScale ? "is-compact-range" : "is-wide-range"}" aria-hidden="true">
+        <div class="duration-scale-ticks">
+          ${scaleMarks.map((value) => `<i class="duration-scale-tick${scaleLabels.includes(value) ? " is-major" : ""}" style="--duration-mark-offset: ${durationOffset(value)}%"></i>`).join("")}
+        </div>
+        <div class="duration-scale-labels">
+          ${scaleLabels.map((value, index) => `<span class="duration-scale-label${index === 0 ? " is-start" : index === scaleLabels.length - 1 ? " is-end" : " is-middle"}" style="--duration-mark-offset: ${durationOffset(value)}%">${value}</span>`).join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+const advancedSettingHints = Object.freeze({
+  autoLink: "自动匹配参考素材名称，一键 AutoLink，省去手动@麻烦",
+  assetValidation: "开启后自动校验素材合规性，提升真人视频生成成功率；非真人生成可关闭，跳过检测节省耗时。",
+  schedule: "可定时设置生成任务，到点自动执行",
+});
+
+function advancedSettingInfo(node, key, label) {
+  const tooltipId = `advanced-setting-${key}-${node.id}`;
+  return `
+    <button class="advanced-setting-info" data-setting-info type="button" aria-label="${escapeHtml(label)}说明" aria-describedby="${escapeHtml(tooltipId)}">
+      <span aria-hidden="true">i</span>
+      <span class="advanced-setting-tooltip" id="${escapeHtml(tooltipId)}" role="tooltip">${escapeHtml(advancedSettingHints[key])}</span>
+    </button>
+  `;
+}
+
+function advancedSettingsPanel(node) {
+  const assetValidationSetting = getNodeGenerationMode(node) === "video"
+    ? `
+      <div class="advanced-setting-row">
+        <div class="advanced-setting-label"><span>自动校验素材</span>${advancedSettingInfo(node, "assetValidation", "自动校验素材")}</div>
+        <button class="advanced-setting-switch ${node.assetValidationEnabled ? "is-on" : ""}" data-action="asset-validation" data-canvas-mutation type="button" role="switch" aria-label="自动校验素材" aria-checked="${node.assetValidationEnabled}" ${node.generating ? "disabled" : ""}><span></span></button>
+      </div>
+    `
+    : "";
+  return `
+    <section class="advanced-settings" id="advanced-settings-${escapeHtml(node.id)}" aria-label="高级设置">
+      <div class="advanced-settings-title">高级设置</div>
+      <div class="advanced-setting-row">
+        <div class="advanced-setting-label"><span>智能引用 AutoLink</span>${advancedSettingInfo(node, "autoLink", "智能引用 AutoLink")}</div>
+        <button class="advanced-setting-switch ${node.autoLinkEnabled ? "is-on" : ""}" data-action="auto-link" data-canvas-mutation type="button" role="switch" aria-label="智能引用 AutoLink" aria-checked="${node.autoLinkEnabled}" ${node.generating ? "disabled" : ""}><span></span></button>
+      </div>
+      ${assetValidationSetting}
+      <div class="advanced-setting-row advanced-setting-schedule">
+        <div class="advanced-setting-label"><span>定时任务</span>${advancedSettingInfo(node, "schedule", "定时任务")}</div>
+        <button class="advanced-schedule-button" type="button" disabled aria-disabled="true" aria-label="定时任务暂未开放" title="定时任务暂未开放"><svg class="advanced-schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3.5v4M16.5 3.5v4M3.5 9.5h17M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></button>
+      </div>
     </section>
   `;
 }
@@ -4607,13 +4990,13 @@ const generationLockedActions = new Set([
   "remove-linked-source",
   "focus-asset",
   "model-panel",
-  "workflow-panel",
   "param-panel",
-  "settings-panel",
   "model",
   "workflow",
   "audio",
   "prompt-optimization",
+  "auto-link",
+  "asset-validation",
   "aspect",
   "duration",
   "quality",
@@ -4644,7 +5027,8 @@ function handleAction(node, action, value) {
     "model",
     "workflow",
     "audio",
-    "prompt-optimization",
+    "auto-link",
+    "asset-validation",
     "aspect",
     "duration",
     "quality",
@@ -4656,7 +5040,8 @@ function handleAction(node, action, value) {
     "model",
     "workflow",
     "audio",
-    "prompt-optimization",
+    "auto-link",
+    "asset-validation",
     "aspect",
     "duration",
     "quality",
@@ -4665,13 +5050,10 @@ function handleAction(node, action, value) {
   const before = undoableActions.has(action) ? cloneNodeState(node) : null;
 
   switch (action) {
-    case "toggle-large":
-      node.promptLarge = !node.promptLarge;
-      node.panel = null;
-      break;
     case "material-panel":
       node.expanded = true;
       node.panel = node.panel === "material" ? null : "material";
+      if (node.panel) node.advancedSettingsExpanded = false;
       break;
     case "material":
       if (value === "local") {
@@ -4704,18 +5086,17 @@ function handleAction(node, action, value) {
       node.expanded = true;
       node.modelFilter = getNodeGenerationMode(node);
       node.panel = node.panel === "model" ? null : "model";
-      break;
-    case "workflow-panel":
-      node.expanded = true;
-      node.panel = node.panel === "workflow" ? null : "workflow";
+      if (node.panel) node.advancedSettingsExpanded = false;
       break;
     case "param-panel":
       node.expanded = true;
       node.panel = node.panel === "params" ? null : "params";
+      if (node.panel) node.advancedSettingsExpanded = false;
       break;
-    case "settings-panel":
+    case "advanced-settings-toggle":
       node.expanded = true;
-      node.panel = node.panel === "utilities" ? null : "utilities";
+      node.advancedSettingsExpanded = !node.advancedSettingsExpanded;
+      if (node.advancedSettingsExpanded) node.panel = null;
       break;
     case "generate":
       if (!node.prompt.trim() || node.generating) return;
@@ -4731,6 +5112,7 @@ function handleAction(node, action, value) {
       }
       const previousDefaultName = defaultGeneratedName(node);
       node.model = selected.id;
+      node.duration = selected.defaults?.duration || "";
       normalizeNodeParameters(node);
       if (node.preview && (!node.name || node.name === previousDefaultName)) {
         node.name = defaultGeneratedName(node);
@@ -4743,7 +5125,7 @@ function handleAction(node, action, value) {
     case "workflow":
       if (!getWorkflowDefinitions(node).some((workflow) => workflow.id === value)) return;
       node.workflow = value;
-      node.panel = null;
+      node.panel = "params";
       rememberPreset(node);
       break;
     case "audio":
@@ -4752,8 +5134,15 @@ function handleAction(node, action, value) {
       rememberPreset(node);
       break;
     case "prompt-optimization":
-      node.promptOptimization = !node.promptOptimization;
-      rememberPreset(node);
+      if (getNodeGenerationMode(node) !== "video") return;
+      startPromptOptimization(node);
+      return;
+    case "auto-link":
+      node.autoLinkEnabled = !node.autoLinkEnabled;
+      break;
+    case "asset-validation":
+      if (getNodeGenerationMode(node) !== "video") return;
+      node.assetValidationEnabled = !node.assetValidationEnabled;
       break;
     case "aspect":
     case "duration":
@@ -5477,18 +5866,14 @@ function addNodeAt(clientX, clientY, mode = "image", options = {}) {
   const node = defaultGeneratorNode(0, 0, useLastPreset ? state.lastPreset.mode || mode : mode);
   if (useLastPreset) applyPreset(node, state.lastPreset);
   const layout = getNodeLayout(node);
-  const totalHeight = layout.mediaHeight + layoutRules.panelGap + layout.panelHeight;
-  const portOffset = 32;
-  if (options.anchor === "input") {
-    node.x = world.x - (layout.nodeWidth - layout.mediaWidth) / 2 + portOffset;
-    node.y = world.y - layout.mediaHeight / 2;
-  } else if (options.anchor === "output") {
-    node.x = world.x - (layout.nodeWidth - layout.mediaWidth) / 2 - layout.mediaWidth - portOffset;
-    node.y = world.y - layout.mediaHeight / 2;
-  } else {
-    node.x = world.x - layout.nodeWidth / 2;
-    node.y = world.y - totalHeight / 2;
-  }
+  const position = canvasNodePlacement.getNodePosition({
+    world,
+    layout,
+    anchor: options.anchor,
+  });
+  if (!position) return null;
+  node.x = position.x;
+  node.y = position.y;
   collapseAllGeneratorPanels();
   state.nodes.push(node);
   bringNodesToFront([node]);
@@ -5530,6 +5915,7 @@ function cloneNodeState(node) {
 function cloneUndoNodeState(node) {
   const snapshot = cloneNodeState(node);
   snapshot.generating = false;
+  snapshot.promptOptimizing = false;
   delete snapshot.generationTaskId;
   return snapshot;
 }
@@ -5565,6 +5951,7 @@ function cloneCanvasContent(source) {
       delete node.groupId;
     }
     node.generating = false;
+    node.promptOptimizing = false;
     delete node.generationTaskId;
     node.panel = null;
     node.mediaMenuOpen = false;
@@ -5585,9 +5972,7 @@ function cloneCanvasContent(source) {
 }
 
 function pushUndoAction(action) {
-  if (!action) return;
-  state.undoStack.push(action);
-  if (state.undoStack.length > 50) state.undoStack.shift();
+  pushCanvasUndoAction(getActiveCanvas(), action);
 }
 
 function deleteSelectedNodes(confirmed = false) {
@@ -5621,6 +6006,9 @@ function deleteSelectedNodes(confirmed = false) {
   const selectedNodeIds = new Set(state.selectedIds);
   if (activeCanvas) {
     cancelGenerationTasks(
+      (task) => task.canvasId === activeCanvas.id && selectedNodeIds.has(task.nodeId),
+    );
+    cancelPromptOptimizationTasks(
       (task) => task.canvasId === activeCanvas.id && selectedNodeIds.has(task.nodeId),
     );
   }
@@ -5674,6 +6062,11 @@ function undoLastAction() {
     if (liveNode?.generating) {
       state.undoStack.push(action);
       showActionToast("生成中的节点暂不能撤销参数");
+      return;
+    }
+    if (liveNode?.promptOptimizing) {
+      state.undoStack.push(action);
+      showActionToast("提示词正在优化，完成后可撤销");
       return;
     }
   }
@@ -5936,7 +6329,7 @@ function renderAgentModelMenu() {
     const active = selectedIds.has(model.id);
     return `
       <button class="agent-model-option ${active ? "active" : ""}" type="button" data-agent-model="${model.id}" aria-pressed="${active}">
-        <span class="agent-model-provider">${escapeHtml(model.icon)}</span>
+        ${modelIconMarkup(model, "agent-model-provider")}
         <span class="agent-model-copy">
           <span class="agent-model-title">${escapeHtml(model.name)}</span>
           <span class="agent-model-detail">${escapeHtml(model.desc)}</span>
@@ -6358,6 +6751,7 @@ function deleteCanvas(canvasId) {
     onConfirm: () => {
       const index = state.canvases.findIndex((item) => item.id === canvasId);
       cancelGenerationTasks((task) => task.canvasId === canvasId);
+      cancelPromptOptimizationTasks((task) => task.canvasId === canvasId);
       state.canvases.splice(index, 1);
       if (state.activeCanvasId === canvasId) {
         const nextCanvas = state.canvases[Math.max(0, index - 1)] || state.canvases[0];
@@ -6379,6 +6773,7 @@ function getVisibleNameElement(kind) {
 function resetPrototypeProject() {
   if (!requireCanvasMutation()) return;
   cancelGenerationTasks((task) => task.projectId === state.projectId);
+  cancelPromptOptimizationTasks((task) => task.projectId === state.projectId);
   state.projectId = crypto.randomUUID();
   state.projectName = "Untitled";
   state.nodes = [];
@@ -6722,6 +7117,36 @@ function isCanvasSurface(target) {
   return target === shell || target === stage || target === nodeLayer || target === connectionLayer;
 }
 
+function isSelectionFrameDragTarget(pointer) {
+  if (
+    !multiSelectionFrame
+    || multiSelectionFrame.classList.contains("hidden")
+    || state.selectedIds.size < 2
+    || !isCanvasMutationAllowed()
+    || !isCanvasSurface(pointer?.target)
+    || state.action
+    || state.connectionDrop
+    || !Number.isFinite(pointer?.clientX)
+    || !Number.isFinite(pointer?.clientY)
+  ) return false;
+
+  const rect = multiSelectionFrame.getBoundingClientRect();
+  return pointer.clientX >= rect.left
+    && pointer.clientX <= rect.right
+    && pointer.clientY >= rect.top
+    && pointer.clientY <= rect.bottom;
+}
+
+function syncSelectionFramePointerFeedback(pointer) {
+  const pressed = isSelectionFrameDragAction();
+  shell.classList.toggle("selection-frame-pressed", pressed);
+  shell.classList.toggle(
+    "selection-frame-hover",
+    !pressed && isSelectionFrameDragTarget(pointer),
+  );
+  multiSelectionFrame?.classList.toggle("is-dragging", pressed);
+}
+
 function isConnectionDropSurface(target) {
   if (!(target instanceof Element) || !shell.contains(target)) return false;
   return !target.closest(
@@ -6809,6 +7234,21 @@ function beginPan(event) {
 
 function beginMarquee(event) {
   canvasPointerInteractionController.beginMarquee(event, shell);
+}
+
+function beginSelectionFrameDrag(event) {
+  const selectedNodes = getSelectedNodes();
+  if (selectedNodes.length < 2) return false;
+  const activeId = selectedNodes.some((node) => node.id === state.activeId)
+    ? state.activeId
+    : selectedNodes[0].id;
+  const result = canvasNodePointerController.handlePointerDown(event, activeId, {
+    interactionSource: "selection-frame",
+  });
+  if (result !== "drag-candidate" || !isSelectionFrameDragAction()) return false;
+  shell.classList.remove("selection-frame-hover");
+  shell.classList.add("selection-frame-pressed");
+  return true;
 }
 
 function beginMinimapDrag(event) {
@@ -6982,18 +7422,18 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
     }
     render();
   },
-  finishGroup: (action) => {
-    if (action.type === "resize-group" && action.moved) {
+  finishGroup: (action, options = {}) => {
+    if (!options.cancelled && action.type === "resize-group" && action.moved) {
       reconcileGroupFrameMembership(action.groupId);
     }
-    canvasGroupInteractionController.finish(action);
+    canvasGroupInteractionController.finish(action, options);
   },
   finishAssetLibraryResize: syncPromptPanelLayouts,
   clearAction: () => {
     state.action = null;
-    nodeLayer.querySelectorAll(".group-frame[data-active-resize]").forEach((element) => {
-      delete element.dataset.activeResize;
-    });
+    if (groupResizeOverlay) delete groupResizeOverlay.dataset.activeResize;
+    shell.classList.remove("selection-frame-pressed");
+    multiSelectionFrame?.classList.remove("is-dragging");
   },
   setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
   releasePointer: (target, pointer) => {
@@ -7004,6 +7444,8 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
     }
   },
   isCanvasSurface,
+  isSelectionFrameDragTarget,
+  beginSelectionFrameDrag,
   closeConnectionCreateMenu: closeCanvasCreateMenus,
   isSpaceDown: () => state.isSpaceDown,
   beginPan,
@@ -7024,7 +7466,7 @@ function moveDraggedNodes(action, event) {
 }
 
 function promoteGroupDrag(action, event) {
-  canvasGroupInteractionController.promoteDrag(action, event);
+  return canvasGroupInteractionController.promoteDrag(action, event);
 }
 
 function moveGroupNodes(action, event) {
@@ -7067,7 +7509,7 @@ function addNodeToGroup(node, groupId) {
 
 function findGroupForNode(node) {
   const groupId = canvasSpatialSelection.resolveNodeGroup({
-    nodeBounds: getNodeVisualBounds(node),
+    nodeBounds: getNodeMembershipBounds(node),
     currentGroupId: node.groupId || null,
     groups: state.groups.map((group) => ({ id: group.id, bounds: getGroupBounds(group) })),
   });
@@ -7103,7 +7545,7 @@ function reconcileGroupFrameMembership(groupId) {
   for (const node of state.nodes) {
     if (node.groupId && node.groupId !== groupId) continue;
     const nextGroupId = canvasSpatialSelection.resolveNodeGroup({
-      nodeBounds: getNodeVisualBounds(node),
+      nodeBounds: getNodeMembershipBounds(node),
       currentGroupId: node.groupId || null,
       groups: [{ id: groupId, bounds }],
     });
@@ -7122,10 +7564,12 @@ function reconcileGroupFrameMembership(groupId) {
 
 function handlePointerMove(event) {
   canvasPointerDispatchController.handleMove(event);
+  syncSelectionFramePointerFeedback(event);
 }
 
 function finishPointerInteraction(event) {
   canvasPointerDispatchController.finish(event);
+  syncSelectionFramePointerFeedback(event);
 }
 
 shell.addEventListener("pointerdown", (event) => {
@@ -7716,6 +8160,15 @@ function setSelectionDownloadMenuOpen(open) {
 
 selectionToolbar?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
+});
+
+groupResizeOverlay?.addEventListener("pointerdown", (event) => {
+  const handle = event.target.closest("[data-group-resize]");
+  const group = getGroupById(groupResizeOverlay.dataset.groupId);
+  if (!handle || !group || event.button !== 0 || !requireCanvasMutation()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  canvasGroupInteractionController.beginResize(group, event, handle.dataset.groupResize, shell);
 });
 
 multiSelectionPort?.addEventListener("pointerdown", beginSelectionConnectionDrag);

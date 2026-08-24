@@ -7,7 +7,7 @@ export function CreditIcon({ className, ...props }: CreditIconProps) {
     <img
       {...props}
       className={className}
-      src="/assets/icons/credit-spark.svg"
+      src="/assets/icons/credit-prism.svg"
       alt=""
       aria-hidden="true"
       width={16}

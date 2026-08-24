@@ -18,7 +18,7 @@
   function createCanvasNodePointerController(options) {
     const interaction = options.interaction;
 
-    function handlePointerDown(event, nodeId) {
+    function handlePointerDown(event, nodeId, pointerOptions = {}) {
       if (event.button === 1 || (event.button === 0 && options.isSpaceDown())) {
         event.preventDefault();
         event.stopPropagation();
@@ -69,7 +69,7 @@
       if (activeNode) nodesToPromote.push(activeNode);
       options.promoteNodes(nodesToPromote);
 
-      options.setAction({
+      const dragCandidate = {
         type: "drag-candidate",
         pointerId: event.pointerId,
         ids: selectedNodes.map((item) => item.id),
@@ -81,7 +81,11 @@
         groups: options.getGroupSnapshots(),
         revealMediaToolbar,
         revealGeneratorPanel,
-      });
+      };
+      if (pointerOptions.interactionSource) {
+        dragCandidate.interactionSource = pointerOptions.interactionSource;
+      }
+      options.setAction(dragCandidate);
       options.capturePointer(event.pointerId);
       options.render();
       return "drag-candidate";

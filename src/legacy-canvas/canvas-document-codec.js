@@ -110,7 +110,8 @@
     node.count = finiteInteger(candidate.count, 1, 1, 100);
     node.workflow = boundedString(candidate.workflow, "", 80);
     node.audioEnabled = candidate.audioEnabled === true;
-    node.promptOptimization = candidate.promptOptimization === true;
+    node.autoLinkEnabled = candidate.autoLinkEnabled !== false;
+    node.assetValidationEnabled = node.mode === "video" && candidate.assetValidationEnabled === true;
     node.prompt = boundedString(candidate.prompt, "", 20_000);
     node.preview = candidate.preview === true;
     node.name = boundedString(candidate.name, "", 300);
@@ -225,8 +226,9 @@
 
   function serializeLastPreset(candidate) {
     const preset = candidate && typeof candidate === "object" ? candidate : {};
+    const mode = GENERATOR_MODES.has(preset.mode) ? preset.mode : "image";
     return {
-      mode: GENERATOR_MODES.has(preset.mode) ? preset.mode : "image",
+      mode,
       model: boundedString(preset.model, "", 200),
       aspect: boundedString(preset.aspect, "", 40),
       resolution: boundedString(preset.resolution, "", 40),
@@ -235,7 +237,6 @@
       count: finiteInteger(preset.count, 1, 1, 100),
       workflow: boundedString(preset.workflow, "", 80),
       audioEnabled: preset.audioEnabled === true,
-      promptOptimization: preset.promptOptimization === true,
     };
   }
 
@@ -257,7 +258,7 @@
     };
   }
 
-  function restoreNode(node, promptInputHeight) {
+  function restoreNode(node) {
     if (node.kind === "asset") {
       return {
         ...node,
@@ -270,9 +271,9 @@
       ...node,
       credits: 0,
       generating: false,
+      promptOptimizing: false,
       expanded: false,
-      promptLarge: false,
-      promptInputHeight,
+      advancedSettingsExpanded: false,
       mediaMenuOpen: false,
       panel: null,
       modelFilter: node.mode,
@@ -291,11 +292,10 @@
     if (!snapshot.canvases.length) return null;
     const minScale = Number.isFinite(options.minScale) ? options.minScale : 0.2;
     const maxScale = Number.isFinite(options.maxScale) ? options.maxScale : 2;
-    const promptInputHeight = finiteNumber(options.promptInputHeight, 112, 1, 10_000);
     const canvases = snapshot.canvases.map((canvas) => ({
       id: canvas.id,
       name: canvas.name,
-      nodes: canvas.nodes.map((node) => restoreNode(node, promptInputHeight)),
+      nodes: canvas.nodes.map((node) => restoreNode(node)),
       connections: canvas.connections,
       groups: canvas.groups,
       tx: canvas.viewport.tx,

@@ -79,11 +79,7 @@
   };
 
   const generationWorkflows = {
-    image: [
-      { id: "text-to-image", label: "文生图片", icon: "type" },
-      { id: "reference-image", label: "参考生成", icon: "scan-search" },
-      { id: "image-edit", label: "图片编辑", icon: "image" },
-    ],
+    image: [],
     video: [
       { id: "text-to-video", label: "文生视频", icon: "square-play" },
       { id: "omni-reference", label: "全能参考", icon: "folder-plus" },
@@ -100,7 +96,7 @@
     },
     {
       id: "seedance",
-      title: "你有多了解 Seedance2.0 创作视频...",
+      title: "你有多了解 Seedance 2.5 创作视频...",
       messages: [
         {
           role: "user",
@@ -138,18 +134,20 @@
     maxHeight: 520,
     minMediaWidth: 300,
     minMediaHeight: 220,
-    normalPanelMinWidth: 560,
-    normalPanelMaxWidth: 760,
-    normalPanelHeight: 222,
-    promptTargetScreenWidth: 800,
-    promptScreenMargin: 80,
+    normalPanelWidth: 705,
+    normalPanelHeight: 291,
+    compactPanelHeight: 260,
+    advancedSettingsHeightByMode: {
+      image: 118,
+      video: 154,
+    },
+    promptInputTop: 73,
+    promptInputBottom: 51,
+    promptTargetScreenWidth: 705,
+    promptScreenMargin: 20,
     promptScaleMin: 0.5,
-    promptScaleMax: 4,
-    largePanelMinHeight: 320,
-    largePanelMaxHeight: 480,
-    largePromptMinHeight: 180,
-    largePromptMaxHeight: 340,
-    panelGap: 10,
+    promptScaleMax: 5,
+    panelGap: 14,
   };
 
   const canvasScaleLimits = {

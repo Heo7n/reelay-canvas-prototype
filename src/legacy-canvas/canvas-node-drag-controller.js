@@ -47,6 +47,7 @@
         origins,
         groups: action.groups,
         isDuplicate: action.altKey,
+        interactionSource: action.interactionSource,
         revealMediaToolbar: action.revealMediaToolbar,
         revealGeneratorPanel: action.revealGeneratorPanel,
       };
@@ -57,6 +58,11 @@
     }
 
     function finish(action, finishOptions = {}) {
+      if (finishOptions.cancelled) {
+        (action.origins || []).forEach(options.applyNodePosition);
+        if (finishOptions.render !== false) options.render();
+        return;
+      }
       options.updateGroupMembership(action.ids);
       if (action.moved && !action.isDuplicate) {
         options.pushUndoAction({

@@ -1,62 +1,60 @@
 # 模型目录说明
 
-更新时间：2026-07-09
+更新时间：2026-08-24
 
 ## 命名原则
 
-- 使用厂商正式公开名称。
-- 不把 Pro、Premier 等订阅套餐误写成模型后缀。
-- 同系列速度 / 成本变体保留明确后缀，例如 Fast、Mini、Lite。
-- Omni 按官方拼写，不使用 `Omini`。
+- 生成节点、Agent 模型偏好、组织积分演示和组织用量演示统一使用同一组产品模型名称。
+- 模型条目和参数能力只在 `data/model-catalog.js` 中定义；其他页面中的名称只允许作为历史记录或演示流水快照。
+- 同系列速度变体保留明确后缀，例如 `Fast`、`Lite`。
+- 目录中删除的模型 ID 只按媒体类型回退到新的默认模型，不允许图片和视频模型互相替代。
 
 ## 当前收录
 
-- OpenAI 当前图像 API 模型使用 `GPT Image 2`。
-- Google 图像模型收录 `Nano Banana Pro` 和 `Nano Banana 2`。
-- Midjourney 当前默认版本为 `V8.1`，同时保留 `V7` 和动漫方向的 `Niji 7`。
-- 字节跳动正式发布的是 `Seedream 5.0 Lite`；未收录无法从官方资料核实的 `Seedream 5.0 Pro`。
-- Seedance 收录 `2.0`、`2.0 Fast`、`2.0 Mini` 三档。
-- 可灵收录 `Video 3.0` 与 `Video 3.0 Omni`。
-- Sora 2 未收录，因为 OpenAI 官方页面标注该产品已于 2026-04-26 停止提供。
+图片模型：
 
-当前共 13 个模型：图片 7 个、视频 6 个。音频暂不提供生成模型，只保留画布素材上传、播放与编辑能力。
+- `GPT Image 2`
+- `Seedream 5.0 Lite`
+- `NanoBanana Pro`
 
-## 参数校验
+视频模型：
 
-`data/model-catalog.js` 已为每个模型声明 `capabilities`，节点参数面板根据该字段动态生成，不再共用一套虚构参数。
+- `Seedance 2.5`
+- `Seedance 2.0`
+- `Seedance 2.0 Fast`
+- `Kling 3.0`
 
-- GPT Image 2：官方支持满足约束的任意尺寸；原型提供十种常用比例、`1K / 2K / 4K` 与低/中/高生成质量。
-- Nano Banana Pro / Nano Banana 2：提供官方支持的完整常用画幅与 `1K / 2K / 4K`。
-- Midjourney V8.1：提供原生 `1K / 2K`；V7 与 Niji 7 只显示原生 `1K`，2K 放大保留为媒体编辑能力。
-- Seedream 5.0 Lite：只显示已确认的高分辨率 `2K / 4K`。
-- Seedance 2.0：`720p / 1080p / 4K`；Fast 与 Mini：`480p / 720p`；时长均限制在 4 至 15 秒的产品范围内。火山引擎当前页面对 4K 同时存在模型直出与 MediaKit 后处理口径，真实 API 接入时必须以端点能力响应为准。
-- Veo 3.1：`720p` 支持 4/6/8 秒；选择 `1080p` 或 `4K` 时自动限制为 8 秒；单次只生成 1 个视频。
-- Kling Video 3.0 系列：`720p / 1080p`，时长在官方 3 至 15 秒范围内。
+当前共 7 个生成模型：图片 3 个、视频 4 个。音频暂不提供独立生成模型，只保留画布素材上传、播放与编辑能力。
 
-## 主要来源
+## 菜单展示短句与资料依据
 
-- [OpenAI GPT Image 2 输出尺寸与质量](https://developers.openai.com/api/docs/guides/image-generation#customize-image-output)
-- [Google Nano Banana 图像生成参数](https://ai.google.dev/gemini-api/docs/image-generation)
-- [Midjourney 版本与 HD 能力](https://docs.midjourney.com/hc/en-us/articles/32199405667853-Version)
-- [Midjourney 图片尺寸](https://docs.midjourney.com/hc/en-us/articles/33329374594957-Image-Size-Resolution)
-- [火山引擎 Seedance 2.0](https://www.volcengine.com/activity/seedance2)
-- [Google Veo 3.1 参数](https://ai.google.dev/gemini-api/docs/video)
-- [可灵 3.0 用户指南](https://app.klingai.com/cn/quickstart/klingai-video-3-model-user-guide)
+模型菜单的说明是面向创作者的单行能力摘要，不照搬供应商营销文案，也不把当前原型尚未接入的 API 能力表述为已经可用。当前短句依据 2026-08-24 可访问的公开资料统一压缩：
 
-## 真实接入提醒
+- GPT Image 2：OpenAI 将其定位为快速、高质量的图像生成与编辑模型，并强调灵活尺寸、高保真图像输入和改进的文字呈现；菜单摘要为“快速生成与编辑，强化文字与参考还原”。来源：[OpenAI 模型页](https://developers.openai.com/api/docs/models/gpt-image-2)、[ChatGPT Images 2.0](https://openai.com/index/introducing-chatgpt-images-2-0/)。
+- Seedream 5.0 Lite：ByteDance Seed 将其定位为具备深度思考和在线检索能力的统一多模态图像生成模型；菜单摘要为“深度推理与实时检索，提升生成准确度”。来源：[Seedream 5.0 Lite](https://seed.bytedance.com/seedream5_0_lite)。
+- NanoBanana Pro：Google 将其称为 Gemini 3 Pro Image，面向复杂、专业场景，强调高级推理、稳健控制、图像生成与编辑；菜单摘要为“专业级生成与编辑，强化复杂视觉控制”。来源：[Introducing Nano Banana Pro](https://blog.google/innovation-and-ai/products/nano-banana-pro/)、[Gemini 3 Pro Image for developers](https://blog.google/innovation-and-ai/technology/developers-tools/gemini-3-pro-image-developers/)。
+- Seedance 2.5：ByteDance Seed 强调 30 秒叙事、音视频联合生成、精准参考控制和编辑能力；菜单摘要为“30 秒音视频叙事，支持精准参考与编辑”。来源：[Seedance 2.5](https://seed.bytedance.com/en/seedance2_5)。
+- Seedance 2.0：ByteDance Seed 将其定义为支持文字、图片、音频和视频四种输入的统一多模态音视频联合生成架构；菜单摘要为“四模态输入，统一音视频生成与编辑”。来源：[Seedance 2.0](https://seed.bytedance.com/seedance2_0)。
+- Seedance 2.0 Fast：公开模型服务将其描述为 Seedance 2.0 的速度优化变体，支持同步音频和多模态输入；菜单只保留经得起跨服务差异的定位，摘要为“加速多模态生成，适合高频创意迭代”。来源：[Replicate 模型页](https://replicate.com/bytedance/seedance-2.0-fast)、[Krea 模型页](https://www.krea.ai/models/seedance-2-fast)。
+- Kling 3.0：Kling 官方说明其最长生成 15 秒，支持原生音视频输出和灵活的多镜头叙事；菜单摘要为“15 秒原生音视频，强化多镜头叙事”。来源：[Kling VIDEO 3.0 指南](https://app.klingai.com/global/quickstart/klingai-video-3-model-user-guide)。
 
-当前能力表服务于前端原型。真实接入仍必须补充：
+## 原型能力契约
 
-- 输入模态。
-- 输出模态。
-- 分辨率与比例。
-- 时长。
-- 参考素材数量。
-- 原生音频能力。
-- 可用地区。
-- 供应商模型 ID。
-- 价格与积分换算。
-- 服务状态。
-- 下线日期。
+`data/model-catalog.js` 为每个模型声明 `capabilities` 和必要的 `defaults`，节点参数菜单完全由这些字段生成。
 
-其中输入模态、参考素材条件和供应商实时服务状态会进一步影响参数组合，应由后端能力接口覆盖前端静态目录。
+- GPT Image 2：常用比例、`1K / 2K / 4K` 与低/中/高生成质量。
+- Seedream 5.0 Lite：常用比例与 `2K / 4K`。
+- NanoBanana Pro：常用比例与 `1K / 2K / 4K`。
+- Seedance 2.5：全能参考 / 首尾帧、六种常用比例、`480p / 720p / 1080p`、`5–30s` 逐秒时长；默认 `16:9 · 720p · 5s`。
+- Seedance 2.0：使用与 Seedance 2.5 同一组原型画幅和分辨率，时长为 `4–15s`、逐秒可调，默认 `4s`。
+- Seedance 2.0 Fast：文生视频 / 图生视频、`480p / 720p`、`4–15s` 逐秒时长，默认 `4s`。
+- Kling 3.0：文生视频 / 图生视频、`720p / 1080p / 4K`、`3–15s` 逐秒时长，默认 `3s`。
+
+这些是当前交互原型的产品能力契约，不代表已经接入供应商 API。真实接入时必须由后端能力接口校准输入方式、输出分辨率、时长、参考素材数量、原生音频、地区、价格、服务状态和下线日期。
+
+## 持久化兼容
+
+- `seedance-2`、`seedance-2-fast`、`kling-video-3`、`gpt-image-2`、`seedream-5-lite` 和 `nano-banana-pro` 保留既有稳定 ID。
+- 新增的 Seedance 2.5 使用 `seedance-2-5`，并成为新视频节点默认模型。
+- 历史画布中的 Nano Banana 2、Midjourney、Niji、Seedance 2.0 Mini、Kling Video 3.0 Omni 和 Veo 3.1 会在恢复并归一化节点时回退到同媒体类型的当前默认模型。
+- 组织积分与用量页面仍使用可整体替换的确定性演示流水；其中模型名称是记录快照，不是第二套模型目录。

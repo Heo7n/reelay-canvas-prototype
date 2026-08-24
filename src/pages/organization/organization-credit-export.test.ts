@@ -28,7 +28,7 @@ describe("organization credit ledger exports", () => {
     expect(allocationCsv).toContain("流水编号,发生时间,成员,账号,类型,积分变动");
     expect(allocationCsv).toContain("2026-07-25 至 2026-08-24");
     expect(consumptionCsv).toContain("任务类型,模型,清晰度,画面比例");
-    expect(consumptionCsv).toContain("Seedream 5.0 Pro,4K,9:16,2 张");
+    expect(consumptionCsv).toContain("Seedream 5.0 Lite,4K,9:16,2 张");
     expect(consumptionCsv).toContain("扣减前余额,扣减后余额");
   });
 
