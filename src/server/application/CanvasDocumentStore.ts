@@ -11,6 +11,12 @@ export interface SaveCanvasDocumentInput {
   content: unknown;
 }
 
+export interface ReadCanvasDocumentInput {
+  actorId: ActorId;
+  projectId: ProjectId;
+  canvasId: CanvasId;
+}
+
 export class CanvasDocumentRevisionConflictError extends Error {
   constructor(readonly currentRevision: number) {
     super(`Canvas document revision conflict; current revision is ${currentRevision}.`);
@@ -20,12 +26,12 @@ export class CanvasDocumentRevisionConflictError extends Error {
 
 export class CanvasDocumentProjectUnavailableError extends Error {
   constructor() {
-    super("The project is unavailable or no longer writable.");
+    super("The project is unavailable or inaccessible to the actor.");
     this.name = "CanvasDocumentProjectUnavailableError";
   }
 }
 
 export interface CanvasDocumentStore {
-  getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null>;
+  getCanvasDocument(input: ReadCanvasDocumentInput): Promise<CanvasDocument | null>;
   saveCanvasDocument(input: SaveCanvasDocumentInput): Promise<CanvasDocument>;
 }

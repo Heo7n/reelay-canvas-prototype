@@ -32,6 +32,8 @@ export const legacyCanvasContextSchema = z
 
 export type LegacyCanvasContext = z.infer<typeof legacyCanvasContextSchema>;
 
+const canvasInstanceIdSchema = z.string().min(1);
+
 export const hostMessageSchema = z
   .object({
     source: z.literal("reelay-shell"),
@@ -83,28 +85,33 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:ready"),
     protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:dirty"),
     protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
     dirty: z.boolean(),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:navigate"),
     protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
     target: z.enum(["home", "projects", "organization", "logout"]),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:open-account"),
     protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:save"),
     protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
     requestId: z.string().min(1),
     schemaVersion: z.number().int().min(1),
     expectedRevision: z.number().int().min(0),

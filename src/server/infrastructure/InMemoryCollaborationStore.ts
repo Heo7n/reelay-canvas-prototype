@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   CanvasDocumentProjectUnavailableError,
   CanvasDocumentRevisionConflictError,
+  type ReadCanvasDocumentInput,
   type SaveCanvasDocumentInput,
 } from "../application/CanvasDocumentStore";
 import type { CanvasDocument, CanvasId } from "../../domain/canvas/canvas-document";
@@ -15,11 +16,12 @@ import type {
   Workspace,
   WorkspaceId,
 } from "../../domain/workspace/workspace";
-import type {
-  CollaborationStore,
-  CreateProjectInput,
-  UpdateProjectInput,
-} from "../application/CollaborationStore";
+import type { CollaborationStore } from "../application/CollaborationStore";
+import {
+  ProjectWorkspaceUnavailableError,
+  type CreateProjectInput,
+  type UpdateProjectInput,
+} from "../application/ProjectStore";
 import {
   createDemoSeed,
   type DemoAccountFixture,
@@ -162,7 +164,7 @@ export class InMemoryCollaborationStore implements CollaborationStore {
         (project) =>
           project.workspaceId === workspaceId &&
           !this.trashedProjects.has(project.id) &&
-          this.projectMemberships.get(project.id)?.has(actorId),
+          this.canReadProject(project, actorId),
       )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map((project) => this.toProjectSummary(project, actorId));
@@ -178,7 +180,7 @@ export class InMemoryCollaborationStore implements CollaborationStore {
       !project ||
       this.trashedProjects.has(projectId) ||
       project.workspaceId !== workspaceId ||
-      !this.projectMemberships.get(projectId)?.has(actorId)
+      !this.canReadProject(project, actorId)
     ) {
       return null;
     }
@@ -190,12 +192,18 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     if (
       !project ||
       this.trashedProjects.has(projectId) ||
-      !this.projectMemberships.get(projectId)?.has(actorId)
+      !this.canReadProject(project, actorId)
     ) return null;
     return this.toProjectSummary(project, actorId);
   }
 
   async createProject(input: CreateProjectInput): Promise<ProjectSummary> {
+    const workspaceExists = this.workspaces.some((workspace) => workspace.id === input.workspaceId);
+    if (!workspaceExists) throw new ProjectWorkspaceUnavailableError("not_found");
+    if (!(await this.canReadWorkspace(input.createdByActorId, input.workspaceId))) {
+      throw new ProjectWorkspaceUnavailableError("forbidden");
+    }
+
     const project: DemoProjectFixture = {
       id: `project-${this.createId()}`,
       workspaceId: input.workspaceId,
@@ -218,7 +226,10 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     const current = this.projects.get(projectId);
     if (!current || this.trashedProjects.has(projectId) || current.workspaceId !== workspaceId) return null;
     const role = this.projectMemberships.get(projectId)?.get(input.updatedByActorId);
-    if (role !== "admin" && role !== "edit") return null;
+    if (
+      !this.canReadProject(current, input.updatedByActorId) ||
+      (role !== "admin" && role !== "edit")
+    ) return null;
 
     const project: DemoProjectFixture = {
       ...current,
@@ -255,8 +266,16 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     return true;
   }
 
-  async getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null> {
-    const document = this.canvasDocuments.get(projectId)?.get(canvasId);
+  async getCanvasDocument(input: ReadCanvasDocumentInput): Promise<CanvasDocument | null> {
+    const project = this.projects.get(input.projectId);
+    if (
+      !project ||
+      this.trashedProjects.has(input.projectId) ||
+      !this.canReadProject(project, input.actorId)
+    ) {
+      throw new CanvasDocumentProjectUnavailableError();
+    }
+    const document = this.canvasDocuments.get(input.projectId)?.get(input.canvasId);
     return document ? structuredClone(document) : null;
   }
 
@@ -266,6 +285,7 @@ export class InMemoryCollaborationStore implements CollaborationStore {
     if (
       !project ||
       this.trashedProjects.has(input.projectId) ||
+      !this.canReadProject(project, input.actorId) ||
       (role !== "admin" && role !== "edit")
     ) {
       throw new CanvasDocumentProjectUnavailableError();
@@ -301,5 +321,10 @@ export class InMemoryCollaborationStore implements CollaborationStore {
       updatedAt: project.updatedAt,
       coverAssetId: project.coverAssetId,
     };
+  }
+
+  private canReadProject(project: DemoProjectFixture, actorId: ActorId): boolean {
+    if (!this.projectMemberships.get(project.id)?.has(actorId)) return false;
+    return project.accessKind === "collaborative" || project.createdByActorId === actorId;
   }
 }

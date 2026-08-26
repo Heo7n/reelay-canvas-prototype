@@ -67,7 +67,7 @@ Reelay Canvas 是面向 AIGC 创作流程的无限画布原型。它不是传统
 主页与画布的边界：
 
 - 新主页和项目库位于 `src/pages`，共享项目卡、账户栏和主题位于 `src/shared`，数据只通过 `src/application` ports 与 `src/infrastructure/http` adapters 进入页面；不进入 `app.js` 或 `styles/app.css`。
-- 主页创建项目后进入 `/app/w/:workspaceId/projects/:projectId/canvases/main`。宿主会先校验会话、工作空间和项目，再以 iframe 打开旧画布并通过一次 `canvas:ready` 握手发送版本化上下文与 CanvasDocument；旧画布按 `projectId + canvasId` 自动保存迁移快照。新项目尚无服务端文档时，主页提示词形成的首个节点会立即写入 revision 1，不需要等待用户再次操作。
+- 主页创建项目后进入 `/app/w/:workspaceId/projects/:projectId/canvases/main`。宿主会先校验会话、工作空间和项目，再以 iframe 打开旧画布并通过一次 `canvas:ready` 握手发送版本化上下文与 CanvasDocument；旧画布按 `projectId + canvasId` 自动保存迁移快照。新项目尚无服务端文档时，纯浏览只把当前空画布登记为内存同步基线，不创建空的数据库记录；主页提示词形成的首个节点或后续真实用户修改才会写入 revision 1。
 - 旧画布内部的“回到主页 / 全部项目 / 退出账号”入口通过 bridge 请求宿主导航；宿主在 dirty 与保存任务清空后进入 React 路由或提交退出 action，不再依赖静态页面。
 - 模拟积分仍没有共享账本；React 页面和旧画布刷新后都显示当前阶段的 `3000 / 0` 测试基线。
 - 素材、模板、组织管理和更多能力入口只给出明确原型反馈，不伪装为已实现页面。
@@ -169,7 +169,7 @@ Agent 对话栏展开或调整宽度时，右上角操作区按对话栏实际�
 当前交互：
 
 - React 工作台已经有真实 browser route identity；从主页或项目库打开项目时，会先验证当前会话能否访问对应 workspace / project，再进入 legacy canvas host。
-- 该路由身份目前只保护入口和传递上下文，不会让旧画布自动加载同名项目内容；旧画布仍只有页面内存中的项目名、多画布和节点状态。
+- 该路由身份保护入口并传递上下文；旧画布会从当前项目的 CanvasDocument 恢复多画布 bundle，但其中的内部画布仍不是独立的服务端 Canvas 实体。
 - 旧画布 Logo 按钮保留项目菜单：回到主页、全部项目和退出由宿主在保存收尾后执行 React 路由；创建 / 删除仍是画布内原型行为，不应描述为完整项目管理能力。
 - 通用确认弹窗使用浏览器模态对话框：打开时焦点进入操作按钮，Tab 不会离开弹窗，Escape 可关闭，关闭后焦点返回原入口。
 - 项目名默认是 `Untitled`，支持双击重命名。
@@ -209,7 +209,7 @@ Agent 对话栏展开或调整宽度时，右上角操作区按对话栏实际�
 
 ## 7. 生成节点
 
-用户描述中“图像节点/视频节点”在产品语言中统一称为“生成节点”。节点在创建时即确定为图片生成或视频生成，之后只允许在同一媒体类型内切换模型；音频暂不作为独立生成节点类型，仍可作为上传、播放和编辑的画布素材，视频生成节点也可在综合参数中保存是否生成音频的开关状态。
+用户描述中“图像节点/视频节点”在产品语言中统一称为“生成节点”；需要区分时称为“图片生成节点 / 视频生成节点”。节点在创建时即写入非空且不可变的 `mediaKind`（`image / video`），之后只允许在同一媒体类型内切换模型；音频暂不作为独立生成节点类型，仍可作为上传、播放和编辑的画布素材，视频生成节点也可在综合参数中保存是否生成音频的开关状态。
 
 ### 7.1 初始状态
 
@@ -337,7 +337,7 @@ Agent 对话栏展开或调整宽度时，右上角操作区按对话栏实际�
 - 开始生成时扣减可用积分，并增加累计消耗。
 - 节点会短暂显示“生成中”状态。
 - 生成任务按 `projectId / canvasId / nodeId / taskId` 定位，切换画布不会使任务停滞或完成到同 ID 的副本节点。
-- 生成任务沿用节点创建时已经确定的图片或视频类型，并把当次模型、生成方式和综合参数作为启动快照；成功结果不会再次改变或重新锁定节点类型。
+- 生成任务沿用节点创建时已经确定的 `mediaKind`，并把同一个 `mediaKind`、当次模型、生成方式和综合参数作为启动快照；任务结果类型必须与节点和快照一致，成功结果不会再次改变或重新锁定节点类型。
 - 成功生成是该节点生成参数的撤销提交边界：完成前积累的节点参数快照会被移除，避免 Ctrl+Z 用陈旧的空节点快照覆盖刚完成的结果或越过节点创建时确定的类型契约。当前这不是完整生成历史或结果版本撤销。
 - 图片结果显示真实在线图片。
 - 视频结果显示真实在线视频。
@@ -444,7 +444,7 @@ stateDiagram-v2
 - 有媒体内容的素材节点或生成节点可作为上游；生成节点左右边中心各有一个只位于媒体框外部的半椭圆端口交互场，不覆盖媒体框主体。十字光标、端口二维跟随与起拖命中共用该外层几何，矩形包围盒四角不产生虚假反馈；拖线时先在外层给出接近反馈，再进入内层半椭圆完成吸附，退出使用略大的同向半椭圆形成滞后。连线进行中，合法目标节点的整个媒体框主体同时作为完整连接接收面：进入主体后预览线临时投影到语义正确的一侧边缘，画布上层会按媒体框的屏幕矩形放置独立的约一像素边缘光层，不参与画布世界缩放。目标反馈只使用纵向贯穿、横向移动的光窗裁进圆角矩形边缘环带，使顶部与底部亮段从连接侧同步向另一侧流动；框外不再叠加扩散光晕。光窗宽度按媒体框当前屏幕宽度自适应，并根据实际窗口宽度计算完全位于框外的起止位置；未经过区域保持透明，每轮完整穿越后只保留短暂暗场，因此不会只在左右端口闪烁，也不会暴露完整矩形轨迹。动画只在目标激活期间运行，进入新目标或重新进入时从连接侧重启。深色主题使用高亮中性白边线，浅色主题使用高对比冷灰边线；两者都不通过加粗边框、框外光晕、压暗媒体内容、径向光斑、旋转光环或倾转节点表达。退出或松手后光层快速消隐，系统减少动态效果时只保留细静态边线。按下开始拉线后，起点端口立即隐藏，预览线直接从媒体框左右边中心出发；端口只承担发现和目标吸附反馈，落定后的实际连线回归媒体框边缘中心。右侧拖出建立下游，左侧拖出建立上游；主体重叠时优先命中视觉层级更高的合法节点，外侧相邻候选重叠时按稳定中心距离切换。拖入已有节点的有效外侧吸附场或媒体框主体都会建立连接；拖到画布空白处松开后，预览线冻结为一次性的待创建反馈，端口保持隐藏。线末端按菜单实际渲染尺寸和画布容器滚动偏移直接锚定到竖排创建菜单的上边或下边，并轻微压入边缘以避免缩放、字体渲染或内部滚动产生视觉缝隙和错位。该菜单与双击创建菜单复用图片、视频两种卡片及相同图标；确认、取消或点击外部后才提交或清除该线。
 - 多选共同框的整体输出端口复用同一连接状态机。起拖后端口跟随指针，所有选中节点的右侧连接线同时汇聚到落点；吸附已有生成节点时批量建立全部合法出边，落到空白处时多条预览线保持显示并打开共同下游创建菜单。选择图片或视频后只创建一个生成节点，并以一次批量连接提交把所有来源连入该节点。
 - 下游提示词面板显示的是上游素材的实时画布引用，不复制媒体文件；上游媒体替换、重命名或切换后引用会同步更新，点击引用可定位上游，移除引用等同于断开连接。
-- 连接使用与节点选择和端口协调的中性灰阶，不使用独立蓝色；普通连线保持低对比，hover 或节点相关连线会明显提高明度和线宽，连接自身选中态再提高一级，接近和吸附沿同一灰阶递进。远景只弱化普通连线，不削弱相关或选中连线。连接禁止自连、重复连接和环路；选中节点时保持上下游节点原有视觉层级，只强化当前节点及与其直接相关的连线，避免把关系高亮误读为多节点选中。连接完成时只播放一次短促落定动效，静止连线不持续运动。连接可单独选中、删除并通过撤销恢复。
+- 连接使用与节点选择和端口协调的中性灰阶，不使用独立蓝色；普通连线保持低对比，hover 或节点相关连线会明显提高明度和线宽，连接自身选中态再提高一级，接近和吸附沿同一灰阶递进。远景只弱化普通连线，不削弱相关或选中连线。连接禁止自连、重复连接和环路；选中节点时保持上下游节点原有视觉层级，只强化当前节点及与其直接相关的连线，避免把关系高亮误读为多节点选中。连接完成时只播放一次短促落定动效，静止连线不持续运动。单条创建、批量创建和删除都通过同一原子 CanvasCommand 提交；批量连接只产生一条撤销记录，连接可单独选中、删除并通过撤销恢复。
 - 节点拖动、组移动、框选、组缩放、连线预览与画布平移按浏览器显示帧合并视觉更新，松手时提交最终坐标，避免高轮询鼠标触发同一帧内的重复布局和连线计算。
 
 后续建议：
@@ -535,46 +535,48 @@ styles/app.css
   定义主题变量、画布视觉、节点样式、Agent 样式和一个基础窄屏降级规则；当前尚不构成完整移动端画布支持。
 
 app.js
-  维护应用状态，按签名复用节点 DOM，处理画布交互、文件拖拽、生成模拟、Agent 对话。
+  维护画布 UI/session 状态和 legacy runtime adapter，按签名复用节点 DOM，处理画布交互、文件拖拽、生成模拟、Agent 对话；不再保存活动画布内容的第二份镜像。
 
 src/config/prototype-config.js
   保存模拟媒体、官方样例素材、媒体工具栏、布局常量、资产分类和 Agent 示例会话等静态原型配置。
 
 data/model-catalog.js
-  保存图片和视频生成模型目录、展示元数据与参数能力表。
+  保存图片和视频生成模型、媒体处理 / Agent 服务、展示元数据、参数能力与确定性用量演示模板；`src/features/models` 只提供 React 可消费的类型化适配，不复制目录数据。
 
 app-shell.html / vite.shell.config.ts / tsconfig.shell.json
   定义当前 `/app` 应用入口、Vite 构建 / 开发代理和严格 TypeScript 检查；开发服务器显式分流 `/app/*` 与旧 `/index.html`。
 
 src/app / src/pages
-  定义 browser route contract、登录 / 主页 / 项目库页面、route loaders / actions 和受保护的 legacy canvas 路由宿主。
+  定义 browser route contract、登录 / 主页 / 项目库页面、route loaders / actions 和受保护的 legacy canvas 路由宿主；主要页面按 route 延迟加载，loader / action 仍保持稳定契约。
 
 src/domain / src/application
-  定义不依赖 React、DOM 或持久化实现的 Session、Workspace、Membership、Project 与 CanvasDocument 边界。
+  定义不依赖 React、DOM、HTTP 或持久化实现的 Session、Workspace、Membership、Project 与 CanvasDocument 边界，并用 application error code 隔离传输错误。
 
 src/infrastructure/http
   用 Zod 校验 HTTP DTO，并实现浏览器 Session gateway 与 Workspace / Project repositories；领域对象不直接依赖传输格式。
 
 src/server
-  定义 Fastify 本地共享 API、HttpOnly 演示会话、异步 collaboration store 边界与 PostgreSQL adapter；内存 adapter 只保留作快速契约测试和显式开发回退。
+  定义 Fastify 本地共享 API、HttpOnly 演示会话、按 Session / Account / Workspace / Project / CanvasDocument 拆分的 capability ports 与 PostgreSQL adapter；路由只依赖最小能力组合，项目创建和画布读写在 adapter 内按 actor scope 再次授权。内存 adapter 只保留作快速契约测试和显式开发回退。
+
+src/features/models / src/features/usage
+  以前端中立边界提供类型化模型目录适配、确定性演示用量 fixture 与分析纯函数；个人用量和组织用量不再互相依赖页面私有模块。
 
 src/shared
   定义迁移页面共用的品牌、账户栏、项目卡、主题和短暂提示能力。
 
 src/legacy-canvas
-  定义版本化同源消息协议和旧画布隔离宿主；旧画布通过单一 ready 握手消费 `host:init` 与 `host:document`，并回传保存请求。
+  定义多画布 runtime store、版本化同源消息协议、旧画布隔离宿主、文档 codec 与 iframe 侧保存协调器；每次 iframe 页面实例用唯一 instance id 完成一次 ready 握手，消费 `host:init` 与 `host:document`，并回传保存请求。
 ```
 
-核心状态在 `state` 对象中：
+每个 CanvasRecord 是节点、组、连接、视口、层级和撤销栈的唯一 runtime 权威；`canvas-runtime-store.js` 管理多画布集合与活动画布。`state.nodes / groups / connections / tx / ty / scale / zCounter / undoStack` 只是在迁移期间给现有 renderer 和手势控制器使用的活动画布访问门面，不保存副本。其余 UI/session 状态仍在 `state` 对象中：
 
-- 画布：`tx`、`ty`、`scale`。
-- 节点：`nodes`、`selectedIds`、`activeId`、`zCounter`。
-- 项目/画布：`projectName`、`canvases`、`activeCanvasId`。
+- 画布 session：`selectedIds`、`activeId`、`activeGroupId`、`activeConnectionId` 等瞬态选择和浮层状态；切换活动画布时会清空，不写入 CanvasDocument。
+- 项目/画布：`projectName`；`canvases` 与 `activeCanvasId` 由 runtime store 持有并通过只读门面暴露。
 - 生成默认值：`lastPreset`。
 - 操作状态：`action`、`isSpaceDown`。
-- 撤销：当前活动画布映射到各 `CanvasDocument` 自己的 `undoStack`；项目重命名不写入该栈，生成中的节点不会被参数撤销恢复为陈旧任务状态，成功生成后会清理该节点在本次结果之前的参数快照。
-- 生成任务：`generationTasks`，任务记录项目 / 画布 / 节点归属、启动参数快照和计价结果。
-- 节点结果类型：生成节点的 `lockedMode` 在首次成功前为 `null`，成功后固定为 `image` 或 `video`；旧原型节点可从已有 `generatedAsset.type` 补齐该值。
+- 撤销：每个内部 CanvasRecord 持有自己的 `undoStack`；项目重命名不写入该栈，生成中的节点不会被参数撤销恢复为陈旧任务状态，成功生成后会清理该节点在本次结果之前的参数快照。
+- 生成任务：`generationTasks`，任务记录项目 / 画布 / 节点归属、与节点 `mediaKind` 一致的启动参数快照和计价结果。
+- 节点媒体类型：生成节点在创建时写入非空且不可变的 `mediaKind`。当前 legacy 运行时仍把它适配为内部 `mode`，但 `mode / lockedMode / generatedAsset.type` 只允许作为 v1 旧快照的迁移输入；新快照只写 `mediaKind`，首次生成成功不再写类型锁。
 - Agent：`agentOpen`、`agentWidth`、`activeConversationId`、`agentModelId`、`agentModelIds`；单双字段是当前兼容状态，不应直接复制到正式 Conversation schema。
 - 资产库：`libraryView`、`librarySearch`、`libraryFilter`、`libraryScope`、`libraryCollapsedGroups`、`globalLibraryDisplay`。
 - 主题：`themeMode`。
@@ -594,22 +596,24 @@ src/legacy-canvas
 
 - 主要交互逻辑仍集中在 `app.js`，继续扩大后会难以维护。
 - 当前完整样式仍集中在 `styles/app.css`，已经有入口层但还未按区域拆分。
-- 迁移页面已经按 route、共享 UI、application port、HTTP adapter 和 server 边界拆分；旧画布仍缺少相同级别的模块边界。
-- 旧画布已有 JavaScript、配置、CSS、HTML 检查以及序列化 / 只读行为测试；React 壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
+- 迁移页面已经按 route、共享 UI、application port、HTTP adapter 和 server 边界拆分；旧画布已提取 codec、连接 / 指针控制器、无 DOM 的持久化协调器、多画布 runtime store 与无 DOM 的 CanvasCommand executor。连接的创建、批量创建、删除和撤销已迁移到原子命令，连接 renderer 不再在渲染时修复内容；节点、分组、移动和参数仍未完成字段级命令迁移，任务 runner 与其余纯消费式渲染边界也仍未完成。
+- 主要 React 页面已经按 route 拆包，HTTP adapter 只向页面暴露 application error；构建主包不再把组织中心、账号用量和画布宿主全部提前加载。
+- 旧画布已有 JavaScript、配置、CSS、HTML 检查以及序列化、只读和持久化状态机行为测试；React 壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
 - 暂无代码格式化、lint 和自动浏览器端到端测试；当前 React 主链路已完成两套隔离浏览器的人工验证，下一阶段应把稳定的登录、路由保护和组织共享流程固化为 E2E。
 - 会话、账号联系资料、Workspace、Membership、Project 与 CanvasDocument 已通过 PostgreSQL 持久化；项目软删除保留成员与画布数据，可重复 migration、幂等 demo seed 和重启集成测试覆盖这些边界。画布文档仍处于迁移桥阶段，资产、生成任务与积分仍只存在原型状态。
+- migration checksum 统一按 LF 计算并由 `.gitattributes` 固定 SQL 换行，Windows / Linux worktree 不会因 CRLF 差异误报历史 migration 被改写。
 - 演示会话 token 以摘要存库并具有过期 / 撤销状态，但十个固定账号、确定性 demo 密码散列和预置项目角色仍不是正式账号生命周期或完整权限管理系统。
-- 全局可变状态仍缺少统一 action/store 边界，撤销也还不是覆盖全部操作的命令系统。
-- React 壳已通过包管理器和构建流程使用 Lucide；旧静态画布仍固定在 `vendor/lucide-1.25.0.min.js`，不依赖境外 CDN。
+- 全局可变状态仍缺少完整 action/store 边界；连接已有原子命令与按画布隔离的混合撤销分派，其余操作仍沿用 legacy action。
+- React 壳已通过包管理器和构建流程使用 Lucide；旧静态画布使用 `app.js` 内的最小图标路径子集，不依赖境外 CDN 或完整 vendor 包。
 
 ## 14. 已知工程债务
 
 - 主交互和样式仍集中在 `app.js` 与 `styles/app.css`，新页面不能继续进入这两个单体文件。
-- Legacy canvas host 与旧画布已接通 `CanvasDocument` 加载 / 保存，并修正空文档首写、重复初始化、后台生成完成和应用内导航前刷新保存。浏览器强制终止仍不能保证异步 HTTP 完成，这是 Web 生命周期本身的边界，后续正式任务系统不能只依赖页面退出钩子。
+- Legacy canvas host 与旧画布已接通 `CanvasDocument` 加载 / 保存；iframe 侧保存协调器独占 baseline、dirty、debounce、单一 in-flight、revision、重试和错误降级状态，宿主按 iframe instance 与 route scope 拒绝重复 ready 和旧 scope 的异步保存回调。首次打开空画布不会制造空 `CanvasDocument`，首次真实修改才写 revision 1。浏览器强制终止仍不能保证异步 HTTP 完成，这是 Web 生命周期本身的边界，后续正式任务系统不能只依赖页面退出钩子。
 - 首次以 `view` 权限加载时已经真正只读；如果一个正在生成的可编辑会话被服务端动态降级，完成回调的权限切换仍需在引入实时权限刷新时单独验证。
 - 当前 CanvasDocument allow-list 是迁移快照边界，不应继续容纳生成历史、资产二进制、积分或账号运行态；新增字段必须先明确恢复语义并扩展行为测试。
-- 当前生成任务只存在页面内存中，虽已记录启动参数快照和节点级结果类型锁，但还没有持久化、节点内多结果历史、取消 UI 或失败退款。
-- 当前撤销仍不是完整 command 系统，只覆盖部分画布操作；项目重命名暂不支持撤销。
+- 当前生成任务只存在页面内存中，虽已记录与节点 `mediaKind` 一致的启动参数快照，但还没有持久化、节点内多结果历史、取消 UI 或失败退款。
+- 当前撤销仍不是完整 command 系统：连接已进入带 before conflict、transition validation 和 50 条上限的原子命令；节点删除、参数、分组与移动仍是 legacy action。后续节点命令必须使用字段 allow-list，不能把生成任务、临时 UI 状态或创建类型一起塞进整节点快照；项目重命名暂不支持撤销。
 - 资产仍以原型对象副本存在，Blob URL 生命周期和正式 AssetReference 尚未落地。
 - 完整演进顺序只在 `docs/product-expansion-plan.md` 维护，本说明不再保留第二套路线路。
 

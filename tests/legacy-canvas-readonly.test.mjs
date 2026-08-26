@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, codec, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -24,7 +24,10 @@ const [html, catalog, config, connections, connectionInteraction, connectionRend
   readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-model.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-media-toolbar-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-runtime-store.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-command-executor.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-document-codec.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-persistence-coordinator.js", root), "utf8"),
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
@@ -71,7 +74,10 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   window.eval(pointerDispatchController);
   window.eval(assetLibraryModel);
   window.eval(mediaToolbarView);
+  window.eval(runtimeStore);
+  window.eval(commandExecutor);
   window.eval(codec);
+  window.eval(persistenceCoordinator);
   window.eval(app);
 
   const content = window.REELAY_CANVAS_DOCUMENT_CODEC.createSnapshot({
@@ -102,7 +108,6 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
         preview: false,
         name: "",
         generatedAsset: null,
-        lockedMode: null,
         assets: [],
         activeAssetId: null,
       }],

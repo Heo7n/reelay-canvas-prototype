@@ -49,7 +49,6 @@ const shortcuts = [
 interface WorkspaceHeaderProps {
   actor: SessionActor;
   currentWorkspace: Workspace;
-  onNotice: (message: string) => void;
   showAccount?: boolean;
 }
 
@@ -140,7 +139,6 @@ function ShortcutHelp() {
 export function WorkspaceHeader({
   actor,
   currentWorkspace,
-  onNotice,
   showAccount = true,
 }: WorkspaceHeaderProps) {
   const location = useLocation();

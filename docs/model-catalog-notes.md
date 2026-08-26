@@ -5,7 +5,7 @@
 ## 命名原则
 
 - 生成节点、Agent 模型偏好、组织积分演示和组织用量演示统一使用同一组产品模型名称。
-- 模型条目和参数能力只在 `data/model-catalog.js` 中定义；其他页面中的名称只允许作为历史记录或演示流水快照。
+- 模型条目、参数能力和可替换的演示用量模板只在 `data/model-catalog.js` 中定义；React 通过 `src/features/models/model-catalog.ts` 的类型化适配读取同一运行时目录。只有已经持久化的历史记录可以保存名称快照。
 - 同系列速度变体保留明确后缀，例如 `Fast`、`Lite`。
 - 目录中删除的模型 ID 只按媒体类型回退到新的默认模型，不允许图片和视频模型互相替代。
 
@@ -57,4 +57,4 @@
 - `seedance-2`、`seedance-2-fast`、`kling-video-3`、`gpt-image-2`、`seedream-5-lite` 和 `nano-banana-pro` 保留既有稳定 ID。
 - 新增的 Seedance 2.5 使用 `seedance-2-5`，并成为新视频节点默认模型。
 - 历史画布中的 Nano Banana 2、Midjourney、Niji、Seedance 2.0 Mini、Kling Video 3.0 Omni 和 Veo 3.1 会在恢复并归一化节点时回退到同媒体类型的当前默认模型。
-- 组织积分与用量页面仍使用可整体替换的确定性演示流水；其中模型名称是记录快照，不是第二套模型目录。
+- 个人与组织用量页面仍使用可整体替换的确定性演示流水；演示记录的模型名称在生成 fixture 时从共享 `REELAY_MODEL_DIRECTORY` 解析，不维护第二套模型目录。未来真实 `GenerationTask` 仍应保存不可变的模型与计费快照。

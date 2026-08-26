@@ -183,12 +183,6 @@ function loadThemeMode() {
 }
 
 const state = {
-  tx: 0,
-  ty: 0,
-  scale: 1,
-  nodes: [],
-  connections: [],
-  groups: [],
   selectedIds: new Set(),
   activeGroupId: null,
   activeId: null,
@@ -196,7 +190,6 @@ const state = {
   recentConnectionId: null,
   recentConnectionTimer: 0,
   connectionDrop: null,
-  zCounter: 1,
   lastPreset: {
     mode: "image",
     model: firstModelId("image"),
@@ -213,7 +206,6 @@ const state = {
   pendingCanvasUploadPoint: null,
   nodeCreatePoint: null,
   isSpaceDown: false,
-  undoStack: [],
   generationTasks: new Map(),
   promptOptimizationTasks: new Map(),
   agentOpen: false,
@@ -221,8 +213,6 @@ const state = {
   zoomTipTimer: 0,
   projectId: crypto.randomUUID(),
   projectName: "Untitled",
-  canvases: [],
-  activeCanvasId: null,
   canvasMoreTargetId: null,
   activeConversationId: "new",
   agentModelId: "gpt-image-2",
@@ -259,24 +249,38 @@ const state = {
   groupChromeFrame: 0,
 };
 
-const canvasPersistence = {
-  initialized: false,
-  hydrating: false,
-  writable: false,
-  blocked: false,
-  revision: 0,
-  canvasId: null,
-  saveTimer: 0,
-  inFlight: null,
-  lastSavedSnapshot: "",
-  accessMode: window.parent === window ? "standalone" : "loading",
-  accessNoticeTimer: 0,
-};
-
 const canvasDocumentCodec = window.REELAY_CANVAS_DOCUMENT_CODEC;
 if (!canvasDocumentCodec) throw new Error("Canvas document codec is unavailable.");
+const canvasRuntimeStoreFactory = window.REELAY_CANVAS_RUNTIME_STORE;
+if (!canvasRuntimeStoreFactory) throw new Error("Canvas runtime store is unavailable.");
+const canvasRuntimeStore = canvasRuntimeStoreFactory.createCanvasRuntimeStore({
+  onMutation: () => scheduleCanvasDocumentSave(0),
+});
+canvasRuntimeStore.attachStateFacade(state);
+const canvasPersistenceCoordinatorFactory = window.REELAY_CANVAS_PERSISTENCE_COORDINATOR;
+if (!canvasPersistenceCoordinatorFactory) throw new Error("Canvas persistence coordinator is unavailable.");
 const canvasConnections = window.REELAY_CANVAS_CONNECTIONS;
 if (!canvasConnections) throw new Error("Canvas connection helpers are unavailable.");
+const canvasCommandExecutorFactory = window.REELAY_CANVAS_COMMAND_EXECUTOR;
+if (!canvasCommandExecutorFactory) throw new Error("Canvas command executor is unavailable.");
+const canvasCommandExecutor = canvasCommandExecutorFactory.createCanvasCommandExecutor({
+  getCanvas: (canvasId) => canvasRuntimeStore.getCanvas(canvasId),
+  normalize(collection, records, context) {
+    if (collection !== "connections") return records;
+    return canvasConnections.normalizeConnections(records, context.canvas.nodes);
+  },
+  validateTransition({ command }) {
+    const unsupported = command.changes.find((change) => change.collection !== "connections");
+    return unsupported
+      ? {
+        code: "unsupported-content-command",
+        message: `Canvas command collection ${unsupported.collection} has no field-level transition contract yet.`,
+      }
+      : null;
+  },
+  undoLimit: 50,
+  onCommit: () => scheduleCanvasDocumentSave(),
+});
 const canvasConnectionInteraction = window.REELAY_CANVAS_CONNECTION_INTERACTION;
 if (!canvasConnectionInteraction) throw new Error("Canvas connection interaction helpers are unavailable.");
 const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
@@ -303,6 +307,45 @@ const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
 if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
 const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
 if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
+let canvasAccessNoticeTimer = 0;
+const canvasInstanceId = crypto.randomUUID();
+const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
+  instanceId: canvasInstanceId,
+  serialize: serializeCanvasDocumentSnapshot,
+  hydrate: hydrateCanvasDocumentSnapshot,
+  makeRequestId: () => crypto.randomUUID(),
+  postMessage: (message) => window.parent.postMessage(message, window.location.origin),
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  isHosted: () => window.parent !== window,
+  getExpectedOrigin: () => window.location.origin,
+  getExpectedSource: () => window.parent,
+  onAccessChange: applyCanvasAccessMode,
+  onContext(context) {
+    state.projectId = String(context.projectId || state.projectId);
+    state.projectName = String(context.projectName || state.projectName);
+    syncHostedIdentity(context);
+    applyCanvasAccessMode("loading");
+    syncProjectNavigation();
+  },
+  onDocumentReady({ writable }) {
+    if (writable) {
+      consumeHomeLaunchIntent();
+    } else {
+      showActionToast("当前项目为只读，可浏览但不能修改");
+    }
+  },
+  onNotice(notice) {
+    const messages = {
+      "unsupported-document": "此画布数据版本暂不支持，已停止自动保存",
+      conflict: "画布已在其他窗口更新，请重新进入项目后继续",
+      forbidden: "当前项目为只读，可浏览但不能修改",
+      missing: "项目已删除或无法访问，当前画布已停止保存",
+      network: "画布暂时保存失败，正在等待重试",
+    };
+    showActionToast(messages[notice] || "画布状态已更新");
+  },
+});
 const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectionRenderer({
   paths: connectionPaths,
   batchPreviewPaths: batchConnectionPreviewPaths,
@@ -339,11 +382,11 @@ const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler
 if (!canvasLayerReconciler) throw new Error("Canvas layer reconciler could not initialize.");
 
 function isCanvasMutationAllowed() {
-  return canvasPersistence.accessMode === "standalone" || canvasPersistence.accessMode === "editable";
+  return canvasPersistence.canMutate();
 }
 
 function syncCanvasAccessUi() {
-  const mode = canvasPersistence.accessMode;
+  const mode = canvasPersistence.getAccessMode();
   appShell?.setAttribute("data-canvas-access", mode);
   const locked = !isCanvasMutationAllowed();
   document.querySelectorAll("[data-canvas-mutation]").forEach((control) => {
@@ -381,9 +424,7 @@ function syncCanvasAccessUi() {
   canvasAccessStatus.textContent = label || "";
 }
 
-function setCanvasAccessMode(mode) {
-  if (!["standalone", "loading", "editable", "readonly", "blocked"].includes(mode)) return;
-  canvasPersistence.accessMode = mode;
+function applyCanvasAccessMode(mode) {
   if (!isCanvasMutationAllowed()) {
     state.action = null;
     shell?.classList.remove("dragging");
@@ -414,15 +455,15 @@ function syncHostedIdentity(context) {
 
 function requireCanvasMutation({ notify = true } = {}) {
   if (isCanvasMutationAllowed()) return true;
-  if (!notify || canvasPersistence.accessNoticeTimer) return false;
+  if (!notify || canvasAccessNoticeTimer) return false;
   const messages = {
     loading: "项目画布仍在加载，暂时不能编辑",
     readonly: "当前为只读项目，可浏览但不能修改",
     blocked: "画布当前不可编辑，请重新加载后继续",
   };
-  showActionToast(messages[canvasPersistence.accessMode] || "当前画布不可编辑");
-  canvasPersistence.accessNoticeTimer = window.setTimeout(() => {
-    canvasPersistence.accessNoticeTimer = 0;
+  showActionToast(messages[canvasPersistence.getAccessMode()] || "当前画布不可编辑");
+  canvasAccessNoticeTimer = window.setTimeout(() => {
+    canvasAccessNoticeTimer = 0;
   }, 1200);
   return false;
 }
@@ -445,12 +486,6 @@ function firstModelId(type) {
 
 function normalizeGeneratorMode(mode) {
   return mode === "image" || mode === "video" ? mode : null;
-}
-
-function getNodeLockedMode(node) {
-  if (!node || node.kind !== "generator") return null;
-  return normalizeGeneratorMode(node.lockedMode)
-    || normalizeGeneratorMode(node.generatedAsset?.type);
 }
 
 function canUseModelForNode(node, model) {
@@ -481,32 +516,12 @@ function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
 }
 
 function getActiveCanvas() {
-  return state.canvases.find((canvas) => canvas.id === state.activeCanvasId) || state.canvases[0] || null;
+  return canvasRuntimeStore.getActiveCanvas();
 }
 
-function saveActiveCanvasState() {
-  const canvas = getActiveCanvas();
+function resetActiveCanvasSession(canvas) {
   if (!canvas) return;
-  canvas.nodes = state.nodes;
-  canvas.connections = state.connections;
-  canvas.groups = state.groups;
-  canvas.tx = state.tx;
-  canvas.ty = state.ty;
-  canvas.scale = state.scale;
-  canvas.zCounter = state.zCounter;
-  canvas.undoStack = state.undoStack;
-}
-
-function loadCanvasState(canvas) {
-  if (!canvas) return;
-  state.nodes = canvas.nodes;
-  state.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
-  state.groups = canvas.groups;
-  state.tx = canvas.tx;
-  state.ty = canvas.ty;
-  state.scale = canvas.scale;
-  state.zCounter = canvas.zCounter;
-  state.undoStack = canvas.undoStack || [];
+  canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
   state.selectedIds = new Set();
   state.activeId = null;
   state.activeConnectionId = null;
@@ -534,21 +549,11 @@ function syncProjectNavigation() {
 
 function initializeCanvases() {
   const initialCanvas = createCanvasRecord("画布 1");
-  initialCanvas.nodes = state.nodes;
-  initialCanvas.connections = state.connections;
-  initialCanvas.groups = state.groups;
-  initialCanvas.tx = state.tx;
-  initialCanvas.ty = state.ty;
-  initialCanvas.scale = state.scale;
-  initialCanvas.zCounter = state.zCounter;
-  initialCanvas.undoStack = state.undoStack;
-  state.canvases = [initialCanvas];
-  state.activeCanvasId = initialCanvas.id;
+  canvasRuntimeStore.replaceCanvases([initialCanvas], initialCanvas.id);
   syncProjectNavigation();
 }
 
 function createCanvasDocumentSnapshot() {
-  saveActiveCanvasState();
   return canvasDocumentCodec.createSnapshot(state);
 }
 
@@ -562,14 +567,13 @@ function hydrateCanvasDocumentSnapshot(content) {
     maxScale: canvasScaleLimits.max,
   });
   if (!restored) return false;
-  state.canvases = restored.canvases;
+  canvasRuntimeStore.replaceCanvases(restored.canvases, restored.activeCanvasId);
   state.canvases.forEach((canvas) => {
     canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
     canvas.nodes.forEach((node) => {
       if (node.kind === "generator") normalizeNodeParameters(node);
     });
   });
-  state.activeCanvasId = restored.activeCanvasId;
   state.lastPreset = {
     mode: restored.lastPreset.mode,
     model: restored.lastPreset.model || state.lastPreset.model,
@@ -584,13 +588,8 @@ function hydrateCanvasDocumentSnapshot(content) {
   state.libraryAssets = [];
   state.libraryView = "canvas";
   state.libraryScope = "project";
-  loadCanvasState(getActiveCanvas());
+  resetActiveCanvasSession(getActiveCanvas());
   return true;
-}
-
-function postCanvasBridgeMessage(message) {
-  if (window.parent === window) return;
-  window.parent.postMessage(message, window.location.origin);
 }
 
 function requestHostNavigation(target) {
@@ -598,12 +597,7 @@ function requestHostNavigation(target) {
     showActionToast("请从 Reelay 应用主页进入此画布");
     return;
   }
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:navigate",
-    protocolVersion: 1,
-    target,
-  });
+  canvasPersistence.post("canvas:navigate", { target });
 }
 
 function requestHostAccountSettings() {
@@ -611,150 +605,19 @@ function requestHostAccountSettings() {
     showActionToast("请从 Reelay 应用主页进入账号设置");
     return;
   }
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:open-account",
-    protocolVersion: 1,
-  });
-}
-
-function postCanvasDirty(dirty) {
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:dirty",
-    protocolVersion: 1,
-    dirty,
-  });
+  canvasPersistence.post("canvas:open-account");
 }
 
 function flushCanvasDocumentSave() {
-  window.clearTimeout(canvasPersistence.saveTimer);
-  canvasPersistence.saveTimer = 0;
-  if (
-    !canvasPersistence.initialized ||
-    canvasPersistence.hydrating ||
-    !canvasPersistence.writable ||
-    canvasPersistence.blocked ||
-    canvasPersistence.inFlight ||
-    !canvasPersistence.canvasId
-  ) return;
-  const serialized = serializeCanvasDocumentSnapshot();
-  if (serialized === canvasPersistence.lastSavedSnapshot) {
-    postCanvasDirty(false);
-    return;
-  }
-  const requestId = crypto.randomUUID();
-  canvasPersistence.inFlight = { requestId, serialized };
-  postCanvasDirty(true);
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:save",
-    protocolVersion: 1,
-    requestId,
-    schemaVersion: 1,
-    expectedRevision: canvasPersistence.revision,
-    content: JSON.parse(serialized),
-  });
+  return canvasPersistence.flush();
 }
 
 function scheduleCanvasDocumentSave(delay = 800) {
-  if (!canvasPersistence.initialized || canvasPersistence.hydrating || !canvasPersistence.writable || canvasPersistence.blocked) return;
-  postCanvasDirty(true);
-  window.clearTimeout(canvasPersistence.saveTimer);
-  canvasPersistence.saveTimer = window.setTimeout(flushCanvasDocumentSave, delay);
-}
-
-function handleCanvasSaveResult(message) {
-  if (message.requestId !== canvasPersistence.inFlight?.requestId) return;
-  canvasPersistence.revision = message.document.revision;
-  canvasPersistence.lastSavedSnapshot = canvasPersistence.inFlight.serialized;
-  canvasPersistence.inFlight = null;
-  if (serializeCanvasDocumentSnapshot() === canvasPersistence.lastSavedSnapshot) {
-    postCanvasDirty(false);
-  } else {
-    scheduleCanvasDocumentSave(0);
-  }
-}
-
-function handleCanvasSaveError(message) {
-  if (message.requestId !== canvasPersistence.inFlight?.requestId) return;
-  canvasPersistence.inFlight = null;
-  if (message.code === "conflict") {
-    canvasPersistence.blocked = true;
-    setCanvasAccessMode("blocked");
-    showActionToast("画布已在其他窗口更新，请重新进入项目后继续");
-    return;
-  }
-  if (message.code === "forbidden") {
-    canvasPersistence.writable = false;
-    setCanvasAccessMode("readonly");
-    showActionToast("当前项目为只读，可浏览但不能修改");
-    return;
-  }
-  if (message.code === "missing") {
-    canvasPersistence.blocked = true;
-    setCanvasAccessMode("blocked");
-    showActionToast("项目已删除或无法访问，当前画布已停止保存");
-    return;
-  }
-  showActionToast("画布暂时保存失败，正在等待重试");
-  scheduleCanvasDocumentSave(3000);
+  return canvasPersistence.schedule(delay);
 }
 
 function handleHostBridgeMessage(event) {
-  if (window.parent === window || event.origin !== window.location.origin || event.source !== window.parent) return;
-  const message = event.data;
-  if (!message || typeof message !== "object" || message.source !== "reelay-shell") return;
-  if (message.type === "host:init" && message.context?.protocolVersion === 1) {
-    state.projectId = String(message.context.projectId || state.projectId);
-    state.projectName = String(message.context.projectName || state.projectName);
-    canvasPersistence.canvasId = String(message.context.canvasId || "main");
-    canvasPersistence.writable = message.context.writable === true;
-    syncHostedIdentity(message.context);
-    setCanvasAccessMode("loading");
-    syncProjectNavigation();
-    return;
-  }
-  if (message.type === "host:document" && message.protocolVersion === 1) {
-    canvasPersistence.hydrating = true;
-    canvasPersistence.writable = message.writable === true;
-    canvasPersistence.revision = message.document?.revision || 0;
-    const hydrated = message.document ? hydrateCanvasDocumentSnapshot(message.document.content) : true;
-    canvasPersistence.hydrating = false;
-    if (!hydrated) {
-      canvasPersistence.blocked = true;
-      setCanvasAccessMode("blocked");
-      showActionToast("此画布数据版本暂不支持，已停止自动保存");
-      return;
-    }
-    canvasPersistence.initialized = true;
-    setCanvasAccessMode(canvasPersistence.writable ? "editable" : "readonly");
-    if (canvasPersistence.writable) consumeHomeLaunchIntent();
-    const serializedSnapshot = serializeCanvasDocumentSnapshot();
-    if (!message.document && canvasPersistence.writable) {
-      canvasPersistence.lastSavedSnapshot = "";
-      postCanvasDirty(true);
-      flushCanvasDocumentSave();
-    } else {
-      canvasPersistence.lastSavedSnapshot = serializedSnapshot;
-      postCanvasDirty(false);
-    }
-    if (!canvasPersistence.writable) {
-      showActionToast("当前项目为只读，可浏览但不能修改");
-    }
-    return;
-  }
-  if (message.type === "host:flush" && message.protocolVersion === 1) {
-    flushCanvasDocumentSave();
-    return;
-  }
-  if (message.type === "host:save-result" && message.protocolVersion === 1) {
-    handleCanvasSaveResult(message);
-    return;
-  }
-  if (message.type === "host:save-error" && message.protocolVersion === 1) {
-    handleCanvasSaveError(message);
-  }
+  return canvasPersistence.handleHostMessage(event);
 }
 
 function screenToWorld(clientX, clientY) {
@@ -762,14 +625,6 @@ function screenToWorld(clientX, clientY) {
   return {
     x: (clientX - rect.left + shell.scrollLeft - state.tx) / state.scale,
     y: (clientY - rect.top + shell.scrollTop - state.ty) / state.scale,
-  };
-}
-
-function worldToScreen(x, y) {
-  const rect = shell.getBoundingClientRect();
-  return {
-    x: rect.left - shell.scrollLeft + state.tx + x * state.scale,
-    y: rect.top - shell.scrollTop + state.ty + y * state.scale,
   };
 }
 
@@ -829,7 +684,6 @@ function applyTransform() {
     `${((portField.fieldVerticalRadius * 2) / state.scale).toFixed(2)}px`,
   );
   scheduleGroupChromeLayout();
-  saveActiveCanvasState();
   updateCanvasGrid();
   syncPromptPanelLayouts();
   window.clearTimeout(state.overlaySyncTimer);
@@ -1166,8 +1020,6 @@ function centerCanvasOnWorld(worldX, worldY) {
 function nextZ() {
   const currentTop = Math.max(state.zCounter, ...state.nodes.map((node) => node.z || 0));
   state.zCounter = currentTop + 1;
-  const canvas = getActiveCanvas();
-  if (canvas) canvas.zCounter = state.zCounter;
   return state.zCounter;
 }
 
@@ -1195,7 +1047,6 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     preview: false,
     generating: false,
     generatedAsset: null,
-    lockedMode: null,
     expanded: true,
     advancedSettingsExpanded: false,
     mediaMenuOpen: false,
@@ -2219,6 +2070,26 @@ function cloneConnectionState(connection) {
   return { ...connection };
 }
 
+function executeConnectionCommand(type, changes, { recordUndo = true } = {}) {
+  const canvas = getActiveCanvas();
+  if (!canvas) {
+    return { ok: false, error: { code: "canvas-not-found", message: "Active canvas was not found." } };
+  }
+  const result = canvasCommandExecutor.execute({
+    id: crypto.randomUUID(),
+    type,
+    canvasId: canvas.id,
+    changes,
+  }, { recordUndo });
+  if (!result.ok) {
+    console.error("Canvas connection command was rejected.", result.error);
+    showActionToast("画布内容已变化，请重试连接操作");
+  } else if (result.effectError) {
+    console.error("Canvas connection command committed but its save effect failed.", result.effectError);
+  }
+  return result;
+}
+
 function getIncomingConnections(nodeId) {
   return state.connections.filter((connection) => connection.targetNodeId === nodeId);
 }
@@ -2277,7 +2148,6 @@ function syncConnectionContextClasses(context) {
 
 function renderConnections() {
   if (!connectionPaths || !connectionPreview) return;
-  state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
 
   const context = getConnectionContext();
   const hasFocusedContext = Boolean(state.activeConnectionId || state.selectedIds.size);
@@ -2317,9 +2187,6 @@ function createConnection(
   if (!result.ok) return null;
   const source = state.nodes.find((node) => node.id === sourceNodeId);
   if (!source || (source.kind !== "generator" && !getEditableMedia(source))) return null;
-  if (recordUndo) {
-    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
-  }
   const connection = {
     id: crypto.randomUUID(),
     sourceNodeId,
@@ -2330,7 +2197,18 @@ function createConnection(
     sourceRatio: clamp(sourceRatio, 0.08, 0.92),
     targetRatio: clamp(targetRatio, 0.08, 0.92),
   };
-  state.connections.push(connection);
+  const commandResult = executeConnectionCommand("connection-create", [{
+    collection: "connections",
+    id: connection.id,
+    before: { record: null },
+    after: { record: connection, index: state.connections.length },
+  }], { recordUndo });
+  if (!commandResult.ok) return null;
+  setRecentConnection(connection);
+  return connection;
+}
+
+function setRecentConnection(connection) {
   state.activeConnectionId = connection.id;
   state.recentConnectionId = connection.id;
   window.clearTimeout(state.recentConnectionTimer);
@@ -2339,7 +2217,6 @@ function createConnection(
     state.recentConnectionId = null;
     renderConnections();
   }, 220);
-  return connection;
 }
 
 function createConnectionsBatch(sourceNodeIds, targetNodeId) {
@@ -2349,26 +2226,51 @@ function createConnectionsBatch(sourceNodeIds, targetNodeId) {
     sourceNodeIds,
     targetNodeId,
   );
-  const before = state.connections.map(cloneConnectionState);
   const created = plan.validSourceIds
-    .map((sourceNodeId) => createConnection(sourceNodeId, targetNodeId, {
-      recordUndo: false,
-      sourceRatio: 0.5,
-      targetRatio: 0.5,
-    }))
+    .map((sourceNodeId) => {
+      const source = state.nodes.find((node) => node.id === sourceNodeId);
+      if (!source || (source.kind !== "generator" && !getEditableMedia(source))) return null;
+      return {
+        id: crypto.randomUUID(),
+        sourceNodeId,
+        targetNodeId,
+        mediaType: getNodeMediaType(source),
+        sourcePortId: getConnectionPortId(sourceNodeId, "output"),
+        targetPortId: getConnectionPortId(targetNodeId, "input"),
+        sourceRatio: 0.5,
+        targetRatio: 0.5,
+      };
+    })
     .filter(Boolean);
-  if (created.length) pushUndoAction({ type: "connections", connections: before });
+  if (created.length) {
+    const startIndex = state.connections.length;
+    const commandResult = executeConnectionCommand(
+      "connections-create-batch",
+      created.map((connection, index) => ({
+        collection: "connections",
+        id: connection.id,
+        before: { record: null },
+        after: { record: connection, index: startIndex + index },
+      })),
+    );
+    if (!commandResult.ok) return { created: [], rejected: plan.rejected };
+    setRecentConnection(created[created.length - 1]);
+  }
   return { created, rejected: plan.rejected };
 }
 
 function removeConnection(connectionId, { recordUndo = true } = {}) {
   if (!requireCanvasMutation()) return false;
-  const connection = state.connections.find((item) => item.id === connectionId);
-  if (!connection) return false;
-  if (recordUndo) {
-    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
-  }
-  state.connections = state.connections.filter((item) => item.id !== connectionId);
+  const connectionIndex = state.connections.findIndex((item) => item.id === connectionId);
+  if (connectionIndex === -1) return false;
+  const connection = state.connections[connectionIndex];
+  const commandResult = executeConnectionCommand("connection-remove", [{
+    collection: "connections",
+    id: connection.id,
+    before: { record: connection, index: connectionIndex },
+    after: { record: null },
+  }], { recordUndo });
+  if (!commandResult.ok) return false;
   if (state.activeConnectionId === connectionId) state.activeConnectionId = null;
   render();
   return true;
@@ -3225,7 +3127,7 @@ function audioWaveformBars(repeat = 1) {
 
 function createGenerationParameterSnapshot(node) {
   return {
-    mode: getNodeGenerationMode(node),
+    mediaKind: getNodeGenerationMode(node),
     model: node.model,
     prompt: node.prompt,
     aspect: node.aspect,
@@ -3241,24 +3143,25 @@ function createGenerationParameterSnapshot(node) {
   };
 }
 
-function createGeneratedAsset(node) {
-  const base = simulationAssets[node.mode] || simulationAssets.image;
+function createGeneratedAsset(parameterSnapshot) {
+  const mediaKind = normalizeGeneratorMode(parameterSnapshot.mediaKind) || "image";
+  const base = simulationAssets[mediaKind] || simulationAssets.image;
   const generated = {
     ...base,
     id: crypto.randomUUID(),
-    displayName: node.mode === "video" ? "Generated video" : "Generated image",
+    displayName: mediaKind === "video" ? "Generated video" : "Generated image",
   };
 
-  if (node.mode === "image") {
-    const size = getGeneratedResolution(node);
+  if (mediaKind === "image") {
+    const size = getGeneratedResolution(parameterSnapshot);
     generated.width = size.width;
     generated.height = size.height;
-    generated.aspectRatio = aspectStringToRatio(node.aspect);
-    generated.url = `https://picsum.photos/seed/${encodeURIComponent(node.id)}/${size.width}/${size.height}`;
+    generated.aspectRatio = aspectStringToRatio(parameterSnapshot.aspect);
+    generated.url = `https://picsum.photos/seed/${encodeURIComponent(parameterSnapshot.id)}/${size.width}/${size.height}`;
   }
 
-  if (node.mode === "video") {
-    generated.aspectRatio = aspectStringToRatio(node.aspect);
+  if (mediaKind === "video") {
+    generated.aspectRatio = aspectStringToRatio(parameterSnapshot.aspect);
   }
 
   return generated;
@@ -3486,7 +3389,6 @@ function hasDraggedLibraryAsset(event) {
 }
 
 function render() {
-  saveActiveCanvasState();
   syncGroups();
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
   shell.classList.toggle("group-editing", Boolean(state.activeGroupId));
@@ -3725,23 +3627,6 @@ function isSelectionFrameDragAction(action = state.action) {
 function updateEmptyState() {
   if (!emptyState) return;
   emptyState.classList.toggle("hidden", state.nodes.length > 0);
-}
-
-function getSelectionBounds() {
-  const selectedNodes = getSelectedNodes();
-  if (selectedNodes.length < 2) return null;
-  return selectedNodes.reduce(
-    (bounds, node) => {
-      const nodeBounds = getNodeBounds(node);
-      return {
-        left: Math.min(bounds.left, nodeBounds.left),
-        top: Math.min(bounds.top, nodeBounds.top),
-        right: Math.max(bounds.right, nodeBounds.right),
-        bottom: Math.max(bounds.bottom, nodeBounds.bottom),
-      };
-    },
-    { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
-  );
 }
 
 function getSelectionVisualBounds() {
@@ -4508,7 +4393,7 @@ function bindAudioEvents(el) {
 
 function getGenerationTaskTarget(task) {
   if (!task || task.projectId !== state.projectId) return null;
-  const canvas = state.canvases.find((item) => item.id === task.canvasId);
+  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
   if (!canvas) return null;
   const node = canvas.nodes.find((item) => item.id === task.nodeId);
   return node ? { canvas, node } : null;
@@ -4537,7 +4422,7 @@ function cancelGenerationTasks(predicate, resetNodes = true) {
 
 function getPromptOptimizationTaskTarget(task) {
   if (!task || task.projectId !== state.projectId) return null;
-  const canvas = state.canvases.find((item) => item.id === task.canvasId);
+  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
   if (!canvas) return null;
   const node = canvas.nodes.find((item) => item.id === task.nodeId);
   return node ? { canvas, node } : null;
@@ -4566,7 +4451,6 @@ function pushCanvasUndoAction(canvas, action) {
   undoStack.push(action);
   if (undoStack.length > 50) undoStack.shift();
   canvas.undoStack = undoStack;
-  if (canvas.id === state.activeCanvasId) state.undoStack = undoStack;
 }
 
 function cancelPromptOptimizationTask(taskId, resetNode = true) {
@@ -4655,7 +4539,6 @@ function commitGenerationUndoBoundary(canvas, nodeId) {
     (action) => !(action.type === "node-update" && action.node?.id === nodeId),
   );
   canvas.undoStack = nextUndoStack;
-  if (canvas.id === state.activeCanvasId) state.undoStack = nextUndoStack;
 }
 
 function completeSimulatedGeneration(taskId) {
@@ -4668,15 +4551,13 @@ function completeSimulatedGeneration(taskId) {
   if (node.kind !== "generator" || node.generationTaskId !== task.id) return;
   node.generating = false;
   delete node.generationTaskId;
-  const outputMode = normalizeGeneratorMode(task.parameterSnapshot.mode);
-  const lockedMode = getNodeLockedMode(node);
+  const outputMode = normalizeGeneratorMode(task.parameterSnapshot.mediaKind);
   const taskModel = models.find((model) => model.id === task.parameterSnapshot.model);
   const nodeMode = getNodeGenerationMode(node);
   if (
     !outputMode
     || outputMode !== nodeMode
     || taskModel?.type !== outputMode
-    || (lockedMode && lockedMode !== outputMode)
   ) {
     if (canvas.id === state.activeCanvasId) {
       showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
@@ -4685,9 +4566,17 @@ function completeSimulatedGeneration(taskId) {
     scheduleCanvasDocumentSave();
     return;
   }
-  node.lockedMode = outputMode;
+  const generatedAsset = createGeneratedAsset({ id: node.id, ...task.parameterSnapshot });
+  if (generatedAsset.type !== outputMode) {
+    if (canvas.id === state.activeCanvasId) {
+      showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
+      render();
+    }
+    scheduleCanvasDocumentSave();
+    return;
+  }
   node.preview = true;
-  node.generatedAsset = createGeneratedAsset({ id: node.id, ...task.parameterSnapshot });
+  node.generatedAsset = generatedAsset;
   node.name = node.name || node.generatedAsset.displayName || defaultGeneratedName(node);
   commitGenerationUndoBoundary(canvas, node.id);
   if (canvas.id === state.activeCanvasId) render();
@@ -5370,10 +5259,6 @@ function resetNodePortPosition(zone) {
   port.style.removeProperty("--port-y");
 }
 
-function resetAllNodePortPositions() {
-  nodeLayer.querySelectorAll("[data-node-port-zone]").forEach(resetNodePortPosition);
-}
-
 function hideConnectionTargetGlow() {
   if (!connectionTargetGlow) return;
   connectionTargetGlow.classList.remove("is-active");
@@ -5901,6 +5786,7 @@ function consumeHomeLaunchIntent() {
     // The node is already created; storage cleanup can safely fail.
   }
   render();
+  scheduleCanvasDocumentSave(0);
   return true;
 }
 
@@ -6054,6 +5940,23 @@ function restoreGroupSnapshot(groups) {
 
 function undoLastAction() {
   if (!requireCanvasMutation()) return;
+  const pendingAction = state.undoStack[state.undoStack.length - 1];
+  if (pendingAction?.kind === "canvas-command") {
+    const result = canvasCommandExecutor.undoLast(state.activeCanvasId);
+    if (!result.ok) {
+      console.error("Canvas command undo was rejected.", result.error);
+      showActionToast("画布内容已变化，无法安全撤销");
+      return;
+    }
+    if (result.effectError) {
+      console.error("Canvas command undo committed but its save effect failed.", result.effectError);
+    }
+    state.activeConnectionId = null;
+    state.recentConnectionId = null;
+    window.clearTimeout(state.recentConnectionTimer);
+    render();
+    return;
+  }
   const action = state.undoStack.pop();
   if (!action) return;
 
@@ -6694,28 +6597,23 @@ function openCanvasMenu(anchor) {
 
 function addCanvas() {
   if (!requireCanvasMutation()) return;
-  saveActiveCanvasState();
   const canvas = createCanvasRecord(`画布 ${state.canvases.length + 1}`);
-  state.canvases.push(canvas);
-  state.activeCanvasId = canvas.id;
-  loadCanvasState(canvas);
+  canvasRuntimeStore.addCanvas(canvas, { activate: true });
+  resetActiveCanvasSession(canvas);
   showActionToast("已添加画布");
 }
 
 function switchCanvas(canvasId) {
   if (canvasId === state.activeCanvasId) return;
-  const nextCanvas = state.canvases.find((canvas) => canvas.id === canvasId);
+  const nextCanvas = canvasRuntimeStore.activateCanvas(canvasId);
   if (!nextCanvas) return;
-  saveActiveCanvasState();
-  state.activeCanvasId = canvasId;
-  loadCanvasState(nextCanvas);
+  resetActiveCanvasSession(nextCanvas);
 }
 
 function duplicateCanvas(canvasId) {
   if (!requireCanvasMutation()) return;
-  const source = state.canvases.find((canvas) => canvas.id === canvasId);
+  const source = canvasRuntimeStore.getCanvas(canvasId);
   if (!source) return;
-  saveActiveCanvasState();
   const content = cloneCanvasContent(source);
   const duplicate = {
     id: crypto.randomUUID(),
@@ -6729,9 +6627,8 @@ function duplicateCanvas(canvasId) {
     zCounter: source.zCounter,
     undoStack: [],
   };
-  state.canvases.push(duplicate);
-  state.activeCanvasId = duplicate.id;
-  loadCanvasState(duplicate);
+  canvasRuntimeStore.addCanvas(duplicate, { activate: true });
+  resetActiveCanvasSession(duplicate);
   showActionToast("已复制画布");
 }
 
@@ -6749,14 +6646,12 @@ function deleteCanvas(canvasId) {
     confirmText: "删除",
     danger: true,
     onConfirm: () => {
-      const index = state.canvases.findIndex((item) => item.id === canvasId);
       cancelGenerationTasks((task) => task.canvasId === canvasId);
       cancelPromptOptimizationTasks((task) => task.canvasId === canvasId);
-      state.canvases.splice(index, 1);
-      if (state.activeCanvasId === canvasId) {
-        const nextCanvas = state.canvases[Math.max(0, index - 1)] || state.canvases[0];
-        state.activeCanvasId = nextCanvas.id;
-        loadCanvasState(nextCanvas);
+      const removal = canvasRuntimeStore.removeCanvas(canvasId);
+      if (!removal) return;
+      if (removal.activeChanged) {
+        resetActiveCanvasSession(removal.activeCanvas);
       } else {
         renderCanvasMenu();
       }
@@ -6776,19 +6671,11 @@ function resetPrototypeProject() {
   cancelPromptOptimizationTasks((task) => task.projectId === state.projectId);
   state.projectId = crypto.randomUUID();
   state.projectName = "Untitled";
-  state.nodes = [];
-  state.groups = [];
-  state.connections = [];
-  state.undoStack = [];
   state.selectedIds = new Set();
   state.activeId = null;
   state.activeGroupId = null;
   state.activeConnectionId = null;
   state.mediaToolbarNodeId = null;
-  state.tx = 0;
-  state.ty = 0;
-  state.scale = 1;
-  state.zCounter = 1;
   state.libraryAssets = [];
   state.libraryView = "canvas";
   state.libraryScope = "project";
@@ -8492,8 +8379,4 @@ initializeCanvases();
 applyTransform();
 consumeHomeLaunchIntent();
 render();
-postCanvasBridgeMessage({
-  source: "reelay-legacy-canvas",
-  type: "canvas:ready",
-  protocolVersion: 1,
-});
+canvasPersistence.post("canvas:ready");

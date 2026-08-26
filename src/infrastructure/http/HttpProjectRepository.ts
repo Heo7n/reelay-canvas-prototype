@@ -5,8 +5,9 @@ import type {
 } from "../../application/projects/ProjectRepository";
 import type { ProjectId, ProjectSummary } from "../../domain/project/project";
 import type { WorkspaceId } from "../../domain/workspace/workspace";
+import { isApplicationError } from "../../application/shared/ApplicationError";
 import { ProjectListResponseDtoSchema, ProjectResponseDtoSchema } from "./contracts";
-import { HttpApiClient, type HttpAdapterOptions, HttpRequestError } from "./HttpApiClient";
+import { HttpApiClient, type HttpAdapterOptions } from "./HttpApiClient";
 
 type ProjectDto = (typeof ProjectResponseDtoSchema)["_output"]["project"];
 
@@ -46,7 +47,7 @@ export class HttpProjectRepository implements ProjectRepository {
       );
       return toProject(response.project);
     } catch (error) {
-      if (error instanceof HttpRequestError && error.status === 404 && error.code === "project_not_found") {
+      if (isApplicationError(error, "not_found") && error.serviceCode === "project_not_found") {
         return null;
       }
       throw error;

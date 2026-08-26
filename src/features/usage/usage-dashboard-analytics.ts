@@ -3,7 +3,7 @@ import type {
   UsageActivityKind,
   UsageCompositionItem,
   UsageRecord,
-} from "../organization-usage-data";
+} from "./usage-types";
 
 export type UsageDisplayKind = "video" | "image" | "processing";
 export type UsageTimelineGranularity = "day" | "week" | "month";
@@ -16,7 +16,6 @@ export interface UsageTimelinePoint {
   tasks: number;
   segments: Record<UsageDisplayKind, number>;
 }
-
 export interface UsageTypeViewModel extends UsageCompositionItem {
   id: UsageDisplayKind;
   outputLabel: string;

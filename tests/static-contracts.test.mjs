@@ -22,12 +22,12 @@ test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
 test("generator nodes keep their creation modality and only expose compatible models", () => {
   assert.match(appSource, /const generationMode = mode === "video" \? "video" : "image"/);
   assert.match(appSource, /mode:\s*generationMode,[\s\S]*?model:\s*firstModelId\(generationMode\)/);
-  assert.match(appSource, /lockedMode:\s*null/);
-  assert.match(appSource, /function getNodeLockedMode\(node\)/);
-  assert.match(appSource, /normalizeGeneratorMode\(node\.generatedAsset\?\.type\)/);
+  assert.doesNotMatch(appSource, /lockedMode/);
   assert.match(appSource, /function getNodeGenerationMode\(node\)[\s\S]*?generatorModelPolicy\.getNodeModeContract\(node\)/);
   assert.match(appSource, /function getCompatibleModelsForNode\(node\)[\s\S]*?generatorModelPolicy\.getCompatibleModels\(models, node\)/);
-  assert.match(appSource, /node\.lockedMode = outputMode/);
+  assert.match(appSource, /mediaKind:\s*getNodeGenerationMode\(node\)/);
+  assert.match(appSource, /task\.parameterSnapshot\.mediaKind/);
+  assert.match(appSource, /generatedAsset\.type !== outputMode/);
   assert.match(appSource, /if \(!canUseModelForNode\(node, selected\)\)/);
   assert.doesNotMatch(appSource, /node\.mode\s*=\s*selected\.type/);
   const modelPanelStart = appSource.indexOf("function modelPanel(node)");
@@ -53,11 +53,54 @@ test("generator nodes keep their creation modality and only expose compatible mo
 
 test("the routed legacy canvas delegates persistence to the versioned document codec", () => {
   assert.match(appSource, /REELAY_CANVAS_DOCUMENT_CODEC/);
+  assert.match(appSource, /REELAY_CANVAS_PERSISTENCE_COORDINATOR/);
   assert.match(appSource, /canvasDocumentCodec\.createSnapshot\(state\)/);
   assert.match(appSource, /canvasDocumentCodec\.restoreSnapshot/);
   assert.match(appSource, /window\.addEventListener\("message", handleHostBridgeMessage\)/);
-  assert.match(appSource, /type:\s*"canvas:save"[\s\S]*expectedRevision:\s*canvasPersistence\.revision/);
-  assert.match(appSource, /message\.code === "conflict"[\s\S]*canvasPersistence\.blocked = true/);
+  assert.match(appSource, /return canvasPersistence\.handleHostMessage\(event\)/);
+  assert.match(appSource, /return canvasPersistence\.schedule\(delay\)/);
+  assert.match(appSource, /return canvasPersistence\.flush\(\)/);
+  assert.match(appSource, /window\.addEventListener\("pagehide", flushCanvasDocumentSave\)/);
+  assert.match(appSource, /document\.visibilityState === "hidden"\) flushCanvasDocumentSave\(\)/);
+});
+
+test("a home launch intent becomes the first real persisted canvas mutation", () => {
+  const functionStart = appSource.indexOf("function consumeHomeLaunchIntent()");
+  const functionEnd = appSource.indexOf("function cloneNodeState", functionStart);
+  assert.ok(functionStart >= 0 && functionEnd > functionStart);
+  const functionSource = appSource.slice(functionStart, functionEnd);
+  const node = {};
+  const removedKeys = [];
+  const scheduledDelays = [];
+  let renderCount = 0;
+  const consumeLaunchIntent = Function(
+    "isCanvasMutationAllowed",
+    "sessionStorage",
+    "homeLaunchIntentKey",
+    "addNodeAt",
+    "window",
+    "render",
+    "scheduleCanvasDocumentSave",
+    `${functionSource}; return consumeHomeLaunchIntent;`,
+  )(
+    () => true,
+    {
+      getItem: () => "  Create a quiet product shot  ",
+      removeItem: (key) => removedKeys.push(key),
+    },
+    "reelay-home-launch-intent",
+    () => node,
+    { innerWidth: 1440, innerHeight: 900 },
+    () => { renderCount += 1; },
+    (delay) => scheduledDelays.push(delay),
+  );
+
+  assert.equal(consumeLaunchIntent(), true);
+  assert.equal(node.prompt, "Create a quiet product shot");
+  assert.equal(node.expanded, true);
+  assert.deepEqual(removedKeys, ["reelay-home-launch-intent"]);
+  assert.equal(renderCount, 1);
+  assert.deepEqual(scheduledDelays, [0]);
 });
 
 test("background generation completion marks the project document for persistence", () => {
@@ -78,7 +121,7 @@ test("background generation completion marks the project document for persistenc
     id: "task-1",
     canvasId: canvas.id,
     nodeId: node.id,
-    parameterSnapshot: { mode: "image", model: "image-model" },
+    parameterSnapshot: { mediaKind: "image", model: "image-model" },
   };
   const state = {
     activeCanvasId: "active-canvas",
@@ -90,7 +133,6 @@ test("background generation completion marks the project document for persistenc
     "state",
     "getGenerationTaskTarget",
     "normalizeGeneratorMode",
-    "getNodeLockedMode",
     "models",
     "getNodeGenerationMode",
     "showActionToast",
@@ -104,7 +146,6 @@ test("background generation completion marks the project document for persistenc
     state,
     () => ({ canvas, node }),
     (mode) => mode,
-    () => null,
     [{ id: "image-model", type: "image" }],
     (targetNode) => targetNode.mode,
     () => undefined,
@@ -123,50 +164,72 @@ test("background generation completion marks the project document for persistenc
   assert.equal(state.generationTasks.size, 0);
 });
 
-test("save scheduling reports dirty before the debounce elapses", () => {
-  const functionStart = appSource.indexOf("function scheduleCanvasDocumentSave(delay = 800)");
-  const functionEnd = appSource.indexOf("function handleCanvasSaveResult", functionStart);
-  assert.ok(functionStart >= 0 && functionEnd > functionStart);
-  const functionSource = appSource.slice(functionStart, functionEnd);
-  const dirtyStates = [];
-  const canvasPersistence = {
-    initialized: true,
-    hydrating: false,
-    writable: true,
-    blocked: false,
-    saveTimer: 0,
-  };
-  const scheduleSave = Function(
-    "canvasPersistence",
-    "postCanvasDirty",
-    "window",
-    "flushCanvasDocumentSave",
-    `${functionSource}; return scheduleCanvasDocumentSave;`,
-  )(
-    canvasPersistence,
-    (dirty) => dirtyStates.push(dirty),
-    { clearTimeout: () => undefined, setTimeout: () => 7 },
-    () => undefined,
-  );
-
-  scheduleSave();
-
-  assert.deepEqual(dirtyStates, [true]);
-  assert.equal(canvasPersistence.saveTimer, 7);
-});
-
 test("model data, config and document codec load before the application", () => {
   const catalogIndex = html.indexOf("./data/model-catalog.js");
   const configIndex = html.indexOf("./src/config/prototype-config.js");
+  const runtimeStoreIndex = html.indexOf("./src/legacy-canvas/canvas-runtime-store.js");
+  const commandExecutorIndex = html.indexOf("./src/legacy-canvas/canvas-command-executor.js");
   const codecIndex = html.indexOf("./src/legacy-canvas/canvas-document-codec.js");
+  const persistenceIndex = html.indexOf("./src/legacy-canvas/canvas-persistence-coordinator.js");
   const modelPolicyIndex = html.indexOf("./src/legacy-canvas/canvas-generator-model-policy.js");
   const appIndex = html.indexOf("./app.js");
   assert.ok(
     catalogIndex >= 0 &&
     catalogIndex < configIndex &&
     configIndex < modelPolicyIndex &&
-    modelPolicyIndex < codecIndex &&
-    codecIndex < appIndex,
+    modelPolicyIndex < runtimeStoreIndex &&
+    runtimeStoreIndex < commandExecutorIndex &&
+    commandExecutorIndex < codecIndex &&
+    codecIndex < persistenceIndex &&
+    persistenceIndex < appIndex &&
+    appIndex >= 0,
+  );
+});
+
+test("active canvas content has one runtime owner instead of render-time mirror copies", () => {
+  assert.match(appSource, /canvasRuntimeStore\.attachStateFacade\(state\)/);
+  assert.match(
+    appSource,
+    /createCanvasRuntimeStore\(\{\s*onMutation:\s*\(\)\s*=>\s*scheduleCanvasDocumentSave\(0\)/,
+  );
+  assert.match(appSource, /function getActiveCanvas\(\) \{\s*return canvasRuntimeStore\.getActiveCanvas\(\);\s*\}/);
+  assert.doesNotMatch(appSource, /saveActiveCanvasState|loadCanvasState/);
+  assert.doesNotMatch(appSource, /state\.canvases\.(?:push|splice)/);
+  assert.doesNotMatch(appSource, /state\.activeCanvasId\s*=/);
+  assert.doesNotMatch(
+    appSource,
+    /canvas\.(?:nodes|connections|groups|tx|ty|scale|zCounter|undoStack)\s*=\s*state\.|state\.(?:nodes|connections|groups|tx|ty|scale|zCounter|undoStack)\s*=\s*canvas\./,
+  );
+});
+
+test("connection mutations commit through the bounded atomic command boundary", () => {
+  assert.match(appSource, /REELAY_CANVAS_COMMAND_EXECUTOR/);
+  assert.match(
+    appSource,
+    /createCanvasCommandExecutor\(\{[\s\S]*?validateTransition\(\{ command \}\)[\s\S]*?undoLimit:\s*50/,
+  );
+  assert.match(
+    appSource,
+    /function createConnection\([\s\S]*?executeConnectionCommand\("connection-create"/,
+  );
+  assert.match(
+    appSource,
+    /function createConnectionsBatch\([\s\S]*?"connections-create-batch"/,
+  );
+  assert.match(
+    appSource,
+    /function removeConnection\([\s\S]*?executeConnectionCommand\("connection-remove"/,
+  );
+  assert.match(
+    appSource,
+    /function undoLastAction\(\)[\s\S]*?pendingAction\?\.kind === "canvas-command"[\s\S]*?canvasCommandExecutor\.undoLast/,
+  );
+  const renderConnectionsStart = appSource.indexOf("function renderConnections()");
+  const renderConnectionsEnd = appSource.indexOf("function createConnection(", renderConnectionsStart);
+  assert.ok(renderConnectionsStart >= 0 && renderConnectionsEnd > renderConnectionsStart);
+  assert.doesNotMatch(
+    appSource.slice(renderConnectionsStart, renderConnectionsEnd),
+    /state\.connections\s*=\s*canvasConnections\.normalizeConnections/,
   );
 });
 
@@ -253,7 +316,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /app\.js\?v=20260824-model-logo-path-35/);
+  assert.match(html, /app\.js\?v=20260826-canvas-command-39/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);

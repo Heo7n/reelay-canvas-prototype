@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildServer } from "../app";
+import { CanvasDocumentProjectUnavailableError } from "../application/CanvasDocumentStore";
 import { DEFAULT_LOCAL_DATABASE_URL } from "../db/config";
 import { runMigrations } from "../db/migrate";
 import { seedDemoDatabase } from "../db/seed";
@@ -91,6 +92,68 @@ afterAll(async () => {
 });
 
 describe("PostgreSQL collaboration persistence", () => {
+  it("enforces workspace and canvas actor scope when adapters are called directly", async () => {
+    const setupPool = createPool();
+    try {
+      await setupPool.query(
+        "INSERT INTO workspaces (id, kind, name) VALUES ($1, 'organization', $2)",
+        ["workspace-outside-actor-scope", "未加入的组织"],
+      );
+    } finally {
+      await setupPool.end();
+    }
+
+    const store = new PostgresCollaborationStore(createPool());
+    try {
+      await expect(store.createProject({
+        workspaceId: "workspace-outside-actor-scope",
+        createdByActorId: "actor-tianmaochao",
+        name: "不应创建",
+      })).rejects.toMatchObject({
+        name: "ProjectWorkspaceUnavailableError",
+        reason: "forbidden",
+      });
+
+      const project = await store.createProject({
+        workspaceId: "workspace-organization-reelay",
+        createdByActorId: "actor-tianmaochao",
+        name: "adapter scope test",
+      });
+      await store.saveCanvasDocument({
+        actorId: "actor-tianmaochao",
+        projectId: project.id,
+        canvasId: "main",
+        schemaVersion: 1,
+        expectedRevision: 0,
+        content: { nodes: [{ id: "authorized" }] },
+      });
+
+      await expect(store.getCanvasDocument({
+        actorId: "actor-tianmaochao",
+        projectId: project.id,
+        canvasId: "main",
+      })).resolves.toEqual(expect.objectContaining({ revision: 1 }));
+      await expect(store.getCanvasDocument({
+        actorId: "actor-chenxi",
+        projectId: project.id,
+        canvasId: "main",
+      })).rejects.toBeInstanceOf(CanvasDocumentProjectUnavailableError);
+
+      await expect(store.moveProjectToTrash(
+        "workspace-organization-reelay",
+        project.id,
+        "actor-tianmaochao",
+      )).resolves.toBe(true);
+      await expect(store.getCanvasDocument({
+        actorId: "actor-tianmaochao",
+        projectId: project.id,
+        canvasId: "main",
+      })).rejects.toBeInstanceOf(CanvasDocumentProjectUnavailableError);
+    } finally {
+      await store.close();
+    }
+  });
+
   it("reads organization members from memberships, users, and password identities", async () => {
     const app = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
 

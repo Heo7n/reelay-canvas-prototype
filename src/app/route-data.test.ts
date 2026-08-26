@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router-dom";
 
+import { ApplicationError } from "../application/shared/ApplicationError";
 import type { ProjectSummary } from "../domain/project/project";
 import type { Workspace } from "../domain/workspace/workspace";
-import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { createRouteHandlers } from "./route-data";
 import type { ApplicationServices } from "./services";
 
@@ -64,7 +64,11 @@ function createServices(signedIn = true): ApplicationServices {
     },
     workspaceContextGateway: {
       load: vi.fn(async (workspaceId) => {
-        if (!signedIn) throw new HttpRequestError(401, "session_required", "Sign in required.");
+        if (!signedIn) {
+          throw new ApplicationError("authentication_required", "Sign in required.", {
+            serviceCode: "session_required",
+          });
+        }
         return {
           actor,
           projects: projects.filter((project) => project.workspaceId === workspaceId),
@@ -118,6 +122,28 @@ describe("application route data", () => {
       "/login?returnTo=%2Fw%2Fworkspace-organization%2Fprojects",
     );
   });
+
+  it.each(["forbidden", "not_found"] as const)(
+    "returns inaccessible workspaces to the actor's default workspace after an application %s error",
+    async (code) => {
+      const services = createServices();
+      vi.mocked(services.workspaceContextGateway.load).mockRejectedValueOnce(
+        new ApplicationError(code, "Workspace unavailable."),
+      );
+      const handlers = createRouteHandlers(services);
+
+      await expectRedirect(
+        handlers.workspaceLoader(loaderArgs(
+          "http://reelay.local/app/w/workspace-missing/projects",
+          { workspaceId: "workspace-missing" },
+        )),
+        "/w/workspace-organization",
+      );
+
+      expect(services.sessionGateway.getCurrent).toHaveBeenCalledOnce();
+      expect(services.workspaceRepository.listForActor).toHaveBeenCalledWith(actor.id);
+    },
+  );
 
   it("chooses the organization workspace after login and rejects external return targets", async () => {
     const handlers = createRouteHandlers(createServices());

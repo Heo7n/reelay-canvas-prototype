@@ -85,7 +85,6 @@ export function OrganizationCenterPage() {
       <WorkspaceHeader
         actor={data.actor}
         currentWorkspace={data.currentWorkspace}
-        onNotice={showNotice}
         showAccount={false}
       />
 

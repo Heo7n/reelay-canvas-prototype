@@ -8,6 +8,7 @@ Before changing this prototype:
 
 Keep these boundaries:
 
+- Treat root-cause repair as a hard rule: restore the correct invariant or state transition instead of covering faulty logic with compensating patches, cleanup jobs, or special cases.
 - Model entries belong in `data/model-catalog.js`.
 - Do not describe planned pages as implemented.
 - Preserve the user-visible semantics of canvas gestures, selection, and theme parity; do not preserve an inaccessible event binding merely because the prototype used it.

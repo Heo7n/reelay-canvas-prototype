@@ -12,6 +12,11 @@ interface AppliedMigrationRow {
   checksum: string;
 }
 
+export function calculateMigrationChecksum(sql: string): string {
+  const normalizedSql = sql.replace(/\r\n?/g, "\n");
+  return createHash("sha256").update(normalizedSql).digest("hex");
+}
+
 async function ensureMigrationTable(client: PoolClient): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -40,7 +45,7 @@ export async function runMigrations(pool: Pool): Promise<string[]> {
 
     for (const fileName of files) {
       const sql = await readFile(join(migrationsDirectory, fileName), "utf8");
-      const checksum = createHash("sha256").update(sql).digest("hex");
+      const checksum = calculateMigrationChecksum(sql);
       const existingChecksum = applied.get(fileName);
 
       if (existingChecksum) {

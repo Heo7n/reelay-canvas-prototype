@@ -40,7 +40,7 @@ export function WorkspaceHomePage() {
 
   return (
     <div className={styles.workspaceShell}>
-      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} onNotice={showNotice} />
+      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} />
       <main className={styles.homeMain}>
         <h1 className={styles.srOnly}>Reelay 创作主页</h1>
         <HeroCarousel slides={heroSlides} activeIndex={activeSlide} onActiveIndexChange={setActiveSlide} onChooseSlide={chooseSlide} />

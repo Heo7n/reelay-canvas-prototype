@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import type { UsageTimelinePoint } from "./usage-analytics";
+import type { UsageTimelinePoint } from "../../../features/usage";
 import styles from "./UsageDistributionChart.module.css";
 
 interface UsageDistributionChartProps {

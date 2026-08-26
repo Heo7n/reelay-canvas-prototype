@@ -42,15 +42,15 @@ test("invalid model ids fall back within the node type and never cross media typ
   assert.equal(policy.resolveModel(catalog.filter((model) => model.type === "image"), unavailableNode), null);
 });
 
-test("an existing generated result remains the compatibility contract for restored documents", () => {
-  const restored = {
+test("runtime model policy never lets legacy fields or results redefine a node creation type", () => {
+  const runtimeNode = {
     kind: "generator",
     mode: "image",
     model: "image-a",
     lockedMode: "video",
     generatedAsset: { type: "video" },
   };
-  assert.equal(policy.getNodeModeContract(restored), "video");
-  assert.equal(policy.normalizeModelState(catalog, restored).id, "video-a");
-  assert.equal(restored.mode, "video");
+  assert.equal(policy.getNodeModeContract(runtimeNode), "image");
+  assert.equal(policy.normalizeModelState(catalog, runtimeNode).id, "image-a");
+  assert.equal(runtimeNode.mode, "image");
 });

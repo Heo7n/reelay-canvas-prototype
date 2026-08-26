@@ -4,11 +4,13 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { loadPrototypeData } from "./load-prototype-data.mjs";
 
-const { catalog, config } = await loadPrototypeData();
+const { catalog, config, modelDirectory } = await loadPrototypeData();
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 
 assert.ok(Array.isArray(catalog) && catalog.length > 0, "Model catalog must not be empty.");
 assert.ok(Object.isFrozen(catalog), "Model catalog must remain frozen.");
+assert.ok(Array.isArray(modelDirectory), "Shared model directory must be available.");
+assert.ok(Object.isFrozen(modelDirectory), "Shared model directory must remain frozen.");
 
 const modelIds = new Set();
 const modelTypes = new Set();
@@ -57,6 +59,29 @@ for (const model of catalog) {
 }
 
 assert.deepEqual([...modelTypes].sort(), ["image", "video"], "Catalog must include image and video models.");
+const directoryIds = new Set();
+const demoOrders = new Set();
+for (const model of modelDirectory) {
+  assert.match(model.id || "", /^[a-z0-9][a-z0-9-]*$/, `Invalid directory model id: ${model.id}`);
+  assert.ok(!directoryIds.has(model.id), `Duplicate directory model id: ${model.id}`);
+  directoryIds.add(model.id);
+  assert.ok(model.name && model.provider, `Directory model ${model.id} needs a name and provider.`);
+  assert.ok(Object.isFrozen(model.capabilities), `Directory capabilities must be frozen for ${model.id}.`);
+  assert.ok(Array.isArray(model.demoUsage) && model.demoUsage.length > 0, `${model.id} needs demo usage templates.`);
+  for (const template of model.demoUsage) {
+    assert.ok(Number.isInteger(template.order) && template.order >= 0, `${model.id} has an invalid demo order.`);
+    assert.ok(!demoOrders.has(template.order), `Duplicate demo usage order: ${template.order}`);
+    demoOrders.add(template.order);
+    assert.ok(template.baseCredits > 0 && template.weight > 0, `${model.id} has invalid demo usage costs.`);
+    assert.ok(template.activityLabel && template.specification, `${model.id} has incomplete demo usage metadata.`);
+  }
+}
+assert.ok(catalog.every((model) => directoryIds.has(model.id)), "Every canvas model must belong to the shared directory.");
+assert.deepEqual(
+  [...demoOrders].sort((left, right) => left - right),
+  Array.from({ length: demoOrders.size }, (_, index) => index),
+  "Demo usage templates must keep a contiguous deterministic order.",
+);
 assert.ok(config && typeof config === "object", "Prototype config was not defined.");
 assert.ok(config.canvasScaleLimits.min > 0, "Minimum canvas scale must be positive.");
 assert.ok(config.canvasScaleLimits.max > config.canvasScaleLimits.min, "Canvas scale limits are invalid.");

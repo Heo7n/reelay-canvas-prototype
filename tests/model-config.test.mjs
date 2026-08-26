@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadPrototypeData } from "../scripts/load-prototype-data.mjs";
 
-const { catalog, config } = await loadPrototypeData();
+const { catalog, config, modelDirectory } = await loadPrototypeData();
 
 test("catalog keeps stable image and video defaults", () => {
   assert.equal(catalog.find((model) => model.type === "image")?.id, "gpt-image-2");
@@ -22,6 +22,30 @@ test("catalog exposes the seven product models in stable display order", () => {
       { id: "kling-video-3", name: "Kling 3.0", type: "video" },
     ],
   );
+});
+
+test("shared directory is the frozen source for canvas and usage model metadata", () => {
+  assert.ok(Object.isFrozen(modelDirectory));
+  assert.equal(modelDirectory.length, 11);
+  assert.ok(catalog.every((model) => modelDirectory.includes(model)));
+  assert.deepEqual(
+    [...modelDirectory].filter((model) => !catalog.includes(model)).map(({ id, name, type }) => ({ id, name, type })),
+    [
+      { id: "reelay-hd", name: "Reelay HD", type: "enhancement" },
+      { id: "reelay-frameboost", name: "Reelay FrameBoost", type: "enhancement" },
+      { id: "reelay-clean", name: "Reelay Clean", type: "enhancement" },
+      { id: "reelay-agent", name: "Reelay Agent", type: "agent" },
+    ],
+  );
+  const demoTemplates = [...modelDirectory].flatMap((model) => (
+    model.demoUsage.map((template) => ({ modelId: model.id, modelName: model.name, ...template }))
+  )).sort((left, right) => left.order - right.order);
+  assert.equal(demoTemplates.length, 27);
+  assert.deepEqual(demoTemplates.slice(0, 3).map(({ modelId, modelName, baseCredits }) => ({ modelId, modelName, baseCredits })), [
+    { modelId: "seedance-2", modelName: "Seedance 2.0", baseCredits: 720 },
+    { modelId: "seedance-2", modelName: "Seedance 2.0", baseCredits: 380 },
+    { modelId: "seedance-2", modelName: "Seedance 2.0", baseCredits: 1080 },
+  ]);
 });
 
 test("every model exposes a shared local brand logo contract", () => {

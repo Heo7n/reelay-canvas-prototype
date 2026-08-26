@@ -3,13 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-const codecSource = await readFile(
-  new URL("../src/legacy-canvas/canvas-document-codec.js", import.meta.url),
-  "utf8",
-);
+const [codecSource, connectionsSource] = await Promise.all([
+  readFile(new URL("../src/legacy-canvas/canvas-document-codec.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/legacy-canvas/canvas-connections.js", import.meta.url), "utf8"),
+]);
 const context = vm.createContext({});
 new vm.Script(codecSource, { filename: "canvas-document-codec.js" }).runInContext(context);
+new vm.Script(connectionsSource, { filename: "canvas-connections.js" }).runInContext(context);
 const codec = context.REELAY_CANVAS_DOCUMENT_CODEC;
+const connections = context.REELAY_CANVAS_CONNECTIONS;
 
 const sortedKeys = (value) => Object.keys(value).sort();
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -81,7 +83,6 @@ test("the canvas document codec persists only explicit content fields and restor
               enhanced: true,
               unknownAssetField: "must-not-persist",
             },
-            lockedMode: "video",
             assets: [
               {
                 id: "reference-1",
@@ -186,7 +187,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
   assert.deepEqual(sortedKeys(generator), [
     "activeAssetId", "aspect", "assetValidationEnabled", "assets", "audioEnabled", "autoLinkEnabled", "count", "duration", "generatedAsset", "groupId", "id", "kind",
-    "lockedMode", "mode", "model", "name", "preview", "prompt", "quality", "resolution",
+    "mediaKind", "model", "name", "preview", "prompt", "quality", "resolution",
     "workflow", "x", "y", "z",
   ]);
   assert.deepEqual(sortedKeys(assetNode), ["activeAssetId", "assets", "id", "kind", "mode", "x", "y", "z"]);
@@ -232,6 +233,9 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(restoredCanvas.scale, 1.25);
   assert.deepEqual(plain(restoredCanvas.undoStack), []);
   assert.equal(restoredGenerator.prompt, "一艘穿越星云的飞船");
+  assert.equal(restoredGenerator.mode, "video");
+  assert.equal(Object.hasOwn(restoredGenerator, "mediaKind"), false);
+  assert.equal(Object.hasOwn(restoredGenerator, "lockedMode"), false);
   assert.equal(restoredGenerator.model, "seedance-2.0");
   assert.equal(restoredGenerator.workflow, "reference-image");
   assert.equal(restoredGenerator.audioEnabled, true);
@@ -362,4 +366,68 @@ test("the codec restores legacy version-one canvases without a connections field
   });
 
   assert.deepEqual(plain(restored.canvases[0].connections), []);
+});
+
+test("legacy generator type aliases migrate once to mediaKind without entering runtime state", () => {
+  const legacyContent = {
+    kind: "reelay-legacy-canvas",
+    version: 1,
+    activeCanvasId: "legacy-canvas",
+    canvases: [{
+      id: "legacy-canvas",
+      name: "Legacy canvas",
+      nodes: [
+        {
+          id: "legacy-generator",
+          kind: "generator",
+          x: 0,
+          y: 0,
+          z: 1,
+          mode: "image",
+          lockedMode: "video",
+          model: "video-a",
+          generatedAsset: {
+            id: "legacy-result",
+            type: "video",
+            url: "https://example.test/result.mp4",
+          },
+        },
+        {
+          id: "target-generator",
+          kind: "generator",
+          x: 400,
+          y: 0,
+          z: 2,
+          mode: "image",
+          model: "image-a",
+        },
+      ],
+      connections: [{
+        id: "legacy-connection",
+        sourceNodeId: "legacy-generator",
+        targetNodeId: "target-generator",
+      }],
+      groups: [],
+      viewport: { tx: 0, ty: 0, scale: 1 },
+      zCounter: 1,
+    }],
+  };
+
+  const restored = codec.restoreSnapshot(legacyContent);
+  const runtimeNode = restored.canvases[0].nodes[0];
+  assert.equal(runtimeNode.mode, "video");
+  assert.equal(runtimeNode.generatedAsset.type, "video");
+  assert.equal(Object.hasOwn(runtimeNode, "lockedMode"), false);
+  assert.equal(Object.hasOwn(runtimeNode, "mediaKind"), false);
+  const runtimeConnections = connections.normalizeConnections(
+    restored.canvases[0].connections,
+    restored.canvases[0].nodes,
+  );
+  assert.equal(runtimeConnections[0].mediaType, "video");
+
+  const migrated = codec.createSnapshot(restored);
+  const persistedNode = migrated.canvases[0].nodes[0];
+  assert.equal(persistedNode.mediaKind, "video");
+  assert.equal(Object.hasOwn(persistedNode, "mode"), false);
+  assert.equal(Object.hasOwn(persistedNode, "lockedMode"), false);
 });

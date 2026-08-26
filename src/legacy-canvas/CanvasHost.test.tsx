@@ -5,8 +5,8 @@ import { act, cleanup, fireEvent, render as renderTestingLibrary, screen, waitFo
 import type { ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApplicationError } from "../application/shared/ApplicationError";
 import type { CanvasDocument } from "../domain/canvas/canvas-document";
-import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import { CanvasHost } from "./CanvasHost";
 
 afterEach(cleanup);
@@ -18,6 +18,7 @@ const document = {
   revision: 2,
   content: { opaque: true },
 };
+const canvasInstanceId = "canvas-instance-1";
 
 const repository = {
   getCanvasDocument: vi.fn(async () => null),
@@ -54,13 +55,17 @@ const editableContext = {
   },
 };
 
-function render(ui: ReactElement) {
-  return renderTestingLibrary(
+function routed(ui: ReactElement): ReactElement {
+  return (
     <MemoryRouter initialEntries={["/w/organization-1/projects/project-1/canvases/main"]}>
       {ui}
       <LocationProbe />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function render(ui: ReactElement) {
+  return renderTestingLibrary(routed(ui));
 }
 
 function LocationProbe() {
@@ -75,6 +80,14 @@ function LocationProbe() {
 }
 
 function dispatchCanvasMessage(frame: HTMLIFrameElement, data: unknown): void {
+  if ((data as { type?: string } | null)?.type !== "canvas:ready") {
+    const instanceId = (data as { instanceId?: string } | null)?.instanceId ?? canvasInstanceId;
+    window.dispatchEvent(new MessageEvent("message", {
+      data: { ...readyMessage, instanceId },
+      origin: window.location.origin,
+      source: frame.contentWindow,
+    }));
+  }
   window.dispatchEvent(new MessageEvent("message", {
     data,
     origin: window.location.origin,
@@ -82,14 +95,19 @@ function dispatchCanvasMessage(frame: HTMLIFrameElement, data: unknown): void {
   }));
 }
 
-function saveMessage(requestId: string): unknown {
+function saveMessage(
+  requestId: string,
+  instanceId = canvasInstanceId,
+  expectedRevision = document.revision,
+): unknown {
   return {
     source: "reelay-legacy-canvas",
     type: "canvas:save",
     protocolVersion: 1,
+    instanceId,
     requestId,
     schemaVersion: document.schemaVersion,
-    expectedRevision: document.revision,
+    expectedRevision,
     content: document.content,
   };
 }
@@ -98,19 +116,25 @@ const readyMessage = {
   source: "reelay-legacy-canvas",
   type: "canvas:ready",
   protocolVersion: 1,
+  instanceId: canvasInstanceId,
 };
 
-const dirtyMessage = (dirty: boolean) => ({
+const dirtyMessage = (dirty: boolean, instanceId = canvasInstanceId) => ({
   source: "reelay-legacy-canvas",
   type: "canvas:dirty",
   protocolVersion: 1,
+  instanceId,
   dirty,
 });
 
-const navigateMessage = (target: "home" | "projects" | "organization" | "logout") => ({
+const navigateMessage = (
+  target: "home" | "projects" | "organization" | "logout",
+  instanceId = canvasInstanceId,
+) => ({
   source: "reelay-legacy-canvas",
   type: "canvas:navigate",
   protocolVersion: 1,
+  instanceId,
   target,
 });
 
@@ -158,6 +182,23 @@ describe("CanvasHost", () => {
     expect(getCanvasDocument).toHaveBeenCalledTimes(2);
   });
 
+  it("stops the iframe when the application reports that the canvas is unavailable", async () => {
+    const getCanvasDocument = vi.fn(async () => {
+      throw new ApplicationError("not_found", "项目不存在或已删除。", {
+        serviceCode: "project_not_found",
+      });
+    });
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument, save: repository.save }}
+        context={editableContext}
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("项目已删除或无法访问");
+    expect(screen.queryByTitle("Reelay 项目画布")).toBeNull();
+  });
+
   it("does not wait for the document request before mounting the iframe", () => {
     const getCanvasDocument = vi.fn(() => new Promise<CanvasDocument | null>(() => undefined));
     render(
@@ -172,7 +213,7 @@ describe("CanvasHost", () => {
     expect(getCanvasDocument).toHaveBeenCalledWith("project-1", "main");
   });
 
-  it("initializes one ready iframe exactly once after its scoped document loads", async () => {
+  it("initializes each iframe instance exactly once when ready is repeated", async () => {
     const getCanvasDocument = vi.fn(async () => document);
     render(
       <CanvasHost
@@ -204,6 +245,58 @@ describe("CanvasHost", () => {
     );
     expect(getCanvasDocument).toHaveBeenCalledWith("project-1", "main");
     expect(postMessage).toHaveBeenCalledTimes(2);
+
+    act(() => dispatchCanvasMessage(frame, readyMessage));
+    expect(postMessage).toHaveBeenCalledTimes(2);
+
+    act(() => dispatchCanvasMessage(frame, {
+      ...readyMessage,
+      instanceId: "canvas-instance-2",
+    }));
+    expect(postMessage).toHaveBeenCalledTimes(4);
+
+    act(() => dispatchCanvasMessage(frame, readyMessage));
+    expect(postMessage).toHaveBeenCalledTimes(4);
+  });
+
+  it("ignores ready and save messages from the wrong origin or window", async () => {
+    const save = vi.fn(async () => document);
+    const getCanvasDocument = vi.fn(async () => document);
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument, save }}
+        context={editableContext}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    await waitFor(() => expect(getCanvasDocument).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: readyMessage,
+        origin: "https://attacker.example",
+        source: frame.contentWindow,
+      }));
+      window.dispatchEvent(new MessageEvent("message", {
+        data: readyMessage,
+        origin: window.location.origin,
+        source: window,
+      }));
+      window.dispatchEvent(new MessageEvent("message", {
+        data: saveMessage("wrong-origin"),
+        origin: "https://attacker.example",
+        source: frame.contentWindow,
+      }));
+      window.dispatchEvent(new MessageEvent("message", {
+        data: saveMessage("wrong-source"),
+        origin: window.location.origin,
+        source: window,
+      }));
+    });
+
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("saves opaque content within the route scope and returns the new revision", async () => {
@@ -238,12 +331,165 @@ describe("CanvasHost", () => {
     ));
   });
 
+  it("waits for an old same-route save before hydrating a new iframe instance", async () => {
+    const replacementInstanceId = "canvas-instance-2";
+    const savedDocument = { ...document, revision: 3 };
+    let resolveOldSave: (value: typeof savedDocument) => void = () => undefined;
+    const save = vi.fn(() => new Promise<typeof savedDocument>((resolve) => {
+      resolveOldSave = resolve;
+    }));
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save }}
+        context={editableContext}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:document", document }),
+      window.location.origin,
+    ));
+
+    act(() => dispatchCanvasMessage(frame, saveMessage("save-before-reload")));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saving");
+
+    act(() => dispatchCanvasMessage(frame, {
+      ...readyMessage,
+      instanceId: replacementInstanceId,
+    }));
+    expect(postMessage.mock.calls.filter(([message]) => (
+      (message as { type?: string }).type === "host:document"
+    ))).toHaveLength(1);
+
+    await act(async () => resolveOldSave(savedDocument));
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:document", document: savedDocument }),
+      window.location.origin,
+    ));
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:save-result", requestId: "save-before-reload" }),
+      window.location.origin,
+    );
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved");
+
+    act(() => {
+      dispatchCanvasMessage(frame, dirtyMessage(false, replacementInstanceId));
+      dispatchCanvasMessage(frame, navigateMessage("home", replacementInstanceId));
+    });
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/w/organization-1"));
+  });
+
+  it("refetches the authoritative document before replacing an iframe after an old save error", async () => {
+    const replacementInstanceId = "canvas-instance-2";
+    const refreshedDocument = { ...document, revision: 4, content: { refreshed: true } };
+    let rejectOldSave: (reason: unknown) => void = () => undefined;
+    const save = vi.fn(() => new Promise<typeof document>((_resolve, reject) => {
+      rejectOldSave = reject;
+    }));
+    const getCanvasDocument = vi.fn()
+      .mockResolvedValueOnce(document)
+      .mockResolvedValueOnce(refreshedDocument);
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument, save }}
+        context={editableContext}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:document", document }),
+      window.location.origin,
+    ));
+    act(() => dispatchCanvasMessage(frame, saveMessage("save-that-conflicts")));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+
+    act(() => dispatchCanvasMessage(frame, {
+      ...readyMessage,
+      instanceId: replacementInstanceId,
+    }));
+    expect(postMessage.mock.calls.filter(([message]) => (
+      (message as { type?: string }).type === "host:document"
+    ))).toHaveLength(1);
+    await act(async () => rejectOldSave(new ApplicationError("conflict", "Rejected")));
+
+    await waitFor(() => expect(getCanvasDocument).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:document", document: refreshedDocument }),
+      window.location.origin,
+    ));
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:save-error", requestId: "save-that-conflicts" }),
+      window.location.origin,
+    );
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved");
+  });
+
+  it("does not deliver an old scope save completion to a replacement iframe", async () => {
+    const documentB = {
+      ...document,
+      projectId: "project-2",
+      revision: 7,
+      content: { scope: "project-2" },
+    };
+    let resolveOldSave: (value: typeof document) => void = () => undefined;
+    const save = vi.fn(() => new Promise<typeof document>((resolve) => {
+      resolveOldSave = resolve;
+    }));
+    const getCanvasDocument = vi.fn(async (projectId: string) => (
+      projectId === "project-2" ? documentB : document
+    ));
+    const view = render(
+      <CanvasHost
+        repository={{ getCanvasDocument, save }}
+        context={editableContext}
+      />,
+    );
+    const frameA = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    dispatchCanvasMessage(frameA, saveMessage("save-project-a"));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+
+    const contextB = {
+      ...editableContext,
+      projectId: "project-2",
+      projectName: "第二个项目",
+    };
+    view.rerender(routed(
+      <CanvasHost
+        repository={{ getCanvasDocument, save }}
+        context={contextB}
+      />,
+    ));
+    const frameB = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    expect(frameB).not.toBe(frameA);
+    await waitFor(() => expect(getCanvasDocument).toHaveBeenCalledWith("project-2", "main"));
+    const postMessageB = vi.spyOn(frameB.contentWindow!, "postMessage");
+
+    await act(async () => resolveOldSave({ ...document, revision: 3 }));
+
+    expect(postMessageB).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:save-result",
+        requestId: "save-project-a",
+      }),
+      window.location.origin,
+    );
+    expect(frameB.closest("section")).toHaveAttribute("data-persistence-status", "saved");
+  });
+
   it.each([
-    [409, "conflict"],
-    [403, "forbidden"],
-  ] as const)("maps HTTP %s saves to a %s bridge error", async (status, code) => {
+    ["conflict", "conflict"],
+    ["forbidden", "forbidden"],
+  ] as const)("maps application %s saves to a %s bridge error", async (applicationCode, code) => {
     const save = vi.fn(async () => {
-      throw new HttpRequestError(status, "save_rejected", "Rejected");
+      throw new ApplicationError(applicationCode, "Rejected", {
+        serviceCode: "save_rejected",
+      });
     });
     render(
       <CanvasHost
@@ -253,14 +499,14 @@ describe("CanvasHost", () => {
     );
     const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
-    dispatchCanvasMessage(frame, saveMessage(`save-${status}`));
+    dispatchCanvasMessage(frame, saveMessage(`save-${applicationCode}`));
 
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       {
         source: "reelay-shell",
         type: "host:save-error",
         protocolVersion: 1,
-        requestId: `save-${status}`,
+        requestId: `save-${applicationCode}`,
         code,
       },
       window.location.origin,
@@ -269,7 +515,9 @@ describe("CanvasHost", () => {
 
   it("stops the iframe after a deleted project rejects an in-flight save", async () => {
     const save = vi.fn(async () => {
-      throw new HttpRequestError(404, "project_not_found", "项目不存在或已删除。");
+      throw new ApplicationError("not_found", "项目不存在或已删除。", {
+        serviceCode: "project_not_found",
+      });
     });
     render(
       <CanvasHost
@@ -458,6 +706,7 @@ describe("CanvasHost", () => {
       source: "reelay-legacy-canvas",
       type: "canvas:open-account",
       protocolVersion: 1,
+      instanceId: canvasInstanceId,
     }));
 
     expect(onOpenAccountSettings).toHaveBeenCalledTimes(1);

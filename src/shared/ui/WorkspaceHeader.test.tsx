@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
@@ -32,7 +32,6 @@ describe("workspace account menu", () => {
           <WorkspaceHeader
             actor={actor}
             currentWorkspace={workspace}
-            onNotice={vi.fn()}
             showAccount={false}
           />
         ),
@@ -49,7 +48,7 @@ describe("workspace account menu", () => {
       {
         path: "*",
         action: async () => null,
-        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} onNotice={vi.fn()} />,
+        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} />,
       },
     ], { initialEntries: ["/w/workspace-organization"] });
     render(<RouterProvider router={router} />);
@@ -93,7 +92,6 @@ describe("workspace account menu", () => {
           <WorkspaceHeader
             actor={actor}
             currentWorkspace={{ ...workspace, currentUserRole }}
-            onNotice={vi.fn()}
           />
         ),
       },
@@ -109,7 +107,7 @@ describe("workspace account menu", () => {
       {
         path: "*",
         action: async () => null,
-        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} onNotice={vi.fn()} />,
+        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} />,
       },
     ], { initialEntries: ["/w/workspace-organization"] });
     render(<RouterProvider router={router} />);
@@ -126,7 +124,7 @@ describe("workspace account menu", () => {
       {
         path: "*",
         action: async () => null,
-        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} onNotice={vi.fn()} />,
+        element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} />,
       },
     ], { initialEntries: ["/w/workspace-organization"] });
     render(<RouterProvider router={router} />);

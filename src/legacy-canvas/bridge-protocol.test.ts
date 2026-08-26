@@ -67,6 +67,7 @@ describe("legacy canvas bridge", () => {
       source: "reelay-legacy-canvas",
       type: "canvas:save",
       protocolVersion: 1,
+      instanceId: "canvas-instance-1",
       requestId: "save-1",
       schemaVersion: 1,
       expectedRevision: 2,
@@ -95,10 +96,12 @@ describe("legacy canvas bridge", () => {
       source: "reelay-legacy-canvas",
       type: "canvas:open-account",
       protocolVersion: 1,
+      instanceId: "canvas-instance-1",
     })).toEqual({
       source: "reelay-legacy-canvas",
       type: "canvas:open-account",
       protocolVersion: 1,
+      instanceId: "canvas-instance-1",
     });
   });
 });

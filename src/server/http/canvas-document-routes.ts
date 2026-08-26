@@ -4,17 +4,21 @@ import type { SessionActor } from "../../domain/identity/session";
 import {
   CanvasDocumentProjectUnavailableError,
   CanvasDocumentRevisionConflictError,
+  type CanvasDocumentStore,
 } from "../application/CanvasDocumentStore";
-import type { CollaborationStore } from "../application/CollaborationStore";
+import type { ProjectAccessReader } from "../application/ProjectStore";
+import type { SessionActorReader } from "../application/SessionStore";
 import { CanvasDocumentParamsSchema, SaveCanvasDocumentBodySchema } from "./contracts";
 import { getRequestActor } from "./session-context";
+
+type CanvasDocumentRouteCapabilities = CanvasDocumentStore & ProjectAccessReader & SessionActorReader;
 
 async function requireActor(
   request: FastifyRequest,
   reply: FastifyReply,
-  store: CollaborationStore,
+  sessions: SessionActorReader,
 ): Promise<SessionActor | null> {
-  const actor = await getRequestActor(request, store);
+  const actor = await getRequestActor(request, sessions);
   if (!actor) {
     reply.code(401).send({ error: { code: "session_required", message: "请先登录演示账号。" } });
     return null;
@@ -24,12 +28,12 @@ async function requireActor(
 
 export async function registerCanvasDocumentRoutes(
   app: FastifyInstance,
-  store: CollaborationStore,
+  capabilities: CanvasDocumentRouteCapabilities,
 ): Promise<void> {
   app.get(
     "/api/projects/:projectId/canvases/:canvasId/document",
     async (request, reply) => {
-      const actor = await requireActor(request, reply, store);
+      const actor = await requireActor(request, reply, capabilities);
       if (!actor) return reply;
       const params = CanvasDocumentParamsSchema.safeParse(request.params);
       if (!params.success) {
@@ -39,21 +43,24 @@ export async function registerCanvasDocumentRoutes(
       }
 
       const { projectId, canvasId } = params.data;
-      const project = await store.getProjectById(actor.id, projectId);
-      if (!project) {
-        return reply.code(404).send({
-          error: { code: "project_not_found", message: "项目不存在。" },
-        });
+      try {
+        const document = await capabilities.getCanvasDocument({ actorId: actor.id, projectId, canvasId });
+        return { document };
+      } catch (error) {
+        if (error instanceof CanvasDocumentProjectUnavailableError) {
+          return reply.code(404).send({
+            error: { code: "project_not_found", message: "项目不存在。" },
+          });
+        }
+        throw error;
       }
-      const document = await store.getCanvasDocument(projectId, canvasId);
-      return { document };
     },
   );
 
   app.put(
     "/api/projects/:projectId/canvases/:canvasId/document",
     async (request, reply) => {
-      const actor = await requireActor(request, reply, store);
+      const actor = await requireActor(request, reply, capabilities);
       if (!actor) return reply;
       const params = CanvasDocumentParamsSchema.safeParse(request.params);
       const body = SaveCanvasDocumentBodySchema.safeParse(request.body);
@@ -64,7 +71,7 @@ export async function registerCanvasDocumentRoutes(
       }
 
       const { projectId, canvasId } = params.data;
-      const project = await store.getProjectById(actor.id, projectId);
+      const project = await capabilities.getProjectById(actor.id, projectId);
       if (!project) {
         return reply.code(404).send({
           error: { code: "project_not_found", message: "项目不存在。" },
@@ -77,7 +84,7 @@ export async function registerCanvasDocumentRoutes(
       }
 
       try {
-        const document = await store.saveCanvasDocument({
+        const document = await capabilities.saveCanvasDocument({
           actorId: actor.id,
           projectId,
           canvasId,

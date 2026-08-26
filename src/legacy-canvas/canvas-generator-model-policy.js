@@ -9,9 +9,7 @@
 
   function getNodeModeContract(node) {
     if (!node || node.kind !== "generator") return null;
-    return normalizeMode(node.lockedMode)
-      || normalizeMode(node.generatedAsset?.type)
-      || normalizeMode(node.mode);
+    return normalizeMode(node.mode);
   }
 
   function getCompatibleModels(catalog, node) {
@@ -35,7 +33,6 @@
     if (!mode) return null;
     const model = resolveModel(catalog, node);
     node.mode = mode;
-    if (normalizeMode(node.lockedMode)) node.lockedMode = mode;
     node.model = model?.id || "";
     return model;
   }

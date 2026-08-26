@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { ApplicationError } from "../../application/shared/ApplicationError";
 import { createHttpServices } from "./createHttpServices";
 import { HttpAccountRepository } from "./HttpAccountRepository";
 import { HttpCanvasDocumentRepository } from "./HttpCanvasDocumentRepository";
@@ -7,7 +8,6 @@ import { HttpOrganizationRepository } from "./HttpOrganizationRepository";
 import { HttpProjectRepository } from "./HttpProjectRepository";
 import { HttpSessionGateway } from "./HttpSessionGateway";
 import {
-  HttpRequestError,
   HttpResponseValidationError,
   type FetchLike,
 } from "./HttpApiClient";
@@ -259,19 +259,24 @@ describe("HttpProjectRepository", () => {
     expect(transport.requests[4]?.init.method).toBe("DELETE");
   });
 
-  it("maps API error envelopes to a stable typed request error", async () => {
+  it.each([
+    [401, "authentication_required"],
+    [403, "forbidden"],
+    [404, "not_found"],
+    [409, "conflict"],
+  ] as const)("maps HTTP %s to the %s application error code", async (status, code) => {
     const transport = createFetchQueue({
-      status: 403,
-      body: { error: { code: "workspace_forbidden", message: "Forbidden" } },
+      status,
+      body: { error: { code: "workspace_request_rejected", message: "Request rejected" } },
     });
     const repository = new HttpProjectRepository({ fetch: transport.fetch });
 
     const request = repository.listByWorkspace("workspace-private");
-    await expect(request).rejects.toBeInstanceOf(HttpRequestError);
+    await expect(request).rejects.toBeInstanceOf(ApplicationError);
     await expect(request).rejects.toMatchObject({
-      status: 403,
-      code: "workspace_forbidden",
-      message: "Forbidden",
+      code,
+      serviceCode: "workspace_request_rejected",
+      message: "Request rejected",
     });
   });
 
@@ -387,8 +392,9 @@ describe("HttpCanvasDocumentRepository", () => {
       expectedRevision: 3,
       content: documentDto.content,
     })).rejects.toMatchObject({
-      status: 409,
-      code: "canvas_revision_conflict",
+      code: "conflict",
+      serviceCode: "canvas_revision_conflict",
+      details: { currentRevision: 4 },
       message: "Reload before saving again.",
     });
   });

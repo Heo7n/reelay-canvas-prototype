@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { SessionActor } from "../../domain/identity/session";
 import {
-  createOrganizationUsageDemoData,
+  createUsageDemoData,
   filterUsageRecords,
   getUsageComposition,
   getUsageRange,
@@ -24,7 +24,7 @@ import {
   type UsageActivityKind,
   type UsageRangePreset,
   type UsageTrendPoint,
-} from "../../pages/organization/organization-usage-data";
+} from "../usage";
 import styles from "./AccountSettingsDialog.module.css";
 
 interface PersonalUsageSectionProps {
@@ -199,7 +199,7 @@ export function PersonalUsageSection({ actor }: PersonalUsageSectionProps) {
   const rangeMenuRef = useRef<HTMLDetailsElement>(null);
   const ledgerStartDateRef = useRef<HTMLInputElement>(null);
   const ledgerEndDateRef = useRef<HTMLInputElement>(null);
-  const demoData = useMemo(() => createOrganizationUsageDemoData([], now), [now]);
+  const demoData = useMemo(() => createUsageDemoData([], now), [now]);
   const personalRecords = useMemo(
     () => demoData.records.filter((record) => record.memberAccount === actor.account),
     [actor.account, demoData.records],

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import type { CanvasDocumentRepository } from "../application/canvases/CanvasDocumentRepository";
+import { isApplicationError } from "../application/shared/ApplicationError";
 import { routePaths } from "../app/routes";
 import type { CanvasDocument } from "../domain/canvas/canvas-document";
-import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
 import {
   hostDocumentMessageSchema,
   hostFlushMessageSchema,
@@ -36,11 +36,19 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const initializedReadyGenerationRef = useRef(0);
+  const activeCanvasInstanceIdRef = useRef<string | null>(null);
+  const seenCanvasInstanceIdsRef = useRef(new Set<string>());
   const dirtyRef = useRef(false);
   const savingRef = useRef(0);
+  const sameScopeInFlightSaveCountRef = useRef(0);
+  const authoritativeDocumentNeedsRefreshRef = useRef(false);
+  const authoritativeRefreshTokenRef = useRef(0);
+  const authoritativeRefreshInFlightRef = useRef(false);
   const pendingNavigationRef = useRef<NavigationTarget | null>(null);
   const navigationTimeoutRef = useRef<number | null>(null);
   const [readyGeneration, setReadyGeneration] = useState(0);
+  const [sameScopeInFlightSaveCount, setSameScopeInFlightSaveCount] = useState(0);
+  const [refreshingAuthoritativeDocument, setRefreshingAuthoritativeDocument] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [documentState, setDocumentState] = useState<DocumentLoadState>({ status: "loading" });
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("loading");
@@ -106,8 +114,11 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
     }, 10_000);
   }, [finishPendingNavigation, requestFlush]);
 
-  const sendInit = useCallback((): void => {
-    if (documentState.status !== "ready") return;
+  const sendInit = useCallback((instanceId: string): void => {
+    if (
+      documentState.status !== "ready"
+      || activeCanvasInstanceIdRef.current !== instanceId
+    ) return;
     const message = hostMessageSchema.parse({
       source: "reelay-shell",
       type: "host:init",
@@ -121,12 +132,52 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       document: documentState.document,
       writable: safeContext.writable,
     }));
+    setPersistenceStatus(savingRef.current > 0
+      ? "saving"
+      : (dirtyRef.current ? "dirty" : "saved"));
   }, [documentState, postToCanvas, safeContext]);
+
+  const refreshAuthoritativeDocument = useCallback((): void => {
+    if (authoritativeRefreshInFlightRef.current) return;
+    const refreshToken = authoritativeRefreshTokenRef.current + 1;
+    authoritativeRefreshTokenRef.current = refreshToken;
+    authoritativeRefreshInFlightRef.current = true;
+    setRefreshingAuthoritativeDocument(true);
+    setDocumentState({ status: "loading" });
+    setPersistenceStatus("loading");
+    void repository.getCanvasDocument(safeContext.projectId, safeContext.canvasId).then(
+      (document) => {
+        if (authoritativeRefreshTokenRef.current !== refreshToken) return;
+        authoritativeDocumentNeedsRefreshRef.current = false;
+        setDocumentState({ status: "ready", document });
+      },
+      (error: unknown) => {
+        if (authoritativeRefreshTokenRef.current !== refreshToken) return;
+        setDocumentState({
+          status: "error",
+          reason: isApplicationError(error, "not_found") ? "unavailable" : "load",
+        });
+        setPersistenceStatus("error");
+      },
+    ).finally(() => {
+      if (authoritativeRefreshTokenRef.current !== refreshToken) return;
+      authoritativeRefreshInFlightRef.current = false;
+      setRefreshingAuthoritativeDocument(false);
+    });
+  }, [repository, safeContext.canvasId, safeContext.projectId]);
 
   useEffect(() => {
     let active = true;
     initializedReadyGenerationRef.current = 0;
+    activeCanvasInstanceIdRef.current = null;
+    seenCanvasInstanceIdsRef.current.clear();
+    sameScopeInFlightSaveCountRef.current = 0;
+    authoritativeDocumentNeedsRefreshRef.current = false;
+    authoritativeRefreshTokenRef.current += 1;
+    authoritativeRefreshInFlightRef.current = false;
     setReadyGeneration(0);
+    setSameScopeInFlightSaveCount(0);
+    setRefreshingAuthoritativeDocument(false);
     dirtyRef.current = false;
     savingRef.current = 0;
     pendingNavigationRef.current = null;
@@ -139,6 +190,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
     void repository.getCanvasDocument(safeContext.projectId, safeContext.canvasId).then(
       (document) => {
         if (active) {
+          authoritativeDocumentNeedsRefreshRef.current = false;
           setDocumentState({ status: "ready", document });
           setPersistenceStatus("saved");
         }
@@ -147,7 +199,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
         if (active) {
           setDocumentState({
             status: "error",
-            reason: error instanceof HttpRequestError && error.status === 404 ? "unavailable" : "load",
+            reason: isApplicationError(error, "not_found") ? "unavailable" : "load",
           });
           setPersistenceStatus("error");
         }
@@ -168,12 +220,17 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
   useEffect(() => {
     if (
       readyGeneration === 0 ||
+      sameScopeInFlightSaveCount > 0 ||
+      refreshingAuthoritativeDocument ||
+      authoritativeDocumentNeedsRefreshRef.current ||
       documentState.status !== "ready" ||
       initializedReadyGenerationRef.current === readyGeneration
     ) return;
+    const instanceId = activeCanvasInstanceIdRef.current;
+    if (!instanceId) return;
     initializedReadyGenerationRef.current = readyGeneration;
-    sendInit();
-  }, [documentState.status, readyGeneration, sendInit]);
+    sendInit(instanceId);
+  }, [documentState.status, readyGeneration, refreshingAuthoritativeDocument, sameScopeInFlightSaveCount, sendInit]);
 
   useEffect(() => {
     const flushIfNeeded = (): void => {
@@ -199,6 +256,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
   }, [requestFlush]);
 
   useEffect(() => {
+    let active = true;
     const sendSaveError = (
       requestId: string,
       code: "conflict" | "forbidden" | "missing" | "network",
@@ -218,9 +276,27 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       if (!message) return;
 
       if (message.type === "canvas:ready") {
+        if (seenCanvasInstanceIdsRef.current.has(message.instanceId)) return;
+        seenCanvasInstanceIdsRef.current.add(message.instanceId);
+        activeCanvasInstanceIdRef.current = message.instanceId;
+        dirtyRef.current = false;
+        savingRef.current = 0;
+        pendingNavigationRef.current = null;
+        if (navigationTimeoutRef.current !== null) {
+          window.clearTimeout(navigationTimeoutRef.current);
+          navigationTimeoutRef.current = null;
+        }
+        setPersistenceStatus("loading");
         setReadyGeneration((generation) => generation + 1);
+        if (
+          sameScopeInFlightSaveCountRef.current === 0
+          && authoritativeDocumentNeedsRefreshRef.current
+        ) {
+          refreshAuthoritativeDocument();
+        }
         return;
       }
+      if (message.instanceId !== activeCanvasInstanceIdRef.current) return;
       if (message.type === "canvas:dirty") {
         dirtyRef.current = message.dirty;
         setPersistenceStatus(message.dirty
@@ -247,7 +323,11 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       }
 
       savingRef.current += 1;
+      sameScopeInFlightSaveCountRef.current += 1;
+      setSameScopeInFlightSaveCount(sameScopeInFlightSaveCountRef.current);
       setPersistenceStatus("saving");
+      const sourceFrame = event.source;
+      const sourceInstanceId = message.instanceId;
       void repository.save({
         projectId: safeContext.projectId,
         canvasId: safeContext.canvasId,
@@ -256,9 +336,30 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
         content: message.content,
       }).then(
         (savedDocument) => {
+          if (!active) return;
+          sameScopeInFlightSaveCountRef.current = Math.max(
+            0,
+            sameScopeInFlightSaveCountRef.current - 1,
+          );
+          setSameScopeInFlightSaveCount(sameScopeInFlightSaveCountRef.current);
+          setDocumentState((current) => {
+            if (
+              current.status === "ready"
+              && current.document
+              && current.document.projectId === savedDocument.projectId
+              && current.document.id === savedDocument.id
+              && current.document.revision > savedDocument.revision
+            ) return current;
+            return { status: "ready", document: savedDocument };
+          });
+          authoritativeDocumentNeedsRefreshRef.current = false;
+          const isActiveSource = sourceFrame === frameRef.current?.contentWindow
+            && sourceInstanceId === activeCanvasInstanceIdRef.current;
+          if (!isActiveSource) return;
           savingRef.current = Math.max(0, savingRef.current - 1);
-          setDocumentState({ status: "ready", document: savedDocument });
-          setPersistenceStatus(dirtyRef.current ? "dirty" : "saved");
+          setPersistenceStatus(savingRef.current > 0
+            ? "saving"
+            : (dirtyRef.current ? "dirty" : "saved"));
           postToCanvas(hostSaveResultMessageSchema.parse({
             source: "reelay-shell",
             type: "host:save-result",
@@ -269,6 +370,19 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
           finishPendingNavigation();
         },
         (error: unknown) => {
+          if (!active) return;
+          sameScopeInFlightSaveCountRef.current = Math.max(
+            0,
+            sameScopeInFlightSaveCountRef.current - 1,
+          );
+          setSameScopeInFlightSaveCount(sameScopeInFlightSaveCountRef.current);
+          authoritativeDocumentNeedsRefreshRef.current = true;
+          const isActiveSource = sourceFrame === frameRef.current?.contentWindow
+            && sourceInstanceId === activeCanvasInstanceIdRef.current;
+          if (!isActiveSource) {
+            if (sameScopeInFlightSaveCountRef.current === 0) refreshAuthoritativeDocument();
+            return;
+          }
           savingRef.current = Math.max(0, savingRef.current - 1);
           setPersistenceStatus("error");
           pendingNavigationRef.current = null;
@@ -276,15 +390,15 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
             window.clearTimeout(navigationTimeoutRef.current);
             navigationTimeoutRef.current = null;
           }
-          if (error instanceof HttpRequestError && error.status === 409) {
+          if (isApplicationError(error, "conflict")) {
             sendSaveError(message.requestId, "conflict");
             return;
           }
-          if (error instanceof HttpRequestError && error.status === 403) {
+          if (isApplicationError(error, "forbidden")) {
             sendSaveError(message.requestId, "forbidden");
             return;
           }
-          if (error instanceof HttpRequestError && error.status === 404) {
+          if (isApplicationError(error, "not_found")) {
             sendSaveError(message.requestId, "missing");
             setDocumentState({ status: "error", reason: "unavailable" });
             return;
@@ -294,8 +408,11 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       );
     };
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [finishPendingNavigation, onOpenAccountSettings, postToCanvas, queueNavigation, repository, safeContext.canvasId, safeContext.projectId, safeContext.writable]);
+    return () => {
+      active = false;
+      window.removeEventListener("message", handleMessage);
+    };
+  }, [finishPendingNavigation, onOpenAccountSettings, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.projectId, safeContext.writable]);
 
   return (
     <section
@@ -306,6 +423,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       {documentState.status !== "error" || documentState.reason !== "unavailable" ? (
         <iframe
           ref={frameRef}
+          key={frameSource}
           className="legacy-canvas-frame"
           src={frameSource}
           title="Reelay 项目画布"

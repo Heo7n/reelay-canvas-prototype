@@ -71,6 +71,14 @@
     return asset;
   }
 
+  function resolveGeneratorMediaKind(candidate, generatedAsset) {
+    if (GENERATOR_MODES.has(candidate.mediaKind)) return candidate.mediaKind;
+    if (GENERATOR_MODES.has(candidate.lockedMode)) return candidate.lockedMode;
+    if (GENERATOR_MODES.has(generatedAsset?.type)) return generatedAsset.type;
+    if (GENERATOR_MODES.has(candidate.mode)) return candidate.mode;
+    return "image";
+  }
+
   function serializeNode(candidate) {
     if (!candidate || typeof candidate !== "object") return null;
     const id = requiredId(candidate.id);
@@ -101,7 +109,7 @@
     }
 
     const generatedAsset = serializeAsset(candidate.generatedAsset);
-    node.mode = GENERATOR_MODES.has(candidate.mode) ? candidate.mode : "image";
+    node.mediaKind = resolveGeneratorMediaKind(candidate, generatedAsset);
     node.model = boundedString(candidate.model, "", 200);
     node.aspect = boundedString(candidate.aspect, "", 40);
     node.resolution = boundedString(candidate.resolution, "", 40);
@@ -111,12 +119,11 @@
     node.workflow = boundedString(candidate.workflow, "", 80);
     node.audioEnabled = candidate.audioEnabled === true;
     node.autoLinkEnabled = candidate.autoLinkEnabled !== false;
-    node.assetValidationEnabled = node.mode === "video" && candidate.assetValidationEnabled === true;
+    node.assetValidationEnabled = node.mediaKind === "video" && candidate.assetValidationEnabled === true;
     node.prompt = boundedString(candidate.prompt, "", 20_000);
     node.preview = candidate.preview === true;
     node.name = boundedString(candidate.name, "", 300);
-    node.generatedAsset = generatedAsset;
-    node.lockedMode = GENERATOR_MODES.has(candidate.lockedMode) ? candidate.lockedMode : null;
+    node.generatedAsset = generatedAsset?.type === node.mediaKind ? generatedAsset : null;
     node.assets = assets;
     node.activeAssetId = activeAssetId && assets.some((asset) => asset.id === activeAssetId)
       ? activeAssetId
@@ -267,8 +274,10 @@
         mediaMenuOpen: false,
       };
     }
+    const { mediaKind, ...content } = node;
     return {
-      ...node,
+      ...content,
+      mode: mediaKind,
       credits: 0,
       generating: false,
       promptOptimizing: false,
@@ -276,7 +285,7 @@
       advancedSettingsExpanded: false,
       mediaMenuOpen: false,
       panel: null,
-      modelFilter: node.mode,
+      modelFilter: mediaKind,
     };
   }
 

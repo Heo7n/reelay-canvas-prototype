@@ -1,436 +1,20 @@
-import type { OrganizationMember } from "../../domain/workspace/workspace";
-
-export type UsageRangePreset =
-  | "today"
-  | "rolling7"
-  | "rolling30"
-  | "month"
-  | "previousMonth"
-  | "all"
-  | "custom";
-export type UsageActivityKind = "image" | "video" | "enhancement" | "agent";
-export type UsageDimension = "type" | "member" | "project" | "model";
-
-export interface UsageRecord {
-  id: string;
-  occurredAt: string;
-  memberId: string;
-  memberName: string;
-  memberAccount: string;
-  projectId: string;
-  projectName: string;
-  activityKind: UsageActivityKind;
-  activityLabel: string;
-  modelId: string;
-  modelName: string;
-  specification: string;
-  credits: number;
-  outputImages: number;
-  outputVideoSeconds: number;
-  status: "settled" | "refunded";
-}
-
-export interface UsageFilters {
-  memberId: string;
-  projectId: string;
-  activityKind: "" | UsageActivityKind;
-  modelId: string;
-}
-
-export interface DateRange {
-  start: Date;
-  end: Date;
-}
-
-export interface UsageSummary {
-  netCredits: number;
-  changeRate: number | null;
-  imageCount: number;
-  videoSeconds: number;
-  recentDailyAverage: number;
-  lifetimeDailyAverage: number;
-  estimatedDaysRecent: number | null;
-  recentToLifetimeRate: number | null;
-}
-
-export interface UsageTrendPoint {
-  key: string;
-  label: string;
-  credits: number;
-  tasks: number;
-}
-
-export interface UsageCompositionItem {
-  id: string;
-  label: string;
-  detail: string;
-  credits: number;
-  share: number;
-  imageCount: number;
-  videoSeconds: number;
-  tasks: number;
-}
-
-export interface UsageActivityPoint {
-  key: string;
-  label: string;
-  credits: number;
-  cumulativeCredits: number;
-  start: Date;
-  end: Date;
-}
-
-export interface HeatmapDay {
-  key: string;
-  date: Date;
-  credits: number;
-  tasks: number;
-  level: 0 | 1 | 2 | 3 | 4;
-}
-
-export interface OrganizationUsageDemoData {
-  availableCredits: number;
-  generatedAt: Date;
-  records: UsageRecord[];
-}
-
-interface UsageTemplate {
-  activityKind: UsageActivityKind;
-  activityLabel: string;
-  modelId: string;
-  modelName: string;
-  specification: string;
-  weight: number;
-  baseCredits: number;
-  outputImages: number;
-  outputVideoSeconds: number;
-}
-
-const FALLBACK_MEMBERS: OrganizationMember[] = [
-  { userId: "actor-owner", displayName: "Hoo", loginIdentifier: "creator@reelay.test", role: "owner" },
-  { userId: "actor-linjing", displayName: "林静", loginIdentifier: "linjing@reelay.test", role: "admin" },
-  { userId: "actor-liran", displayName: "李然", loginIdentifier: "liran@reelay.test", role: "admin" },
-  { userId: "actor-chenxi", displayName: "陈曦", loginIdentifier: "chenxi@reelay.test", role: "member" },
-  { userId: "actor-zhouyu", displayName: "周予", loginIdentifier: "zhouyu@reelay.test", role: "member" },
-  { userId: "actor-suhe", displayName: "苏禾", loginIdentifier: "suhe@reelay.test", role: "member" },
-  { userId: "actor-wangyin", displayName: "王茵", loginIdentifier: "wangyin@reelay.test", role: "member" },
-  { userId: "actor-xuzhe", displayName: "许哲", loginIdentifier: "xuzhe@reelay.test", role: "member" },
-  { userId: "actor-yelan", displayName: "叶澜", loginIdentifier: "yelan@reelay.test", role: "member" },
-  { userId: "actor-shenan", displayName: "沈岸", loginIdentifier: "shenan@reelay.test", role: "member" },
-];
-
-const PROJECTS = [
-  { id: "project-perfume", name: "香水品牌 TVC_最终版", weight: 20 },
-  { id: "project-scifi", name: "科幻预告片_初剪版", weight: 18 },
-  { id: "project-character", name: "角色动画短片_第 3 版", weight: 17 },
-  { id: "project-launch", name: "智能硬件新品发布", weight: 15 },
-  { id: "project-spring", name: "春季品牌整合传播", weight: 12 },
-  { id: "project-concept", name: "品牌视觉概念", weight: 10 },
-] as const;
+import type {
+  DateRange,
+  HeatmapDay,
+  UsageActivityKind,
+  UsageActivityPoint,
+  UsageCompositionItem,
+  UsageDimension,
+  UsageFilters,
+  UsageRangePreset,
+  UsageRecord,
+  UsageSummary,
+  UsageTrendPoint,
+} from "./usage-types";
 
 const DEMO_HISTORY_DAYS = 1_095;
 export const ORGANIZATION_TIME_ZONE = "Asia/Shanghai";
 const ORGANIZATION_TIME_ZONE_OFFSET = 8 * 60 * 60 * 1_000;
-
-const USAGE_TEMPLATES: UsageTemplate[] = [
-  {
-    activityKind: "video",
-    activityLabel: "文生视频",
-    modelId: "seedance-2",
-    modelName: "Seedance 2.0",
-    specification: "1080p · 10s",
-    weight: 14,
-    baseCredits: 720,
-    outputImages: 0,
-    outputVideoSeconds: 10,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "文生视频",
-    modelId: "seedance-2",
-    modelName: "Seedance 2.0",
-    specification: "720p · 5s",
-    weight: 8,
-    baseCredits: 380,
-    outputImages: 0,
-    outputVideoSeconds: 5,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "文生视频",
-    modelId: "seedance-2",
-    modelName: "Seedance 2.0",
-    specification: "4K · 10s",
-    weight: 3,
-    baseCredits: 1_080,
-    outputImages: 0,
-    outputVideoSeconds: 10,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "图生视频",
-    modelId: "seedance-2-fast",
-    modelName: "Seedance 2.0 Fast",
-    specification: "720p · 5s",
-    weight: 10,
-    baseCredits: 360,
-    outputImages: 0,
-    outputVideoSeconds: 5,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "图生视频",
-    modelId: "seedance-2-fast",
-    modelName: "Seedance 2.0 Fast",
-    specification: "480p · 5s",
-    weight: 6,
-    baseCredits: 240,
-    outputImages: 0,
-    outputVideoSeconds: 5,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "参考生视频",
-    modelId: "kling-video-3",
-    modelName: "Kling 3.0",
-    specification: "1080p · 10s",
-    weight: 6,
-    baseCredits: 660,
-    outputImages: 0,
-    outputVideoSeconds: 10,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "参考生视频",
-    modelId: "kling-video-3",
-    modelName: "Kling 3.0",
-    specification: "720p · 5s",
-    weight: 4,
-    baseCredits: 390,
-    outputImages: 0,
-    outputVideoSeconds: 5,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "参考生视频",
-    modelId: "kling-video-3",
-    modelName: "Kling 3.0",
-    specification: "4K · 10s",
-    weight: 3,
-    baseCredits: 1_020,
-    outputImages: 0,
-    outputVideoSeconds: 10,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "文生视频",
-    modelId: "seedance-2-5",
-    modelName: "Seedance 2.5",
-    specification: "720p · 5s",
-    weight: 6,
-    baseCredits: 210,
-    outputImages: 0,
-    outputVideoSeconds: 5,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "参考生视频",
-    modelId: "seedance-2-5",
-    modelName: "Seedance 2.5",
-    specification: "1080p · 8s",
-    weight: 3,
-    baseCredits: 920,
-    outputImages: 0,
-    outputVideoSeconds: 8,
-  },
-  {
-    activityKind: "video",
-    activityLabel: "参考生视频",
-    modelId: "kling-video-3",
-    modelName: "Kling 3.0",
-    specification: "720p · 8s",
-    weight: 2,
-    baseCredits: 650,
-    outputImages: 0,
-    outputVideoSeconds: 8,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "gpt-image-2",
-    modelName: "GPT Image 2",
-    specification: "高 · 2K · 16:9 · 4 张",
-    weight: 12,
-    baseCredits: 168,
-    outputImages: 4,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "gpt-image-2",
-    modelName: "GPT Image 2",
-    specification: "中 · 2K · 1:1 · 2 张",
-    weight: 8,
-    baseCredits: 88,
-    outputImages: 2,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "gpt-image-2",
-    modelName: "GPT Image 2",
-    specification: "低 · 1K · 3:2 · 4 张",
-    weight: 5,
-    baseCredits: 48,
-    outputImages: 4,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "nano-banana-pro",
-    modelName: "NanoBanana Pro",
-    specification: "2K · 1:1 · 2 张",
-    weight: 12,
-    baseCredits: 96,
-    outputImages: 2,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "nano-banana-pro",
-    modelName: "NanoBanana Pro",
-    specification: "4K · 16:9 · 1 张",
-    weight: 6,
-    baseCredits: 120,
-    outputImages: 1,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "nano-banana-pro",
-    modelName: "NanoBanana Pro",
-    specification: "2K · 16:9 · 4 张",
-    weight: 10,
-    baseCredits: 112,
-    outputImages: 4,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "nano-banana-pro",
-    modelName: "NanoBanana Pro",
-    specification: "2K · 1:1 · 4 张",
-    weight: 7,
-    baseCredits: 112,
-    outputImages: 4,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "seedream-5-lite",
-    modelName: "Seedream 5.0 Lite",
-    specification: "4K · 3:2 · 4 张",
-    weight: 8,
-    baseCredits: 88,
-    outputImages: 4,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "image",
-    activityLabel: "图片生成",
-    modelId: "seedream-5-lite",
-    modelName: "Seedream 5.0 Lite",
-    specification: "2K · 16:9 · 4 张",
-    weight: 6,
-    baseCredits: 68,
-    outputImages: 4,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "enhancement",
-    activityLabel: "高清放大",
-    modelId: "reelay-hd",
-    modelName: "Reelay HD",
-    specification: "2× · 4K",
-    weight: 7,
-    baseCredits: 54,
-    outputImages: 1,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "enhancement",
-    activityLabel: "高清放大",
-    modelId: "reelay-hd",
-    modelName: "Reelay HD",
-    specification: "4× · 8K",
-    weight: 4,
-    baseCredits: 92,
-    outputImages: 1,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "enhancement",
-    activityLabel: "提升帧率",
-    modelId: "reelay-frameboost",
-    modelName: "Reelay FrameBoost",
-    specification: "1080p · 60fps · 10s",
-    weight: 5,
-    baseCredits: 86,
-    outputImages: 0,
-    outputVideoSeconds: 10,
-  },
-  {
-    activityKind: "enhancement",
-    activityLabel: "视频去字幕",
-    modelId: "reelay-clean",
-    modelName: "Reelay Clean",
-    specification: "1080p · 10s",
-    weight: 4,
-    baseCredits: 72,
-    outputImages: 0,
-    outputVideoSeconds: 10,
-  },
-  {
-    activityKind: "agent",
-    activityLabel: "Agent 处理",
-    modelId: "reelay-agent",
-    modelName: "Reelay Agent",
-    specification: "分镜拆解 · 1 次",
-    weight: 9,
-    baseCredits: 42,
-    outputImages: 0,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "agent",
-    activityLabel: "Agent 处理",
-    modelId: "reelay-agent",
-    modelName: "Reelay Agent",
-    specification: "镜头规划 · 1 次",
-    weight: 6,
-    baseCredits: 38,
-    outputImages: 0,
-    outputVideoSeconds: 0,
-  },
-  {
-    activityKind: "agent",
-    activityLabel: "Agent 处理",
-    modelId: "reelay-agent",
-    modelName: "Reelay Agent",
-    specification: "提示词润色 · 1 次",
-    weight: 5,
-    baseCredits: 24,
-    outputImages: 0,
-    outputVideoSeconds: 0,
-  },
-];
 
 export const USAGE_ACTIVITY_LABELS: Record<UsageActivityKind, string> = {
   image: "图片生成",
@@ -458,7 +42,6 @@ const hourFormatter = new Intl.DateTimeFormat("zh-CN", {
 function shiftToOrganizationTime(value: Date): Date {
   return new Date(value.getTime() + ORGANIZATION_TIME_ZONE_OFFSET);
 }
-
 function shiftFromOrganizationTime(value: Date): Date {
   return new Date(value.getTime() - ORGANIZATION_TIME_ZONE_OFFSET);
 }
@@ -503,7 +86,7 @@ export function formatUsageDateInput(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function localDateKey(value: Date): string {
+export function usageDateKey(value: Date): string {
   const shifted = shiftToOrganizationTime(value);
   const year = shifted.getUTCFullYear();
   const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
@@ -518,146 +101,6 @@ function monthKey(value: Date): string {
   }`;
 }
 
-function clampEventHour(now: Date, dayOffset: number, eventIndex: number): number {
-  if (dayOffset !== 0) return 8 + ((eventIndex * 3 + dayOffset) % 13);
-  const latestCompletedHour = Math.max(0, shiftToOrganizationTime(now).getUTCHours() - 1);
-  return Math.max(
-    0,
-    Math.min(latestCompletedHour, 8 + eventIndex * 2),
-  );
-}
-
-function deterministicUnit(seed: number): number {
-  let value = Math.imul(seed ^ 0x6d2b79f5, 0x45d9f3b);
-  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
-  return ((value ^ (value >>> 16)) >>> 0) / 4_294_967_296;
-}
-
-function weightedIndex(weights: number[], seed: number): number {
-  const total = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0);
-  if (total <= 0) return 0;
-  let target = deterministicUnit(seed) * total;
-  for (let index = 0; index < weights.length; index += 1) {
-    target -= Math.max(0, weights[index]);
-    if (target <= 0) return index;
-  }
-  return Math.max(0, weights.length - 1);
-}
-
-function isOccasionalSaturdayRestDay(dayOffset: number): boolean {
-  return deterministicUnit(dayOffset * 193 + 109) < 0.14;
-}
-
-function getDailyEventCount(date: Date, dayOffset: number): number {
-  const dayOfWeek = shiftToOrganizationTime(date).getUTCDay();
-  const activitySeed = deterministicUnit(dayOffset * 97 + 31);
-  if (dayOfWeek === 6) {
-    return isOccasionalSaturdayRestDay(dayOffset)
-      ? 0
-      : 3 + Math.floor(activitySeed * 4);
-  }
-  return dayOfWeek === 0
-    ? 6 + Math.floor(activitySeed * 3)
-    : 9 + Math.floor(activitySeed * 5);
-}
-
-function getDailyCreditTarget(date: Date, dayOffset: number): number {
-  const dayOfWeek = shiftToOrganizationTime(date).getUTCDay();
-  const volumeSeed = deterministicUnit(dayOffset * 151 + 73);
-  if (dayOfWeek === 6) {
-    return isOccasionalSaturdayRestDay(dayOffset)
-      ? 0
-      : Math.round(2_800 + volumeSeed * 2_400);
-  }
-  return dayOfWeek === 0
-    ? Math.round(5_200 + volumeSeed * 1_200)
-    : Math.round(6_500 + volumeSeed * 3_200);
-}
-
-export function createOrganizationUsageDemoData(
-  members: OrganizationMember[],
-  now = new Date(),
-): OrganizationUsageDemoData {
-  const activeMembers = members.length > 0 ? members : FALLBACK_MEMBERS;
-  const records: UsageRecord[] = [];
-  const today = startOfOrganizationDay(now);
-  const templateWeights = USAGE_TEMPLATES.map((template) => template.weight);
-  const projectWeights = PROJECTS.map((project) => project.weight);
-  const memberWeights = activeMembers.map((_, index) => Math.max(4, 18 - index * 1.5));
-
-  for (let dayOffset = 0; dayOffset < DEMO_HISTORY_DAYS; dayOffset += 1) {
-    const date = addOrganizationDays(today, -dayOffset);
-    const eventCount = getDailyEventCount(date, dayOffset);
-    const dayRecordStart = records.length;
-
-    for (let eventIndex = 0; eventIndex < eventCount; eventIndex += 1) {
-      const seed = dayOffset * 131 + eventIndex * 29;
-      const template = USAGE_TEMPLATES[weightedIndex(templateWeights, seed + 7)];
-      const member = activeMembers[weightedIndex(memberWeights, seed + 19)];
-      const project = PROJECTS[weightedIndex(projectWeights, seed + 37)];
-      const occurredAt = new Date(
-        date.getTime()
-        + clampEventHour(now, dayOffset, eventIndex) * 60 * 60 * 1_000
-        + ((eventIndex * 11) % 60) * 60 * 1_000,
-      );
-      const costVariation = 0.86 + deterministicUnit(seed + 53) * 0.3;
-      const credits = Math.max(1, Math.round(template.baseCredits * costVariation));
-
-      records.push({
-        id: `usage-${localDateKey(date)}-${eventIndex}`,
-        occurredAt: occurredAt.toISOString(),
-        memberId: member.userId,
-        memberName: member.displayName,
-        memberAccount: member.loginIdentifier ?? "未绑定登录标识",
-        projectId: project.id,
-        projectName: project.name,
-        activityKind: template.activityKind,
-        activityLabel: template.activityLabel,
-        modelId: template.modelId,
-        modelName: template.modelName,
-        specification: template.specification,
-        credits,
-        outputImages: template.outputImages,
-        outputVideoSeconds: template.outputVideoSeconds,
-        status: "settled",
-      });
-    }
-
-    const dayRecords = records.slice(dayRecordStart);
-    const dailyTarget = getDailyCreditTarget(date, dayOffset);
-    const unscaledTotal = dayRecords.reduce((sum, record) => sum + record.credits, 0);
-    if (dailyTarget > 0 && unscaledTotal > 0) {
-      const scale = dailyTarget / unscaledTotal;
-      let scaledTotal = 0;
-      dayRecords.forEach((record) => {
-        record.credits = Math.max(1, Math.round(record.credits * scale));
-        scaledTotal += record.credits;
-      });
-      dayRecords[0].credits += dailyTarget - scaledTotal;
-    }
-
-    if (dayOffset > 0 && dayOffset % 43 === 9) {
-      const source = records.at(-1);
-      if (!source) continue;
-      records.push({
-        ...source,
-        id: `${source.id}-refund`,
-        occurredAt: new Date(new Date(source.occurredAt).getTime() + 18 * 60 * 1000).toISOString(),
-        activityLabel: `${source.activityLabel}退款`,
-        credits: -Math.round(source.credits * 0.5),
-        outputImages: 0,
-        outputVideoSeconds: 0,
-        status: "refunded",
-      });
-    }
-  }
-
-  return {
-    availableCredits: 100_000,
-    generatedAt: new Date(now.getTime() - 5 * 60 * 1000),
-    records: records.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)),
-  };
-}
 
 export function getUsageRange(
   preset: UsageRangePreset,
@@ -943,11 +386,11 @@ export function getUsageTrend(records: UsageRecord[], range: DateRange): UsageTr
   const createPoint = (date: Date): UsageTrendPoint => {
     if (mode === "hour") {
       const organizationHour = shiftToOrganizationTime(date).getUTCHours();
-      const key = `${localDateKey(date)}-${String(organizationHour).padStart(2, "0")}`;
+      const key = `${usageDateKey(date)}-${String(organizationHour).padStart(2, "0")}`;
       return { key, label: hourFormatter.format(date), credits: 0, tasks: 0 };
     }
     if (mode === "day") {
-      return { key: localDateKey(date), label: dayFormatter.format(date), credits: 0, tasks: 0 };
+      return { key: usageDateKey(date), label: dayFormatter.format(date), credits: 0, tasks: 0 };
     }
     return { key: monthKey(date), label: monthFormatter.format(date), credits: 0, tasks: 0 };
   };
@@ -993,7 +436,7 @@ export function getHeatmapDays(records: UsageRecord[], now: Date): HeatmapDay[] 
   records.forEach((record) => {
     const date = new Date(record.occurredAt);
     if (date < start || date > now) return;
-    const key = localDateKey(date);
+    const key = usageDateKey(date);
     const current = totals.get(key) ?? { credits: 0, tasks: 0 };
     current.credits += record.credits;
     current.tasks += record.status === "settled" ? 1 : 0;
@@ -1010,7 +453,7 @@ export function getHeatmapDays(records: UsageRecord[], now: Date): HeatmapDay[] 
 
   return Array.from({ length: 365 }, (_, index) => {
     const date = addOrganizationDays(start, index);
-    const key = localDateKey(date);
+    const key = usageDateKey(date);
     const total = totals.get(key) ?? { credits: 0, tasks: 0 };
     const level: HeatmapDay["level"] = total.credits <= 0
       ? 0
@@ -1035,7 +478,7 @@ export function getWeeklyActivity(
     const pointStart = addOrganizationDays(start, index * 7);
     const pointEnd = addOrganizationDays(pointStart, 7);
     return {
-      key: localDateKey(pointStart),
+      key: usageDateKey(pointStart),
       label: `${dayFormatter.format(pointStart)}–${
         dayFormatter.format(addOrganizationDays(pointEnd, -1))
       }`,
@@ -1117,7 +560,7 @@ export function buildUsageExcelXml(
     { credits: number; records: number; imageCount: number; videoSeconds: number }
   >();
   records.forEach((record) => {
-    const date = localDateKey(new Date(record.occurredAt));
+    const date = usageDateKey(new Date(record.occurredAt));
     const current = dailyUsage.get(date) ?? {
       credits: 0,
       records: 0,
