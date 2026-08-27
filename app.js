@@ -3807,7 +3807,7 @@ function renderSelectionToolbar() {
   if (!selectionToolbar || !multiSelectionFrame) return;
   const selectedNodes = getSelectedNodes();
   const bounds = getSelectionVisualBounds();
-  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 18);
+  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
   if (!screenRect) {
     shell.classList.remove(
       "multi-selection-active",

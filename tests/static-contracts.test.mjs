@@ -332,7 +332,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /app\.js\?v=20260827-connection-confirm-46/);
+  assert.match(html, /styles\.css\?v=20260827-selection-frame-47/);
+  assert.match(html, /app\.js\?v=20260827-selection-frame-47/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -583,9 +584,12 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.match(html, /id="multiSelectionFrame"[\s\S]*?id="multiSelectionPort"/);
   assert.doesNotMatch(html, /multiSelectionPortCount|multi-selection-port-count/);
   assert.doesNotMatch(html, /id="selectionCount"|批量下载（默认）/);
-  assert.match(appSource, /getSelectionScreenRect\(bounds,\s*state,\s*18\)/);
+  assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getSelectionScreenRect\(bounds,\s*state,\s*0\)/);
+  assert.match(appSource, /function getDefaultGroupBounds\(nodes\)[\s\S]*?groupFrameRules\.paddingX[\s\S]*?groupFrameRules\.paddingTop[\s\S]*?groupFrameRules\.paddingBottom/);
   assert.match(appCss, /--multi-selection-fill:\s*rgba/);
-  assert.match(appCss, /\.multi-selection-frame\s*\{[\s\S]*?border:\s*1px solid var\(--multi-selection-border\)[\s\S]*?background:\s*var\(--multi-selection-fill\)[\s\S]*?0 22px 64px var\(--multi-selection-shadow-far\)/);
+  assert.match(appCss, /:root\s*\{[\s\S]*?--multi-selection-shadow-near:\s*rgba\(240, 244, 250, 0\.13\)[\s\S]*?--multi-selection-shadow-far:\s*rgba\(207, 216, 230, 0\.09\)/);
+  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--multi-selection-shadow-near:\s*rgba\(30, 42, 60, 0\.14\)[\s\S]*?--multi-selection-shadow-far:\s*rgba\(30, 42, 60, 0\.21\)/);
+  assert.match(appCss, /\.multi-selection-frame\s*\{[\s\S]*?border:\s*1px solid var\(--multi-selection-border\)[\s\S]*?background:\s*var\(--multi-selection-fill\)[\s\S]*?0 28px 80px var\(--multi-selection-shadow-far\)/);
   assert.match(appCss, /\.multi-selection-frame\s*\{[\s\S]*?pointer-events:\s*none/);
   assert.doesNotMatch(appCss, /\.multi-selection-frame::before\s*\{[\s\S]*?linear-gradient/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-hover[\s\S]*?cursor:\s*grab/);
