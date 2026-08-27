@@ -64,6 +64,7 @@ const multiSelectionPort = document.querySelector("#multiSelectionPort");
 const selectionToolbar = document.querySelector("#selectionToolbar");
 let profileMenuCloseTimer = null;
 let themeFeedbackTimer = null;
+let nodeMediaCornerRadiusWorld = 20;
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
 const selectionDownloadTrigger = document.querySelector(".selection-download-trigger");
 const agentDock = document.querySelector("#agentDock");
@@ -690,6 +691,21 @@ function showZoomValueTip() {
   }, 900);
 }
 
+function syncSelectionOverlayProjection(
+  portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale),
+) {
+  shell.style.setProperty("--multi-selection-port-scale", state.scale.toFixed(4));
+  shell.style.setProperty("--multi-selection-port-offset", `${portField.portOffset.toFixed(2)}px`);
+  shell.style.setProperty(
+    "--multi-selection-port-visual-size",
+    `${(portField.portMinOutside * 2).toFixed(2)}px`,
+  );
+  shell.style.setProperty(
+    "--multi-selection-frame-radius",
+    `${(nodeMediaCornerRadiusWorld * state.scale).toFixed(2)}px`,
+  );
+}
+
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
   const inverseCanvasScale = (1 / state.scale).toFixed(4);
@@ -697,6 +713,7 @@ function applyTransform() {
   const nodeMetaScale = (nodeMetaScreenScale / state.scale).toFixed(4);
   const portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale);
   shell.style.setProperty("--connection-feedback-scale", inverseCanvasScale);
+  syncSelectionOverlayProjection(portField);
   shell.style.setProperty("--node-meta-ui-scale", nodeMetaScale);
   shell.style.setProperty("--group-ui-scale", nodeMetaScale);
   shell.style.setProperty("--group-interaction-scale", inverseCanvasScale);
@@ -6502,6 +6519,12 @@ function applyTheme(mode = state.themeMode, options = {}) {
   }
   document.documentElement.dataset.theme = getResolvedTheme(nextMode);
   document.documentElement.dataset.themeMode = nextMode;
+  const configuredNodeRadius = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--node-media-radius"),
+  );
+  if (Number.isFinite(configuredNodeRadius)) nodeMediaCornerRadiusWorld = configuredNodeRadius;
+  syncSelectionOverlayProjection();
+  renderSelectionToolbar();
   const themeLabels = {
     light: "浅色模式",
     dark: "深色模式",

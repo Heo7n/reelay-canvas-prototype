@@ -275,8 +275,8 @@
 .node-port {
   --port-accent: var(--relation-stroke);
   --port-enter-x: 0px;
-  --port-size: 34px;
-  --port-stroke: 2px;
+  --port-size: var(--connection-port-size);
+  --port-stroke: var(--connection-port-stroke);
   --port-stroke-color: var(--relation-stroke-soft);
   --port-mark-color: var(--relation-stroke);
   position: absolute;
@@ -313,8 +313,8 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 20px;
-  height: 2.4px;
+  width: var(--connection-port-mark-width);
+  height: var(--connection-port-mark-height);
   border-radius: 999px;
   background: var(--port-mark-color);
   transform: translate(-50%, -50%);
@@ -330,12 +330,12 @@
 }
 
 .node-port-input {
-  --port-x: calc(100% - 38px);
+  --port-x: calc(100% - 38px - var(--node-media-border-width));
   --port-enter-x: 8px;
 }
 
 .node-port-output {
-  --port-x: 38px;
+  --port-x: calc(38px + var(--node-media-border-width));
   --port-enter-x: -8px;
 }
 

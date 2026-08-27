@@ -35,6 +35,8 @@
   --node-media-bg: #242426;
   --node-media-content-bg: #1d1e20;
   --node-media-border: rgba(255, 255, 255, 0.14);
+  --node-media-border-width: 2px;
+  --node-media-radius: 20px;
   --node-media-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
   --selection-stroke: rgba(255, 255, 255, 0.68);
   --relation-stroke-soft: rgba(255, 255, 255, 0.26);
@@ -42,6 +44,10 @@
   --relation-stroke-strong: rgba(255, 255, 255, 0.72);
   --relation-stroke-ready: rgba(255, 255, 255, 0.84);
   --relation-halo: rgba(255, 255, 255, 0.07);
+  --connection-port-size: 34px;
+  --connection-port-stroke: 2px;
+  --connection-port-mark-width: 20px;
+  --connection-port-mark-height: 2.4px;
   --media-border-image: rgba(121, 168, 255, 0.54);
   --media-border-video: rgba(255, 194, 102, 0.58);
   --media-border-audio: rgba(136, 240, 194, 0.56);
@@ -98,6 +104,7 @@
   --multi-selection-fill-active: rgba(226, 232, 242, 0.055);
   --multi-selection-border: rgba(235, 240, 248, 0.22);
   --multi-selection-border-active: rgba(241, 245, 252, 0.34);
+  --multi-selection-frame-border-width: 1px;
   --multi-selection-shadow-near: rgba(240, 244, 250, 0.13);
   --multi-selection-shadow-far: rgba(207, 216, 230, 0.09);
   --multi-selection-highlight: rgba(255, 255, 255, 0.1);
@@ -140,6 +147,7 @@ html[data-theme="light"] {
   --node-media-bg: #f2f3f5;
   --node-media-content-bg: #eeeeef;
   --node-media-border: rgba(17, 24, 39, 0.11);
+  --node-media-radius: 8px;
   --node-media-shadow: none;
   --selection-stroke: rgba(17, 24, 39, 0.48);
   --relation-stroke-soft: rgba(17, 24, 39, 0.2);
@@ -189,13 +197,13 @@ html[data-theme="light"] {
   --group-frame-fill-active: rgba(45, 55, 72, 0.04);
   --group-corner-stroke: rgba(25, 35, 50, 0.62);
   --group-title-text: rgba(17, 24, 39, 0.58);
-  --multi-selection-fill: rgba(255, 255, 255, 0.12);
-  --multi-selection-fill-active: rgba(255, 255, 255, 0.2);
+  --multi-selection-fill: rgba(37, 48, 66, 0.018);
+  --multi-selection-fill-active: rgba(37, 48, 66, 0.032);
   --multi-selection-border: rgba(37, 48, 66, 0.18);
   --multi-selection-border-active: rgba(37, 48, 66, 0.28);
-  --multi-selection-shadow-near: rgba(30, 42, 60, 0.14);
-  --multi-selection-shadow-far: rgba(30, 42, 60, 0.21);
-  --multi-selection-highlight: rgba(255, 255, 255, 0.78);
+  --multi-selection-shadow-near: rgba(30, 42, 60, 0.07);
+  --multi-selection-shadow-far: rgba(30, 42, 60, 0.045);
+  --multi-selection-highlight: rgba(255, 255, 255, 0.28);
   --multi-toolbar-bg: rgba(255, 255, 255, 0.94);
   --multi-toolbar-border: rgba(31, 41, 55, 0.11);
   --multi-toolbar-shadow: 0 16px 42px rgba(36, 48, 68, 0.18), 0 2px 8px rgba(36, 48, 68, 0.08);
@@ -2232,8 +2240,8 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   z-index: 30;
   min-width: 1px;
   min-height: 1px;
-  border: 1px solid var(--multi-selection-border);
-  border-radius: 14px;
+  border: var(--multi-selection-frame-border-width) solid var(--multi-selection-border);
+  border-radius: var(--multi-selection-frame-radius, var(--node-media-radius));
   background: var(--multi-selection-fill);
   box-shadow:
     0 6px 20px var(--multi-selection-shadow-near),
@@ -2252,18 +2260,21 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
 }
 
 .multi-selection-port {
+  --multi-selection-port-stroke-color: var(--relation-stroke);
+  --multi-selection-port-mark-color: var(--relation-stroke);
   position: absolute;
-  left: calc(100% + 12px);
+  left: calc(
+    100% + var(--multi-selection-port-offset, 38px) + var(--multi-selection-frame-border-width)
+  );
   top: 50%;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: max(44px, var(--multi-selection-port-visual-size, var(--connection-port-size)));
+  height: max(44px, var(--multi-selection-port-visual-size, var(--connection-port-size)));
   padding: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--selection-stroke);
   transform: translate(-50%, -50%);
   cursor: crosshair;
   pointer-events: auto;
@@ -2274,17 +2285,24 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
 .multi-selection-port::before {
   content: "";
   position: absolute;
-  inset: 5px;
-  border: 1.5px solid currentColor;
-  border-radius: inherit;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  width: var(--connection-port-size);
+  height: var(--connection-port-size);
+  border: var(--connection-port-stroke) solid var(--multi-selection-port-stroke-color);
+  border-radius: 50%;
   background: color-mix(in srgb, var(--app-bg) 76%, transparent);
   box-shadow: 0 1px 5px rgb(0 0 0 / 14%);
+  translate: -50% -50%;
+  scale: var(--multi-selection-port-scale, 1);
 }
 
 .multi-selection-port:hover,
 .multi-selection-port:focus-visible,
 .multi-selection-frame.is-connecting .multi-selection-port {
-  color: color-mix(in srgb, var(--selection-stroke) 88%, var(--text));
+  --multi-selection-port-stroke-color: var(--relation-stroke-strong);
+  --multi-selection-port-mark-color: var(--relation-stroke-strong);
   outline: none;
   scale: 1.08;
 }
@@ -2295,22 +2313,26 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   scale: 0.88;
 }
 
-.multi-selection-port-mark,
-.multi-selection-port-mark::after {
+.multi-selection-port-mark {
   position: relative;
   z-index: 1;
   display: block;
-  width: 9px;
-  height: 1.5px;
+  width: var(--connection-port-mark-width);
+  height: var(--connection-port-mark-height);
   border-radius: 999px;
-  background: currentColor;
-  content: "";
+  background: var(--multi-selection-port-mark-color);
+  scale: var(--multi-selection-port-scale, 1);
 }
 
 .multi-selection-port-mark::after {
+  content: "";
   position: absolute;
   left: 50%;
   top: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: inherit;
   transform: translate(-50%, -50%) rotate(90deg);
 }
 
@@ -3066,8 +3088,8 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   width: 520px;
   height: 300px;
   margin: 0 auto;
-  border: 2px solid var(--node-media-border);
-  border-radius: 20px;
+  border: var(--node-media-border-width) solid var(--node-media-border);
+  border-radius: var(--node-media-radius);
   background: var(--node-media-bg);
   box-shadow: var(--node-media-shadow);
   overflow: visible;
@@ -5306,8 +5328,8 @@ html[data-theme="light"] .duration-scale-tick.is-major {
 }
 
 html[data-theme="light"] .media-frame {
-  border-width: 2px;
-  border-radius: 8px;
+  border-width: var(--node-media-border-width);
+  border-radius: var(--node-media-radius);
   box-shadow: var(--node-media-shadow);
 }
 
