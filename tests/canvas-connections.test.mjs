@@ -68,6 +68,19 @@ test("getBezierPath returns stable horizontal and vertical cubic paths", () => {
     connectionsApi.getBezierPath({ x: 5, y: 5 }, { x: 5, y: 205 }),
     "M 5 5 C 77 5, -67 205, 5 205",
   );
+  assert.equal(
+    connectionsApi.getBezierPath({ x: 0, y: 10 }, { x: 200, y: 50 }, { reverse: true }),
+    "M 200 50 C 104 50, 96 10, 0 10",
+  );
+});
+
+test("getBezierLength estimates the same curve in either visual direction", () => {
+  const source = { x: 0, y: 10 };
+  const target = { x: 200, y: 50 };
+  const length = connectionsApi.getBezierLength(source, target);
+  assert.ok(length > Math.hypot(200, 40));
+  assert.ok(length < 240);
+  assert.equal(connectionsApi.getBezierLength(source, target), length);
 });
 
 test("batch planning deduplicates sources and keeps every legal edge", () => {

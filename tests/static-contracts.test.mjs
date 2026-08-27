@@ -257,6 +257,17 @@ test("connection drag preview delegates to the connection renderer", () => {
   assert.doesNotMatch(appSource, /\brenderConnectionPreview\s*\(/);
 });
 
+test("connecting existing nodes does not open or select the destination workspace", () => {
+  const finishStart = appSource.indexOf("function finishConnectionDrag(event, options = {})");
+  const finishEnd = appSource.indexOf("const canvasNodePointerController", finishStart);
+  assert.ok(finishStart >= 0 && finishEnd > finishStart);
+  const finishSource = appSource.slice(finishStart, finishEnd);
+  assert.match(finishSource, /createConnectionsBatch\(action\.originNodeIds, action\.targetNodeId\)[\s\S]*?render\(\)/);
+  assert.match(finishSource, /createConnection\(action\.sourceNodeId, action\.targetNodeId,[\s\S]*?render\(\)/);
+  assert.doesNotMatch(finishSource, /target\.expanded|target\.panel|bringNodesToFront\(\[target\]\)|setSelection\(\[target\.id\]/);
+  assert.match(appSource, /connectionCreateMenu\?\.addEventListener\("click"[\s\S]*?node\.expanded = true/);
+});
+
 test("node chrome waits for pointer completion instead of opening during drag", async () => {
   const [nodePointerSource, pointerDispatchSource] = await Promise.all([
     readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
@@ -270,8 +281,10 @@ test("node chrome waits for pointer completion instead of opening during drag", 
 });
 
 test("connection ports keep their external field while media frames accept body drops", async () => {
-  const [interactionSource, rendererSource, connectionStyles] = await Promise.all([
+  const [interactionSource, motionSource, feedbackControllerSource, rendererSource, connectionStyles] = await Promise.all([
     readFile(new URL("src/legacy-canvas/canvas-connection-interaction.js", root), "utf8"),
+    readFile(new URL("src/legacy-canvas/canvas-connection-feedback-motion.js", root), "utf8"),
+    readFile(new URL("src/legacy-canvas/canvas-connection-feedback-controller.js", root), "utf8"),
     readFile(new URL("src/legacy-canvas/canvas-connection-renderer.js", root), "utf8"),
     readFile(new URL("styles/canvas-connections.css", root), "utf8"),
   ]);
@@ -312,13 +325,14 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(interactionSource, /function selectNodeBodyCandidate/);
   assert.match(appSource, /targetRect:[\s\S]*?frameRect\.left[\s\S]*?frameRect\.bottom/);
   assert.match(appSource, /canvasConnectionInteraction\.selectNodeBodyCandidate/);
-  assert.match(html, /canvas-connections\.css\?v=20260827-connection-sweep-42/);
-  assert.match(html, /canvas-connection-feedback-controller\.js\?v=20260827-connection-sweep-42/);
-  assert.match(html, /canvas-connection-renderer\.js\?v=20260827-connection-sweep-42/);
+  assert.match(html, /canvas-connections\.css\?v=20260827-connection-growth-45/);
+  assert.match(html, /canvas-connection-feedback-motion\.js\?v=20260827-connection-growth-45/);
+  assert.match(html, /canvas-connection-feedback-controller\.js\?v=20260827-connection-growth-45/);
+  assert.match(html, /canvas-connection-renderer\.js\?v=20260827-connection-growth-45/);
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /app\.js\?v=20260827-connection-sweep-42/);
+  assert.match(html, /app\.js\?v=20260827-connection-growth-45/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -340,16 +354,25 @@ test("connection ports keep their external field while media frames accept body 
   assert.doesNotMatch(connectionStyles, /^\.connection-target-glow::after\s*\{(?:(?!\}).)*animation:/ms);
   assert.match(connectionStyles, /74%, 100% \{[\s\S]*?--connection-target-sweep-end/);
   assert.match(connectionStyles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.connection-target-glow\.is-active::after\s*\{[\s\S]*?animation:\s*none/);
-  assert.match(rendererSource, /function syncSettleHighlight[\s\S]*?connection-settle-trail[\s\S]*?connection-settle-head/);
-  assert.match(connectionStyles, /\.connection-settle-trail\s*\{[\s\S]*?--connection-settle-length:\s*0\.24[\s\S]*?--connection-settle-end-offset:\s*-0\.825/);
-  assert.match(connectionStyles, /\.connection-settle-head\s*\{[\s\S]*?--connection-settle-length:\s*0\.065[\s\S]*?--connection-settle-end-offset:\s*-1/);
-  assert.match(connectionStyles, /\.connection-group\.is-new \.connection-settle-trail,[\s\S]*?connection-settle-sweep\s+440ms/);
-  assert.match(connectionStyles, /100%\s*\{[\s\S]*?stroke-dashoffset:\s*var\(--connection-settle-end-offset\)/);
-  assert.doesNotMatch(connectionStyles, /\.connection-group\.is-new \.connection-underlay,[\s\S]*?animation:/);
-  assert.match(appSource, /recentConnectionIds:\s*new Set\(\)/);
-  assert.match(appSource, /createConnectionFeedbackController\([\s\S]*?recentIds:\s*state\.recentConnectionIds[\s\S]*?duration:\s*520/);
-  assert.match(appSource, /function setRecentConnections\(connections\)[\s\S]*?canvasConnectionFeedback\.add\(connections\)/);
-  assert.match(appSource, /createConnectionsBatch[\s\S]*?setRecentConnections\(created\)/);
+  assert.match(rendererSource, /function createSettleElements[\s\S]*?connection-settle-progress[\s\S]*?connection-settle-origin[\s\S]*?connection-settle-arrival/);
+  assert.match(rendererSource, /feedback\.direction === "reverse"[\s\S]*?\{ reverse: true \}/);
+  assert.match(rendererSource, /strokeDashoffset:[\s\S]*?profile\.originProgress[\s\S]*?travelEnd/);
+  assert.match(rendererSource, /Promise\.all\(animations\.map\([\s\S]*?onComplete/);
+  assert.match(connectionStyles, /\.connection-settle-progress\s*\{[\s\S]*?stroke-width:\s*1\.7/);
+  assert.match(connectionStyles, /\.connection-group\.is-settling \.connection-path[\s\S]*?opacity:\s*0\.1/);
+  assert.doesNotMatch(connectionStyles, /connection-settle-sweep|440ms/);
+  assert.match(motionSource, /Math\.round\(clamp\(360 \+ 9 \* Math\.sqrt\(safePathLength\), 460, 700\)\)/);
+  assert.match(motionSource, /originMs[\s\S]*?travelMs[\s\S]*?arrivalHoldMs[\s\S]*?fadeMs[\s\S]*?totalMs/);
+  assert.match(motionSource, /cleanupGraceMs = clamp\(fadeMs, 80, 120\)[\s\S]*?safetyMs = totalMs \+ cleanupGraceMs/);
+  assert.match(feedbackControllerSource, /record\.startedAt \+ getDuration\(record\.profile\)/);
+  assert.match(feedbackControllerSource, /Number\.isFinite\(profile\?\.safetyMs\)/);
+  assert.match(feedbackControllerSource, /completionNotificationQueued[\s\S]*?enqueueMicrotask/);
+  assert.doesNotMatch(feedbackControllerSource, /duration\s*=\s*520/);
+  assert.match(appSource, /connectionFeedbacks:\s*new Map\(\)/);
+  assert.match(appSource, /screenPathLength:\s*canvasConnections\.getBezierLength\(points\.source, points\.target\) \* state\.scale/);
+  assert.match(appSource, /feedbackDirection:\s*action\.originSide === "input" \? "reverse" : "forward"/);
+  assert.match(appSource, /reducedMotionQuery\.addEventListener\?\.\("change"[\s\S]*?canvasConnectionFeedback\.clear\(\)/);
+  assert.match(appSource, /createConnectionsBatch[\s\S]*?setConnectionFeedback\(created\)/);
   assert.doesNotMatch(appSource, /haloWindow|haloSpread|--connection-target-halo/);
   assert.doesNotMatch(connectionStyles, /connection-target-glow-halo|--connection-target-halo|connection-target-halo-scan/);
   assert.doesNotMatch(connectionStyles, /radial-gradient|@property --connection-target-overlay-scan/);

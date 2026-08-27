@@ -188,7 +188,7 @@ const state = {
   activeGroupId: null,
   activeId: null,
   activeConnectionId: null,
-  recentConnectionIds: new Set(),
+  connectionFeedbacks: new Map(),
   connectionDrop: null,
   lastPreset: {
     mode: "image",
@@ -305,6 +305,8 @@ const canvasConnectionRendererFactory = window.REELAY_CANVAS_CONNECTION_RENDERER
 if (!canvasConnectionRendererFactory) throw new Error("Canvas connection renderer is unavailable.");
 const canvasConnectionFeedbackControllerFactory = window.REELAY_CANVAS_CONNECTION_FEEDBACK_CONTROLLER;
 if (!canvasConnectionFeedbackControllerFactory) throw new Error("Canvas connection feedback controller is unavailable.");
+const canvasConnectionFeedbackMotion = window.REELAY_CANVAS_CONNECTION_FEEDBACK_MOTION;
+if (!canvasConnectionFeedbackMotion) throw new Error("Canvas connection feedback motion is unavailable.");
 const canvasLayerReconcilerFactory = window.REELAY_CANVAS_LAYER_RECONCILER;
 if (!canvasLayerReconcilerFactory) throw new Error("Canvas layer reconciler is unavailable.");
 const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
@@ -372,12 +374,14 @@ const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectio
 });
 if (!canvasConnectionRenderer) throw new Error("Canvas connection renderer could not initialize.");
 const canvasConnectionFeedback = canvasConnectionFeedbackControllerFactory.createConnectionFeedbackController({
-  recentIds: state.recentConnectionIds,
-  duration: 520,
+  records: state.connectionFeedbacks,
   now: () => performance.now(),
   setTimer: (callback, delay) => window.setTimeout(callback, delay),
   clearTimer: (timerId) => window.clearTimeout(timerId),
-  onExpire: renderConnections,
+  onChange: renderConnections,
+});
+reducedMotionQuery.addEventListener?.("change", (event) => {
+  if (event.matches) canvasConnectionFeedback.clear();
 });
 const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler({
   layer: nodeLayer,
@@ -2280,6 +2284,16 @@ function syncConnectionContextClasses(context) {
   });
 }
 
+function resolveConnectionPoints(connection) {
+  const source = state.nodes.find((node) => node.id === connection.sourceNodeId);
+  const target = state.nodes.find((node) => node.id === connection.targetNodeId);
+  if (!source || !target) return null;
+  return {
+    source: getConnectionPortPoint(source, "output"),
+    target: getConnectionPortPoint(target, "input"),
+  };
+}
+
 function renderConnections() {
   if (!connectionPaths || !connectionPreview) return;
 
@@ -2289,19 +2303,13 @@ function renderConnections() {
     connections: state.connections,
     activeConnectionId: state.activeConnectionId,
     relatedConnectionIds: context.relatedConnectionIds,
-    recentConnectionIds: state.recentConnectionIds,
+    connectionFeedbacks: state.connectionFeedbacks,
+    onFeedbackStart: (connectionId, token) => canvasConnectionFeedback.start(connectionId, token),
+    onFeedbackComplete: (connectionId, token) => canvasConnectionFeedback.complete(connectionId, token),
     hasFocusedContext,
     controlScale: clamp(1 / state.scale, 0.72, 2.4),
     getPath: canvasConnections.getBezierPath,
-    resolvePoints(connection) {
-      const source = state.nodes.find((node) => node.id === connection.sourceNodeId);
-      const target = state.nodes.find((node) => node.id === connection.targetNodeId);
-      if (!source || !target) return null;
-      return {
-        source: getConnectionPortPoint(source, "output"),
-        target: getConnectionPortPoint(target, "input"),
-      };
-    },
+    resolvePoints: resolveConnectionPoints,
   });
   const previewAction = state.action || state.connectionDrop?.previewAction || null;
   canvasConnectionRenderer.renderPreview(previewAction, canvasConnections.getBezierPath);
@@ -2314,7 +2322,12 @@ function renderConnections() {
 function createConnection(
   sourceNodeId,
   targetNodeId,
-  { recordUndo = true, sourceRatio = 0.5, targetRatio = 0.5 } = {},
+  {
+    recordUndo = true,
+    sourceRatio = 0.5,
+    targetRatio = 0.5,
+    feedbackDirection = "forward",
+  } = {},
 ) {
   if (!requireCanvasMutation()) return null;
   const result = canvasConnections.canConnect(state.connections, state.nodes, sourceNodeId, targetNodeId);
@@ -2338,16 +2351,30 @@ function createConnection(
     after: { record: connection, index: state.connections.length },
   }], { recordUndo });
   if (!commandResult.ok) return null;
-  setRecentConnections([connection]);
+  setConnectionFeedback([connection], feedbackDirection);
   return connection;
 }
 
-function clearRecentConnectionFeedback(connectionIds = state.recentConnectionIds) {
+function clearRecentConnectionFeedback(connectionIds = state.connectionFeedbacks) {
   canvasConnectionFeedback.clear(connectionIds);
 }
 
-function setRecentConnections(connections) {
-  canvasConnectionFeedback.add(connections);
+function setConnectionFeedback(connections, direction = "forward") {
+  if (reducedMotionQuery.matches) return [];
+  const cohortSize = connections.length;
+  const entries = connections.map((connection) => {
+    const points = resolveConnectionPoints(connection);
+    if (!points) return null;
+    return {
+      id: connection.id,
+      direction,
+      profile: canvasConnectionFeedbackMotion.createMotionProfile({
+        screenPathLength: canvasConnections.getBezierLength(points.source, points.target) * state.scale,
+        cohortSize,
+      }),
+    };
+  }).filter(Boolean);
+  return canvasConnectionFeedback.add(entries);
 }
 
 function createConnectionsBatch(sourceNodeIds, targetNodeId) {
@@ -2385,7 +2412,7 @@ function createConnectionsBatch(sourceNodeIds, targetNodeId) {
       })),
     );
     if (!commandResult.ok) return { created: [], rejected: plan.rejected };
-    setRecentConnections(created);
+    setConnectionFeedback(created);
   }
   return { created, rejected: plan.rejected };
 }
@@ -5780,14 +5807,7 @@ function finishConnectionDrag(event, options = {}) {
   }
 
   if (!options.cancelled && action.mode === "selection-output" && action.targetNodeId) {
-    const result = createConnectionsBatch(action.originNodeIds, action.targetNodeId);
-    const target = state.nodes.find((node) => node.id === action.targetNodeId);
-    if (target && result.created.length) {
-      target.expanded = true;
-      target.panel = null;
-      bringNodesToFront([target]);
-      setSelection([target.id], target.id, { keepConnection: true });
-    }
+    createConnectionsBatch(action.originNodeIds, action.targetNodeId);
     render();
     return;
   }
@@ -5796,15 +5816,9 @@ function finishConnectionDrag(event, options = {}) {
     const connection = createConnection(action.sourceNodeId, action.targetNodeId, {
       sourceRatio: action.originSide === "input" ? action.targetRatio : action.originRatio,
       targetRatio: action.originSide === "input" ? action.originRatio : action.targetRatio,
+      feedbackDirection: action.originSide === "input" ? "reverse" : "forward",
     });
     if (connection) {
-      const target = state.nodes.find((node) => node.id === action.targetNodeId);
-      if (target) {
-        target.expanded = true;
-        target.panel = null;
-        bringNodesToFront([target]);
-        setSelection([target.id], target.id, { keepConnection: true });
-      }
       render();
       return;
     }
@@ -7768,11 +7782,13 @@ connectionCreateMenu?.addEventListener("click", (event) => {
     createConnection(node.id, originNodeId, {
       sourceRatio: 0.5,
       targetRatio: drop.originRatio,
+      feedbackDirection: "reverse",
     });
   } else {
     createConnection(originNodeId, node.id, {
       sourceRatio: drop.originRatio,
       targetRatio: 0.5,
+      feedbackDirection: "forward",
     });
   }
   node.expanded = true;

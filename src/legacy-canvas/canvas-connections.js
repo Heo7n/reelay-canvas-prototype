@@ -107,14 +107,52 @@
     });
   }
 
-  function getBezierPath(source, target) {
+  function getBezierGeometry(source, target) {
     const distance = Math.max(0, target.x - source.x);
     const controlOffset = Math.max(72, Math.min(240, distance * 0.48 || Math.abs(target.y - source.y) * 0.34));
-    return `M ${source.x} ${source.y} C ${source.x + controlOffset} ${source.y}, ${target.x - controlOffset} ${target.y}, ${target.x} ${target.y}`;
+    return {
+      source,
+      sourceControl: { x: source.x + controlOffset, y: source.y },
+      targetControl: { x: target.x - controlOffset, y: target.y },
+      target,
+    };
+  }
+
+  function getBezierPath(source, target, { reverse = false } = {}) {
+    const geometry = getBezierGeometry(source, target);
+    if (reverse) {
+      return `M ${target.x} ${target.y} C ${geometry.targetControl.x} ${geometry.targetControl.y}, ${geometry.sourceControl.x} ${geometry.sourceControl.y}, ${source.x} ${source.y}`;
+    }
+    return `M ${source.x} ${source.y} C ${geometry.sourceControl.x} ${geometry.sourceControl.y}, ${geometry.targetControl.x} ${geometry.targetControl.y}, ${target.x} ${target.y}`;
+  }
+
+  function getBezierLength(source, target, sampleCount = 16) {
+    const geometry = getBezierGeometry(source, target);
+    const samples = Math.max(4, Math.min(64, Math.round(sampleCount) || 16));
+    let previous = source;
+    let length = 0;
+    for (let index = 1; index <= samples; index += 1) {
+      const t = index / samples;
+      const inverse = 1 - t;
+      const point = {
+        x: inverse ** 3 * source.x
+          + 3 * inverse ** 2 * t * geometry.sourceControl.x
+          + 3 * inverse * t ** 2 * geometry.targetControl.x
+          + t ** 3 * target.x,
+        y: inverse ** 3 * source.y
+          + 3 * inverse ** 2 * t * geometry.sourceControl.y
+          + 3 * inverse * t ** 2 * geometry.targetControl.y
+          + t ** 3 * target.y,
+      };
+      length += Math.hypot(point.x - previous.x, point.y - previous.y);
+      previous = point;
+    }
+    return length;
   }
 
   root.REELAY_CANVAS_CONNECTIONS = Object.freeze({
     canConnect,
+    getBezierLength,
     getBezierPath,
     normalizeConnections,
     planBatchConnections,

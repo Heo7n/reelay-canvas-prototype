@@ -9,7 +9,7 @@ const source = await readFile(
   "utf8",
 );
 
-function createHarness() {
+function createHarness({ withAnimation = true } = {}) {
   const dom = new JSDOM(`
     <svg xmlns="http://www.w3.org/2000/svg">
       <g id="paths"></g>
@@ -18,6 +18,13 @@ function createHarness() {
       <circle id="endpoint" class="connection-preview-endpoint hidden"></circle>
     </svg>
   `);
+  const animationCalls = [];
+  if (withAnimation) {
+    dom.window.SVGElement.prototype.animate = function animate(keyframes, options) {
+      animationCalls.push({ element: this, keyframes, options });
+      return { finished: new Promise(() => {}) };
+    };
+  }
   const context = vm.createContext({
     document: dom.window.document,
     window: dom.window,
@@ -33,6 +40,7 @@ function createHarness() {
   });
   const getPath = (start, end) => `${start.x},${start.y}->${end.x},${end.y}`;
   return {
+    animationCalls,
     batchPreviews: dom.window.document.querySelector("#batch-previews"),
     endpoint,
     getPath,
@@ -49,7 +57,7 @@ test("related and active connections render above muted paths", () => {
     connections,
     activeConnectionId,
     relatedConnectionIds: new Set(relatedIds),
-    recentConnectionIds: new Set(),
+    connectionFeedbacks: new Map(),
     hasFocusedContext: true,
     controlScale: 1,
     resolvePoints: () => ({ source: { x: 0, y: 0 }, target: { x: 10, y: 10 } }),
@@ -66,38 +74,124 @@ test("related and active connections render above muted paths", () => {
   groups.forEach((group, id) => assert.equal(paths.querySelector(`[data-connection-id="${id}"]`), group));
 });
 
-test("recent connections add one directional settle sweep without animating the base line", () => {
-  const { paths, renderer } = createHarness();
+test("feedback grows from the gesture origin, preserves one animation per token, and supports reverse gestures", () => {
+  const { animationCalls, paths, renderer } = createHarness();
   const connection = { id: "fresh" };
-  const render = (recentConnectionIds) => renderer.renderConnections({
+  const started = [];
+  const completed = [];
+  const profile = {
+    totalMs: 1100,
+    originProgress: 0.02,
+    headLength: 0.08,
+    tailLength: 0.32,
+    overlayOpacity: 0.9,
+    phaseOffsets: { originEnd: 0.08, travelEnd: 0.76, arrivalEnd: 0.84 },
+  };
+  const render = (connectionFeedbacks) => renderer.renderConnections({
     connections: [connection],
     activeConnectionId: null,
     relatedConnectionIds: new Set(),
-    recentConnectionIds,
+    connectionFeedbacks,
+    onFeedbackStart: (id, token) => {
+      started.push([id, token]);
+      return true;
+    },
+    onFeedbackComplete: (id, token) => completed.push([id, token]),
+    hasFocusedContext: false,
+    controlScale: 1,
+    resolvePoints: () => ({ source: { x: 0, y: 0 }, target: { x: 120, y: 40 } }),
+    getPath: (_source, _target, options) => options?.reverse
+      ? "M 120 40 C 80 40 40 0 0 0"
+      : "M 0 0 C 40 0 80 40 120 40",
+  });
+
+  const feedbacks = new Map([[connection.id, {
+    id: connection.id,
+    token: 7,
+    direction: "reverse",
+    profile,
+  }]]);
+  render(feedbacks);
+  const group = paths.firstElementChild;
+  const progress = group.querySelector(".connection-settle-progress");
+  const trail = group.querySelector(".connection-settle-trail");
+  const head = group.querySelector(".connection-settle-head");
+  const origin = group.querySelector(".connection-settle-origin");
+  const arrival = group.querySelector(".connection-settle-arrival");
+  assert.equal(group.classList.contains("is-settling"), true);
+  assert.equal(group.dataset.feedbackToken, "7");
+  assert.equal(progress?.getAttribute("pathLength"), "1");
+  assert.equal(trail?.getAttribute("pathLength"), "1");
+  assert.equal(head?.getAttribute("pathLength"), "1");
+  assert.equal(progress?.getAttribute("d"), "M 120 40 C 80 40 40 0 0 0");
+  assert.equal(trail?.style.strokeDasharray, "0.32 1");
+  assert.equal(head?.style.strokeDasharray, "0.08 1");
+  assert.equal(origin?.getAttribute("cx"), "120");
+  assert.equal(origin?.getAttribute("cy"), "40");
+  assert.equal(arrival?.getAttribute("cx"), "0");
+  assert.equal(arrival?.getAttribute("cy"), "0");
+  assert.deepEqual(started, [["fresh", 7]]);
+  assert.deepEqual(completed, []);
+  assert.equal(animationCalls.length, 5);
+  animationCalls.forEach(({ options }) => {
+    assert.equal(options.duration, 1100);
+    assert.equal(options.easing, "linear");
+  });
+  const headAnimation = animationCalls.find(({ element }) => element === head);
+  assert.equal(headAnimation.keyframes[0].strokeDashoffset, "0.08");
+  assert.equal(headAnimation.keyframes[1].strokeDashoffset, "0.06");
+  assert.equal(headAnimation.keyframes[1].offset, 0.08);
+
+  render(feedbacks);
+  assert.equal(animationCalls.length, 5);
+  assert.deepEqual(started, [["fresh", 7]]);
+  assert.equal(group.querySelector(".connection-settle-progress"), progress);
+  assert.equal(group.querySelector(".connection-settle-trail"), trail);
+  assert.equal(group.querySelector(".connection-settle-head"), head);
+
+  render(new Map());
+  assert.equal(group.classList.contains("is-settling"), false);
+  assert.equal(group.querySelector(".connection-settle-progress"), null);
+  assert.equal(group.querySelector(".connection-settle-trail"), null);
+  assert.equal(group.querySelector(".connection-settle-head"), null);
+  assert.equal(group.querySelector(".connection-settle-origin"), null);
+  assert.equal(group.querySelector(".connection-settle-arrival"), null);
+});
+
+test("unsupported animation APIs restore the stable line and complete feedback", async () => {
+  const { paths, renderer } = createHarness({ withAnimation: false });
+  const completed = [];
+  const feedback = {
+    id: "fallback",
+    token: 3,
+    direction: "forward",
+    profile: {
+      totalMs: 700,
+      originProgress: 0.02,
+      headLength: 0.08,
+      tailLength: 0.32,
+      overlayOpacity: 1,
+      phaseOffsets: { originEnd: 0.08, travelEnd: 0.8, arrivalEnd: 0.88 },
+    },
+  };
+  renderer.renderConnections({
+    connections: [{ id: feedback.id }],
+    activeConnectionId: null,
+    relatedConnectionIds: new Set(),
+    connectionFeedbacks: new Map([[feedback.id, feedback]]),
+    onFeedbackStart: () => true,
+    onFeedbackComplete: (id, token) => completed.push([id, token]),
     hasFocusedContext: false,
     controlScale: 1,
     resolvePoints: () => ({ source: { x: 0, y: 0 }, target: { x: 120, y: 40 } }),
     getPath: () => "M 0 0 C 40 0 80 40 120 40",
   });
 
-  render(new Set([connection.id]));
   const group = paths.firstElementChild;
-  const trail = group.querySelector(".connection-settle-trail");
-  const head = group.querySelector(".connection-settle-head");
-  assert.equal(group.classList.contains("is-new"), true);
-  assert.equal(trail?.getAttribute("pathLength"), "1");
-  assert.equal(head?.getAttribute("pathLength"), "1");
-  assert.equal(trail?.getAttribute("d"), "M 0 0 C 40 0 80 40 120 40");
-  assert.equal(head?.getAttribute("d"), "M 0 0 C 40 0 80 40 120 40");
-
-  render(new Set([connection.id]));
-  assert.equal(group.querySelector(".connection-settle-trail"), trail);
-  assert.equal(group.querySelector(".connection-settle-head"), head);
-
-  render(new Set());
-  assert.equal(group.classList.contains("is-new"), false);
-  assert.equal(group.querySelector(".connection-settle-trail"), null);
+  assert.equal(group.classList.contains("is-settling"), false);
   assert.equal(group.querySelector(".connection-settle-head"), null);
+  await Promise.resolve();
+  assert.deepEqual(completed, [["fallback", 3]]);
 });
 
 test("connection preview transitions through free, near, snapped, and cleared feedback", () => {
