@@ -316,7 +316,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /app\.js\?v=20260826-canvas-command-39/);
+  assert.match(html, /app\.js\?v=20260827-aspect-layout-40/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -513,6 +513,25 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.match(appCss, /\.control-chip\.model-chip::after\s*\{[\s\S]*?width:\s*1px[\s\S]*?height:\s*20px/);
   assert.doesNotMatch(appCss, /promptPanelReveal|\.generator-node\.selected \.prompt-panel\s*\{[\s\S]*?animation:/);
   assert.doesNotMatch(appSource, /toggle-large|promptLarge|promptInputHeight|expand-corner/);
+});
+
+test("aspect changes preserve node identity and share bottom-anchored presented geometry", () => {
+  assert.match(html, /canvas-node-layout-transition\.js\?v=20260827-aspect-layout-40/);
+  assert.match(
+    appSource,
+    /function getNodeRenderSignature\(node\)[\s\S]*?!\["x", "y", "z", "groupId", "aspect"\]\.includes\(key\)/,
+  );
+  assert.match(
+    appSource,
+    /function applyNodeAspect\(node, aspect\)[\s\S]*?getBottomCenterAnchoredPosition[\s\S]*?canvasNodeLayoutTransition\.start/,
+  );
+  assert.match(
+    appSource,
+    /function syncNodeVisualLayout[\s\S]*?mediaFrame\.style\.width[\s\S]*?mediaFrame\.style\.height/,
+  );
+  assert.match(appSource, /function getConnectionPortPoint\(node, side\)[\s\S]*?getNodePresentation\(node\)/);
+  assert.match(appSource, /function renderNodeLayoutTransitionFrame\(\)[\s\S]*?renderConnections\(\)[\s\S]*?renderSelectionToolbar\(\)[\s\S]*?renderMinimap\(\)/);
+  assert.match(appSource, /querySelectorAll\('\[data-action="aspect"\]'\)[\s\S]*?aria-pressed/);
 });
 
 test("multi-selection uses a quiet shared container and one aggregate output port", async () => {

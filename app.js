@@ -84,6 +84,7 @@ const agentModelBtn = document.querySelector("#agentModelBtn");
 const agentModelMenu = document.querySelector("#agentModelMenu");
 const canvasAccessStatus = document.querySelector("#canvasAccessStatus");
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
 const homeLaunchIntentKey = "reelay-home-launch-intent";
@@ -287,6 +288,8 @@ const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
 if (!canvasNodeInteraction) throw new Error("Canvas node interaction helpers are unavailable.");
 const canvasNodePlacement = window.REELAY_CANVAS_NODE_PLACEMENT;
 if (!canvasNodePlacement) throw new Error("Canvas node placement helpers are unavailable.");
+const canvasNodeLayoutTransitionFactory = window.REELAY_CANVAS_NODE_LAYOUT_TRANSITION;
+if (!canvasNodeLayoutTransitionFactory) throw new Error("Canvas node layout transition helper is unavailable.");
 const canvasSpatialSelection = window.REELAY_CANVAS_SPATIAL_SELECTION;
 if (!canvasSpatialSelection) throw new Error("Canvas spatial selection helpers are unavailable.");
 const canvasNodePointerControllerFactory = window.REELAY_CANVAS_NODE_POINTER_CONTROLLER;
@@ -307,6 +310,14 @@ const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
 if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
 const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
 if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
+const canvasNodeLayoutTransition = canvasNodeLayoutTransitionFactory.createNodeLayoutTransitionController({
+  now: () => performance.now(),
+  requestFrame: (callback) => window.requestAnimationFrame(callback),
+  cancelFrame: (frameId) => window.cancelAnimationFrame(frameId),
+  shouldReduceMotion: () => reducedMotionQuery.matches,
+  onFrame: renderNodeLayoutTransitionFrame,
+  onFinish: renderNodeLayoutTransitionFrame,
+});
 let canvasAccessNoticeTimer = 0;
 const canvasInstanceId = crypto.randomUUID();
 const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
@@ -696,10 +707,25 @@ function applyTransform() {
   scheduleCanvasDocumentSave();
 }
 
-function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id="${node.id}"]`)) {
+function syncNodeVisualLayout(
+  node,
+  element = nodeLayer.querySelector(`[data-id="${node.id}"]`),
+  presentation = getNodePresentation(node),
+) {
   if (!element) return;
-  const layout = getNodeLayout(node);
+  const { x, y, layout } = presentation;
+  element.style.left = `${x}px`;
+  element.style.top = `${y}px`;
   element.style.width = `${layout.nodeWidth}px`;
+  element.classList.toggle(
+    "node-layout-transitioning",
+    canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node)),
+  );
+  const mediaFrame = element.querySelector(".media-frame");
+  if (mediaFrame) {
+    mediaFrame.style.width = `${layout.mediaWidth}px`;
+    mediaFrame.style.height = `${layout.mediaHeight}px`;
+  }
   const mediaToolbar = element.querySelector("[data-media-toolbar]");
   if (mediaToolbar) {
     mediaToolbar.style.setProperty("--toolbar-scale", layout.toolbarScale.toFixed(4));
@@ -718,6 +744,27 @@ function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id=
   promptPanel.style.setProperty("--prompt-advanced-height", `${layout.advancedSettingsHeight}px`);
   promptPanel.style.setProperty("--prompt-input-top", `${layoutRules.promptInputTop}px`);
   promptPanel.style.setProperty("--prompt-input-bottom", `${layoutRules.promptInputBottom}px`);
+}
+
+function syncNodeAspectUi(node, element) {
+  if (node.kind !== "generator") return;
+  const parameterLabel = element.querySelector('[data-action="param-panel"] .control-chip-label');
+  if (parameterLabel) parameterLabel.textContent = getParamLabel(node);
+  element.querySelectorAll('[data-action="aspect"]').forEach((button) => {
+    const active = button.dataset.value === node.aspect;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function renderNodeLayoutTransitionFrame() {
+  for (const node of state.nodes) {
+    const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+    if (element) syncCanvasNodeElement(element, node);
+  }
+  renderConnections();
+  renderSelectionToolbar();
+  renderMinimap();
 }
 
 function syncPromptPanelContentHeight(node, element) {
@@ -1344,49 +1391,104 @@ function getNodeLayout(node) {
   };
 }
 
-function getNodeBounds(node) {
+function getNodeLayoutTransitionId(node) {
+  return `${state.projectId}:${state.activeCanvasId}:${node.id}`;
+}
+
+function getNodePresentation(node) {
   const layout = getNodeLayout(node);
+  const transition = canvasNodeLayoutTransition.get(getNodeLayoutTransitionId(node));
+  if (!transition) return { x: node.x, y: node.y, layout };
+  return {
+    x: transition.x,
+    y: transition.y,
+    layout: {
+      ...layout,
+      nodeWidth: transition.nodeWidth,
+      nodeHeight: transition.nodeHeight,
+      mediaWidth: transition.mediaWidth,
+      mediaHeight: transition.mediaHeight,
+    },
+  };
+}
+
+function toNodeTransitionGeometry(presentation) {
+  return {
+    x: presentation.x,
+    y: presentation.y,
+    nodeWidth: presentation.layout.nodeWidth,
+    nodeHeight: presentation.layout.nodeHeight,
+    mediaWidth: presentation.layout.mediaWidth,
+    mediaHeight: presentation.layout.mediaHeight,
+  };
+}
+
+function applyNodeAspect(node, aspect) {
+  if (node.aspect === aspect) return false;
+  const from = getNodePresentation(node);
+  node.aspect = aspect;
+  normalizeNodeParameters(node);
+  const nextLayout = getNodeLayout(node);
+  const nextPosition = canvasNodePlacement.getBottomCenterAnchoredPosition({
+    position: { x: from.x, y: from.y },
+    currentLayout: from.layout,
+    nextLayout,
+  });
+  if (!nextPosition) return false;
+
+  node.x = nextPosition.x;
+  node.y = nextPosition.y;
+  canvasNodeLayoutTransition.start({
+    id: getNodeLayoutTransitionId(node),
+    from: toNodeTransitionGeometry(from),
+    to: toNodeTransitionGeometry({ x: node.x, y: node.y, layout: nextLayout }),
+  });
+  return true;
+}
+
+function getNodeBounds(node) {
+  const { x, y, layout } = getNodePresentation(node);
   const promptOverflow =
     node.kind === "generator" && node.expanded
       ? Math.max(0, (layout.panelWidth * layout.promptScale - layout.nodeWidth) / 2)
       : 0;
   return {
-    left: node.x - promptOverflow,
-    top: node.y,
-    right: node.x + layout.nodeWidth + promptOverflow,
-    bottom: node.y + layout.nodeHeight,
+    left: x - promptOverflow,
+    top: y,
+    right: x + layout.nodeWidth + promptOverflow,
+    bottom: y + layout.nodeHeight,
     width: layout.nodeWidth + promptOverflow * 2,
     height: layout.nodeHeight,
   };
 }
 
 function getNodeVisualBounds(node) {
-  const layout = getNodeLayout(node);
-  const mediaLeft = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  const { x, y, layout } = getNodePresentation(node);
+  const mediaLeft = x + (layout.nodeWidth - layout.mediaWidth) / 2;
   let left = mediaLeft;
   let right = mediaLeft + layout.mediaWidth;
-  let bottom = node.y + layout.mediaHeight;
+  let bottom = y + layout.mediaHeight;
   if (node.kind === "generator" && node.expanded) {
     const promptWidth = layout.panelWidth * layout.promptScale;
-    const promptLeft = node.x + (layout.nodeWidth - promptWidth) / 2;
+    const promptLeft = x + (layout.nodeWidth - promptWidth) / 2;
     left = Math.min(left, promptLeft);
     right = Math.max(right, promptLeft + promptWidth);
     bottom += layoutRules.panelGap + layout.panelHeight * layout.promptScale;
   }
   return {
     left,
-    top: node.y,
+    top: y,
     right,
     bottom,
     width: right - left,
-    height: bottom - node.y,
+    height: bottom - y,
   };
 }
 
 function getNodeMembershipBounds(node) {
-  const layout = getNodeLayout(node);
-  const left = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
-  const top = node.y;
+  const { x, y, layout } = getNodePresentation(node);
+  const left = x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  const top = y;
   return {
     left,
     top,
@@ -2095,11 +2197,11 @@ function getIncomingConnections(nodeId) {
 }
 
 function getConnectionPortPoint(node, side) {
-  const layout = getNodeLayout(node);
-  const mediaLeft = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  const { x, y, layout } = getNodePresentation(node);
+  const mediaLeft = x + (layout.nodeWidth - layout.mediaWidth) / 2;
   return {
     x: side === "input" ? mediaLeft : mediaLeft + layout.mediaWidth,
-    y: node.y + layout.mediaHeight / 2,
+    y: y + layout.mediaHeight / 2,
   };
 }
 
@@ -3390,6 +3492,7 @@ function hasDraggedLibraryAsset(event) {
 
 function render() {
   syncGroups();
+  canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
   shell.classList.toggle("group-editing", Boolean(state.activeGroupId));
   renderGroupResizeOverlay();
@@ -3408,7 +3511,7 @@ function render() {
 
 function getNodeRenderSignature(node) {
   const renderState = Object.fromEntries(
-    Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId"].includes(key)),
+    Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId", "aspect"].includes(key)),
   );
   renderState.mediaToolbarVisible = shouldShowMediaEditToolbar(node);
   renderState.linkedReferences = getIncomingConnections(node.id).map((connection) => {
@@ -3433,12 +3536,11 @@ function getGroupRenderSignature(group) {
 }
 
 function syncCanvasNodeElement(element, node) {
-  element.style.left = `${node.x}px`;
-  element.style.top = `${node.y}px`;
   element.style.zIndex = String(node.z);
   element.classList.toggle("selected", state.selectedIds.has(node.id));
   element.classList.toggle("grouped", Boolean(node.groupId));
   syncNodeVisualLayout(node, element);
+  syncNodeAspectUi(node, element);
 }
 
 function syncGroupFrameElement(element, group) {
@@ -4862,7 +4964,8 @@ function parameterSection(node, label, action, values) {
 
 function paramButton(node, action, value) {
   const aspectIcon = action === "aspect" ? renderAspectIcon(value) : "";
-  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" data-canvas-mutation type="button">${aspectIcon}<span>${value}</span></button>`;
+  const pressed = action === "aspect" ? ` aria-pressed="${node[action] === value}"` : "";
+  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" data-canvas-mutation type="button"${pressed}>${aspectIcon}<span>${value}</span></button>`;
 }
 
 function renderAspectIcon(value) {
@@ -4893,6 +4996,7 @@ const generationLockedActions = new Set([
 ]);
 
 function handleAction(node, action, value) {
+  if (action !== "aspect") canvasNodeLayoutTransition.finishAll();
   if (action === "focus-linked-source") {
     const connection = state.connections.find((item) => item.id === value);
     const source = connection && state.nodes.find((item) => item.id === connection.sourceNodeId);
@@ -5034,6 +5138,9 @@ function handleAction(node, action, value) {
       node.assetValidationEnabled = !node.assetValidationEnabled;
       break;
     case "aspect":
+      applyNodeAspect(node, value);
+      rememberPreset(node);
+      break;
     case "duration":
     case "quality":
     case "resolution":
@@ -5940,6 +6047,7 @@ function restoreGroupSnapshot(groups) {
 
 function undoLastAction() {
   if (!requireCanvasMutation()) return;
+  canvasNodeLayoutTransition.finishAll();
   const pendingAction = state.undoStack[state.undoStack.length - 1];
   if (pendingAction?.kind === "canvas-command") {
     const result = canvasCommandExecutor.undoLast(state.activeCanvasId);
@@ -7458,6 +7566,11 @@ function finishPointerInteraction(event) {
   canvasPointerDispatchController.finish(event);
   syncSelectionFramePointerFeedback(event);
 }
+
+shell.addEventListener("pointerdown", (event) => {
+  if (event.target instanceof Element && event.target.closest('[data-action="aspect"]')) return;
+  canvasNodeLayoutTransition.finishAll();
+}, true);
 
 shell.addEventListener("pointerdown", (event) => {
   canvasPointerDispatchController.handleSurfacePointerDown(event);

@@ -47,3 +47,28 @@ test("connection creation keeps the dropped endpoint outside the requested media
   assert.equal(input.y + layout.mediaHeight / 2, world.y);
   assert.equal(output.y + layout.mediaHeight / 2, world.y);
 });
+
+test("aspect resizing preserves the media bottom edge and horizontal center", () => {
+  const position = { x: 180, y: 260 };
+  const currentLayout = { nodeWidth: 705, mediaWidth: 620, mediaHeight: 349 };
+  const nextLayout = { nodeWidth: 740, mediaWidth: 293, mediaHeight: 520 };
+  const nextPosition = placement.getBottomCenterAnchoredPosition({
+    position,
+    currentLayout,
+    nextLayout,
+  });
+
+  assert.equal(nextPosition.x + nextLayout.nodeWidth / 2, position.x + currentLayout.nodeWidth / 2);
+  assert.equal(nextPosition.y + nextLayout.mediaHeight, position.y + currentLayout.mediaHeight);
+});
+
+test("bottom-centered resizing rejects incomplete geometry", () => {
+  assert.equal(
+    placement.getBottomCenterAnchoredPosition({
+      position: { x: 1, y: 2 },
+      currentLayout: { nodeWidth: 705, mediaHeight: 349 },
+      nextLayout: { nodeWidth: 705 },
+    }),
+    null,
+  );
+});

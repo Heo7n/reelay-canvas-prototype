@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -17,6 +17,7 @@ const [html, catalog, config, connections, connectionInteraction, connectionRend
   readFile(new URL("src/legacy-canvas/canvas-spatial-selection.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-interaction.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-placement.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-node-layout-transition.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-drag-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-group-interaction-controller.js", root), "utf8"),
@@ -67,6 +68,7 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   window.eval(spatialSelection);
   window.eval(nodeInteraction);
   window.eval(nodePlacement);
+  window.eval(nodeLayoutTransition);
   window.eval(nodePointerController);
   window.eval(nodeDragController);
   window.eval(groupInteractionController);

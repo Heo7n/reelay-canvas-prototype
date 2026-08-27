@@ -3056,6 +3056,14 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   pointer-events: none;
 }
 
+.canvas-node.node-layout-transitioning {
+  will-change: left, top, width;
+}
+
+.canvas-node.node-layout-transitioning .media-frame {
+  will-change: width, height;
+}
+
 .media-frame {
   position: relative;
   pointer-events: auto;
