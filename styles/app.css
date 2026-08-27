@@ -102,12 +102,12 @@
   --group-title-font-size: 14px;
   --multi-selection-fill: rgba(226, 232, 242, 0.035);
   --multi-selection-fill-active: rgba(226, 232, 242, 0.055);
-  --multi-selection-border: rgba(235, 240, 248, 0.34);
-  --multi-selection-border-active: rgba(241, 245, 252, 0.5);
+  --multi-selection-border: rgba(235, 240, 248, 0.22);
+  --multi-selection-border-active: rgba(241, 245, 252, 0.34);
   --multi-selection-frame-border-width: 1px;
-  --multi-selection-shadow-near: rgba(240, 244, 250, 0.15);
-  --multi-selection-shadow-far: rgba(207, 216, 230, 0.075);
-  --multi-selection-highlight: rgba(255, 255, 255, 0.12);
+  --multi-selection-shadow-near: rgba(240, 244, 250, 0.13);
+  --multi-selection-shadow-far: rgba(207, 216, 230, 0.09);
+  --multi-selection-highlight: rgba(255, 255, 255, 0.1);
   --multi-toolbar-bg: rgba(24, 25, 28, 0.92);
   --multi-toolbar-border: rgba(255, 255, 255, 0.12);
   --multi-toolbar-shadow: 0 16px 42px rgba(0, 0, 0, 0.42), 0 2px 10px rgba(0, 0, 0, 0.24);
@@ -199,10 +199,10 @@ html[data-theme="light"] {
   --group-title-text: rgba(17, 24, 39, 0.58);
   --multi-selection-fill: rgba(37, 48, 66, 0.018);
   --multi-selection-fill-active: rgba(37, 48, 66, 0.032);
-  --multi-selection-border: rgba(37, 48, 66, 0.23);
-  --multi-selection-border-active: rgba(37, 48, 66, 0.34);
-  --multi-selection-shadow-near: rgba(30, 42, 60, 0.075);
-  --multi-selection-shadow-far: rgba(30, 42, 60, 0.04);
+  --multi-selection-border: rgba(37, 48, 66, 0.18);
+  --multi-selection-border-active: rgba(37, 48, 66, 0.28);
+  --multi-selection-shadow-near: rgba(30, 42, 60, 0.07);
+  --multi-selection-shadow-far: rgba(30, 42, 60, 0.045);
   --multi-selection-highlight: rgba(255, 255, 255, 0.28);
   --multi-toolbar-bg: rgba(255, 255, 255, 0.94);
   --multi-toolbar-border: rgba(31, 41, 55, 0.11);
@@ -5369,11 +5369,6 @@ html[data-theme="light"] .canvas-node.selected .media-frame {
 
 html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
   border-color: var(--selection-stroke);
-  box-shadow: var(--node-media-shadow);
-}
-
-.app-shell .canvas-shell.multi-selection-active .canvas-node.selected .media-frame {
-  border-color: var(--node-media-border);
   box-shadow: var(--node-media-shadow);
 }
 
