@@ -188,8 +188,7 @@ const state = {
   activeGroupId: null,
   activeId: null,
   activeConnectionId: null,
-  recentConnectionId: null,
-  recentConnectionTimer: 0,
+  recentConnectionIds: new Set(),
   connectionDrop: null,
   lastPreset: {
     mode: "image",
@@ -304,6 +303,8 @@ const canvasPointerDispatchControllerFactory = window.REELAY_CANVAS_POINTER_DISP
 if (!canvasPointerDispatchControllerFactory) throw new Error("Canvas pointer dispatch controller is unavailable.");
 const canvasConnectionRendererFactory = window.REELAY_CANVAS_CONNECTION_RENDERER;
 if (!canvasConnectionRendererFactory) throw new Error("Canvas connection renderer is unavailable.");
+const canvasConnectionFeedbackControllerFactory = window.REELAY_CANVAS_CONNECTION_FEEDBACK_CONTROLLER;
+if (!canvasConnectionFeedbackControllerFactory) throw new Error("Canvas connection feedback controller is unavailable.");
 const canvasLayerReconcilerFactory = window.REELAY_CANVAS_LAYER_RECONCILER;
 if (!canvasLayerReconcilerFactory) throw new Error("Canvas layer reconciler is unavailable.");
 const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
@@ -370,6 +371,14 @@ const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectio
   onRemove: removeConnection,
 });
 if (!canvasConnectionRenderer) throw new Error("Canvas connection renderer could not initialize.");
+const canvasConnectionFeedback = canvasConnectionFeedbackControllerFactory.createConnectionFeedbackController({
+  recentIds: state.recentConnectionIds,
+  duration: 520,
+  now: () => performance.now(),
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  onExpire: renderConnections,
+});
 const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler({
   layer: nodeLayer,
   groups: {
@@ -532,6 +541,7 @@ function getActiveCanvas() {
 
 function resetActiveCanvasSession(canvas) {
   if (!canvas) return;
+  clearRecentConnectionFeedback();
   canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
   state.selectedIds = new Set();
   state.activeId = null;
@@ -2279,7 +2289,7 @@ function renderConnections() {
     connections: state.connections,
     activeConnectionId: state.activeConnectionId,
     relatedConnectionIds: context.relatedConnectionIds,
-    recentConnectionId: state.recentConnectionId,
+    recentConnectionIds: state.recentConnectionIds,
     hasFocusedContext,
     controlScale: clamp(1 / state.scale, 0.72, 2.4),
     getPath: canvasConnections.getBezierPath,
@@ -2328,19 +2338,16 @@ function createConnection(
     after: { record: connection, index: state.connections.length },
   }], { recordUndo });
   if (!commandResult.ok) return null;
-  setRecentConnection(connection);
+  setRecentConnections([connection]);
   return connection;
 }
 
-function setRecentConnection(connection) {
-  state.activeConnectionId = connection.id;
-  state.recentConnectionId = connection.id;
-  window.clearTimeout(state.recentConnectionTimer);
-  state.recentConnectionTimer = window.setTimeout(() => {
-    if (state.recentConnectionId !== connection.id) return;
-    state.recentConnectionId = null;
-    renderConnections();
-  }, 220);
+function clearRecentConnectionFeedback(connectionIds = state.recentConnectionIds) {
+  canvasConnectionFeedback.clear(connectionIds);
+}
+
+function setRecentConnections(connections) {
+  canvasConnectionFeedback.add(connections);
 }
 
 function createConnectionsBatch(sourceNodeIds, targetNodeId) {
@@ -2378,7 +2385,7 @@ function createConnectionsBatch(sourceNodeIds, targetNodeId) {
       })),
     );
     if (!commandResult.ok) return { created: [], rejected: plan.rejected };
-    setRecentConnection(created[created.length - 1]);
+    setRecentConnections(created);
   }
   return { created, rejected: plan.rejected };
 }
@@ -2395,6 +2402,7 @@ function removeConnection(connectionId, { recordUndo = true } = {}) {
     after: { record: null },
   }], { recordUndo });
   if (!commandResult.ok) return false;
+  clearRecentConnectionFeedback([connectionId]);
   if (state.activeConnectionId === connectionId) state.activeConnectionId = null;
   render();
   return true;
@@ -5406,25 +5414,27 @@ function showConnectionTargetGlow(entry) {
   const worldRadius = Number.parseFloat(computed.borderTopLeftRadius) || 0;
   const screenRadius = Math.max(4, worldRadius * state.scale);
   const frameWidth = entry.frameRect.width;
-  const coreWindow = clamp(
-    frameWidth * 0.62,
-    Math.min(72, frameWidth * 0.58),
-    Math.min(360, frameWidth * 0.72),
+  const sweepWindow = clamp(
+    frameWidth * 0.28,
+    Math.min(78, frameWidth * 0.32),
+    Math.min(180, frameWidth * 0.36),
   );
-  const coreLayerWidth = frameWidth + 1.6;
-  const coreBackgroundTravel = Math.max(1, coreLayerWidth - coreWindow);
-  const coreScan = {
-    start: (-coreWindow / coreBackgroundTravel) * 100,
-    end: (coreLayerWidth / coreBackgroundTravel) * 100,
+  const sweepLayerWidth = frameWidth + 1.6;
+  const sweepBackgroundTravel = Math.max(1, sweepLayerWidth - sweepWindow);
+  const sweepRange = {
+    start: (-sweepWindow / sweepBackgroundTravel) * 100,
+    end: (sweepLayerWidth / sweepBackgroundTravel) * 100,
   };
+  const sweepDuration = clamp(740 + frameWidth * 0.38, 820, 1020);
   connectionTargetGlow.style.left = `${entry.frameRect.left - shellRect.left + shell.scrollLeft}px`;
   connectionTargetGlow.style.top = `${entry.frameRect.top - shellRect.top + shell.scrollTop}px`;
   connectionTargetGlow.style.width = `${entry.frameRect.width}px`;
   connectionTargetGlow.style.height = `${entry.frameRect.height}px`;
   connectionTargetGlow.style.setProperty("--connection-target-radius", `${screenRadius}px`);
-  connectionTargetGlow.style.setProperty("--connection-target-core-window", `${coreWindow}px`);
-  connectionTargetGlow.style.setProperty("--connection-target-core-scan-start", `${coreScan.start}%`);
-  connectionTargetGlow.style.setProperty("--connection-target-core-scan-end", `${coreScan.end}%`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-window", `${sweepWindow}px`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-start", `${sweepRange.start}%`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-end", `${sweepRange.end}%`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-duration", `${Math.round(sweepDuration)}ms`);
   connectionTargetGlow.style.setProperty(
     "--connection-target-scan-direction",
     entry.interactionSide === "right" ? "-1" : "1",
@@ -6045,6 +6055,7 @@ function deleteSelectedNodes(confirmed = false) {
   state.connections = state.connections.filter(
     (connection) => !selectedNodeIds.has(connection.sourceNodeId) && !selectedNodeIds.has(connection.targetNodeId),
   );
+  clearRecentConnectionFeedback(deletedConnections.map((connection) => connection.id));
   state.groups = state.groups.filter((group) => !deletedGroups.some((item) => item.id === group.id));
   clearSelection();
   state.activeGroupId = null;
@@ -6082,8 +6093,7 @@ function undoLastAction() {
       console.error("Canvas command undo committed but its save effect failed.", result.effectError);
     }
     state.activeConnectionId = null;
-    state.recentConnectionId = null;
-    window.clearTimeout(state.recentConnectionTimer);
+    clearRecentConnectionFeedback();
     render();
     return;
   }
@@ -6805,6 +6815,7 @@ function resetPrototypeProject() {
   state.activeId = null;
   state.activeGroupId = null;
   state.activeConnectionId = null;
+  clearRecentConnectionFeedback();
   state.mediaToolbarNodeId = null;
   state.libraryAssets = [];
   state.libraryView = "canvas";

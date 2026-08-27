@@ -87,6 +87,29 @@
       return group;
     }
 
+    function syncSettleHighlight(group, isRecent, pathData) {
+      let trail = group.querySelector(".connection-settle-trail");
+      let head = group.querySelector(".connection-settle-head");
+      if (!isRecent) {
+        trail?.remove();
+        head?.remove();
+        return;
+      }
+      const hitPath = group.querySelector(".connection-hit-path");
+      if (!trail) {
+        trail = createSvgElement("path", "connection-settle-trail");
+        trail.setAttribute("pathLength", "1");
+        group.insertBefore(trail, hitPath);
+      }
+      if (!head) {
+        head = createSvgElement("path", "connection-settle-head");
+        head.setAttribute("pathLength", "1");
+        group.insertBefore(head, hitPath);
+      }
+      trail.setAttribute("d", pathData);
+      head.setAttribute("d", pathData);
+    }
+
     function renderConnections(input) {
       const existingGroups = new Map(
         Array.from(paths.children, (group) => [group.dataset.connectionId, group]),
@@ -111,7 +134,8 @@
         group.dataset.controlScale = input.controlScale;
         group.classList.toggle("is-active", isActive);
         group.classList.toggle("is-related", isRelated);
-        group.classList.toggle("is-new", input.recentConnectionId === connection.id);
+        const isRecent = input.recentConnectionIds?.has(connection.id) === true;
+        group.classList.toggle("is-new", isRecent);
         group.classList.toggle(
           "is-muted",
           input.hasFocusedContext && !isActive && !isRelated,
@@ -122,6 +146,7 @@
         });
         group.querySelectorAll(".connection-underlay, .connection-path, .connection-hit-path")
           .forEach((element) => element.setAttribute("d", pathData));
+        syncSettleHighlight(group, isRecent, pathData);
         positionCutControl(group, {
           x: (points.source.x + points.target.x) / 2,
           y: (points.source.y + points.target.y) / 2,

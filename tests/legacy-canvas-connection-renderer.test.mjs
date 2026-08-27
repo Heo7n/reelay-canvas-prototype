@@ -49,7 +49,7 @@ test("related and active connections render above muted paths", () => {
     connections,
     activeConnectionId,
     relatedConnectionIds: new Set(relatedIds),
-    recentConnectionId: null,
+    recentConnectionIds: new Set(),
     hasFocusedContext: true,
     controlScale: 1,
     resolvePoints: () => ({ source: { x: 0, y: 0 }, target: { x: 10, y: 10 } }),
@@ -64,6 +64,40 @@ test("related and active connections render above muted paths", () => {
   assert.deepEqual(Array.from(paths.children, (group) => group.dataset.connectionId), ["related", "active", "muted"]);
   assert.equal(paths.children.length, 3);
   groups.forEach((group, id) => assert.equal(paths.querySelector(`[data-connection-id="${id}"]`), group));
+});
+
+test("recent connections add one directional settle sweep without animating the base line", () => {
+  const { paths, renderer } = createHarness();
+  const connection = { id: "fresh" };
+  const render = (recentConnectionIds) => renderer.renderConnections({
+    connections: [connection],
+    activeConnectionId: null,
+    relatedConnectionIds: new Set(),
+    recentConnectionIds,
+    hasFocusedContext: false,
+    controlScale: 1,
+    resolvePoints: () => ({ source: { x: 0, y: 0 }, target: { x: 120, y: 40 } }),
+    getPath: () => "M 0 0 C 40 0 80 40 120 40",
+  });
+
+  render(new Set([connection.id]));
+  const group = paths.firstElementChild;
+  const trail = group.querySelector(".connection-settle-trail");
+  const head = group.querySelector(".connection-settle-head");
+  assert.equal(group.classList.contains("is-new"), true);
+  assert.equal(trail?.getAttribute("pathLength"), "1");
+  assert.equal(head?.getAttribute("pathLength"), "1");
+  assert.equal(trail?.getAttribute("d"), "M 0 0 C 40 0 80 40 120 40");
+  assert.equal(head?.getAttribute("d"), "M 0 0 C 40 0 80 40 120 40");
+
+  render(new Set([connection.id]));
+  assert.equal(group.querySelector(".connection-settle-trail"), trail);
+  assert.equal(group.querySelector(".connection-settle-head"), head);
+
+  render(new Set());
+  assert.equal(group.classList.contains("is-new"), false);
+  assert.equal(group.querySelector(".connection-settle-trail"), null);
+  assert.equal(group.querySelector(".connection-settle-head"), null);
 });
 
 test("connection preview transitions through free, near, snapped, and cleared feedback", () => {

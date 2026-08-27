@@ -4,12 +4,13 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-connections.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-connection-interaction.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-connection-feedback-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-connection-renderer.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-layer-reconciler.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-generator-model-policy.js", root), "utf8"),
@@ -61,6 +62,7 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   window.eval(config);
   window.eval(connections);
   window.eval(connectionInteraction);
+  window.eval(connectionFeedbackController);
   window.eval(connectionRenderer);
   window.eval(layerReconciler);
   window.eval(generatorModelPolicy);

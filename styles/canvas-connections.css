@@ -39,20 +39,54 @@
   transition: stroke 160ms ease, opacity 160ms ease, stroke-width 160ms ease;
 }
 
-.connection-group.is-new .connection-underlay,
-.connection-group.is-new .connection-path {
-  animation: connection-settle 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+.connection-settle-trail,
+.connection-settle-head {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0;
 }
 
-@keyframes connection-settle {
-  from {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
-    opacity: 0.38;
+.connection-settle-trail {
+  /* Both layers travel 1.065 normalized units so the bright head stays in front. */
+  --connection-settle-length: 0.24;
+  --connection-settle-end-offset: -0.825;
+  stroke: color-mix(in srgb, var(--relation-stroke-ready) 44%, transparent);
+  stroke-width: 3.8;
+  stroke-dasharray: var(--connection-settle-length) 1;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--relation-stroke-ready) 42%, transparent));
+}
+
+.connection-settle-head {
+  --connection-settle-length: 0.065;
+  --connection-settle-end-offset: -1;
+  stroke: color-mix(in srgb, var(--relation-stroke-ready) 94%, white 6%);
+  stroke-width: 2.25;
+  stroke-dasharray: var(--connection-settle-length) 1;
+  filter: drop-shadow(0 0 1.4px var(--relation-stroke-ready));
+}
+
+.connection-group.is-new .connection-settle-trail,
+.connection-group.is-new .connection-settle-head {
+  animation: connection-settle-sweep 440ms cubic-bezier(0.26, 0.68, 0.26, 1) both;
+}
+
+@keyframes connection-settle-sweep {
+  0% {
+    stroke-dashoffset: var(--connection-settle-length);
+    opacity: 0;
   }
-  to {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 0;
+  12% {
+    opacity: 0.62;
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: var(--connection-settle-end-offset);
+    opacity: 0;
   }
 }
 
@@ -446,8 +480,8 @@
 }
 
 .connection-target-glow {
-  --connection-target-edge-base: transparent;
   --connection-target-edge-reduced: rgb(248 250 255 / 42%);
+  --connection-target-flare-peak: rgb(255 255 255 / 100%);
   --connection-target-flare-core: rgb(255 255 255 / 96%);
   --connection-target-flare-mid: rgb(244 247 255 / 72%);
   --connection-target-flare-soft: rgb(236 241 250 / 24%);
@@ -476,9 +510,13 @@
 
 .connection-target-glow::before {
   z-index: 1;
-  inset: -0.3px;
-  border: 0.6px solid var(--connection-target-edge-base);
-  border-radius: calc(var(--connection-target-radius, 18px) + 0.3px);
+  inset: -0.6px;
+  border: 0.9px solid var(--connection-target-flare-mid);
+  border-radius: calc(var(--connection-target-radius, 18px) + 0.6px);
+  clip-path: inset(0 72% 0 0 round calc(var(--connection-target-radius, 18px) + 0.6px));
+  opacity: 0;
+  transform: scaleX(var(--connection-target-scan-direction, 1));
+  filter: drop-shadow(0 0 1px var(--connection-target-flare-soft));
 }
 
 .connection-target-glow::after {
@@ -486,20 +524,31 @@
   inset: -0.8px;
   padding: 1.1px;
   border-radius: calc(var(--connection-target-radius, 18px) + 0.8px);
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--connection-target-flare-soft) 12%,
-    var(--connection-target-flare-mid) 28%,
-    var(--connection-target-flare-core) 43%,
-    var(--connection-target-flare-core) 57%,
-    var(--connection-target-flare-mid) 72%,
-    var(--connection-target-flare-soft) 88%,
-    transparent 100%
-  );
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--connection-target-flare-soft) 22%,
+      var(--connection-target-flare-mid) 52%,
+      var(--connection-target-flare-core) 72%,
+      var(--connection-target-flare-peak) 79%,
+      var(--connection-target-flare-mid) 87%,
+      transparent 100%
+    ),
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--connection-target-flare-soft) 26%,
+      var(--connection-target-flare-mid) 66%,
+      transparent 100%
+    );
   background-repeat: no-repeat;
-  background-size: var(--connection-target-core-window, 72px) 100%;
-  background-position: var(--connection-target-core-scan-start, -165%) 50%;
+  background-size:
+    var(--connection-target-sweep-window, 112px) 100%,
+    var(--connection-target-sweep-window, 112px) 100%;
+  background-position:
+    var(--connection-target-sweep-start, -48%) 50%,
+    var(--connection-target-sweep-start, -48%) 50%;
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -513,23 +562,43 @@
 }
 
 .connection-target-glow.is-active::after {
-  animation: connection-target-core-scan 1500ms linear infinite;
+  animation: connection-target-edge-sweep var(--connection-target-sweep-duration, 940ms) linear 54ms infinite;
+}
+
+.connection-target-glow.is-active::before {
+  animation: connection-target-edge-capture 250ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 html[data-theme="light"] .connection-target-glow {
-  --connection-target-edge-base: transparent;
   --connection-target-edge-reduced: rgb(30 43 59 / 44%);
+  --connection-target-flare-peak: rgb(18 30 47 / 100%);
   --connection-target-flare-core: rgb(24 38 57 / 92%);
   --connection-target-flare-mid: rgb(48 68 94 / 64%);
   --connection-target-flare-soft: rgb(76 98 126 / 18%);
 }
 
-@keyframes connection-target-core-scan {
+@keyframes connection-target-edge-capture {
   0% {
-    background-position: var(--connection-target-core-scan-start, -165%) 50%;
+    opacity: 0;
   }
-  93%, 100% {
-    background-position: var(--connection-target-core-scan-end, 265%) 50%;
+  18% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes connection-target-edge-sweep {
+  0% {
+    background-position:
+      var(--connection-target-sweep-start, -48%) 50%,
+      var(--connection-target-sweep-start, -48%) 50%;
+  }
+  74%, 100% {
+    background-position:
+      var(--connection-target-sweep-end, 148%) 50%,
+      var(--connection-target-sweep-end, 148%) 50%;
   }
 }
 
@@ -806,9 +875,10 @@ html[data-theme="dark"] .connection-cut-surface {
     animation: none;
   }
 
-  .connection-group.is-new .connection-underlay,
-  .connection-group.is-new .connection-path {
+  .connection-group.is-new .connection-settle-trail,
+  .connection-group.is-new .connection-settle-head {
     animation: none;
+    display: none;
   }
 
 
@@ -818,11 +888,18 @@ html[data-theme="dark"] .connection-cut-surface {
 
   .connection-target-glow::before {
     border-color: var(--connection-target-edge-reduced);
+    clip-path: none;
+    opacity: 1;
+    transform: none;
   }
 
   .connection-target-glow.is-active::after {
     animation: none;
     display: none;
+  }
+
+  .connection-target-glow.is-active::before {
+    animation: none;
   }
 
 }
