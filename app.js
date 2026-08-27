@@ -2362,18 +2362,11 @@ function clearRecentConnectionFeedback(connectionIds = state.connectionFeedbacks
 function setConnectionFeedback(connections, direction = "forward") {
   if (reducedMotionQuery.matches) return [];
   const cohortSize = connections.length;
-  const entries = connections.map((connection) => {
-    const points = resolveConnectionPoints(connection);
-    if (!points) return null;
-    return {
-      id: connection.id,
-      direction,
-      profile: canvasConnectionFeedbackMotion.createMotionProfile({
-        screenPathLength: canvasConnections.getBezierLength(points.source, points.target) * state.scale,
-        cohortSize,
-      }),
-    };
-  }).filter(Boolean);
+  const entries = connections.map((connection) => ({
+    id: connection.id,
+    direction,
+    profile: canvasConnectionFeedbackMotion.createFeedbackProfile({ cohortSize }),
+  }));
   return canvasConnectionFeedback.add(entries);
 }
 

@@ -21,8 +21,14 @@ function createHarness({ withAnimation = true } = {}) {
   const animationCalls = [];
   if (withAnimation) {
     dom.window.SVGElement.prototype.animate = function animate(keyframes, options) {
-      animationCalls.push({ element: this, keyframes, options });
-      return { finished: new Promise(() => {}) };
+      let finish;
+      const animation = {
+        finished: new Promise((resolve) => {
+          finish = resolve;
+        }),
+      };
+      animationCalls.push({ animation, element: this, finish, keyframes, options });
+      return animation;
     };
   }
   const context = vm.createContext({
@@ -74,19 +80,22 @@ test("related and active connections render above muted paths", () => {
   groups.forEach((group, id) => assert.equal(paths.querySelector(`[data-connection-id="${id}"]`), group));
 });
 
-test("feedback grows from the gesture origin, preserves one animation per token, and supports reverse gestures", () => {
+test("feedback confirms the stable path immediately, preserves one animation per token, and marks the gesture endpoint", async () => {
   const { animationCalls, paths, renderer } = createHarness();
   const connection = { id: "fresh" };
   const started = [];
   const completed = [];
+  let resolveFeedbackComplete;
+  const feedbackCompleted = new Promise((resolve) => {
+    resolveFeedbackComplete = resolve;
+  });
   const profile = {
-    totalMs: 1100,
-    originProgress: 0.02,
-    headLength: 0.08,
-    tailLength: 0.32,
+    totalMs: 240,
     overlayOpacity: 0.9,
-    phaseOffsets: { originEnd: 0.08, travelEnd: 0.76, arrivalEnd: 0.84 },
+    linePeakOffset: 0.18,
+    endpointPeakOffset: 0.3,
   };
+  const pathCalls = [];
   const render = (connectionFeedbacks) => renderer.renderConnections({
     connections: [connection],
     activeConnectionId: null,
@@ -96,13 +105,18 @@ test("feedback grows from the gesture origin, preserves one animation per token,
       started.push([id, token]);
       return true;
     },
-    onFeedbackComplete: (id, token) => completed.push([id, token]),
+    onFeedbackComplete: (id, token) => {
+      completed.push([id, token]);
+      render(new Map());
+      resolveFeedbackComplete();
+    },
     hasFocusedContext: false,
     controlScale: 1,
     resolvePoints: () => ({ source: { x: 0, y: 0 }, target: { x: 120, y: 40 } }),
-    getPath: (_source, _target, options) => options?.reverse
-      ? "M 120 40 C 80 40 40 0 0 0"
-      : "M 0 0 C 40 0 80 40 120 40",
+    getPath: (...args) => {
+      pathCalls.push(args);
+      return "M 0 0 C 40 0 80 40 120 40";
+    },
   });
 
   const feedbacks = new Map([[connection.id, {
@@ -113,49 +127,44 @@ test("feedback grows from the gesture origin, preserves one animation per token,
   }]]);
   render(feedbacks);
   const group = paths.firstElementChild;
-  const progress = group.querySelector(".connection-settle-progress");
-  const trail = group.querySelector(".connection-settle-trail");
-  const head = group.querySelector(".connection-settle-head");
-  const origin = group.querySelector(".connection-settle-origin");
-  const arrival = group.querySelector(".connection-settle-arrival");
-  assert.equal(group.classList.contains("is-settling"), true);
+  const basePath = group.querySelector(".connection-path");
+  const confirmationPath = group.querySelector(".connection-confirmation-path");
+  const confirmationEndpoint = group.querySelector(".connection-confirmation-endpoint");
+  assert.equal(basePath?.getAttribute("d"), "M 0 0 C 40 0 80 40 120 40");
+  assert.equal(basePath?.style.strokeDashoffset, "");
+  assert.equal(group.classList.contains("is-confirming"), true);
   assert.equal(group.dataset.feedbackToken, "7");
-  assert.equal(progress?.getAttribute("pathLength"), "1");
-  assert.equal(trail?.getAttribute("pathLength"), "1");
-  assert.equal(head?.getAttribute("pathLength"), "1");
-  assert.equal(progress?.getAttribute("d"), "M 120 40 C 80 40 40 0 0 0");
-  assert.equal(trail?.style.strokeDasharray, "0.32 1");
-  assert.equal(head?.style.strokeDasharray, "0.08 1");
-  assert.equal(origin?.getAttribute("cx"), "120");
-  assert.equal(origin?.getAttribute("cy"), "40");
-  assert.equal(arrival?.getAttribute("cx"), "0");
-  assert.equal(arrival?.getAttribute("cy"), "0");
+  assert.deepEqual(
+    Array.from(group.querySelectorAll(".connection-confirmation-path, .connection-confirmation-endpoint")),
+    [confirmationPath, confirmationEndpoint],
+  );
+  assert.equal(confirmationPath?.getAttribute("d"), "M 0 0 C 40 0 80 40 120 40");
+  assert.equal(confirmationPath?.style.strokeDashoffset, "");
+  assert.equal(confirmationEndpoint?.getAttribute("cx"), "0");
+  assert.equal(confirmationEndpoint?.getAttribute("cy"), "0");
+  assert.equal(pathCalls.length, 1);
+  assert.equal(pathCalls[0].length, 2);
   assert.deepEqual(started, [["fresh", 7]]);
   assert.deepEqual(completed, []);
-  assert.equal(animationCalls.length, 5);
-  animationCalls.forEach(({ options }) => {
-    assert.equal(options.duration, 1100);
-    assert.equal(options.easing, "linear");
+  assert.equal(animationCalls.length, 2);
+  animationCalls.forEach(({ keyframes, options }) => {
+    assert.equal(options.duration, 240);
+    assert.equal(options.easing, "cubic-bezier(0.22, 0.72, 0.28, 1)");
+    keyframes.forEach((keyframe) => assert.equal("strokeDashoffset" in keyframe, false));
   });
-  const headAnimation = animationCalls.find(({ element }) => element === head);
-  assert.equal(headAnimation.keyframes[0].strokeDashoffset, "0.08");
-  assert.equal(headAnimation.keyframes[1].strokeDashoffset, "0.06");
-  assert.equal(headAnimation.keyframes[1].offset, 0.08);
 
   render(feedbacks);
-  assert.equal(animationCalls.length, 5);
+  assert.equal(animationCalls.length, 2);
   assert.deepEqual(started, [["fresh", 7]]);
-  assert.equal(group.querySelector(".connection-settle-progress"), progress);
-  assert.equal(group.querySelector(".connection-settle-trail"), trail);
-  assert.equal(group.querySelector(".connection-settle-head"), head);
+  assert.equal(group.querySelector(".connection-confirmation-path"), confirmationPath);
+  assert.equal(group.querySelector(".connection-confirmation-endpoint"), confirmationEndpoint);
 
-  render(new Map());
-  assert.equal(group.classList.contains("is-settling"), false);
-  assert.equal(group.querySelector(".connection-settle-progress"), null);
-  assert.equal(group.querySelector(".connection-settle-trail"), null);
-  assert.equal(group.querySelector(".connection-settle-head"), null);
-  assert.equal(group.querySelector(".connection-settle-origin"), null);
-  assert.equal(group.querySelector(".connection-settle-arrival"), null);
+  animationCalls.forEach(({ finish }) => finish());
+  await feedbackCompleted;
+  assert.deepEqual(completed, [["fresh", 7]]);
+  assert.equal(group.classList.contains("is-confirming"), false);
+  assert.equal(group.querySelector(".connection-confirmation-path"), null);
+  assert.equal(group.querySelector(".connection-confirmation-endpoint"), null);
 });
 
 test("unsupported animation APIs restore the stable line and complete feedback", async () => {
@@ -166,12 +175,10 @@ test("unsupported animation APIs restore the stable line and complete feedback",
     token: 3,
     direction: "forward",
     profile: {
-      totalMs: 700,
-      originProgress: 0.02,
-      headLength: 0.08,
-      tailLength: 0.32,
+      totalMs: 240,
       overlayOpacity: 1,
-      phaseOffsets: { originEnd: 0.08, travelEnd: 0.8, arrivalEnd: 0.88 },
+      linePeakOffset: 0.18,
+      endpointPeakOffset: 0.3,
     },
   };
   renderer.renderConnections({
@@ -188,8 +195,11 @@ test("unsupported animation APIs restore the stable line and complete feedback",
   });
 
   const group = paths.firstElementChild;
-  assert.equal(group.classList.contains("is-settling"), false);
-  assert.equal(group.querySelector(".connection-settle-head"), null);
+  assert.equal(group.classList.contains("is-confirming"), false);
+  assert.equal(group.querySelector(".connection-confirmation-path"), null);
+  assert.equal(group.querySelector(".connection-confirmation-endpoint"), null);
+  assert.equal(group.querySelector(".connection-path")?.getAttribute("d"), "M 0 0 C 40 0 80 40 120 40");
+  assert.deepEqual(completed, []);
   await Promise.resolve();
   assert.deepEqual(completed, [["fallback", 3]]);
 });

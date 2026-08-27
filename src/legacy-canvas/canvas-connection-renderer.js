@@ -9,23 +9,16 @@
     return element;
   }
 
-  const SETTLE_ELEMENT_CLASSES = Object.freeze([
-    "connection-settle-progress",
-    "connection-settle-trail",
-    "connection-settle-head",
-    "connection-settle-origin",
-    "connection-settle-arrival",
+  const CONFIRMATION_ELEMENT_CLASSES = Object.freeze([
+    "connection-confirmation-path",
+    "connection-confirmation-endpoint",
   ]);
-
-  function getDashOffset(segmentLength, progress) {
-    return String(segmentLength - progress);
-  }
 
   function animateElement(element, keyframes, duration) {
     if (typeof element?.animate !== "function") return null;
     return element.animate(keyframes, {
       duration,
-      easing: "linear",
+      easing: "cubic-bezier(0.22, 0.72, 0.28, 1)",
       fill: "both",
     });
   }
@@ -108,111 +101,72 @@
       return group;
     }
 
-    function clearSettleHighlight(group) {
-      group.classList.remove("is-settling");
+    function clearConnectionConfirmation(group) {
+      group.classList.remove("is-confirming");
       delete group.dataset.feedbackToken;
-      SETTLE_ELEMENT_CLASSES.forEach((className) => {
+      CONFIRMATION_ELEMENT_CLASSES.forEach((className) => {
         group.querySelector(`.${className}`)?.remove();
       });
     }
 
-    function syncSettleGeometry(group, pathData, origin, arrival) {
-      group.querySelectorAll(
-        ".connection-settle-progress, .connection-settle-trail, .connection-settle-head",
-      ).forEach((element) => element.setAttribute("d", pathData));
-      const originMarker = group.querySelector(".connection-settle-origin");
-      originMarker?.setAttribute("cx", origin.x);
-      originMarker?.setAttribute("cy", origin.y);
-      const arrivalMarker = group.querySelector(".connection-settle-arrival");
-      arrivalMarker?.setAttribute("cx", arrival.x);
-      arrivalMarker?.setAttribute("cy", arrival.y);
+    function syncConfirmationGeometry(group, pathData, endpoint) {
+      group.querySelector(".connection-confirmation-path")?.setAttribute("d", pathData);
+      const marker = group.querySelector(".connection-confirmation-endpoint");
+      marker?.setAttribute("cx", endpoint.x);
+      marker?.setAttribute("cy", endpoint.y);
     }
 
-    function createSettleElements(group, pathData, origin, arrival, profile) {
+    function createConfirmationElements(group, pathData, endpoint) {
       const hitPath = group.querySelector(".connection-hit-path");
-      const progress = createSvgElement("path", "connection-settle-progress");
-      const trail = createSvgElement("path", "connection-settle-trail");
-      const head = createSvgElement("path", "connection-settle-head");
-      const originMarker = createSvgElement("circle", "connection-settle-origin");
-      const arrivalMarker = createSvgElement("circle", "connection-settle-arrival");
-      originMarker.setAttribute("r", "2.7");
-      arrivalMarker.setAttribute("r", "3.1");
-      [progress, trail, head].forEach((element) => element.setAttribute("pathLength", "1"));
-      progress.style.strokeDasharray = "1 1";
-      trail.style.strokeDasharray = `${profile.tailLength} 1`;
-      head.style.strokeDasharray = `${profile.headLength} 1`;
-      [progress, trail, head, originMarker, arrivalMarker]
-        .forEach((element) => group.insertBefore(element, hitPath));
-      syncSettleGeometry(group, pathData, origin, arrival);
-      return { progress, trail, head, originMarker, arrivalMarker };
+      const path = createSvgElement("path", "connection-confirmation-path");
+      const marker = createSvgElement("circle", "connection-confirmation-endpoint");
+      marker.setAttribute("r", "3.2");
+      group.insertBefore(path, hitPath);
+      group.insertBefore(marker, hitPath);
+      syncConfirmationGeometry(group, pathData, endpoint);
+      return { path, marker };
     }
 
-    function startSettleAnimations(elements, profile) {
-      const { originEnd, travelEnd, arrivalEnd } = profile.phaseOffsets;
-      const originFadeEnd = Math.min(travelEnd, originEnd + 80 / profile.totalMs);
+    function startConfirmationAnimations(elements, profile) {
       const opacity = profile.overlayOpacity;
       const animations = [
-        animateElement(elements.progress, [
-          { strokeDashoffset: "1", opacity: 0.5 * opacity, offset: 0 },
-          { strokeDashoffset: String(1 - profile.originProgress), opacity: 0.72 * opacity, offset: originEnd },
-          { strokeDashoffset: "0", opacity: 0.76 * opacity, offset: travelEnd },
-          { strokeDashoffset: "0", opacity: 0.68 * opacity, offset: arrivalEnd },
-          { strokeDashoffset: "0", opacity: 0, offset: 1 },
+        animateElement(elements.path, [
+          { opacity: 0.38 * opacity, offset: 0 },
+          { opacity: 0.78 * opacity, offset: profile.linePeakOffset },
+          { opacity: 0, offset: 1 },
         ], profile.totalMs),
-        animateElement(elements.trail, [
-          { strokeDashoffset: getDashOffset(profile.tailLength, 0), opacity: 0.44 * opacity, offset: 0 },
-          { strokeDashoffset: getDashOffset(profile.tailLength, profile.originProgress), opacity: 0.64 * opacity, offset: originEnd },
-          { strokeDashoffset: getDashOffset(profile.tailLength, 1), opacity: 0.88 * opacity, offset: travelEnd },
-          { strokeDashoffset: getDashOffset(profile.tailLength, 1), opacity: 0.56 * opacity, offset: arrivalEnd },
-          { strokeDashoffset: getDashOffset(profile.tailLength, 1), opacity: 0, offset: 1 },
-        ], profile.totalMs),
-        animateElement(elements.head, [
-          { strokeDashoffset: getDashOffset(profile.headLength, 0), opacity: 0.72 * opacity, offset: 0 },
-          { strokeDashoffset: getDashOffset(profile.headLength, profile.originProgress), opacity, offset: originEnd },
-          { strokeDashoffset: getDashOffset(profile.headLength, 1), opacity, offset: travelEnd },
-          { strokeDashoffset: getDashOffset(profile.headLength, 1), opacity: 0.42 * opacity, offset: arrivalEnd },
-          { strokeDashoffset: getDashOffset(profile.headLength, 1), opacity: 0, offset: 1 },
-        ], profile.totalMs),
-        animateElement(elements.originMarker, [
-          { opacity: 0.92 * opacity, transform: "scale(0.82)", offset: 0 },
-          { opacity: opacity, transform: "scale(1)", offset: originEnd },
-          { opacity: 0, transform: "scale(0.72)", offset: originFadeEnd },
-          { opacity: 0, transform: "scale(0.72)", offset: 1 },
-        ], profile.totalMs),
-        animateElement(elements.arrivalMarker, [
-          { opacity: 0, transform: "scale(0.72)", offset: 0 },
-          { opacity: 0, transform: "scale(0.72)", offset: travelEnd },
-          { opacity: opacity, transform: "scale(1.08)", offset: arrivalEnd },
-          { opacity: 0, transform: "scale(1.36)", offset: 1 },
+        animateElement(elements.marker, [
+          { opacity: 0.7 * opacity, transform: "scale(0.72)", offset: 0 },
+          { opacity: 0.92 * opacity, transform: "scale(1)", offset: profile.endpointPeakOffset },
+          { opacity: 0, transform: "scale(1.55)", offset: 1 },
         ], profile.totalMs),
       ].filter(Boolean);
       return animations;
     }
 
-    function syncSettleHighlight(group, feedback, pathData, points, callbacks) {
+    function syncConnectionConfirmation(group, feedback, pathData, points, callbacks) {
       if (!feedback || feedback.profile?.reducedMotion || feedback.profile?.totalMs <= 0) {
-        clearSettleHighlight(group);
+        clearConnectionConfirmation(group);
         return;
       }
-      const origin = feedback.direction === "reverse" ? points.target : points.source;
-      const arrival = feedback.direction === "reverse" ? points.source : points.target;
+      const endpoint = feedback.direction === "reverse" ? points.source : points.target;
       const token = String(feedback.token);
       if (group.dataset.feedbackToken === token) {
-        syncSettleGeometry(group, pathData, origin, arrival);
+        syncConfirmationGeometry(group, pathData, endpoint);
         return;
       }
-      clearSettleHighlight(group);
+      clearConnectionConfirmation(group);
       if (callbacks.onStart?.(feedback.id, feedback.token) === false) return;
       group.dataset.feedbackToken = token;
-      group.classList.add("is-settling");
-      const elements = createSettleElements(group, pathData, origin, arrival, feedback.profile);
-      const animations = startSettleAnimations(elements, feedback.profile);
+      group.classList.add("is-confirming");
+      const elements = createConfirmationElements(group, pathData, endpoint);
+      const animations = startConfirmationAnimations(elements, feedback.profile);
       if (animations.length) {
         Promise.all(animations.map((animation) => animation.finished))
           .then(() => callbacks.onComplete?.(feedback.id, feedback.token))
           .catch(() => {});
       } else {
-        clearSettleHighlight(group);
+        clearConnectionConfirmation(group);
         Promise.resolve().then(() => callbacks.onComplete?.(feedback.id, feedback.token));
       }
     }
@@ -228,9 +182,6 @@
         if (!points) return;
         const feedback = input.connectionFeedbacks?.get(connection.id) || null;
         const pathData = input.getPath(points.source, points.target);
-        const feedbackPathData = feedback?.direction === "reverse"
-          ? input.getPath(points.source, points.target, { reverse: true })
-          : pathData;
         let group = existingGroups.get(connection.id);
         if (group) {
           existingGroups.delete(connection.id);
@@ -255,7 +206,7 @@
         });
         group.querySelectorAll(".connection-underlay, .connection-path, .connection-hit-path")
           .forEach((element) => element.setAttribute("d", pathData));
-        syncSettleHighlight(group, feedback, feedbackPathData, points, {
+        syncConnectionConfirmation(group, feedback, pathData, points, {
           onStart: input.onFeedbackStart,
           onComplete: input.onFeedbackComplete,
         });

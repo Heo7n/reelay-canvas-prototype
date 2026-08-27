@@ -39,56 +39,28 @@
   transition: stroke 160ms ease, opacity 160ms ease, stroke-width 160ms ease;
 }
 
-.connection-settle-progress,
-.connection-settle-trail,
-.connection-settle-head,
-.connection-settle-origin,
-.connection-settle-arrival {
+.connection-confirmation-path,
+.connection-confirmation-endpoint {
   pointer-events: none;
   opacity: 0;
 }
 
-.connection-settle-progress,
-.connection-settle-trail,
-.connection-settle-head {
+.connection-confirmation-path {
   fill: none;
+  stroke: color-mix(in srgb, var(--relation-stroke-ready) 78%, white 22%);
+  stroke-width: 2.7;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--relation-stroke-ready) 48%, transparent));
 }
 
-.connection-settle-progress {
-  stroke: color-mix(in srgb, var(--relation-stroke-ready) 64%, var(--relation-stroke-soft));
-  stroke-width: 1.7;
-}
-
-.connection-settle-trail {
-  stroke: color-mix(in srgb, var(--relation-stroke-ready) 44%, transparent);
-  stroke-width: 3.8;
-  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--relation-stroke-ready) 42%, transparent));
-}
-
-.connection-settle-head {
-  stroke: color-mix(in srgb, var(--relation-stroke-ready) 94%, white 6%);
-  stroke-width: 2.25;
-  filter: drop-shadow(0 0 1.4px var(--relation-stroke-ready));
-}
-
-.connection-settle-origin,
-.connection-settle-arrival {
+.connection-confirmation-endpoint {
+  fill: color-mix(in srgb, var(--relation-stroke-ready) 88%, white 12%);
   vector-effect: non-scaling-stroke;
   transform-box: fill-box;
   transform-origin: center;
-}
-
-.connection-settle-origin {
-  fill: var(--relation-stroke-ready);
-  filter: drop-shadow(0 0 2.4px color-mix(in srgb, var(--relation-stroke-ready) 74%, transparent));
-}
-
-.connection-settle-arrival {
-  fill: color-mix(in srgb, var(--relation-stroke-ready) 88%, white 12%);
-  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--relation-stroke-ready) 72%, transparent));
+  filter: drop-shadow(0 0 2.6px color-mix(in srgb, var(--relation-stroke-ready) 68%, transparent));
 }
 
 .connection-hit-path {
@@ -124,17 +96,6 @@
   stroke: var(--relation-stroke-ready);
   opacity: 1;
   stroke-width: 2.3;
-}
-
-.connection-group.is-settling .connection-path,
-.connection-group.is-settling:hover .connection-path,
-.connection-group.is-settling.is-related .connection-path,
-.connection-group.is-settling.is-active .connection-path {
-  opacity: 0.1;
-}
-
-.connection-group.is-settling .connection-underlay {
-  opacity: 0.08;
 }
 
 .connection-cut-control {
@@ -887,23 +848,9 @@ html[data-theme="dark"] .connection-cut-surface {
     animation: none;
   }
 
-  .connection-settle-progress,
-  .connection-settle-trail,
-  .connection-settle-head,
-  .connection-settle-origin,
-  .connection-settle-arrival {
+  .connection-confirmation-path,
+  .connection-confirmation-endpoint {
     display: none;
-  }
-
-  .connection-group.is-settling .connection-path,
-  .connection-group.is-settling:hover .connection-path,
-  .connection-group.is-settling.is-related .connection-path,
-  .connection-group.is-settling.is-active .connection-path {
-    opacity: 1;
-  }
-
-  .connection-group.is-settling .connection-underlay {
-    opacity: 0.76;
   }
 
 
