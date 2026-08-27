@@ -41,7 +41,7 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(appSource, /function modelIconMarkup\(model, className\)[\s\S]*?model\?\.iconSrc[\s\S]*?model-brand-mask/);
   assert.doesNotMatch(appSource, /workflow-panel|hasWorkflowControl|workflowPanel/);
   assert.match(appSource, /function workflowParameterSection\(node\)[\s\S]*?data-action="workflow"/);
-  assert.match(appSource, /function getParamLabel\(node\)[\s\S]*?workflowLabel[\s\S]*?node\.aspect/);
+  assert.match(appSource, /function getParamLabelParts\(node\)[\s\S]*?workflow\?\.label[\s\S]*?aspect:\s*node\.aspect/);
   assert.match(appSource, /placeholder="描述你想生成的内容，或输入 @ 引用"/);
   assert.match(appSource, /modelIconMarkup\(model, "agent-model-provider"\)/);
   assert.match(appSource, /"box":\s*'<path/);
@@ -316,7 +316,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /app\.js\?v=20260827-aspect-layout-40/);
+  assert.match(html, /app\.js\?v=20260827-aspect-layout-41/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -515,8 +515,8 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.doesNotMatch(appSource, /toggle-large|promptLarge|promptInputHeight|expand-corner/);
 });
 
-test("aspect changes preserve node identity and share bottom-anchored presented geometry", () => {
-  assert.match(html, /canvas-node-layout-transition\.js\?v=20260827-aspect-layout-40/);
+test("aspect changes preserve node identity and isolate the prompt workspace from media layout", () => {
+  assert.match(html, /canvas-node-layout-transition\.js\?v=20260827-aspect-layout-41/);
   assert.match(
     appSource,
     /function getNodeRenderSignature\(node\)[\s\S]*?!\["x", "y", "z", "groupId", "aspect"\]\.includes\(key\)/,
@@ -527,10 +527,14 @@ test("aspect changes preserve node identity and share bottom-anchored presented 
   );
   assert.match(
     appSource,
-    /function syncNodeVisualLayout[\s\S]*?mediaFrame\.style\.width[\s\S]*?mediaFrame\.style\.height/,
+    /function syncNodeVisualLayout[\s\S]*?element\.style\.top = `\$\{node\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY/,
   );
+  assert.match(appSource, /promptPanel\.style\.top = `\$\{canonicalLayout\.mediaHeight \+ layoutRules\.panelGap\}px`[\s\S]*?if \(isTransitioning\) return/);
+  assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?left:\s*50%[\s\S]*?translate:\s*-50% 0/);
+  assert.match(appSource, /class="control-chip-label param-chip-label"[\s\S]*?getParamLabelMarkup\(node\)/);
+  assert.match(appCss, /\.param-summary-aspect\s*\{[\s\S]*?flex:\s*0 0 4ch[\s\S]*?font-variant-numeric:\s*tabular-nums/);
   assert.match(appSource, /function getConnectionPortPoint\(node, side\)[\s\S]*?getNodePresentation\(node\)/);
-  assert.match(appSource, /function renderNodeLayoutTransitionFrame\(\)[\s\S]*?renderConnections\(\)[\s\S]*?renderSelectionToolbar\(\)[\s\S]*?renderMinimap\(\)/);
+  assert.match(appSource, /function renderNodeLayoutTransitionFrame\(transitionIds = \[\]\)[\s\S]*?renderConnections\(\)[\s\S]*?renderSelectionToolbar\(\)[\s\S]*?renderMinimap\(\)/);
   assert.match(appSource, /querySelectorAll\('\[data-action="aspect"\]'\)[\s\S]*?aria-pressed/);
 });
 

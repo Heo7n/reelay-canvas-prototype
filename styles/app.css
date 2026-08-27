@@ -3056,12 +3056,8 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   pointer-events: none;
 }
 
-.canvas-node.node-layout-transitioning {
-  will-change: left, top, width;
-}
-
 .canvas-node.node-layout-transitioning .media-frame {
-  will-change: width, height;
+  will-change: width, height, transform;
 }
 
 .media-frame {
@@ -3875,18 +3871,20 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
 }
 
 .prompt-panel {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 50%;
   z-index: 9;
   pointer-events: auto;
   width: 705px;
   height: 291px;
-  margin: 14px auto 0;
-  margin-bottom: var(--prompt-extra-height, 0);
+  margin: 0;
   border: 0.5px solid var(--node-panel-line);
   border-radius: 12px;
   background: var(--node-panel-bg);
   box-shadow: var(--node-panel-shadow);
   overflow: visible;
+  translate: -50% 0;
   transform: scale(var(--prompt-scale, 1));
   transform-origin: top center;
   transition: transform 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -4185,6 +4183,27 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   padding: 0 8px;
   border-radius: 6px;
   background: transparent;
+}
+
+.param-chip-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.param-summary-before,
+.param-summary-after {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.param-summary-aspect {
+  flex: 0 0 4ch;
+  width: 4ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .image-mode .param-chip {

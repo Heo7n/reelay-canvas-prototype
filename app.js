@@ -713,22 +713,23 @@ function syncNodeVisualLayout(
   presentation = getNodePresentation(node),
 ) {
   if (!element) return;
-  const { x, y, layout } = presentation;
-  element.style.left = `${x}px`;
-  element.style.top = `${y}px`;
-  element.style.width = `${layout.nodeWidth}px`;
-  element.classList.toggle(
-    "node-layout-transitioning",
-    canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node)),
-  );
+  const { y, layout } = presentation;
+  const canonicalLayout = getNodeLayout(node);
+  const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
+  element.style.left = `${node.x}px`;
+  element.style.top = `${node.y}px`;
+  element.style.width = `${canonicalLayout.nodeWidth}px`;
+  element.style.height = `${canonicalLayout.nodeHeight}px`;
+  element.classList.toggle("node-layout-transitioning", isTransitioning);
   const mediaFrame = element.querySelector(".media-frame");
   if (mediaFrame) {
     mediaFrame.style.width = `${layout.mediaWidth}px`;
     mediaFrame.style.height = `${layout.mediaHeight}px`;
+    mediaFrame.style.transform = `translateY(${(y - node.y).toFixed(3)}px)`;
   }
   const mediaToolbar = element.querySelector("[data-media-toolbar]");
-  if (mediaToolbar) {
-    mediaToolbar.style.setProperty("--toolbar-scale", layout.toolbarScale.toFixed(4));
+  if (mediaToolbar && !isTransitioning) {
+    mediaToolbar.style.setProperty("--toolbar-scale", canonicalLayout.toolbarScale.toFixed(4));
     mediaToolbar.style.setProperty("--toolbar-nudge", "0px");
     const toolbarRect = mediaToolbar.getBoundingClientRect();
     const nudge = toolbarRect.top < 8 ? (8 - toolbarRect.top) / state.scale : 0;
@@ -736,20 +737,22 @@ function syncNodeVisualLayout(
   }
   const promptPanel = element.querySelector(".prompt-panel");
   if (!promptPanel) return;
-  promptPanel.style.width = `${layout.panelWidth}px`;
-  promptPanel.style.height = `${layout.panelHeight}px`;
-  promptPanel.style.setProperty("--prompt-scale", layout.promptScale.toFixed(4));
-  promptPanel.style.setProperty("--prompt-extra-height", `${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px`);
-  promptPanel.style.setProperty("--prompt-composer-height", `${layout.composerHeight}px`);
-  promptPanel.style.setProperty("--prompt-advanced-height", `${layout.advancedSettingsHeight}px`);
+  promptPanel.style.top = `${canonicalLayout.mediaHeight + layoutRules.panelGap}px`;
+  if (isTransitioning) return;
+  promptPanel.style.width = `${canonicalLayout.panelWidth}px`;
+  promptPanel.style.height = `${canonicalLayout.panelHeight}px`;
+  promptPanel.style.setProperty("--prompt-scale", canonicalLayout.promptScale.toFixed(4));
+  promptPanel.style.setProperty("--prompt-extra-height", `${(canonicalLayout.panelHeight * (canonicalLayout.promptScale - 1)).toFixed(2)}px`);
+  promptPanel.style.setProperty("--prompt-composer-height", `${canonicalLayout.composerHeight}px`);
+  promptPanel.style.setProperty("--prompt-advanced-height", `${canonicalLayout.advancedSettingsHeight}px`);
   promptPanel.style.setProperty("--prompt-input-top", `${layoutRules.promptInputTop}px`);
   promptPanel.style.setProperty("--prompt-input-bottom", `${layoutRules.promptInputBottom}px`);
 }
 
 function syncNodeAspectUi(node, element) {
   if (node.kind !== "generator") return;
-  const parameterLabel = element.querySelector('[data-action="param-panel"] .control-chip-label');
-  if (parameterLabel) parameterLabel.textContent = getParamLabel(node);
+  const aspectLabel = element.querySelector("[data-param-aspect]");
+  if (aspectLabel) aspectLabel.textContent = node.aspect;
   element.querySelectorAll('[data-action="aspect"]').forEach((button) => {
     const active = button.dataset.value === node.aspect;
     button.classList.toggle("active", active);
@@ -757,10 +760,12 @@ function syncNodeAspectUi(node, element) {
   });
 }
 
-function renderNodeLayoutTransitionFrame() {
+function renderNodeLayoutTransitionFrame(transitionIds = []) {
+  const activeIds = new Set(transitionIds);
   for (const node of state.nodes) {
+    if (!activeIds.has(getNodeLayoutTransitionId(node))) continue;
     const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
-    if (element) syncCanvasNodeElement(element, node);
+    if (element) syncNodeVisualLayout(node, element);
   }
   renderConnections();
   renderSelectionToolbar();
@@ -1277,13 +1282,30 @@ function getGenerationAvailability(node) {
 }
 
 function getParamLabel(node) {
+  const parts = getParamLabelParts(node);
+  return `${parts.beforeAspect}${parts.aspect}${parts.afterAspect}`;
+}
+
+function getParamLabelParts(node) {
   if (getNodeGenerationMode(node) === "video") {
     const workflow = getWorkflowDefinition(node);
-    const workflowLabel = workflow?.label ? `${workflow.label} · ` : "";
-    return `${workflowLabel}${node.aspect} · ${node.quality} · ${node.duration}`;
+    return {
+      beforeAspect: workflow?.label ? `${workflow.label} · ` : "",
+      aspect: node.aspect,
+      afterAspect: ` · ${node.quality} · ${node.duration}`,
+    };
   }
   const quality = getCapabilityValues(node, "qualities").length ? ` · ${node.quality}` : "";
-  return `${node.aspect} · ${node.resolution}${quality}`;
+  return {
+    beforeAspect: "",
+    aspect: node.aspect,
+    afterAspect: ` · ${node.resolution}${quality}`,
+  };
+}
+
+function getParamLabelMarkup(node) {
+  const parts = getParamLabelParts(node);
+  return `<span class="param-summary-before">${escapeHtml(parts.beforeAspect)}</span><span class="param-summary-aspect" data-param-aspect>${escapeHtml(parts.aspect)}</span><span class="param-summary-after">${escapeHtml(parts.afterAspect)}</span>`;
 }
 
 function aspectStringToRatio(aspect) {
@@ -3873,7 +3895,7 @@ function createGeneratorNodeElement(node) {
             <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
           </button>
           <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>
-            <span class="control-chip-label">${escapeHtml(getParamLabel(node))}</span>
+            <span class="control-chip-label param-chip-label">${getParamLabelMarkup(node)}</span>
             ${getNodeGenerationMode(node) === "video" ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
           </button>
           <div class="control-spacer"></div>
