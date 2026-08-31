@@ -338,7 +338,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-58/);
+  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-60/);
   assert.match(html, /app\.js\?v=20260831-canvas-chrome-58/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
@@ -719,9 +719,9 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
   assert.match(stylesEntry, /styles\/app\.css\?v=20260831-selection-surface-55/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-58/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-60/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
-  assert.match(html, /class="left-rail"[\s\S]*?id="shareProjectBtn"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="railProfileBtn"/);
+  assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
   assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-disabled="true"[^>]*disabled>[\s\S]*?data-lucide="layout-grid"[\s\S]*?id="zoomSlider"/);
   assert.doesNotMatch(html, /class="rail-button canvas-switch-trigger"[^>]*title=|id="railProfileBtn"[^>]*title=/);
@@ -735,8 +735,9 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.doesNotMatch(projectActionSource, /action === "(?:home|create|delete)"/);
   assert.match(canvasChromeCss, /--canvas-edge-bar-width:\s*268px/);
   assert.match(canvasChromeCss, /\.top-bar \.canvas-project-switcher\s*\{[\s\S]*?width:\s*min\(var\(--canvas-edge-bar-width\), calc\(100vw - 96px\)\)/);
-  assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\],[\s\S]*?outline:\s*0;[\s\S]*?background:\s*transparent/);
+  assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\],[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
+  assert.match(canvasChromeCss, /\.left-rail \.profile-menu,[\s\S]*?top:\s*0;[\s\S]*?bottom:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 14px\)/);
   assert.doesNotMatch(canvasChromeCss, /\.share-reveal/);
   assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*12px[\s\S]*?bottom:\s*12px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-control:hover,[\s\S]*?\.canvas-zoom-control\.value-visible\s*\{[\s\S]*?width:\s*178px/);

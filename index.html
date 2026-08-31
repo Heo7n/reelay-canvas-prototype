@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260831-canvas-chrome-58" />
+    <link rel="stylesheet" href="./styles.css?v=20260831-canvas-chrome-60" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -28,10 +28,6 @@
       <aside class="left-rail" aria-label="画布快捷操作">
         <div class="left-rail-stack top-actions" id="topActions">
           <span class="sr-only" data-canvas-name>画布 1</span>
-          <button class="rail-button share-button" id="shareProjectBtn" type="button" aria-label="分享项目">
-            <i data-lucide="share-2" aria-hidden="true"></i>
-            <span class="rail-button-tip">分享项目</span>
-          </button>
           <button class="rail-button canvas-switch-trigger" type="button" data-canvas-menu-button aria-label="切换画布" aria-controls="canvasMenu" aria-expanded="false" aria-haspopup="menu">
             <i data-lucide="layers-3" aria-hidden="true"></i>
             <span class="rail-button-tip">切换画布</span>
@@ -39,6 +35,10 @@
           <button class="rail-button asset-library-trigger" id="railLibraryBtn" type="button" aria-label="资产库" aria-expanded="false">
             <i data-lucide="folder" aria-hidden="true"></i>
             <span class="asset-lib-tooltip rail-button-tip">资产库</span>
+          </button>
+          <button class="rail-button share-button" id="shareProjectBtn" type="button" aria-label="分享项目">
+            <i data-lucide="share-2" aria-hidden="true"></i>
+            <span class="rail-button-tip">分享项目</span>
           </button>
           <div class="profile-anchor">
             <button class="rail-button avatar-button" id="railProfileBtn" type="button" data-initial="R" aria-label="个人：Reelay 用户" aria-controls="profileMenu" aria-expanded="false"></button>
