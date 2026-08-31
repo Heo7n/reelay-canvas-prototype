@@ -479,7 +479,6 @@ function syncHostedIdentity(context) {
 
   state.identity = { account, displayName, workspaceName, workspaceRole };
   railProfileBtn?.setAttribute("data-initial", initial);
-  railProfileBtn?.setAttribute("title", displayName);
   railProfileBtn?.setAttribute("aria-label", `个人：${displayName}`);
   if (profileAvatar) profileAvatar.textContent = initial;
   if (profileName) profileName.textContent = displayName;

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260831-canvas-chrome-56" />
+    <link rel="stylesheet" href="./styles.css?v=20260831-canvas-chrome-58" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -28,7 +28,11 @@
       <aside class="left-rail" aria-label="画布快捷操作">
         <div class="left-rail-stack top-actions" id="topActions">
           <span class="sr-only" data-canvas-name>画布 1</span>
-          <button class="rail-button canvas-switch-trigger" type="button" data-canvas-menu-button title="切换画布" aria-label="切换画布" aria-controls="canvasMenu" aria-expanded="false" aria-haspopup="menu">
+          <button class="rail-button share-button" id="shareProjectBtn" type="button" aria-label="分享项目">
+            <i data-lucide="share-2" aria-hidden="true"></i>
+            <span class="rail-button-tip">分享项目</span>
+          </button>
+          <button class="rail-button canvas-switch-trigger" type="button" data-canvas-menu-button aria-label="切换画布" aria-controls="canvasMenu" aria-expanded="false" aria-haspopup="menu">
             <i data-lucide="layers-3" aria-hidden="true"></i>
             <span class="rail-button-tip">切换画布</span>
           </button>
@@ -37,7 +41,7 @@
             <span class="asset-lib-tooltip rail-button-tip">资产库</span>
           </button>
           <div class="profile-anchor">
-            <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="Reelay 用户" data-initial="R" aria-label="个人：Reelay 用户" aria-controls="profileMenu" aria-expanded="false"></button>
+            <button class="rail-button avatar-button" id="railProfileBtn" type="button" data-initial="R" aria-label="个人：Reelay 用户" aria-controls="profileMenu" aria-expanded="false"></button>
             <span class="rail-button-tip profile-button-tip">个人</span>
 
             <div class="profile-menu hidden" id="profileMenu">
@@ -119,12 +123,6 @@
                 </button>
               </div>
             </div>
-          </div>
-          <div class="share-reveal">
-            <button class="share-button" id="shareProjectBtn" type="button" aria-label="分享项目">
-              <i data-lucide="share-2" aria-hidden="true"></i>
-              <span class="action-tip">分享</span>
-            </button>
           </div>
         </div>
       </aside>
@@ -317,7 +315,7 @@
               <span class="canvas-tool-tip">适应视图</span>
             </button>
             <button class="canvas-tool-button canvas-tool-button-upcoming" type="button" data-canvas-tool="organize" aria-label="整理画布，即将支持" aria-disabled="true" disabled>
-              <i data-lucide="sparkles" aria-hidden="true"></i>
+              <i data-lucide="layout-grid" aria-hidden="true"></i>
               <span class="canvas-tool-tip">整理画布 · 即将支持</span>
             </button>
             <label class="canvas-zoom-control" aria-label="放大/缩小画布">
@@ -420,6 +418,6 @@
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260826-media-kind-37"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./app.js?v=20260831-canvas-chrome-57"></script>
+    <script src="./app.js?v=20260831-canvas-chrome-58"></script>
   </body>
 </html>
