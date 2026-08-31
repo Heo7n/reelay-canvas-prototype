@@ -34,6 +34,8 @@ const railProfileBtn = document.querySelector("#railProfileBtn");
 const profileAnchor = document.querySelector(".profile-anchor");
 const shareProjectBtn = document.querySelector("#shareProjectBtn");
 const profileMenu = document.querySelector("#profileMenu");
+const profileHelpFlyout = profileMenu?.querySelector(".profile-help-flyout");
+const profileHelpTrigger = profileHelpFlyout?.querySelector(".profile-help-trigger");
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
 const assetLibraryGrid = document.querySelector("#assetLibraryGrid");
@@ -51,8 +53,6 @@ const profileCreditValue = document.querySelector("#profileCreditValue");
 const profileAvatar = document.querySelector("#profileAvatar");
 const profileName = document.querySelector("#profileName");
 const profileEmail = document.querySelector("#profileEmail");
-const profileOrganization = document.querySelector("#profileOrganization");
-const profileOrganizationName = document.querySelector("#profileOrganizationName");
 const profileOrganizationRole = document.querySelector("#profileOrganizationRole");
 const emptyState = document.querySelector("#emptyState");
 const emptyCreateMain = document.querySelector(".empty-create-main");
@@ -481,9 +481,7 @@ function syncHostedIdentity(context) {
   if (profileAvatar) profileAvatar.textContent = initial;
   if (profileName) profileName.textContent = displayName;
   if (profileEmail) profileEmail.textContent = account || "演示画布";
-  if (profileOrganizationName) profileOrganizationName.textContent = workspaceName;
   if (profileOrganizationRole) profileOrganizationRole.textContent = roleLabels[workspaceRole];
-  profileOrganization?.setAttribute("aria-label", `进入${workspaceName}组织管理界面`);
 }
 
 function requireCanvasMutation({ notify = true } = {}) {
@@ -7416,7 +7414,7 @@ function shouldBypassCanvasWheel(target) {
         ".agent-history-menu",
         ".agent-model-menu",
         ".profile-menu",
-        ".profile-help-inline-panel",
+        ".profile-help-flyout-panel",
         ".canvas-tools",
         ".canvas-tool-popover",
         ".toolbar-dropdown",
@@ -8252,25 +8250,13 @@ canvasHomeButtons.forEach((button) => {
 });
 
 function setProfileHelpOpen(open) {
-  const helpInline = profileMenu?.querySelector(".profile-help-inline");
-  const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
-  helpInline?.classList.toggle("open", open);
-  helpTrigger?.setAttribute("aria-expanded", String(open));
+  profileHelpFlyout?.classList.toggle("open", open);
+  profileHelpTrigger?.setAttribute("aria-expanded", String(open));
 }
 
 function toggleProfileHelpOpen() {
-  const isOpen = profileMenu?.querySelector(".profile-help-inline")?.classList.contains("open");
+  const isOpen = profileHelpFlyout?.classList.contains("open");
   setProfileHelpOpen(!isOpen);
-}
-
-function keepProfileHelpOpenForPointer(event) {
-  const helpInline = profileMenu?.querySelector(".profile-help-inline.open");
-  const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
-  if (!helpInline || !helpTrigger) return;
-  const triggerTop = helpTrigger.getBoundingClientRect().top;
-  if (event.clientY < triggerTop - 2) {
-    setProfileHelpOpen(false);
-  }
 }
 
 function openProfileMenu({ focusMenu = false } = {}) {
@@ -8330,13 +8316,21 @@ profileMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 
-profileMenu?.addEventListener("pointermove", keepProfileHelpOpenForPointer);
-
-profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("pointerenter", () => {
+profileHelpFlyout?.addEventListener("pointerenter", () => {
   setProfileHelpOpen(true);
 });
 
-profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("keydown", (event) => {
+profileHelpFlyout?.addEventListener("pointerleave", () => {
+  setProfileHelpOpen(false);
+});
+
+profileHelpFlyout?.addEventListener("focusout", () => {
+  window.setTimeout(() => {
+    if (!profileHelpFlyout.contains(document.activeElement)) setProfileHelpOpen(false);
+  }, 0);
+});
+
+profileHelpTrigger?.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
   event.stopPropagation();

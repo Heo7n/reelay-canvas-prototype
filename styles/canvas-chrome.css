@@ -73,7 +73,6 @@ html[data-theme="light"] {
 .project-home-button:focus-visible,
 .project-switch-button:focus-visible,
 .left-rail .rail-button:focus-visible,
-.share-button:focus-visible,
 .canvas-tool-button:focus-visible,
 .canvas-zoom-control:focus-within {
   outline: 2px solid var(--canvas-chrome-focus);
@@ -240,6 +239,7 @@ html[data-theme="light"] {
   background: transparent;
   color: var(--floating-text);
   box-shadow: none;
+  backdrop-filter: none;
   cursor: pointer;
   transition:
     background 0.14s ease,
@@ -342,7 +342,7 @@ html[data-theme="light"] {
 .left-rail .rail-button:hover > .rail-button-tip,
 .left-rail .rail-button:focus-visible > .rail-button-tip,
 .left-rail .profile-anchor:hover > .profile-button-tip,
-.left-rail .profile-anchor:focus-within > .profile-button-tip {
+.left-rail .avatar-button:focus-visible + .profile-button-tip {
   opacity: 1;
   transform: translate(0, -50%);
 }
@@ -354,12 +354,10 @@ html[data-theme="light"] {
 }
 
 /* Account menu now belongs to the personal entry rather than the top-right corner. */
-.left-rail .profile-menu,
-.left-rail .profile-anchor .profile-menu {
-  /* Align the trigger avatar with the identity avatar inside the menu. */
-  top: -12px;
+.left-rail .profile-menu {
+  top: auto;
   right: auto;
-  bottom: auto;
+  bottom: -6px;
   left: calc(100% + 14px);
   z-index: 7;
   overflow: visible;
@@ -379,11 +377,6 @@ html[data-theme="light"] {
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
-}
-
-.left-rail .profile-shortcut-sheet {
-  right: auto;
-  left: calc(100% + 12px);
 }
 
 .canvas-menu-name.editing {
@@ -628,8 +621,7 @@ html[data-theme="dark"] .agent-logo img {
     width: min(var(--canvas-edge-bar-width), calc(100vw - 20px));
   }
 
-  .left-rail .profile-menu,
-  .left-rail .profile-anchor .profile-menu {
+  .left-rail .profile-menu {
     position: fixed;
     top: 12px;
     right: 12px;

@@ -201,7 +201,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   profileButton.getClientRects = () => [{}];
   profileButton.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
   assert.equal(profileButton.getAttribute("aria-expanded"), "true");
-  assert.equal(window.document.activeElement, window.document.querySelector("#profileOrganization"));
+  assert.equal(window.document.activeElement, window.document.querySelector("#profileCreditsBtn"));
   window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
   assert.equal(profileButton.getAttribute("aria-expanded"), "false");
   assert.equal(window.document.activeElement, profileButton);

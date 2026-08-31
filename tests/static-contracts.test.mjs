@@ -338,8 +338,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-61/);
-  assert.match(html, /app\.js\?v=20260831-canvas-chrome-59/);
+  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-66/);
+  assert.match(html, /app\.js\?v=20260831-canvas-chrome-62/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -718,8 +718,8 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-selection-surface-55/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-61/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-canvas-profile-flyout-58/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-66/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
@@ -738,7 +738,13 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\],[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
   assert.match(canvasChromeCss, /\.left-rail \.avatar-button\.active \+ \.profile-button-tip\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?opacity:\s*0;/);
-  assert.match(canvasChromeCss, /\.left-rail \.profile-menu,[\s\S]*?top:\s*-12px;[\s\S]*?bottom:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 14px\)/);
+  assert.match(canvasChromeCss, /\.left-rail \.rail-button\s*\{[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/);
+  assert.match(canvasChromeCss, /\.left-rail \.profile-menu\s*\{[\s\S]*?top:\s*auto;[\s\S]*?bottom:\s*-6px;[\s\S]*?left:\s*calc\(100% \+ 14px\)/);
+  assert.match(appCss, /\.profile-help-flyout-panel\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?left:\s*calc\(100% \+ 26px\);[\s\S]*?width:\s*168px/);
+  assert.match(appCss, /\.profile-shortcut-sheet\s*\{[\s\S]*?right:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 12px\)/);
+  assert.match(appSource, /profileHelpFlyout\?\.addEventListener\("pointerenter"[\s\S]*?setProfileHelpOpen\(true\)[\s\S]*?profileHelpFlyout\?\.addEventListener\("pointerleave"[\s\S]*?setProfileHelpOpen\(false\)/);
+  assert.doesNotMatch(`${html}\n${appSource}\n${appCss}`, /profile-help-inline|profileHelpInline/);
+  assert.doesNotMatch(appCss, /\.profile-help-trigger\s*>\s*\.lucide:last-child[\s\S]*?transform/);
   assert.doesNotMatch(canvasChromeCss, /\.share-reveal/);
   assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*12px[\s\S]*?bottom:\s*12px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-control:hover,[\s\S]*?\.canvas-zoom-control\.value-visible\s*\{[\s\S]*?width:\s*178px/);
@@ -776,7 +782,15 @@ test("canvas switch buttons only open the menu and menu rows own rename editing"
 });
 
 test("the canvas organization entry exposes a visual management affordance without redundant text", () => {
-  assert.match(html, /id="profileOrganization"[^>]*aria-label="进入组织管理界面"/);
+  assert.match(html, /class="profile-menu-list"[\s\S]*?id="profileCreditsBtn"[\s\S]*?id="profileOrganization"/);
+  assert.match(html, /id="profileOrganization"[^>]*aria-label="进入组织中心"[\s\S]*?>[\s\S]*?<span>组织中心<\/span>/);
+  assert.doesNotMatch(appSource, /\bprofileOrganization\b/);
+  assert.doesNotMatch(`${html}\n${appCss}`, /avatar-credit-badge/);
+  assert.doesNotMatch(`${html}\n${appCss}`, /share-button|action-tip/);
+  assert.doesNotMatch(appCss, /\.profile-anchor\s+\.profile-menu/);
+  assert.doesNotMatch(appCss, /\.profile-menu-item\.active/);
+  assert.doesNotMatch(html, /class="profile-menu-item danger"[^>]*data-profile-action="logout"/);
+  assert.doesNotMatch(appCss, /\.profile-menu-item\.danger/);
   assert.doesNotMatch(html, />所属组织</);
   assert.doesNotMatch(html, /role="tooltip">进入组织管理界面</);
   assert.doesNotMatch(appCss, /\.profile-membership:hover > (?:svg|span)/);
