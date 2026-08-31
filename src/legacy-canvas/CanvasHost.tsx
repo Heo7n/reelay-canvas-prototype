@@ -13,13 +13,14 @@ import {
   hostSaveResultMessageSchema,
   legacyCanvasContextSchema,
   parseCanvasMessage,
+  type LegacyAccountSection,
   type LegacyCanvasContext,
 } from "./bridge-protocol";
 
 interface CanvasHostProps {
   context: LegacyCanvasContext;
   onLogout?: () => void;
-  onOpenAccountSettings?: () => void;
+  onOpenAccountSettings?: (section: LegacyAccountSection) => void;
   repository: CanvasDocumentRepository;
 }
 
@@ -310,7 +311,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
         return;
       }
       if (message.type === "canvas:open-account") {
-        onOpenAccountSettings?.();
+        onOpenAccountSettings?.(message.section);
         return;
       }
       if (message.type !== "canvas:save") return;

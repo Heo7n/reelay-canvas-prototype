@@ -18,29 +18,41 @@ const document = {
 
 describe("legacy canvas bridge", () => {
   it("accepts versioned host context and a separate opaque document message", () => {
-    expect(
-      hostMessageSchema.parse({
-        source: "reelay-shell",
-        type: "host:init",
-        context: {
-          protocolVersion: 1,
-          workspaceId: "org-1",
-          projectId: "project-1",
-          projectName: "品牌故事",
-          canvasId: "canvas-1",
-          theme: "dark",
-          writable: true,
-          actor: {
-            account: "creator@reelay.test",
-            displayName: "Hoo",
-          },
-          workspace: {
-            name: "星海视觉工作室",
-            role: "owner",
-          },
-        },
-      }).context.workspaceId,
-    ).toBe("org-1");
+    const context = {
+      protocolVersion: 1 as const,
+      capabilities: { accountSections: true },
+      workspaceId: "org-1",
+      projectId: "project-1",
+      projectName: "品牌故事",
+      canvasId: "canvas-1",
+      theme: "dark" as const,
+      writable: true,
+      actor: {
+        account: "creator@reelay.test",
+        displayName: "Hoo",
+      },
+      workspace: {
+        name: "星海视觉工作室",
+        role: "owner" as const,
+      },
+    };
+    const parsedContext = hostMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:init",
+      context,
+    }).context;
+    expect(parsedContext.workspaceId).toBe("org-1");
+    expect(parsedContext.capabilities).toEqual({ accountSections: true });
+    expect(hostMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:init",
+      context: { ...context, capabilities: undefined },
+    }).context.capabilities).toBeUndefined();
+    expect(hostMessageSchema.safeParse({
+      source: "reelay-shell",
+      type: "host:init",
+      context: { ...context, capabilities: { accountSections: true, unknown: true } },
+    }).success).toBe(false);
 
     expect(hostDocumentMessageSchema.parse({
       source: "reelay-shell",
@@ -91,7 +103,7 @@ describe("legacy canvas bridge", () => {
     }).code).toBe("missing");
   });
 
-  it("accepts the routed account-settings request from the legacy canvas", () => {
+  it("accepts routed account sections and defaults old account requests to profile", () => {
     expect(parseCanvasMessage({
       source: "reelay-legacy-canvas",
       type: "canvas:open-account",
@@ -102,6 +114,39 @@ describe("legacy canvas bridge", () => {
       type: "canvas:open-account",
       protocolVersion: 1,
       instanceId: "canvas-instance-1",
+      section: "profile",
     });
+
+    expect(parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      section: "credits",
+    })).toEqual({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      section: "credits",
+    });
+  });
+
+  it("rejects unknown or structurally invalid account sections", () => {
+    expect(parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      section: "billing",
+    })).toBeNull();
+    expect(parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      section: "profile",
+      unexpected: true,
+    })).toBeNull();
   });
 });

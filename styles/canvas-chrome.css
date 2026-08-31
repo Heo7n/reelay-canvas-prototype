@@ -1,0 +1,709 @@
+:root {
+  --canvas-chrome-bg: color-mix(in srgb, var(--surface) 82%, transparent);
+  --canvas-chrome-bg-raised: color-mix(in srgb, var(--surface) 94%, transparent);
+  --canvas-chrome-border: color-mix(in srgb, var(--text) 13%, transparent);
+  --canvas-chrome-hover: color-mix(in srgb, var(--text) 9%, transparent);
+  --canvas-chrome-shadow: 0 12px 34px rgba(0, 0, 0, 0.18);
+  --canvas-chrome-focus: color-mix(in srgb, var(--text) 62%, transparent);
+}
+
+html[data-theme="light"] {
+  --canvas-chrome-bg: color-mix(in srgb, #ffffff 88%, transparent);
+  --canvas-chrome-bg-raised: color-mix(in srgb, #ffffff 96%, transparent);
+  --canvas-chrome-border: rgba(17, 24, 39, 0.13);
+  --canvas-chrome-hover: rgba(17, 24, 39, 0.065);
+  --canvas-chrome-shadow: 0 10px 28px rgba(16, 24, 40, 0.1);
+  --canvas-chrome-focus: rgba(17, 24, 39, 0.62);
+}
+
+/* Project-level navigation */
+.top-bar {
+  top: 12px;
+  left: 12px;
+}
+
+.top-bar .canvas-project-switcher,
+.asset-library-header .canvas-project-switcher {
+  display: grid;
+  grid-template-columns: 36px 1px minmax(0, 1fr) 36px;
+  gap: 4px;
+  width: min(280px, calc(100vw - 96px));
+  min-height: 44px;
+  padding: 3px 4px;
+  border-color: var(--canvas-chrome-border);
+  border-radius: 14px;
+  background: var(--canvas-chrome-bg);
+  box-shadow: var(--canvas-chrome-shadow);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.project-home-button,
+.project-switch-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    transform 0.14s ease;
+}
+
+.project-home-button:hover,
+.project-switch-button:hover {
+  background: var(--canvas-chrome-hover);
+  color: var(--text);
+}
+
+.project-home-button:active,
+.project-switch-button:active {
+  transform: scale(0.96);
+}
+
+.project-home-button:focus-visible,
+.project-switch-button:focus-visible,
+.left-rail .rail-button:focus-visible,
+.share-button:focus-visible,
+.canvas-tool-button:focus-visible,
+.canvas-zoom-control:focus-within {
+  outline: 2px solid var(--canvas-chrome-focus);
+  outline-offset: 2px;
+}
+
+.project-home-button svg,
+.project-switch-button svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.85;
+}
+
+.project-home-icon {
+  transform: rotate(180deg);
+}
+
+.top-bar .project-nav-divider,
+.asset-library-header .project-nav-divider {
+  align-self: center;
+  height: 24px;
+  background: var(--canvas-chrome-border);
+}
+
+.top-bar .project-nav-name,
+.asset-library-header .project-nav-name {
+  align-self: center;
+  max-width: none;
+  padding: 8px 7px;
+  font-size: 14px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+.top-bar .project-nav-name[contenteditable="true"],
+.asset-library-header .project-nav-name[contenteditable="true"] {
+  min-width: 0;
+  outline-offset: -1px;
+}
+
+.asset-library-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 12px;
+}
+
+.asset-library-header .canvas-project-switcher {
+  width: 100%;
+  max-width: 280px;
+  box-shadow: none;
+}
+
+.asset-library-header-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.asset-library-header-button,
+.asset-library-header .asset-library-close {
+  position: static;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  cursor: pointer;
+  backdrop-filter: none;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    transform 0.14s ease;
+}
+
+.asset-library-header-button:hover,
+.asset-library-header .asset-library-close:hover {
+  background: var(--canvas-chrome-hover);
+  color: var(--text);
+}
+
+.asset-library-header-button:active,
+.asset-library-header .asset-library-close:active {
+  transform: scale(0.95);
+}
+
+.asset-library-header-button:focus-visible,
+.asset-library-header .asset-library-close:focus-visible {
+  outline: 2px solid var(--canvas-chrome-focus);
+  outline-offset: 2px;
+}
+
+.asset-library-header-button svg,
+.asset-library-header .asset-library-close svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.9;
+}
+
+/* Mid-left canvas, asset, and account rail */
+.left-rail {
+  top: 50%;
+  bottom: auto;
+  left: 12px;
+  display: block;
+  width: 56px;
+  height: auto;
+  transform: translateY(-50%);
+  transition:
+    left 0.22s ease,
+    opacity 0.16s ease,
+    transform 0.22s ease;
+}
+
+.left-rail .left-rail-stack.top-actions {
+  position: relative;
+  top: auto;
+  right: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  width: 56px;
+  height: auto;
+  padding: 5px;
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 28px;
+  background: var(--canvas-chrome-bg);
+  box-shadow: var(--canvas-chrome-shadow);
+  backdrop-filter: blur(18px) saturate(120%);
+  transition:
+    border-radius 0.18s ease,
+    background 0.16s ease;
+}
+
+.app-shell.agent-open .left-rail .top-actions {
+  right: auto;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.left-rail-stack:hover,
+.left-rail-stack:focus-within {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  background: var(--canvas-chrome-bg-raised);
+}
+
+.left-rail .rail-button,
+.left-rail .profile-anchor {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+}
+
+.left-rail .rail-button {
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--floating-text);
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    transform 0.14s ease;
+}
+
+.left-rail .rail-button:hover,
+.left-rail .rail-button.active {
+  background: var(--canvas-chrome-hover);
+  color: var(--text);
+  transform: none;
+}
+
+.left-rail .rail-button:active {
+  transform: scale(0.95);
+}
+
+.left-rail .rail-button svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.9;
+}
+
+.left-rail .asset-library-trigger {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--floating-text);
+  box-shadow: none;
+}
+
+.left-rail .asset-library-trigger:hover,
+.left-rail .asset-library-trigger.active {
+  background: var(--canvas-chrome-hover);
+  color: var(--text);
+}
+
+.left-rail .profile-anchor {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.left-rail .avatar-button {
+  width: 46px;
+  height: 46px;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--text) 96%, var(--bg)), color-mix(in srgb, var(--text) 78%, var(--bg))),
+    var(--text);
+  color: var(--bg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg) 16%, transparent);
+  cursor: pointer;
+}
+
+.left-rail .avatar-button:hover,
+.left-rail .avatar-button.active {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--text) 100%, var(--bg)), color-mix(in srgb, var(--text) 86%, var(--bg))),
+    var(--text);
+  color: var(--bg);
+}
+
+.left-rail .avatar-button::before {
+  font-size: 16px;
+  font-weight: 560;
+}
+
+.rail-button-tip,
+.left-rail .asset-lib-tooltip,
+.left-rail .action-tip {
+  position: absolute;
+  top: 50%;
+  bottom: auto;
+  left: calc(100% + 10px);
+  z-index: 6;
+  min-width: max-content;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(32, 33, 37, 0.96);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+
+.left-rail .rail-button:hover > .rail-button-tip,
+.left-rail .rail-button:focus-visible > .rail-button-tip,
+.left-rail .profile-anchor:hover > .profile-button-tip,
+.left-rail .profile-anchor:focus-within > .profile-button-tip,
+.left-rail .share-button:hover > .action-tip,
+.left-rail .share-button:focus-visible > .action-tip {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.share-reveal {
+  position: absolute;
+  right: -1px;
+  bottom: calc(100% - 1px);
+  left: -1px;
+  display: grid;
+  place-items: start center;
+  height: 65px;
+  padding: 5px 5px 14px;
+  border: 1px solid var(--canvas-chrome-border);
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  background: var(--canvas-chrome-bg-raised);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateY(18px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s linear 0.2s;
+}
+
+.share-reveal::after {
+  position: absolute;
+  right: 12px;
+  bottom: 6px;
+  left: 12px;
+  height: 1px;
+  background: var(--canvas-chrome-border);
+  content: "";
+}
+
+.left-rail-stack:hover > .share-reveal,
+.left-rail-stack:focus-within > .share-reveal {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.left-rail .share-button {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--floating-text);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.left-rail .share-button:hover {
+  background: var(--canvas-chrome-hover);
+  color: var(--text);
+}
+
+.left-rail .share-button svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.9;
+}
+
+/* Account menu now belongs to the personal entry rather than the top-right corner. */
+.left-rail .profile-menu,
+.left-rail .profile-anchor .profile-menu {
+  top: auto;
+  right: auto;
+  bottom: -2px;
+  left: calc(100% + 14px);
+  z-index: 7;
+  overflow: visible;
+  background: var(--canvas-chrome-bg-raised);
+}
+
+.profile-credit-item .credit-semantic-icon {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
+.profile-credit-value {
+  grid-column: 3;
+  justify-self: end;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.left-rail .profile-shortcut-sheet {
+  right: auto;
+  left: calc(100% + 12px);
+}
+
+.canvas-menu-name.editing {
+  grid-column: 1;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  outline: 1px solid color-mix(in srgb, var(--accent, #5f8cff) 64%, transparent);
+  background: color-mix(in srgb, var(--accent, #5f8cff) 12%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 820;
+  cursor: text;
+}
+
+/* Bottom-left viewport tools */
+.canvas-tools {
+  left: 12px;
+  bottom: 12px;
+}
+
+.canvas-tool-row {
+  gap: 2px;
+  min-height: 48px;
+  padding: 5px;
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 15px;
+  background: var(--canvas-chrome-bg);
+  box-shadow: var(--canvas-chrome-shadow);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.canvas-tool-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.canvas-tool-button:hover,
+.canvas-tool-button.active {
+  background: var(--canvas-chrome-hover);
+  color: var(--text);
+}
+
+.canvas-tool-button svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.9;
+}
+
+.canvas-tool-button-upcoming,
+.canvas-tool-button-upcoming:hover,
+.canvas-tool-button-upcoming:active {
+  background: transparent;
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.38;
+  transform: none;
+}
+
+.canvas-tool-tip {
+  bottom: 45px;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.canvas-tool-button:focus-visible .canvas-tool-tip,
+.canvas-tool-button:hover .canvas-tool-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.canvas-zoom-control,
+.canvas-zoom-control:hover,
+.canvas-zoom-control:focus-within,
+.canvas-zoom-control.value-visible {
+  width: 136px;
+  height: 38px;
+  padding: 0 12px;
+  overflow: visible;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.canvas-zoom-control:hover,
+.canvas-zoom-control:focus-within,
+.canvas-zoom-control.value-visible {
+  background: var(--canvas-chrome-hover);
+}
+
+.canvas-zoom-control input[type="range"] {
+  min-width: 108px;
+}
+
+.canvas-zoom-control input[type="range"]::-webkit-slider-runnable-track {
+  height: 5px;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.canvas-zoom-control input[type="range"]::-webkit-slider-thumb {
+  width: 17px;
+  height: 17px;
+  margin-top: -6px;
+}
+
+.canvas-zoom-control input[type="range"]::-moz-range-track {
+  height: 5px;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.canvas-zoom-control input[type="range"]::-moz-range-thumb {
+  width: 17px;
+  height: 17px;
+}
+
+.canvas-zoom-value,
+.canvas-zoom-control:hover .canvas-zoom-value,
+.canvas-zoom-control:focus-within .canvas-zoom-value,
+.canvas-zoom-control.value-visible .canvas-zoom-value {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  width: auto;
+  min-width: 42px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: visible;
+  border-radius: 8px;
+  background: rgba(32, 33, 37, 0.96);
+  color: #ffffff;
+  font-size: 11px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+
+.canvas-zoom-control:hover .canvas-zoom-value,
+.canvas-zoom-control:focus-within .canvas-zoom-value,
+.canvas-zoom-control.value-visible .canvas-zoom-value {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.canvas-tool-popover {
+  bottom: 58px;
+}
+
+.app-shell.asset-library-open .canvas-tools {
+  left: calc(var(--asset-panel-width) + 12px);
+}
+
+/* Agent is the only persistent control in the top-right corner. */
+.agent-launcher {
+  top: 18px;
+  right: 18px;
+  width: 54px;
+  height: 54px;
+  border-color: var(--canvas-chrome-border);
+  border-radius: 50%;
+  background: var(--canvas-chrome-bg);
+  box-shadow: var(--canvas-chrome-shadow);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.agent-launcher:hover,
+.agent-launcher:focus-visible {
+  border-color: color-mix(in srgb, var(--text) 30%, var(--canvas-chrome-border));
+  box-shadow:
+    var(--canvas-chrome-shadow),
+    0 0 0 4px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.agent-logo {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-logo img {
+  width: 28px;
+  height: 28px;
+}
+
+html[data-theme="dark"] .agent-logo img {
+  filter: invert(1);
+}
+
+.agent-tooltip {
+  top: calc(100% + 9px);
+}
+
+.agent-launcher:focus-visible .agent-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 900px) {
+  .left-rail {
+    left: 10px;
+  }
+
+  .canvas-tools {
+    left: 10px;
+    bottom: 10px;
+  }
+
+  .agent-launcher {
+    top: 10px;
+    right: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .top-bar {
+    top: 62px;
+    left: 10px;
+  }
+
+  .top-bar .canvas-project-switcher {
+    width: min(280px, calc(100vw - 20px));
+  }
+
+  .left-rail .profile-menu,
+  .left-rail .profile-anchor .profile-menu {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    left: 78px;
+    width: auto;
+    overflow-y: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-home-button,
+  .project-switch-button,
+  .left-rail,
+  .left-rail-stack,
+  .left-rail .rail-button,
+  .share-reveal,
+  .rail-button-tip,
+  .canvas-tool-button,
+  .canvas-zoom-control,
+  .canvas-zoom-value,
+  .agent-launcher {
+    transition: none;
+  }
+}

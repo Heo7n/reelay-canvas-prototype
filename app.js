@@ -28,8 +28,10 @@ const projectMenu = document.querySelector("#projectMenu");
 const canvasMenu = document.querySelector("#canvasMenu");
 const canvasMenuList = document.querySelector("#canvasMenuList");
 const canvasMoreMenu = document.querySelector("#canvasMoreMenu");
+const canvasHomeButtons = document.querySelectorAll("#canvasHomeBtn, [data-canvas-home-button]");
 const railLibraryBtn = document.querySelector("#railLibraryBtn");
 const railProfileBtn = document.querySelector("#railProfileBtn");
+const profileAnchor = document.querySelector(".profile-anchor");
 const shareProjectBtn = document.querySelector("#shareProjectBtn");
 const profileMenu = document.querySelector("#profileMenu");
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
@@ -45,8 +47,7 @@ const assetLibraryResizeHandle = document.querySelector("#assetLibraryResizeHand
 const themeModeIcon = document.querySelector("#themeModeIcon");
 const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
-const avatarCreditBadge = document.querySelector("#avatarCreditBadge");
-const avatarCreditValue = document.querySelector("#avatarCreditValue");
+const profileCreditValue = document.querySelector("#profileCreditValue");
 const profileAvatar = document.querySelector("#profileAvatar");
 const profileName = document.querySelector("#profileName");
 const profileEmail = document.querySelector("#profileEmail");
@@ -64,6 +65,10 @@ const multiSelectionChrome = document.querySelector("#multiSelectionChrome");
 const multiSelectionPort = document.querySelector("#multiSelectionPort");
 const selectionToolbar = document.querySelector("#selectionToolbar");
 let profileMenuCloseTimer = null;
+let profilePointerInside = false;
+let projectMenuTrigger = null;
+let canvasMenuTrigger = null;
+let canvasMoreMenuTrigger = null;
 let themeFeedbackTimer = null;
 let selectionSurfaceRadiusWorld = 20;
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
@@ -231,6 +236,9 @@ const state = {
     workspaceName: "组织空间",
     workspaceRole: "member",
   },
+  hostCapabilities: {
+    accountSections: false,
+  },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
   libraryAssets: [],
@@ -340,6 +348,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   onContext(context) {
     state.projectId = String(context.projectId || state.projectId);
     state.projectName = String(context.projectName || state.projectName);
+    state.hostCapabilities.accountSections = context.capabilities?.accountSections === true;
     syncHostedIdentity(context);
     applyCanvasAccessMode("loading");
     syncProjectNavigation();
@@ -471,6 +480,7 @@ function syncHostedIdentity(context) {
   state.identity = { account, displayName, workspaceName, workspaceRole };
   railProfileBtn?.setAttribute("data-initial", initial);
   railProfileBtn?.setAttribute("title", displayName);
+  railProfileBtn?.setAttribute("aria-label", `个人：${displayName}`);
   if (profileAvatar) profileAvatar.textContent = initial;
   if (profileName) profileName.textContent = displayName;
   if (profileEmail) profileEmail.textContent = account || "演示画布";
@@ -498,9 +508,79 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+const panelWidthRules = Object.freeze({
+  assetMin: 380,
+  assetMax: 780,
+  agentMin: 340,
+  agentMax: 640,
+  canvasCorridor: 280,
+});
+
+function isAssetLibraryOpen() {
+  return Boolean(assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden"));
+}
+
+function canShowAssetAndAgent() {
+  return window.innerWidth >= panelWidthRules.assetMin
+    + panelWidthRules.agentMin
+    + panelWidthRules.canvasCorridor;
+}
+
+function clampPanelWidth(width, minWidth, maxWidth) {
+  const safeMax = Math.max(0, maxWidth);
+  return clamp(width, Math.min(minWidth, safeMax), safeMax);
+}
+
+function applyAssetLibraryWidth(width) {
+  state.assetLibraryWidth = width;
+  appShell?.style.setProperty("--asset-panel-width", `${Math.round(width)}px`);
+}
+
+function applyAgentWidth(width) {
+  state.agentWidth = width;
+  agentDock?.style.setProperty("--agent-width", `${width}px`);
+  appShell?.style.setProperty("--agent-width", `${width}px`);
+}
+
+function reconcileDualPanelWidths(preferredPanel) {
+  if (!state.agentOpen || !isAssetLibraryOpen() || !canShowAssetAndAgent()) return;
+  const capacity = window.innerWidth - panelWidthRules.canvasCorridor;
+  let nextAssetWidth;
+  let nextAgentWidth;
+  if (preferredPanel === "asset") {
+    nextAssetWidth = clampPanelWidth(
+      state.assetLibraryWidth,
+      panelWidthRules.assetMin,
+      Math.min(panelWidthRules.assetMax, capacity - panelWidthRules.agentMin),
+    );
+    nextAgentWidth = clampPanelWidth(
+      state.agentWidth,
+      panelWidthRules.agentMin,
+      Math.min(panelWidthRules.agentMax, capacity - nextAssetWidth),
+    );
+  } else {
+    nextAgentWidth = clampPanelWidth(
+      state.agentWidth,
+      panelWidthRules.agentMin,
+      Math.min(panelWidthRules.agentMax, capacity - panelWidthRules.assetMin),
+    );
+    nextAssetWidth = clampPanelWidth(
+      state.assetLibraryWidth,
+      panelWidthRules.assetMin,
+      Math.min(panelWidthRules.assetMax, capacity - nextAgentWidth),
+    );
+  }
+  applyAssetLibraryWidth(nextAssetWidth);
+  applyAgentWidth(nextAgentWidth);
+}
+
 function setAssetLibraryWidth(width) {
-  state.assetLibraryWidth = clamp(width, 380, Math.min(780, window.innerWidth - 96));
-  appShell?.style.setProperty("--asset-panel-width", `${Math.round(state.assetLibraryWidth)}px`);
+  const opposingWidth = state.agentOpen ? state.agentWidth : 0;
+  const viewportMax = Math.min(panelWidthRules.assetMax, window.innerWidth - 96);
+  const maxWidth = state.agentOpen && isAssetLibraryOpen()
+    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.canvasCorridor - opposingWidth)
+    : viewportMax;
+  applyAssetLibraryWidth(clampPanelWidth(width, panelWidthRules.assetMin, maxWidth));
   renderSelectionToolbar();
   renderMinimap();
   scheduleNodePopoverLayouts();
@@ -566,6 +646,7 @@ function syncProjectNavigation() {
   const canvas = getActiveCanvas();
   projectNameEls.forEach((element) => {
     if (element.textContent !== state.projectName) element.textContent = state.projectName;
+    element.setAttribute("aria-label", `项目名称 ${state.projectName}，按 Enter 重命名`);
   });
   canvasNameEls.forEach((element) => {
     const nextName = canvas?.name || "画布 1";
@@ -627,12 +708,16 @@ function requestHostNavigation(target) {
   canvasPersistence.post("canvas:navigate", { target });
 }
 
-function requestHostAccountSettings() {
+function requestHostAccountSettings(section = "profile") {
   if (window.parent === window) {
     showActionToast("请从 Reelay 应用主页进入账号设置");
     return;
   }
-  canvasPersistence.post("canvas:open-account");
+  const nextSection = section === "credits" ? "credits" : "profile";
+  const payload = nextSection === "credits" && state.hostCapabilities.accountSections
+    ? { section: "credits" }
+    : {};
+  canvasPersistence.post("canvas:open-account", payload);
 }
 
 function flushCanvasDocumentSave() {
@@ -2053,11 +2138,11 @@ function formatCredit(value) {
 }
 
 function syncCreditDisplay() {
-  const credits = formatCredit(state.account.credits);
-  if (avatarCreditBadge) {
-    avatarCreditBadge.setAttribute("aria-label", `可用积分 ${credits}`);
-  }
-  if (avatarCreditValue) avatarCreditValue.textContent = credits;
+  const credits = new Intl.NumberFormat("zh-CN").format(Math.max(0, Math.round(state.account.credits || 0)));
+  if (!profileCreditValue) return;
+  profileCreditValue.textContent = credits;
+  profileCreditValue.closest("[data-profile-action='credits']")
+    ?.setAttribute("aria-label", `查看我的积分，当前 ${credits}`);
 }
 
 function hasEnoughCredits(cost) {
@@ -3163,7 +3248,7 @@ function syncNarrowViewportIsolation({ focusPanel = false } = {}) {
 }
 
 function openAssetLibrary(targetNodeId = null) {
-  if (narrowViewportQuery.matches && state.agentOpen) setAgentOpen(false);
+  if (state.agentOpen && !canShowAssetAndAgent()) setAgentOpen(false);
   state.libraryTargetNodeId = targetNodeId;
   if (targetNodeId) {
     state.libraryView = "assets";
@@ -3174,6 +3259,7 @@ function openAssetLibrary(targetNodeId = null) {
     assetLibraryPanel.setAttribute("aria-hidden", "false");
   }
   appShell?.classList.add("asset-library-open");
+  if (state.agentOpen) reconcileDualPanelWidths("asset");
   railLibraryBtn?.classList.add("active");
   railLibraryBtn?.setAttribute("aria-expanded", "true");
   closeProfileMenu();
@@ -3789,6 +3875,10 @@ function getSelectedNodes() {
   return state.nodes.filter((node) => state.selectedIds.has(node.id));
 }
 
+function getExactSelectionGroup(selectedNodes = getSelectedNodes()) {
+  return canvasSpatialSelection.getExactSelectionGroup(selectedNodes, state.groups);
+}
+
 function isSelectionFrameDragAction(action = state.action) {
   return action?.interactionSource === "selection-frame"
     && (action.type === "drag-candidate" || action.type === "drag-nodes");
@@ -3824,6 +3914,7 @@ function getSelectionVisualBounds() {
 function renderSelectionToolbar() {
   if (!selectionToolbar || !multiSelectionSurface || !multiSelectionChrome) return;
   const selectedNodes = getSelectedNodes();
+  const exactSelectionGroup = getExactSelectionGroup(selectedNodes);
   const bounds = getSelectionVisualBounds();
   const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
   if (!screenRect) {
@@ -3842,6 +3933,9 @@ function renderSelectionToolbar() {
   }
 
   shell.classList.add("multi-selection-active");
+  if (exactSelectionGroup) {
+    shell.classList.remove("selection-frame-hover", "selection-frame-pressed");
+  }
 
   const isSelectionConnecting = state.action?.type === "connect"
     && state.action.mode === "selection-output"
@@ -3851,8 +3945,9 @@ function renderSelectionToolbar() {
     element.style.top = `${screenRect.top}px`;
     element.style.width = `${screenRect.width}px`;
     element.style.height = `${screenRect.height}px`;
-    element.classList.remove("hidden");
   });
+  multiSelectionChrome.classList.remove("hidden");
+  multiSelectionSurface.classList.toggle("hidden", Boolean(exactSelectionGroup));
   multiSelectionChrome.classList.toggle("is-connecting", isSelectionConnecting);
   if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
   if (isSelectionConnecting) {
@@ -6552,17 +6647,18 @@ function applyTheme(mode = state.themeMode, options = {}) {
 }
 
 function setAgentWidth(width) {
-  const maxWidth = Math.min(640, window.innerWidth);
-  const minWidth = Math.min(340, maxWidth);
-  state.agentWidth = clamp(width, minWidth, maxWidth);
-  agentDock?.style.setProperty("--agent-width", `${state.agentWidth}px`);
-  appShell?.style.setProperty("--agent-width", `${state.agentWidth}px`);
+  const opposingWidth = isAssetLibraryOpen() ? state.assetLibraryWidth : 0;
+  const viewportMax = Math.min(panelWidthRules.agentMax, window.innerWidth);
+  const maxWidth = state.agentOpen && isAssetLibraryOpen()
+    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.canvasCorridor - opposingWidth)
+    : viewportMax;
+  applyAgentWidth(clampPanelWidth(width, panelWidthRules.agentMin, maxWidth));
   renderSelectionToolbar();
   scheduleNodePopoverLayouts();
 }
 
 function setAgentOpen(open) {
-  if (open && narrowViewportQuery.matches && assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")) {
+  if (open && isAssetLibraryOpen() && !canShowAssetAndAgent()) {
     closeAssetLibrary();
   }
   state.agentOpen = open;
@@ -6572,6 +6668,7 @@ function setAgentOpen(open) {
   appShell?.classList.toggle("agent-open", open);
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
+  if (open && isAssetLibraryOpen()) reconcileDualPanelWidths("agent");
   if (agentPanel) {
     agentPanel.inert = !open;
     agentPanel.setAttribute("aria-hidden", String(!open));
@@ -6698,20 +6795,37 @@ function commitProjectRename(nextName) {
   syncProjectNavigation();
 }
 
-function commitCanvasRename(nextName) {
-  if (!requireCanvasMutation()) return;
-  const canvas = getActiveCanvas();
-  if (!canvas) return;
-  canvas.name = String(nextName || canvas.name || "画布 1").trim() || "画布 1";
+function commitCanvasRename(nextName, canvasId = state.activeCanvasId, { renderMenu = true } = {}) {
+  if (!requireCanvasMutation()) return false;
+  const canvas = canvasRuntimeStore.getCanvas(canvasId);
+  if (!canvas) return false;
+  const normalizedName = String(nextName || canvas.name || "画布 1").trim() || "画布 1";
+  if (normalizedName === canvas.name) {
+    syncProjectNavigation();
+    if (renderMenu) renderCanvasMenu();
+    return true;
+  }
+  canvas.name = normalizedName;
   syncProjectNavigation();
-  renderCanvasMenu();
+  if (renderMenu) renderCanvasMenu();
   scheduleCanvasDocumentSave();
+  return true;
 }
 
 function positionMenu(menu, anchor, options = {}) {
   if (!menu || !anchor) return;
   const rect = anchor.getBoundingClientRect();
   const width = options.width || menu.offsetWidth || 190;
+  if (options.placement === "right") {
+    const height = menu.offsetHeight || 60;
+    const left = clamp(rect.right + (options.gap ?? 8), 8, window.innerWidth - width - 8);
+    const top = clamp(rect.top, 8, window.innerHeight - height - 8);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.style.right = "auto";
+    menu.style.bottom = "auto";
+    return;
+  }
   const left = clamp(options.alignRight ? rect.right - width : rect.left, 8, window.innerWidth - width - 8);
   const top = clamp(rect.bottom + (options.gap ?? 8), 8, window.innerHeight - 60);
   menu.style.left = `${left}px`;
@@ -6720,10 +6834,42 @@ function positionMenu(menu, anchor, options = {}) {
   menu.style.bottom = "auto";
 }
 
-function closeProjectMenus() {
+function setMenuTriggerExpanded(selector, activeTrigger = null) {
+  document.querySelectorAll(selector).forEach((trigger) => {
+    trigger.setAttribute("aria-expanded", String(trigger === activeTrigger));
+  });
+}
+
+function focusFirstMenuControl(menu) {
+  window.requestAnimationFrame(() => {
+    menu?.querySelector('[role="menuitem"]:not([disabled]), button:not([disabled]), input:not([disabled])')?.focus();
+  });
+}
+
+function closeCanvasMoreMenu({ returnFocus = false } = {}) {
+  const focusTarget = canvasMoreMenuTrigger;
+  canvasMoreMenu?.classList.add("hidden");
+  canvasMoreMenuTrigger?.setAttribute("aria-expanded", "false");
+  canvasMoreMenuTrigger = null;
+  if (returnFocus && canRestoreDialogFocus(focusTarget)) {
+    window.requestAnimationFrame(() => focusTarget.focus());
+  }
+}
+
+function closeProjectMenus({ returnFocus = false } = {}) {
+  const projectWasOpen = Boolean(projectMenu && !projectMenu.classList.contains("hidden"));
+  const canvasWasOpen = Boolean(canvasMenu && !canvasMenu.classList.contains("hidden"));
+  const focusTarget = projectWasOpen ? projectMenuTrigger : canvasWasOpen ? canvasMenuTrigger : null;
   projectMenu?.classList.add("hidden");
   canvasMenu?.classList.add("hidden");
-  canvasMoreMenu?.classList.add("hidden");
+  closeCanvasMoreMenu();
+  setMenuTriggerExpanded("[data-project-menu-button]");
+  setMenuTriggerExpanded("[data-canvas-menu-button]");
+  projectMenuTrigger = null;
+  canvasMenuTrigger = null;
+  if (returnFocus && canRestoreDialogFocus(focusTarget)) {
+    window.requestAnimationFrame(() => focusTarget.focus());
+  }
 }
 
 function renderCanvasMenu() {
@@ -6732,12 +6878,12 @@ function renderCanvasMenu() {
   canvasMenuList.innerHTML = state.canvases
     .map(
       (canvas) => `
-        <div class="canvas-menu-row ${canvas.id === activeId ? "active" : ""}" data-canvas-id="${canvas.id}">
-          <button class="canvas-menu-switch" type="button" data-canvas-switch="${canvas.id}">
-            <span>${escapeHtml(canvas.name)}</span>
+        <div class="canvas-menu-row ${canvas.id === activeId ? "active" : ""}" role="none" data-canvas-id="${canvas.id}">
+          <button class="canvas-menu-switch" type="button" role="menuitem" data-canvas-switch="${canvas.id}">
+            <span class="canvas-menu-name">${escapeHtml(canvas.name)}</span>
             ${canvas.id === activeId ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
           </button>
-          <button class="canvas-menu-more-button" type="button" data-canvas-more="${canvas.id}" title="画布操作" aria-label="画布操作">
+          <button class="canvas-menu-more-button" type="button" role="menuitem" data-canvas-more="${canvas.id}" title="画布操作" aria-label="画布操作" aria-controls="canvasMoreMenu" aria-expanded="false" aria-haspopup="menu">
             <i data-lucide="more-horizontal" aria-hidden="true"></i>
           </button>
         </div>
@@ -6747,25 +6893,98 @@ function renderCanvasMenu() {
   refreshIcons();
 }
 
-function openProjectMenu(anchor) {
+function openProjectMenu(anchor, { focusMenu = false } = {}) {
+  const wasOpen = projectMenuTrigger === anchor && !projectMenu?.classList.contains("hidden");
   closeCanvasPanel();
-  canvasMenu?.classList.add("hidden");
-  canvasMoreMenu?.classList.add("hidden");
-  projectMenu?.classList.toggle("hidden");
-  if (!projectMenu?.classList.contains("hidden")) {
-    positionMenu(projectMenu, anchor, { width: 190 });
+  if (wasOpen && focusMenu) {
+    focusFirstMenuControl(projectMenu);
+    return;
   }
+  closeProjectMenus();
+  if (wasOpen || !projectMenu) return;
+  projectMenuTrigger = anchor;
+  projectMenu.classList.remove("hidden");
+  setMenuTriggerExpanded("[data-project-menu-button]", anchor);
+  positionMenu(projectMenu, anchor, { width: 190 });
+  if (focusMenu) focusFirstMenuControl(projectMenu);
 }
 
-function openCanvasMenu(anchor) {
+function openCanvasMenu(anchor, { focusMenu = false } = {}) {
+  const wasOpen = canvasMenuTrigger === anchor && !canvasMenu?.classList.contains("hidden");
   closeCanvasPanel();
-  projectMenu?.classList.add("hidden");
-  canvasMoreMenu?.classList.add("hidden");
-  renderCanvasMenu();
-  canvasMenu?.classList.toggle("hidden");
-  if (!canvasMenu?.classList.contains("hidden")) {
-    positionMenu(canvasMenu, anchor, { width: 220 });
+  if (wasOpen && focusMenu) {
+    focusFirstMenuControl(canvasMenu);
+    return;
   }
+  closeProjectMenus();
+  if (wasOpen || !canvasMenu) return;
+  renderCanvasMenu();
+  canvasMenuTrigger = anchor;
+  canvasMenu.classList.remove("hidden");
+  setMenuTriggerExpanded("[data-canvas-menu-button]", anchor);
+  positionMenu(canvasMenu, anchor, anchor.closest(".left-rail")
+    ? { width: 220, placement: "right", gap: 10 }
+    : { width: 220 });
+  if (focusMenu) focusFirstMenuControl(canvasMenu);
+}
+
+function beginCanvasMenuRename(canvasId) {
+  if (!requireCanvasMutation()) return;
+  const canvas = canvasRuntimeStore.getCanvas(canvasId);
+  if (!canvas || !canvasMenuList) return;
+  closeCanvasMoreMenu();
+  renderCanvasMenu();
+  canvasMenu?.classList.remove("hidden");
+  const row = [...canvasMenuList.querySelectorAll("[data-canvas-id]")]
+    .find((element) => element.dataset.canvasId === canvasId);
+  const switchButton = row?.querySelector(".canvas-menu-switch");
+  if (!switchButton) return;
+  const nameInput = document.createElement("input");
+  nameInput.className = "canvas-menu-name editing";
+  nameInput.type = "text";
+  nameInput.value = canvas.name;
+  nameInput.setAttribute("aria-label", "重命名画布");
+  switchButton.replaceWith(nameInput);
+  nameInput.focus();
+  nameInput.select();
+
+  let finished = false;
+  const finish = (commit, { focusTarget = null } = {}) => {
+    if (finished) return;
+    finished = true;
+    const previousName = canvas.name;
+    const nextName = commit ? nameInput.value.trim() : previousName;
+    if (commit) {
+      commitCanvasRename(nextName || previousName, canvasId, { renderMenu: false });
+    }
+    const resolvedName = canvasRuntimeStore.getCanvas(canvasId)?.name || previousName;
+    const restoredName = switchButton.querySelector(".canvas-menu-name");
+    if (restoredName) restoredName.textContent = resolvedName;
+    if (nameInput.isConnected) nameInput.replaceWith(switchButton);
+    if (focusTarget?.isConnected) {
+      focusTarget.focus({ preventScroll: true });
+    }
+  };
+  nameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      finish(true, { focusTarget: switchButton });
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      finish(false, { focusTarget: switchButton });
+    } else if (event.key === "Tab") {
+      const controls = [...canvasMenu.querySelectorAll("button:not([disabled]), input:not([disabled])")];
+      const currentIndex = controls.indexOf(nameInput);
+      const nextIndex = currentIndex + (event.shiftKey ? -1 : 1);
+      const focusTarget = controls[nextIndex] || canvasMenuTrigger;
+      event.preventDefault();
+      event.stopPropagation();
+      finish(true, { focusTarget });
+    }
+  });
+  nameInput.addEventListener("blur", () => finish(true), { once: true });
 }
 
 function addCanvas() {
@@ -6833,85 +7052,23 @@ function deleteCanvas(canvasId) {
   });
 }
 
-function getVisibleNameElement(kind) {
-  const elements = kind === "project" ? projectNameEls : canvasNameEls;
-  return [...elements].find((element) => element.offsetParent !== null) || elements[0] || null;
-}
-
-function resetPrototypeProject() {
-  if (!requireCanvasMutation()) return;
-  cancelGenerationTasks((task) => task.projectId === state.projectId);
-  cancelPromptOptimizationTasks((task) => task.projectId === state.projectId);
-  state.projectId = crypto.randomUUID();
-  state.projectName = "Untitled";
-  state.selectedIds = new Set();
-  state.activeId = null;
-  state.activeGroupId = null;
-  state.activeConnectionId = null;
-  clearRecentConnectionFeedback();
-  state.mediaToolbarNodeId = null;
-  state.libraryAssets = [];
-  state.libraryView = "canvas";
-  state.libraryScope = "project";
-  state.libraryTargetNodeId = null;
-  state.librarySearch = "";
-  state.libraryFilter = "all";
-  state.libraryCollapsedGroups = new Set();
-  state.pendingUploadNodeId = null;
-  state.pendingCanvasUploadPoint = null;
-  state.nodeCreatePoint = null;
-  state.canvasMoreTargetId = null;
-  initializeCanvases();
-  applyTransform();
-  render();
-}
-
 function handleProjectMenuAction(action) {
   closeProjectMenus();
-  if (action === "home") {
-    requestHostNavigation("home");
-    return;
-  }
   if (action === "all") {
     requestHostNavigation("projects");
-    return;
-  }
-  if (action === "create") {
-    showConfirmDialog({
-      title: "创建新项目",
-      body: "当前前端原型没有持久化保存。继续后会重置为一个新的空白项目。",
-      confirmText: "创建",
-      onConfirm: () => {
-        resetPrototypeProject();
-        showActionToast("已创建新项目");
-      },
-    });
-    return;
-  }
-  if (action === "delete") {
-    showConfirmDialog({
-      title: "删除项目",
-      body: "当前项目会在原型中被清空并回到初始状态。此操作当前不可撤销。",
-      confirmText: "删除",
-      danger: true,
-      onConfirm: () => {
-        resetPrototypeProject();
-        showActionToast("项目已删除");
-      },
-    });
   }
 }
 
 function handleCanvasMoreAction(action) {
   const canvasId = state.canvasMoreTargetId || state.activeCanvasId;
+  if (action === "rename") {
+    switchCanvas(canvasId);
+    requestAnimationFrame(() => beginCanvasMenuRename(canvasId));
+    return;
+  }
   closeProjectMenus();
   if (action === "open") {
     showActionToast("多窗口画布将在正式工作台中打开");
-    return;
-  }
-  if (action === "rename") {
-    switchCanvas(canvasId);
-    requestAnimationFrame(() => beginInlineRename(getVisibleNameElement("canvas")));
     return;
   }
   if (action === "duplicate") {
@@ -7183,6 +7340,7 @@ function isSelectionFrameDragTarget(pointer) {
     !multiSelectionChrome
     || multiSelectionChrome.classList.contains("hidden")
     || state.selectedIds.size < 2
+    || getExactSelectionGroup()
     || !isCanvasMutationAllowed()
     || !isCanvasSurface(pointer?.target)
     || state.action
@@ -7218,6 +7376,7 @@ function isConnectionDropSurface(target) {
       ".selection-toolbar",
       ".group-toolbar",
       ".canvas-controls",
+      ".canvas-tools",
       ".left-rail",
       ".top-bar",
       ".top-actions",
@@ -7261,6 +7420,7 @@ function shouldBypassCanvasWheel(target) {
         ".agent-model-menu",
         ".profile-menu",
         ".profile-help-inline-panel",
+        ".canvas-tools",
         ".canvas-tool-popover",
         ".toolbar-dropdown",
         ".selection-toolbar",
@@ -7298,7 +7458,7 @@ function beginMarquee(event) {
 
 function beginSelectionFrameDrag(event) {
   const selectedNodes = getSelectedNodes();
-  if (selectedNodes.length < 2) return false;
+  if (selectedNodes.length < 2 || getExactSelectionGroup(selectedNodes)) return false;
   const activeId = selectedNodes.some((node) => node.id === state.activeId)
     ? state.activeId
     : selectedNodes[0].id;
@@ -8087,6 +8247,12 @@ assetLibraryGrid?.addEventListener("dragstart", (event) => {
 });
 
 shareProjectBtn?.addEventListener("click", shareProject);
+canvasHomeButtons.forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    requestHostNavigation("home");
+  });
+});
 
 function clearProfileMenuCloseTimer() {
   window.clearTimeout(profileMenuCloseTimer);
@@ -8115,48 +8281,80 @@ function keepProfileHelpOpenForPointer(event) {
   }
 }
 
-function openProfileMenu() {
+function openProfileMenu({ focusMenu = false } = {}) {
   clearProfileMenuCloseTimer();
   profileMenu?.classList.remove("hidden");
   railProfileBtn?.classList.add("active");
+  railProfileBtn?.setAttribute("aria-expanded", "true");
+  if (focusMenu) focusFirstMenuControl(profileMenu);
 }
 
-function closeProfileMenu() {
+function closeProfileMenu({ returnFocus = false } = {}) {
   clearProfileMenuCloseTimer();
   profileMenu?.classList.add("hidden");
   railProfileBtn?.classList.remove("active");
+  railProfileBtn?.setAttribute("aria-expanded", "false");
   setProfileHelpOpen(false);
+  if (returnFocus && canRestoreDialogFocus(railProfileBtn)) {
+    window.requestAnimationFrame(() => railProfileBtn.focus());
+  }
 }
 
 function scheduleCloseProfileMenu() {
   clearProfileMenuCloseTimer();
-  profileMenuCloseTimer = window.setTimeout(closeProfileMenu, 180);
+  profileMenuCloseTimer = window.setTimeout(() => {
+    profileMenuCloseTimer = null;
+    if (profilePointerInside || profileAnchor?.contains(document.activeElement)) return;
+    closeProfileMenu();
+  }, 180);
 }
 
 railProfileBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
+  openProfileMenu({ focusMenu: event.detail === 0 });
+});
+
+profileAnchor?.addEventListener("pointerenter", () => {
+  profilePointerInside = true;
   openProfileMenu();
 });
 
-railProfileBtn?.addEventListener("pointerenter", () => {
-  openProfileMenu();
+profileAnchor?.addEventListener("pointerleave", () => {
+  profilePointerInside = false;
+  scheduleCloseProfileMenu();
 });
-
-railProfileBtn?.addEventListener("pointerleave", scheduleCloseProfileMenu);
 
 railProfileBtn?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
+  if (event.key === "Escape" && !profileMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProfileMenu({ returnFocus: true });
+    return;
+  }
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    openProfileMenu({ focusMenu: true });
+  }
+});
+
+profileMenu?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
   event.preventDefault();
   event.stopPropagation();
-  openProfileMenu();
+  closeProfileMenu({ returnFocus: true });
+});
+
+profileAnchor?.addEventListener("focusout", () => {
+  window.setTimeout(() => {
+    if (!profilePointerInside && !profileAnchor.contains(document.activeElement)) closeProfileMenu();
+  }, 0);
 });
 
 profileMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 
-profileMenu?.addEventListener("pointerenter", clearProfileMenuCloseTimer);
-profileMenu?.addEventListener("pointerleave", scheduleCloseProfileMenu);
 profileMenu?.addEventListener("pointermove", keepProfileHelpOpenForPointer);
 
 profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("pointerenter", () => {
@@ -8186,11 +8384,18 @@ profileMenu?.addEventListener("click", (event) => {
     applyTheme(state.themeMode === "light" ? "dark" : "light", { flash: true });
     return;
   }
-  if (action === "account") {
+  if (action === "account" || action === "profile") {
     event.preventDefault();
     event.stopPropagation();
     closeProfileMenu();
-    requestHostAccountSettings();
+    requestHostAccountSettings("profile");
+    return;
+  }
+  if (action === "credits") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProfileMenu();
+    requestHostAccountSettings("credits");
     return;
   }
   if (action === "logout") {
@@ -8310,21 +8515,34 @@ zoomSlider?.addEventListener("input", (event) => {
 document.querySelectorAll("[data-project-menu-button]").forEach((button) => {
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    openProjectMenu(button);
+    openProjectMenu(button, { focusMenu: event.detail === 0 });
+  });
+  button.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openProjectMenu(button, { focusMenu: true });
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProjectMenus({ returnFocus: true });
+    }
   });
 });
 
 document.querySelectorAll("[data-canvas-menu-button]").forEach((button) => {
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (event.detail > 1) return;
-    openCanvasMenu(button);
+    openCanvasMenu(button, { focusMenu: event.detail === 0 });
   });
-  button.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    closeProjectMenus();
-    beginInlineRename(button.querySelector("[data-canvas-name]"));
+  button.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openCanvasMenu(button, { focusMenu: true });
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProjectMenus({ returnFocus: true });
+    }
   });
 });
 
@@ -8334,25 +8552,11 @@ projectNameEls.forEach((element) => {
     beginInlineRename(element);
   });
   element.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
+    if (element.contentEditable !== "true" && (event.key === "Enter" || event.key === "F2")) {
       event.preventDefault();
-      finishInlineRename(element, true);
+      beginInlineRename(element);
+      return;
     }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      finishInlineRename(element, false);
-    }
-  });
-  element.addEventListener("blur", () => finishInlineRename(element, true));
-});
-
-canvasNameEls.forEach((element) => {
-  element.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    beginInlineRename(element);
-  });
-  element.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       finishInlineRename(element, true);
@@ -8367,6 +8571,27 @@ canvasNameEls.forEach((element) => {
 
 [projectMenu, canvasMenu, canvasMoreMenu].forEach((menu) => {
   menu?.addEventListener("pointerdown", (event) => event.stopPropagation());
+});
+
+projectMenu?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeProjectMenus({ returnFocus: true });
+});
+
+canvasMenu?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.target.closest("input.canvas-menu-name.editing")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeProjectMenus({ returnFocus: true });
+});
+
+canvasMoreMenu?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeCanvasMoreMenu({ returnFocus: true });
 });
 
 projectMenu?.addEventListener("click", (event) => {
@@ -8385,10 +8610,16 @@ canvasMenu?.addEventListener("click", (event) => {
   }
   const moreButton = event.target.closest("[data-canvas-more]");
   if (moreButton) {
+    const wasOpen = canvasMoreMenuTrigger === moreButton && !canvasMoreMenu?.classList.contains("hidden");
+    closeCanvasMoreMenu();
+    if (wasOpen) return;
     state.canvasMoreTargetId = moreButton.dataset.canvasMore;
+    canvasMoreMenuTrigger = moreButton;
+    moreButton.setAttribute("aria-expanded", "true");
     canvasMoreMenu?.classList.remove("hidden");
     if (!canvasMoreMenu?.classList.contains("hidden")) {
       positionMenu(canvasMoreMenu, moreButton, { width: 178, gap: 4 });
+      if (event.detail === 0) focusFirstMenuControl(canvasMoreMenu);
     }
     return;
   }
@@ -8485,6 +8716,25 @@ agentResizeHandle?.addEventListener("pointerdown", (event) => {
   agentResizeHandle.setPointerCapture(event.pointerId);
 });
 
+document.addEventListener("focusin", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const projectOpen = Boolean(projectMenu && !projectMenu.classList.contains("hidden"));
+  const canvasOpen = Boolean(canvasMenu && !canvasMenu.classList.contains("hidden"));
+  if (projectOpen && !projectMenu.contains(target) && target !== projectMenuTrigger) {
+    closeProjectMenus();
+    return;
+  }
+  if (
+    canvasOpen
+    && !canvasMenu.contains(target)
+    && !canvasMoreMenu?.contains(target)
+    && target !== canvasMenuTrigger
+  ) {
+    closeProjectMenus();
+  }
+});
+
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   if (!target?.closest(".agent-actions, .agent-history-menu, .agent-model-wrap")) {
@@ -8518,22 +8768,21 @@ document.addEventListener("click", (event) => {
 });
 
 window.addEventListener("resize", () => {
-  setAssetLibraryWidth(state.assetLibraryWidth);
-  syncPromptPanelLayouts();
-  renderSelectionToolbar();
-  renderMinimap();
-  if (
-    narrowViewportQuery.matches &&
-    state.agentOpen &&
-    assetLibraryPanel &&
-    !assetLibraryPanel.classList.contains("hidden")
-  ) {
+  if (state.agentOpen && isAssetLibraryOpen() && !canShowAssetAndAgent()) {
     if (agentDock?.contains(document.activeElement)) {
       closeAssetLibrary();
     } else {
       setAgentOpen(false);
     }
   }
+  if (state.agentOpen && isAssetLibraryOpen()) {
+    reconcileDualPanelWidths(assetLibraryPanel?.contains(document.activeElement) ? "asset" : "agent");
+  }
+  setAssetLibraryWidth(state.assetLibraryWidth);
+  setAgentWidth(state.agentWidth);
+  syncPromptPanelLayouts();
+  renderSelectionToolbar();
+  renderMinimap();
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
 });
 

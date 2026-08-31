@@ -3,9 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const [appSource, appCss, html] = await Promise.all([
+const [appSource, appCss, canvasChromeCss, stylesEntry, html] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
+  readFile(new URL("styles/canvas-chrome.css", root), "utf8"),
+  readFile(new URL("styles.css", root), "utf8"),
   readFile(new URL("index.html", root), "utf8"),
 ]);
 
@@ -14,9 +16,11 @@ test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
     appSource,
     /account:\s*\{\s*credits:\s*3000,\s*consumedCredits:\s*0,?\s*\}/,
   );
-  assert.match(html, /id="avatarCreditBadge"[^>]*>[\s\S]*?<img[^>]*src="\.\/assets\/icons\/credit-prism\.svg"[^>]*>[\s\S]*?id="avatarCreditValue">3000<\/span>/);
-  assert.doesNotMatch(html, /id="avatarCreditBadge"[^>]*(?:role="button"|tabindex=)/);
-  assert.doesNotMatch(appSource, /avatarCreditBadge\?\.addEventListener/);
+  assert.match(html, /data-profile-action="credits"[^>]*>[\s\S]*?<img[^>]*src="\.\/assets\/icons\/credit-prism\.svg"[^>]*>[\s\S]*?id="profileCreditValue">3,000<\/strong>/);
+  assert.doesNotMatch(html, /id="avatarCredit(?:Badge|Value)"/);
+  assert.match(appSource, /const profileCreditValue = document\.querySelector\("#profileCreditValue"\)/);
+  assert.match(appSource, /function syncCreditDisplay\(\)[\s\S]*?new Intl\.NumberFormat\("zh-CN"\)[\s\S]*?profileCreditValue\.textContent = credits[\s\S]*?查看我的积分，当前 \$\{credits\}/);
+  assert.doesNotMatch(appSource, /avatarCredit(?:Badge|Value)/);
 });
 
 test("generator nodes keep their creation modality and only expose compatible models", () => {
@@ -334,8 +338,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-group-surfaces-53/);
-  assert.match(html, /app\.js\?v=20260831-group-surfaces-53/);
+  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-56/);
+  assert.match(html, /app\.js\?v=20260831-canvas-chrome-57/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -486,7 +490,6 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.match(appSource, /function completePromptOptimization\(taskId\)[\s\S]*?buildOptimizedPrompt\(task\.sourcePrompt\)[\s\S]*?pushCanvasUndoAction\(canvas,[\s\S]*?scheduleCanvasDocumentSave\(\)/);
   assert.match(appSource, /cancelPromptOptimizationTasks\([\s\S]*?task\.canvasId === activeCanvas\.id && selectedNodeIds\.has\(task\.nodeId\)/);
   assert.match(appSource, /cancelPromptOptimizationTasks\(\(task\) => task\.canvasId === canvasId\)/);
-  assert.match(appSource, /cancelPromptOptimizationTasks\(\(task\) => task\.projectId === state\.projectId\)/);
   assert.doesNotMatch(appSource, /promptOptimization:\s*(?:true|false)/);
   assert.match(appCss, /\.prompt-optimization-button\.is-processing \.prompt-optimization-spinner\s*\{[\s\S]*?animation:\s*promptOptimizationSpin 720ms linear infinite/);
   assert.match(appSource, /function advancedSettingsPanel\(node\)[\s\S]*?getNodeGenerationMode\(node\) === "video"[\s\S]*?自动校验素材[\s\S]*?智能引用 AutoLink[\s\S]*?assetValidationSetting[\s\S]*?定时任务/);
@@ -593,9 +596,9 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.doesNotMatch(html, /id="selectionCount"|批量下载（默认）/);
   assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getSelectionScreenRect\(bounds,\s*state,\s*0\)/);
   assert.match(appSource, /function getDefaultGroupBounds\(nodes\)[\s\S]*?groupFrameRules\.paddingX[\s\S]*?groupFrameRules\.paddingTop[\s\S]*?groupFrameRules\.paddingBottom/);
-  assert.match(appCss, /:root\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\([\s\S]*?--multi-selection-boundary:\s*rgba\([\s\S]*?--multi-selection-depth:\s*rgba\(/);
-  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\([\s\S]*?--multi-selection-boundary:\s*rgba\([\s\S]*?--multi-selection-depth:\s*rgba\(/);
-  assert.match(appCss, /\.multi-selection-surface\s*\{[\s\S]*?z-index:\s*1;[\s\S]*?border:\s*1px solid var\(--multi-selection-boundary\)[\s\S]*?border-radius:\s*var\(--multi-selection-surface-radius,[\s\S]*?background:\s*var\(--multi-selection-surface-fill\)[\s\S]*?box-shadow:\s*0 8px 24px var\(--multi-selection-depth\)[\s\S]*?pointer-events:\s*none/);
+  assert.match(appCss, /:root\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\(205, 214, 228, 0\.085\)[\s\S]*?--multi-selection-boundary:\s*rgba\(225, 232, 242, 0\.18\)[\s\S]*?--multi-selection-depth:\s*rgba\(/);
+  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\(45, 59, 80, 0\.034\)[\s\S]*?--multi-selection-boundary:\s*rgba\(37, 49, 68, 0\.055\)[\s\S]*?--multi-selection-depth:\s*rgba\(/);
+  assert.match(appCss, /\.multi-selection-surface\s*\{[\s\S]*?z-index:\s*1;[\s\S]*?border:\s*1px solid var\(--multi-selection-boundary\)[\s\S]*?border-radius:\s*var\(--multi-selection-surface-radius,[\s\S]*?background:\s*var\(--multi-selection-surface-fill\)[\s\S]*?box-shadow:\s*0 6px 18px var\(--multi-selection-depth\)[\s\S]*?pointer-events:\s*none/);
   assert.match(appCss, /\.canvas-stage\s*\{[\s\S]*?z-index:\s*2;/);
   assert.match(appCss, /\.multi-selection-chrome\s*\{[\s\S]*?z-index:\s*30;[\s\S]*?pointer-events:\s*none/);
   assert.doesNotMatch(appCss, /\.multi-selection-chrome\s*\{[^}]*(?:border|background|box-shadow)\s*:/);
@@ -612,6 +615,8 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.match(appSource, /function applyTheme[\s\S]*?--node-media-radius[\s\S]*?syncSelectionOverlayProjection\(\)[\s\S]*?renderSelectionToolbar\(\)/);
   assert.match(appSource, /\[multiSelectionSurface, multiSelectionChrome\]\.forEach[\s\S]*?screenRect\.left[\s\S]*?screenRect\.height/);
   assert.match(appSource, /multiSelectionSurface\.classList\.add\("hidden"\)[\s\S]*?multiSelectionChrome\.classList\.add\("hidden"\)/);
+  assert.match(appSource, /function getExactSelectionGroup\(selectedNodes = getSelectedNodes\(\)\)[\s\S]*?canvasSpatialSelection\.getExactSelectionGroup\(selectedNodes, state\.groups\)/);
+  assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getExactSelectionGroup\(selectedNodes\)[\s\S]*?multiSelectionChrome\.classList\.remove\("hidden"\)[\s\S]*?multiSelectionSurface\.classList\.toggle\("hidden", Boolean\(exactSelectionGroup\)\)/);
   assert.match(appCss, /\.multi-selection-port\s*\{[\s\S]*?left:\s*calc\(100% \+ var\(--multi-selection-port-offset,[\s\S]*?width:\s*max\(44px, var\(--multi-selection-port-visual-size/);
   assert.doesNotMatch(appCss, /--multi-selection-frame-border-width/);
   assert.match(appCss, /\.multi-selection-port::before\s*\{[\s\S]*?width:\s*var\(--connection-port-size\)[\s\S]*?border:\s*var\(--connection-port-stroke\)[\s\S]*?scale:\s*var\(--multi-selection-port-scale/);
@@ -626,8 +631,8 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.match(connectionStyles, /\.canvas-shell\.multi-selection-active \.canvas-node\.selected \.node-port-zone/);
   assert.match(appSource, /mode:\s*"selection-output"[\s\S]*?origins/);
   assert.match(appSource, /group-unavailable[\s\S]*?node\.groupId/);
-  assert.match(appSource, /function isSelectionFrameDragTarget\(pointer\)[\s\S]*?multiSelectionChrome\.getBoundingClientRect\(\)/);
-  assert.match(appSource, /function beginSelectionFrameDrag\(event\)[\s\S]*?interactionSource:\s*"selection-frame"/);
+  assert.match(appSource, /function isSelectionFrameDragTarget\(pointer\)[\s\S]*?getExactSelectionGroup\(\)[\s\S]*?multiSelectionChrome\.getBoundingClientRect\(\)/);
+  assert.match(appSource, /function beginSelectionFrameDrag\(event\)[\s\S]*?getExactSelectionGroup\(selectedNodes\)[\s\S]*?interactionSource:\s*"selection-frame"/);
   assert.match(appSource, /function handlePointerMove\(event\)[\s\S]*?syncSelectionFramePointerFeedback\(event\)/);
   assert.match(appSource, /isSelectionFrameDragTarget,[\s\S]*?beginSelectionFrameDrag,/);
 });
@@ -687,12 +692,78 @@ test("empty generator media uses a larger centered modality icon", () => {
 
 test("legacy page exits through the routed host instead of deleted static pages", () => {
   assert.match(appSource, /function requestHostNavigation\(target\)/);
+  assert.ok((html.match(/data-canvas-home-button/g) || []).length >= 2);
+  assert.match(appSource, /document\.querySelectorAll\("#canvasHomeBtn, \[data-canvas-home-button\]"\)/);
+  assert.match(appSource, /canvasHomeButtons\.forEach\([\s\S]*?requestHostNavigation\("home"\)/);
   assert.match(appSource, /requestHostNavigation\("home"\)/);
   assert.match(appSource, /requestHostNavigation\("projects"\)/);
   assert.match(appSource, /requestHostNavigation\("logout"\)/);
   assert.match(html, />退出账号</);
+  assert.doesNotMatch(html, /(?:title|aria-label)="切换项目"/);
   assert.doesNotMatch(html, /退出(?:演示账号|登录)/);
   assert.doesNotMatch(appSource, /(?:home|login)\.html/);
+});
+
+test("canvas chrome controls expose keyboard-operable names and expanded state", () => {
+  assert.match(html, /id="railProfileBtn"[^>]*aria-label="个人：Reelay 用户"[^>]*aria-controls="profileMenu"[^>]*aria-expanded="false"/);
+  assert.match(appSource, /function syncHostedIdentity[\s\S]*?setAttribute\("aria-label", `个人：\$\{displayName\}`\)/);
+  assert.match(appSource, /function openProfileMenu[\s\S]*?setAttribute\("aria-expanded", "true"\)/);
+  assert.match(appSource, /function closeProfileMenu[\s\S]*?setAttribute\("aria-expanded", "false"\)/);
+  assert.match(appSource, /function scheduleCloseProfileMenu\(\)[\s\S]*?profilePointerInside \|\| profileAnchor\?\.contains\(document\.activeElement\)[\s\S]*?closeProfileMenu\(\)/);
+  assert.match(appSource, /profileAnchor\?\.addEventListener\("pointerenter"[\s\S]*?profilePointerInside = true[\s\S]*?profileAnchor\?\.addEventListener\("pointerleave"[\s\S]*?profilePointerInside = false/);
+  assert.match(html, /data-project-name[^>]*tabindex="0"[^>]*aria-label="项目名称 Untitled，按 Enter 重命名"/);
+  assert.match(appSource, /element\.contentEditable !== "true"[\s\S]*?event\.key === "Enter"[\s\S]*?event\.key === "F2"[\s\S]*?beginInlineRename\(element\)/);
+  assert.match(appSource, /state\.hostCapabilities\.accountSections = context\.capabilities\?\.accountSections === true/);
+  assert.match(appSource, /nextSection === "credits" && state\.hostCapabilities\.accountSections[\s\S]*?\{ section: "credits" \}[\s\S]*?canvasPersistence\.post\("canvas:open-account", payload\)/);
+});
+
+test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-selection-surface-55/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-56/);
+  assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
+  assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="railProfileBtn"[\s\S]*?class="share-reveal"/);
+  assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-disabled="true"[^>]*disabled[\s\S]*?id="zoomSlider"/);
+  assert.match(html, /class="agent-dock collapsed"[\s\S]*?class="agent-launcher"/);
+  assert.doesNotMatch(html, /data-project-action="(?:home|create|delete)"/);
+  assert.doesNotMatch(appSource, /function resetPrototypeProject/);
+  const projectActionStart = appSource.indexOf("function handleProjectMenuAction");
+  const projectActionEnd = appSource.indexOf("function handleCanvasMoreAction", projectActionStart);
+  const projectActionSource = appSource.slice(projectActionStart, projectActionEnd);
+  assert.match(projectActionSource, /action === "all"[\s\S]*?requestHostNavigation\("projects"\)/);
+  assert.doesNotMatch(projectActionSource, /action === "(?:home|create|delete)"/);
+  assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
+  assert.match(canvasChromeCss, /\.share-reveal\s*\{[\s\S]*?opacity:\s*0[\s\S]*?pointer-events:\s*none[\s\S]*?visibility:\s*hidden/);
+  assert.match(canvasChromeCss, /\.left-rail-stack:hover > \.share-reveal,[\s\S]*?\.left-rail-stack:focus-within > \.share-reveal[\s\S]*?pointer-events:\s*auto[\s\S]*?visibility:\s*visible/);
+  assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*12px[\s\S]*?bottom:\s*12px/);
+  assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
+  assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
+});
+
+test("canvas switch buttons only open the menu and menu rows own rename editing", () => {
+  const triggerStart = appSource.indexOf('document.querySelectorAll("[data-canvas-menu-button]")');
+  const triggerEnd = appSource.indexOf("projectNameEls.forEach", triggerStart);
+  assert.ok(triggerStart >= 0 && triggerEnd > triggerStart);
+  const triggerSource = appSource.slice(triggerStart, triggerEnd);
+  assert.match(triggerSource, /addEventListener\("click"[\s\S]*?openCanvasMenu\(button, \{ focusMenu: event\.detail === 0 \}\)/);
+  assert.doesNotMatch(triggerSource, /dblclick|beginInlineRename/);
+
+  const renameStart = appSource.indexOf("function beginCanvasMenuRename");
+  const renameEnd = appSource.indexOf("function addCanvas", renameStart);
+  assert.ok(renameStart >= 0 && renameEnd > renameStart);
+  const renameSource = appSource.slice(renameStart, renameEnd);
+  assert.match(renameSource, /if \(!requireCanvasMutation\(\)\) return/);
+  assert.match(renameSource, /event\.key === "Enter"/);
+  assert.match(renameSource, /event\.key === "Escape"/);
+  assert.match(renameSource, /event\.key === "Tab"[\s\S]*?controls\[nextIndex\] \|\| canvasMenuTrigger/);
+  assert.match(renameSource, /commitCanvasRename\(nextName \|\| previousName, canvasId, \{ renderMenu: false \}\)/);
+  assert.match(renameSource, /nameInput\.replaceWith\(switchButton\)/);
+
+  const commitStart = appSource.indexOf("function commitCanvasRename");
+  const commitEnd = appSource.indexOf("function positionMenu", commitStart);
+  const commitSource = appSource.slice(commitStart, commitEnd);
+  assert.match(commitSource, /\{ renderMenu = true \} = \{\}/);
+  assert.match(commitSource, /if \(normalizedName === canvas\.name\)[\s\S]*?return true/);
+  assert.ok(commitSource.indexOf("scheduleCanvasDocumentSave()") > commitSource.indexOf("if (normalizedName === canvas.name)"));
 });
 
 test("the canvas organization entry exposes a visual management affordance without redundant text", () => {

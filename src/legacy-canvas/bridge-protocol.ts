@@ -10,6 +10,12 @@ export const bridgeCanvasDocumentSchema = z
   })
   .strict();
 
+const legacyCanvasCapabilitiesSchema = z
+  .object({
+    accountSections: z.boolean(),
+  })
+  .strict();
+
 export const legacyCanvasContextSchema = z
   .object({
     protocolVersion: z.literal(1),
@@ -19,6 +25,7 @@ export const legacyCanvasContextSchema = z
     canvasId: z.string().min(1),
     theme: z.enum(["light", "dark"]),
     writable: z.boolean(),
+    capabilities: legacyCanvasCapabilitiesSchema.optional(),
     actor: z.object({
       account: z.string().min(1),
       displayName: z.string().min(1),
@@ -33,6 +40,8 @@ export const legacyCanvasContextSchema = z
 export type LegacyCanvasContext = z.infer<typeof legacyCanvasContextSchema>;
 
 const canvasInstanceIdSchema = z.string().min(1);
+export const legacyAccountSectionSchema = z.enum(["profile", "credits"]);
+export type LegacyAccountSection = z.infer<typeof legacyAccountSectionSchema>;
 
 export const hostMessageSchema = z
   .object({
@@ -106,6 +115,7 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("canvas:open-account"),
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
+    section: legacyAccountSectionSchema.optional().default("profile"),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

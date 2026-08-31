@@ -4,7 +4,10 @@ import type { CanvasDocumentRepository } from "../../application/canvases/Canvas
 import { routePaths } from "../../app/routes";
 import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { CanvasHost } from "../../legacy-canvas/CanvasHost";
-import { AccountSettingsDialog } from "../../features/account/AccountSettingsDialog";
+import {
+  AccountSettingsDialog,
+  type AccountSection,
+} from "../../features/account/AccountSettingsDialog";
 import { readTheme } from "../../shared/theme/theme";
 
 interface LegacyCanvasRouteProps {
@@ -13,6 +16,7 @@ interface LegacyCanvasRouteProps {
 
 export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRouteProps) {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [accountSettingsSection, setAccountSettingsSection] = useState<AccountSection>("profile");
   const { workspaceId, projectId, canvasId } = useParams();
   const { actor, currentWorkspace, projects } = useWorkspaceRouteData();
   const project = projects.find((candidate) => candidate.id === projectId);
@@ -28,28 +32,33 @@ export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRout
       <CanvasHost
         repository={canvasDocumentRepository}
         onLogout={() => submit(null, { action: routePaths.logout(), method: "post" })}
-        onOpenAccountSettings={() => setAccountSettingsOpen(true)}
+        onOpenAccountSettings={(section) => {
+          setAccountSettingsSection(section);
+          setAccountSettingsOpen(true);
+        }}
         context={{
-        protocolVersion: 1,
-        workspaceId,
-        projectId,
-        projectName: project.name,
-        canvasId,
-        theme: readTheme(),
-        writable: project.currentUserRole !== "view",
-        actor: {
-          account: actor.account,
-          displayName: actor.displayName,
-        },
-        workspace: {
-          name: currentWorkspace.name,
-          role: currentWorkspace.currentUserRole ?? "member",
-        },
+          protocolVersion: 1,
+          capabilities: { accountSections: true },
+          workspaceId,
+          projectId,
+          projectName: project.name,
+          canvasId,
+          theme: readTheme(),
+          writable: project.currentUserRole !== "view",
+          actor: {
+            account: actor.account,
+            displayName: actor.displayName,
+          },
+          workspace: {
+            name: currentWorkspace.name,
+            role: currentWorkspace.currentUserRole ?? "member",
+          },
         }}
       />
       <AccountSettingsDialog
         actor={actor}
         workspace={currentWorkspace}
+        initialSection={accountSettingsSection}
         open={accountSettingsOpen}
         onClose={() => setAccountSettingsOpen(false)}
       />

@@ -34,14 +34,15 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
-test("a hosted read-only canvas blocks editing while preserving viewport controls", () => {
+test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", () => {
   const dom = new JSDOM(html, {
     url: "http://reelay.test/index.html",
     runScripts: "outside-only",
     pretendToBeVisual: true,
   });
   const { window } = dom;
-  const hostWindow = { postMessage() {} };
+  const postedMessages = [];
+  const hostWindow = { postMessage(message) { postedMessages.push(message); } };
   Object.defineProperty(window, "parent", { configurable: true, value: hostWindow });
   window.matchMedia = () => ({
     matches: false,
@@ -124,26 +125,28 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
     origin: window.location.origin,
     source: hostWindow,
   }));
+  const hostContext = {
+    protocolVersion: 1,
+    capabilities: { accountSections: true },
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    projectName: "只读项目",
+    canvasId: "main",
+    theme: "light",
+    writable: false,
+    actor: {
+      account: "linjing@reelay.test",
+      displayName: "林静",
+    },
+    workspace: {
+      name: "星海视觉工作室",
+      role: "admin",
+    },
+  };
   dispatchHostMessage({
     source: "reelay-shell",
     type: "host:init",
-    context: {
-      protocolVersion: 1,
-      workspaceId: "workspace-1",
-      projectId: "project-1",
-      projectName: "只读项目",
-      canvasId: "main",
-      theme: "light",
-      writable: false,
-      actor: {
-        account: "linjing@reelay.test",
-        displayName: "林静",
-      },
-      workspace: {
-        name: "星海视觉工作室",
-        role: "admin",
-      },
-    },
+    context: hostContext,
   });
   dispatchHostMessage({
     source: "reelay-shell",
@@ -160,9 +163,111 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   assert.equal(window.document.querySelector("#profileName").textContent, "林静");
   assert.equal(window.document.querySelector("#profileEmail").textContent, "linjing@reelay.test");
   assert.equal(window.document.querySelector("#profileOrganizationRole").textContent, "管理员");
+  assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-label"), "个人：林静");
+  assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.querySelector("#profileCreditValue").textContent, "3,000");
+  assert.equal(
+    window.document.querySelector("[data-profile-action='credits']").getAttribute("aria-label"),
+    "查看我的积分，当前 3,000",
+  );
   assert.equal(window.document.querySelector(".empty-create-main").textContent, "画布暂无内容");
   assert.equal(window.document.querySelector(".empty-create-sub"), null);
   assert.equal(node.querySelector(".prompt-panel"), null);
+
+  const readonlyProjectName = window.document.querySelector("[data-project-name]");
+  readonlyProjectName.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+  assert.notEqual(readonlyProjectName.contentEditable, "true");
+
+  postedMessages.length = 0;
+  const homeButtons = [...window.document.querySelectorAll("[data-canvas-home-button]")];
+  assert.equal(homeButtons.length, 2);
+  homeButtons.forEach((button) => {
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    assert.equal(postedMessages.at(-1).type, "canvas:navigate");
+    assert.equal(postedMessages.at(-1).target, "home");
+  });
+
+  window.document.querySelector("[data-profile-action='credits']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(postedMessages.at(-1).type, "canvas:open-account");
+  assert.equal(postedMessages.at(-1).section, "credits");
+
+  window.document.querySelector("[data-profile-action='account']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(postedMessages.at(-1).type, "canvas:open-account");
+  assert.equal(Object.hasOwn(postedMessages.at(-1), "section"), false);
+
+  const profileButton = window.document.querySelector("#railProfileBtn");
+  profileButton.getClientRects = () => [{}];
+  profileButton.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+  assert.equal(profileButton.getAttribute("aria-expanded"), "true");
+  assert.equal(window.document.activeElement, window.document.querySelector("#profileOrganization"));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  assert.equal(profileButton.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, profileButton);
+
+  const projectMenuButton = window.document.querySelector(".top-bar [data-project-menu-button]");
+  projectMenuButton.getClientRects = () => [{}];
+  projectMenuButton.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+  assert.equal(projectMenuButton.getAttribute("aria-expanded"), "true");
+  assert.equal(window.document.activeElement, window.document.querySelector("[data-project-action='all']"));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  assert.equal(projectMenuButton.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, projectMenuButton);
+
+  const canvasMenuButton = window.document.querySelector(".left-rail [data-canvas-menu-button]");
+  canvasMenuButton.getClientRects = () => [{}];
+  canvasMenuButton.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+  assert.equal(canvasMenuButton.getAttribute("aria-expanded"), "true");
+  assert.equal(window.document.activeElement, window.document.querySelector(".canvas-menu-switch"));
+  const firstCanvasMoreButton = window.document.querySelector("[data-canvas-more]");
+  firstCanvasMoreButton.getClientRects = () => [{}];
+  firstCanvasMoreButton.focus();
+  firstCanvasMoreButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 0 }));
+  assert.equal(firstCanvasMoreButton.getAttribute("aria-expanded"), "true");
+  assert.equal(window.document.activeElement, window.document.querySelector("[data-canvas-more-action='open']"));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  assert.equal(firstCanvasMoreButton.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, firstCanvasMoreButton);
+  canvasMenuButton.focus();
+  canvasMenuButton.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  assert.equal(canvasMenuButton.getAttribute("aria-expanded"), "false");
+
+  window.document.querySelector("#railLibraryBtn")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  window.document.querySelector("#agentLauncher")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
+  const agentWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--agent-width"));
+  assert.ok(assetWidth + agentWidth <= window.innerWidth - 280);
+  window.document.querySelector("#agentCloseBtn")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  window.document.querySelector("#assetLibraryCloseBtn")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+  const originalInnerWidth = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
+  window.dispatchEvent(new window.Event("resize"));
+  window.document.querySelector("#railLibraryBtn")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  window.document.querySelector("#agentLauncher")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(window.document.querySelector("#assetLibraryPanel").classList.contains("hidden"), true);
+  assert.equal(window.document.querySelector("#agentDock").classList.contains("open"), true);
+  window.document.querySelector("#agentCloseBtn")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
+  window.dispatchEvent(new window.Event("resize"));
+
+  window.document.querySelector(".left-rail [data-canvas-menu-button]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  window.document.querySelector("[data-canvas-more]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const readonlyRename = window.document.querySelector("[data-canvas-more-action='rename']");
+  assert.equal(readonlyRename.disabled, true);
+  readonlyRename.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(window.document.querySelector("input.canvas-menu-name.editing"), null);
+  assert.equal(postedMessages.some((message) => message.type === "canvas:save"), false);
 
   shell.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true, clientX: 400, clientY: 300 }));
   assert.equal(window.document.querySelectorAll(".canvas-node").length, 1);
@@ -228,6 +333,7 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
     "selection-toolbar",
     "toolbar-dropdown",
     "confirm-dialog",
+    "canvas-tools",
     "canvas-tool-popover",
   ]) {
     const protectedSurface = window.document.createElement("div");
@@ -316,6 +422,109 @@ test("a hosted read-only canvas blocks editing while preserving viewport control
   media.dispatchEvent(lineModeWheel);
   assert.equal(lineModeWheel.defaultPrevented, true);
   assert.notEqual(stage.style.transform, scaleBeforeControlWheel);
+
+  dispatchHostMessage({
+    source: "reelay-shell",
+    type: "host:init",
+    context: { ...hostContext, writable: true },
+  });
+  dispatchHostMessage({
+    source: "reelay-shell",
+    type: "host:document",
+    protocolVersion: 1,
+    document: { id: "main", projectId: "project-1", schemaVersion: 1, revision: 1, content },
+    writable: true,
+  });
+
+  const projectMenuTrigger = window.document.querySelector("[data-project-menu-button]");
+  projectMenuTrigger.focus();
+  projectMenuTrigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  assert.equal(window.document.querySelector("#projectMenu").classList.contains("hidden"), false);
+  projectMenuTrigger.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+  assert.equal(window.document.querySelector("#projectMenu").classList.contains("hidden"), false);
+  assert.equal(window.document.activeElement, window.document.querySelector("#projectMenu [role='menuitem']"));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  assert.equal(window.document.querySelector("#projectMenu").classList.contains("hidden"), true);
+  assert.equal(window.document.activeElement, projectMenuTrigger);
+
+  const canvasMenuTrigger = window.document.querySelector(".left-rail [data-canvas-menu-button]");
+  canvasMenuTrigger.focus();
+  canvasMenuTrigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  assert.equal(window.document.querySelector("#canvasMenu").classList.contains("hidden"), false);
+  canvasMenuTrigger.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+  assert.equal(window.document.querySelector("#canvasMenu").classList.contains("hidden"), false);
+  assert.equal(window.document.activeElement, window.document.querySelector("#canvasMenu [role='menuitem']"));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  assert.equal(window.document.querySelector("#canvasMenu").classList.contains("hidden"), true);
+  assert.equal(window.document.activeElement, canvasMenuTrigger);
+
+  const beginMenuRename = () => {
+    window.document.querySelector("#canvasMenu").classList.add("hidden");
+    window.document.querySelector("#canvasMoreMenu").classList.add("hidden");
+    window.document.querySelector(".left-rail [data-canvas-menu-button]")
+      .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    window.document.querySelector("[data-canvas-more]")
+      .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    window.document.querySelector("[data-canvas-more-action='rename']")
+      .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    return window.document.querySelector("input.canvas-menu-name.editing");
+  };
+
+  postedMessages.length = 0;
+  const cancelledRename = beginMenuRename();
+  assert.ok(cancelledRename);
+  cancelledRename.value = "不应保存";
+  cancelledRename.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  assert.equal(postedMessages.some((message) => message.type === "canvas:dirty"), false);
+  assert.match(window.document.querySelector("[data-canvas-name]").textContent, /主画布/);
+  assert.equal(window.document.activeElement, window.document.querySelector(".canvas-menu-switch"));
+
+  postedMessages.length = 0;
+  const unchangedRename = beginMenuRename();
+  assert.equal(unchangedRename.value, "主画布");
+  unchangedRename.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+  assert.equal(postedMessages.some((message) => message.type === "canvas:dirty"), false);
+  assert.equal(window.document.activeElement, window.document.querySelector(".canvas-menu-switch"));
+
+  postedMessages.length = 0;
+  const committedRename = beginMenuRename();
+  committedRename.value = "分镜画布";
+  committedRename.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+  assert.equal(postedMessages.some((message) => message.type === "canvas:dirty" && message.dirty), true);
+  assert.equal(window.document.activeElement, window.document.querySelector(".canvas-menu-switch"));
+  dispatchHostMessage({ source: "reelay-shell", type: "host:flush", protocolVersion: 1 });
+  const renameSave = postedMessages.findLast((message) => message.type === "canvas:save");
+  assert.ok(renameSave);
+  const savedRenameContent = typeof renameSave.content === "string"
+    ? JSON.parse(renameSave.content)
+    : renameSave.content;
+  assert.equal(savedRenameContent.canvases[0].name, "分镜画布");
+
+  const tabRename = beginMenuRename();
+  const tabMoreButton = window.document.querySelector("[data-canvas-more]");
+  tabRename.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+  assert.equal(window.document.activeElement, tabMoreButton);
+  assert.equal(window.document.querySelector("[data-canvas-more]"), tabMoreButton);
+
+  const blurredRename = beginMenuRename();
+  const preservedMoreButton = window.document.querySelector("[data-canvas-more]");
+  preservedMoreButton.focus();
+  assert.equal(blurredRename.isConnected, false);
+  assert.equal(window.document.querySelector("[data-canvas-more]"), preservedMoreButton);
+  preservedMoreButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(window.document.querySelector("#canvasMoreMenu").classList.contains("hidden"), false);
+
+  const { capabilities: _capabilities, ...legacyHostContext } = hostContext;
+  dispatchHostMessage({
+    source: "reelay-shell",
+    type: "host:init",
+    context: legacyHostContext,
+  });
+  postedMessages.length = 0;
+  window.document.querySelector("[data-profile-action='credits']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(postedMessages.at(-1).type, "canvas:open-account");
+  assert.equal(Object.hasOwn(postedMessages.at(-1), "section"), false);
 
   dom.window.close();
 });

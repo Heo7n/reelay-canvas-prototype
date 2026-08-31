@@ -691,7 +691,7 @@ describe("CanvasHost", () => {
     );
   });
 
-  it("hands the legacy account action to the routed account dialog", async () => {
+  it("hands explicit and legacy-default account sections to the routed dialog", async () => {
     const onOpenAccountSettings = vi.fn();
     render(
       <CanvasHost
@@ -707,8 +707,18 @@ describe("CanvasHost", () => {
       type: "canvas:open-account",
       protocolVersion: 1,
       instanceId: canvasInstanceId,
+      section: "credits",
     }));
 
-    expect(onOpenAccountSettings).toHaveBeenCalledTimes(1);
+    expect(onOpenAccountSettings).toHaveBeenLastCalledWith("credits");
+
+    act(() => dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-account",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+    }));
+
+    expect(onOpenAccountSettings).toHaveBeenNthCalledWith(2, "profile");
   });
 });
