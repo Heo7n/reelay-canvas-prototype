@@ -334,7 +334,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260827-selection-node-borders-51/);
+  assert.match(html, /styles\.css\?v=20260831-selection-hierarchy-52/);
   assert.match(html, /app\.js\?v=20260827-selection-overlay-49/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
@@ -395,6 +395,7 @@ test("node selection and connection relationships use one restrained neutral hie
   assert.match(appCss, /--relation-stroke-strong:\s*rgba\(/);
   assert.match(appCss, /--relation-stroke-ready:\s*rgba\(/);
   assert.match(appCss, /\.canvas-node\.selected \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--selection-stroke\)[\s\S]*?box-shadow:\s*var\(--node-media-shadow\)/);
+  assert.match(appCss, /\.app-shell \.canvas-shell\.multi-selection-active \.canvas-node\.selected \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
   assert.match(appCss, /\.asset-node\.image-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
   assert.match(appCss, /\.asset-node\.video-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
   assert.match(appCss, /\.asset-node\.audio-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
@@ -589,8 +590,8 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getSelectionScreenRect\(bounds,\s*state,\s*0\)/);
   assert.match(appSource, /function getDefaultGroupBounds\(nodes\)[\s\S]*?groupFrameRules\.paddingX[\s\S]*?groupFrameRules\.paddingTop[\s\S]*?groupFrameRules\.paddingBottom/);
   assert.match(appCss, /--multi-selection-fill:\s*rgba/);
-  assert.match(appCss, /:root\s*\{[\s\S]*?--multi-selection-shadow-near:\s*rgba\(240, 244, 250, 0\.13\)[\s\S]*?--multi-selection-shadow-far:\s*rgba\(207, 216, 230, 0\.09\)/);
-  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--multi-selection-fill:\s*rgba\(37, 48, 66, 0\.018\)[\s\S]*?--multi-selection-shadow-near:\s*rgba\(30, 42, 60, 0\.07\)[\s\S]*?--multi-selection-shadow-far:\s*rgba\(30, 42, 60, 0\.045\)/);
+  assert.match(appCss, /:root\s*\{[\s\S]*?--multi-selection-border:\s*rgba\(235, 240, 248, 0\.34\)[\s\S]*?--multi-selection-shadow-near:\s*rgba\(240, 244, 250, 0\.15\)[\s\S]*?--multi-selection-shadow-far:\s*rgba\(207, 216, 230, 0\.075\)/);
+  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--multi-selection-fill:\s*rgba\(37, 48, 66, 0\.018\)[\s\S]*?--multi-selection-border:\s*rgba\(37, 48, 66, 0\.23\)[\s\S]*?--multi-selection-shadow-near:\s*rgba\(30, 42, 60, 0\.075\)[\s\S]*?--multi-selection-shadow-far:\s*rgba\(30, 42, 60, 0\.04\)/);
   assert.match(appCss, /\.multi-selection-frame\s*\{[\s\S]*?border:\s*var\(--multi-selection-frame-border-width\) solid var\(--multi-selection-border\)[\s\S]*?border-radius:\s*var\(--multi-selection-frame-radius,[\s\S]*?background:\s*var\(--multi-selection-fill\)[\s\S]*?0 28px 80px var\(--multi-selection-shadow-far\)/);
   assert.match(appCss, /\.multi-selection-frame\s*\{[\s\S]*?pointer-events:\s*none/);
   assert.doesNotMatch(appCss, /\.multi-selection-frame::before\s*\{[\s\S]*?linear-gradient/);
