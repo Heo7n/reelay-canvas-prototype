@@ -93,21 +93,26 @@
   --node-leading-title: 1.2;
   --node-leading-control: 1.2;
   --node-leading-body: 1.5;
-  --group-frame-line: rgba(214, 220, 232, 0.18);
-  --group-frame-line-active: rgba(226, 231, 240, 0.5);
-  --group-frame-fill: rgba(196, 204, 220, 0.025);
-  --group-frame-fill-active: rgba(196, 204, 220, 0.055);
-  --group-corner-stroke: rgba(244, 247, 252, 0.78);
-  --group-title-text: rgba(255, 255, 255, 0.6);
+  --group-frame-boundary: rgba(214, 222, 234, 0.13);
+  --group-frame-boundary-hover: rgba(214, 222, 234, 0.2);
+  --group-frame-boundary-active: rgba(214, 222, 234, 0.3);
+  --group-frame-fill: rgba(190, 201, 218, 0.022);
+  --group-frame-fill-hover: rgba(190, 201, 218, 0.032);
+  --group-frame-fill-active: rgba(190, 201, 218, 0.044);
+  --group-frame-depth-active: rgba(0, 0, 0, 0.16);
+  --group-corner-stroke: rgba(244, 247, 252, 0.62);
+  --group-title-text: rgba(245, 247, 250, 0.58);
+  --group-title-text-hover: rgba(245, 247, 250, 0.7);
+  --group-title-text-active: rgba(245, 247, 250, 0.82);
   --group-title-font-size: 14px;
-  --multi-selection-fill: rgba(226, 232, 242, 0.035);
-  --multi-selection-fill-active: rgba(226, 232, 242, 0.055);
-  --multi-selection-border: rgba(235, 240, 248, 0.34);
-  --multi-selection-border-active: rgba(241, 245, 252, 0.5);
-  --multi-selection-frame-border-width: 1px;
-  --multi-selection-shadow-near: rgba(240, 244, 250, 0.15);
-  --multi-selection-shadow-far: rgba(207, 216, 230, 0.075);
-  --multi-selection-highlight: rgba(255, 255, 255, 0.12);
+  --multi-selection-surface-fill: rgba(205, 214, 228, 0.026);
+  --multi-selection-surface-fill-hover: rgba(205, 214, 228, 0.036);
+  --multi-selection-surface-fill-active: rgba(205, 214, 228, 0.046);
+  --multi-selection-boundary: rgba(225, 232, 242, 0.16);
+  --multi-selection-boundary-hover: rgba(225, 232, 242, 0.24);
+  --multi-selection-boundary-active: rgba(225, 232, 242, 0.32);
+  --multi-selection-depth: rgba(0, 0, 0, 0.2);
+  --multi-selection-depth-active: rgba(0, 0, 0, 0.26);
   --multi-toolbar-bg: rgba(24, 25, 28, 0.92);
   --multi-toolbar-border: rgba(255, 255, 255, 0.12);
   --multi-toolbar-shadow: 0 16px 42px rgba(0, 0, 0, 0.42), 0 2px 10px rgba(0, 0, 0, 0.24);
@@ -191,19 +196,25 @@ html[data-theme="light"] {
   --node-tooltip-line: rgba(255, 255, 255, 0.1);
   --node-tooltip-text: rgba(255, 255, 255, 0.94);
   --node-tooltip-shadow: 0 12px 30px rgba(23, 29, 40, 0.22);
-  --group-frame-line: rgba(40, 48, 62, 0.14);
-  --group-frame-line-active: rgba(35, 44, 60, 0.38);
-  --group-frame-fill: rgba(45, 55, 72, 0.018);
-  --group-frame-fill-active: rgba(45, 55, 72, 0.04);
-  --group-corner-stroke: rgba(25, 35, 50, 0.62);
-  --group-title-text: rgba(17, 24, 39, 0.58);
-  --multi-selection-fill: rgba(37, 48, 66, 0.018);
-  --multi-selection-fill-active: rgba(37, 48, 66, 0.032);
-  --multi-selection-border: rgba(37, 48, 66, 0.23);
-  --multi-selection-border-active: rgba(37, 48, 66, 0.34);
-  --multi-selection-shadow-near: rgba(30, 42, 60, 0.075);
-  --multi-selection-shadow-far: rgba(30, 42, 60, 0.04);
-  --multi-selection-highlight: rgba(255, 255, 255, 0.28);
+  --group-frame-boundary: rgba(37, 50, 70, 0.12);
+  --group-frame-boundary-hover: rgba(37, 50, 70, 0.18);
+  --group-frame-boundary-active: rgba(37, 50, 70, 0.28);
+  --group-frame-fill: rgba(52, 66, 88, 0.016);
+  --group-frame-fill-hover: rgba(52, 66, 88, 0.026);
+  --group-frame-fill-active: rgba(52, 66, 88, 0.038);
+  --group-frame-depth-active: rgba(31, 43, 61, 0.075);
+  --group-corner-stroke: rgba(25, 35, 50, 0.55);
+  --group-title-text: rgba(23, 33, 48, 0.58);
+  --group-title-text-hover: rgba(23, 33, 48, 0.68);
+  --group-title-text-active: rgba(23, 33, 48, 0.78);
+  --multi-selection-surface-fill: rgba(45, 59, 80, 0.018);
+  --multi-selection-surface-fill-hover: rgba(45, 59, 80, 0.027);
+  --multi-selection-surface-fill-active: rgba(45, 59, 80, 0.036);
+  --multi-selection-boundary: rgba(37, 49, 68, 0.14);
+  --multi-selection-boundary-hover: rgba(37, 49, 68, 0.21);
+  --multi-selection-boundary-active: rgba(37, 49, 68, 0.28);
+  --multi-selection-depth: rgba(31, 43, 61, 0.065);
+  --multi-selection-depth-active: rgba(31, 43, 61, 0.09);
   --multi-toolbar-bg: rgba(255, 255, 255, 0.94);
   --multi-toolbar-border: rgba(31, 41, 55, 0.11);
   --multi-toolbar-shadow: 0 16px 42px rgba(36, 48, 68, 0.18), 0 2px 8px rgba(36, 48, 68, 0.08);
@@ -2235,18 +2246,15 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   pointer-events: none;
 }
 
-.multi-selection-frame {
+.multi-selection-surface {
   position: absolute;
-  z-index: 30;
+  z-index: 1;
   min-width: 1px;
   min-height: 1px;
-  border: var(--multi-selection-frame-border-width) solid var(--multi-selection-border);
-  border-radius: var(--multi-selection-frame-radius, var(--node-media-radius));
-  background: var(--multi-selection-fill);
-  box-shadow:
-    0 6px 20px var(--multi-selection-shadow-near),
-    0 28px 80px var(--multi-selection-shadow-far),
-    inset 0 1px 0 var(--multi-selection-highlight);
+  border: 1px solid var(--multi-selection-boundary);
+  border-radius: var(--multi-selection-surface-radius, var(--node-media-radius));
+  background: var(--multi-selection-surface-fill);
+  box-shadow: 0 8px 24px var(--multi-selection-depth);
   pointer-events: none;
   transition:
     border-color 120ms ease,
@@ -2254,18 +2262,30 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
     box-shadow 120ms ease;
 }
 
-.multi-selection-frame.is-connecting {
-  border-color: var(--multi-selection-border-active);
-  background: var(--multi-selection-fill-active);
+.canvas-shell.selection-frame-hover .multi-selection-surface {
+  border-color: var(--multi-selection-boundary-hover);
+  background: var(--multi-selection-surface-fill-hover);
+}
+
+.canvas-shell.selection-frame-pressed .multi-selection-surface {
+  border-color: var(--multi-selection-boundary-active);
+  background: var(--multi-selection-surface-fill-active);
+  box-shadow: 0 10px 28px var(--multi-selection-depth-active);
+}
+
+.multi-selection-chrome {
+  position: absolute;
+  z-index: 30;
+  min-width: 1px;
+  min-height: 1px;
+  pointer-events: none;
 }
 
 .multi-selection-port {
   --multi-selection-port-stroke-color: var(--relation-stroke);
   --multi-selection-port-mark-color: var(--relation-stroke);
   position: absolute;
-  left: calc(
-    100% + var(--multi-selection-port-offset, 38px) + var(--multi-selection-frame-border-width)
-  );
+  left: calc(100% + var(--multi-selection-port-offset, 38px));
   top: 50%;
   display: grid;
   place-items: center;
@@ -2300,7 +2320,7 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
 
 .multi-selection-port:hover,
 .multi-selection-port:focus-visible,
-.multi-selection-frame.is-connecting .multi-selection-port {
+.multi-selection-chrome.is-connecting .multi-selection-port {
   --multi-selection-port-stroke-color: var(--relation-stroke-strong);
   --multi-selection-port-mark-color: var(--relation-stroke-strong);
   outline: none;
@@ -2526,7 +2546,7 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   border: 1px solid transparent;
   border-radius: 16px;
   background: var(--group-frame-fill);
-  box-shadow: inset 0 0 0 calc(1px * var(--group-interaction-scale, 1)) var(--group-frame-line);
+  box-shadow: inset 0 0 0 calc(1px * var(--group-interaction-scale, 1)) var(--group-frame-boundary);
   cursor: move;
   pointer-events: auto;
   transition:
@@ -2534,9 +2554,17 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
     box-shadow 140ms ease;
 }
 
+.group-frame:hover {
+  background: var(--group-frame-fill-hover);
+  box-shadow: inset 0 0 0 calc(1px * var(--group-interaction-scale, 1)) var(--group-frame-boundary-hover);
+}
+
 .group-frame.selected {
   background: var(--group-frame-fill-active);
-  box-shadow: inset 0 0 0 calc(1.35px * var(--group-interaction-scale, 1)) var(--group-frame-line-active);
+  box-shadow:
+    inset 0 0 0 calc(1px * var(--group-interaction-scale, 1)) var(--group-frame-boundary-active),
+    0 calc(4px * var(--group-interaction-scale, 1))
+      calc(16px * var(--group-interaction-scale, 1)) var(--group-frame-depth-active);
 }
 
 .group-title {
@@ -2555,6 +2583,15 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   white-space: nowrap;
   will-change: transform;
   z-index: 12;
+  transition: color 120ms ease;
+}
+
+.group-frame:hover .group-title {
+  color: var(--group-title-text-hover);
+}
+
+.group-frame.selected .group-title {
+  color: var(--group-title-text-active);
 }
 
 .group-toolbar {

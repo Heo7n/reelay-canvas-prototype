@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-  <link rel="stylesheet" href="./styles.css?v=20260831-selection-hierarchy-52" />
-  <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
+    <link rel="stylesheet" href="./styles.css?v=20260831-group-surfaces-53" />
+    <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
     <main class="app-shell">
@@ -191,6 +191,7 @@
 
       <section class="canvas-shell" id="canvasShell">
         <div class="canvas-grid" id="canvasGrid" aria-hidden="true"></div>
+        <div class="multi-selection-surface hidden" id="multiSelectionSurface" aria-hidden="true"></div>
         <div class="canvas-stage" id="canvasStage">
           <svg class="connection-layer" id="connectionLayer" aria-hidden="true">
             <g id="connectionPaths"></g>
@@ -248,7 +249,7 @@
           <button class="group-corner-handle south-west" type="button" data-group-resize="sw" aria-label="从左下角调整组框大小"></button>
           <button class="group-corner-handle north-west" type="button" data-group-resize="nw" aria-label="从左上角调整组框大小"></button>
         </div>
-        <div class="multi-selection-frame hidden" id="multiSelectionFrame">
+        <div class="multi-selection-chrome hidden" id="multiSelectionChrome">
           <button
             class="multi-selection-port"
             id="multiSelectionPort"
@@ -410,6 +411,6 @@
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260826-media-kind-37"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./app.js?v=20260827-selection-overlay-49"></script>
+    <script src="./app.js?v=20260831-group-surfaces-53"></script>
   </body>
 </html>

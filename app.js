@@ -59,12 +59,13 @@ const emptyCreateSecondary = document.querySelector(".empty-create-secondary");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
 const groupResizeOverlay = document.querySelector("#groupResizeOverlay");
-const multiSelectionFrame = document.querySelector("#multiSelectionFrame");
+const multiSelectionSurface = document.querySelector("#multiSelectionSurface");
+const multiSelectionChrome = document.querySelector("#multiSelectionChrome");
 const multiSelectionPort = document.querySelector("#multiSelectionPort");
 const selectionToolbar = document.querySelector("#selectionToolbar");
 let profileMenuCloseTimer = null;
 let themeFeedbackTimer = null;
-let nodeMediaCornerRadiusWorld = 20;
+let selectionSurfaceRadiusWorld = 20;
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
 const selectionDownloadTrigger = document.querySelector(".selection-download-trigger");
 const agentDock = document.querySelector("#agentDock");
@@ -701,8 +702,8 @@ function syncSelectionOverlayProjection(
     `${(portField.portMinOutside * 2).toFixed(2)}px`,
   );
   shell.style.setProperty(
-    "--multi-selection-frame-radius",
-    `${(nodeMediaCornerRadiusWorld * state.scale).toFixed(2)}px`,
+    "--multi-selection-surface-radius",
+    `${(selectionSurfaceRadiusWorld * state.scale).toFixed(2)}px`,
   );
 }
 
@@ -3821,7 +3822,7 @@ function getSelectionVisualBounds() {
 }
 
 function renderSelectionToolbar() {
-  if (!selectionToolbar || !multiSelectionFrame) return;
+  if (!selectionToolbar || !multiSelectionSurface || !multiSelectionChrome) return;
   const selectedNodes = getSelectedNodes();
   const bounds = getSelectionVisualBounds();
   const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
@@ -3831,8 +3832,9 @@ function renderSelectionToolbar() {
       "selection-frame-hover",
       "selection-frame-pressed",
     );
-    multiSelectionFrame.classList.add("hidden");
-    multiSelectionFrame.classList.remove("is-connecting", "is-dragging");
+    multiSelectionSurface.classList.add("hidden");
+    multiSelectionChrome.classList.add("hidden");
+    multiSelectionChrome.classList.remove("is-connecting");
     multiSelectionPort?.removeAttribute("style");
     selectionToolbar.classList.add("hidden");
     setSelectionDownloadMenuOpen(false);
@@ -3844,13 +3846,14 @@ function renderSelectionToolbar() {
   const isSelectionConnecting = state.action?.type === "connect"
     && state.action.mode === "selection-output"
     || state.connectionDrop?.kind === "selection";
-  multiSelectionFrame.style.left = `${screenRect.left}px`;
-  multiSelectionFrame.style.top = `${screenRect.top}px`;
-  multiSelectionFrame.style.width = `${screenRect.width}px`;
-  multiSelectionFrame.style.height = `${screenRect.height}px`;
-  multiSelectionFrame.classList.remove("hidden");
-  multiSelectionFrame.classList.toggle("is-connecting", isSelectionConnecting);
-  multiSelectionFrame.classList.toggle("is-dragging", isSelectionFrameDragAction());
+  [multiSelectionSurface, multiSelectionChrome].forEach((element) => {
+    element.style.left = `${screenRect.left}px`;
+    element.style.top = `${screenRect.top}px`;
+    element.style.width = `${screenRect.width}px`;
+    element.style.height = `${screenRect.height}px`;
+    element.classList.remove("hidden");
+  });
+  multiSelectionChrome.classList.toggle("is-connecting", isSelectionConnecting);
   if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
   if (isSelectionConnecting) {
     selectionToolbar.classList.add("hidden");
@@ -5550,8 +5553,8 @@ function getSelectionConnectionOrigins() {
 }
 
 function positionMultiSelectionPort(clientX, clientY) {
-  if (!multiSelectionFrame || !multiSelectionPort) return;
-  const frameRect = multiSelectionFrame.getBoundingClientRect();
+  if (!multiSelectionChrome || !multiSelectionPort) return;
+  const frameRect = multiSelectionChrome.getBoundingClientRect();
   multiSelectionPort.style.left = `${clientX - frameRect.left}px`;
   multiSelectionPort.style.top = `${clientY - frameRect.top}px`;
 }
@@ -5564,7 +5567,7 @@ function beginSelectionConnectionDrag(event) {
   if (event.button !== 0 || !requireCanvasMutation()) return;
   const origins = getSelectionConnectionOrigins();
   if (origins.length < 2 || origins.length !== state.selectedIds.size) return;
-  const frameRect = multiSelectionFrame?.getBoundingClientRect();
+  const frameRect = multiSelectionChrome?.getBoundingClientRect();
   if (!frameRect) return;
   const registry = buildConnectionPortRegistry();
   const targetPlans = new Map();
@@ -6522,7 +6525,7 @@ function applyTheme(mode = state.themeMode, options = {}) {
   const configuredNodeRadius = Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue("--node-media-radius"),
   );
-  if (Number.isFinite(configuredNodeRadius)) nodeMediaCornerRadiusWorld = configuredNodeRadius;
+  if (Number.isFinite(configuredNodeRadius)) selectionSurfaceRadiusWorld = configuredNodeRadius;
   syncSelectionOverlayProjection();
   renderSelectionToolbar();
   const themeLabels = {
@@ -7177,8 +7180,8 @@ function isCanvasSurface(target) {
 
 function isSelectionFrameDragTarget(pointer) {
   if (
-    !multiSelectionFrame
-    || multiSelectionFrame.classList.contains("hidden")
+    !multiSelectionChrome
+    || multiSelectionChrome.classList.contains("hidden")
     || state.selectedIds.size < 2
     || !isCanvasMutationAllowed()
     || !isCanvasSurface(pointer?.target)
@@ -7188,7 +7191,7 @@ function isSelectionFrameDragTarget(pointer) {
     || !Number.isFinite(pointer?.clientY)
   ) return false;
 
-  const rect = multiSelectionFrame.getBoundingClientRect();
+  const rect = multiSelectionChrome.getBoundingClientRect();
   return pointer.clientX >= rect.left
     && pointer.clientX <= rect.right
     && pointer.clientY >= rect.top
@@ -7202,7 +7205,6 @@ function syncSelectionFramePointerFeedback(pointer) {
     "selection-frame-hover",
     !pressed && isSelectionFrameDragTarget(pointer),
   );
-  multiSelectionFrame?.classList.toggle("is-dragging", pressed);
 }
 
 function isConnectionDropSurface(target) {
@@ -7491,7 +7493,6 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
     state.action = null;
     if (groupResizeOverlay) delete groupResizeOverlay.dataset.activeResize;
     shell.classList.remove("selection-frame-pressed");
-    multiSelectionFrame?.classList.remove("is-dragging");
   },
   setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
   releasePointer: (target, pointer) => {
