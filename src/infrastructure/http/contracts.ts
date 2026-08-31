@@ -115,6 +115,50 @@ export const CanvasDocumentResponseDtoSchema = z
   })
   .strict();
 
+export const MediaAssetKindDtoSchema = z.enum(["image", "video", "audio"]);
+
+export const ProjectAssetDtoSchema = z.object({
+  referenceId: IdentifierSchema,
+  assetId: IdentifierSchema,
+  assetVersion: z.number().int().positive(),
+  mediaKind: MediaAssetKindDtoSchema,
+  displayName: z.string().trim().min(1).max(300),
+  contentType: z.string().trim().min(1).max(120),
+  byteSize: z.number().int().positive().max(64 * 1024 * 1024),
+  checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
+  contentUrl: z.string().trim().min(1).max(2_048),
+}).strict();
+
+export const MediaUploadIntentResponseDtoSchema = z.object({
+  uploadIntent: z.object({
+    id: IdentifierSchema,
+    expiresAt: z.string().datetime({ offset: true }),
+  }).strict(),
+  upload: z.object({
+    url: z.string().trim().min(1).max(4_096),
+    method: z.literal("PUT"),
+    headers: z.record(z.string(), z.string()),
+  }).strict(),
+}).strict();
+
+export const FinalizeMediaUploadResponseDtoSchema = z.object({
+  asset: z.object({
+    id: IdentifierSchema,
+    workspaceId: IdentifierSchema,
+    mediaKind: MediaAssetKindDtoSchema,
+    displayName: z.string().trim().min(1).max(300),
+    objectVersion: z.number().int().positive(),
+    contentType: z.string().trim().min(1).max(120),
+    byteSize: z.number().int().positive().max(64 * 1024 * 1024),
+    checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  }).strict(),
+}).strict();
+
+export const ProjectAssetResponseDtoSchema = z.object({ projectAsset: ProjectAssetDtoSchema }).strict();
+export const ProjectAssetsResponseDtoSchema = z.object({ projectAssets: z.array(ProjectAssetDtoSchema) }).strict();
+
 export const ErrorResponseDtoSchema = z
   .object({
     error: z

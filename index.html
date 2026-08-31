@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260831-asset-library-12" />
+    <link rel="stylesheet" href="./styles.css?v=20260901-asset-grid-24" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -65,10 +65,6 @@
                   <small id="profileOrganizationRole">成员</small>
                   <i data-lucide="chevron-right" aria-hidden="true"></i>
                 </button>
-                <button class="profile-menu-item" type="button" data-profile-action="account">
-                  <i data-lucide="settings" aria-hidden="true"></i>
-                  <span>账号设置</span>
-                </button>
                 <button class="profile-menu-item profile-appearance-item" type="button" data-profile-action="appearance" aria-label="切换外观">
                   <span class="theme-current-icon" id="themeModeIcon">
                     <i data-lucide="moon" aria-hidden="true"></i>
@@ -84,6 +80,10 @@
                     </span>
                   </span>
                 </button>
+                <button class="profile-menu-item" type="button" data-profile-action="account">
+                  <i data-lucide="settings" aria-hidden="true"></i>
+                  <span>账号设置</span>
+                </button>
                 <div class="profile-help-flyout">
                   <button class="profile-menu-item profile-help-trigger" id="profileHelpTrigger" type="button" aria-label="帮助中心" aria-expanded="false" aria-controls="profileHelpPanel">
                     <i data-lucide="circle-help" aria-hidden="true"></i>
@@ -91,11 +91,6 @@
                     <i data-lucide="chevron-right" aria-hidden="true"></i>
                   </button>
                   <div class="profile-help-flyout-panel" id="profileHelpPanel" role="group" aria-labelledby="profileHelpTrigger">
-                    <button class="profile-help-link profile-help-shortcuts" id="profileShortcutTrigger" type="button" aria-expanded="false" aria-controls="profileShortcutSheet">
-                      <i data-lucide="keyboard" aria-hidden="true"></i>
-                      <span>快捷键</span>
-                      <i data-lucide="chevron-right" aria-hidden="true"></i>
-                    </button>
                     <a class="profile-help-link" href="https://reelay.tech.jetsentv.com/manual" target="_blank" rel="noopener noreferrer">
                       <i data-lucide="book-open-check" aria-hidden="true"></i>
                       <span>使用教程</span>
@@ -104,7 +99,13 @@
                       <i data-lucide="send-horizontal" aria-hidden="true"></i>
                       <span>反馈问题</span>
                     </a>
-                    <div class="profile-shortcut-sheet" id="profileShortcutSheet" role="region" aria-label="快捷键">
+                    <button class="profile-help-link profile-help-shortcuts" id="profileShortcutTrigger" type="button" aria-expanded="false" aria-controls="profileShortcutSheet">
+                      <i data-lucide="keyboard" aria-hidden="true"></i>
+                      <span>快捷键</span>
+                      <i data-lucide="chevron-down" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <div class="profile-shortcut-sheet" id="profileShortcutSheet" role="region" aria-label="快捷键">
                       <div class="profile-shortcut-groups">
                         <section class="profile-shortcut-group">
                           <h3>画布操作</h3>
@@ -153,7 +154,6 @@
                           </dl>
                         </section>
                       </div>
-                    </div>
                   </div>
                 </div>
                 <button class="profile-menu-item" type="button" data-profile-action="logout">
@@ -490,7 +490,7 @@
     </main>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
     <script src="./data/model-catalog.js?v=20260824-selection-frame-drag-33"></script>
-    <script src="./src/config/prototype-config.js?v=20260831-asset-library-12"></script>
+    <script src="./src/config/prototype-config.js?v=20260901-ui-alignment-19"></script>
     <script src="./src/legacy-canvas/canvas-connections.js?v=20260827-connection-confirm-46"></script>
     <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260824-node-body-target-1"></script>
     <script src="./src/legacy-canvas/canvas-connection-feedback-motion.js?v=20260827-connection-confirm-46"></script>
@@ -508,13 +508,14 @@
     <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260824-group-frame-24"></script>
     <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
     <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260824-selection-frame-drag-33"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260831-asset-library-12"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260831-asset-library-12"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260901-asset-grid-24"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260901-asset-grid-24"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260819-progressive-split-10"></script>
     <script src="./src/legacy-canvas/canvas-runtime-store.js?v=20260826-canvas-runtime-store-38"></script>
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
-    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260826-media-kind-37"></script>
+    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260901-asset-grid-24"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./app.js?v=20260831-asset-library-12"></script>
+    <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js?v=20260901-asset-grid-24"></script>
+    <script src="./app.js?v=20260901-asset-grid-24"></script>
   </body>
 </html>

@@ -18,6 +18,7 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "src/contracts/**/*.ts",
     "src/domain/**/*.ts",
     "src/server/**/*.ts",
     "api/**/*.ts"

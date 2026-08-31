@@ -391,6 +391,33 @@ test("blocks removal of referenced Media unless its Entity placement is removed 
   assert.equal(store.getEntity(entityRef("hero")).id, "hero");
 });
 
+test("fails closed for unsupported rename, move and delete commands on persisted media", () => {
+  const store = createFixtureStore();
+  store.registerMedia({
+    media: {
+      id: "workspace-asset-1",
+      type: "image",
+      name: "Cloud image",
+      workspaceAssetId: "workspace-asset-1",
+      url: "/api/assets/workspace-asset-1/content",
+    },
+    space: "personal",
+  });
+  assert.throws(
+    () => store.renameItem({ item: mediaRef("workspace-asset-1"), name: "Renamed", space: "personal" }),
+    /尚未接入/,
+  );
+  assert.throws(
+    () => store.moveItems({ items: [mediaRef("workspace-asset-1")], space: "personal", folderId: null }),
+    /尚未接入/,
+  );
+  assert.throws(
+    () => store.removePlacements({ items: [mediaRef("workspace-asset-1")], space: "personal" }),
+    /尚未接入/,
+  );
+  assert.equal(store.hasPlacement(mediaRef("workspace-asset-1"), "personal"), true);
+});
+
 test("rejects every mutation whose source or target placement is the platform space", () => {
   const store = createFixtureStore();
   const before = plain(store.snapshot());

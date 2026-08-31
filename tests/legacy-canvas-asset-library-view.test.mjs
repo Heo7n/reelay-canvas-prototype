@@ -86,7 +86,11 @@ test("selection command bar shows count, select-all, filter, views, and personal
   });
 
   assert.match(markup, /<span>操作<\/span>/);
-  assert.match(markup, /data-lucide="list"[^>]*><\/i>\s*<span>操作<\/span>/);
+  assert.match(markup, /asset-library-primary-command asset-library-batch-command/);
+  assert.match(
+    markup,
+    /data-library-batch-toggle="true"[^>]*>\s*<i data-lucide="list-checks"[^>]*><\/i>\s*<span>操作<\/span>\s*<\/button>/,
+  );
   assert.match(markup, /aria-label="操作，已选 3 项"/);
   assert.doesNotMatch(markup, /操作 ·/);
   assert.match(markup, /data-library-batch-toggle="true"/);
@@ -104,6 +108,11 @@ test("selection command bar shows count, select-all, filter, views, and personal
   assert.match(markup, /data-library-batch-action="move"/);
   assert.match(markup, /data-library-batch-action="share-organization"/);
   assert.match(markup, /data-library-batch-action="delete"/);
+  assert.match(markup, /asset-library-toolbar-menu batch/);
+  assert.match(markup, /data-library-batch-action="review">\s*<span>批量提交审核<\/span>/);
+  assert.match(markup, /data-library-batch-action="move">\s*<span>批量移动<\/span>/);
+  assert.match(markup, /data-library-batch-action="share-organization">\s*<span>复制到组织空间<\/span>/);
+  assert.match(markup, /data-library-batch-action="delete">\s*<span>批量删除<\/span>/);
   assert.doesNotMatch(markup, /data-library-upload/);
   assert.doesNotMatch(markup, /data-library-selection-toggle/);
 
@@ -112,6 +121,22 @@ test("selection command bar shows count, select-all, filter, views, and personal
   const filterIndex = markup.indexOf('data-library-filter-toggle="true"');
   const displayIndex = markup.indexOf('data-library-display="grid"');
   assert.ok(selectAllIndex < cancelIndex && cancelIndex < filterIndex && filterIndex < displayIndex);
+});
+
+test("selection command bar disables batch actions until at least one item is selected", () => {
+  const markup = view.renderCommandBar({
+    mutable: true,
+    space: "personal",
+    section: "media",
+    selectionMode: true,
+    selectedCount: 0,
+    menu: "batch",
+  });
+
+  assert.match(markup, /aria-label="操作，尚未选择资产"/);
+  assert.match(markup, /data-library-batch-toggle="true" disabled aria-disabled="true"/);
+  assert.match(markup, /aria-expanded="false"/);
+  assert.doesNotMatch(markup, /asset-library-toolbar-menu batch/);
 });
 
 test("organization batch actions omit sharing to organization", () => {
@@ -129,7 +154,7 @@ test("organization batch actions omit sharing to organization", () => {
   assert.match(markup, /data-library-batch-action="delete"/);
   assert.match(markup, /data-library-selection-cancel="true"/);
   assert.doesNotMatch(markup, /share-organization/);
-  assert.doesNotMatch(markup, /共享到组织空间/);
+  assert.doesNotMatch(markup, /复制到组织空间/);
   assert.doesNotMatch(markup, /data-library-filter-toggle/);
 });
 
@@ -249,6 +274,7 @@ test("personal media cards expose selected, menu, rename, and all single-item ac
   };
   const markup = view.renderMediaCard(base);
   const renaming = view.renderMediaCard({ ...base, menuOpen: false, renaming: true });
+  const unselected = view.renderMediaCard({ ...base, selected: false, menuOpen: false });
 
   assert.match(markup, /asset-library-media-card selected selection-mode menu-open/);
   assert.match(markup, /draggable="true"/);
@@ -258,6 +284,10 @@ test("personal media cards expose selected, menu, rename, and all single-item ac
   assert.match(markup, /tabindex="0" aria-label="名称 镜头 A，按 Enter 或 F2 重命名"/);
   assert.match(markup, /data-library-select="media-1"/);
   assert.match(markup, /aria-pressed="true"/);
+  assert.match(markup, /data-library-select="media-1"[^]*data-lucide="check"/);
+  assert.match(unselected, /data-library-select="media-1"[^>]*>\s*<\/button>/);
+  assert.doesNotMatch(unselected, /data-lucide="plus"/);
+  assert.doesNotMatch(unselected, /data-lucide="square"/);
   assert.match(markup, /data-library-menu-toggle="media-1"/);
   assert.match(markup, /data-lucide="ellipsis-vertical"/);
   for (const action of ["rename", "review", "move", "share-organization", "delete"]) {

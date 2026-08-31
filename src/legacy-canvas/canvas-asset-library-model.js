@@ -85,6 +85,14 @@
       return record;
     }
 
+    function assertPersistedMediaCommandAvailable(item, action) {
+      const record = requireRecord(item);
+      if (item.kind === "media" && record.workspaceAssetId) {
+        throw new Error(`云端素材${action}尚未接入，当前操作已取消。`);
+      }
+      return record;
+    }
+
     function assertMutable(space) {
       if (!isMutableSpace(space)) throw new Error(`The ${space} asset library space is read-only.`);
     }
@@ -580,7 +588,7 @@
       if (!hasPlacementInternal(item, resolvedSpace)) throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
       const normalizedName = String(name || "").trim();
       if (!normalizedName) throw new Error("Item name is required.");
-      const record = requireRecord(item);
+      const record = assertPersistedMediaCommandAvailable(item, "重命名");
       record.name = normalizedName;
       if (Object.prototype.hasOwnProperty.call(record, "displayName")) record.displayName = normalizedName;
       return cloneValue(record);
@@ -591,6 +599,7 @@
       assertMutable(resolvedSpace);
       const refs = items.map((item) => resolveItemRef(item));
       for (const item of refs) {
+        assertPersistedMediaCommandAvailable(item, "移动");
         validateFolder(folderId, resolvedSpace, item.kind);
         if (!hasPlacementInternal(item, resolvedSpace)) throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
       }
@@ -736,6 +745,7 @@
       const refs = items.map((item) => resolveItemRef(item));
       const removalKeys = new Set();
       for (const item of refs) {
+        assertPersistedMediaCommandAvailable(item, "删除");
         const key = placementKey(item, resolvedSpace);
         if (!placementsByKey.has(key)) throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
         removalKeys.add(key);

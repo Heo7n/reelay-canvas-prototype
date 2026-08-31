@@ -10,6 +10,7 @@ dist/
 build/
 coverage/
 .vercel/
+.reelay-data/
 
 # Environment files
 .env

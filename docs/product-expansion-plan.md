@@ -17,7 +17,7 @@ Reelay 不应只是一块无限画布，也不应演变成把大量后台页面�
 以下是为了让基础开发可以前进而采用的可逆假设，不是不可更改的产品结论：
 
 - 首期账号主要属于一个组织 Workspace；“个人 / 协作项目”是同一组织内的项目访问类型，不再为每个账号复制一套个人 Workspace。个人项目只对创建者可见，协作项目通过显式 ProjectMembership 分配成员与角色。
-- 可跨项目复用的 Asset 归 Workspace 所有，Project 和 Node 只保存 AssetReference。尚未保存的生成结果仍是 GenerationResult，不会自动污染全局资产中心。
+- 可跨项目复用的 WorkspaceMediaAsset 归 Workspace 所有，Project 使用 ProjectAssetReference，Node 后续也只保存显式稳定引用。尚未保存的生成结果仍是 GenerationResult，不会自动污染全局资产中心。
 - 首期按 Reelay 统一提供模型服务设计，但 ProviderConnection 保留扩展边界；不在首期同时建设 BYOK 的密钥、配额和故障处理体系。
 - 同一组织下的成员身份、Membership 和显式 ProjectMembership 先于外部分享与实时协作。首期先演示多个账号在同一组织内访问各自有权使用的项目，不引入分享链接、实时光标和冲突合并。
 - 前端框架不是产品架构本身。先定义 route contract、领域对象和存储接口；Phase 0B 暂按 `docs/adr/0001-application-runtime-and-migration.md` 采用 React + TypeScript + Vite + React Router，答案或运行证据反驳时重新评审。现有画布通过 adapter 接入，不因框架选择被整体重写。
@@ -98,7 +98,7 @@ flowchart TD
 
 这是登录后的默认页面，不是宣传落地页。
 
-> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；十个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据、成员关系与路由画布文档已持久化到本地 PostgreSQL；旧画布通过受控迁移快照加载 / 保存，但素材、生成任务、历史和积分账本仍未持久化，因此这仍不是正式账号或生产协作。
+> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；十个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据、成员关系、路由画布文档，以及首个 WorkspaceMediaAsset / personal placement / ProjectAssetReference 切片已持久化到本地 PostgreSQL；本地资产内容由 filesystem ObjectStore 保留。旧画布通过受控迁移快照加载 / 保存，但 Entity / Folder、生成任务、历史和积分账本仍未持久化，因此这仍不是正式账号或生产协作。
 
 ### 页面目标
 
@@ -149,7 +149,7 @@ flowchart TD
 
 ## 4.2 资产中心
 
-资产中心是跨项目复用的 Media 与 Entity 管理页；画布内资产库已经实现其页面内存交互投影，正式 React 页面、权限和持久化仍属于本规划。
+资产中心是跨项目复用的 Media 与 Entity 管理页。画布内资产库已有高保真页面投影，并落地了个人 Media 上传、WorkspaceMediaAsset、personal placement、ProjectAssetReference、列表与内容读取的首个本地持久化切片。正式 React 资产中心、Entity / Folder repository、组织权限、平台目录和公网对象存储仍属于本规划。
 
 ### 页面目标
 
@@ -194,7 +194,7 @@ flowchart TD
 
 - 拖入上传。
 - 直接创建 Entity 时原子登记新 Media 与主体引用；删除 Entity 不删除 Media。
-- 批量加入项目（创建 AssetReference，不复制 Asset 所有权）。
+- 批量加入项目（创建 ProjectAssetReference，不复制 WorkspaceMediaAsset 所有权）。
 - 打开素材所在画布并定位节点。
 - 查看生成提示词和模型参数。
 - 删除前检查引用关系。
@@ -347,13 +347,14 @@ Agent 不直接调用页面 DOM 或原型事件函数。跨项目写操作必须
 | User | 用户资料与偏好 |
 | Project | 项目元数据、Workspace 归属、个人 / 协作访问类型、封面与创建 / 更新审计 |
 | ProjectMembership | 项目成员及 `admin/edit/view` 角色；是项目读写权限来源 |
-| CanvasDocument | 画布视口、节点、组与版本 |
+| CanvasDocument | 画布视口、节点、组与版本；v1 由 canonical allow-list 与持久 URL 安全校验约束 |
 | Node | 画布节点；GenerationNode 持有创建时确定且不可变的 `mediaKind` 与结果引用 |
-| Asset | Workspace 所有、可跨项目复用的持久 Media 对象；个人 / 组织空间由 placement 表达，不复制媒体内容 |
+| WorkspaceMediaAsset | Workspace 所有、可跨项目复用的持久 Media 对象；媒体二进制交给 ObjectStore |
+| MediaAssetPlacement | 个人 / 组织空间的可见与发布位置；不复制 WorkspaceMediaAsset |
 | Entity | 由去重、有序 Media 引用组成的主体；不复制 Media 的 URL、Blob、尺寸、时长或二进制 |
-| AssetReference | Project / Node 对 Asset 的显式引用与必要版本信息 |
+| ProjectAssetReference | Project 对 WorkspaceMediaAsset 的显式引用与必要版本信息；Node 级稳定引用仍待建立 |
 | GenerationTask | 带 actor 与项目 / 画布 / 节点 scope、状态、参数 / 计价快照和幂等键的一次执行 |
-| GenerationResult | 带不可变 `mediaKind` 的任务输出；默认不等于 Asset |
+| GenerationResult | 带不可变 `mediaKind` 的任务输出；默认不等于 WorkspaceMediaAsset |
 | ModelDefinition | 模型能力、参数模式和计费规则 |
 | CreditLedger | append-only 的预占、结算、释放 / 退款事实；余额是投影而不是第二真相 |
 | Conversation | Agent 会话、Workspace / Project scope 与可访问资源 |
@@ -366,7 +367,7 @@ Agent 不直接调用页面 DOM 或原型事件函数。跨项目写操作必须
 - 生成节点创建时必须原子写入非空、不可变的 `mediaKind`；旧 `mode / lockedMode` 只允许在版本化迁移适配器中读取，不能进入正常 runtime 或新 schema。
 - `GenerationTask.parameterSnapshot.mediaKind` 必须等于节点 `mediaKind`；任务成功只追加 `GenerationResult` 并更新 `activeResultId`，不负责设置或重新锁定节点类型。
 - 一个节点的全部 `GenerationResult.mediaKind` 必须与节点相同。跨图片 / 视频必须创建新节点，并通过稳定的结果或资产引用连接输入输出关系。
-- 节点保存 `mediaKind`、`activeResultId` 与有序的 `generationResultIds`；任务状态、参数 / 计价快照和错误归 `GenerationTask`，媒体输出归 `GenerationResult`，可复用资产归 `Asset`。
+- 节点保存 `mediaKind`、`activeResultId` 与有序的 `generationResultIds`；任务状态、参数 / 计价快照和错误归 `GenerationTask`，媒体输出归 `GenerationResult`，可复用持久资产归 `WorkspaceMediaAsset`。
 - 删除或切换结果、失败、取消、普通撤销都不得改变 `mediaKind`；复制任意生成节点都继承 `mediaKind`，但不复制或伪造任务与计费事件。
 - 成功生成是普通参数撤销的版本边界。未来若支持“撤销生成”，它只通过显式命令变更 Node → GenerationResult 引用；已经执行的任务和 `CreditLedger` 历史不可重写，也不能因 UI 撤销静默退款。退款只能由失败、取消或服务端补偿规则以幂等账本事件产生。
 - 一次任务可以产生多个结果，`count` 不应继续被压缩为单个 `generatedAsset`；参考素材快照也应保存稳定的 `AssetReference` 与必要版本信息，而不只是易失的内存 id。
@@ -390,8 +391,8 @@ sequenceDiagram
   T-->>C: 返回任务状态与进度
   T-->>C: 返回 GenerationResult
   U->>C: 显式保存结果
-  C->>A: 创建 Workspace Asset 与项目 AssetReference
-  U->>A: 通过新的 AssetReference 跨项目复用
+  C->>A: 创建 WorkspaceMediaAsset 与 ProjectAssetReference
+  U->>A: 通过新的 ProjectAssetReference 跨项目复用
 ```
 
 ### 6.2 从资产中心回到节点
@@ -423,22 +424,22 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、首批 Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、账号联系资料、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision、项目软删除和跨服务重启集成验证；旧画布已消费账号、组织和项目上下文，通过严格 allow-list bundle 保存多画布、节点、组与视口，并已提取无 DOM 的 iframe 持久化协调器。新画布快照只写节点 `mediaKind`，旧 `mode / lockedMode` 仅在 v1 读取边界迁移。账号设置已形成“个人主页 / 我的积分”的 React 弹出面板，组织中心也已提供积分管理与用量看板；其中积分余额、流水和用量分析仍是可整体替换的确定性前端演示数据，不是真实 `CreditLedger` 或持久化生成任务聚合。静态登录 / 主页双轨已经删除，画布导航统一回到 React 宿主。内存 adapter 只保留作快速契约测试和显式回退；资产、生成任务、生成历史和积分账本尚未持久化。
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、账号联系资料、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision、项目软删除和跨服务重启集成验证。CanvasDocument v1 现在通过 canonical allow-list 收敛字段、上限与媒体 URL，不支持的版本失败关闭；旧 `mode / lockedMode` 仅在 v1 读取边界迁移。首个资产切片已建立 WorkspaceMediaAsset、personal placement、ProjectAssetReference 与 ObjectStore 边界，可在本地 PostgreSQL + filesystem ObjectStore 中完成上传、挂到当前项目、列表 / 内容读取和跨服务重启恢复。Entity / Folder、组织共享、平台审核、生成任务、生成历史和积分账本尚未持久化；积分余额、流水和用量分析仍是可整体替换的确定性前端演示数据，不是真实 `CreditLedger`。公网 Vercel 还没有私有 Supabase Storage adapter，本地 filesystem ObjectStore 不是 serverless 持久化方案。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
 - 优先建立 Session、Workspace、Membership、Project、ProjectMembership 和 CanvasDocument 的 repository / service 边界，让单组织容器和项目访问都由显式 actor scope 驱动。
 - 因为组织演示需要多个浏览器账号看到各自有权访问的共享数据，Phase 0B 同步建立最小共享后端、服务端会话和开发数据库；IndexedDB 只承担本地草稿、缓存和离线恢复。
-- 为 Asset、GenerationTask、GenerationResult 和 CreditLedger 先定义核心不变量；真实生成接入前再补足 repository 和事务边界。
+- 继续为 Entity / Folder、GenerationTask、GenerationResult 和 CreditLedger 定义核心不变量；WorkspaceMediaAsset 已有首个 repository / ObjectStore 边界，不把尚未落地的其他资产能力描述为完成。
 - 本地草稿与 Blob 使用 IndexedDB；localStorage 仅保存主题等设备偏好。
 - 建立通用通知、确认、菜单、对话框和焦点管理组件。
 
 ### Phase 0C：真实主链路
 
 - 把当前 legacy CanvasDocument bundle 逐步迁移为正式 Canvas / Node 数据边界，并补齐草稿恢复。
-- 资产持久化与显式 AssetReference。
+- 在已有 WorkspaceMediaAsset + personal placement + ProjectAssetReference 切片上继续补齐 Entity / Folder、organization placement、Node 级稳定引用、删除 / 恢复与 GenerationResult 晋升；公网部署改用私有对象存储，不复用本地 filesystem adapter。
 - 生成任务与积分预占原子提交；成功只结算一次，失败 / 取消只释放或退款一次；重试复用幂等键且不得重复扣费。
-- 真实生成结果先登记为 GenerationResult，由用户或产品规则显式提升为 Asset。
+- 真实生成结果先登记为 GenerationResult，由用户或产品规则显式提升为 WorkspaceMediaAsset。
 
 ### Phase 1：核心工作台
 
@@ -479,7 +480,7 @@ Phase 0B 可以按 1.1 节的可逆假设推进，但在进入相应产品功能
 
 1. 首期账号主要属于一个组织；个人创作以组织内 private Project 表达，而不是为每个账号建立个人 Workspace。
 2. Reelay 统一提供模型服务；BYOK 只保留 ProviderConnection 边界，不在首期同时实现。
-3. Asset 归 Workspace，Project / Node 保存 AssetReference；项目内的临时数组不是正式所有权模型。
+3. WorkspaceMediaAsset 归 Workspace，Project 保存 ProjectAssetReference，Node 后续也只保存稳定引用；项目内的临时数组不是正式所有权模型。
 4. GenerationResult 默认不自动进入资产中心，必须显式保存或经过可解释的产品规则晋升。
 5. 模板首期仅限内部或私有复用，公开发布与市场化另行评估。
 6. 组织成员身份与显式 ProjectMembership 先于外部分享和实时协作；分享链接、实时状态、冲突合并和审批留到主链路稳定后。

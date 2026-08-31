@@ -32,10 +32,10 @@
   ]);
 
   const BATCH_ACTIONS = Object.freeze([
-    { id: "review", icon: "shield-check", label: "提交 Seedance 合规审核" },
-    { id: "move", icon: "folder-input", label: "移动" },
-    { id: "share-organization", icon: "users", label: "共享到组织空间", personalOnly: true },
-    { id: "delete", icon: "trash-2", label: "删除", danger: true },
+    { id: "review", label: "批量提交审核" },
+    { id: "move", label: "批量移动" },
+    { id: "share-organization", label: "复制到组织空间", personalOnly: true },
+    { id: "delete", label: "批量删除", danger: true },
   ]);
 
   function escapeHtml(value) {
@@ -101,10 +101,9 @@
     const actions = actionsForSpace(BATCH_ACTIONS, space)
       .filter((action) => action.id !== "review" || reviewableSelection);
     return `
-      <div class="asset-library-toolbar-menu" role="menu" aria-label="批量操作">
+      <div class="asset-library-toolbar-menu batch" role="menu" aria-label="批量操作">
         ${actions.map((action) => `
           <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem" data-library-batch-action="${action.id}">
-            ${icon(action.icon)}
             <span>${action.label}</span>
           </button>
         `).join("")}
@@ -134,7 +133,8 @@
     const display = normalizeDisplay(options.display);
     const requestedMenu = normalizeMenu(options.menu);
     const reviewableSelection = options.reviewableSelection !== false;
-    const menu = selectionMode && requestedMenu === "batch"
+    const hasSelection = selectedCount > 0;
+    const menu = selectionMode && hasSelection && requestedMenu === "batch"
       ? "batch"
       : section === "media" && requestedMenu === "filter"
         ? "filter"
@@ -150,10 +150,9 @@
       : selectionMode
         ? `
           <div class="asset-library-command-popover">
-            <button class="asset-library-primary-command" type="button" aria-haspopup="menu" aria-expanded="${menu === "batch"}" aria-label="操作，已选 ${selectedCount} 项" data-library-batch-toggle="true">
-              ${icon("list")}
+            <button class="asset-library-primary-command asset-library-batch-command" type="button" aria-haspopup="menu" aria-expanded="${menu === "batch"}" aria-label="${hasSelection ? `操作，已选 ${selectedCount} 项` : "操作，尚未选择资产"}" data-library-batch-toggle="true"${hasSelection ? "" : ' disabled aria-disabled="true"'}>
+              ${icon("list-checks")}
               <span>操作</span>
-              ${icon("chevron-down")}
             </button>
             ${menu === "batch" ? renderBatchMenu(space, reviewableSelection) : ""}
           </div>
@@ -432,7 +431,7 @@
       ${selectionMode
         ? `
           <button class="${classNames("asset-library-selection-button", selected && "active")}" type="button" aria-label="${selected ? "取消选择" : "选择"}" aria-pressed="${selected}" data-library-select="${safeId}" data-library-item-kind="${safeKind}">
-            ${icon(selected ? "check" : "plus")}
+            ${selected ? icon("check") : ""}
           </button>
         `
         : ""}

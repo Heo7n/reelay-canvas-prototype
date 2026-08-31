@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   hostDocumentMessageSchema,
+  hostAssetCommandErrorMessageSchema,
   hostFlushMessageSchema,
+  hostMediaUploadGrantMessageSchema,
+  hostMediaUploadResultMessageSchema,
   hostMessageSchema,
+  hostProjectAssetsMessageSchema,
   hostSaveErrorMessageSchema,
   hostSaveResultMessageSchema,
   parseCanvasMessage,
@@ -17,6 +21,17 @@ const document = {
 };
 
 describe("legacy canvas bridge", () => {
+  const projectAsset = {
+    referenceId: "reference-1",
+    assetId: "asset-1",
+    assetVersion: 1,
+    mediaKind: "image" as const,
+    displayName: "cover.png",
+    contentType: "image/png",
+    byteSize: 42,
+    checksumSha256: "a".repeat(64),
+    contentUrl: "/api/assets/asset-1/content",
+  };
   it("accepts versioned host context and a separate opaque document message", () => {
     const context = {
       protocolVersion: 1 as const,
@@ -158,6 +173,61 @@ describe("legacy canvas bridge", () => {
       instanceId: "canvas-instance-1",
       section: "credits",
     });
+  });
+
+  it("strictly validates scoped asset upload requests and correlated host responses", () => {
+    const create = parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:create-media-upload",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      requestId: "upload-1",
+      idempotencyKey: "attempt-1",
+      mediaKind: "image",
+      displayName: "cover.png",
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "a".repeat(64),
+    });
+    expect(create?.type).toBe("canvas:create-media-upload");
+    expect(parseCanvasMessage({ ...create, workspaceId: "iframe-controlled" })).toBeNull();
+    expect(parseCanvasMessage({ ...create, byteSize: 64 * 1024 * 1024 + 1 })).toBeNull();
+    expect(parseCanvasMessage({ ...create, checksumSha256: "A".repeat(64) })).toBeNull();
+
+    expect(hostProjectAssetsMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:project-assets",
+      protocolVersion: 1,
+      requestId: "snapshot-1",
+      instanceId: "canvas-instance-1",
+      projectAssets: [projectAsset],
+    }).projectAssets).toEqual([projectAsset]);
+    expect(hostMediaUploadGrantMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:media-upload-grant",
+      protocolVersion: 1,
+      requestId: "upload-1",
+      instanceId: "canvas-instance-1",
+      uploadIntent: { id: "intent-1", expiresAt: "2026-08-31T12:00:00.000Z" },
+      upload: { url: "/api/uploads/intent-1", method: "PUT", headers: { "x-upload": "one" } },
+    }).upload.method).toBe("PUT");
+    expect(hostMediaUploadResultMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:media-upload-result",
+      protocolVersion: 1,
+      requestId: "upload-1",
+      instanceId: "canvas-instance-1",
+      uploadId: "intent-1",
+      projectAsset,
+    }).projectAsset.assetId).toBe("asset-1");
+    expect(hostAssetCommandErrorMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:asset-command-error",
+      protocolVersion: 1,
+      requestId: "upload-1",
+      instanceId: "canvas-instance-1",
+      code: "forbidden",
+    }).code).toBe("forbidden");
   });
 
   it("rejects unknown or structurally invalid account sections", () => {

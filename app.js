@@ -255,6 +255,7 @@ const state = {
   hostCapabilities: {
     accountSections: false,
     projectSwitcher: false,
+    assetPersistence: false,
   },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
@@ -381,6 +382,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.projectName = String(context.projectName || state.projectName);
     state.hostCapabilities.accountSections = context.capabilities?.accountSections === true;
     state.hostCapabilities.projectSwitcher = context.capabilities?.projectSwitcher === true;
+    state.hostCapabilities.assetPersistence = context.capabilities?.assetPersistence === true;
     state.projects = normalizeProjectOptions(context.projects);
     state.projectSearch = "";
     if (projectMenuSearch) projectMenuSearch.value = "";
@@ -406,6 +408,28 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     };
     showActionToast(messages[notice] || "画布状态已更新");
   },
+});
+const canvasMediaAssetCoordinatorFactory = window.REELAY_CANVAS_MEDIA_ASSET_COORDINATOR;
+if (!canvasMediaAssetCoordinatorFactory) throw new Error("Canvas media asset coordinator is unavailable.");
+const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAssetCoordinator({
+  instanceId: canvasInstanceId,
+  makeRequestId: () => crypto.randomUUID(),
+  postMessage: (message) => window.parent.postMessage(message, window.location.origin),
+  checksumFile: async (file) => {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  },
+  uploadFile: async ({ url, method, headers, file }) => {
+    const response = await fetch(url, { method, headers, body: file, credentials: "include" });
+    if (!response.ok) throw new Error(`媒体上传失败（${response.status}）`);
+  },
+  getBaseUrl: () => window.location.href,
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  isHosted: () => window.parent !== window,
+  getExpectedOrigin: () => window.location.origin,
+  getExpectedSource: () => window.parent,
+  onProjectAssets: registerHostProjectAssets,
 });
 const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectionRenderer({
   paths: connectionPaths,
@@ -564,15 +588,39 @@ function clampPanelWidth(width, minWidth, maxWidth) {
   return clamp(width, Math.min(minWidth, safeMax), safeMax);
 }
 
+function getAssetLibraryWidthBounds() {
+  const viewportMax = Math.max(0, Math.min(panelWidthRules.assetMax, window.innerWidth - 24));
+  const opposingWidth = state.agentOpen ? state.agentWidth : 0;
+  const coupledMax = state.agentOpen && isAssetLibraryOpen()
+    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.canvasCorridor - opposingWidth)
+    : viewportMax;
+  const max = Math.max(0, coupledMax);
+  return {
+    min: Math.min(panelWidthRules.assetMin, max),
+    max,
+  };
+}
+
+function syncAssetLibraryResizeSemantics(bounds = getAssetLibraryWidthBounds()) {
+  if (!assetLibraryResizeHandle) return;
+  const width = Math.round(state.assetLibraryWidth);
+  assetLibraryResizeHandle.setAttribute("aria-valuemin", String(Math.round(bounds.min)));
+  assetLibraryResizeHandle.setAttribute("aria-valuemax", String(Math.round(bounds.max)));
+  assetLibraryResizeHandle.setAttribute("aria-valuenow", String(width));
+  assetLibraryResizeHandle.setAttribute("aria-valuetext", `资产库宽度 ${width} 像素`);
+}
+
 function applyAssetLibraryWidth(width) {
   state.assetLibraryWidth = width;
   appShell?.style.setProperty("--asset-panel-width", `${Math.round(width)}px`);
+  syncAssetLibraryResizeSemantics();
 }
 
 function applyAgentWidth(width) {
   state.agentWidth = width;
   agentDock?.style.setProperty("--agent-width", `${width}px`);
   appShell?.style.setProperty("--agent-width", `${width}px`);
+  syncAssetLibraryResizeSemantics();
 }
 
 function reconcileDualPanelWidths(preferredPanel) {
@@ -603,20 +651,15 @@ function reconcileDualPanelWidths(preferredPanel) {
       Math.min(panelWidthRules.assetMax, capacity - nextAgentWidth),
     );
   }
-  applyAssetLibraryWidth(nextAssetWidth);
   applyAgentWidth(nextAgentWidth);
+  applyAssetLibraryWidth(nextAssetWidth);
 }
 
 function setAssetLibraryWidth(width, { remember = true } = {}) {
   const preferredWidth = clamp(width, panelWidthRules.assetMin, panelWidthRules.assetMax);
   if (remember) state.assetLibraryPreferredWidth = preferredWidth;
-  const opposingWidth = state.agentOpen ? state.agentWidth : 0;
-  const viewportMax = Math.min(panelWidthRules.assetMax, window.innerWidth - 24);
-  const maxWidth = state.agentOpen && isAssetLibraryOpen()
-    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.canvasCorridor - opposingWidth)
-    : viewportMax;
-  applyAssetLibraryWidth(clampPanelWidth(preferredWidth, panelWidthRules.assetMin, maxWidth));
-  assetLibraryResizeHandle?.setAttribute("aria-valuenow", String(Math.round(state.assetLibraryWidth)));
+  const bounds = getAssetLibraryWidthBounds();
+  applyAssetLibraryWidth(clampPanelWidth(preferredWidth, bounds.min, bounds.max));
   renderSelectionToolbar();
   renderMinimap();
   scheduleNodePopoverLayouts();
@@ -843,7 +886,7 @@ function scheduleCanvasDocumentSave(delay = 800) {
 }
 
 function handleHostBridgeMessage(event) {
-  return canvasPersistence.handleHostMessage(event);
+  return canvasPersistence.handleHostMessage(event) || canvasMediaAssets.handleHostMessage(event);
 }
 
 function screenToWorld(clientX, clientY) {
@@ -2117,6 +2160,23 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function sanitizeRuntimeMediaUrl(value) {
+  const url = String(value ?? "").trim().slice(0, 2_048);
+  if (!url || /[\u0000-\u001f\u007f<>"'`]/.test(url)) return "";
+  const compact = url.replace(/[\u0000-\u0020]+/g, "");
+  const scheme = compact.match(/^([a-z][a-z\d+.-]*):/i)?.[1]?.toLowerCase();
+  if (scheme && !["http", "https", "blob"].includes(scheme)) {
+    const safeDataMedia = /^data:(?:image\/(?:avif|gif|jpe?g|png|webp)|video\/(?:mp4|ogg|webm)|audio\/(?:aac|mpeg|ogg|wav|webm))(?:;|,)/i;
+    if (!safeDataMedia.test(compact)) return "";
+  }
+  if (!scheme && !/^\/(?!\/)/.test(url) && !/^\.\.?\//.test(url)) return "";
+  return url;
+}
+
+function safeMediaAttributeUrl(value) {
+  return escapeHtml(sanitizeRuntimeMediaUrl(value));
+}
+
 const fallbackIconPaths = {
   "align-horizontal-space-around": '<path d="M4 18V6"/><path d="M20 18V6"/><path d="M8 12h8"/><path d="m14 9 3 3-3 3"/><path d="m10 9-3 3 3 3"/>',
   "align-vertical-space-around": '<path d="M6 4h12"/><path d="M6 20h12"/><path d="M12 8v8"/><path d="m9 14 3 3 3-3"/><path d="m9 10 3-3 3 3"/>',
@@ -2162,6 +2222,7 @@ const fallbackIconPaths = {
   "layers-3": '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
   "layout-grid": '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
   "list": '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+  "list-checks": '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
   "list-filter": '<path d="M3 6h18"/><path d="M6 12h12"/><path d="M10 18h4"/>',
   "log-out": '<path d="M10 17v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2"/><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/>',
   "map": '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
@@ -2703,17 +2764,18 @@ function mediaEditToolbar(node, layout) {
 }
 
 function assetPreview(asset) {
-  if (!asset.url) {
+  const safeUrl = safeMediaAttributeUrl(asset.url);
+  if (!safeUrl) {
     if (asset.type === "video") return `<span class="asset-glyph">▣</span>`;
     if (asset.type === "audio") return `<span class="asset-glyph">♬</span>`;
     return `<span class="asset-glyph">▧</span>`;
   }
   if (asset.type === "image") {
-    return `<img src="${asset.url}" alt="" draggable="false" />`;
+    return `<img src="${safeUrl}" alt="" draggable="false" />`;
   }
   if (asset.type === "video") {
     return `
-      <video src="${asset.url}" muted playsinline preload="metadata" draggable="false"></video>
+      <video src="${safeUrl}" muted playsinline preload="metadata" draggable="false"></video>
       <span class="video-play">▶</span>
     `;
   }
@@ -2740,6 +2802,31 @@ function createAssetsFromFiles(files) {
       };
     })
     .filter(Boolean);
+}
+
+async function createPersistedAssetsFromFiles(files) {
+  if (window.parent === window) return createAssetsFromFiles(files);
+  if (!state.hostCapabilities.assetPersistence) {
+    showActionToast("当前项目尚未接入资产持久化，无法添加本地文件");
+    return [];
+  }
+  const accepted = Array.from(files || [])
+    .map((file) => ({ file, mediaKind: getAssetType(file) }))
+    .filter((entry) => entry.mediaKind);
+  if (!accepted.length) return [];
+  try {
+    return await Promise.all(accepted.map(async ({ file, mediaKind }) => {
+      const projectAsset = await canvasMediaAssets.persistFile(file, {
+        mediaKind,
+        displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
+        contentType: file.type || defaultUploadContentType(mediaKind),
+      });
+      return projectAssetToLibraryMedia(projectAsset);
+    }));
+  } catch (error) {
+    showActionToast(error?.message || "媒体上传失败");
+    return [];
+  }
 }
 
 function cloneAsset(asset, source = asset.source) {
@@ -3125,7 +3212,7 @@ function openAssetLibraryPreview(kind, id) {
     if (assetLibraryPreviewMeta) assetLibraryPreviewMeta.textContent = `${media.length} 个素材引用`;
     if (assetLibraryPreviewUse) assetLibraryPreviewUse.hidden = true;
   } else {
-    const url = escapeHtml(item.url || "");
+    const url = safeMediaAttributeUrl(item.url);
     if (item.mediaKind === "image" || item.type === "image") {
       assetLibraryPreviewBody.innerHTML = url ? `<img src="${url}" alt="${escapeHtml(name)}" />` : assetPreview(item);
     } else if (item.mediaKind === "video" || item.type === "video") {
@@ -3336,7 +3423,8 @@ function useLibraryAsset(assetId, clientX, clientY) {
 }
 
 function hydrateAssetMetadata(asset, nodeId) {
-  if (!asset.url) return;
+  const safeUrl = sanitizeRuntimeMediaUrl(asset.url);
+  if (!safeUrl) return;
 
   if (asset.type === "image") {
     const image = new Image();
@@ -3347,7 +3435,7 @@ function hydrateAssetMetadata(asset, nodeId) {
       asset.aspectRatio = image.naturalWidth / image.naturalHeight;
       if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
     };
-    image.src = asset.url;
+    image.src = safeUrl;
     return;
   }
 
@@ -3358,7 +3446,7 @@ function hydrateAssetMetadata(asset, nodeId) {
       asset.duration = audio.duration;
       if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
     };
-    audio.src = asset.url;
+    audio.src = safeUrl;
     return;
   }
 
@@ -3374,7 +3462,7 @@ function hydrateAssetMetadata(asset, nodeId) {
     asset.aspectRatio = video.videoWidth / video.videoHeight;
     if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
   };
-  video.src = asset.url;
+  video.src = safeUrl;
 }
 
 function audioWaveformBars(repeat = 1) {
@@ -3483,14 +3571,16 @@ function assetMediaContent(asset) {
     `;
   }
 
-  if (asset.type === "image" && asset.url) {
-    return `<div class="media-content image"><img class="frame-media" src="${asset.url}" alt="" draggable="false" /></div>`;
+  const safeUrl = safeMediaAttributeUrl(asset.url);
+
+  if (asset.type === "image" && safeUrl) {
+    return `<div class="media-content image"><img class="frame-media" src="${safeUrl}" alt="" draggable="false" /></div>`;
   }
 
-  if (asset.type === "video" && asset.url) {
+  if (asset.type === "video" && safeUrl) {
     return `
       <div class="media-content video">
-        <video class="frame-media" src="${asset.url}" controls playsinline preload="metadata" draggable="false"></video>
+        <video class="frame-media" src="${safeUrl}" controls playsinline preload="metadata" draggable="false"></video>
       </div>
     `;
   }
@@ -3512,7 +3602,7 @@ function assetMediaContent(asset) {
             <span class="audio-progress-fill" data-audio-progress-fill></span>
           </div>
         </div>
-        ${asset.url ? `<audio class="frame-audio" src="${asset.url}" preload="metadata"></audio>` : ""}
+        ${safeUrl ? `<audio class="frame-audio" src="${safeUrl}" preload="metadata"></audio>` : ""}
       </div>
     `;
   }
@@ -3561,10 +3651,10 @@ function assetShelf(node) {
   return `<div class="asset-shelf">${linkedReferences}${assets}</div>`;
 }
 
-function addFilesToGeneratorNode(node, files) {
+async function addFilesToGeneratorNode(node, files) {
   if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
-  const accepted = createAssetsFromFiles(files);
+  const accepted = await createPersistedAssetsFromFiles(files);
   if (!accepted.length) return;
 
   registerLibraryAssets(accepted, "project");
@@ -3578,9 +3668,9 @@ function addFilesToGeneratorNode(node, files) {
   render();
 }
 
-function addMediaNodesFromFiles(files, clientX, clientY) {
+async function addMediaNodesFromFiles(files, clientX, clientY) {
   if (!requireCanvasMutation()) return [];
-  const accepted = createAssetsFromFiles(files);
+  const accepted = await createPersistedAssetsFromFiles(files);
   if (!accepted.length) return [];
 
   registerLibraryAssets(accepted, "project");
@@ -4201,9 +4291,10 @@ function getAssetDownloadExtension(asset) {
 }
 
 async function downloadAssetFile(asset, fileName = `${getAssetDisplayName(asset) || `reelay-${asset.type}`}.${getAssetDownloadExtension(asset)}`) {
-  if (!asset?.url) return false;
+  const safeUrl = sanitizeRuntimeMediaUrl(asset?.url);
+  if (!safeUrl) return false;
   try {
-    const response = await fetch(asset.url);
+    const response = await fetch(safeUrl);
     if (!response.ok) throw new Error("Download failed");
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
@@ -4214,7 +4305,7 @@ async function downloadAssetFile(asset, fileName = `${getAssetDisplayName(asset)
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   } catch {
     const anchor = document.createElement("a");
-    anchor.href = asset.url;
+    anchor.href = safeUrl;
     anchor.target = "_blank";
     anchor.rel = "noopener";
     anchor.click();
@@ -4229,6 +4320,10 @@ function addEditableMediaToLibrary(node) {
   const registered = findRegisteredLibraryMedia(asset);
   if (hasPersonalLibraryPlacement(registered)) {
     showActionToast("该媒体已在个人素材中");
+    return;
+  }
+  if (window.parent !== window && !asset.workspaceAssetId && !registered?.workspaceAssetId) {
+    showActionToast("该媒体尚未持久化，当前不能加入云端素材库");
     return;
   }
   registerLibraryAssets(
@@ -6675,6 +6770,11 @@ function setAgentOpen(open) {
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
   if (open && isAssetLibraryOpen()) reconcileDualPanelWidths("agent");
+  else if (!open && isAssetLibraryOpen()) {
+    setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
+  } else {
+    syncAssetLibraryResizeSemantics();
+  }
   if (agentPanel) {
     agentPanel.inert = !open;
     agentPanel.setAttribute("aria-hidden", String(!open));
@@ -7221,6 +7321,7 @@ function addSelectedMediaToLibrary() {
     const sourceId = asset.librarySourceId || asset.id;
     const registered = findRegisteredLibraryMedia(asset);
     if (hasPersonalLibraryPlacement(registered)) continue;
+    if (window.parent !== window && !asset.workspaceAssetId && !registered?.workspaceAssetId) continue;
     const candidate = registered || {
       ...cloneAsset(asset, asset.source || "library"),
       librarySourceId: sourceId,
@@ -7229,7 +7330,7 @@ function addSelectedMediaToLibrary() {
     additions.push(candidate);
   }
   if (!additions.length) {
-    showActionToast("选中素材已在个人素材中");
+    showActionToast(window.parent !== window ? "选中素材尚未持久化或已在个人素材中" : "选中素材已在个人素材中");
     return;
   }
   registerLibraryAssets(additions, "project");
@@ -8128,9 +8229,9 @@ localAssetInput.addEventListener("change", (event) => {
   const node = state.nodes.find((item) => item.id === state.pendingUploadNodeId);
   const canvasPoint = state.pendingCanvasUploadPoint;
   if (node) {
-    addFilesToGeneratorNode(node, files);
+    void addFilesToGeneratorNode(node, files);
   } else if (canvasPoint && files.length) {
-    addMediaNodesFromFiles(files, canvasPoint.clientX, canvasPoint.clientY);
+    void addMediaNodesFromFiles(files, canvasPoint.clientX, canvasPoint.clientY);
   }
   state.pendingUploadNodeId = null;
   state.pendingCanvasUploadPoint = null;
@@ -8180,11 +8281,11 @@ window.addEventListener("drop", (event) => {
 
   const targetNode = getNodeFromElement(event.target);
   if (targetNode?.kind === "generator") {
-    addFilesToGeneratorNode(targetNode, files);
+    void addFilesToGeneratorNode(targetNode, files);
     return;
   }
 
-  addMediaNodesFromFiles(files, event.clientX, event.clientY);
+  void addMediaNodesFromFiles(files, event.clientX, event.clientY);
 });
 
 function setAssetLibrarySelectionMode(enabled) {
@@ -8287,17 +8388,80 @@ function createAssetLibraryFolder() {
   renderAssetLibrary();
 }
 
-function addFilesToAssetLibrary(files) {
+function projectAssetToLibraryMedia(projectAsset) {
+  const contentUrl = new URL(projectAsset.contentUrl, window.location.href);
+  if (contentUrl.origin !== window.location.origin) throw new Error("资产内容地址不属于当前 Reelay 服务");
+  const url = sanitizeRuntimeMediaUrl(contentUrl.href);
+  if (!url) throw new Error("资产内容地址无效");
+  return {
+    id: projectAsset.assetId,
+    workspaceAssetId: projectAsset.assetId,
+    projectAssetReferenceId: projectAsset.referenceId,
+    librarySourceId: projectAsset.assetId,
+    assetVersion: projectAsset.assetVersion,
+    mediaKind: projectAsset.mediaKind,
+    type: projectAsset.mediaKind,
+    name: projectAsset.displayName,
+    displayName: projectAsset.displayName,
+    contentType: projectAsset.contentType,
+    byteSize: projectAsset.byteSize,
+    checksumSha256: projectAsset.checksumSha256,
+    url,
+    source: "workspace",
+  };
+}
+
+function registerHostProjectAssets(projectAssets) {
+  for (const projectAsset of projectAssets) {
+    try {
+      const media = projectAssetToLibraryMedia(projectAsset);
+      assetLibraryStore.registerMedia({ media, space: "personal", folderId: null });
+      hydrateAssetMetadata(media, null);
+    } catch {
+      // Invalid server projections stay out of the legacy library.
+    }
+  }
+  renderAssetLibrary();
+}
+
+function defaultUploadContentType(mediaKind) {
+  if (mediaKind === "video") return "video/mp4";
+  if (mediaKind === "audio") return "audio/mpeg";
+  return "image/jpeg";
+}
+
+async function addFilesToAssetLibrary(files) {
   if (!isAssetLibraryMutable()) return;
-  const media = createAssetsFromFiles(files).map((asset) => ({
-    ...asset,
-    displayName: asset.name || asset.displayName,
-  }));
-  if (!media.length) {
+  const accepted = Array.from(files || [])
+    .map((file) => ({ file, mediaKind: getAssetType(file) }))
+    .filter((entry) => entry.mediaKind);
+  if (!accepted.length) {
     showActionToast("请选择图片、视频或音频文件");
     return;
   }
+  if (window.parent !== window && !state.hostCapabilities.assetPersistence) {
+    showActionToast("当前项目尚未接入资产持久化");
+    return;
+  }
+  if (window.parent !== window && state.librarySpace !== "personal") {
+    showActionToast("首个持久化切片仅支持上传到个人空间");
+    return;
+  }
+  showActionToast(`正在上传 ${accepted.length} 个素材…`);
   try {
+    const media = window.parent === window
+      ? createAssetsFromFiles(accepted.map((entry) => entry.file)).map((asset) => ({
+        ...asset,
+        displayName: asset.name || asset.displayName,
+      }))
+      : await Promise.all(accepted.map(async ({ file, mediaKind }) => {
+        const projectAsset = await canvasMediaAssets.persistFile(file, {
+          mediaKind,
+          displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
+          contentType: file.type || defaultUploadContentType(mediaKind),
+        });
+        return projectAssetToLibraryMedia(projectAsset);
+      }));
     if (state.librarySection === "entity") {
       const entityName = `${fileDisplayName(media[0].name, "新建主体")}主体`;
       assetLibraryStore.createEntityFromMedia({
@@ -8307,7 +8471,7 @@ function addFilesToAssetLibrary(files) {
         folderId: state.libraryFolderId,
         mediaFolderId: null,
       });
-      showActionToast(`已创建主体，并登记 ${media.length} 个素材`);
+      showActionToast(`已持久化 ${media.length} 个素材；主体仅保留在当前页面`);
     } else {
       media.forEach((asset) => {
         assetLibraryStore.registerMedia({
@@ -8320,9 +8484,6 @@ function addFilesToAssetLibrary(files) {
     }
     media.forEach((asset) => hydrateAssetMetadata(asset, null));
   } catch (error) {
-    media.forEach((asset) => {
-      if (String(asset.url || "").startsWith("blob:")) URL.revokeObjectURL(asset.url);
-    });
     showActionToast(error?.message || "资产写入失败");
   }
   renderAssetLibrary();
@@ -8441,6 +8602,7 @@ railLibraryBtn?.addEventListener("click", (event) => {
 
 assetLibraryCloseBtn?.addEventListener("click", closeAssetLibrary);
 assetLibraryResizeHandle?.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
   event.preventDefault();
   event.stopPropagation();
   state.action = {
@@ -8456,10 +8618,11 @@ assetLibraryResizeHandle?.addEventListener("pointerdown", (event) => {
 assetLibraryResizeHandle?.addEventListener("keydown", (event) => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
+  const bounds = getAssetLibraryWidthBounds();
   const step = event.shiftKey ? 64 : 16;
-  if (event.key === "Home") setAssetLibraryWidth(panelWidthRules.assetMin);
-  else if (event.key === "End") setAssetLibraryWidth(panelWidthRules.assetMax);
-  else setAssetLibraryWidth(state.assetLibraryPreferredWidth + (event.key === "ArrowRight" ? step : -step));
+  if (event.key === "Home") setAssetLibraryWidth(bounds.min);
+  else if (event.key === "End") setAssetLibraryWidth(bounds.max);
+  else setAssetLibraryWidth(state.assetLibraryWidth + (event.key === "ArrowRight" ? step : -step));
 });
 assetLibraryPanel?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -8561,6 +8724,11 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-library-batch-toggle]")) {
+    if (state.librarySelectedIds.size === 0) {
+      state.libraryToolbarMenu = null;
+      renderAssetLibrary();
+      return;
+    }
     state.libraryToolbarMenu = state.libraryToolbarMenu === "batch" ? null : "batch";
     renderAssetLibrary();
     return;
@@ -8653,7 +8821,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
   }
 });
 assetLibraryUploadInput?.addEventListener("change", (event) => {
-  addFilesToAssetLibrary(event.currentTarget.files);
+  void addFilesToAssetLibrary(event.currentTarget.files);
   event.currentTarget.value = "";
 });
 assetLibraryCreateFolderBtn?.addEventListener("click", createAssetLibraryFolder);
@@ -8730,7 +8898,14 @@ canvasHomeButtons.forEach((button) => {
   });
 });
 
+let profileHelpCloseTimer = null;
 let profileShortcutCloseTimer = null;
+
+function clearProfileHelpCloseTimer() {
+  if (profileHelpCloseTimer === null) return;
+  window.clearTimeout(profileHelpCloseTimer);
+  profileHelpCloseTimer = null;
+}
 
 function setProfileShortcutOpen(open) {
   if (profileShortcutCloseTimer !== null) {
@@ -8750,13 +8925,28 @@ function scheduleProfileShortcutClose() {
       profileShortcutSheet?.matches(":hover") ||
       profileShortcutSheet?.contains(document.activeElement);
     if (!keepsShortcutOpen) setProfileShortcutOpen(false);
-  }, 80);
+  }, 180);
 }
 
 function setProfileHelpOpen(open) {
+  if (open) clearProfileHelpCloseTimer();
   profileHelpFlyout?.classList.toggle("open", open);
   profileHelpTrigger?.setAttribute("aria-expanded", String(open));
   if (!open) setProfileShortcutOpen(false);
+}
+
+function scheduleProfileHelpClose() {
+  clearProfileHelpCloseTimer();
+  profileHelpCloseTimer = window.setTimeout(() => {
+    profileHelpCloseTimer = null;
+    const helpPanel = profileHelpFlyout?.querySelector(".profile-help-flyout-panel");
+    const keepsHelpOpen =
+      profileHelpTrigger?.matches(":hover, :focus") ||
+      helpPanel?.matches(":hover") ||
+      profileShortcutSheet?.matches(":hover") ||
+      profileHelpFlyout?.contains(document.activeElement);
+    if (!keepsHelpOpen) setProfileHelpOpen(false);
+  }, 180);
 }
 
 function toggleProfileHelpOpen() {
@@ -8826,7 +9016,11 @@ profileHelpFlyout?.addEventListener("pointerenter", () => {
 });
 
 profileHelpFlyout?.addEventListener("pointerleave", () => {
-  setProfileHelpOpen(false);
+  scheduleProfileHelpClose();
+});
+
+profileHelpFlyout?.querySelector(".profile-help-flyout-panel")?.addEventListener("pointerenter", () => {
+  setProfileHelpOpen(true);
 });
 
 profileHelpFlyout?.addEventListener("focusout", () => {
@@ -8861,6 +9055,7 @@ profileShortcutTrigger?.addEventListener("click", (event) => {
 });
 
 profileShortcutSheet?.addEventListener("pointerenter", () => {
+  setProfileHelpOpen(true);
   setProfileShortcutOpen(true);
 });
 

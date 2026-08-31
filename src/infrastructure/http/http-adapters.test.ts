@@ -4,6 +4,7 @@ import { ApplicationError } from "../../application/shared/ApplicationError";
 import { createHttpServices } from "./createHttpServices";
 import { HttpAccountRepository } from "./HttpAccountRepository";
 import { HttpCanvasDocumentRepository } from "./HttpCanvasDocumentRepository";
+import { HttpMediaAssetRepository } from "./HttpMediaAssetRepository";
 import { HttpOrganizationRepository } from "./HttpOrganizationRepository";
 import { HttpProjectRepository } from "./HttpProjectRepository";
 import { HttpSessionGateway } from "./HttpSessionGateway";
@@ -400,6 +401,74 @@ describe("HttpCanvasDocumentRepository", () => {
   });
 });
 
+describe("HttpMediaAssetRepository", () => {
+  const projectAsset = {
+    referenceId: "reference-1",
+    assetId: "asset-1",
+    assetVersion: 1,
+    mediaKind: "image" as const,
+    displayName: "cover.png",
+    contentType: "image/png",
+    byteSize: 42,
+    checksumSha256: "a".repeat(64),
+    contentUrl: "/api/assets/asset-1/content",
+  };
+
+  it("creates, finalizes, attaches and lists media through encoded scoped routes", async () => {
+    const asset = {
+      id: "asset-1",
+      workspaceId: "workspace/one",
+      mediaKind: "image",
+      displayName: "cover.png",
+      objectVersion: 1,
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "a".repeat(64),
+      createdAt: "2026-08-31T12:00:00.000Z",
+      updatedAt: "2026-08-31T12:00:00.000Z",
+    };
+    const grant = {
+      uploadIntent: { id: "upload/one", expiresAt: "2026-08-31T12:10:00.000Z" },
+      upload: { url: "/api/uploads/upload-one", method: "PUT", headers: { "x-upload": "one" } },
+    };
+    const transport = createFetchQueue(
+      { body: grant },
+      { body: { asset } },
+      { body: { projectAsset } },
+      { body: { projectAssets: [projectAsset] } },
+    );
+    const repository = new HttpMediaAssetRepository({ baseUrl: "/backend", fetch: transport.fetch });
+
+    await expect(repository.createUploadIntent({
+      workspaceId: "workspace/one",
+      idempotencyKey: "attempt-1",
+      mediaKind: "image",
+      displayName: "cover.png",
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "a".repeat(64),
+    })).resolves.toEqual(grant);
+    await expect(repository.finalizeUpload("workspace/one", "upload/one")).resolves.toEqual(asset);
+    await expect(repository.attachToProject("project/one", "asset/one")).resolves.toEqual(projectAsset);
+    await expect(repository.listProjectAssets("project/one")).resolves.toEqual([projectAsset]);
+
+    expect(transport.requests.map((request) => request.url)).toEqual([
+      "/backend/api/workspaces/workspace%2Fone/media-upload-intents",
+      "/backend/api/workspaces/workspace%2Fone/media-upload-intents/upload%2Fone/finalize",
+      "/backend/api/projects/project%2Fone/asset-references/asset%2Fone",
+      "/backend/api/projects/project%2Fone/asset-references",
+    ]);
+    expect(JSON.parse(String(transport.requests[0]?.init.body))).toEqual({
+      idempotencyKey: "attempt-1",
+      mediaKind: "image",
+      displayName: "cover.png",
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "a".repeat(64),
+    });
+  });
+});
+
 describe("createHttpServices", () => {
   it("creates all application adapters from one injectable transport configuration", async () => {
     const transport = createFetchQueue({ body: { actor: null } });
@@ -407,6 +476,7 @@ describe("createHttpServices", () => {
 
     await expect(services.sessionGateway.getCurrent()).resolves.toEqual({ actor: null });
     expect(services.canvasDocumentRepository).toBeInstanceOf(HttpCanvasDocumentRepository);
+    expect(services.mediaAssetRepository).toBeInstanceOf(HttpMediaAssetRepository);
     expect(services.accountRepository).toBeInstanceOf(HttpAccountRepository);
     expect(services.workspaceContextGateway).toBeInstanceOf(HttpWorkspaceContextGateway);
     expect(services.organizationRepository).toBeInstanceOf(HttpOrganizationRepository);

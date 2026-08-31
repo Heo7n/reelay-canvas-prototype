@@ -1,17 +1,7 @@
 import path from "node:path";
 
 import { buildServer } from "./app";
-import type { CollaborationStore } from "./application/CollaborationStore";
-import { createPostgresPool } from "./db/config";
-import { InMemoryCollaborationStore } from "./infrastructure/InMemoryCollaborationStore";
-import { PostgresCollaborationStore } from "./infrastructure/PostgresCollaborationStore";
-
-function createStore(): CollaborationStore {
-  const storage = process.env.REELAY_STORAGE?.trim().toLocaleLowerCase("en-US") ?? "postgresql";
-  if (storage === "memory") return new InMemoryCollaborationStore();
-  if (storage === "postgresql") return new PostgresCollaborationStore(createPostgresPool());
-  throw new Error(`Unsupported REELAY_STORAGE value: ${storage}`);
-}
+import { createServerDependencies } from "./server-dependencies";
 
 async function start(): Promise<void> {
   const isProduction = process.env.NODE_ENV === "production";
@@ -19,12 +9,13 @@ async function start(): Promise<void> {
   const host = process.env.REELAY_SERVER_HOST ?? (isProduction ? "0.0.0.0" : "127.0.0.1");
   const configuredStaticRoot = process.env.REELAY_STATIC_ROOT?.trim();
   const staticRoot = configuredStaticRoot || (isProduction ? path.resolve("dist/shell") : undefined);
-  const store = createStore();
+  const dependencies = createServerDependencies();
+  const { store } = dependencies;
   let app;
 
   try {
     await store.ping();
-    app = await buildServer({ logger: true, staticRoot, store });
+    app = await buildServer({ ...dependencies, logger: true, staticRoot });
   } catch (error) {
     await store.close();
     throw error;

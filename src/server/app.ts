@@ -6,10 +6,16 @@ import { registerSessionRoutes } from "./http/session-routes";
 import { registerAccountRoutes } from "./http/account-routes";
 import { registerWorkspaceProjectRoutes } from "./http/workspace-project-routes";
 import { registerCanvasDocumentRoutes } from "./http/canvas-document-routes";
+import { registerAssetRoutes } from "./http/asset-routes";
 import type { CollaborationStore } from "./application/CollaborationStore";
+import type { ObjectStore } from "./application/ObjectStore";
+import type { ProjectAssetReferenceStore } from "./application/ProjectAssetReferenceStore";
+import type { WorkspaceMediaAssetStore } from "./application/WorkspaceMediaAssetStore";
 
 export interface BuildServerOptions {
+  assetStore?: WorkspaceMediaAssetStore & ProjectAssetReferenceStore;
   logger?: boolean;
+  objectStore?: ObjectStore;
   secureCookies?: boolean;
   staticRoot?: string;
   store: CollaborationStore;
@@ -33,6 +39,14 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   await registerAccountRoutes(app, store);
   await registerWorkspaceProjectRoutes(app, store);
   await registerCanvasDocumentRoutes(app, store);
+  if (options.assetStore && options.objectStore) {
+    await registerAssetRoutes(app, {
+      assetStore: options.assetStore,
+      objectStore: options.objectStore,
+      projects: store,
+      sessions: store,
+    });
+  }
 
   if (options.staticRoot) {
     await app.register(fastifyStatic, {

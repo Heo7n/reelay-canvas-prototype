@@ -88,9 +88,27 @@ test("move dispatches candidate promotion, scheduled moves, and direct resize ac
   harness.controller.handleMove({ clientX: 20 });
   assert.equal(harness.calls.at(-1)[0], "schedule");
 
+  harness.setAction({ type: "resize-asset-library", startWidth: 550, startClientX: 100 });
+  harness.controller.handleMove({ clientX: 164 });
+  assert.deepEqual(harness.calls.at(-1), ["resizeAssetLibrary", 614]);
+
   harness.setAction({ type: "resize-agent", startWidth: 300, startClientX: 100 });
   harness.controller.handleMove({ clientX: 70 });
   assert.deepEqual(harness.calls.at(-1), ["resizeAgent", 330]);
+});
+
+test("asset resize finalizes once and releases its capture target", () => {
+  const harness = createHarness();
+  const captureTarget = {};
+  harness.setAction({ type: "resize-asset-library", pointerId: 7, captureTarget });
+  harness.controller.finish({ type: "pointerup", pointerId: 7 });
+  assert.deepEqual(harness.calls.map(([name]) => name), [
+    "finishAssetLibraryResize",
+    "clearAction",
+    "setDragging",
+    "releasePointer",
+  ]);
+  assert.equal(harness.calls.at(-1)[1], captureTarget);
 });
 
 test("finish flushes movement, runs the action finalizer, and releases capture", () => {

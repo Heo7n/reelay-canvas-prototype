@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { Navigate, useParams, useSubmit } from "react-router-dom";
 import type { CanvasDocumentRepository } from "../../application/canvases/CanvasDocumentRepository";
+import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
 import { routePaths } from "../../app/routes";
 import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { CanvasHost } from "../../legacy-canvas/CanvasHost";
@@ -13,9 +14,10 @@ import { readTheme } from "../../shared/theme/theme";
 
 interface LegacyCanvasRouteProps {
   canvasDocumentRepository: CanvasDocumentRepository;
+  mediaAssetRepository: MediaAssetRepository;
 }
 
-export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRouteProps) {
+export function LegacyCanvasRoute({ canvasDocumentRepository, mediaAssetRepository }: LegacyCanvasRouteProps) {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [accountSettingsSection, setAccountSettingsSection] = useState<AccountSection>("profile");
   const { workspaceId, projectId, canvasId } = useParams();
@@ -45,12 +47,13 @@ export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRout
     <>
       <CanvasHost
         repository={canvasDocumentRepository}
+        mediaAssetRepository={mediaAssetRepository}
         onLogout={logout}
         onCreateProject={createProject}
         onOpenAccountSettings={openAccountSettings}
         context={{
           protocolVersion: 1,
-          capabilities: { accountSections: true, projectSwitcher: true },
+          capabilities: { accountSections: true, projectSwitcher: true, assetPersistence: true },
           workspaceId,
           projectId,
           projectName: project.name,

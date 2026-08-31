@@ -350,6 +350,24 @@ test("the codec rejects unknown versions and normalizes hostile or invalid conte
   assert.equal(canvas.groups[0].z, 1);
 });
 
+test("persisted media URLs reject attribute injection and active-content schemes", () => {
+  const rejected = [
+    "javascript:alert(1)",
+    "data:image/svg+xml,<svg/>",
+    "blob:https://example.test/id",
+    "//evil.example/path",
+    'https://cdn.example/x" onerror="alert(1)',
+    "https://cdn.example/x' onclick='alert(1)",
+    "https://cdn.example/x\nmalformed",
+    "https://cdn.example/<svg>",
+  ];
+  for (const url of rejected) assert.equal(codec.sanitizeMediaUrl(url), "", url);
+
+  for (const url of ["https://cdn.example/a.png", "http://localhost:5173/a.mp4", "/assets/a.png", "./a.png", "../a.png"]) {
+    assert.equal(codec.sanitizeMediaUrl(url), url);
+  }
+});
+
 test("the codec restores legacy version-one canvases without a connections field", () => {
   const restored = codec.restoreSnapshot({
     kind: "reelay-legacy-canvas",

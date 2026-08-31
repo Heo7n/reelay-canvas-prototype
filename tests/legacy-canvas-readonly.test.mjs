@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -32,6 +32,7 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("src/legacy-canvas/canvas-command-executor.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-document-codec.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-persistence-coordinator.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-asset-coordinator.js", root), "utf8"),
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
@@ -87,7 +88,18 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(commandExecutor);
   window.eval(codec);
   window.eval(persistenceCoordinator);
+  window.eval(mediaAssetCoordinator);
   window.eval(app);
+
+  const injectionProbe = window.document.createElement("div");
+  injectionProbe.innerHTML = window.assetMediaContent({
+    type: "image",
+    url: 'https://cdn.example/x" onerror="window.__mediaUrlInjected=1',
+  });
+  assert.equal(injectionProbe.querySelector("[onerror],[onclick],script,svg"), null);
+  assert.equal(injectionProbe.querySelector("img"), null);
+  injectionProbe.innerHTML = window.assetMediaContent({ type: "image", url: "blob:http://reelay.test/safe" });
+  assert.equal(injectionProbe.querySelector("img")?.getAttribute("src"), "blob:http://reelay.test/safe");
 
   const content = window.REELAY_CANVAS_DOCUMENT_CODEC.createSnapshot({
     activeCanvasId: "canvas-1",
@@ -274,9 +286,19 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
   const agentWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--agent-width"));
+  const assetResizeHandle = window.document.querySelector("#assetLibraryResizeHandle");
   assert.ok(assetWidth + agentWidth <= window.innerWidth - 280);
+  assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), assetWidth);
+  assert.ok(Number(assetResizeHandle.getAttribute("aria-valuemax")) >= assetWidth);
   window.document.querySelector("#agentCloseBtn")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const restoredAssetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
+  assert.equal(restoredAssetWidth, 550);
+  assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), restoredAssetWidth);
+  assetResizeHandle.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowLeft" }));
+  const keyboardAssetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
+  assert.equal(keyboardAssetWidth, restoredAssetWidth - 16);
+  assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), keyboardAssetWidth);
   window.document.querySelector("#assetLibraryCloseBtn")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource] = await Promise.all([
+const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource, assetLibraryCss] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
   readFile(new URL("styles/canvas-chrome.css", root), "utf8"),
@@ -12,6 +12,7 @@ const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, 
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
+  readFile(new URL("styles/canvas-asset-library.css", root), "utf8"),
 ]);
 
 test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
@@ -178,6 +179,7 @@ test("model data, config and document codec load before the application", () => 
   const commandExecutorIndex = html.indexOf("./src/legacy-canvas/canvas-command-executor.js");
   const codecIndex = html.indexOf("./src/legacy-canvas/canvas-document-codec.js");
   const persistenceIndex = html.indexOf("./src/legacy-canvas/canvas-persistence-coordinator.js");
+  const mediaAssetCoordinatorIndex = html.indexOf("./src/legacy-canvas/canvas-media-asset-coordinator.js");
   const modelPolicyIndex = html.indexOf("./src/legacy-canvas/canvas-generator-model-policy.js");
   const assetLibraryModelIndex = html.indexOf("./src/legacy-canvas/canvas-asset-library-model.js");
   const assetLibraryViewIndex = html.indexOf("./src/legacy-canvas/canvas-asset-library-view.js");
@@ -192,7 +194,8 @@ test("model data, config and document codec load before the application", () => 
     runtimeStoreIndex < commandExecutorIndex &&
     commandExecutorIndex < codecIndex &&
     codecIndex < persistenceIndex &&
-    persistenceIndex < appIndex &&
+    persistenceIndex < mediaAssetCoordinatorIndex &&
+    mediaAssetCoordinatorIndex < appIndex &&
     appIndex >= 0,
   );
 });
@@ -345,8 +348,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-asset-library-12/);
-  assert.match(html, /app\.js\?v=20260831-asset-library-12/);
+  assert.match(html, /styles\.css\?v=20260901-asset-grid-24/);
+  assert.match(html, /app\.js\?v=20260901-asset-grid-24/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -728,9 +731,9 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-asset-library-12/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-asset-library-12/);
-  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260831-asset-library-12/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260901-asset-grid-24/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260901-asset-grid-24/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260901-asset-grid-24/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
@@ -749,36 +752,49 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(appSource, /function renderProjectMenu\(\)[\s\S]*?data-project-id=[\s\S]*?aria-current=[\s\S]*?data-lucide="check"/);
   assert.match(appSource, /function requestHostProjectNavigation\(projectId\)[\s\S]*?canvasPersistence\.post\("canvas:open-project", \{ projectId \}\)/);
   assert.match(appSource, /function requestHostProjectCreation\(\)[\s\S]*?canvasPersistence\.post\("canvas:create-project"\)/);
-  assert.match(canvasChromeCss, /--canvas-edge-bar-width:\s*268px/);
+  assert.match(canvasChromeCss, /--canvas-edge-bar-width:\s*248px/);
+  assert.match(canvasChromeCss, /--canvas-project-bar-height:\s*40px/);
+  assert.match(canvasChromeCss, /--canvas-viewport-toolbar-height:\s*44px/);
+  assert.match(canvasChromeCss, /--canvas-chrome-panel-gap:\s*8px/);
   assert.match(canvasChromeCss, /\.top-bar \.canvas-project-switcher\s*\{[\s\S]*?width:\s*min\(var\(--canvas-edge-bar-width\), calc\(100vw - 96px\)\)/);
   assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\]\s*\{[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
+  assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?width:\s*52px/);
+  assert.match(canvasChromeCss, /\.left-rail \.rail-button,[\s\S]*?width:\s*42px;[\s\S]*?height:\s*42px/);
   assert.match(canvasChromeCss, /\.left-rail \.avatar-button\.active \+ \.profile-button-tip\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?opacity:\s*0;/);
   assert.match(canvasChromeCss, /\.left-rail \.rail-button\s*\{[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/);
-  assert.match(canvasChromeCss, /\.left-rail \.profile-menu\s*\{[\s\S]*?top:\s*auto;[\s\S]*?bottom:\s*-6px;[\s\S]*?left:\s*calc\(100% \+ 14px\)/);
-  assert.match(appCss, /\.profile-help-flyout-panel\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?left:\s*calc\(100% \+ 26px\);[\s\S]*?width:\s*168px/);
-  assert.match(appCss, /\.profile-shortcut-sheet\s*\{[\s\S]*?right:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 12px\)[\s\S]*?width:\s*246px/);
+  assert.match(canvasChromeCss, /\.left-rail \.profile-menu\s*\{[\s\S]*?top:\s*auto;[\s\S]*?bottom:\s*-5px;[\s\S]*?left:\s*calc\(100% \+ 12px\)/);
+  assert.match(appCss, /\.profile-help-flyout\s*\{[\s\S]*?position:\s*static/);
+  assert.match(appCss, /\.profile-help-flyout-panel\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?bottom:\s*-1px;[\s\S]*?left:\s*calc\(100% \+ 8px\);[\s\S]*?width:\s*168px/);
+  assert.match(appCss, /\.profile-shortcut-sheet\s*\{[\s\S]*?top:\s*calc\(100% \+ 8px\);[\s\S]*?left:\s*-1px;[\s\S]*?width:\s*min\(620px, calc\(100vw - 368px\)\)/);
   assert.match(canvasChromeCss, /\.project-menu\s*\{[\s\S]*?display:\s*flex;[\s\S]*?border-radius:\s*16px/);
   assert.match(canvasChromeCss, /\.project-menu-list\s*\{[\s\S]*?max-height:\s*min\(336px,[\s\S]*?overflow-y:\s*auto/);
   assert.match(canvasChromeCss, /\.project-menu \.project-menu-option\s*\{[\s\S]*?grid-template-columns:\s*42px minmax\(0, 1fr\) 20px/);
-  assert.match(appSource, /profileHelpFlyout\?\.addEventListener\("pointerenter"[\s\S]*?setProfileHelpOpen\(true\)[\s\S]*?profileHelpFlyout\?\.addEventListener\("pointerleave"[\s\S]*?setProfileHelpOpen\(false\)/);
+  assert.match(appSource, /function scheduleProfileHelpClose\(\)[\s\S]*?helpPanel\?\.matches\(":hover"\)[\s\S]*?180/);
+  assert.match(appSource, /profileHelpFlyout\?\.addEventListener\("pointerenter"[\s\S]*?setProfileHelpOpen\(true\)[\s\S]*?profileHelpFlyout\?\.addEventListener\("pointerleave"[\s\S]*?scheduleProfileHelpClose\(\)/);
   assert.doesNotMatch(`${html}\n${appSource}\n${appCss}`, /profile-help-inline|profileHelpInline/);
   assert.doesNotMatch(appCss, /\.profile-help-trigger\s*>\s*\.lucide:last-child[\s\S]*?transform/);
   assert.doesNotMatch(canvasChromeCss, /\.share-reveal/);
   assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*12px[\s\S]*?bottom:\s*12px/);
-  assert.match(canvasChromeCss, /\.canvas-zoom-control:hover,[\s\S]*?\.canvas-zoom-control\.value-visible\s*\{[\s\S]*?width:\s*178px/);
+  assert.match(canvasChromeCss, /\.canvas-tool-row\s*\{[\s\S]*?height:\s*var\(--canvas-viewport-toolbar-height\);[\s\S]*?padding:\s*4px/);
+  assert.match(canvasChromeCss, /\.canvas-tool-button\s*\{[\s\S]*?width:\s*34px;[\s\S]*?height:\s*34px/);
+  assert.match(canvasChromeCss, /\.canvas-zoom-control:hover,[\s\S]*?\.canvas-zoom-control\.value-visible\s*\{[\s\S]*?width:\s*168px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-value\s*\{[\s\S]*?position:\s*static[\s\S]*?width:\s*0[\s\S]*?transform:\s*translateX\(-4px\)/);
-  assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*42px[\s\S]*?margin-left:\s*10px/);
+  assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*38px[\s\S]*?margin-left:\s*8px/);
+  assert.match(assetLibraryCss, /top:\s*calc\(12px \+ var\(--canvas-project-bar-height,\s*40px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
+  assert.match(assetLibraryCss, /bottom:\s*calc\(12px \+ var\(--canvas-viewport-toolbar-height,\s*44px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
   assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
   assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
 });
 
 test("asset library actions stay scoped to their real controls and canvas drop target", () => {
-  assert.match(html, /styles\.css\?v=20260831-asset-library-12/);
-  assert.match(html, /prototype-config\.js\?v=20260831-asset-library-12/);
-  assert.match(html, /canvas-asset-library-model\.js\?v=20260831-asset-library-12/);
-  assert.match(html, /canvas-asset-library-view\.js\?v=20260831-asset-library-12/);
-  assert.match(html, /app\.js\?v=20260831-asset-library-12/);
+  assert.match(html, /styles\.css\?v=20260901-asset-grid-24/);
+  assert.match(html, /prototype-config\.js\?v=20260901-ui-alignment-19/);
+  assert.match(html, /canvas-asset-library-model\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /canvas-asset-library-view\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /canvas-document-codec\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /app\.js\?v=20260901-asset-grid-24/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
   assert.match(appSource, /closest\("#assetLibrarySpaceMenu \[data-library-space\]"\)/);
@@ -788,6 +804,24 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(appSource, /function isCanvasDropTarget\(target\)[\s\S]*?closest\("#canvasShell"\)/);
   assert.match(appSource, /hasSupportedPayload && !isCanvasDropTarget\(event\.target\)/);
   assert.doesNotMatch(appSource, /window\.prompt\("新建文件夹名称"/);
+  assert.match(appSource, /window\.parent !== window && state\.librarySpace !== "personal"[\s\S]*?仅支持上传到个人空间/);
+  assert.match(appSource, /event\.target\.closest\("\[data-library-batch-toggle\]"\)[\s\S]*?state\.librarySelectedIds\.size === 0[\s\S]*?state\.libraryToolbarMenu = null/);
+  assert.match(assetLibraryCss, /\.asset-library-batch-command:disabled\s*\{[\s\S]*?background:\s*var\(--text\) !important;[\s\S]*?color:\s*var\(--bg\) !important;[\s\S]*?cursor:\s*not-allowed;[\s\S]*?opacity:\s*0\.68/);
+  assert.match(assetLibraryCss, /\.asset-library-panel \.asset-library-card-namebar input:focus-visible\s*\{[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix/);
+  assert.match(assetLibraryCss, /--asset-card-size:\s*164px/);
+  assert.match(assetLibraryCss, /\.asset-library-grid\s*\{[\s\S]*?justify-content:\s*start/);
+  assert.match(assetLibraryCss, /\.asset-library-grid\.grid-view\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, var\(--asset-card-size\)\)/);
+  assert.match(assetLibraryCss, /@container asset-library \(min-width:\s*548px\)\s*\{[\s\S]*?\.asset-library-grid\.grid-view\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, var\(--asset-card-size\)\)/);
+  assert.match(assetLibraryCss, /@container asset-library \(min-width:\s*726px\)\s*\{[\s\S]*?\.asset-library-grid\.grid-view\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4, var\(--asset-card-size\)\)/);
+  assert.match(assetLibraryCss, /\.asset-library-grid\.grid-view \.asset-library-item-menu\s*\{[\s\S]*?top:\s*5px;[\s\S]*?left:\s*calc\(100% \+ 4px\);[\s\S]*?width:\s*188px/);
+  assert.match(assetLibraryCss, /\.asset-library-grid\.grid-view \.asset-library-card:nth-child\(even\) \.asset-library-item-menu\s*\{[\s\S]*?right:\s*calc\(100% \+ 4px\);[\s\S]*?left:\s*auto/);
+  assert.match(assetLibraryCss, /\.asset-library-resize-handle::after\s*\{[\s\S]*?top:\s*50%;[\s\S]*?height:\s*36px;[\s\S]*?opacity:\s*0/);
+  assert.match(assetLibraryCss, /\.asset-library-resize-handle:focus-visible::after\s*\{[\s\S]*?var\(--text\) 42%[\s\S]*?opacity:\s*1/);
+  assert.match(assetLibraryCss, /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.asset-library-resize-handle\s*\{[\s\S]*?display:\s*none/);
+  assert.match(appCss, /\.app-shell\s*\{[\s\S]*?--asset-panel-width:\s*550px/);
+  assert.match(appSource, /function getAssetLibraryWidthBounds\(\)[\s\S]*?canvasCorridor[\s\S]*?function syncAssetLibraryResizeSemantics/);
+  assert.match(appSource, /assetLibraryResizeHandle\?\.addEventListener\("pointerdown", \(event\) => \{[\s\S]*?event\.button !== 0/);
+  assert.match(appSource, /assetLibraryResizeHandle\?\.addEventListener\("keydown"[\s\S]*?state\.assetLibraryWidth \+ \(event\.key === "ArrowRight" \? step : -step\)/);
   assert.match(
     appSource,
     /function createAssetLibraryFolder\(\)[\s\S]*?listFolders\([\s\S]*?新建文件夹 \$\{sequence\}[\s\S]*?libraryRenameTarget = \{ kind: "folder", id: folder\.id \}/,
@@ -797,6 +831,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
     "folder-input",
     "grid-2x2",
     "house",
+    "list-checks",
     "list-filter",
     "shield-check",
     "square",
@@ -859,9 +894,13 @@ test("shortcut help mirrors the implemented canvas gestures", () => {
   assert.doesNotMatch(html, /data-help-action="shortcuts"/);
   assert.doesNotMatch(html, /<kbd>/);
   assert.doesNotMatch(appCss, /(?:^|\n)\.shortcut-(?:list|row)\b/m);
-  assert.match(appCss, /\.profile-shortcut-groups\s*\{[\s\S]*?display:\s*grid;[\s\S]*?gap:\s*8px/);
+  assert.match(appCss, /\.profile-shortcut-groups\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);[\s\S]*?gap:\s*0/);
   assert.doesNotMatch(appCss, /\.profile-shortcut-columns\s*\{/);
-  assert.match(appCss, /\.profile-help-shortcuts::before\s*\{[\s\S]*?right:\s*-20px;[\s\S]*?width:\s*20px/);
+  assert.match(appCss, /\.profile-shortcut-group \+ \.profile-shortcut-group\s*\{[\s\S]*?border-left:\s*1px solid/);
+  assert.match(appCss, /\.profile-help-shortcuts::before\s*\{[\s\S]*?top:\s*100%;[\s\S]*?height:\s*18px/);
+  assert.match(html, /<span>使用教程<\/span>[\s\S]*?<span>反馈问题<\/span>[\s\S]*?id="profileShortcutTrigger"[\s\S]*?<span>快捷键<\/span>/);
+  assert.match(html, /id="profileShortcutTrigger"[\s\S]*?data-lucide="chevron-down"/);
+  assert.match(appCss, /\.profile-help-shortcuts\[aria-expanded="true"\] > \.lucide:last-child\s*\{[\s\S]*?transform:\s*rotate\(180deg\)/);
   assert.match(appCss, /\.profile-shortcut-sheet\.open\s*\{[\s\S]*?display:\s*grid/);
   assert.match(appSource, /function setProfileShortcutOpen\(open\)[\s\S]*?profileShortcutTrigger\?\.setAttribute\("aria-expanded", String\(open\)\)[\s\S]*?profileShortcutSheet\?\.classList\.toggle\("open", open\)/);
   assert.match(appSource, /profileShortcutTrigger\?\.addEventListener\("pointerenter"[\s\S]*?profileShortcutTrigger\?\.addEventListener\("click"[\s\S]*?profileShortcutSheet\?\.addEventListener\("pointerenter"/);
@@ -909,4 +948,6 @@ test("the canvas organization entry exposes a visual management affordance witho
   assert.doesNotMatch(html, /role="tooltip">进入组织管理界面</);
   assert.doesNotMatch(appCss, /\.profile-membership:hover > (?:svg|span)/);
   assert.doesNotMatch(appCss, /\.profile-membership:hover,\s*\.profile-membership:focus-visible\s*\{[^}]*box-shadow/);
+  assert.match(appCss, /\.profile-membership\s*\{[\s\S]*?background:\s*transparent/);
+  assert.match(html, /data-profile-action="organization"[\s\S]*?data-profile-action="appearance"[\s\S]*?data-profile-action="account"/);
 });

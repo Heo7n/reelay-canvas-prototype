@@ -17,6 +17,13 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
   Function；前端与 API 仍然同源，不增加第二套鉴权。
 - 浏览器中不包含数据库连接串、Supabase service key 或 demo seed 开关。
 - migration 与 demo seed 是一次性人工初始化步骤，不在构建、冷启动或请求中执行。
+- 本地开发服务的 filesystem ObjectStore 仅用于本地常驻进程；Vercel Function 的文件系统不是资产持久层，不能复用该 adapter。
+
+## 资产文件边界
+
+当前公网预览没有接入私有 Supabase Storage，也没有完成公网资产上传 / 读取验收。仓库内的首个 `WorkspaceMediaAsset + personal placement + ProjectAssetReference + ObjectStore` 切片目前只在本地 PostgreSQL + filesystem ObjectStore 上提供跨服务重启持久化。
+
+公网启用该能力前，必须配置私有 Storage bucket 与专用 ObjectStore adapter，保留服务端项目成员授权、对象键隔离、checksum / 大小校验和受控内容读取。Supabase service key 只能留在服务端；未完成这些接线与验收前，不对公网宣告 `assetPersistence` 能力。
 
 ## 数据库连接
 
@@ -34,7 +41,7 @@ Root 2021 CA 校验 TLS，不在运行时关闭证书验证。
 2. 临时设置 `REELAY_DEPLOYMENT_MODE=preview` 与 `ALLOW_DEMO_SEED=true`。
 3. 运行一次 `npm run db:seed`，随后删除 seed 开关。
 4. 在 Vercel 的 Preview 与 Production 环境设置 `DATABASE_URL`。
-5. 部署后检查 `/api/health`、登录、项目读写与画布自动保存。
+5. 部署后检查 `/api/health`、登录、项目读写与画布自动保存。只有完成上述私有 Storage 接线后，才增加资产上传、项目挂载、内容读取和重部署后保留验收。
 
 固定演示账号与密码见 `docs/agent-handoff.md`。免费层可能在长期无活动后暂停，
 因此该地址只作为前端原型评审环境，不承诺正式生产可用性。

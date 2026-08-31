@@ -40,7 +40,7 @@
   function sanitizeMediaUrl(value) {
     if (typeof value !== "string") return "";
     const url = value.trim().slice(0, 2_048);
-    if (!url) return "";
+    if (!url || /[\u0000-\u001f\u007f<>"'`]/.test(url)) return "";
     if (/^https?:\/\//i.test(url)) return url;
     if (/^\/(?!\/)/.test(url) || /^\.\.?\//.test(url)) return url;
     return "";
@@ -327,5 +327,6 @@
   root.REELAY_CANVAS_DOCUMENT_CODEC = Object.freeze({
     createSnapshot,
     restoreSnapshot,
+    sanitizeMediaUrl,
   });
 }(typeof globalThis === "object" ? globalThis : window));

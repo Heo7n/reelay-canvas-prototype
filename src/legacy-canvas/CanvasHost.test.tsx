@@ -279,6 +279,120 @@ describe("CanvasHost", () => {
     expect(postMessage).toHaveBeenCalledTimes(4);
   });
 
+  it("downgrades asset persistence when project asset discovery fails without blocking the canvas", async () => {
+    const mediaAssetRepository = {
+      listProjectAssets: vi.fn(async () => { throw new ApplicationError("not_found", "missing"); }),
+    } as never;
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        mediaAssetRepository={mediaAssetRepository}
+        context={{
+          ...editableContext,
+          capabilities: { ...editableContext.capabilities, assetPersistence: true },
+        }}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:init",
+        context: expect.objectContaining({
+          capabilities: expect.objectContaining({ assetPersistence: false }),
+        }),
+      }),
+      window.location.origin,
+    ));
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:document", document }),
+      window.location.origin,
+    );
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:project-assets" }),
+      window.location.origin,
+    );
+  });
+
+  it("uses host workspace and project scope for upload finalize and explicit attach", async () => {
+    const projectAsset = {
+      referenceId: "reference-1",
+      assetId: "asset-1",
+      assetVersion: 1,
+      mediaKind: "image" as const,
+      displayName: "cover.png",
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "a".repeat(64),
+      contentUrl: "/api/assets/asset-1/content",
+    };
+    const createUploadIntent = vi.fn(async () => ({
+      uploadIntent: { id: "upload-1", expiresAt: "2026-08-31T12:00:00.000Z" },
+      upload: { url: "/api/uploads/upload-1", method: "PUT" as const, headers: {} },
+    }));
+    const finalizeUpload = vi.fn(async () => ({ id: "asset-1" }));
+    const attachToProject = vi.fn(async () => projectAsset);
+    const mediaAssetRepository = {
+      listProjectAssets: vi.fn(async () => [projectAsset]),
+      createUploadIntent,
+      finalizeUpload,
+      attachToProject,
+    } as never;
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        mediaAssetRepository={mediaAssetRepository}
+        context={{
+          ...editableContext,
+          capabilities: { ...editableContext.capabilities, assetPersistence: true },
+        }}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:project-assets", projectAssets: [projectAsset] }),
+      window.location.origin,
+    ));
+    dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:create-media-upload",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: "request-1",
+      idempotencyKey: "attempt-1",
+      mediaKind: "image",
+      displayName: "cover.png",
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "a".repeat(64),
+    });
+    await waitFor(() => expect(createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: "organization-1",
+      idempotencyKey: "attempt-1",
+    })));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:media-upload-grant", requestId: "request-1" }),
+      window.location.origin,
+    ));
+    dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:finalize-media-upload",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: "request-1",
+      uploadId: "upload-1",
+    });
+    await waitFor(() => expect(finalizeUpload).toHaveBeenCalledWith("organization-1", "upload-1"));
+    expect(attachToProject).toHaveBeenCalledWith("project-1", "asset-1");
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:media-upload-result", requestId: "request-1", projectAsset }),
+      window.location.origin,
+    ));
+  });
+
   it("ignores ready and save messages from the wrong origin or window", async () => {
     const save = vi.fn(async () => document);
     const getCanvasDocument = vi.fn(async () => document);
