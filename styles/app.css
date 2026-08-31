@@ -93,26 +93,31 @@
   --node-leading-title: 1.2;
   --node-leading-control: 1.2;
   --node-leading-body: 1.5;
-  --group-frame-boundary: rgba(214, 222, 234, 0.13);
-  --group-frame-boundary-hover: rgba(214, 222, 234, 0.2);
-  --group-frame-boundary-active: rgba(214, 222, 234, 0.3);
-  --group-frame-fill: rgba(190, 201, 218, 0.022);
-  --group-frame-fill-hover: rgba(190, 201, 218, 0.032);
-  --group-frame-fill-active: rgba(190, 201, 218, 0.044);
-  --group-frame-depth-active: rgba(0, 0, 0, 0.16);
+  --group-frame-boundary: rgba(214, 222, 234, 0.15);
+  --group-frame-boundary-hover: rgba(214, 222, 234, 0.22);
+  --group-frame-boundary-active: rgba(214, 222, 234, 0.32);
+  --group-frame-fill: rgba(190, 201, 218, 0.012);
+  --group-frame-fill-hover: rgba(190, 201, 218, 0.018);
+  --group-frame-fill-active: rgba(190, 201, 218, 0.026);
+  --group-frame-top-wash: rgba(190, 201, 218, 0.038);
+  --group-frame-top-wash-hover: rgba(190, 201, 218, 0.052);
+  --group-frame-top-wash-active: rgba(190, 201, 218, 0.068);
+  --group-frame-depth-active: rgba(0, 0, 0, 0.14);
   --group-corner-stroke: rgba(244, 247, 252, 0.62);
   --group-title-text: rgba(245, 247, 250, 0.58);
   --group-title-text-hover: rgba(245, 247, 250, 0.7);
   --group-title-text-active: rgba(245, 247, 250, 0.82);
+  --group-title-surface: rgba(24, 25, 28, 0.88);
+  --group-title-boundary: rgba(229, 235, 244, 0.11);
+  --group-title-boundary-hover: rgba(229, 235, 244, 0.17);
+  --group-title-depth: rgba(0, 0, 0, 0.2);
   --group-title-font-size: 14px;
-  --multi-selection-surface-fill: rgba(205, 214, 228, 0.085);
-  --multi-selection-surface-fill-hover: rgba(205, 214, 228, 0.1);
-  --multi-selection-surface-fill-active: rgba(205, 214, 228, 0.115);
-  --multi-selection-boundary: rgba(225, 232, 242, 0.18);
-  --multi-selection-boundary-hover: rgba(225, 232, 242, 0.25);
-  --multi-selection-boundary-active: rgba(225, 232, 242, 0.32);
-  --multi-selection-depth: rgba(0, 0, 0, 0.24);
-  --multi-selection-depth-active: rgba(0, 0, 0, 0.3);
+  --multi-selection-surface-fill: rgba(205, 214, 228, 0.008);
+  --multi-selection-surface-fill-hover: rgba(205, 214, 228, 0.012);
+  --multi-selection-surface-fill-active: rgba(205, 214, 228, 0.018);
+  --multi-selection-edge: rgba(225, 232, 242, 0.11);
+  --multi-selection-edge-hover: rgba(225, 232, 242, 0.15);
+  --multi-selection-edge-active: rgba(225, 232, 242, 0.2);
   --multi-toolbar-bg: rgba(24, 25, 28, 0.92);
   --multi-toolbar-border: rgba(255, 255, 255, 0.12);
   --multi-toolbar-shadow: 0 16px 42px rgba(0, 0, 0, 0.42), 0 2px 10px rgba(0, 0, 0, 0.24);
@@ -199,22 +204,27 @@ html[data-theme="light"] {
   --group-frame-boundary: rgba(37, 50, 70, 0.12);
   --group-frame-boundary-hover: rgba(37, 50, 70, 0.18);
   --group-frame-boundary-active: rgba(37, 50, 70, 0.28);
-  --group-frame-fill: rgba(52, 66, 88, 0.016);
-  --group-frame-fill-hover: rgba(52, 66, 88, 0.026);
-  --group-frame-fill-active: rgba(52, 66, 88, 0.038);
+  --group-frame-fill: rgba(52, 66, 88, 0.008);
+  --group-frame-fill-hover: rgba(52, 66, 88, 0.012);
+  --group-frame-fill-active: rgba(52, 66, 88, 0.018);
+  --group-frame-top-wash: rgba(52, 66, 88, 0.025);
+  --group-frame-top-wash-hover: rgba(52, 66, 88, 0.036);
+  --group-frame-top-wash-active: rgba(52, 66, 88, 0.05);
   --group-frame-depth-active: rgba(31, 43, 61, 0.075);
   --group-corner-stroke: rgba(25, 35, 50, 0.55);
   --group-title-text: rgba(23, 33, 48, 0.58);
   --group-title-text-hover: rgba(23, 33, 48, 0.68);
   --group-title-text-active: rgba(23, 33, 48, 0.78);
-  --multi-selection-surface-fill: rgba(45, 59, 80, 0.034);
-  --multi-selection-surface-fill-hover: rgba(45, 59, 80, 0.046);
-  --multi-selection-surface-fill-active: rgba(45, 59, 80, 0.06);
-  --multi-selection-boundary: rgba(37, 49, 68, 0.055);
-  --multi-selection-boundary-hover: rgba(37, 49, 68, 0.1);
-  --multi-selection-boundary-active: rgba(37, 49, 68, 0.16);
-  --multi-selection-depth: rgba(31, 43, 61, 0.05);
-  --multi-selection-depth-active: rgba(31, 43, 61, 0.075);
+  --group-title-surface: rgba(249, 251, 253, 0.94);
+  --group-title-boundary: rgba(37, 50, 70, 0.1);
+  --group-title-boundary-hover: rgba(37, 50, 70, 0.16);
+  --group-title-depth: rgba(31, 43, 61, 0.09);
+  --multi-selection-surface-fill: rgba(45, 59, 80, 0.004);
+  --multi-selection-surface-fill-hover: rgba(45, 59, 80, 0.007);
+  --multi-selection-surface-fill-active: rgba(45, 59, 80, 0.011);
+  --multi-selection-edge: rgba(37, 49, 68, 0.065);
+  --multi-selection-edge-hover: rgba(37, 49, 68, 0.1);
+  --multi-selection-edge-active: rgba(37, 49, 68, 0.145);
   --multi-toolbar-bg: rgba(255, 255, 255, 0.94);
   --multi-toolbar-border: rgba(31, 41, 55, 0.11);
   --multi-toolbar-shadow: 0 16px 42px rgba(36, 48, 68, 0.18), 0 2px 8px rgba(36, 48, 68, 0.08);
@@ -2251,26 +2261,24 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   z-index: 1;
   min-width: 1px;
   min-height: 1px;
-  border: 1px solid var(--multi-selection-boundary);
+  border: 0;
   border-radius: var(--multi-selection-surface-radius, var(--node-media-radius));
   background: var(--multi-selection-surface-fill);
-  box-shadow: 0 6px 18px var(--multi-selection-depth);
+  box-shadow: inset 0 0 16px var(--multi-selection-edge);
   pointer-events: none;
   transition:
-    border-color 120ms ease,
     background 120ms ease,
     box-shadow 120ms ease;
 }
 
 .canvas-shell.selection-frame-hover .multi-selection-surface {
-  border-color: var(--multi-selection-boundary-hover);
   background: var(--multi-selection-surface-fill-hover);
+  box-shadow: inset 0 0 18px var(--multi-selection-edge-hover);
 }
 
 .canvas-shell.selection-frame-pressed .multi-selection-surface {
-  border-color: var(--multi-selection-boundary-active);
   background: var(--multi-selection-surface-fill-active);
-  box-shadow: 0 8px 22px var(--multi-selection-depth-active);
+  box-shadow: inset 0 0 20px var(--multi-selection-edge-active);
 }
 
 .multi-selection-chrome {
@@ -2545,7 +2553,9 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   position: absolute;
   border: 1px solid transparent;
   border-radius: 16px;
-  background: var(--group-frame-fill);
+  background:
+    linear-gradient(180deg, var(--group-frame-top-wash), transparent min(96px, 28%)),
+    var(--group-frame-fill);
   box-shadow: inset 0 0 0 calc(1px * var(--group-interaction-scale, 1)) var(--group-frame-boundary);
   cursor: move;
   pointer-events: auto;
@@ -2555,12 +2565,16 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
 }
 
 .group-frame:hover {
-  background: var(--group-frame-fill-hover);
+  background:
+    linear-gradient(180deg, var(--group-frame-top-wash-hover), transparent min(104px, 30%)),
+    var(--group-frame-fill-hover);
   box-shadow: inset 0 0 0 calc(1px * var(--group-interaction-scale, 1)) var(--group-frame-boundary-hover);
 }
 
 .group-frame.selected {
-  background: var(--group-frame-fill-active);
+  background:
+    linear-gradient(180deg, var(--group-frame-top-wash-active), transparent min(112px, 32%)),
+    var(--group-frame-fill-active);
   box-shadow:
     inset 0 0 0 calc(1px * var(--group-interaction-scale, 1)) var(--group-frame-boundary-active),
     0 calc(4px * var(--group-interaction-scale, 1))
@@ -2569,9 +2583,17 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
 
 .group-title {
   position: absolute;
-  left: calc(10px * var(--group-ui-scale, 1));
+  left: calc(12px * var(--group-ui-scale, 1));
   top: auto;
-  bottom: calc(100% + 8px * var(--group-ui-scale, 1));
+  bottom: calc(100% - 6px * var(--group-ui-scale, 1));
+  display: flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 4px 9px;
+  border: 1px solid var(--group-title-boundary);
+  border-radius: 8px;
+  background: var(--group-title-surface);
+  box-shadow: 0 4px 12px var(--group-title-depth);
   color: var(--group-title-text);
   font-size: var(--group-title-font-size);
   font-weight: 760;
@@ -2583,14 +2605,18 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   white-space: nowrap;
   will-change: transform;
   z-index: 12;
-  transition: color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .group-frame:hover .group-title {
+  border-color: var(--group-title-boundary-hover);
   color: var(--group-title-text-hover);
 }
 
 .group-frame.selected .group-title {
+  border-color: var(--group-title-boundary-hover);
   color: var(--group-title-text-active);
 }
 
