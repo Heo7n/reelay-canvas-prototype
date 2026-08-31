@@ -338,8 +338,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-60/);
-  assert.match(html, /app\.js\?v=20260831-canvas-chrome-58/);
+  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-61/);
+  assert.match(html, /app\.js\?v=20260831-canvas-chrome-59/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -709,8 +709,8 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
   assert.match(appSource, /function syncHostedIdentity[\s\S]*?setAttribute\("aria-label", `个人：\$\{displayName\}`\)/);
   assert.match(appSource, /function openProfileMenu[\s\S]*?setAttribute\("aria-expanded", "true"\)/);
   assert.match(appSource, /function closeProfileMenu[\s\S]*?setAttribute\("aria-expanded", "false"\)/);
-  assert.match(appSource, /function scheduleCloseProfileMenu\(\)[\s\S]*?profilePointerInside \|\| profileAnchor\?\.contains\(document\.activeElement\)[\s\S]*?closeProfileMenu\(\)/);
-  assert.match(appSource, /profileAnchor\?\.addEventListener\("pointerenter"[\s\S]*?profilePointerInside = true[\s\S]*?profileAnchor\?\.addEventListener\("pointerleave"[\s\S]*?profilePointerInside = false/);
+  assert.match(appSource, /railProfileBtn\?\.addEventListener\("click"[\s\S]*?profileMenu\?\.classList\.contains\("hidden"\)[\s\S]*?openProfileMenu[\s\S]*?closeProfileMenu/);
+  assert.doesNotMatch(appSource, /profileAnchor\?\.addEventListener\("pointerenter"[\s\S]*?openProfileMenu|scheduleCloseProfileMenu|profilePointerInside/);
   assert.match(html, /data-project-name[^>]*tabindex="0"[^>]*aria-label="项目名称 Untitled，按 Enter 重命名"/);
   assert.match(appSource, /element\.contentEditable !== "true"[\s\S]*?event\.key === "Enter"[\s\S]*?event\.key === "F2"[\s\S]*?beginInlineRename\(element\)/);
   assert.match(appSource, /state\.hostCapabilities\.accountSections = context\.capabilities\?\.accountSections === true/);
@@ -719,7 +719,7 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
   assert.match(stylesEntry, /styles\/app\.css\?v=20260831-selection-surface-55/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-60/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-61/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
@@ -737,7 +737,8 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(canvasChromeCss, /\.top-bar \.canvas-project-switcher\s*\{[\s\S]*?width:\s*min\(var\(--canvas-edge-bar-width\), calc\(100vw - 96px\)\)/);
   assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\],[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
-  assert.match(canvasChromeCss, /\.left-rail \.profile-menu,[\s\S]*?top:\s*0;[\s\S]*?bottom:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 14px\)/);
+  assert.match(canvasChromeCss, /\.left-rail \.avatar-button\.active \+ \.profile-button-tip\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?opacity:\s*0;/);
+  assert.match(canvasChromeCss, /\.left-rail \.profile-menu,[\s\S]*?top:\s*-12px;[\s\S]*?bottom:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 14px\)/);
   assert.doesNotMatch(canvasChromeCss, /\.share-reveal/);
   assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*12px[\s\S]*?bottom:\s*12px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-control:hover,[\s\S]*?\.canvas-zoom-control\.value-visible\s*\{[\s\S]*?width:\s*178px/);

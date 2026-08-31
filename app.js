@@ -64,8 +64,6 @@ const multiSelectionSurface = document.querySelector("#multiSelectionSurface");
 const multiSelectionChrome = document.querySelector("#multiSelectionChrome");
 const multiSelectionPort = document.querySelector("#multiSelectionPort");
 const selectionToolbar = document.querySelector("#selectionToolbar");
-let profileMenuCloseTimer = null;
-let profilePointerInside = false;
 let projectMenuTrigger = null;
 let canvasMenuTrigger = null;
 let canvasMoreMenuTrigger = null;
@@ -8253,11 +8251,6 @@ canvasHomeButtons.forEach((button) => {
   });
 });
 
-function clearProfileMenuCloseTimer() {
-  window.clearTimeout(profileMenuCloseTimer);
-  profileMenuCloseTimer = null;
-}
-
 function setProfileHelpOpen(open) {
   const helpInline = profileMenu?.querySelector(".profile-help-inline");
   const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
@@ -8281,7 +8274,6 @@ function keepProfileHelpOpenForPointer(event) {
 }
 
 function openProfileMenu({ focusMenu = false } = {}) {
-  clearProfileMenuCloseTimer();
   profileMenu?.classList.remove("hidden");
   railProfileBtn?.classList.add("active");
   railProfileBtn?.setAttribute("aria-expanded", "true");
@@ -8289,7 +8281,6 @@ function openProfileMenu({ focusMenu = false } = {}) {
 }
 
 function closeProfileMenu({ returnFocus = false } = {}) {
-  clearProfileMenuCloseTimer();
   profileMenu?.classList.add("hidden");
   railProfileBtn?.classList.remove("active");
   railProfileBtn?.setAttribute("aria-expanded", "false");
@@ -8299,28 +8290,13 @@ function closeProfileMenu({ returnFocus = false } = {}) {
   }
 }
 
-function scheduleCloseProfileMenu() {
-  clearProfileMenuCloseTimer();
-  profileMenuCloseTimer = window.setTimeout(() => {
-    profileMenuCloseTimer = null;
-    if (profilePointerInside || profileAnchor?.contains(document.activeElement)) return;
-    closeProfileMenu();
-  }, 180);
-}
-
 railProfileBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  openProfileMenu({ focusMenu: event.detail === 0 });
-});
-
-profileAnchor?.addEventListener("pointerenter", () => {
-  profilePointerInside = true;
-  openProfileMenu();
-});
-
-profileAnchor?.addEventListener("pointerleave", () => {
-  profilePointerInside = false;
-  scheduleCloseProfileMenu();
+  if (profileMenu?.classList.contains("hidden")) {
+    openProfileMenu({ focusMenu: event.detail === 0 });
+  } else {
+    closeProfileMenu();
+  }
 });
 
 railProfileBtn?.addEventListener("keydown", (event) => {
@@ -8346,7 +8322,7 @@ profileMenu?.addEventListener("keydown", (event) => {
 
 profileAnchor?.addEventListener("focusout", () => {
   window.setTimeout(() => {
-    if (!profilePointerInside && !profileAnchor.contains(document.activeElement)) closeProfileMenu();
+    if (!profileAnchor.contains(document.activeElement)) closeProfileMenu();
   }, 0);
 });
 
