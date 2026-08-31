@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260831-canvas-chrome-66" />
+    <link rel="stylesheet" href="./styles.css?v=20260831-canvas-shortcuts-69" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -91,9 +91,10 @@
                     <i data-lucide="chevron-right" aria-hidden="true"></i>
                   </button>
                   <div class="profile-help-flyout-panel" id="profileHelpPanel" role="group" aria-labelledby="profileHelpTrigger">
-                    <button class="profile-help-link profile-help-shortcuts" type="button" data-help-action="shortcuts">
+                    <button class="profile-help-link profile-help-shortcuts" id="profileShortcutTrigger" type="button" aria-expanded="false" aria-controls="profileShortcutSheet">
                       <i data-lucide="keyboard" aria-hidden="true"></i>
                       <span>快捷键</span>
+                      <i data-lucide="chevron-right" aria-hidden="true"></i>
                     </button>
                     <a class="profile-help-link" href="https://reelay.tech.jetsentv.com/manual" target="_blank" rel="noopener noreferrer">
                       <i data-lucide="book-open-check" aria-hidden="true"></i>
@@ -103,16 +104,66 @@
                       <i data-lucide="send-horizontal" aria-hidden="true"></i>
                       <span>反馈问题</span>
                     </a>
-                    <div class="profile-shortcut-sheet" id="profileShortcutSheet" aria-label="快捷键说明">
-                      <div class="shortcut-list">
-                        <div class="shortcut-row"><span>空格 + 拖动</span><kbd>平移画布</kbd></div>
-                        <div class="shortcut-row"><span>鼠标滚轮</span><kbd>平移画布</kbd></div>
-                        <div class="shortcut-row"><span>Ctrl/Cmd + 滚轮</span><kbd>缩放</kbd></div>
-                        <div class="shortcut-row"><span>双击画布</span><kbd>添加节点</kbd></div>
-                        <div class="shortcut-row"><span>拖拽空白</span><kbd>框选</kbd></div>
-                        <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
-                        <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
-                        <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销上一步</kbd></div>
+                    <div class="profile-shortcut-sheet" id="profileShortcutSheet" role="region" aria-labelledby="profileShortcutTitle">
+                      <div class="profile-shortcut-header">
+                        <i data-lucide="keyboard" aria-hidden="true"></i>
+                        <strong id="profileShortcutTitle">快捷键</strong>
+                      </div>
+                      <div class="profile-shortcut-columns">
+                        <section class="profile-shortcut-group">
+                          <h3>画布与创建</h3>
+                          <dl class="profile-shortcut-list">
+                            <div class="profile-shortcut-row">
+                              <dt>移动视图</dt>
+                              <dd><span class="profile-shortcut-gesture">中键</span><span>/</span><kbd>空格</kbd><span>+</span><span>拖动</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>纵向平移</dt>
+                              <dd><span class="profile-shortcut-gesture">滚轮</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>横向平移</dt>
+                              <dd><span class="profile-shortcut-binding"><kbd>Shift</kbd><span>+</span><span class="profile-shortcut-gesture">滚轮</span></span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>缩放视图</dt>
+                              <dd><span class="profile-shortcut-binding"><kbd><span aria-hidden="true">Ctrl/⌘</span><span class="sr-only">Ctrl 或 Command</span></kbd><span>+</span><span class="profile-shortcut-gesture">滚轮</span></span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>添加菜单</dt>
+                              <dd><span class="profile-shortcut-gesture">双击画布</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>框选多个</dt>
+                              <dd><span class="profile-shortcut-gesture">空白拖动</span></dd>
+                            </div>
+                          </dl>
+                        </section>
+                        <section class="profile-shortcut-group">
+                          <h3>选择与编辑</h3>
+                          <dl class="profile-shortcut-list">
+                            <div class="profile-shortcut-row">
+                              <dt>追加或移除</dt>
+                              <dd><span class="profile-shortcut-binding"><kbd>Shift</kbd><span>单击</span></span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>复制并拖动</dt>
+                              <dd><span class="profile-shortcut-binding"><kbd>Alt</kbd><span>拖动</span></span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>删除选中</dt>
+                              <dd><kbd><span aria-hidden="true">Del</span><span class="sr-only">Delete</span></kbd><span>/</span><kbd><span aria-hidden="true">⌫</span><span class="sr-only">Backspace</span></kbd></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>撤销上一步</dt>
+                              <dd><kbd><span aria-hidden="true">Ctrl/⌘ + Z</span><span class="sr-only">Ctrl 或 Command 加 Z</span></kbd></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>关闭菜单</dt>
+                              <dd><kbd>Esc</kbd></dd>
+                            </div>
+                          </dl>
+                        </section>
                       </div>
                     </div>
                   </div>
@@ -418,6 +469,6 @@
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260826-media-kind-37"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./app.js?v=20260831-canvas-chrome-62"></script>
+    <script src="./app.js?v=20260831-canvas-shortcuts-63"></script>
   </body>
 </html>

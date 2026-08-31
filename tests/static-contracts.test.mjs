@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const [appSource, appCss, canvasChromeCss, stylesEntry, html] = await Promise.all([
+const [appSource, appCss, canvasChromeCss, stylesEntry, html, nodePointerSource, pointerDispatchSource] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
   readFile(new URL("styles/canvas-chrome.css", root), "utf8"),
   readFile(new URL("styles.css", root), "utf8"),
   readFile(new URL("index.html", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
 ]);
 
 test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
@@ -338,8 +340,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-canvas-chrome-66/);
-  assert.match(html, /app\.js\?v=20260831-canvas-chrome-62/);
+  assert.match(html, /styles\.css\?v=20260831-canvas-shortcuts-69/);
+  assert.match(html, /app\.js\?v=20260831-canvas-shortcuts-63/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -718,7 +720,7 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-canvas-profile-flyout-58/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-canvas-shortcuts-61/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-canvas-chrome-66/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
@@ -741,7 +743,7 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(canvasChromeCss, /\.left-rail \.rail-button\s*\{[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail \.profile-menu\s*\{[\s\S]*?top:\s*auto;[\s\S]*?bottom:\s*-6px;[\s\S]*?left:\s*calc\(100% \+ 14px\)/);
   assert.match(appCss, /\.profile-help-flyout-panel\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?left:\s*calc\(100% \+ 26px\);[\s\S]*?width:\s*168px/);
-  assert.match(appCss, /\.profile-shortcut-sheet\s*\{[\s\S]*?right:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 12px\)/);
+  assert.match(appCss, /\.profile-shortcut-sheet\s*\{[\s\S]*?right:\s*auto;[\s\S]*?left:\s*calc\(100% \+ 12px\)[\s\S]*?width:\s*336px/);
   assert.match(appSource, /profileHelpFlyout\?\.addEventListener\("pointerenter"[\s\S]*?setProfileHelpOpen\(true\)[\s\S]*?profileHelpFlyout\?\.addEventListener\("pointerleave"[\s\S]*?setProfileHelpOpen\(false\)/);
   assert.doesNotMatch(`${html}\n${appSource}\n${appCss}`, /profile-help-inline|profileHelpInline/);
   assert.doesNotMatch(appCss, /\.profile-help-trigger\s*>\s*\.lucide:last-child[\s\S]*?transform/);
@@ -752,6 +754,68 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*42px[\s\S]*?margin-left:\s*10px/);
   assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
   assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
+});
+
+test("shortcut help mirrors the implemented canvas gestures", () => {
+  const wheelHandlerStart = appSource.indexOf('shell.addEventListener(\n  "wheel"');
+  const wheelHandlerEnd = appSource.indexOf('window.addEventListener("keydown"', wheelHandlerStart);
+  const wheelHandlerSource = appSource.slice(wheelHandlerStart, wheelHandlerEnd);
+  const canvasKeydownHandlerEnd = appSource.indexOf('window.addEventListener("keyup"', wheelHandlerEnd);
+  const canvasKeyupHandlerEnd = appSource.indexOf('document.addEventListener("dragstart"', canvasKeydownHandlerEnd);
+  const canvasKeydownHandlerSource = appSource.slice(wheelHandlerEnd, canvasKeydownHandlerEnd);
+  const canvasKeyupHandlerSource = appSource.slice(canvasKeydownHandlerEnd, canvasKeyupHandlerEnd);
+  const nodePointerConfigStart = appSource.indexOf("createCanvasNodePointerController({");
+  const nodePointerConfigEnd = appSource.indexOf("\n});", nodePointerConfigStart);
+  const pointerDispatchConfigStart = appSource.indexOf("createCanvasPointerDispatchController({");
+  const pointerDispatchConfigEnd = appSource.indexOf("\n});", pointerDispatchConfigStart);
+  const nodePointerConfigSource = appSource.slice(nodePointerConfigStart, nodePointerConfigEnd);
+  const pointerDispatchConfigSource = appSource.slice(pointerDispatchConfigStart, pointerDispatchConfigEnd);
+
+  assert.notEqual(wheelHandlerStart, -1);
+  assert.notEqual(wheelHandlerEnd, -1);
+  assert.notEqual(canvasKeydownHandlerEnd, -1);
+  assert.notEqual(canvasKeyupHandlerEnd, -1);
+  assert.notEqual(nodePointerConfigStart, -1);
+  assert.notEqual(nodePointerConfigEnd, -1);
+  assert.notEqual(pointerDispatchConfigStart, -1);
+  assert.notEqual(pointerDispatchConfigEnd, -1);
+  assert.match(html, /id="profileShortcutTrigger"[^>]*aria-expanded="false"[^>]*aria-controls="profileShortcutSheet"/);
+  assert.match(html, /id="profileShortcutSheet"[^>]*role="region"[^>]*aria-labelledby="profileShortcutTitle"/);
+  assert.match(html, /id="profileShortcutTitle">快捷键<\/strong>[\s\S]*?<h3>画布与创建<\/h3>[\s\S]*?<h3>选择与编辑<\/h3>/);
+  assert.match(html, /<dt>移动视图<\/dt>[\s\S]*?profile-shortcut-gesture">中键<\/span>[\s\S]*?<kbd>空格<\/kbd>[\s\S]*?<span>\+<\/span>[\s\S]*?<span>拖动<\/span>/);
+  assert.match(html, /<dt>纵向平移<\/dt>[\s\S]*?profile-shortcut-gesture">滚轮<\/span>/);
+  assert.match(html, /<dt>横向平移<\/dt>[\s\S]*?<kbd>Shift<\/kbd>[\s\S]*?profile-shortcut-gesture">滚轮<\/span>/);
+  assert.match(html, /<dt>缩放视图<\/dt>[\s\S]*?<span aria-hidden="true">Ctrl\/⌘<\/span>[\s\S]*?<span class="sr-only">Ctrl 或 Command<\/span>[\s\S]*?profile-shortcut-gesture">滚轮<\/span>/);
+  assert.match(html, /<dt>添加菜单<\/dt>[\s\S]*?profile-shortcut-gesture">双击画布<\/span>/);
+  assert.match(html, /<dt>框选多个<\/dt>[\s\S]*?profile-shortcut-gesture">空白拖动<\/span>/);
+  assert.match(html, /<dt>追加或移除<\/dt>[\s\S]*?<kbd>Shift<\/kbd>[\s\S]*?<span>单击<\/span>/);
+  assert.match(html, /<dt>复制并拖动<\/dt>[\s\S]*?<kbd>Alt<\/kbd>[\s\S]*?<span>拖动<\/span>/);
+  assert.match(html, /<dt>删除选中<\/dt>[\s\S]*?<span aria-hidden="true">Del<\/span>[\s\S]*?<span class="sr-only">Delete<\/span>[\s\S]*?<span aria-hidden="true">⌫<\/span>[\s\S]*?<span class="sr-only">Backspace<\/span>/);
+  assert.match(html, /<dt>撤销上一步<\/dt>[\s\S]*?<span aria-hidden="true">Ctrl\/⌘ \+ Z<\/span>[\s\S]*?<span class="sr-only">Ctrl 或 Command 加 Z<\/span>/);
+  assert.match(html, /<dt>关闭菜单<\/dt>[\s\S]*?<kbd>Esc<\/kbd>/);
+
+  assert.match(pointerDispatchSource, /pointer\.button === 1 \|\| options\.isSpaceDown\(\)/);
+  assert.match(nodePointerSource, /event\.button === 1 \|\| \(event\.button === 0 && options\.isSpaceDown\(\)\)/);
+  assert.match(nodePointerConfigSource, /isSpaceDown:\s*\(\) => state\.isSpaceDown/);
+  assert.match(pointerDispatchConfigSource, /isSpaceDown:\s*\(\) => state\.isSpaceDown/);
+  assert.match(canvasKeydownHandlerSource, /if \(event\.code === "Space"\)\s*\{[\s\S]*?state\.isSpaceDown = true;[\s\S]*?shell\.classList\.add\("space-pan"\)/);
+  assert.match(canvasKeyupHandlerSource, /if \(event\.code !== "Space"\) return;[\s\S]*?state\.isSpaceDown = false;[\s\S]*?shell\.classList\.remove\("space-pan"\)/);
+  assert.match(wheelHandlerSource, /if \(event\.ctrlKey \|\| event\.metaKey\)[\s\S]*?setCanvasZoom\(state\.scale \* zoomFactor, event\.clientX, event\.clientY\)/);
+  assert.match(wheelHandlerSource, /event\.shiftKey && Math\.abs\(event\.deltaX\) < 1[\s\S]*?state\.tx -= horizontalDelta/);
+  assert.match(appSource, /shell\.addEventListener\("dblclick"[\s\S]*?openNodeCreateMenu/);
+  assert.match(nodePointerSource, /shiftKey:\s*event\.shiftKey/);
+  assert.match(nodePointerSource, /altKey:\s*event\.altKey/);
+  assert.match(appSource, /event\.key === "Delete" \|\| event\.key === "Backspace"/);
+  assert.match(appSource, /\(event\.ctrlKey \|\| event\.metaKey\) && event\.key\.toLowerCase\(\) === "z"/);
+  assert.doesNotMatch(html, /data-help-action="shortcuts"/);
+  assert.doesNotMatch(html, /<kbd>(?:中键|滚轮|双击画布|空白拖动)<\/kbd>/);
+  assert.doesNotMatch(appCss, /(?:^|\n)\.shortcut-(?:list|row)\b/m);
+  assert.match(appCss, /\.profile-shortcut-columns\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(appCss, /\.profile-help-shortcuts::before\s*\{[\s\S]*?right:\s*-20px;[\s\S]*?width:\s*20px/);
+  assert.match(appCss, /\.profile-shortcut-sheet\.open\s*\{[\s\S]*?display:\s*grid/);
+  assert.match(appSource, /function setProfileShortcutOpen\(open\)[\s\S]*?profileShortcutTrigger\?\.setAttribute\("aria-expanded", String\(open\)\)[\s\S]*?profileShortcutSheet\?\.classList\.toggle\("open", open\)/);
+  assert.match(appSource, /profileShortcutTrigger\?\.addEventListener\("pointerenter"[\s\S]*?profileShortcutTrigger\?\.addEventListener\("click"[\s\S]*?profileShortcutSheet\?\.addEventListener\("pointerenter"/);
+  assert.doesNotMatch(appCss, /\.profile-help-shortcuts:(?:hover|focus-visible)\s*~\s*\.profile-shortcut-sheet/);
 });
 
 test("canvas switch buttons only open the menu and menu rows own rename editing", () => {

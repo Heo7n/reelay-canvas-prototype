@@ -36,6 +36,8 @@ const shareProjectBtn = document.querySelector("#shareProjectBtn");
 const profileMenu = document.querySelector("#profileMenu");
 const profileHelpFlyout = profileMenu?.querySelector(".profile-help-flyout");
 const profileHelpTrigger = profileHelpFlyout?.querySelector(".profile-help-trigger");
+const profileShortcutTrigger = profileHelpFlyout?.querySelector("#profileShortcutTrigger");
+const profileShortcutSheet = profileHelpFlyout?.querySelector("#profileShortcutSheet");
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
 const assetLibraryGrid = document.querySelector("#assetLibraryGrid");
@@ -8249,9 +8251,33 @@ canvasHomeButtons.forEach((button) => {
   });
 });
 
+let profileShortcutCloseTimer = null;
+
+function setProfileShortcutOpen(open) {
+  if (profileShortcutCloseTimer !== null) {
+    window.clearTimeout(profileShortcutCloseTimer);
+    profileShortcutCloseTimer = null;
+  }
+  profileShortcutTrigger?.setAttribute("aria-expanded", String(open));
+  profileShortcutSheet?.classList.toggle("open", open);
+}
+
+function scheduleProfileShortcutClose() {
+  if (profileShortcutCloseTimer !== null) window.clearTimeout(profileShortcutCloseTimer);
+  profileShortcutCloseTimer = window.setTimeout(() => {
+    profileShortcutCloseTimer = null;
+    const keepsShortcutOpen =
+      profileShortcutTrigger?.matches(":hover, :focus") ||
+      profileShortcutSheet?.matches(":hover") ||
+      profileShortcutSheet?.contains(document.activeElement);
+    if (!keepsShortcutOpen) setProfileShortcutOpen(false);
+  }, 80);
+}
+
 function setProfileHelpOpen(open) {
   profileHelpFlyout?.classList.toggle("open", open);
   profileHelpTrigger?.setAttribute("aria-expanded", String(open));
+  if (!open) setProfileShortcutOpen(false);
 }
 
 function toggleProfileHelpOpen() {
@@ -8336,6 +8362,30 @@ profileHelpTrigger?.addEventListener("keydown", (event) => {
   event.stopPropagation();
   toggleProfileHelpOpen();
 });
+
+profileShortcutTrigger?.addEventListener("pointerenter", () => {
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutTrigger?.addEventListener("pointerleave", scheduleProfileShortcutClose);
+
+profileShortcutTrigger?.addEventListener("focus", () => {
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutTrigger?.addEventListener("blur", scheduleProfileShortcutClose);
+
+profileShortcutTrigger?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutSheet?.addEventListener("pointerenter", () => {
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutSheet?.addEventListener("pointerleave", scheduleProfileShortcutClose);
 
 profileMenu?.addEventListener("click", (event) => {
   const helpTrigger = event.target.closest(".profile-help-trigger");
