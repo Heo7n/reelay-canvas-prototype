@@ -335,7 +335,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
   assert.match(html, /styles\.css\?v=20260831-selection-surface-55/);
-  assert.match(html, /app\.js\?v=20260831-group-surfaces-53/);
+  assert.match(html, /app\.js\?v=20260831-exact-group-selection-54/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -612,6 +612,8 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.match(appSource, /function applyTheme[\s\S]*?--node-media-radius[\s\S]*?syncSelectionOverlayProjection\(\)[\s\S]*?renderSelectionToolbar\(\)/);
   assert.match(appSource, /\[multiSelectionSurface, multiSelectionChrome\]\.forEach[\s\S]*?screenRect\.left[\s\S]*?screenRect\.height/);
   assert.match(appSource, /multiSelectionSurface\.classList\.add\("hidden"\)[\s\S]*?multiSelectionChrome\.classList\.add\("hidden"\)/);
+  assert.match(appSource, /function getExactSelectionGroup\(selectedNodes = getSelectedNodes\(\)\)[\s\S]*?canvasSpatialSelection\.getExactSelectionGroup\(selectedNodes, state\.groups\)/);
+  assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getExactSelectionGroup\(selectedNodes\)[\s\S]*?multiSelectionChrome\.classList\.remove\("hidden"\)[\s\S]*?multiSelectionSurface\.classList\.toggle\("hidden", Boolean\(exactSelectionGroup\)\)/);
   assert.match(appCss, /\.multi-selection-port\s*\{[\s\S]*?left:\s*calc\(100% \+ var\(--multi-selection-port-offset,[\s\S]*?width:\s*max\(44px, var\(--multi-selection-port-visual-size/);
   assert.doesNotMatch(appCss, /--multi-selection-frame-border-width/);
   assert.match(appCss, /\.multi-selection-port::before\s*\{[\s\S]*?width:\s*var\(--connection-port-size\)[\s\S]*?border:\s*var\(--connection-port-stroke\)[\s\S]*?scale:\s*var\(--multi-selection-port-scale/);
@@ -626,8 +628,8 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.match(connectionStyles, /\.canvas-shell\.multi-selection-active \.canvas-node\.selected \.node-port-zone/);
   assert.match(appSource, /mode:\s*"selection-output"[\s\S]*?origins/);
   assert.match(appSource, /group-unavailable[\s\S]*?node\.groupId/);
-  assert.match(appSource, /function isSelectionFrameDragTarget\(pointer\)[\s\S]*?multiSelectionChrome\.getBoundingClientRect\(\)/);
-  assert.match(appSource, /function beginSelectionFrameDrag\(event\)[\s\S]*?interactionSource:\s*"selection-frame"/);
+  assert.match(appSource, /function isSelectionFrameDragTarget\(pointer\)[\s\S]*?getExactSelectionGroup\(\)[\s\S]*?multiSelectionChrome\.getBoundingClientRect\(\)/);
+  assert.match(appSource, /function beginSelectionFrameDrag\(event\)[\s\S]*?getExactSelectionGroup\(selectedNodes\)[\s\S]*?interactionSource:\s*"selection-frame"/);
   assert.match(appSource, /function handlePointerMove\(event\)[\s\S]*?syncSelectionFramePointerFeedback\(event\)/);
   assert.match(appSource, /isSelectionFrameDragTarget,[\s\S]*?beginSelectionFrameDrag,/);
 });

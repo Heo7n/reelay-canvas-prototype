@@ -87,8 +87,26 @@
     });
   }
 
+  function getExactSelectionGroup(selectedNodes, groups) {
+    if (!Array.isArray(selectedNodes) || selectedNodes.length < 2 || !Array.isArray(groups)) {
+      return null;
+    }
+
+    const groupId = selectedNodes[0]?.groupId;
+    if (!groupId || selectedNodes.some((node) => node?.groupId !== groupId)) return null;
+
+    const group = groups.find((candidate) => candidate?.id === groupId);
+    if (!group || !Array.isArray(group.nodeIds) || group.nodeIds.length !== selectedNodes.length) {
+      return null;
+    }
+
+    const selectedNodeIds = new Set(selectedNodes.map((node) => node?.id));
+    return group.nodeIds.every((nodeId) => selectedNodeIds.has(nodeId)) ? group : null;
+  }
+
   root.REELAY_CANVAS_SPATIAL_SELECTION = Object.freeze({
     containsSubjectCenter,
+    getExactSelectionGroup,
     getIntersectionRatio,
     getSelectionScreenRect,
     normalizeRect,

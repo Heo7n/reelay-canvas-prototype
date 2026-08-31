@@ -80,3 +80,24 @@ test("a node does not join from a tiny edge overlap or after leaving every frame
     groups: [group],
   }), null);
 });
+
+test("an exact persistent-group selection is recognized without collapsing selection semantics", () => {
+  const group = { id: "group-a", nodeIds: ["node-a", "node-b", "node-c"] };
+  const otherGroup = { id: "group-b", nodeIds: ["node-d", "node-e"] };
+  const nodeA = { id: "node-a", groupId: "group-a" };
+  const nodeB = { id: "node-b", groupId: "group-a" };
+  const nodeC = { id: "node-c", groupId: "group-a" };
+  const otherGroupNode = { id: "node-d", groupId: "group-b" };
+  const looseNode = { id: "node-loose", groupId: null };
+
+  assert.equal(
+    geometry.getExactSelectionGroup([nodeA, nodeB, nodeC], [group, otherGroup])?.id,
+    "group-a",
+  );
+  assert.equal(geometry.getExactSelectionGroup([nodeA, nodeB], [group, otherGroup]), null);
+  assert.equal(geometry.getExactSelectionGroup([nodeA, otherGroupNode], [group, otherGroup]), null);
+  assert.equal(
+    geometry.getExactSelectionGroup([nodeA, nodeB, nodeC, looseNode], [group, otherGroup]),
+    null,
+  );
+});

@@ -3789,6 +3789,10 @@ function getSelectedNodes() {
   return state.nodes.filter((node) => state.selectedIds.has(node.id));
 }
 
+function getExactSelectionGroup(selectedNodes = getSelectedNodes()) {
+  return canvasSpatialSelection.getExactSelectionGroup(selectedNodes, state.groups);
+}
+
 function isSelectionFrameDragAction(action = state.action) {
   return action?.interactionSource === "selection-frame"
     && (action.type === "drag-candidate" || action.type === "drag-nodes");
@@ -3824,6 +3828,7 @@ function getSelectionVisualBounds() {
 function renderSelectionToolbar() {
   if (!selectionToolbar || !multiSelectionSurface || !multiSelectionChrome) return;
   const selectedNodes = getSelectedNodes();
+  const exactSelectionGroup = getExactSelectionGroup(selectedNodes);
   const bounds = getSelectionVisualBounds();
   const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
   if (!screenRect) {
@@ -3842,6 +3847,9 @@ function renderSelectionToolbar() {
   }
 
   shell.classList.add("multi-selection-active");
+  if (exactSelectionGroup) {
+    shell.classList.remove("selection-frame-hover", "selection-frame-pressed");
+  }
 
   const isSelectionConnecting = state.action?.type === "connect"
     && state.action.mode === "selection-output"
@@ -3851,8 +3859,9 @@ function renderSelectionToolbar() {
     element.style.top = `${screenRect.top}px`;
     element.style.width = `${screenRect.width}px`;
     element.style.height = `${screenRect.height}px`;
-    element.classList.remove("hidden");
   });
+  multiSelectionChrome.classList.remove("hidden");
+  multiSelectionSurface.classList.toggle("hidden", Boolean(exactSelectionGroup));
   multiSelectionChrome.classList.toggle("is-connecting", isSelectionConnecting);
   if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
   if (isSelectionConnecting) {
@@ -7183,6 +7192,7 @@ function isSelectionFrameDragTarget(pointer) {
     !multiSelectionChrome
     || multiSelectionChrome.classList.contains("hidden")
     || state.selectedIds.size < 2
+    || getExactSelectionGroup()
     || !isCanvasMutationAllowed()
     || !isCanvasSurface(pointer?.target)
     || state.action
@@ -7298,7 +7308,7 @@ function beginMarquee(event) {
 
 function beginSelectionFrameDrag(event) {
   const selectedNodes = getSelectedNodes();
-  if (selectedNodes.length < 2) return false;
+  if (selectedNodes.length < 2 || getExactSelectionGroup(selectedNodes)) return false;
   const activeId = selectedNodes.some((node) => node.id === state.activeId)
     ? state.activeId
     : selectedNodes[0].id;
