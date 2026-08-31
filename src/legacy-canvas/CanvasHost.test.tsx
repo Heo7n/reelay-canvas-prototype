@@ -39,9 +39,14 @@ const repository = {
 
 const editableContext = {
   protocolVersion: 1 as const,
+  capabilities: { accountSections: true, projectSwitcher: true },
   workspaceId: "organization-1",
   projectId: "project-1",
   projectName: "品牌故事",
+  projects: [
+    { id: "project-1", name: "品牌故事", coverUrl: null },
+    { id: "project-2", name: "产品短片", coverUrl: "/assets/product.webp" },
+  ],
   canvasId: "main",
   theme: "light" as const,
   writable: true,
@@ -137,6 +142,21 @@ const navigateMessage = (
   instanceId,
   target,
 });
+
+const openProjectMessage = (projectId: string) => ({
+  source: "reelay-legacy-canvas",
+  type: "canvas:open-project",
+  protocolVersion: 1,
+  instanceId: canvasInstanceId,
+  projectId,
+});
+
+const createProjectMessage = {
+  source: "reelay-legacy-canvas",
+  type: "canvas:create-project",
+  protocolVersion: 1,
+  instanceId: canvasInstanceId,
+};
 
 describe("CanvasHost", () => {
   it("keeps workspace, project, and canvas identity on the isolated legacy URL", async () => {
@@ -671,6 +691,31 @@ describe("CanvasHost", () => {
     act(() => dispatchCanvasMessage(frame, navigateMessage("logout")));
 
     expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens only authorized projected projects and delegates project creation", async () => {
+    const onCreateProject = vi.fn();
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        context={editableContext}
+        onCreateProject={onCreateProject}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+
+    act(() => dispatchCanvasMessage(frame, openProjectMessage("project-outside-scope")));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/w/organization-1/projects/project-1/canvases/main",
+    );
+
+    act(() => dispatchCanvasMessage(frame, openProjectMessage("project-2")));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/w/organization-1/projects/project-2/canvases/main",
+    );
+
+    act(() => dispatchCanvasMessage(frame, createProjectMessage));
+    expect(onCreateProject).toHaveBeenCalledTimes(1);
   });
 
   it("opens organization center with the current canvas recorded as its return target", async () => {

@@ -19,6 +19,7 @@ import {
 
 interface CanvasHostProps {
   context: LegacyCanvasContext;
+  onCreateProject?: () => void;
   onLogout?: () => void;
   onOpenAccountSettings?: (section: LegacyAccountSection) => void;
   repository: CanvasDocumentRepository;
@@ -31,8 +32,12 @@ type DocumentLoadState =
 
 type PersistenceStatus = "loading" | "saved" | "dirty" | "saving" | "error";
 type NavigationTarget = "home" | "projects" | "organization" | "logout";
+type NavigationRequest =
+  | { kind: "route"; target: NavigationTarget }
+  | { kind: "project"; projectId: string }
+  | { kind: "create-project" };
 
-export function CanvasHost({ context, onLogout, onOpenAccountSettings, repository }: CanvasHostProps) {
+export function CanvasHost({ context, onCreateProject, onLogout, onOpenAccountSettings, repository }: CanvasHostProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -45,7 +50,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
   const authoritativeDocumentNeedsRefreshRef = useRef(false);
   const authoritativeRefreshTokenRef = useRef(0);
   const authoritativeRefreshInFlightRef = useRef(false);
-  const pendingNavigationRef = useRef<NavigationTarget | null>(null);
+  const pendingNavigationRef = useRef<NavigationRequest | null>(null);
   const navigationTimeoutRef = useRef<number | null>(null);
   const [readyGeneration, setReadyGeneration] = useState(0);
   const [sameScopeInFlightSaveCount, setSameScopeInFlightSaveCount] = useState(0);
@@ -53,7 +58,12 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [documentState, setDocumentState] = useState<DocumentLoadState>({ status: "loading" });
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("loading");
-  const safeContext = legacyCanvasContextSchema.parse(context);
+  const safeContext = useMemo(() => legacyCanvasContextSchema.parse(context), [context]);
+  const projectAuthorizationKey = JSON.stringify((safeContext.projects ?? []).map((project) => project.id));
+  const authorizedProjectIds = useMemo(
+    () => new Set(JSON.parse(projectAuthorizationKey) as string[]),
+    [projectAuthorizationKey],
+  );
   const frameSource = useMemo(() => {
     const query = new URLSearchParams({
       workspaceId: safeContext.workspaceId,
@@ -76,13 +86,22 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
   }, [postToCanvas]);
 
   const finishPendingNavigation = useCallback((): void => {
-    const target = pendingNavigationRef.current;
-    if (!target || dirtyRef.current || savingRef.current > 0) return;
+    const request = pendingNavigationRef.current;
+    if (!request || dirtyRef.current || savingRef.current > 0) return;
     pendingNavigationRef.current = null;
     if (navigationTimeoutRef.current !== null) {
       window.clearTimeout(navigationTimeoutRef.current);
       navigationTimeoutRef.current = null;
     }
+    if (request.kind === "create-project") {
+      onCreateProject?.();
+      return;
+    }
+    if (request.kind === "project") {
+      navigate(routePaths.canvas(safeContext.workspaceId, request.projectId, "main"));
+      return;
+    }
+    const { target } = request;
     if (target === "logout") {
       onLogout?.();
       return;
@@ -98,10 +117,10 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
     navigate(target === "home"
       ? routePaths.workspaceHome(safeContext.workspaceId)
       : routePaths.projects(safeContext.workspaceId));
-  }, [location.hash, location.pathname, location.search, navigate, onLogout, safeContext.workspaceId]);
+  }, [location.hash, location.pathname, location.search, navigate, onCreateProject, onLogout, safeContext.workspaceId]);
 
-  const queueNavigation = useCallback((target: NavigationTarget): void => {
-    pendingNavigationRef.current = target;
+  const queueNavigation = useCallback((request: NavigationRequest): void => {
+    pendingNavigationRef.current = request;
     if (!dirtyRef.current && savingRef.current === 0) {
       finishPendingNavigation();
       return;
@@ -307,7 +326,21 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
         return;
       }
       if (message.type === "canvas:navigate") {
-        queueNavigation(message.target);
+        queueNavigation({ kind: "route", target: message.target });
+        return;
+      }
+      if (message.type === "canvas:open-project") {
+        const canOpenProject = safeContext.capabilities?.projectSwitcher === true
+          && authorizedProjectIds.has(message.projectId);
+        if (canOpenProject && message.projectId !== safeContext.projectId) {
+          queueNavigation({ kind: "project", projectId: message.projectId });
+        }
+        return;
+      }
+      if (message.type === "canvas:create-project") {
+        if (safeContext.capabilities?.projectSwitcher === true && onCreateProject) {
+          queueNavigation({ kind: "create-project" });
+        }
         return;
       }
       if (message.type === "canvas:open-account") {
@@ -413,7 +446,7 @@ export function CanvasHost({ context, onLogout, onOpenAccountSettings, repositor
       active = false;
       window.removeEventListener("message", handleMessage);
     };
-  }, [finishPendingNavigation, onOpenAccountSettings, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.projectId, safeContext.writable]);
+  }, [authorizedProjectIds, finishPendingNavigation, onCreateProject, onOpenAccountSettings, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.projectId, safeContext.writable]);
 
   return (
     <section

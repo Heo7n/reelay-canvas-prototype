@@ -25,13 +25,11 @@ vi.mock("../../app/useWorkspaceRouteData", () => ({
       name: "星海视觉工作室",
     },
     projects: [{
-      accessKind: "personal",
-      createdAt: "2026-08-01T00:00:00.000Z",
-      createdBy: "actor-1",
+      accessKind: "private",
+      coverAssetId: null,
       currentUserRole: "admin",
       id: "project-1",
       name: "品牌故事",
-      thumbnail: null,
       updatedAt: "2026-08-01T00:00:00.000Z",
       workspaceId: "workspace-1",
     }],
@@ -41,14 +39,25 @@ vi.mock("../../app/useWorkspaceRouteData", () => ({
 vi.mock("../../shared/theme/theme", () => ({ readTheme: () => "light" }));
 
 vi.mock("../../legacy-canvas/CanvasHost", () => ({
-  CanvasHost: ({ context, onOpenAccountSettings }: {
-    context: { capabilities?: { accountSections?: boolean } };
+  CanvasHost: ({ context, onCreateProject, onOpenAccountSettings }: {
+    context: {
+      capabilities?: { accountSections?: boolean; projectSwitcher?: boolean };
+      projects?: Array<{ id: string; name: string; coverUrl: string | null }>;
+    };
+    onCreateProject?: () => void;
     onOpenAccountSettings: (section: "profile" | "credits") => void;
   }) => (
     <div>
       <output data-testid="account-sections-capability">
         {String(context.capabilities?.accountSections === true)}
       </output>
+      <output data-testid="project-switcher-capability">
+        {String(context.capabilities?.projectSwitcher === true)}
+      </output>
+      <output data-testid="project-options">
+        {context.projects?.map((project) => project.name).join(",")}
+      </output>
+      <output data-testid="project-create-handler">{typeof onCreateProject}</output>
       <button type="button" onClick={() => onOpenAccountSettings("profile")}>打开个人主页</button>
       <button type="button" onClick={() => onOpenAccountSettings("credits")}>打开我的积分</button>
     </div>
@@ -79,6 +88,9 @@ describe("LegacyCanvasRoute", () => {
     render(<RouterProvider router={router} />);
 
     expect(screen.getByTestId("account-sections-capability")).toHaveTextContent("true");
+    expect(screen.getByTestId("project-switcher-capability")).toHaveTextContent("true");
+    expect(screen.getByTestId("project-options")).toHaveTextContent("品牌故事");
+    expect(screen.getByTestId("project-create-handler")).toHaveTextContent("function");
 
     fireEvent.click(screen.getByRole("button", { name: "打开我的积分" }));
     expect(screen.getByTestId("initial-account-section")).toHaveTextContent("credits");

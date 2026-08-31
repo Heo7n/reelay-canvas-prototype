@@ -13,6 +13,15 @@ export const bridgeCanvasDocumentSchema = z
 const legacyCanvasCapabilitiesSchema = z
   .object({
     accountSections: z.boolean(),
+    projectSwitcher: z.boolean().optional(),
+  })
+  .strict();
+
+const legacyProjectOptionSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    coverUrl: z.string().min(1).nullable(),
   })
   .strict();
 
@@ -22,6 +31,7 @@ export const legacyCanvasContextSchema = z
     workspaceId: z.string().min(1),
     projectId: z.string().min(1),
     projectName: z.string().min(1),
+    projects: z.array(legacyProjectOptionSchema).optional(),
     canvasId: z.string().min(1),
     theme: z.enum(["light", "dark"]),
     writable: z.boolean(),
@@ -109,6 +119,19 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
     target: z.enum(["home", "projects", "organization", "logout"]),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:open-project"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    projectId: z.string().min(1),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:create-project"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

@@ -127,10 +127,14 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   }));
   const hostContext = {
     protocolVersion: 1,
-    capabilities: { accountSections: true },
+    capabilities: { accountSections: true, projectSwitcher: true },
     workspaceId: "workspace-1",
     projectId: "project-1",
     projectName: "只读项目",
+    projects: [
+      { id: "project-1", name: "只读项目", coverUrl: null },
+      { id: "project-2", name: "第二个项目", coverUrl: "/assets/project.webp" },
+    ],
     canvasId: "main",
     theme: "light",
     writable: false,
@@ -210,10 +214,25 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   projectMenuButton.getClientRects = () => [{}];
   projectMenuButton.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
   assert.equal(projectMenuButton.getAttribute("aria-expanded"), "true");
-  assert.equal(window.document.activeElement, window.document.querySelector("[data-project-action='all']"));
+  assert.equal(window.document.activeElement, window.document.querySelector("#projectMenuSearch"));
   window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
   assert.equal(projectMenuButton.getAttribute("aria-expanded"), "false");
   assert.equal(window.document.activeElement, projectMenuButton);
+
+  projectMenuButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const projectSearch = window.document.querySelector("#projectMenuSearch");
+  projectSearch.value = "第二";
+  projectSearch.dispatchEvent(new window.Event("input", { bubbles: true }));
+  assert.equal(window.document.querySelectorAll("#projectMenuList [data-project-id]").length, 1);
+  window.document.querySelector("#projectMenuList [data-project-id='project-2']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(postedMessages.at(-1).type, "canvas:open-project");
+  assert.equal(postedMessages.at(-1).projectId, "project-2");
+
+  projectMenuButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  window.document.querySelector("[data-project-action='create']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(postedMessages.at(-1).type, "canvas:create-project");
 
   const canvasMenuButton = window.document.querySelector(".left-rail [data-canvas-menu-button]");
   canvasMenuButton.getClientRects = () => [{}];
@@ -442,7 +461,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.querySelector("#projectMenu").classList.contains("hidden"), false);
   projectMenuTrigger.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
   assert.equal(window.document.querySelector("#projectMenu").classList.contains("hidden"), false);
-  assert.equal(window.document.activeElement, window.document.querySelector("#projectMenu [role='menuitem']"));
+  assert.equal(window.document.activeElement, window.document.querySelector("#projectMenuSearch"));
   window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
   assert.equal(window.document.querySelector("#projectMenu").classList.contains("hidden"), true);
   assert.equal(window.document.activeElement, projectMenuTrigger);

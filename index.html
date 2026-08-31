@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260831-canvas-shortcuts-69" />
+    <link rel="stylesheet" href="./styles.css?v=20260831-project-switcher-71" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -17,7 +17,7 @@
           </button>
           <span class="project-nav-divider" aria-hidden="true"></span>
           <span class="project-nav-name" data-project-name tabindex="0" title="双击或按 Enter 重命名项目" aria-label="项目名称 Untitled，按 Enter 重命名">Untitled</span>
-          <button class="project-switch-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单" aria-controls="projectMenu" aria-expanded="false" aria-haspopup="menu">
+          <button class="project-switch-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单" aria-controls="projectMenu" aria-expanded="false" aria-haspopup="dialog">
             <i data-lucide="chevron-down" aria-hidden="true"></i>
           </button>
         </div>
@@ -104,63 +104,51 @@
                       <i data-lucide="send-horizontal" aria-hidden="true"></i>
                       <span>反馈问题</span>
                     </a>
-                    <div class="profile-shortcut-sheet" id="profileShortcutSheet" role="region" aria-labelledby="profileShortcutTitle">
-                      <div class="profile-shortcut-header">
-                        <i data-lucide="keyboard" aria-hidden="true"></i>
-                        <strong id="profileShortcutTitle">快捷键</strong>
-                      </div>
-                      <div class="profile-shortcut-columns">
+                    <div class="profile-shortcut-sheet" id="profileShortcutSheet" role="region" aria-label="快捷键">
+                      <div class="profile-shortcut-groups">
                         <section class="profile-shortcut-group">
-                          <h3>画布与创建</h3>
+                          <h3>画布操作</h3>
                           <dl class="profile-shortcut-list">
                             <div class="profile-shortcut-row">
                               <dt>移动视图</dt>
-                              <dd><span class="profile-shortcut-gesture">中键</span><span>/</span><kbd>空格</kbd><span>+</span><span>拖动</span></dd>
-                            </div>
-                            <div class="profile-shortcut-row">
-                              <dt>纵向平移</dt>
-                              <dd><span class="profile-shortcut-gesture">滚轮</span></dd>
-                            </div>
-                            <div class="profile-shortcut-row">
-                              <dt>横向平移</dt>
-                              <dd><span class="profile-shortcut-binding"><kbd>Shift</kbd><span>+</span><span class="profile-shortcut-gesture">滚轮</span></span></dd>
+                              <dd><span class="profile-shortcut-key">中键拖动</span><span class="profile-shortcut-separator">/</span><span class="profile-shortcut-key">空格 + 拖动</span></dd>
                             </div>
                             <div class="profile-shortcut-row">
                               <dt>缩放视图</dt>
-                              <dd><span class="profile-shortcut-binding"><kbd><span aria-hidden="true">Ctrl/⌘</span><span class="sr-only">Ctrl 或 Command</span></kbd><span>+</span><span class="profile-shortcut-gesture">滚轮</span></span></dd>
+                              <dd><span class="profile-shortcut-key">Ctrl / Cmd + 滚轮</span></dd>
                             </div>
                             <div class="profile-shortcut-row">
-                              <dt>添加菜单</dt>
-                              <dd><span class="profile-shortcut-gesture">双击画布</span></dd>
+                              <dt>滚动平移</dt>
+                              <dd><span class="profile-shortcut-key">Shift + 滚轮</span></dd>
                             </div>
                             <div class="profile-shortcut-row">
-                              <dt>框选多个</dt>
-                              <dd><span class="profile-shortcut-gesture">空白拖动</span></dd>
+                              <dt>多选 / 框选</dt>
+                              <dd><span class="profile-shortcut-key">拖动空白</span><span class="profile-shortcut-separator">/</span><span class="profile-shortcut-key">Shift + 单击</span></dd>
                             </div>
                           </dl>
                         </section>
                         <section class="profile-shortcut-group">
-                          <h3>选择与编辑</h3>
+                          <h3>节点操作</h3>
                           <dl class="profile-shortcut-list">
                             <div class="profile-shortcut-row">
-                              <dt>追加或移除</dt>
-                              <dd><span class="profile-shortcut-binding"><kbd>Shift</kbd><span>单击</span></span></dd>
+                              <dt>添加节点</dt>
+                              <dd><span class="profile-shortcut-key">双击空白</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>删除节点</dt>
+                              <dd><span class="profile-shortcut-key">Delete</span><span class="profile-shortcut-separator">/</span><span class="profile-shortcut-key">Backspace</span></dd>
                             </div>
                             <div class="profile-shortcut-row">
                               <dt>复制并拖动</dt>
-                              <dd><span class="profile-shortcut-binding"><kbd>Alt</kbd><span>拖动</span></span></dd>
-                            </div>
-                            <div class="profile-shortcut-row">
-                              <dt>删除选中</dt>
-                              <dd><kbd><span aria-hidden="true">Del</span><span class="sr-only">Delete</span></kbd><span>/</span><kbd><span aria-hidden="true">⌫</span><span class="sr-only">Backspace</span></kbd></dd>
+                              <dd><span class="profile-shortcut-key">Alt + 拖动</span></dd>
                             </div>
                             <div class="profile-shortcut-row">
                               <dt>撤销上一步</dt>
-                              <dd><kbd><span aria-hidden="true">Ctrl/⌘ + Z</span><span class="sr-only">Ctrl 或 Command 加 Z</span></kbd></dd>
+                              <dd><span class="profile-shortcut-key">Ctrl / Cmd + Z</span></dd>
                             </div>
                             <div class="profile-shortcut-row">
-                              <dt>关闭菜单</dt>
-                              <dd><kbd>Esc</kbd></dd>
+                              <dt>关闭当前浮层</dt>
+                              <dd><span class="profile-shortcut-key">Esc</span></dd>
                             </div>
                           </dl>
                         </section>
@@ -185,7 +173,7 @@
             </button>
             <span class="project-nav-divider" aria-hidden="true"></span>
             <span class="project-nav-name" id="assetLibraryProjectName" data-project-name tabindex="0" title="双击或按 Enter 重命名项目" aria-label="项目名称 Untitled，按 Enter 重命名">Untitled</span>
-            <button class="project-switch-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单" aria-controls="projectMenu" aria-expanded="false" aria-haspopup="menu">
+            <button class="project-switch-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单" aria-controls="projectMenu" aria-expanded="false" aria-haspopup="dialog">
               <i data-lucide="chevron-down" aria-hidden="true"></i>
             </button>
           </div>
@@ -222,8 +210,21 @@
         </div>
         <div class="asset-library-resize-handle" id="assetLibraryResizeHandle" role="separator" aria-orientation="vertical" title="调整资产库宽度"></div>
       </aside>
-      <div class="project-menu hidden" id="projectMenu" role="menu" aria-label="项目菜单">
-        <button type="button" role="menuitem" data-project-action="all">查看全部项目</button>
+      <div class="project-menu hidden" id="projectMenu" role="dialog" aria-labelledby="projectMenuTitle">
+        <h2 class="sr-only" id="projectMenuTitle">切换项目</h2>
+        <label class="project-menu-search">
+          <i data-lucide="search" aria-hidden="true"></i>
+          <span class="sr-only">搜索项目</span>
+          <input id="projectMenuSearch" type="search" maxlength="80" placeholder="搜索项目" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="project-menu-list" id="projectMenuList" role="list" aria-label="可切换项目"></div>
+        <p class="project-menu-empty" id="projectMenuEmpty" hidden>没有找到匹配的项目</p>
+        <div class="project-menu-footer">
+          <button class="project-menu-create" type="button" data-project-action="create">
+            <i data-lucide="plus" aria-hidden="true"></i>
+            <span>新建项目</span>
+          </button>
+        </div>
       </div>
 
       <div class="canvas-menu hidden" id="canvasMenu" role="menu" aria-label="内部画布菜单">
@@ -469,6 +470,6 @@
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260826-media-kind-37"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./app.js?v=20260831-canvas-shortcuts-63"></script>
+    <script src="./app.js?v=20260831-project-switcher-64"></script>
   </body>
 </html>

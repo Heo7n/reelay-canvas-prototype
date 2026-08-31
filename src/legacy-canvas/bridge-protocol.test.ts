@@ -20,10 +20,14 @@ describe("legacy canvas bridge", () => {
   it("accepts versioned host context and a separate opaque document message", () => {
     const context = {
       protocolVersion: 1 as const,
-      capabilities: { accountSections: true },
+      capabilities: { accountSections: true, projectSwitcher: true },
       workspaceId: "org-1",
       projectId: "project-1",
       projectName: "品牌故事",
+      projects: [
+        { id: "project-1", name: "品牌故事", coverUrl: "/assets/brand.webp" },
+        { id: "project-2", name: "产品短片", coverUrl: null },
+      ],
       canvasId: "canvas-1",
       theme: "dark" as const,
       writable: true,
@@ -42,7 +46,8 @@ describe("legacy canvas bridge", () => {
       context,
     }).context;
     expect(parsedContext.workspaceId).toBe("org-1");
-    expect(parsedContext.capabilities).toEqual({ accountSections: true });
+    expect(parsedContext.capabilities).toEqual({ accountSections: true, projectSwitcher: true });
+    expect(parsedContext.projects).toHaveLength(2);
     expect(hostMessageSchema.parse({
       source: "reelay-shell",
       type: "host:init",
@@ -66,6 +71,29 @@ describe("legacy canvas bridge", () => {
       type: "host:flush",
       protocolVersion: 1,
     }).type).toBe("host:flush");
+  });
+
+  it("accepts scoped project switch and creation requests", () => {
+    expect(parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-project",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      projectId: "project-2",
+    })?.type).toBe("canvas:open-project");
+    expect(parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:create-project",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+    })?.type).toBe("canvas:create-project");
+    expect(parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:open-project",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      projectId: "",
+    })).toBeNull();
   });
 
   it("rejects unversioned or foreign messages", () => {

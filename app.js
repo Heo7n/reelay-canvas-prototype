@@ -25,6 +25,9 @@ const zoomValueTip = document.querySelector("#zoomValueTip");
 const projectNameEls = document.querySelectorAll("[data-project-name]");
 const canvasNameEls = document.querySelectorAll("[data-canvas-name]");
 const projectMenu = document.querySelector("#projectMenu");
+const projectMenuSearch = document.querySelector("#projectMenuSearch");
+const projectMenuList = document.querySelector("#projectMenuList");
+const projectMenuEmpty = document.querySelector("#projectMenuEmpty");
 const canvasMenu = document.querySelector("#canvasMenu");
 const canvasMenuList = document.querySelector("#canvasMenuList");
 const canvasMoreMenu = document.querySelector("#canvasMoreMenu");
@@ -220,6 +223,8 @@ const state = {
   zoomTipTimer: 0,
   projectId: crypto.randomUUID(),
   projectName: "Untitled",
+  projects: [],
+  projectSearch: "",
   canvasMoreTargetId: null,
   activeConversationId: "new",
   agentModelId: "gpt-image-2",
@@ -238,6 +243,7 @@ const state = {
   },
   hostCapabilities: {
     accountSections: false,
+    projectSwitcher: false,
   },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
@@ -349,9 +355,14 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.projectId = String(context.projectId || state.projectId);
     state.projectName = String(context.projectName || state.projectName);
     state.hostCapabilities.accountSections = context.capabilities?.accountSections === true;
+    state.hostCapabilities.projectSwitcher = context.capabilities?.projectSwitcher === true;
+    state.projects = normalizeProjectOptions(context.projects);
+    state.projectSearch = "";
+    if (projectMenuSearch) projectMenuSearch.value = "";
     syncHostedIdentity(context);
     applyCanvasAccessMode("loading");
     syncProjectNavigation();
+    renderProjectMenu();
   },
   onDocumentReady({ writable }) {
     if (writable) {
@@ -652,6 +663,55 @@ function syncProjectNavigation() {
   document.title = `${state.projectName} · Reelay Canvas`;
 }
 
+function normalizeProjectOptions(projects) {
+  const normalized = Array.isArray(projects)
+    ? projects
+      .filter((project) => project && typeof project.id === "string" && typeof project.name === "string")
+      .map((project) => ({
+        id: project.id,
+        name: project.name.trim() || "未命名项目",
+        coverUrl: typeof project.coverUrl === "string" && project.coverUrl ? project.coverUrl : null,
+      }))
+    : [];
+  if (normalized.some((project) => project.id === state.projectId)) return normalized;
+  return [{ id: state.projectId, name: state.projectName, coverUrl: null }, ...normalized];
+}
+
+function getProjectMenuOptions() {
+  return state.projects.length
+    ? state.projects
+    : [{ id: state.projectId, name: state.projectName, coverUrl: null }];
+}
+
+function getProjectMenuSeed(projectId) {
+  return [...String(projectId)].reduce((total, character) => total + character.codePointAt(0), 0) % 4;
+}
+
+function renderProjectMenu() {
+  if (!projectMenuList) return;
+  const query = state.projectSearch.trim().toLocaleLowerCase("zh-CN");
+  const projects = getProjectMenuOptions().filter(
+    (project) => !query || project.name.toLocaleLowerCase("zh-CN").includes(query),
+  );
+  projectMenuList.innerHTML = projects
+    .map((project) => {
+      const active = project.id === state.projectId;
+      const thumbnail = project.coverUrl
+        ? `<img class="project-menu-thumbnail" src="${escapeHtml(project.coverUrl)}" alt="" />`
+        : `<span class="project-menu-thumbnail project-menu-thumbnail-placeholder" data-project-seed="${getProjectMenuSeed(project.id)}" aria-hidden="true"><i data-lucide="panels-top-left"></i></span>`;
+      return `
+        <button class="project-menu-option${active ? " active" : ""}" type="button" data-project-id="${escapeHtml(project.id)}"${active ? ' aria-current="page"' : ""}>
+          ${thumbnail}
+          <span class="project-menu-option-name" title="${escapeHtml(project.name)}">${escapeHtml(project.name)}</span>
+          <span class="project-menu-check" aria-hidden="true">${active ? '<i data-lucide="check"></i>' : ""}</span>
+        </button>
+      `;
+    })
+    .join("");
+  if (projectMenuEmpty) projectMenuEmpty.hidden = projects.length > 0;
+  refreshIcons();
+}
+
 function initializeCanvases() {
   const initialCanvas = createCanvasRecord("画布 1");
   canvasRuntimeStore.replaceCanvases([initialCanvas], initialCanvas.id);
@@ -703,6 +763,31 @@ function requestHostNavigation(target) {
     return;
   }
   canvasPersistence.post("canvas:navigate", { target });
+}
+
+function requestHostProjectNavigation(projectId) {
+  if (projectId === state.projectId) return;
+  if (window.parent === window) {
+    showActionToast("请从 Reelay 应用主页进入此画布");
+    return;
+  }
+  if (!state.hostCapabilities.projectSwitcher) {
+    requestHostNavigation("projects");
+    return;
+  }
+  canvasPersistence.post("canvas:open-project", { projectId });
+}
+
+function requestHostProjectCreation() {
+  if (window.parent === window) {
+    showActionToast("请从 Reelay 应用主页创建项目");
+    return;
+  }
+  if (!state.hostCapabilities.projectSwitcher) {
+    requestHostNavigation("projects");
+    return;
+  }
+  canvasPersistence.post("canvas:create-project");
 }
 
 function requestHostAccountSettings(section = "profile") {
@@ -6789,7 +6874,11 @@ function finishInlineRename(element, commit = true) {
 function commitProjectRename(nextName) {
   if (!requireCanvasMutation()) return;
   state.projectName = String(nextName || "Untitled").trim() || "Untitled";
+  state.projects = getProjectMenuOptions().map((project) => (
+    project.id === state.projectId ? { ...project, name: state.projectName } : project
+  ));
   syncProjectNavigation();
+  renderProjectMenu();
 }
 
 function commitCanvasRename(nextName, canvasId = state.activeCanvasId, { renderMenu = true } = {}) {
@@ -6831,6 +6920,21 @@ function positionMenu(menu, anchor, options = {}) {
   menu.style.bottom = "auto";
 }
 
+function positionProjectMenu(anchor) {
+  if (!projectMenu || !anchor) return;
+  const surface = anchor.closest(".project-nav") || anchor;
+  const rect = surface.getBoundingClientRect();
+  const width = Math.min(360, Math.max(0, window.innerWidth - 16));
+  const left = clamp(rect.left, 8, window.innerWidth - width - 8);
+  const top = clamp(rect.bottom + 8, 8, window.innerHeight - 180);
+  projectMenu.style.width = `${width}px`;
+  projectMenu.style.maxHeight = `${Math.max(172, window.innerHeight - top - 8)}px`;
+  projectMenu.style.left = `${left}px`;
+  projectMenu.style.top = `${top}px`;
+  projectMenu.style.right = "auto";
+  projectMenu.style.bottom = "auto";
+}
+
 function setMenuTriggerExpanded(selector, activeTrigger = null) {
   document.querySelectorAll(selector).forEach((trigger) => {
     trigger.setAttribute("aria-expanded", String(trigger === activeTrigger));
@@ -6864,6 +6968,10 @@ function closeProjectMenus({ returnFocus = false } = {}) {
   setMenuTriggerExpanded("[data-canvas-menu-button]");
   projectMenuTrigger = null;
   canvasMenuTrigger = null;
+  if (projectWasOpen) {
+    state.projectSearch = "";
+    if (projectMenuSearch) projectMenuSearch.value = "";
+  }
   if (returnFocus && canRestoreDialogFocus(focusTarget)) {
     window.requestAnimationFrame(() => focusTarget.focus());
   }
@@ -6899,10 +7007,11 @@ function openProjectMenu(anchor, { focusMenu = false } = {}) {
   }
   closeProjectMenus();
   if (wasOpen || !projectMenu) return;
+  renderProjectMenu();
   projectMenuTrigger = anchor;
   projectMenu.classList.remove("hidden");
   setMenuTriggerExpanded("[data-project-menu-button]", anchor);
-  positionMenu(projectMenu, anchor, { width: 190 });
+  positionProjectMenu(anchor);
   if (focusMenu) focusFirstMenuControl(projectMenu);
 }
 
@@ -7051,9 +7160,7 @@ function deleteCanvas(canvasId) {
 
 function handleProjectMenuAction(action) {
   closeProjectMenus();
-  if (action === "all") {
-    requestHostNavigation("projects");
-  }
+  if (action === "create") requestHostProjectCreation();
 }
 
 function handleCanvasMoreAction(action) {
@@ -8593,10 +8700,27 @@ projectNameEls.forEach((element) => {
 });
 
 projectMenu?.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProjectMenus({ returnFocus: true });
+    return;
+  }
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  const controls = [
+    projectMenuSearch,
+    ...projectMenu.querySelectorAll(".project-menu-option, .project-menu-create"),
+  ].filter((control) => control && !control.disabled && control.getClientRects().length);
+  const currentIndex = controls.indexOf(document.activeElement);
+  if (currentIndex < 0) return;
   event.preventDefault();
-  event.stopPropagation();
-  closeProjectMenus({ returnFocus: true });
+  const direction = event.key === "ArrowDown" ? 1 : -1;
+  controls[(currentIndex + direction + controls.length) % controls.length]?.focus();
+});
+
+projectMenuSearch?.addEventListener("input", (event) => {
+  state.projectSearch = event.currentTarget.value;
+  renderProjectMenu();
 });
 
 canvasMenu?.addEventListener("keydown", (event) => {
@@ -8615,6 +8739,12 @@ canvasMoreMenu?.addEventListener("keydown", (event) => {
 
 projectMenu?.addEventListener("click", (event) => {
   event.stopPropagation();
+  const projectId = event.target.closest("[data-project-id]")?.dataset.projectId;
+  if (projectId) {
+    closeProjectMenus();
+    requestHostProjectNavigation(projectId);
+    return;
+  }
   const action = event.target.closest("[data-project-action]")?.dataset.projectAction;
   if (action) handleProjectMenuAction(action);
 });
@@ -8787,6 +8917,9 @@ document.addEventListener("click", (event) => {
 });
 
 window.addEventListener("resize", () => {
+  if (projectMenuTrigger && !projectMenu?.classList.contains("hidden")) {
+    positionProjectMenu(projectMenuTrigger);
+  }
   if (state.agentOpen && isAssetLibraryOpen() && !canShowAssetAndAgent()) {
     if (agentDock?.contains(document.activeElement)) {
       closeAssetLibrary();

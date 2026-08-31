@@ -2,25 +2,13 @@ import { useRef, useState } from "react";
 import { EllipsisVertical, Pencil, UsersRound } from "lucide-react";
 import { Link, useFetcher } from "react-router-dom";
 
-import characterCoverUrl from "../../../assets/home/project-character.webp";
-import educationCoverUrl from "../../../assets/home/project-education.webp";
-import perfumeCoverUrl from "../../../assets/home/project-perfume.webp";
-import productCoverUrl from "../../../assets/home/project-product.webp";
-import scifiCoverUrl from "../../../assets/home/project-scifi.webp";
 import type { ProjectSummary } from "../../domain/project/project";
 import { routePaths } from "../../app/routes";
 import type { WorkspaceActionData } from "../../app/route-data";
+import { resolveProjectCoverUrl } from "../projects/project-cover";
 import styles from "./ProjectCard.module.css";
 import { ProjectDeleteDialog } from "./ProjectDeleteDialog";
 import { useProjectMenu } from "./ProjectMenuProvider";
-
-const coverUrls: Record<string, string> = {
-  "demo-cover-character": characterCoverUrl,
-  "demo-cover-education": educationCoverUrl,
-  "demo-cover-perfume": perfumeCoverUrl,
-  "demo-cover-product": productCoverUrl,
-  "demo-cover-scifi": scifiCoverUrl,
-};
 
 interface ProjectCardProps {
   onNotice: (message: string) => void;
@@ -47,7 +35,7 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const cancelRename = useRef(false);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
-  const coverUrl = project.coverAssetId ? coverUrls[project.coverAssetId] : undefined;
+  const coverUrl = resolveProjectCoverUrl(project.coverAssetId);
   const canEdit = project.currentUserRole !== "view";
   const canAdminister = project.currentUserRole === "admin";
   const canDelete = project.accessKind === "private" || canAdminister;
