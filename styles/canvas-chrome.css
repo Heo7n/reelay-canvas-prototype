@@ -23,8 +23,7 @@ html[data-theme="light"] {
   left: 12px;
 }
 
-.top-bar .canvas-project-switcher,
-.asset-library-header .canvas-project-switcher {
+.top-bar .canvas-project-switcher {
   display: grid;
   grid-template-columns: 36px 1px minmax(0, 1fr) 36px;
   gap: 4px;
@@ -90,15 +89,13 @@ html[data-theme="light"] {
   transform: rotate(180deg);
 }
 
-.top-bar .project-nav-divider,
-.asset-library-header .project-nav-divider {
+.top-bar .project-nav-divider {
   align-self: center;
   height: 24px;
   background: var(--canvas-chrome-border);
 }
 
-.top-bar .project-nav-name,
-.asset-library-header .project-nav-name {
+.top-bar .project-nav-name {
   align-self: center;
   max-width: none;
   padding: 8px 7px;
@@ -107,8 +104,7 @@ html[data-theme="light"] {
   letter-spacing: -0.01em;
 }
 
-.top-bar .project-nav-name[contenteditable="true"],
-.asset-library-header .project-nav-name[contenteditable="true"] {
+.top-bar .project-nav-name[contenteditable="true"] {
   min-width: 0;
   outline: 0;
   background: color-mix(in srgb, var(--text) 7%, transparent);
@@ -332,70 +328,6 @@ html[data-theme="light"] {
   width: 19px;
   height: 19px;
   stroke-width: 1.8;
-}
-
-.asset-library-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 12px;
-}
-
-.asset-library-header .canvas-project-switcher {
-  width: 100%;
-  max-width: 280px;
-  box-shadow: none;
-}
-
-.asset-library-header-actions {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.asset-library-header-button,
-.asset-library-header .asset-library-close {
-  position: static;
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted);
-  box-shadow: none;
-  cursor: pointer;
-  backdrop-filter: none;
-  transition:
-    background 0.14s ease,
-    color 0.14s ease,
-    transform 0.14s ease;
-}
-
-.asset-library-header-button:hover,
-.asset-library-header .asset-library-close:hover {
-  background: var(--canvas-chrome-hover);
-  color: var(--text);
-}
-
-.asset-library-header-button:active,
-.asset-library-header .asset-library-close:active {
-  transform: scale(0.95);
-}
-
-.asset-library-header-button:focus-visible,
-.asset-library-header .asset-library-close:focus-visible {
-  outline: 2px solid var(--canvas-chrome-focus);
-  outline-offset: 2px;
-}
-
-.asset-library-header-button svg,
-.asset-library-header .asset-library-close svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.9;
 }
 
 /* Mid-left canvas, asset, and account rail */
@@ -760,10 +692,6 @@ html[data-theme="light"] {
 
 .canvas-tool-popover {
   bottom: 58px;
-}
-
-.app-shell.asset-library-open .canvas-tools {
-  left: calc(var(--asset-panel-width) + 12px);
 }
 
 /* Agent is the only persistent control in the top-right corner. */

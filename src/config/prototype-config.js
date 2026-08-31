@@ -40,18 +40,95 @@
     },
   };
 
-  const officialLibraryAssets = [
-    {
-      id: "official-sfx-roar",
-      type: "audio",
-      name: "Cinematic creature roar.mp3",
-      displayName: "电影感生物低吼",
-      url: "https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3",
-      duration: 0,
-      aspectRatio: 16 / 9,
-      source: "official",
-    },
-  ];
+  const assetLibrarySeed = {
+    media: [
+      {
+        id: "media-personal-mountain",
+        mediaKind: "image",
+        type: "image",
+        name: "森林旅人.webp",
+        displayName: "森林旅人.webp",
+        url: "./assets/home/project-character.webp",
+        width: 1200,
+        height: 900,
+        aspectRatio: 4 / 3,
+        source: "upload",
+      },
+      {
+        id: "media-personal-forest",
+        mediaKind: "video",
+        type: "video",
+        name: "林间镜头.mp4",
+        displayName: "林间镜头.mp4",
+        url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+        width: 1280,
+        height: 720,
+        aspectRatio: 16 / 9,
+        source: "generation-result",
+      },
+      {
+        id: "media-personal-roar",
+        mediaKind: "audio",
+        type: "audio",
+        name: "氛围低吼.mp3",
+        displayName: "氛围低吼.mp3",
+        url: "https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3",
+        duration: 0,
+        source: "upload",
+      },
+      {
+        id: "media-organization-product",
+        mediaKind: "image",
+        type: "image",
+        name: "品牌产品参考.png",
+        displayName: "品牌产品参考.png",
+        url: "./assets/home/project-product.webp",
+        width: 1200,
+        height: 900,
+        aspectRatio: 4 / 3,
+        source: "team-shared",
+      },
+      {
+        id: "media-platform-landscape",
+        mediaKind: "image",
+        type: "image",
+        name: "深空母舰.webp",
+        displayName: "深空母舰.webp",
+        url: "./assets/home/project-scifi.webp",
+        width: 1200,
+        height: 900,
+        aspectRatio: 4 / 3,
+        source: "platform",
+      },
+    ],
+    entities: [
+      {
+        id: "entity-personal-forest-guide",
+        name: "山林氛围主体",
+        mediaRefs: [
+          { mediaId: "media-personal-mountain", order: 0 },
+          { mediaId: "media-personal-forest", order: 1 },
+          { mediaId: "media-personal-roar", order: 2 },
+        ],
+        coverMediaId: "media-personal-mountain",
+      },
+    ],
+    folders: [
+      { id: "folder-personal-visual", space: "personal", kind: "media", name: "视觉参考", parentId: null },
+      { id: "folder-personal-entity", space: "personal", kind: "entity", name: "主体合集", parentId: null },
+      { id: "folder-organization-brand", space: "organization", kind: "media", name: "品牌资料", parentId: null },
+      { id: "folder-platform-starter", space: "platform", kind: "media", name: "平台示例", parentId: null },
+    ],
+    placements: [
+      { item: { kind: "media", id: "media-personal-mountain" }, space: "personal", folderId: null },
+      { item: { kind: "media", id: "media-personal-forest" }, space: "personal", folderId: null },
+      { item: { kind: "media", id: "media-personal-roar" }, space: "personal", folderId: null },
+      { item: { kind: "entity", id: "entity-personal-forest-guide" }, space: "personal", folderId: null },
+      { item: { kind: "media", id: "media-organization-product" }, space: "organization", folderId: null },
+      { item: { kind: "media", id: "media-platform-landscape" }, space: "platform", folderId: null },
+      { item: { kind: "media", id: "media-personal-roar" }, space: "platform", folderId: null },
+    ],
+  };
 
   const mediaToolDefinitions = {
     enhance: { icon: "badge-hd", label: "HD 增强" },
@@ -163,19 +240,12 @@
     minHeight: 180,
   };
 
-  const assetCategoryFilters = [
-    ["character", "角色"],
-    ["scene", "场景"],
-    ["prop", "道具"],
-    ["material", "素材"],
-  ];
-
   window.REELAY_PROTOTYPE_CONFIG = {
     imageResolutionCost,
     imageQualityMultiplier,
     videoQualityCost,
     simulationAssets,
-    officialLibraryAssets,
+    assetLibrarySeed,
     mediaToolDefinitions,
     mediaToolsByType,
     defaultMediaToolPreferences,
@@ -184,6 +254,5 @@
     layoutRules,
     canvasScaleLimits,
     groupFrameRules,
-    assetCategoryFilters,
   };
 })();

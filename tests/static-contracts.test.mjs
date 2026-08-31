@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const [appSource, appCss, canvasChromeCss, stylesEntry, html, nodePointerSource, pointerDispatchSource] = await Promise.all([
+const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
   readFile(new URL("styles/canvas-chrome.css", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-asset-library-view.js", root), "utf8"),
   readFile(new URL("styles.css", root), "utf8"),
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
@@ -178,12 +179,16 @@ test("model data, config and document codec load before the application", () => 
   const codecIndex = html.indexOf("./src/legacy-canvas/canvas-document-codec.js");
   const persistenceIndex = html.indexOf("./src/legacy-canvas/canvas-persistence-coordinator.js");
   const modelPolicyIndex = html.indexOf("./src/legacy-canvas/canvas-generator-model-policy.js");
+  const assetLibraryModelIndex = html.indexOf("./src/legacy-canvas/canvas-asset-library-model.js");
+  const assetLibraryViewIndex = html.indexOf("./src/legacy-canvas/canvas-asset-library-view.js");
   const appIndex = html.indexOf("./app.js");
   assert.ok(
     catalogIndex >= 0 &&
     catalogIndex < configIndex &&
     configIndex < modelPolicyIndex &&
-    modelPolicyIndex < runtimeStoreIndex &&
+    modelPolicyIndex < assetLibraryModelIndex &&
+    assetLibraryModelIndex < assetLibraryViewIndex &&
+    assetLibraryViewIndex < runtimeStoreIndex &&
     runtimeStoreIndex < commandExecutorIndex &&
     commandExecutorIndex < codecIndex &&
     codecIndex < persistenceIndex &&
@@ -340,8 +345,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-project-switcher-71/);
-  assert.match(html, /app\.js\?v=20260831-project-switcher-64/);
+  assert.match(html, /styles\.css\?v=20260831-asset-library-12/);
+  assert.match(html, /app\.js\?v=20260831-asset-library-12/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -694,7 +699,7 @@ test("empty generator media uses a larger centered modality icon", () => {
 
 test("legacy page exits through the routed host instead of deleted static pages", () => {
   assert.match(appSource, /function requestHostNavigation\(target\)/);
-  assert.ok((html.match(/data-canvas-home-button/g) || []).length >= 2);
+  assert.equal((html.match(/data-canvas-home-button/g) || []).length, 1);
   assert.match(appSource, /document\.querySelectorAll\("#canvasHomeBtn, \[data-canvas-home-button\]"\)/);
   assert.match(appSource, /canvasHomeButtons\.forEach\([\s\S]*?requestHostNavigation\("home"\)/);
   assert.match(appSource, /requestHostNavigation\("home"\)/);
@@ -717,11 +722,15 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
   assert.match(appSource, /element\.contentEditable !== "true"[\s\S]*?event\.key === "Enter"[\s\S]*?event\.key === "F2"[\s\S]*?beginInlineRename\(element\)/);
   assert.match(appSource, /state\.hostCapabilities\.accountSections = context\.capabilities\?\.accountSections === true/);
   assert.match(appSource, /nextSection === "credits" && state\.hostCapabilities\.accountSections[\s\S]*?\{ section: "credits" \}[\s\S]*?canvasPersistence\.post\("canvas:open-account", payload\)/);
+  assert.match(assetLibraryViewSource, /const renameKeyboardAttrs = mutable && !renaming[\s\S]*?tabindex="0"[\s\S]*?按 Enter 或 F2 重命名/);
+  assert.match(assetLibraryViewSource, /data-library-rename="\$\{safeId\}"[\s\S]*?\$\{renameKeyboardAttrs\}/);
+  assert.match(appSource, /const renameTarget = event\.target\.closest\("\[data-library-rename\]"\)[\s\S]*?event\.key === "Enter"[\s\S]*?event\.key === "F2"[\s\S]*?startAssetLibraryRename/);
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-canvas-shortcuts-62/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-project-switcher-67/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260831-asset-library-12/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260831-asset-library-12/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260831-asset-library-12/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
@@ -742,7 +751,7 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(appSource, /function requestHostProjectCreation\(\)[\s\S]*?canvasPersistence\.post\("canvas:create-project"\)/);
   assert.match(canvasChromeCss, /--canvas-edge-bar-width:\s*268px/);
   assert.match(canvasChromeCss, /\.top-bar \.canvas-project-switcher\s*\{[\s\S]*?width:\s*min\(var\(--canvas-edge-bar-width\), calc\(100vw - 96px\)\)/);
-  assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\],[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
+  assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\]\s*\{[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
   assert.match(canvasChromeCss, /\.left-rail \.avatar-button\.active \+ \.profile-button-tip\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?opacity:\s*0;/);
   assert.match(canvasChromeCss, /\.left-rail \.rail-button\s*\{[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/);
@@ -762,6 +771,40 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*42px[\s\S]*?margin-left:\s*10px/);
   assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
   assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
+});
+
+test("asset library actions stay scoped to their real controls and canvas drop target", () => {
+  assert.match(html, /styles\.css\?v=20260831-asset-library-12/);
+  assert.match(html, /prototype-config\.js\?v=20260831-asset-library-12/);
+  assert.match(html, /canvas-asset-library-model\.js\?v=20260831-asset-library-12/);
+  assert.match(html, /canvas-asset-library-view\.js\?v=20260831-asset-library-12/);
+  assert.match(html, /app\.js\?v=20260831-asset-library-12/);
+  assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
+  assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
+  assert.match(appSource, /closest\("#assetLibrarySpaceMenu \[data-library-space\]"\)/);
+  assert.match(appSource, /closest\("#assetLibrarySectionTabs \[data-library-section\]"\)/);
+  assert.match(appSource, /closest\("#assetLibraryCommandBar button\[data-library-display\]"\)/);
+  assert.match(appSource, /const eventPath = typeof event\.composedPath === "function"/);
+  assert.match(appSource, /function isCanvasDropTarget\(target\)[\s\S]*?closest\("#canvasShell"\)/);
+  assert.match(appSource, /hasSupportedPayload && !isCanvasDropTarget\(event\.target\)/);
+  assert.doesNotMatch(appSource, /window\.prompt\("新建文件夹名称"/);
+  assert.match(
+    appSource,
+    /function createAssetLibraryFolder\(\)[\s\S]*?listFolders\([\s\S]*?新建文件夹 \$\{sequence\}[\s\S]*?libraryRenameTarget = \{ kind: "folder", id: folder\.id \}/,
+  );
+  for (const iconName of [
+    "chevron-left",
+    "folder-input",
+    "grid-2x2",
+    "house",
+    "list-filter",
+    "shield-check",
+    "square",
+    "square-check-big",
+    "user-round-plus",
+  ]) {
+    assert.match(appSource, new RegExp(`"${iconName}":\\s*'<`));
+  }
 });
 
 test("shortcut help mirrors the implemented canvas gestures", () => {

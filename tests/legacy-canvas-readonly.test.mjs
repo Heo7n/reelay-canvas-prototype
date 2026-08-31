@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -26,6 +26,7 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("src/legacy-canvas/canvas-pointer-interaction-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-asset-library-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-media-toolbar-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-runtime-store.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-command-executor.js", root), "utf8"),
@@ -80,6 +81,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(pointerInteractionController);
   window.eval(pointerDispatchController);
   window.eval(assetLibraryModel);
+  window.eval(assetLibraryView);
   window.eval(mediaToolbarView);
   window.eval(runtimeStore);
   window.eval(commandExecutor);
@@ -184,7 +186,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
 
   postedMessages.length = 0;
   const homeButtons = [...window.document.querySelectorAll("[data-canvas-home-button]")];
-  assert.equal(homeButtons.length, 2);
+  assert.equal(homeButtons.length, 1);
   homeButtons.forEach((button) => {
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     assert.equal(postedMessages.at(-1).type, "canvas:navigate");
@@ -254,6 +256,20 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
 
   window.document.querySelector("#railLibraryBtn")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  window.document.querySelector("[data-library-filter-toggle]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  assert.ok(window.document.querySelector(".asset-library-toolbar-menu.compact"));
+  assert.equal(
+    window.document.querySelector("[data-library-filter-toggle]").getAttribute("aria-expanded"),
+    "true",
+  );
+  window.document.querySelector("[data-library-selection-toggle]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  const selectionCancel = window.document.querySelector("[data-library-selection-cancel]");
+  assert.ok(selectionCancel);
+  assert.match(selectionCancel.textContent, /取消/);
+  selectionCancel.dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  assert.ok(window.document.querySelector("[data-library-selection-toggle]"));
   window.document.querySelector("#agentLauncher")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));

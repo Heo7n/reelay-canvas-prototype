@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260831-project-switcher-71" />
+    <link rel="stylesheet" href="./styles.css?v=20260831-asset-library-12" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -167,49 +167,93 @@
       </aside>
       <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库" aria-hidden="true" inert>
         <header class="asset-library-header">
-          <div class="project-nav canvas-project-switcher" data-project-nav="asset">
-            <button class="project-home-button" type="button" data-canvas-home-button title="返回主页" aria-label="返回主页">
-              <i class="project-home-icon" data-lucide="chevron-right" aria-hidden="true"></i>
+          <div class="asset-library-heading">
+            <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="返回画布" aria-label="返回画布">
+              <i data-lucide="chevron-left" aria-hidden="true"></i>
             </button>
-            <span class="project-nav-divider" aria-hidden="true"></span>
-            <span class="project-nav-name" id="assetLibraryProjectName" data-project-name tabindex="0" title="双击或按 Enter 重命名项目" aria-label="项目名称 Untitled，按 Enter 重命名">Untitled</span>
-            <button class="project-switch-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单" aria-controls="projectMenu" aria-expanded="false" aria-haspopup="dialog">
+            <h2>资产库</h2>
+          </div>
+          <div class="asset-library-space-switcher">
+            <button class="asset-library-space-button" id="assetLibrarySpaceButton" type="button" aria-haspopup="menu" aria-controls="assetLibrarySpaceMenu" aria-expanded="false">
+              <span id="assetLibrarySpaceLabel">个人空间</span>
               <i data-lucide="chevron-down" aria-hidden="true"></i>
             </button>
-          </div>
-          <div class="asset-library-header-actions">
-            <span class="sr-only" data-canvas-name>画布 1</span>
-            <button class="asset-library-header-button asset-library-canvas-switch" type="button" data-canvas-menu-button title="切换画布" aria-label="切换画布" aria-controls="canvasMenu" aria-expanded="false" aria-haspopup="menu">
-              <i data-lucide="layers-3" aria-hidden="true"></i>
-            </button>
-            <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起资产库" aria-label="收起资产库">
-              <i data-lucide="panel-left-close" aria-hidden="true"></i>
-            </button>
+            <div class="asset-library-space-menu hidden" id="assetLibrarySpaceMenu" role="menu" aria-label="切换资产空间">
+              <button type="button" role="menuitemradio" data-library-space="personal" aria-checked="true">
+                <i data-lucide="user-round" aria-hidden="true"></i>
+                <span>个人空间</span>
+                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
+              </button>
+              <button type="button" role="menuitemradio" data-library-space="organization" aria-checked="false">
+                <i data-lucide="users-round" aria-hidden="true"></i>
+                <span>组织空间</span>
+                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
+              </button>
+              <button type="button" role="menuitemradio" data-library-space="platform" aria-checked="false">
+                <i data-lucide="badge-check" aria-hidden="true"></i>
+                <span>平台空间</span>
+                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
+              </button>
+            </div>
           </div>
         </header>
-        <div class="asset-library-mode" role="tablist" aria-label="项目内容层级">
-          <div class="asset-library-local-tabs" id="assetLibraryModeTabs"></div>
-          <button class="asset-library-global-button" id="assetLibraryGlobalBtn" type="button" title="全局资产库" aria-label="全局资产库">
-            <i data-lucide="book-open" aria-hidden="true"></i>
-          </button>
-        </div>
+        <nav class="asset-library-section-tabs" id="assetLibrarySectionTabs" role="tablist" aria-label="资产类型">
+          <button class="active" id="assetLibraryMediaTab" type="button" role="tab" data-library-section="media" aria-selected="true" aria-controls="assetLibraryGrid">素材</button>
+          <button id="assetLibraryEntityTab" type="button" role="tab" data-library-section="entity" aria-selected="false" aria-controls="assetLibraryGrid">主体库</button>
+        </nav>
+        <label class="asset-library-search" aria-label="搜索资产库">
+          <i data-lucide="search" aria-hidden="true"></i>
+          <input id="assetLibrarySearchInput" type="search" placeholder="搜索" autocomplete="off" />
+        </label>
         <div class="asset-library-body">
           <section class="asset-library-content">
-            <div class="asset-library-listbar">
-              <label class="asset-library-search" aria-label="搜索资产库">
-                <i data-lucide="search" aria-hidden="true"></i>
-                <input id="assetLibrarySearchInput" type="search" placeholder="搜索" />
-              </label>
-              <div class="asset-library-tabs" id="assetLibraryTabs" role="listbox" aria-label="素材类型"></div>
+            <div class="asset-library-directorybar">
+              <div class="asset-library-directory-shell">
+                <div class="asset-library-directory">
+                  <button class="asset-library-directory-button" id="assetLibraryDirectoryButton" type="button" aria-haspopup="tree" aria-controls="assetLibraryDirectoryTreePopover" aria-expanded="false">
+                    <i data-lucide="chevron-down" aria-hidden="true"></i>
+                    <strong id="assetLibraryDirectoryName">默认目录</strong>
+                  </button>
+                  <span class="asset-library-directory-divider" aria-hidden="true"></span>
+                  <button class="asset-library-folder-create" id="assetLibraryCreateFolderBtn" type="button" title="在当前目录中新建文件夹" aria-label="在当前目录中新建文件夹">
+                    <i data-lucide="plus" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <div class="asset-library-directory-tree-popover hidden" id="assetLibraryDirectoryTreePopover"></div>
+              </div>
+              <div class="asset-library-command-slot" id="assetLibraryCommandBar"></div>
             </div>
-            <div class="asset-library-grid" id="assetLibraryGrid"></div>
-            <div class="asset-library-footer">
-              <span class="asset-library-count" id="assetLibraryCount">共 0 项</span>
-            </div>
+            <div class="asset-library-grid" id="assetLibraryGrid" role="tabpanel" aria-labelledby="assetLibraryMediaTab"></div>
           </section>
         </div>
-        <div class="asset-library-resize-handle" id="assetLibraryResizeHandle" role="separator" aria-orientation="vertical" title="调整资产库宽度"></div>
+        <footer class="asset-library-footer">
+          <span class="asset-library-count" id="assetLibraryCount">共 0 个素材</span>
+        </footer>
+        <div class="asset-library-overlay-layer" id="assetLibraryOverlayLayer"></div>
+        <input id="assetLibraryUploadInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
+        <div class="asset-library-resize-handle" id="assetLibraryResizeHandle" role="separator" aria-orientation="vertical" aria-label="调整资产库宽度" aria-valuemin="380" aria-valuemax="780" aria-valuenow="550" tabindex="0" title="调整资产库宽度"></div>
       </aside>
+      <dialog class="asset-library-preview-dialog" id="assetLibraryPreviewDialog" aria-labelledby="assetLibraryPreviewTitle">
+        <div class="asset-library-preview-shell">
+          <header>
+            <div>
+              <span class="asset-library-preview-kicker" id="assetLibraryPreviewKicker">素材预览</span>
+              <h2 id="assetLibraryPreviewTitle">素材</h2>
+            </div>
+            <button type="button" data-library-preview-close title="关闭预览" aria-label="关闭预览">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+          </header>
+          <div class="asset-library-preview-body" id="assetLibraryPreviewBody"></div>
+          <footer>
+            <span id="assetLibraryPreviewMeta"></span>
+            <button class="asset-library-preview-use" id="assetLibraryPreviewUse" type="button">
+              <i data-lucide="plus" aria-hidden="true"></i>
+              <span>添加到画布</span>
+            </button>
+          </footer>
+        </div>
+      </dialog>
       <div class="project-menu hidden" id="projectMenu" role="dialog" aria-labelledby="projectMenuTitle">
         <h2 class="sr-only" id="projectMenuTitle">切换项目</h2>
         <label class="project-menu-search">
@@ -446,7 +490,7 @@
     </main>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
     <script src="./data/model-catalog.js?v=20260824-selection-frame-drag-33"></script>
-    <script src="./src/config/prototype-config.js?v=20260824-prompt-optimization-32"></script>
+    <script src="./src/config/prototype-config.js?v=20260831-asset-library-12"></script>
     <script src="./src/legacy-canvas/canvas-connections.js?v=20260827-connection-confirm-46"></script>
     <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260824-node-body-target-1"></script>
     <script src="./src/legacy-canvas/canvas-connection-feedback-motion.js?v=20260827-connection-confirm-46"></script>
@@ -464,12 +508,13 @@
     <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260824-group-frame-24"></script>
     <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
     <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260824-selection-frame-drag-33"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260818-progressive-split-9"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260831-asset-library-12"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260831-asset-library-12"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260819-progressive-split-10"></script>
     <script src="./src/legacy-canvas/canvas-runtime-store.js?v=20260826-canvas-runtime-store-38"></script>
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260826-media-kind-37"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./app.js?v=20260831-project-switcher-64"></script>
+    <script src="./app.js?v=20260831-asset-library-12"></script>
   </body>
 </html>

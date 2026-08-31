@@ -149,17 +149,23 @@ flowchart TD
 
 ## 4.2 资产中心
 
-资产中心是跨项目复用的媒体管理页；画布左下角资产库是它在单项目中的轻量投影。
+资产中心是跨项目复用的 Media 与 Entity 管理页；画布内资产库已经实现其页面内存交互投影，正式 React 页面、权限和持久化仍属于本规划。
 
 ### 页面目标
 
-- 管理已经保存为 Workspace Asset 的图片、视频和音频；未晋升的 GenerationResult 只在任务或节点结果历史中管理。
+- 管理已经保存为 Workspace Media Asset 的图片、视频和音频；未晋升的 GenerationResult 只在任务或节点结果历史中管理。
+- 管理只引用 Media、不重复保存媒体字段或二进制的 Entity 主体；直接创建主体时，新媒体必须先登记到 Media，再由 Entity 保存有序引用。
 - 查看素材被哪些项目或节点引用。
 - 批量整理、重命名、下载和删除。
 
 ### 页面结构
 
-左侧筛选：
+顶层空间与分栏：
+
+- 个人空间与组织空间是 Workspace Asset 的不同可见 / 发布位置，不复制底层 Media；平台空间来自单独的只读目录，不能伪装为当前 Workspace 的可写资产。
+- Media 素材与 Entity 主体库独立展示；Media 支持图片、视频、音频筛选，Entity 通过 Media 引用形成预览。
+
+完整页面后续筛选：
 
 - 全部。
 - 图片。
@@ -187,6 +193,7 @@ flowchart TD
 ### 关键交互
 
 - 拖入上传。
+- 直接创建 Entity 时原子登记新 Media 与主体引用；删除 Entity 不删除 Media。
 - 批量加入项目（创建 AssetReference，不复制 Asset 所有权）。
 - 打开素材所在画布并定位节点。
 - 查看生成提示词和模型参数。
@@ -342,7 +349,8 @@ Agent 不直接调用页面 DOM 或原型事件函数。跨项目写操作必须
 | ProjectMembership | 项目成员及 `admin/edit/view` 角色；是项目读写权限来源 |
 | CanvasDocument | 画布视口、节点、组与版本 |
 | Node | 画布节点；GenerationNode 持有创建时确定且不可变的 `mediaKind` 与结果引用 |
-| Asset | Workspace 所有、可跨项目复用的持久媒体对象 |
+| Asset | Workspace 所有、可跨项目复用的持久 Media 对象；个人 / 组织空间由 placement 表达，不复制媒体内容 |
+| Entity | 由去重、有序 Media 引用组成的主体；不复制 Media 的 URL、Blob、尺寸、时长或二进制 |
 | AssetReference | Project / Node 对 Asset 的显式引用与必要版本信息 |
 | GenerationTask | 带 actor 与项目 / 画布 / 节点 scope、状态、参数 / 计价快照和幂等键的一次执行 |
 | GenerationResult | 带不可变 `mediaKind` 的任务输出；默认不等于 Asset |
