@@ -139,7 +139,7 @@ test("selection command bar disables batch actions until at least one item is se
   assert.doesNotMatch(markup, /asset-library-toolbar-menu batch/);
 });
 
-test("organization batch actions omit sharing to organization", () => {
+test("organization Entity batch actions omit review and sharing to organization", () => {
   const markup = view.renderCommandBar({
     mutable: true,
     space: "organization",
@@ -149,43 +149,52 @@ test("organization batch actions omit sharing to organization", () => {
     menu: "batch",
   });
 
-  assert.match(markup, /data-library-batch-action="review"/);
+  assert.doesNotMatch(markup, /data-library-batch-action="review"/);
   assert.match(markup, /data-library-batch-action="move"/);
   assert.match(markup, /data-library-batch-action="delete"/);
   assert.match(markup, /data-library-selection-cancel="true"/);
   assert.doesNotMatch(markup, /share-organization/);
   assert.doesNotMatch(markup, /复制到组织空间/);
   assert.doesNotMatch(markup, /data-library-filter-toggle/);
+  assert.match(markup, /data-library-display="list"/);
+  assert.equal(markup.match(/data-library-display=/g)?.length, 1);
 });
 
-test("platform command bar remains read-only even when mutable is requested", () => {
-  const mediaMarkup = view.renderCommandBar({
+test("platform inspiration command bar supports selection and media filters without management controls", () => {
+  const browseMarkup = view.renderCommandBar({
     mutable: true,
     space: "platform",
-    section: "media",
-    selectionMode: true,
-    menu: "batch",
-  });
-  const entityMarkup = view.renderCommandBar({
-    mutable: true,
-    space: "official",
     section: "entity",
   });
+  const selectionMarkup = view.renderCommandBar({
+    mutable: true,
+    space: "official",
+    section: "media",
+    selectionMode: true,
+    selectedCount: 2,
+    menu: "batch",
+  });
 
-  for (const markup of [mediaMarkup, entityMarkup]) {
-    assert.match(markup, /asset-library-readonly-command/);
-    assert.match(markup, />仅可查看</);
+  for (const markup of [browseMarkup, selectionMarkup]) {
+    assert.match(markup, /asset-library-commandbar platform/);
+    assert.match(markup, /data-library-commandbar="media"/);
     assert.doesNotMatch(markup, /data-library-upload/);
     assert.doesNotMatch(markup, /data-library-create-entity/);
-    assert.doesNotMatch(markup, /data-library-selection-toggle/);
-    assert.doesNotMatch(markup, /data-library-selection-cancel/);
-    assert.doesNotMatch(markup, /data-library-select-all/);
-    assert.doesNotMatch(markup, /data-library-batch/);
+    assert.doesNotMatch(markup, /asset-library-readonly-command/);
+    assert.doesNotMatch(markup, /data-library-display=/);
   }
-  assert.match(mediaMarkup, /data-library-filter-toggle="true"/);
-  assert.match(mediaMarkup, /data-library-display="list"/);
-  assert.equal(mediaMarkup.match(/data-library-display=/g)?.length, 1);
-  assert.doesNotMatch(entityMarkup, /data-library-filter-toggle/);
+  assert.match(browseMarkup, /data-library-selection-toggle="true"/);
+  assert.match(browseMarkup, /data-library-filter-toggle="true"/);
+  assert.doesNotMatch(browseMarkup, /data-library-batch-toggle/);
+  assert.match(selectionMarkup, /data-library-batch-toggle="true"/);
+  assert.match(selectionMarkup, /data-library-select-all="true"/);
+  assert.match(selectionMarkup, /data-library-selection-cancel="true"/);
+  assert.match(selectionMarkup, /data-library-filter-toggle="true"/);
+  assert.match(selectionMarkup, /data-library-batch-action="add-canvas"/);
+  assert.match(selectionMarkup, />添加到画布</);
+  assert.match(selectionMarkup, /data-library-batch-action="save-material"/);
+  assert.match(selectionMarkup, />保存到素材</);
+  assert.doesNotMatch(selectionMarkup, /review|move|share-organization|delete/);
 });
 
 test("command bar renders active filter, display, and filter-menu semantics", () => {
@@ -378,28 +387,19 @@ test("organization single-item menus omit sharing and platform cards hide mutati
   assert.doesNotMatch(organization, /share-organization/);
   assert.doesNotMatch(organization, /共享到组织空间/);
 
-  assert.match(platform, /asset-library-media-card readonly/);
+  assert.match(platform, /asset-library-media-card selected selection-mode readonly/);
   assert.doesNotMatch(platform, /data-library-menu-toggle/);
   assert.doesNotMatch(platform, /data-library-menu-item/);
-  assert.doesNotMatch(platform, /data-library-select/);
+  assert.match(platform, /data-library-select="platform-media"/);
+  assert.match(platform, /aria-pressed="true"/);
   assert.doesNotMatch(platform, /data-library-rename/);
 });
 
-test("entity cards render escaped collage previews, counts, metadata, and item actions", () => {
+test("entity cards render a chosen cover, simple name, and item actions", () => {
   const markup = view.renderEntityCard({
     entity: { id: "entity-1", name: "主角" },
     name: "主角主体",
-    mediaPreviews: [
-      { mediaKind: "image", url: "https://cdn.example/portrait.jpg" },
-      {
-        mediaKind: "video",
-        url: "https://cdn.example/action.mp4",
-        thumbnailUrl: "https://cdn.example/action.jpg",
-      },
-      { mediaKind: "audio", url: "https://cdn.example/voice.mp3" },
-      { mediaKind: "image", thumbnailUrl: "https://cdn.example/reference.webp" },
-      { mediaKind: "image", url: "https://cdn.example/not-rendered.jpg" },
-    ],
+    coverPreview: { mediaKind: "image", url: "https://cdn.example/portrait.jpg" },
     mediaCount: 5,
     meta: "5 个素材 · 刚刚更新",
     selected: true,
@@ -412,17 +412,20 @@ test("entity cards render escaped collage previews, counts, metadata, and item a
   assert.match(markup, /asset-library-entity-card selected selection-mode menu-open/);
   assert.match(markup, /data-library-entity="entity-1"/);
   assert.match(markup, /data-library-preview="entity-1"/);
-  assert.match(markup, /asset-library-entity-collage/);
+  assert.match(markup, /asset-library-entity-cover/);
   assert.match(markup, /<img src="https:\/\/cdn\.example\/portrait\.jpg"/);
-  assert.match(markup, /<video src="https:\/\/cdn\.example\/action\.mp4" poster="https:\/\/cdn\.example\/action\.jpg"/);
-  assert.match(markup, /class="audio-wave"/);
-  assert.match(markup, /<img src="https:\/\/cdn\.example\/reference\.webp"/);
-  assert.doesNotMatch(markup, /not-rendered/);
-  assert.match(markup, />5 个素材</);
-  assert.match(markup, /5 个素材 · 刚刚更新/);
+  assert.doesNotMatch(markup, /action\.mp4|audio-wave|reference\.webp/);
+  assert.doesNotMatch(markup, /个素材|asset-library-entity-badge|asset-library-card-meta/);
   assert.match(markup, /asset-library-card-namebar" data-library-rename="entity-1" data-library-item-kind="entity"/);
   assert.match(markup, /data-library-select="entity-1"/);
+  assert.match(markup, /data-library-menu-item="edit"[^>]*data-library-edit-entity="entity-1"/);
+  assert.match(markup, /data-library-menu-item="edit"[^>]*>[^]*?<span>编辑<\/span>/);
+  assert.match(markup, /data-library-menu-item="rename"/);
+  assert.match(markup, /data-library-menu-item="move"/);
   assert.match(markup, /data-library-menu-item="share-organization"/);
+  assert.match(markup, /data-library-menu-item="share-organization"[^>]*>[^]*?<span>复制到组织空间<\/span>/);
+  assert.match(markup, /data-library-menu-item="delete"/);
+  assert.doesNotMatch(markup, /data-library-menu-item="review"/);
 });
 
 test("card renderers escape every user-controlled HTML and attribute value", () => {
@@ -446,12 +449,7 @@ test("card renderers escape every user-controlled HTML and attribute value", () 
   });
   const entityMarkup = view.renderEntityCard({
     entity: { id: payload, name: payload },
-    mediaPreviews: [
-      rawPreview,
-      { previewHtml: rawPreview },
-      { mediaKind: "image", url: "javascript:alert(3)" },
-      { mediaKind: "image", url: "https://cdn.example/safe.jpg?x=1&y=2" },
-    ],
+    coverPreview: { mediaKind: "image", url: "https://cdn.example/safe.jpg?x=1&y=2" },
     mediaCount: payload,
     meta: payload,
     mutable: true,
@@ -510,7 +508,8 @@ test("empty states distinguish search, mutable media, mutable entities, and read
   assert.match(media, /data-library-upload="true"/);
   assert.match(entity, /还没有主体/);
   assert.match(entity, /data-library-create-entity="true"/);
-  assert.match(readOnly, /暂无可用主体/);
+  assert.match(readOnly, /暂无灵感素材/);
+  assert.match(readOnly, /试试其他关键词或素材类型/);
   assert.doesNotMatch(readOnly, /data-library-create-entity/);
 });
 

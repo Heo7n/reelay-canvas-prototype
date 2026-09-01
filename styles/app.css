@@ -2955,14 +2955,14 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   flex: 0 0 148px;
   height: 46px;
   padding: 4px 8px 4px 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--node-chip-text) 9%, transparent);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--node-chip-bg);
   overflow: hidden;
 }
 
 .asset-card:hover {
-  background: rgba(255, 255, 255, 0.085);
+  background: var(--node-chip-hover);
 }
 
 .asset-card.active {
@@ -3057,7 +3057,7 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
 }
 
 .asset-meta span {
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--node-chip-text);
   font-size: var(--node-font-label);
   font-weight: 720;
   line-height: var(--node-leading-caption);
@@ -3065,7 +3065,7 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
 
 .asset-meta small {
   margin-top: 3px;
-  color: rgba(255, 255, 255, 0.38);
+  color: color-mix(in srgb, var(--node-chip-text) 48%, transparent);
   font-size: var(--node-font-caption);
   font-weight: 620;
   line-height: var(--node-leading-caption);
@@ -3225,29 +3225,26 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   letter-spacing: -0.02em;
 }
 
-.model-brand-icon img,
-.model-brand-mask {
+.model-brand-icon img {
   display: block;
   width: var(--model-icon-art, 22px);
   height: var(--model-icon-art, 22px);
+  object-fit: contain;
 }
 
-.model-brand-icon img {
-  object-fit: contain;
+.model-brand-monochrome img {
+  filter: brightness(0);
+  opacity: 0.82;
+}
+
+html:not([data-theme="light"]) .model-brand-monochrome img {
+  filter: brightness(0) invert(1);
+  opacity: 0.86;
 }
 
 html:not([data-theme="light"]) .model-icon.model-brand-icon {
   background: rgba(255, 255, 255, 0.1);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
-}
-
-.model-brand-mask {
-  background: currentColor;
-  -webkit-mask: var(--model-icon-mask) center / contain no-repeat;
-  mask: var(--model-icon-mask) center / contain no-repeat;
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: contain;
 }
 
 .model-chip-glyph.model-brand-icon {

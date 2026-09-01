@@ -97,6 +97,14 @@
       if (!isMutableSpace(space)) throw new Error(`The ${space} asset library space is read-only.`);
     }
 
+    function createGeneratedMediaId() {
+      let candidate;
+      do {
+        candidate = `media-${++generatedMediaId}`;
+      } while (mediaById.has(candidate));
+      return candidate;
+    }
+
     function normalizeMediaRecord(input, idOverride = null) {
       const source = cloneValue(input || {});
       const id = String(idOverride || source.id || `media-${++generatedMediaId}`).trim();
@@ -137,13 +145,28 @@
       if (source.displayName != null) record.displayName = String(source.displayName);
       if (source.description != null) record.description = String(source.description);
       if (Array.isArray(source.tags)) record.tags = source.tags.map((tag) => String(tag));
-      if (source.coverMediaId != null) record.coverMediaId = String(source.coverMediaId);
+      if (source.coverMediaId != null) record.coverMediaId = String(source.coverMediaId).trim();
       if (source.createdBy != null) record.createdBy = String(source.createdBy);
       if (source.createdAt != null) record.createdAt = source.createdAt;
       if (source.updatedAt != null) record.updatedAt = source.updatedAt;
       if (source.version != null) record.version = source.version;
       if (source.lifecycle != null) record.lifecycle = source.lifecycle;
       return record;
+    }
+
+    function validateEntityStructure(entity, mediaMap) {
+      if (!entity.mediaRefs.length) throw new Error("An Entity must reference at least one Media item.");
+      if (entity.coverMediaId != null && !entity.mediaRefs.some((ref) => ref.mediaId === entity.coverMediaId)) {
+        throw new Error(`Entity ${entity.id} cover media must belong to its Media references: ${entity.coverMediaId}`);
+      }
+      if (entity.coverMediaId != null) {
+        const coverMedia = mediaMap.get(entity.coverMediaId);
+        if (!coverMedia) throw new Error(`Entity ${entity.id} references missing cover media: ${entity.coverMediaId}`);
+        if (coverMedia.mediaKind !== "image") {
+          throw new Error(`Entity ${entity.id} cover media must be an image: ${entity.coverMediaId}`);
+        }
+      }
+      return entity;
     }
 
     function createGeneratedFolderId() {
@@ -296,10 +319,21 @@
       return placementsByKey.has(placementKey(item, space));
     }
 
+    function validateMediaPlacementBoundary(item, space, placementMap = placementsByKey) {
+      if (item.kind !== "media") return;
+      const crossesPlatformBoundary = space === "platform"
+        ? [...mutableSpaces].some((mutableSpace) => placementMap.has(placementKey(item, mutableSpace)))
+        : mutableSpaces.has(space) && placementMap.has(placementKey(item, "platform"));
+      if (crossesPlatformBoundary) {
+        throw new Error(`Media ${item.id} cannot have both platform and writable-space placements.`);
+      }
+    }
+
     function createPlacement(item, space, folderId = null) {
       validateFolder(folderId, space, item.kind);
       const key = placementKey(item, space);
       if (placementsByKey.has(key)) return false;
+      validateMediaPlacementBoundary(item, space);
       placementsByKey.set(key, { item: { ...item }, space, folderId });
       return true;
     }
@@ -317,16 +351,17 @@
     }
     for (const input of entities) {
       const record = normalizeEntityRecord(input);
+      validateEntityStructure(record, mediaById);
       if (entitiesById.has(record.id)) throw new Error(`Duplicate entity id: ${record.id}`);
       entitiesById.set(record.id, record);
     }
     for (const input of placements) {
       const placement = normalizePlacementRecord(input);
       requireRecord(placement.item);
-      validateFolder(placement.folderId, placement.space, placement.item.kind);
       const key = placementKey(placement.item, placement.space);
-      if (placementsByKey.has(key)) throw new Error(`Duplicate placement: ${key}`);
-      placementsByKey.set(key, placement);
+      if (!createPlacement(placement.item, placement.space, placement.folderId)) {
+        throw new Error(`Duplicate placement: ${key}`);
+      }
     }
 
     function validateEntityVisibility(entity, space, placementMap = placementsByKey, mediaMap = mediaById) {
@@ -442,6 +477,31 @@
       return { media: cloneValue(record), created, placementCreated };
     }
 
+    function importPlatformMediaToPersonal({ item: itemInput, folderId = null } = {}) {
+      const sourceItem = resolveItemRef(itemInput, "media");
+      const source = requireRecord(sourceItem);
+      if (!hasPlacementInternal(sourceItem, "platform")) {
+        throw new Error(`Media ${sourceItem.id} is not visible in platform.`);
+      }
+      validateFolder(folderId, "personal", "media");
+
+      const platformSourceId = String(source.platformSourceId || source.id).trim();
+      const existing = [...mediaById.values()].find((candidate) =>
+        candidate.id !== source.id &&
+          String(candidate.platformSourceId || "").trim() === platformSourceId &&
+          !hasPlacementInternal({ kind: "media", id: candidate.id }, "platform"),
+      );
+      const record = existing || normalizeMediaRecord({
+        ...cloneValue(source),
+        id: createGeneratedMediaId(),
+        platformSourceId,
+      });
+      const created = !existing;
+      if (created) mediaById.set(record.id, record);
+      const placementCreated = createPlacement({ kind: "media", id: record.id }, "personal", folderId);
+      return { media: cloneValue(record), created, placementCreated };
+    }
+
     function createEntityFromMedia({
       entity: inputEntity,
       media: inputMedia = [],
@@ -491,11 +551,19 @@
         const wasDirectlyRegistered = stagedMedia.some((record) => record.id === ref.mediaId) ||
           [...inputIdToCanonicalId.values()].includes(ref.mediaId);
         if (!stagedPlacements.has(key) && wasDirectlyRegistered) {
+          validateMediaPlacementBoundary(mediaItem, resolvedSpace, stagedPlacements);
           stagedPlacements.set(key, { item: mediaItem, space: resolvedSpace, folderId: mediaFolderId });
         }
       }
 
-      const entity = normalizeEntityRecord(inputEntity, normalizedRefs, entityId);
+      const entityInput = inputEntity && Object.prototype.hasOwnProperty.call(inputEntity, "coverMediaId")
+        ? {
+            ...inputEntity,
+            coverMediaId: inputIdToCanonicalId.get(String(inputEntity.coverMediaId)) || inputEntity.coverMediaId,
+          }
+        : inputEntity;
+      const entity = normalizeEntityRecord(entityInput, normalizedRefs, entityId);
+      validateEntityStructure(entity, stagedMediaMap);
       validateEntityVisibility(entity, resolvedSpace, stagedPlacements, stagedMediaMap);
       const entityPlacement = {
         item: { kind: "entity", id: entity.id },
@@ -514,6 +582,56 @@
         media: entity.mediaRefs.map((ref) => cloneValue(mediaById.get(ref.mediaId))),
         createdMediaIds: stagedMedia.map((record) => record.id),
       };
+    }
+
+    function updateEntity({ item: itemInput, space = "personal", patch = {} } = {}) {
+      const item = resolveItemRef(itemInput, "entity");
+      const resolvedSpace = resolveSpace(space);
+      assertMutable(resolvedSpace);
+      const current = requireRecord(item);
+      if (!hasPlacementInternal(item, resolvedSpace)) {
+        throw new Error(`Entity ${item.id} is not visible in ${resolvedSpace}.`);
+      }
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        throw new Error("Entity patch must be an object.");
+      }
+
+      const allowedFields = new Set(["name", "description", "mediaRefs", "coverMediaId"]);
+      const unsupportedFields = Object.keys(patch).filter((field) => !allowedFields.has(field));
+      if (unsupportedFields.length) {
+        throw new Error(`Unsupported Entity patch field: ${unsupportedFields.join(", ")}`);
+      }
+
+      const candidate = cloneValue(current);
+      if (Object.prototype.hasOwnProperty.call(patch, "name")) {
+        const name = String(patch.name || "").trim();
+        if (!name) throw new Error("Entity name is required.");
+        candidate.name = name;
+        if (Object.prototype.hasOwnProperty.call(candidate, "displayName")) candidate.displayName = name;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, "description")) {
+        candidate.description = String(patch.description ?? "").trim();
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, "mediaRefs")) {
+        if (!Array.isArray(patch.mediaRefs)) throw new Error("Entity mediaRefs must be an array.");
+        candidate.mediaRefs = normalizeMediaRefs(patch.mediaRefs);
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, "coverMediaId")) {
+        const coverMediaId = patch.coverMediaId == null ? "" : String(patch.coverMediaId).trim();
+        if (coverMediaId) candidate.coverMediaId = coverMediaId;
+        else delete candidate.coverMediaId;
+      }
+
+      validateEntityStructure(candidate, mediaById);
+      const placementSpaces = new Set(
+        [...placementsByKey.values()]
+          .filter((placement) => placement.item.kind === "entity" && placement.item.id === item.id)
+          .map((placement) => placement.space),
+      );
+      for (const placementSpace of placementSpaces) validateEntityVisibility(candidate, placementSpace);
+
+      entitiesById.set(item.id, candidate);
+      return cloneValue(candidate);
     }
 
     function createFolder(input = {}) {
@@ -802,7 +920,9 @@
       hasPlacement,
       snapshot,
       registerMedia,
+      importPlatformMediaToPersonal,
       createEntityFromMedia,
+      updateEntity,
       createFolder,
       renameFolder,
       moveFolder,

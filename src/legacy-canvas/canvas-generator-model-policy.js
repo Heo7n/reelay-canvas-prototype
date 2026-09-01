@@ -28,6 +28,10 @@
     return Boolean(mode && model && model.type === mode && catalog?.includes(model));
   }
 
+  function canUseEntityReferences(catalog, node) {
+    return resolveModel(catalog, node)?.brand === "seedance";
+  }
+
   function normalizeModelState(catalog, node) {
     const mode = getNodeModeContract(node);
     if (!mode) return null;
@@ -38,6 +42,7 @@
   }
 
   root.REELAY_CANVAS_GENERATOR_MODEL_POLICY = Object.freeze({
+    canUseEntityReferences,
     canUseModel,
     getCompatibleModels,
     getNodeModeContract,

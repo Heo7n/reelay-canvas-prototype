@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityUseModel, entityUseView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -27,6 +27,10 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-model.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-editor-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-editor-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-use-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-use-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-media-toolbar-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-runtime-store.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-command-executor.js", root), "utf8"),
@@ -83,6 +87,10 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(pointerDispatchController);
   window.eval(assetLibraryModel);
   window.eval(assetLibraryView);
+  window.eval(entityEditorModel);
+  window.eval(entityEditorView);
+  window.eval(entityUseModel);
+  window.eval(entityUseView);
   window.eval(mediaToolbarView);
   window.eval(runtimeStore);
   window.eval(commandExecutor);
@@ -282,6 +290,35 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.match(selectionCancel.textContent, /取消/);
   selectionCancel.dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
   assert.ok(window.document.querySelector("[data-library-selection-toggle]"));
+
+  window.document.querySelector("#assetLibrarySpaceButton")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  window.document.querySelector("[data-library-space='platform']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  assert.equal(window.document.querySelector("#assetLibraryPanel").getAttribute("data-library-space"), "platform");
+  assert.equal(window.document.querySelector("#assetLibraryMediaTab").textContent, "灵感搜索");
+  assert.equal(window.document.querySelector("#assetLibraryEntityTab").hidden, true);
+  assert.ok(window.document.querySelector("#assetLibraryPlatformCommandBar [data-library-selection-toggle]"));
+  assert.ok(window.document.querySelector("#assetLibraryPlatformCommandBar [data-library-filter-toggle]"));
+  assert.equal(window.document.querySelector("#assetLibraryPlatformCommandBar [data-library-display]"), null);
+
+  window.document.querySelector("#assetLibraryPlatformCommandBar [data-library-filter-toggle]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  assert.ok(window.document.querySelector("#assetLibraryPlatformCommandBar .asset-library-toolbar-menu.compact"));
+  window.document.querySelector("#assetLibraryPlatformCommandBar [data-library-selection-toggle]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  window.document.querySelector("#assetLibraryGrid [data-library-select]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  window.document.querySelector("#assetLibraryPlatformCommandBar [data-library-batch-toggle]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  const platformBatchMenu = window.document.querySelector("#assetLibraryPlatformCommandBar .asset-library-toolbar-menu.batch");
+  assert.ok(platformBatchMenu);
+  assert.match(platformBatchMenu.textContent, /添加到画布/);
+  assert.match(platformBatchMenu.textContent, /保存到素材/);
+  assert.doesNotMatch(platformBatchMenu.textContent, /审核|移动|删除/);
+  window.document.querySelector("#assetLibraryPlatformCommandBar [data-library-selection-cancel]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+
   window.document.querySelector("#agentLauncher")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));

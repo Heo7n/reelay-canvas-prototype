@@ -7,9 +7,15 @@ const source = await readFile(
   new URL("../src/legacy-canvas/canvas-asset-library-model.js", import.meta.url),
   "utf8",
 );
+const editorSource = await readFile(
+  new URL("../src/legacy-canvas/canvas-entity-editor-model.js", import.meta.url),
+  "utf8",
+);
 const context = vm.createContext({});
 new vm.Script(source).runInContext(context);
+new vm.Script(editorSource).runInContext(context);
 const model = context.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
+const editorModel = context.REELAY_CANVAS_ENTITY_EDITOR_MODEL;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const mediaRef = (id) => ({ kind: "media", id });
 const entityRef = (id) => ({ kind: "entity", id });
@@ -70,6 +76,22 @@ test("exposes only the focused asset-library model API", () => {
     "normalizeSpace",
   ]);
   assert.equal(model.MAX_DIRECTORY_LEVELS, 5);
+});
+
+test("exposes a frozen Entity editor draft API", () => {
+  assert.ok(Object.isFrozen(editorModel));
+  assert.deepEqual(plain(Object.keys(editorModel).sort()), [
+    "addMediaRefs",
+    "createDraft",
+    "filterMedia",
+    "removeMediaRef",
+    "setActiveMedia",
+    "setCoverMedia",
+    "setFilter",
+    "toEntityInput",
+    "updateDetails",
+    "validateDraft",
+  ]);
 });
 
 test("normalizes searches and the legacy official space without making platform mutable", () => {
@@ -153,6 +175,126 @@ test("registerMedia deduplicates by id, source id, or URL while adding a placeme
   assert.equal(store.hasPlacement(mediaRef("portrait"), "organization", "organization-media"), true);
 });
 
+test("imports platform Media as an independent idempotent personal record", () => {
+  const store = model.createAssetLibraryStore({
+    media: [
+      {
+        id: "platform-source",
+        type: "image",
+        name: "平台原名.png",
+        displayName: "平台原名",
+        url: "/platform/shared-image.png",
+        librarySourceId: "shared-library-source",
+        platformSourceId: "platform-origin-001",
+        sourceCatalogId: "starter-catalog",
+      },
+      {
+        id: "shared-library-source",
+        type: "image",
+        name: "个人同源素材.png",
+        url: "/platform/shared-image.png",
+      },
+      {
+        id: "platform-source-alias",
+        type: "image",
+        name: "平台同源别名.png",
+        url: "/platform/shared-image-alias.png",
+        platformSourceId: "platform-origin-001",
+        sourceCatalogId: "starter-catalog",
+      },
+    ],
+    placements: [
+      { item: mediaRef("platform-source"), space: "platform", folderId: null },
+      { item: mediaRef("shared-library-source"), space: "personal", folderId: null },
+      { item: mediaRef("platform-source-alias"), space: "platform", folderId: null },
+    ],
+  });
+
+  const first = store.importPlatformMediaToPersonal({ item: mediaRef("platform-source") });
+  assert.equal(first.created, true);
+  assert.equal(first.placementCreated, true);
+  assert.notEqual(first.media.id, "platform-source");
+  assert.notEqual(first.media.id, "shared-library-source");
+  assert.equal(first.media.platformSourceId, "platform-origin-001");
+  assert.equal(first.media.sourceCatalogId, "starter-catalog");
+  assert.equal(first.media.url, "/platform/shared-image.png");
+  assert.equal(store.hasPlacement(mediaRef("platform-source"), "personal"), false);
+  assert.equal(store.hasPlacement(mediaRef(first.media.id), "personal"), true);
+
+  const byPlatformSourceId = store.importPlatformMediaToPersonal({ item: mediaRef("platform-source-alias") });
+  assert.equal(byPlatformSourceId.created, false);
+  assert.equal(byPlatformSourceId.media.id, first.media.id);
+  assert.equal(store.hasPlacement(mediaRef("platform-source-alias"), "personal"), false);
+
+  store.renameItem({ item: mediaRef(first.media.id), name: "我的平台副本", space: "personal" });
+  const second = store.importPlatformMediaToPersonal({ item: mediaRef("platform-source") });
+  assert.equal(second.created, false);
+  assert.equal(second.placementCreated, false);
+  assert.equal(second.media.id, first.media.id);
+  assert.equal(second.media.name, "我的平台副本");
+  assert.equal(store.getMedia(mediaRef("platform-source")).name, "平台原名.png");
+  assert.equal(store.getMedia(mediaRef("platform-source")).displayName, "平台原名");
+  assert.equal(store.listAllMedia().length, 4);
+
+  assert.throws(
+    () => store.importPlatformMediaToPersonal({ item: mediaRef("shared-library-source") }),
+    /not visible in platform/,
+  );
+});
+
+test("keeps platform Media placements isolated from writable spaces", () => {
+  const media = [{ id: "isolated-media", type: "image", url: "/catalog/isolated.png" }];
+  for (const placements of [
+    [
+      { item: mediaRef("isolated-media"), space: "platform" },
+      { item: mediaRef("isolated-media"), space: "personal" },
+    ],
+    [
+      { item: mediaRef("isolated-media"), space: "organization" },
+      { item: mediaRef("isolated-media"), space: "platform" },
+    ],
+  ]) {
+    assert.throws(
+      () => model.createAssetLibraryStore({ media, placements }),
+      /cannot have both platform and writable-space placements/,
+    );
+  }
+
+  const store = createFixtureStore();
+  const beforeRuntimeFailure = plain(store.snapshot());
+  assert.throws(
+    () => store.registerMedia({
+      media: { id: "platform-alias", type: "video", url: "/platform/demo.mp4" },
+      space: "personal",
+      folderId: "personal-media",
+    }),
+    /cannot have both platform and writable-space placements/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeRuntimeFailure);
+
+  assert.throws(
+    () => store.createEntityFromMedia({
+      entity: { id: "platform-copy-entity", name: "错误平台引用", mediaRefs: ["platform-alias"] },
+      media: [{ id: "platform-alias", type: "video", url: "/platform/demo.mp4" }],
+      space: "personal",
+      folderId: "personal-entity",
+      mediaFolderId: "personal-media",
+    }),
+    /cannot have both platform and writable-space placements/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeRuntimeFailure);
+
+  const personalToOrganization = store.registerMedia({
+    media: { id: "portrait", type: "image" },
+    space: "organization",
+    folderId: "organization-media",
+  });
+  assert.equal(personalToOrganization.created, false);
+  assert.equal(personalToOrganization.placementCreated, true);
+  assert.equal(store.hasPlacement(mediaRef("portrait"), "personal"), true);
+  assert.equal(store.hasPlacement(mediaRef("portrait"), "organization"), true);
+});
+
 test("creates new Media and an Entity atomically without copying media payload into the Entity", () => {
   const store = createFixtureStore();
   const result = store.createEntityFromMedia({
@@ -194,6 +336,37 @@ test("creates new Media and an Entity atomically without copying media payload i
     "new-audio",
   ]);
 
+  const deduplicatedCover = store.createEntityFromMedia({
+    entity: {
+      id: "portrait-alias-entity",
+      name: "复用主角",
+      mediaRefs: [{ mediaId: "portrait-alias" }],
+      coverMediaId: "portrait-alias",
+    },
+    media: [{ id: "portrait-alias", type: "image", url: "blob:portrait" }],
+    space: "personal",
+    folderId: "personal-entity",
+    mediaFolderId: "personal-media",
+  });
+  assert.equal(deduplicatedCover.entity.coverMediaId, "portrait");
+  assert.deepEqual(plain(deduplicatedCover.entity.mediaRefs), [{ mediaId: "portrait", order: 0 }]);
+
+  const beforeInvalidCover = plain(store.snapshot());
+  assert.throws(
+    () => store.createEntityFromMedia({
+      entity: {
+        id: "voice-cover",
+        name: "错误音频封面",
+        mediaRefs: [{ mediaId: "voice" }],
+        coverMediaId: "voice",
+      },
+      space: "personal",
+      folderId: "personal-entity",
+    }),
+    /cover media must be an image/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeInvalidCover);
+
   const beforeFailure = plain(store.snapshot());
   assert.throws(
     () => store.createEntityFromMedia({
@@ -219,6 +392,252 @@ test("rejects an Entity placement whose referenced Media is not visible in the t
     /cannot be visible in organization/,
   );
   assert.deepEqual(plain(store.snapshot()), before);
+});
+
+test("updates an Entity atomically with ordered unique references and isolated output", () => {
+  const store = createFixtureStore();
+  const mediaBefore = plain(store.listAllMedia());
+  const updated = store.updateEntity({
+    item: entityRef("hero"),
+    space: "personal",
+    patch: {
+      name: "  主角 Alpha  ",
+      description: "  主要角色设定  ",
+      mediaRefs: ["voice", { mediaId: "portrait", order: 91 }, "voice"],
+      coverMediaId: "portrait",
+    },
+  });
+
+  assert.deepEqual(plain(updated), {
+    id: "hero",
+    name: "主角 Alpha",
+    mediaRefs: [
+      { mediaId: "voice", order: 0 },
+      { mediaId: "portrait", order: 1 },
+    ],
+    description: "主要角色设定",
+    coverMediaId: "portrait",
+  });
+  assert.deepEqual(plain(store.listAllMedia()), mediaBefore);
+  updated.mediaRefs.length = 0;
+  updated.name = "outside";
+  assert.equal(store.getEntity(entityRef("hero")).name, "主角 Alpha");
+  assert.equal(store.getEntity(entityRef("hero")).mediaRefs.length, 2);
+});
+
+test("rejects invalid Entity updates without changing any store state", () => {
+  const store = createFixtureStore();
+  const cases = [
+    [{ mediaRefs: [] }, /at least one Media/],
+    [{ mediaRefs: ["missing"] }, /missing media/],
+    [{ mediaRefs: ["portrait"], coverMediaId: "voice" }, /cover media must belong/],
+    [{ coverMediaId: "voice" }, /cover media must be an image/],
+    [{ name: "   " }, /name is required/],
+    [{ mediaRefs: "portrait" }, /must be an array/],
+    [{ id: "replacement" }, /Unsupported Entity patch field/],
+  ];
+
+  for (const [patch, pattern] of cases) {
+    const before = plain(store.snapshot());
+    assert.throws(() => store.updateEntity({ item: entityRef("hero"), space: "personal", patch }), pattern);
+    assert.deepEqual(plain(store.snapshot()), before);
+  }
+
+  const beforeMissingPlacement = plain(store.snapshot());
+  assert.throws(
+    () => store.updateEntity({ item: entityRef("hero"), space: "organization", patch: { name: "组织主角" } }),
+    /not visible in organization/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeMissingPlacement);
+
+  store.updateEntity({
+    item: entityRef("hero"),
+    space: "personal",
+    patch: { coverMediaId: "portrait" },
+  });
+  const beforeStaleCover = plain(store.snapshot());
+  assert.throws(
+    () => store.updateEntity({
+      item: entityRef("hero"),
+      space: "personal",
+      patch: { mediaRefs: ["voice"] },
+    }),
+    /cover media must belong/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeStaleCover);
+});
+
+test("keeps every existing Entity placement valid when references are updated", () => {
+  const store = createFixtureStore();
+  store.shareToOrganization({
+    items: [entityRef("hero")],
+    fromSpace: "personal",
+    mediaFolderId: "organization-media",
+    entityFolderId: "organization-entity",
+  });
+  store.registerMedia({
+    media: { id: "personal-only", type: "image", name: "个人补充.png", url: "blob:personal-only" },
+    space: "personal",
+    folderId: "personal-media",
+  });
+  const beforeFailure = plain(store.snapshot());
+
+  assert.throws(
+    () => store.updateEntity({
+      item: entityRef("hero"),
+      space: "personal",
+      patch: { mediaRefs: ["portrait", "personal-only"] },
+    }),
+    /cannot be visible in organization/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeFailure);
+
+  store.registerMedia({
+    media: { id: "personal-only", type: "image", url: "blob:personal-only" },
+    space: "organization",
+    folderId: "organization-media",
+  });
+  const updated = store.updateEntity({
+    item: entityRef("hero"),
+    space: "personal",
+    patch: { mediaRefs: ["portrait", "personal-only"], coverMediaId: "personal-only" },
+  });
+  assert.deepEqual(plain(updated.mediaRefs), [
+    { mediaId: "portrait", order: 0 },
+    { mediaId: "personal-only", order: 1 },
+  ]);
+});
+
+test("rejects structurally invalid Entity seed records", () => {
+  assert.throws(
+    () => model.createAssetLibraryStore({ entities: [{ id: "empty", name: "空主体", mediaRefs: [] }] }),
+    /at least one Media/,
+  );
+  assert.throws(
+    () => model.createAssetLibraryStore({
+      media: [{ id: "image", type: "image" }],
+      entities: [{
+        id: "bad-cover",
+        name: "错误封面",
+        mediaRefs: [{ mediaId: "image" }],
+        coverMediaId: "missing",
+      }],
+    }),
+    /cover media must belong/,
+  );
+  assert.throws(
+    () => model.createAssetLibraryStore({
+      media: [{ id: "voice", type: "audio" }],
+      entities: [{
+        id: "audio-cover",
+        name: "音频封面",
+        mediaRefs: [{ mediaId: "voice" }],
+        coverMediaId: "voice",
+      }],
+    }),
+    /cover media must be an image/,
+  );
+});
+
+test("creates immutable Entity drafts and keeps active and cover Media coherent", () => {
+  const editing = editorModel.createDraft({
+    entity: {
+      id: "hero",
+      name: "主角",
+      description: "角色设定",
+      mediaRefs: [{ mediaId: "portrait", order: 9 }, "voice", "portrait"],
+      coverMediaId: "portrait",
+    },
+    space: "organization",
+  });
+  assert.ok(Object.isFrozen(editing));
+  assert.ok(Object.isFrozen(editing.mediaRefs));
+  assert.equal(editing.mode, "edit");
+  assert.equal(editing.entityId, "hero");
+  assert.equal(editing.activeMediaId, "portrait");
+  assert.equal(editing.coverMediaId, "portrait");
+  assert.deepEqual(plain(editing.mediaRefs), [
+    { mediaId: "portrait", order: 0 },
+    { mediaId: "voice", order: 1 },
+  ]);
+
+  let creating = editorModel.createDraft({ name: "新主体" });
+  creating = editorModel.addMediaRefs(creating, ["voice", { id: "portrait" }, "voice"]);
+  assert.deepEqual(plain(creating.mediaRefs), [
+    { mediaId: "voice", order: 0 },
+    { mediaId: "portrait", order: 1 },
+  ]);
+  assert.equal(creating.activeMediaId, "voice");
+  assert.equal(creating.coverMediaId, null);
+
+  creating = editorModel.setActiveMedia(creating, "voice");
+  assert.throws(
+    () => editorModel.setCoverMedia(creating, { id: "voice", type: "audio" }),
+    /must be an image/,
+  );
+  creating = editorModel.setCoverMedia(creating, { id: "portrait", type: "image" });
+  creating = editorModel.removeMediaRef(creating, "voice");
+  assert.equal(creating.activeMediaId, "portrait");
+  assert.equal(creating.coverMediaId, "portrait");
+  assert.throws(() => editorModel.setActiveMedia(creating, "missing"), /must belong/);
+  assert.throws(() => editorModel.setCoverMedia(creating, { id: "missing", type: "image" }), /must belong/);
+
+  creating = editorModel.removeMediaRef(creating, "portrait");
+  assert.equal(creating.activeMediaId, null);
+  assert.equal(creating.coverMediaId, null);
+  assert.equal(editorModel.validateDraft(creating).valid, false);
+});
+
+test("filters available Media with stable facet counts and validates commit input", () => {
+  let draft = editorModel.createDraft({
+    name: "  主角  ",
+    description: "  统一角色设定  ",
+    mediaRefs: ["portrait"],
+    query: "角色",
+    mediaKind: "image",
+  });
+  const media = [
+    { id: "portrait", type: "image", name: "角色人像" },
+    { id: "motion", type: "video", tags: ["角色", "动作"] },
+    { id: "voice", type: "audio", name: "对白" },
+    { id: "portrait", type: "image", name: "重复项" },
+  ];
+  const filtered = editorModel.filterMedia(draft, media);
+  assert.ok(Object.isFrozen(filtered));
+  assert.deepEqual(plain(filtered.counts), { all: 2, image: 1, video: 1, audio: 0 });
+  assert.deepEqual(plain(filtered.items).map((item) => item.id), ["portrait"]);
+  assert.equal(filtered.visibleCount, 1);
+
+  assert.equal(editorModel.validateDraft(draft, { media }).valid, true);
+  const nonImageCover = editorModel.createDraft({
+    name: "音频主体",
+    mediaRefs: ["voice"],
+    coverMediaId: "voice",
+  });
+  const nonImageCoverValidation = editorModel.validateDraft(nonImageCover, { media });
+  assert.equal(nonImageCoverValidation.valid, false);
+  assert.equal(nonImageCoverValidation.errors.find((error) => error.field === "coverMediaId")?.code, "cover_not_image");
+  const missingValidation = editorModel.validateDraft(draft, {
+    media: media.filter((item) => item.id !== "portrait"),
+  });
+  assert.equal(missingValidation.valid, false);
+  assert.equal(missingValidation.errors[0].code, "media_missing");
+
+  draft = editorModel.updateDetails(draft, { name: "  主角 Alpha  " });
+  draft = editorModel.setFilter(draft, { query: "", mediaKind: "audio" });
+  assert.deepEqual(plain(editorModel.filterMedia(draft, media).items).map((item) => item.id), ["voice"]);
+  draft = editorModel.setCoverMedia(draft, media[0]);
+  const input = editorModel.toEntityInput(draft, { media });
+  assert.ok(Object.isFrozen(input));
+  assert.deepEqual(plain(input), {
+    name: "主角 Alpha",
+    description: "统一角色设定",
+    mediaRefs: [{ mediaId: "portrait", order: 0 }],
+    coverMediaId: "portrait",
+  });
+
+  const invalid = editorModel.createDraft();
+  assert.throws(() => editorModel.toEntityInput(invalid), /请输入主体名称/);
 });
 
 test("creates and renames folders, renames items, and moves placements without changing item ids", () => {
@@ -431,6 +850,10 @@ test("rejects every mutation whose source or target placement is the platform sp
       entity: { id: "platform-entity", mediaRefs: [{ mediaId: "platform-video" }] },
       space: "platform",
     }),
+    /read-only/,
+  );
+  assert.throws(
+    () => store.updateEntity({ item: entityRef("hero"), space: "platform", patch: { name: "改名" } }),
     /read-only/,
   );
   assert.throws(

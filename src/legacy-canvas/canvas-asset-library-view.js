@@ -24,6 +24,14 @@
     { id: "delete", icon: "trash-2", label: "删除", danger: true },
   ]);
 
+  const ENTITY_ACTIONS = Object.freeze([
+    { id: "edit", icon: "square-pen", label: "编辑" },
+    { id: "rename", icon: "pencil", label: "重命名" },
+    { id: "move", icon: "folder-input", label: "移动" },
+    { id: "share-organization", icon: "users", label: "复制到组织空间", personalOnly: true },
+    { id: "delete", icon: "trash-2", label: "删除", danger: true },
+  ]);
+
   const FOLDER_ACTIONS = Object.freeze([
     { id: "rename", icon: "pencil", label: "重命名" },
     { id: "move", icon: "folder-input", label: "移动" },
@@ -36,6 +44,11 @@
     { id: "move", label: "批量移动" },
     { id: "share-organization", label: "复制到组织空间", personalOnly: true },
     { id: "delete", label: "批量删除", danger: true },
+  ]);
+
+  const PLATFORM_BATCH_ACTIONS = Object.freeze([
+    { id: "add-canvas", label: "添加到画布" },
+    { id: "save-material", label: "保存到素材" },
   ]);
 
   function escapeHtml(value) {
@@ -97,9 +110,11 @@
     `;
   }
 
-  function renderBatchMenu(space, reviewableSelection) {
-    const actions = actionsForSpace(BATCH_ACTIONS, space)
-      .filter((action) => action.id !== "review" || reviewableSelection);
+  function renderBatchMenu(section, space, reviewableSelection) {
+    const actions = space === "platform"
+      ? PLATFORM_BATCH_ACTIONS
+      : actionsForSpace(BATCH_ACTIONS, space)
+        .filter((action) => action.id !== "review" || (section === "media" && reviewableSelection));
     return `
       <div class="asset-library-toolbar-menu batch" role="menu" aria-label="批量操作">
         ${actions.map((action) => `
@@ -122,10 +137,12 @@
   }
 
   function renderCommandBar(options = {}) {
-    const section = normalizeSection(options.section);
     const space = normalizeSpace(options.space);
+    const platform = space === "platform";
+    const section = platform ? "media" : normalizeSection(options.section);
     const mutable = canMutate(options.mutable, space);
-    const selectionMode = mutable && Boolean(options.selectionMode);
+    const selectable = mutable || platform;
+    const selectionMode = selectable && Boolean(options.selectionMode);
     const selectedCount = Number.isFinite(Number(options.selectedCount))
       ? Math.max(0, Math.floor(Number(options.selectedCount)))
       : 0;
@@ -140,24 +157,26 @@
         ? "filter"
         : "";
 
-    const leadingCommand = !mutable
+    const leadingCommand = selectionMode
+      ? `
+          <div class="asset-library-command-popover">
+            <button class="asset-library-primary-command asset-library-batch-command" type="button" aria-haspopup="menu" aria-expanded="${menu === "batch"}" aria-label="${hasSelection ? `操作，已选 ${selectedCount} 项` : "操作，尚未选择资产"}" data-library-batch-toggle="true"${hasSelection ? "" : ' disabled aria-disabled="true"'}>
+              ${icon("list-checks")}
+              <span>操作</span>
+            </button>
+            ${menu === "batch" ? renderBatchMenu(section, space, reviewableSelection) : ""}
+          </div>
+        `
+      : platform
+        ? ""
+        : !mutable
       ? `
         <button class="asset-library-readonly-command" type="button" disabled aria-disabled="true">
           ${icon("eye")}
           <span>仅可查看</span>
         </button>
       `
-      : selectionMode
-        ? `
-          <div class="asset-library-command-popover">
-            <button class="asset-library-primary-command asset-library-batch-command" type="button" aria-haspopup="menu" aria-expanded="${menu === "batch"}" aria-label="${hasSelection ? `操作，已选 ${selectedCount} 项` : "操作，尚未选择资产"}" data-library-batch-toggle="true"${hasSelection ? "" : ' disabled aria-disabled="true"'}>
-              ${icon("list-checks")}
-              <span>操作</span>
-            </button>
-            ${menu === "batch" ? renderBatchMenu(space, reviewableSelection) : ""}
-          </div>
-        `
-        : section === "entity"
+      : section === "entity"
           ? `
             <button class="asset-library-primary-command" type="button" data-library-create-entity="true">
               ${icon("user-round-plus")}
@@ -171,10 +190,10 @@
             </button>
           `;
 
-    const selectionControl = mutable && !selectionMode
+    const selectionControl = selectable && !selectionMode
       ? `
         <button type="button" title="多选" aria-label="进入多选" aria-pressed="false" data-library-selection-toggle="true">
-          ${icon("square-check-big")}
+          ${icon("copy-check")}
         </button>
       `
       : selectionMode
@@ -199,13 +218,13 @@
       : "";
 
     return `
-      <div class="${classNames("asset-library-commandbar", selectionMode && "selection-mode", !mutable && "readonly")}" data-library-commandbar="${section}" data-library-space="${space}" data-library-active-filter="${filter}" data-library-active-display="${display}" data-library-open-menu="${menu}" data-library-selection-mode="${selectionMode}">
+      <div class="${classNames("asset-library-commandbar", platform && "platform", selectionMode && "selection-mode", !mutable && !platform && "readonly")}" data-library-commandbar="${section}" data-library-space="${space}" data-library-active-filter="${filter}" data-library-active-display="${display}" data-library-open-menu="${menu}" data-library-selection-mode="${selectionMode}">
         ${leadingCommand}
         <div class="asset-library-command-popover">
           <div class="asset-library-command-group">
             ${selectionControl}
             ${filterControl}
-            ${renderDisplayControl(display)}
+            ${platform ? "" : renderDisplayControl(display)}
           </div>
           ${menu === "filter" ? renderFilterMenu(filter) : ""}
         </div>
@@ -410,12 +429,13 @@
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
     const itemLabel = safeKind === "folder" ? "文件夹" : safeKind === "entity" ? "主体" : "素材";
-    const actions = actionsForSpace(kind === "folder" ? FOLDER_ACTIONS : ITEM_ACTIONS, space)
+    const sourceActions = kind === "folder" ? FOLDER_ACTIONS : kind === "entity" ? ENTITY_ACTIONS : ITEM_ACTIONS;
+    const actions = actionsForSpace(sourceActions, space)
       .filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio");
     return `
       <div class="asset-library-item-menu" role="menu" aria-label="${itemLabel}操作">
         ${actions.map((action) => `
-          <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem" data-library-menu-item="${action.id}" data-library-item-id="${safeId}" data-library-item-kind="${safeKind}"${action.id === "rename" ? ` data-library-rename="${safeId}"` : ""}>
+          <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem" data-library-menu-item="${action.id}" data-library-item-id="${safeId}" data-library-item-kind="${safeKind}"${action.id === "rename" ? ` data-library-rename="${safeId}"` : ""}${action.id === "edit" ? ` data-library-edit-entity="${safeId}"` : ""}>
             ${icon(action.icon)}
             <span>${action.label}</span>
           </button>
@@ -424,11 +444,11 @@
     `;
   }
 
-  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, space, mediaKind = null }) {
+  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, selectable = mutable, space, mediaKind = null }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
     return `
-      ${selectionMode
+      ${selectionMode && selectable
         ? `
           <button class="${classNames("asset-library-selection-button", selected && "active")}" type="button" aria-label="${selected ? "取消选择" : "选择"}" aria-pressed="${selected}" data-library-select="${safeId}" data-library-item-kind="${safeKind}">
             ${selected ? icon("check") : ""}
@@ -452,8 +472,9 @@
     const name = options.name ?? media.name ?? "未命名素材";
     const space = resolveSpace(options.space, media);
     const mutable = canMutate(options.mutable, space);
-    const selectionMode = mutable && Boolean(options.selectionMode);
-    const selected = mutable && Boolean(options.selected);
+    const selectable = mutable || space === "platform";
+    const selectionMode = selectable && Boolean(options.selectionMode);
+    const selected = selectable && Boolean(options.selected);
     const menuOpen = mutable && Boolean(options.menuOpen);
     const renaming = mutable && Boolean(options.renaming);
     const safeId = escapeHtml(id);
@@ -466,7 +487,7 @@
           ${renderStructuredPreview(media)}
         </button>
         ${renderNameBar({ id, kind: "media", name, meta: options.meta ?? "", renaming, mutable })}
-        ${renderCardControls({ id, kind: "media", selected, selectionMode, menuOpen, mutable, space, mediaKind })}
+        ${renderCardControls({ id, kind: "media", selected, selectionMode, menuOpen, mutable, selectable, space, mediaKind })}
       </article>
     `;
   }
@@ -481,22 +502,19 @@
     const selected = mutable && Boolean(options.selected);
     const menuOpen = mutable && Boolean(options.menuOpen);
     const renaming = mutable && Boolean(options.renaming);
-    const previews = (Array.isArray(options.mediaPreviews) ? options.mediaPreviews : []).slice(0, 4);
-    const mediaCount = options.mediaCount ?? previews.length;
+    const coverPreview = options.coverPreview && typeof options.coverPreview === "object"
+      ? options.coverPreview
+      : null;
     const safeId = escapeHtml(id);
     const safeName = escapeHtml(name);
-    const safeCount = escapeHtml(mediaCount);
-    const collage = previews.length
-      ? previews.map((preview) => `<span>${renderStructuredPreview(preview)}</span>`).join("")
-      : `<span>${icon("user-round")}</span>`;
+    const cover = coverPreview ? renderStructuredPreview(coverPreview) : icon("user-round");
 
     return `
       <article class="${classNames("asset-library-card", "asset-library-entity-card", selected && "selected", selectionMode && "selection-mode", menuOpen && "menu-open", renaming && "renaming", !mutable && "readonly")}" data-library-entity="${safeId}" data-library-space="${space}">
-        <button class="asset-library-card-preview" type="button" aria-label="预览主体 ${safeName}" data-library-preview="${safeId}" data-library-item-kind="entity">
-          <span class="asset-library-entity-collage">${collage}</span>
-          <span class="asset-library-entity-badge">${safeCount} 个素材</span>
+        <button class="asset-library-card-preview" type="button" aria-label="查看主体详情 ${safeName}" data-library-preview="${safeId}" data-library-item-kind="entity">
+          <span class="asset-library-entity-cover">${cover}</span>
         </button>
-        ${renderNameBar({ id, kind: "entity", name, meta: options.meta ?? "", renaming, mutable })}
+        ${renderNameBar({ id, kind: "entity", name, renaming, mutable })}
         ${renderCardControls({ id, kind: "entity", selected, selectionMode, menuOpen, mutable, space })}
       </article>
     `;
@@ -518,6 +536,10 @@
       title = "没有匹配结果";
       description = "试试其他关键词，或清除当前搜索与筛选条件。";
       action = `<button type="button" data-library-clear-query="true" data-library-clear-filter="true">清除筛选</button>`;
+    } else if (space === "platform") {
+      iconName = "sparkles";
+      title = "暂无灵感素材";
+      description = "试试其他关键词或素材类型。";
     } else if (section === "entity") {
       iconName = "user-round";
       title = mutable ? "还没有主体" : "暂无可用主体";
