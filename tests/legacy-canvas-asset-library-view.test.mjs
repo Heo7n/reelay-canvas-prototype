@@ -157,6 +157,8 @@ test("organization Entity batch actions omit review and sharing to organization"
   assert.doesNotMatch(markup, /share-organization/);
   assert.doesNotMatch(markup, /复制到组织空间/);
   assert.doesNotMatch(markup, /data-library-filter-toggle/);
+  assert.match(markup, /data-library-display="list"/);
+  assert.equal(markup.match(/data-library-display=/g)?.length, 1);
 });
 
 test("personal Entity batch actions contain only move, organization copy, and delete", () => {
@@ -534,6 +536,9 @@ test("Entity cards render one explicit cover without count badges or review acti
   assert.doesNotMatch(markup, /data-library-menu-item="review"/);
   assert.doesNotMatch(markup, /提交 Seedance 合规审核/);
   assert.match(markup, /data-library-menu-item="share-organization"/);
+  assert.match(markup, /data-library-menu-item="share-organization"[^>]*>[^]*?<span>复制到组织空间<\/span>/);
+  assert.match(markup, /data-library-menu-item="delete"/);
+  assert.doesNotMatch(markup, /data-library-menu-item="review"/);
 });
 
 test("persisted Entity cards render only explicitly supported actions", () => {
@@ -639,12 +644,6 @@ test("card renderers escape every user-controlled HTML and attribute value", () 
   });
   const entityMarkup = view.renderEntityCard({
     entity: { id: payload, name: payload },
-    mediaPreviews: [
-      rawPreview,
-      { previewHtml: rawPreview },
-      { mediaKind: "image", url: "javascript:alert(3)" },
-      { mediaKind: "image", url: "https://cdn.example/safe.jpg?x=1&y=2" },
-    ],
     mediaCount: payload,
     meta: payload,
     coverPreview: { mediaKind: "image", url: "https://cdn.example/safe.jpg?x=1&y=2" },
@@ -706,7 +705,7 @@ test("empty states distinguish search, mutable sections, and the platform Media-
   assert.match(entity, /data-library-create-entity="true"/);
   assert.match(entity, />新建主体<\/button>/);
   assert.match(readOnly, /data-library-empty="media"/);
-  assert.match(readOnly, /暂无可用素材/);
+  assert.match(readOnly, /暂无灵感素材/);
   assert.doesNotMatch(readOnly, /data-library-create-entity/);
 });
 

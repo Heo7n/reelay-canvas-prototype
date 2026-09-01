@@ -154,6 +154,26 @@
       return record;
     }
 
+    function validateEntityStructure(entity, mediaMap) {
+      if (!entity.mediaRefs.length) throw new Error("An Entity must reference at least one Media item.");
+      for (const ref of entity.mediaRefs) {
+        if (!mediaMap.has(ref.mediaId)) {
+          throw new Error(`Entity ${entity.id} references missing media: ${ref.mediaId}`);
+        }
+      }
+      if (entity.coverMediaId != null && !entity.mediaRefs.some((ref) => ref.mediaId === entity.coverMediaId)) {
+        throw new Error(`Entity ${entity.id} cover media must belong to its Media references: ${entity.coverMediaId}`);
+      }
+      if (entity.coverMediaId != null) {
+        const coverMedia = mediaMap.get(entity.coverMediaId);
+        if (!coverMedia) throw new Error(`Entity ${entity.id} references missing cover media: ${entity.coverMediaId}`);
+        if (!visualMediaKinds.has(coverMedia.mediaKind)) {
+          throw new Error(`Entity ${entity.id} cover media must be an image or video: ${entity.coverMediaId}`);
+        }
+      }
+      return entity;
+    }
+
     function createGeneratedFolderId() {
       let candidate;
       do {
@@ -304,10 +324,21 @@
       return placementsByKey.has(placementKey(item, space));
     }
 
+    function validateMediaPlacementBoundary(item, space, placementMap = placementsByKey) {
+      if (item.kind !== "media") return;
+      const crossesPlatformBoundary = space === "platform"
+        ? [...mutableSpaces].some((mutableSpace) => placementMap.has(placementKey(item, mutableSpace)))
+        : mutableSpaces.has(space) && placementMap.has(placementKey(item, "platform"));
+      if (crossesPlatformBoundary) {
+        throw new Error(`Media ${item.id} cannot have both platform and writable-space placements.`);
+      }
+    }
+
     function createPlacement(item, space, folderId = null) {
       validateFolder(folderId, space, item.kind);
       const key = placementKey(item, space);
       if (placementsByKey.has(key)) return false;
+      validateMediaPlacementBoundary(item, space);
       placementsByKey.set(key, { item: { ...item }, space, folderId });
       return true;
     }
@@ -325,16 +356,17 @@
     }
     for (const input of entities) {
       const record = normalizeEntityRecord(input);
+      validateEntityStructure(record, mediaById);
       if (entitiesById.has(record.id)) throw new Error(`Duplicate entity id: ${record.id}`);
       entitiesById.set(record.id, record);
     }
     for (const input of placements) {
       const placement = normalizePlacementRecord(input);
       requireRecord(placement.item);
-      validateFolder(placement.folderId, placement.space, placement.item.kind);
       const key = placementKey(placement.item, placement.space);
-      if (placementsByKey.has(key)) throw new Error(`Duplicate placement: ${key}`);
-      placementsByKey.set(key, placement);
+      if (!createPlacement(placement.item, placement.space, placement.folderId)) {
+        throw new Error(`Duplicate placement: ${key}`);
+      }
     }
 
     function validateEntityVisibility(entity, space, placementMap = placementsByKey, mediaMap = mediaById) {
@@ -451,6 +483,11 @@
     function registerMedia({ media: input, space = "personal", folderId = null } = {}) {
       const resolvedSpace = resolveSpace(space);
       assertMutable(resolvedSpace);
+      const platformSourceId = String(input?.platformSourceId || "").trim();
+      const workspaceAssetId = String(input?.workspaceAssetId || "").trim();
+      if (platformSourceId && !workspaceAssetId) {
+        throw new Error("Platform Media import requires an authoritative persisted Workspace Media record.");
+      }
       validateFolder(folderId, resolvedSpace, "media");
       const duplicate = findDuplicateMedia(input);
       const record = duplicate || normalizeMediaRecord(input);

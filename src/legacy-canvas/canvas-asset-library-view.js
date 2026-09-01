@@ -235,7 +235,7 @@
     const selectionControl = selectionEnabled && !selectionMode
       ? `
         <button type="button" title="多选" aria-label="进入多选" aria-pressed="false" data-library-selection-toggle="true">
-          ${icon("square-check-big")}
+          ${icon("copy-check")}
         </button>
       `
       : selectionMode
@@ -483,7 +483,7 @@
     return `
       <div class="asset-library-item-menu" role="menu" aria-label="${itemLabel}操作">
         ${actions.map((action) => `
-          <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem" data-library-menu-item="${action.id}" data-library-item-id="${safeId}" data-library-item-kind="${safeKind}"${action.id === "rename" ? ` data-library-rename="${safeId}"` : ""}>
+          <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem" data-library-menu-item="${action.id}" data-library-item-id="${safeId}" data-library-item-kind="${safeKind}"${action.id === "rename" ? ` data-library-rename="${safeId}"` : ""}${action.id === "edit" ? ` data-library-edit-entity="${safeId}"` : ""}>
             ${icon(action.icon)}
             <span>${action.label}</span>
           </button>
@@ -492,12 +492,12 @@
     `;
   }
 
-  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, space, mediaKind = null, allowedActions = null }) {
+  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, selectable = true, space, mediaKind = null, allowedActions = null }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
     const hasMenuActions = getItemActions({ kind, space, mediaKind, allowedActions }).length > 0;
     return `
-      ${selectionMode
+      ${selectionMode && selectable
         ? `
           <button class="${classNames("asset-library-selection-button", selected && "active")}" type="button" aria-label="${selected ? "取消选择" : "选择"}" aria-pressed="${selected}" data-library-select="${safeId}" data-library-item-kind="${safeKind}">
             ${selected ? icon("check") : ""}
@@ -536,7 +536,7 @@
           ${renderStructuredPreview(media)}
         </button>
         ${renderNameBar({ id, kind: "media", name, meta: options.meta ?? "", renaming, mutable })}
-        ${renderCardControls({ id, kind: "media", selected, selectionMode, menuOpen, mutable, space, mediaKind })}
+        ${renderCardControls({ id, kind: "media", selected, selectionMode, menuOpen, mutable, selectable: selectionEnabled, space, mediaKind })}
       </article>
     `;
   }
@@ -594,6 +594,10 @@
       title = "没有匹配结果";
       description = "试试其他关键词，或清除当前搜索与筛选条件。";
       action = `<button type="button" data-library-clear-query="true" data-library-clear-filter="true">清除筛选</button>`;
+    } else if (space === "platform") {
+      iconName = "sparkles";
+      title = "暂无灵感素材";
+      description = "试试其他关键词或素材类型。";
     } else if (section === "entity") {
       iconName = "user-round";
       title = canCreateEntity ? "还没有主体" : "暂无可用主体";

@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -30,6 +30,8 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("src/legacy-canvas/canvas-entity-editor-model.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-entity-editor-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-entity-editor-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-use-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-use-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-media-toolbar-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-runtime-store.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-command-executor.js", root), "utf8"),
@@ -90,6 +92,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(entityEditorModel);
   window.eval(entityEditorView);
   window.eval(entityEditorController);
+  window.eval(entityUseModel);
+  window.eval(entityUseView);
   window.eval(mediaToolbarView);
   window.eval(runtimeStore);
   window.eval(commandExecutor);

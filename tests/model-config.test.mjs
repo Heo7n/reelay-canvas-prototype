@@ -24,6 +24,15 @@ test("catalog exposes the seven product models in stable display order", () => {
   );
 });
 
+test("the Seedance family is identified by shared catalog brand metadata", () => {
+  const seedanceIds = [...catalog]
+    .filter((model) => model.brand === "seedance")
+    .map((model) => model.id);
+  assert.deepEqual(seedanceIds, ["seedance-2-5", "seedance-2", "seedance-2-fast"]);
+  assert.ok(seedanceIds.every((id) => catalog.find((model) => model.id === id)?.type === "video"));
+  assert.equal(catalog.find((model) => model.id === "kling-video-3")?.brand, undefined);
+});
+
 test("shared directory is the frozen source for canvas and usage model metadata", () => {
   assert.ok(Object.isFrozen(modelDirectory));
   assert.equal(modelDirectory.length, 11);
@@ -126,4 +135,36 @@ test("only video nodes expose generation workflows", () => {
     [...config.generationWorkflows.video].map((workflow) => workflow.label),
     ["文生视频", "全能参考", "首尾帧", "图生视频"],
   );
+});
+
+test("asset-library demo images cover varied ratios and Entity covers resolve to images", () => {
+  const seed = config.assetLibrarySeed;
+  const personalMediaIds = new Set(
+    seed.placements
+      .filter((placement) => placement.space === "personal" && placement.item.kind === "media")
+      .map((placement) => placement.item.id),
+  );
+  const personalImages = seed.media.filter((media) => (
+    personalMediaIds.has(media.id) && (media.mediaKind || media.type) === "image"
+  ));
+  const hasRatio = (ratio) => personalImages.some((media) => Math.abs(media.width / media.height - ratio) < 1e-9);
+
+  assert.ok(personalImages.length >= 7);
+  assert.ok(hasRatio(1));
+  assert.ok(hasRatio(3 / 4));
+  assert.ok(hasRatio(4 / 3));
+  assert.ok(hasRatio(16 / 9));
+  for (const image of personalImages) {
+    assert.equal(image.aspectRatio, image.width / image.height, `${image.id} ratio metadata must match its dimensions`);
+    assert.match(image.url, /^\.\/assets\//, `${image.id} must remain available without a remote image host`);
+  }
+
+  const mediaById = new Map(seed.media.map((media) => [media.id, media]));
+  assert.ok(seed.entities.length >= 2);
+  for (const entity of seed.entities) {
+    assert.ok(entity.mediaRefs.length >= 3);
+    if (!entity.coverMediaId) continue;
+    assert.equal(mediaById.get(entity.coverMediaId)?.mediaKind, "image");
+    assert.ok(entity.mediaRefs.some((ref) => ref.mediaId === entity.coverMediaId));
+  }
 });

@@ -70,6 +70,9 @@ test("exposes only the focused asset-library model API", () => {
     "normalizeSpace",
   ]);
   assert.equal(model.MAX_DIRECTORY_LEVELS, 5);
+  const store = createFixtureStore();
+  assert.equal(store.createEntityFromMedia, undefined);
+  assert.equal(store.importPlatformMediaToPersonal, undefined);
 });
 
 test("normalizes searches and the legacy official space without making platform mutable", () => {
@@ -354,6 +357,54 @@ test("updates persisted Entity content only from the expected version and advanc
   assert.deepEqual(plain(store.snapshot()), beforeInvalid);
 });
 
+test("rejects structurally invalid Entity seed records", () => {
+  assert.throws(
+    () => model.createAssetLibraryStore({ entities: [{ id: "empty", name: "空主体", mediaRefs: [] }] }),
+    /at least one Media/,
+  );
+  assert.throws(
+    () => model.createAssetLibraryStore({
+      media: [{ id: "image", type: "image" }],
+      entities: [{
+        id: "bad-cover",
+        name: "错误封面",
+        mediaRefs: [{ mediaId: "image" }],
+        coverMediaId: "missing",
+      }],
+    }),
+    /cover media must belong/,
+  );
+  assert.throws(
+    () => model.createAssetLibraryStore({
+      media: [{ id: "image", type: "image" }],
+      entities: [{ id: "missing-ref", name: "缺失引用", mediaRefs: [{ mediaId: "missing" }] }],
+    }),
+    /references missing media/,
+  );
+  assert.throws(
+    () => model.createAssetLibraryStore({
+      media: [{ id: "voice", type: "audio" }],
+      entities: [{
+        id: "audio-cover",
+        name: "音频封面",
+        mediaRefs: [{ mediaId: "voice" }],
+        coverMediaId: "voice",
+      }],
+    }),
+    /cover media must be an image or video/,
+  );
+  const videoCoverStore = model.createAssetLibraryStore({
+    media: [{ id: "motion", type: "video" }],
+    entities: [{
+      id: "video-cover",
+      name: "视频封面",
+      mediaRefs: [{ mediaId: "motion" }],
+      coverMediaId: "motion",
+    }],
+  });
+  assert.equal(videoCoverStore.getEntity(entityRef("video-cover")).coverMediaId, "motion");
+});
+
 test("creates and renames folders, renames items, and moves placements without changing item ids", () => {
   const store = createFixtureStore();
   const folder = store.createFolder({ id: "archive", name: " 待整理 ", space: "personal", kind: "media" });
@@ -558,6 +609,22 @@ test("rejects every mutation whose source or target placement is the platform sp
   assert.throws(
     () => store.registerMedia({ media: { id: "platform-upload", type: "image" }, space: "platform" }),
     /read-only/,
+  );
+  assert.throws(
+    () => store.registerMedia({
+      media: {
+        id: "page-local-platform-copy",
+        type: "video",
+        platformSourceId: "platform-video",
+        url: "/platform/copied.mp4",
+      },
+      space: "personal",
+    }),
+    /authoritative persisted Workspace Media record/,
+  );
+  assert.throws(
+    () => store.registerMedia({ media: { id: "platform-video", type: "video" }, space: "personal" }),
+    /cannot have both platform and writable-space placements/,
   );
   assert.throws(
     () => store.createFolder({ id: "platform-new", name: "平台新目录", space: "platform", kind: "media" }),

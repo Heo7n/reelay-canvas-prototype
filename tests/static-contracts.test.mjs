@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource, assetLibraryCss] = await Promise.all([
+const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource, assetLibraryCss, entityEditorViewSource, entityEditorCss, entityUseModelSource, entityUseViewSource, entityUseCss] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
   readFile(new URL("styles/canvas-chrome.css", root), "utf8"),
@@ -13,6 +13,11 @@ const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, 
   readFile(new URL("src/legacy-canvas/canvas-node-pointer-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
   readFile(new URL("styles/canvas-asset-library.css", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-editor-view.js", root), "utf8"),
+  readFile(new URL("styles/canvas-entity-editor.css", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-use-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-use-view.js", root), "utf8"),
+  readFile(new URL("styles/canvas-entity-use.css", root), "utf8"),
 ]);
 
 test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
@@ -46,7 +51,7 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(modelPanelSource, /仅显示同类型模型/);
   assert.doesNotMatch(modelPanelSource, /mode-tabs|mode-tab|data-model-filter/);
   assert.match(appSource, /modelIconMarkup\(item, "model-icon"\)/);
-  assert.match(appSource, /function modelIconMarkup\(model, className\)[\s\S]*?model\?\.iconSrc[\s\S]*?model-brand-mask/);
+  assert.match(appSource, /function modelIconMarkup\(model, className\)[\s\S]*?model\?\.iconSrc[\s\S]*?model-brand-monochrome[\s\S]*?<img src="\$\{escapeHtml\(model\.iconSrc\)\}" alt="" \/>/);
   assert.doesNotMatch(appSource, /workflow-panel|hasWorkflowControl|workflowPanel/);
   assert.match(appSource, /function workflowParameterSection\(node\)[\s\S]*?data-action="workflow"/);
   assert.match(appSource, /function getParamLabelParts\(node\)[\s\S]*?workflow\?\.label[\s\S]*?aspect:\s*node\.aspect/);
@@ -183,6 +188,10 @@ test("model data, config and document codec load before the application", () => 
   const modelPolicyIndex = html.indexOf("./src/legacy-canvas/canvas-generator-model-policy.js");
   const assetLibraryModelIndex = html.indexOf("./src/legacy-canvas/canvas-asset-library-model.js");
   const assetLibraryViewIndex = html.indexOf("./src/legacy-canvas/canvas-asset-library-view.js");
+  const entityEditorModelIndex = html.indexOf("./src/legacy-canvas/canvas-entity-editor-model.js");
+  const entityEditorViewIndex = html.indexOf("./src/legacy-canvas/canvas-entity-editor-view.js");
+  const entityUseModelIndex = html.indexOf("./src/legacy-canvas/canvas-entity-use-model.js");
+  const entityUseViewIndex = html.indexOf("./src/legacy-canvas/canvas-entity-use-view.js");
   const appIndex = html.indexOf("./app.js");
   assert.ok(
     catalogIndex >= 0 &&
@@ -190,7 +199,11 @@ test("model data, config and document codec load before the application", () => 
     configIndex < modelPolicyIndex &&
     modelPolicyIndex < assetLibraryModelIndex &&
     assetLibraryModelIndex < assetLibraryViewIndex &&
-    assetLibraryViewIndex < runtimeStoreIndex &&
+    assetLibraryViewIndex < entityEditorModelIndex &&
+    entityEditorModelIndex < entityEditorViewIndex &&
+    entityEditorViewIndex < entityUseModelIndex &&
+    entityUseModelIndex < entityUseViewIndex &&
+    entityUseViewIndex < runtimeStoreIndex &&
     runtimeStoreIndex < commandExecutorIndex &&
     commandExecutorIndex < codecIndex &&
     codecIndex < persistenceIndex &&
@@ -348,7 +361,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260901-platform-space-27/);
+  assert.match(html, /styles\.css\?v=20260901-entity-use-43/);
   assert.match(html, /app\.js\?v=20260901-platform-space-27/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
@@ -563,9 +576,12 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.match(appCss, /\.model-chip-glyph\s*\{[\s\S]*?flex:\s*0 0 24px[\s\S]*?width:\s*24px/);
   assert.match(appCss, /\.model-option\s*\{[\s\S]*?grid-template-columns:\s*34px minmax\(0, 1fr\) 18px/);
   assert.match(appCss, /\.model-icon\s*\{[\s\S]*?width:\s*34px[\s\S]*?height:\s*34px/);
-  assert.match(appSource, /model\.iconMode === "mask"[\s\S]*?new URL\(model\.iconSrc, document\.baseURI\)\.href[\s\S]*?--model-icon-mask: url/);
-  assert.doesNotMatch(appSource, /model\.iconSrc\.startsWith\("\.\/"\)[\s\S]*?\.\.\//);
-  assert.match(appCss, /\.model-brand-mask\s*\{[\s\S]*?-webkit-mask:\s*var\(--model-icon-mask\)[\s\S]*?mask:\s*var\(--model-icon-mask\)/);
+  assert.match(appSource, /model\.iconMode === "mask" \? " model-brand-monochrome" : ""/);
+  assert.match(appCss, /\.model-brand-icon img\s*\{[\s\S]*?object-fit:\s*contain/);
+  assert.match(appCss, /\.model-brand-monochrome img\s*\{[\s\S]*?filter:\s*brightness\(0\)/);
+  assert.match(appCss, /html:not\(\[data-theme="light"\]\) \.model-brand-monochrome img\s*\{[\s\S]*?filter:\s*brightness\(0\) invert\(1\)/);
+  assert.doesNotMatch(appSource, /new URL\(model\.iconSrc|--model-icon-mask/);
+  assert.doesNotMatch(appCss, /\.model-brand-mask|--model-icon-mask/);
   assert.doesNotMatch(appCss, /model-logo-(?:seed|nano|kling)[^\{]*img\s*\{[\s\S]*?filter:/);
   assert.match(appSource, /class="model-check" data-lucide="check"/);
   assert.match(appCss, /\.model-option\.active \.model-check\s*\{[\s\S]*?opacity:\s*1/);
@@ -731,7 +747,7 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260901-asset-grid-24/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260901-entity-use-43/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260901-asset-grid-24/);
   assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260901-platform-space-27/);
   assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260901-platform-space-27/);
@@ -784,20 +800,46 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*38px[\s\S]*?margin-left:\s*8px/);
   assert.match(assetLibraryCss, /top:\s*calc\(12px \+ var\(--canvas-project-bar-height,\s*40px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
   assert.match(assetLibraryCss, /bottom:\s*calc\(12px \+ var\(--canvas-viewport-toolbar-height,\s*44px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
+  assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*calc\(12px \+ var\(--canvas-project-bar-height,\s*40px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)[\s\S]*?bottom:\s*calc\(12px \+ var\(--canvas-viewport-toolbar-height,\s*44px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
   assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
   assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
 });
 
 test("asset library actions stay scoped to their real controls and canvas drop target", () => {
-  assert.match(html, /styles\.css\?v=20260901-platform-space-27/);
-  assert.match(html, /prototype-config\.js\?v=20260901-ui-alignment-19/);
+  assert.match(html, /styles\.css\?v=20260901-entity-use-43/);
+  assert.match(html, /prototype-config\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
-  assert.match(html, /canvas-document-codec\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
+  assert.match(html, /canvas-entity-use-view\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260901-platform-space-27/);
   assert.match(html, /app\.js\?v=20260901-platform-space-27/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
+  assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
+
+  assert.match(html, /id="canvasEntityEditorHost" hidden inert aria-hidden="true"/);
+  assert.match(html, /id="canvasEntityPickerHost" hidden inert aria-hidden="true"/);
+  assert.match(html, /id="canvasEntityEditorUploadInput"[^>]*hidden/);
+  assert.doesNotMatch(html, /id="assetEntityEditor"|id="assetEntityEditorContent"|id="assetEntityUploadInput"/);
+  assert.match(appSource, /createCanvasEntityEditorController\(\{[\s\S]*?saveEntity:\s*saveEntityEditorDraft/);
+  assert.match(appSource, /function openEntityEditorCreate\(\)[\s\S]*?canvasEntityEditor\.open\(\{[\s\S]*?mode:\s*"create"/);
+  assert.match(appSource, /function openEntityEditorEdit\(entityId\)[\s\S]*?expectedVersion:\s*entity\.version/);
+  assert.doesNotMatch(appSource, /createEntityFromMedia|importPlatformMediaToPersonal|function saveAssetEntityEditor/);
+
+  assert.match(html, /id="entityUseDetailPortal"[^>]*aria-hidden="true"[^>]*inert[^>]*hidden/);
+  assert.match(html, /id="entityUsePickerPortal"[^>]*aria-hidden="true"[^>]*inert[^>]*hidden/);
+  assert.match(entityUseModelSource, /function createEntityMediaPlan/);
+  assert.match(entityUseModelSource, /function createCenteredGridPlan/);
+  assert.match(entityUseViewSource, /data-entity-use-action="add-entities"/);
+  assert.match(entityUseViewSource, /data-entity-use-add-canvas/);
+  assert.match(appSource, /function addEntityToCanvas\(entityId\)[\s\S]*?pushUndoAction\(\{ type: "create"/);
+  assert.match(appSource, /function openEntityUsePicker\(nodeId\)[\s\S]*?!canNodeUseEntityReferences\(node\)/);
+  assert.match(appSource, /function addSelectedEntitiesToGenerator\(\)[\s\S]*?const before = cloneNodeState\(node\)[\s\S]*?node\.assets\.push\(\.\.\.additions\)/);
+  assert.match(appSource, /entityUsePickerPortal\?\.addEventListener\("click"[\s\S]*?action === "toggle-entity"[\s\S]*?action === "add-entities"/);
+  assert.match(appSource, /entityUsePickerPortal\?\.addEventListener\("input"[\s\S]*?renderEntityUsePicker\(\{ focusSearch: true \}\)/);
+  assert.match(appSource, /case "entity-picker":[\s\S]*?if \(!canNodeUseEntityReferences\(node\)\) return/);
+
   assert.match(appSource, /closest\("#assetLibrarySpaceMenu \[data-library-space\]"\)/);
   assert.match(appSource, /closest\("#assetLibrarySectionTabs \[data-library-section\]"\)/);
   assert.match(appSource, /closest\("#assetLibraryCommandBar button\[data-library-display\]"\)/);
@@ -805,50 +847,21 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(appSource, /function isCanvasDropTarget\(target\)[\s\S]*?closest\("#canvasShell"\)/);
   assert.match(appSource, /hasSupportedPayload && !isCanvasDropTarget\(event\.target\)/);
   assert.doesNotMatch(appSource, /window\.prompt\("新建文件夹名称"/);
-  assert.match(appSource, /window\.parent !== window && state\.librarySpace !== "personal"[\s\S]*?仅支持上传到个人空间/);
+  assert.match(appSource, /window\.parent !== window && space !== "personal"[\s\S]*?仅支持上传到个人空间/);
   assert.match(appSource, /event\.target\.closest\("\[data-library-batch-toggle\]"\)[\s\S]*?state\.librarySelectedIds\.size === 0[\s\S]*?state\.libraryToolbarMenu = null/);
+
   assert.match(appSource, /state\.librarySpace === "platform"[\s\S]*?\? "media"/);
   assert.match(appSource, /flatPlatformResults = state\.librarySpace === "platform"[\s\S]*?flatPlatformResults \? \[\]/);
   assert.match(appSource, /allowedBatchActions:\s*platformResults[\s\S]*?\["add-canvas", "save-personal"\][\s\S]*?canImportPlatformAssets:\s*false/);
   assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetToCanvas/);
   assert.match(appSource, /action === "save-personal"[\s\S]*?保存平台素材到个人素材库尚未接入/);
-  assert.doesNotMatch(appSource, /savePlatformMediaToPersonal/);
-  assert.match(assetLibraryCss, /\.asset-library-batch-command:disabled\s*\{[\s\S]*?background:\s*var\(--text\) !important;[\s\S]*?color:\s*var\(--bg\) !important;[\s\S]*?cursor:\s*not-allowed;[\s\S]*?opacity:\s*0\.68/);
-  assert.match(assetLibraryCss, /\.asset-library-panel \.asset-library-card-namebar input:focus-visible\s*\{[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix/);
-  assert.match(assetLibraryCss, /--asset-card-size:\s*164px/);
-  assert.match(assetLibraryCss, /\.asset-library-grid\s*\{[\s\S]*?justify-content:\s*start/);
-  assert.match(assetLibraryCss, /\.asset-library-grid\.grid-view\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, var\(--asset-card-size\)\)/);
-  assert.match(assetLibraryCss, /@container asset-library \(min-width:\s*548px\)\s*\{[\s\S]*?\.asset-library-grid\.grid-view\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, var\(--asset-card-size\)\)/);
-  assert.match(assetLibraryCss, /@container asset-library \(min-width:\s*726px\)\s*\{[\s\S]*?\.asset-library-grid\.grid-view\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4, var\(--asset-card-size\)\)/);
-  assert.match(assetLibraryCss, /\.asset-library-grid\.grid-view \.asset-library-item-menu\s*\{[\s\S]*?top:\s*5px;[\s\S]*?left:\s*calc\(100% \+ 4px\);[\s\S]*?width:\s*188px/);
-  assert.match(assetLibraryCss, /\.asset-library-grid\.grid-view \.asset-library-card:nth-child\(even\) \.asset-library-item-menu\s*\{[\s\S]*?right:\s*calc\(100% \+ 4px\);[\s\S]*?left:\s*auto/);
-  assert.match(assetLibraryCss, /\.asset-library-resize-handle::after\s*\{[\s\S]*?top:\s*50%;[\s\S]*?height:\s*36px;[\s\S]*?opacity:\s*0/);
-  assert.match(assetLibraryCss, /\.asset-library-resize-handle:focus-visible::after\s*\{[\s\S]*?var\(--text\) 42%[\s\S]*?opacity:\s*1/);
-  assert.match(assetLibraryCss, /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.asset-library-resize-handle\s*\{[\s\S]*?display:\s*none/);
-  assert.match(appCss, /\.app-shell\s*\{[\s\S]*?--asset-panel-width:\s*550px/);
-  assert.match(appSource, /function getAssetLibraryWidthBounds\(\)[\s\S]*?canvasCorridor[\s\S]*?function syncAssetLibraryResizeSemantics/);
-  assert.match(appSource, /assetLibraryResizeHandle\?\.addEventListener\("pointerdown", \(event\) => \{[\s\S]*?event\.button !== 0/);
-  assert.match(appSource, /assetLibraryResizeHandle\?\.addEventListener\("keydown"[\s\S]*?state\.assetLibraryWidth \+ \(event\.key === "ArrowRight" \? step : -step\)/);
-  assert.match(
-    appSource,
-    /function createAssetLibraryFolder\(\)[\s\S]*?listFolders\([\s\S]*?新建文件夹 \$\{sequence\}[\s\S]*?libraryRenameTarget = \{ kind: "folder", id: folder\.id \}/,
-  );
-  for (const iconName of [
-    "chevron-left",
-    "folder-input",
-    "grid-2x2",
-    "house",
-    "list-checks",
-    "list-filter",
-    "shield-check",
-    "square",
-    "square-check-big",
-    "user-round-plus",
-  ]) {
-    assert.match(appSource, new RegExp(`"${iconName}":\\s*'<`));
-  }
+  assert.doesNotMatch(appSource, /savePlatformMediaToPersonal|savePlatformSelectionToPersonal|save-material/);
+  assert.match(assetLibraryViewSource, /PLATFORM_BATCH_ACTIONS[\s\S]*?add-canvas[\s\S]*?save-personal/);
+  assert.match(assetLibraryCss, /\.asset-library-content\s*\{[\s\S]*?overflow:\s*hidden/);
+  assert.match(assetLibraryCss, /\.asset-library-grid\s*\{[\s\S]*?overflow-y:\s*auto[\s\S]*?flex:\s*1 1 0/);
+  assert.match(assetLibraryCss, /\.asset-library-resize-handle::after\s*\{[\s\S]*?height:\s*36px;[\s\S]*?opacity:\s*0/);
+  assert.match(entityUseCss, /\.entity-use-picker-portal\s*\{[\s\S]*?z-index:\s*120/);
 });
-
 test("shortcut help mirrors the implemented canvas gestures", () => {
   const wheelHandlerStart = appSource.indexOf('shell.addEventListener(\n  "wheel"');
   const wheelHandlerEnd = appSource.indexOf('window.addEventListener("keydown"', wheelHandlerStart);

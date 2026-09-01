@@ -61,6 +61,8 @@ const assetLibraryCommandBar = document.querySelector("#assetLibraryCommandBar")
 const assetLibraryOverlayLayer = document.querySelector("#assetLibraryOverlayLayer");
 const assetLibraryUploadInput = document.querySelector("#assetLibraryUploadInput");
 const assetLibraryResizeHandle = document.querySelector("#assetLibraryResizeHandle");
+const entityUseDetailPortal = document.querySelector("#entityUseDetailPortal");
+const entityUsePickerPortal = document.querySelector("#entityUsePickerPortal");
 const assetLibraryPreviewDialog = document.querySelector("#assetLibraryPreviewDialog");
 const assetLibraryPreviewTitle = document.querySelector("#assetLibraryPreviewTitle");
 const assetLibraryPreviewKicker = document.querySelector("#assetLibraryPreviewKicker");
@@ -116,6 +118,7 @@ const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
+const entityUsePickerBackgroundInertState = new Map();
 const homeLaunchIntentKey = "reelay-home-launch-intent";
 
 function syncFaviconContrast() {
@@ -285,6 +288,20 @@ const state = {
   libraryMoveItems: [],
   libraryMoveFolderId: null,
   libraryPreviewTarget: null,
+  entityUseDetailId: null,
+  entityUseDetailPinned: false,
+  entityUseDetailAnchorId: null,
+  entityUseDetailOpenTimer: 0,
+  entityUseDetailCloseTimer: 0,
+  entityUsePickerTargetNodeId: null,
+  entityUsePickerSpace: "personal",
+  entityUsePickerQuery: "",
+  entityUsePickerSelectedIds: new Set(),
+  entityUsePickerSelectedSpaces: new Map(),
+  entityUsePickerComposing: false,
+  entityUsePickerSelectionStart: null,
+  entityUsePickerSelectionEnd: null,
+  entityUsePickerReturnFocus: null,
   librarySearchByContext: {},
   libraryFilterByContext: {},
   assetLibraryPreferredWidth: 550,
@@ -468,6 +485,11 @@ const canvasEntityEditorControllerFactory = window.REELAY_CANVAS_ENTITY_EDITOR_C
 if (!canvasEntityEditorModel || !canvasEntityEditorView || !canvasEntityEditorControllerFactory) {
   throw new Error("Canvas Entity editor dependencies are unavailable.");
 }
+const canvasEntityUseModel = window.REELAY_CANVAS_ENTITY_USE_MODEL;
+const canvasEntityUseView = window.REELAY_CANVAS_ENTITY_USE_VIEW;
+if (!canvasEntityUseModel || !canvasEntityUseView) {
+  throw new Error("Canvas Entity use dependencies are unavailable.");
+}
 let reopenAssetLibraryAfterEntityEditor = false;
 const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntityEditorController({
   host: canvasEntityEditorHost,
@@ -591,6 +613,8 @@ function applyCanvasAccessMode(mode) {
     shell?.classList.remove("dragging");
   }
   syncCanvasAccessUi();
+  if (state.entityUsePickerTargetNodeId) renderEntityUsePicker();
+  if (state.entityUseDetailId) renderEntityUseDetail();
 }
 
 function syncHostedIdentity(context) {
@@ -1474,6 +1498,10 @@ function getModel(node) {
   return generatorModelPolicy.resolveModel(models, node);
 }
 
+function canNodeUseEntityReferences(node) {
+  return generatorModelPolicy.canUseEntityReferences(models, node);
+}
+
 function getModelCapabilities(node) {
   return getModel(node)?.capabilities || {};
 }
@@ -2330,6 +2358,7 @@ const fallbackIconPaths = {
   "square-plus": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/>',
   "square": '<rect x="4" y="4" width="16" height="16" rx="2"/>',
   "square-check-big": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 12 3 3 6-6"/>',
+  "copy-check": '<path d="m12 15 2 2 4-4"/><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
   "timer": '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/>',
   "type": '<path d="M4 5h16"/><path d="M10 5v14"/><path d="M14 5v14"/><path d="M8 19h8"/>',
@@ -2898,9 +2927,15 @@ async function createPersistedAssetsFromFiles(files) {
 }
 
 function cloneAsset(asset, source = asset.source) {
+  const librarySourceId = asset.librarySourceId
+    || asset.workspaceAssetId
+    || asset.platformSourceId
+    || asset.sourceId
+    || asset.id;
   return {
     ...asset,
     id: crypto.randomUUID(),
+    ...(librarySourceId ? { librarySourceId } : {}),
     source,
   };
 }
@@ -2952,6 +2987,7 @@ function clearAssetLibrarySelection({ keepMode = false } = {}) {
 }
 
 function switchAssetLibraryContext({ space = state.librarySpace, section = state.librarySection } = {}) {
+  closeEntityUseDetail();
   rememberAssetLibraryContext();
   state.librarySpace = canvasAssetLibraryModel.normalizeSpace(space);
   state.librarySection = state.librarySpace === "platform"
@@ -3092,7 +3128,9 @@ function renderAssetLibrary() {
   if (!assetLibraryGrid || !canvasAssetLibraryView) return;
   const mutable = isAssetLibraryMutable();
   const space = state.librarySpace;
+  const platform = space === "platform";
   const section = state.librarySection;
+  const display = state.libraryDisplay;
   const canCreateEntity = mutable && space === "personal" && section === "entity" && canPersistLibraryEntities();
   const canUploadMedia = mutable && space === "personal" && section === "media" && canPersistLibraryMedia();
   const canManageFolders = mutable && section === "media";
@@ -3123,7 +3161,7 @@ function renderAssetLibrary() {
   assetLibrarySpaceMenu?.querySelectorAll("[data-library-space]").forEach((button) => {
     button.setAttribute("aria-checked", button.dataset.librarySpace === space ? "true" : "false");
   });
-  const platformResults = space === "platform";
+  const platformResults = platform;
   const assetLibraryDirectoryBar = assetLibraryDirectoryButton?.closest(".asset-library-directorybar");
   if (assetLibraryCommandBar) {
     const commandHost = platformResults ? assetLibraryPlatformCommandAnchor : assetLibraryDirectoryBar;
@@ -3144,11 +3182,12 @@ function renderAssetLibrary() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", active ? "true" : "false");
   });
+  assetLibrarySectionTabs?.classList.toggle("platform-inspiration", platform);
   assetLibraryGrid.setAttribute(
     "aria-labelledby",
     section === "media" ? "assetLibraryMediaTab" : "assetLibraryEntityTab",
   );
-  assetLibraryGrid.className = `asset-library-grid ${state.libraryDisplay === "list" ? "list-view" : "grid-view"}`;
+  assetLibraryGrid.className = `asset-library-grid ${display === "list" ? "list-view" : "grid-view"}`;
   if (assetLibrarySearchInput && assetLibrarySearchInput.value !== state.librarySearch) {
     assetLibrarySearchInput.value = state.librarySearch;
   }
@@ -3226,6 +3265,12 @@ function renderAssetLibrary() {
       };
       if (item.kind === "entity") {
         const entityMedia = assetLibraryStore.getEntityMedia({ kind: "entity", id: item.id });
+        const coverMedia = item.coverMediaId
+          ? entityMedia.find((media) => media.id === item.coverMediaId)
+          : null;
+        const coverPreview = coverMedia && (coverMedia.mediaKind || coverMedia.type) === "image"
+          ? coverMedia
+          : entityMedia.find((media) => (media.mediaKind || media.type) === "image") || null;
         return canvasAssetLibraryView.renderEntityCard({
           ...common,
           entity: item,
@@ -3256,11 +3301,15 @@ function renderAssetLibrary() {
   });
 
   if (assetLibraryCount) {
+    if (platform) {
+      assetLibraryCount.textContent = `共 ${items.length} 个结果`;
+    } else {
     const noun = section === "entity" ? "个主体" : "个素材";
     const filtered = Boolean(state.librarySearch || (section === "media" && state.libraryFilter !== "all"));
     assetLibraryCount.textContent = filtered
       ? `显示 ${items.length} / 共 ${allItems.length} ${noun}`
       : `共 ${allItems.length} ${noun}`;
+    }
   }
 
   if (assetLibraryOverlayLayer) {
@@ -3282,6 +3331,14 @@ function renderAssetLibrary() {
       input?.focus();
       input?.select();
     });
+  }
+  if (state.entityUseDetailId) {
+    const entityStillVisible = section === "entity"
+      && !state.librarySelectionMode
+      && !state.libraryMenuTarget
+      && items.some((item) => item.kind === "entity" && item.id === state.entityUseDetailId);
+    if (!entityStillVisible) closeEntityUseDetail();
+    else window.requestAnimationFrame(() => renderEntityUseDetail());
   }
 }
 
@@ -3315,41 +3372,393 @@ function hasPersonalLibraryPlacement(media) {
   );
 }
 
-function openAssetLibraryPreview(kind, id) {
-  const itemKind = kind === "entity" ? "entity" : "media";
-  const item = itemKind === "entity"
-    ? assetLibraryStore.getEntity({ kind: "entity", id })
-    : assetLibraryStore.getMedia({ kind: "media", id });
+function getAssetLibraryEntityCard(entityId = state.entityUseDetailAnchorId || state.entityUseDetailId) {
+  if (!entityId || !assetLibraryGrid) return null;
+  return [...assetLibraryGrid.querySelectorAll("[data-library-entity]")]
+    .find((element) => element.dataset.libraryEntity === entityId) || null;
+}
+
+function clearEntityUseDetailTimers() {
+  if (state.entityUseDetailOpenTimer) window.clearTimeout(state.entityUseDetailOpenTimer);
+  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
+  state.entityUseDetailOpenTimer = 0;
+  state.entityUseDetailCloseTimer = 0;
+}
+
+function getEntityUseDetailPayload(entityId = state.entityUseDetailId) {
+  const entity = entityId
+    ? assetLibraryStore.getEntity({ kind: "entity", id: entityId })
+    : null;
+  if (!entity) return null;
+  const space = state.librarySpace;
+  if (!assetLibraryStore.hasPlacement({ kind: "entity", id: entity.id }, space)) return null;
+  const media = assetLibraryStore
+    .getEntityMedia({ kind: "entity", id: entity.id })
+    .filter((item) => assetLibraryStore.hasPlacement({ kind: "media", id: item.id }, space));
+  return { ...entity, media };
+}
+
+function getEntityUseDetailPlacement(anchor) {
+  const anchorRect = anchor.getBoundingClientRect();
+  const avoidRects = [];
+  if (state.agentOpen && agentDock) avoidRects.push(agentDock.getBoundingClientRect());
+  return canvasEntityUseView.computeDetailPlacement({
+    viewportRect: { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
+    anchorRect,
+    sourceRect: anchorRect,
+    avoidRects,
+    panelWidth: 340,
+    panelHeight: 454,
+    gap: 10,
+    margin: 12,
+  });
+}
+
+function renderEntityUseDetail() {
+  if (!entityUseDetailPortal || !state.entityUseDetailId) return;
+  const anchor = getAssetLibraryEntityCard();
+  const entity = getEntityUseDetailPayload();
+  const eligible = isAssetLibraryOpen()
+    && state.librarySection === "entity"
+    && !state.librarySelectionMode
+    && !state.libraryMenuTarget
+    && !state.libraryRenameTarget
+    && anchor
+    && entity;
+  if (!eligible) {
+    closeEntityUseDetail();
+    return;
+  }
+  const placement = getEntityUseDetailPlacement(anchor);
+  entityUseDetailPortal.innerHTML = canvasEntityUseView.renderEntityDetail({
+    entity,
+    media: entity.media,
+    pinned: state.entityUseDetailPinned,
+    placement,
+    canAdd: isCanvasMutationAllowed(),
+  });
+  canvasEntityUseView.syncEntityDetailPortal(entityUseDetailPortal, {
+    visible: true,
+    pinned: state.entityUseDetailPinned,
+    placement,
+  });
+  refreshIcons();
+}
+
+function openEntityUseDetail(entityId, { pinned = false, delay = 0 } = {}) {
+  if (!entityId || state.librarySelectionMode || state.libraryMenuTarget || state.libraryRenameTarget) return;
+  if (!isAssetLibraryOpen() || state.librarySection !== "entity") return;
+  if (state.entityUseDetailPinned && !pinned) return;
+  clearEntityUseDetailTimers();
+  const open = () => {
+    state.entityUseDetailOpenTimer = 0;
+    state.entityUseDetailId = entityId;
+    state.entityUseDetailAnchorId = entityId;
+    state.entityUseDetailPinned = Boolean(pinned);
+    renderEntityUseDetail();
+  };
+  if (delay > 0) state.entityUseDetailOpenTimer = window.setTimeout(open, delay);
+  else open();
+}
+
+function scheduleEntityUseDetailClose(delay = 170) {
+  if (state.entityUseDetailOpenTimer) window.clearTimeout(state.entityUseDetailOpenTimer);
+  state.entityUseDetailOpenTimer = 0;
+  if (state.entityUseDetailPinned) return;
+  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
+  state.entityUseDetailCloseTimer = window.setTimeout(() => {
+    state.entityUseDetailCloseTimer = 0;
+    if (!state.entityUseDetailPinned) closeEntityUseDetail();
+  }, delay);
+}
+
+function closeEntityUseDetail({ restoreFocus = false } = {}) {
+  const entityId = state.entityUseDetailAnchorId || state.entityUseDetailId;
+  clearEntityUseDetailTimers();
+  state.entityUseDetailId = null;
+  state.entityUseDetailAnchorId = null;
+  state.entityUseDetailPinned = false;
+  if (entityUseDetailPortal) {
+    canvasEntityUseView.syncEntityDetailPortal(entityUseDetailPortal, { visible: false });
+    entityUseDetailPortal.innerHTML = "";
+  }
+  if (restoreFocus && entityId) {
+    window.requestAnimationFrame(() => getAssetLibraryEntityCard(entityId)?.querySelector(".asset-library-card-preview")?.focus({ preventScroll: true }));
+  }
+}
+
+function getEntityUsePickerEntities() {
+  const entitiesById = new Map();
+  for (const space of ["personal", "organization"]) {
+    const entities = assetLibraryStore.listItems({ space, kind: "entity" });
+    for (const entity of entities) {
+      const existing = entitiesById.get(entity.id);
+      if (existing) {
+        if (!existing.spaces.includes(space)) existing.spaces.push(space);
+        continue;
+      }
+      const { kind: _kind, placement: _placement, ...record } = entity;
+      entitiesById.set(entity.id, {
+        ...record,
+        spaces: [space],
+        media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entity.id }),
+      });
+    }
+  }
+  return [...entitiesById.values()];
+}
+
+function setEntityUsePickerBackgroundIsolation(active) {
+  if (!appShell) return;
+  if (active) {
+    if (entityUsePickerBackgroundInertState.has(appShell)) return;
+    entityUsePickerBackgroundInertState.set(appShell, {
+      inert: appShell.inert,
+      ariaHidden: appShell.getAttribute("aria-hidden"),
+    });
+    appShell.inert = true;
+    appShell.setAttribute("aria-hidden", "true");
+    return;
+  }
+  for (const [element, previous] of entityUsePickerBackgroundInertState) {
+    element.inert = previous.inert;
+    if (previous.ariaHidden == null) element.removeAttribute("aria-hidden");
+    else element.setAttribute("aria-hidden", previous.ariaHidden);
+  }
+  entityUsePickerBackgroundInertState.clear();
+}
+
+function renderEntityUsePicker({ focusSearch = false } = {}) {
+  if (!entityUsePickerPortal || !state.entityUsePickerTargetNodeId) return;
+  const node = state.nodes.find((item) => item.id === state.entityUsePickerTargetNodeId);
+  if (!node || node.kind !== "generator" || !canNodeUseEntityReferences(node)) {
+    closeEntityUsePicker({ restoreFocus: false });
+    return;
+  }
+  const canAdd = isCanvasMutationAllowed() && !node.generating;
+  entityUsePickerPortal.innerHTML = canvasEntityUseView.renderEntityPicker({
+    entities: getEntityUsePickerEntities(),
+    space: state.entityUsePickerSpace,
+    query: state.entityUsePickerQuery,
+    selectedIds: state.entityUsePickerSelectedIds,
+    canAdd,
+  });
+  canvasEntityUseView.syncEntityPickerPortal(entityUsePickerPortal, { visible: true });
+  refreshIcons();
+  if (focusSearch) {
+    window.requestAnimationFrame(() => {
+      const input = entityUsePickerPortal.querySelector("[data-entity-use-search]");
+      if (!(input instanceof HTMLInputElement)) return;
+      input.focus({ preventScroll: true });
+      const valueLength = input.value.length;
+      const start = Number.isInteger(state.entityUsePickerSelectionStart)
+        ? Math.min(state.entityUsePickerSelectionStart, valueLength)
+        : valueLength;
+      const end = Number.isInteger(state.entityUsePickerSelectionEnd)
+        ? Math.min(state.entityUsePickerSelectionEnd, valueLength)
+        : start;
+      input.setSelectionRange(start, end);
+    });
+  }
+}
+
+function openEntityUsePicker(nodeId) {
+  if (!requireCanvasMutation()) return;
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node || node.kind !== "generator" || node.generating || !canNodeUseEntityReferences(node)) return;
+  closeEntityUseDetail();
+  state.entityUsePickerTargetNodeId = node.id;
+  state.entityUsePickerSpace = "personal";
+  state.entityUsePickerQuery = "";
+  state.entityUsePickerSelectedIds.clear();
+  state.entityUsePickerSelectedSpaces.clear();
+  state.entityUsePickerComposing = false;
+  state.entityUsePickerSelectionStart = 0;
+  state.entityUsePickerSelectionEnd = 0;
+  state.entityUsePickerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  setEntityUsePickerBackgroundIsolation(true);
+  renderEntityUsePicker({ focusSearch: true });
+}
+
+function closeEntityUsePicker({ restoreFocus = true } = {}) {
+  const nodeId = state.entityUsePickerTargetNodeId;
+  const previousFocus = state.entityUsePickerReturnFocus;
+  state.entityUsePickerTargetNodeId = null;
+  state.entityUsePickerQuery = "";
+  state.entityUsePickerSelectedIds.clear();
+  state.entityUsePickerSelectedSpaces.clear();
+  state.entityUsePickerComposing = false;
+  state.entityUsePickerSelectionStart = null;
+  state.entityUsePickerSelectionEnd = null;
+  state.entityUsePickerReturnFocus = null;
+  if (entityUsePickerPortal) {
+    canvasEntityUseView.syncEntityPickerPortal(entityUsePickerPortal, { visible: false });
+    entityUsePickerPortal.innerHTML = "";
+  }
+  setEntityUsePickerBackgroundIsolation(false);
+  if (!restoreFocus) return;
+  window.requestAnimationFrame(() => {
+    const currentTrigger = nodeId
+      ? nodeLayer.querySelector(`[data-id="${CSS.escape(nodeId)}"] .entity-drop`)
+      : null;
+    if (currentTrigger instanceof HTMLElement) currentTrigger.focus({ preventScroll: true });
+    else if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  });
+}
+
+function createEntityUseMediaPlan(entityIds, existingMedia, selectedSpaces) {
+  const entities = entityIds
+    .map((entityId) => assetLibraryStore.getEntity({ kind: "entity", id: entityId }))
+    .filter(Boolean);
+  return canvasEntityUseModel.createEntityMediaPlan({
+    entities,
+    media: assetLibraryStore.listAllMedia(),
+    existingMedia,
+    isMediaVisible(media, entity) {
+      const space = selectedSpaces.get(entity.id) || "personal";
+      return assetLibraryStore.hasPlacement({ kind: "media", id: media.id }, space);
+    },
+  });
+}
+
+function addSelectedEntitiesToGenerator() {
+  if (!requireCanvasMutation()) return;
+  const node = state.nodes.find((item) => item.id === state.entityUsePickerTargetNodeId);
+  if (!node || node.kind !== "generator" || node.generating || !canNodeUseEntityReferences(node)) {
+    closeEntityUsePicker({ restoreFocus: false });
+    showActionToast("当前生成节点已不可用");
+    return;
+  }
+  const entityIds = [...state.entityUsePickerSelectedIds];
+  const plan = createEntityUseMediaPlan(entityIds, node.assets || [], state.entityUsePickerSelectedSpaces);
+  if (!plan.entries.length) {
+    closeEntityUsePicker();
+    showActionToast(plan.skipped.some((item) => item.reason === "existing")
+      ? "所选主体素材已在参考区"
+      : "所选主体没有可添加的素材");
+    return;
+  }
+  const before = cloneNodeState(node);
+  const additions = plan.entries.map((entry) => cloneAsset({
+    ...entry.media,
+    librarySourceId: entry.sourceMediaId || entry.mediaId,
+  }, "library"));
+  pushUndoAction({ type: "node-update", node: before });
+  node.assets.push(...additions);
+  node.activeAssetId = additions[0].id;
+  node.expanded = true;
+  node.panel = null;
+  additions.forEach((asset) => hydrateAssetMetadata(asset, node.id));
+  bringNodesToFront([node]);
+  setSelection([node.id], node.id);
+  closeEntityUsePicker({ restoreFocus: false });
+  render();
+  window.requestAnimationFrame(() => nodeLayer.querySelector(`[data-id="${CSS.escape(node.id)}"] .entity-drop`)?.focus({ preventScroll: true }));
+  const skippedExisting = plan.skipped.filter((item) => item.reason === "existing" || item.reason === "duplicate").length;
+  showActionToast(skippedExisting
+    ? `已添加 ${additions.length} 个参考素材，跳过 ${skippedExisting} 个重复项`
+    : `已添加 ${additions.length} 个参考素材`);
+}
+
+function getAvailableCanvasPlacementViewport() {
+  const shellRect = shell.getBoundingClientRect();
+  let left = shellRect.left;
+  let right = shellRect.right;
+  if (isAssetLibraryOpen() && assetLibraryPanel) {
+    left = Math.max(left, assetLibraryPanel.getBoundingClientRect().right + 12);
+  }
+  if (state.agentOpen && agentDock) {
+    right = Math.min(right, agentDock.getBoundingClientRect().left - 12);
+  }
+  if (right - left < 280) {
+    left = shellRect.left;
+    right = shellRect.right;
+  }
+  const top = shellRect.top;
+  const bottom = shellRect.bottom;
+  const center = screenToWorld((left + right) / 2, (top + bottom) / 2);
+  return {
+    centerX: center.x,
+    centerY: center.y,
+    viewportWidth: Math.max(1, (right - left) / state.scale),
+    viewportHeight: Math.max(1, (bottom - top) / state.scale),
+  };
+}
+
+function addEntityToCanvas(entityId) {
+  if (!requireCanvasMutation()) return [];
+  const selectedSpaces = new Map([[entityId, state.librarySpace]]);
+  const plan = createEntityUseMediaPlan([entityId], getCanvasLibraryAssets(), selectedSpaces);
+  if (!plan.entries.length) {
+    showActionToast(plan.skipped.some((item) => item.reason === "existing")
+      ? "这个主体的素材已在画布中"
+      : "这个主体没有可添加的素材");
+    return [];
+  }
+  const createdNodes = plan.entries.map((entry) => {
+    const asset = cloneAsset({
+      ...entry.media,
+      librarySourceId: entry.sourceMediaId || entry.mediaId,
+    }, "library");
+    const node = defaultAssetNode(0, 0, asset);
+    hydrateAssetMetadata(asset, node.id);
+    return node;
+  });
+  const layoutEntries = plan.entries.map((entry, index) => {
+    const layout = getNodeLayout(createdNodes[index]);
+    return { ...entry, layoutWidth: layout.nodeWidth, layoutHeight: layout.nodeHeight };
+  });
+  const viewport = getAvailableCanvasPlacementViewport();
+  const layoutPlan = canvasEntityUseModel.createCenteredGridPlan(layoutEntries, {
+    ...viewport,
+    padding: 36 / state.scale,
+    gapX: 30 / state.scale,
+    gapY: 30 / state.scale,
+  });
+  layoutPlan.items.forEach((item, index) => {
+    createdNodes[index].x = item.x;
+    createdNodes[index].y = item.y;
+  });
+  collapseAllGeneratorPanels();
+  pushUndoAction({ type: "create", nodeIds: createdNodes.map((node) => node.id) });
+  state.nodes.push(...createdNodes);
+  bringNodesToFront(createdNodes);
+  setSelection(createdNodes.map((node) => node.id), createdNodes[0].id);
+  closeEntityUseDetail();
+  const createdBounds = getNodesContentBounds(createdNodes);
+  const shouldFitCreatedNodes = createdBounds && getBoundsFitScale(createdBounds) < state.scale;
+  render();
+  if (shouldFitCreatedNodes) applyFitBounds(createdBounds);
+  const skippedExisting = plan.skipped.filter((item) => item.reason === "existing" || item.reason === "duplicate").length;
+  showActionToast(skippedExisting
+    ? `已添加 ${createdNodes.length} 个素材，跳过 ${skippedExisting} 个重复项`
+    : `已添加 ${createdNodes.length} 个素材到画布`);
+  return createdNodes;
+}
+
+function openAssetLibraryPreview(id) {
+  const item = assetLibraryStore.getMedia({ kind: "media", id });
   if (!item || !assetLibraryPreviewDialog || !assetLibraryPreviewBody) return;
-  state.libraryPreviewTarget = { kind: itemKind, id };
-  const name = itemKind === "entity" ? item.name : getAssetDisplayName(item);
+  state.libraryPreviewTarget = { kind: "media", id };
+  const name = getAssetDisplayName(item);
   if (assetLibraryPreviewTitle) assetLibraryPreviewTitle.textContent = name;
   if (assetLibraryPreviewKicker) {
-    assetLibraryPreviewKicker.textContent = itemKind === "entity" ? "主体预览" : `${assetTypeLabel(item.mediaKind || item.type)}预览`;
+    assetLibraryPreviewKicker.textContent = `${assetTypeLabel(item.mediaKind || item.type)}预览`;
   }
-  if (itemKind === "entity") {
-    const media = assetLibraryStore.getEntityMedia({ kind: "entity", id });
-    assetLibraryPreviewBody.innerHTML = `<div class="asset-library-preview-entity">${media
-      .map((asset) => `<div>${assetPreview(asset)}</div>`)
-      .join("")}</div>`;
-    if (assetLibraryPreviewMeta) assetLibraryPreviewMeta.textContent = `${media.length} 个素材引用`;
-    if (assetLibraryPreviewUse) assetLibraryPreviewUse.hidden = true;
+  const url = safeMediaAttributeUrl(item.url);
+  if (item.mediaKind === "image" || item.type === "image") {
+    assetLibraryPreviewBody.innerHTML = url ? `<img src="${url}" alt="${escapeHtml(name)}" />` : assetPreview(item);
+  } else if (item.mediaKind === "video" || item.type === "video") {
+    assetLibraryPreviewBody.innerHTML = url ? `<video src="${url}" controls autoplay playsinline></video>` : assetPreview(item);
   } else {
-    const url = safeMediaAttributeUrl(item.url);
-    if (item.mediaKind === "image" || item.type === "image") {
-      assetLibraryPreviewBody.innerHTML = url ? `<img src="${url}" alt="${escapeHtml(name)}" />` : assetPreview(item);
-    } else if (item.mediaKind === "video" || item.type === "video") {
-      assetLibraryPreviewBody.innerHTML = url ? `<video src="${url}" controls autoplay playsinline></video>` : assetPreview(item);
-    } else {
-      assetLibraryPreviewBody.innerHTML = url ? `<audio src="${url}" controls autoplay></audio>` : assetPreview(item);
-    }
-    if (assetLibraryPreviewMeta) {
-      assetLibraryPreviewMeta.textContent = `${assetTypeLabel(item.mediaKind || item.type)} · ${getAssetLibraryOriginLabel(item)}`;
-    }
-    if (assetLibraryPreviewUse) {
-      assetLibraryPreviewUse.hidden = false;
-      assetLibraryPreviewUse.querySelector("span").textContent = state.libraryTargetNodeId ? "引用到当前节点" : "添加到画布";
-    }
+    assetLibraryPreviewBody.innerHTML = url ? `<audio src="${url}" controls autoplay></audio>` : assetPreview(item);
+  }
+  if (assetLibraryPreviewMeta) {
+    assetLibraryPreviewMeta.textContent = `${assetTypeLabel(item.mediaKind || item.type)} · ${getAssetLibraryOriginLabel(item)}`;
+  }
+  if (assetLibraryPreviewUse) {
+    assetLibraryPreviewUse.hidden = false;
+    assetLibraryPreviewUse.querySelector("span").textContent = state.libraryTargetNodeId ? "引用到当前节点" : "添加到画布";
   }
   refreshIcons();
   if (!assetLibraryPreviewDialog.open) assetLibraryPreviewDialog.showModal();
@@ -3474,8 +3883,9 @@ function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
   }
 }
 
-function closeAssetLibrary() {
-  const shouldRestoreFocus = Boolean(assetLibraryPanel?.contains(document.activeElement));
+function closeAssetLibrary({ restoreFocus = true } = {}) {
+  const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
+  closeEntityUseDetail();
   state.libraryTargetNodeId = null;
   state.libraryDirectoryMenuOpen = false;
   state.libraryRenameTarget = null;
@@ -3545,47 +3955,71 @@ function useLibraryAsset(assetId, clientX, clientY) {
   addLibraryAssetToCanvas(sourceAsset, clientX, clientY);
 }
 
-function hydrateAssetMetadata(asset, nodeId) {
+function readAssetMetadata(asset) {
   const safeUrl = sanitizeRuntimeMediaUrl(asset.url);
-  if (!safeUrl) return;
+  if (!safeUrl) return Promise.resolve({});
+  const mediaType = asset.type || asset.mediaKind;
 
-  if (asset.type === "image") {
-    const image = new Image();
-    image.onload = () => {
-      if (!image.naturalWidth || !image.naturalHeight) return;
-      asset.width = image.naturalWidth;
-      asset.height = image.naturalHeight;
-      asset.aspectRatio = image.naturalWidth / image.naturalHeight;
-      if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId = 0;
+    const finish = (metadata = {}) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+      resolve(metadata);
     };
-    image.src = safeUrl;
-    return;
-  }
+    timeoutId = window.setTimeout(() => finish(), 4000);
 
-  if (asset.type === "audio") {
-    const audio = document.createElement("audio");
-    audio.preload = "metadata";
-    audio.onloadedmetadata = () => {
-      asset.duration = audio.duration;
-      if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
-    };
-    audio.src = safeUrl;
-    return;
-  }
+    if (mediaType === "image") {
+      const image = new Image();
+      image.onload = () => finish(image.naturalWidth && image.naturalHeight
+        ? {
+            width: image.naturalWidth,
+            height: image.naturalHeight,
+            aspectRatio: image.naturalWidth / image.naturalHeight,
+          }
+        : {});
+      image.onerror = () => finish();
+      image.src = safeUrl;
+      return;
+    }
 
-  if (asset.type !== "video") return;
+    if (mediaType === "audio") {
+      const audio = document.createElement("audio");
+      audio.preload = "metadata";
+      audio.onloadedmetadata = () => finish(Number.isFinite(audio.duration) ? { duration: audio.duration } : {});
+      audio.onerror = () => finish();
+      audio.src = safeUrl;
+      return;
+    }
 
-  const video = document.createElement("video");
-  video.preload = "metadata";
-  video.onloadedmetadata = () => {
-    if (!video.videoWidth || !video.videoHeight) return;
-    asset.width = video.videoWidth;
-    asset.height = video.videoHeight;
-    asset.duration = video.duration;
-    asset.aspectRatio = video.videoWidth / video.videoHeight;
+    if (mediaType !== "video") {
+      finish();
+      return;
+    }
+
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => finish(video.videoWidth && video.videoHeight
+      ? {
+          width: video.videoWidth,
+          height: video.videoHeight,
+          duration: Number.isFinite(video.duration) ? video.duration : 0,
+          aspectRatio: video.videoWidth / video.videoHeight,
+        }
+      : {});
+    video.onerror = () => finish();
+    video.src = safeUrl;
+  });
+}
+
+function hydrateAssetMetadata(asset, nodeId) {
+  readAssetMetadata(asset).then((metadata) => {
+    if (!Object.keys(metadata).length) return;
+    Object.assign(asset, metadata);
     if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
-  };
-  video.src = safeUrl;
+  });
 }
 
 function audioWaveformBars(repeat = 1) {
@@ -3866,6 +4300,12 @@ function isCanvasDropTarget(target) {
 }
 
 function render() {
+  if (state.entityUsePickerTargetNodeId) {
+    const pickerTarget = state.nodes.find((node) => node.id === state.entityUsePickerTargetNodeId);
+    if (!pickerTarget || pickerTarget.kind !== "generator" || pickerTarget.generating || !canNodeUseEntityReferences(pickerTarget)) {
+      closeEntityUsePicker({ restoreFocus: false });
+    }
+  }
   syncGroups();
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
@@ -4231,10 +4671,23 @@ function createAssetNodeElement(node) {
   return el;
 }
 
+function entityEntryIconMarkup() {
+  return `
+    <span class="entity-entry-glyph" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/>
+        <circle cx="12" cy="9.25" r="2.1" fill="currentColor" stroke="none"/>
+        <path d="M8.4 16.4c.45-2.2 1.7-3.3 3.6-3.3s3.15 1.1 3.6 3.3"/>
+      </svg>
+    </span>
+  `;
+}
+
 function createGeneratorNodeElement(node) {
   const model = getModel(node);
   const layout = getNodeLayout(node);
   const isVideoNode = getNodeGenerationMode(node) === "video";
+  const supportsEntityReferences = canNodeUseEntityReferences(node);
   const selected = state.selectedIds.has(node.id);
   const generationAvailability = getGenerationAvailability(node);
   const el = document.createElement("article");
@@ -4249,7 +4702,8 @@ function createGeneratorNodeElement(node) {
 
   const promptPanel = node.expanded
     ? `
-      <section class="prompt-panel ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
+      <section class="prompt-panel ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
+        ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
         <textarea class="prompt-input" placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
@@ -5184,11 +5638,8 @@ function modelPanel(node) {
 
 function modelIconMarkup(model, className) {
   if (model?.iconSrc) {
-    const classes = `${className} model-brand-icon model-logo-${model.id}`;
-    if (model.iconMode === "mask") {
-      const maskSrc = new URL(model.iconSrc, document.baseURI).href;
-      return `<span class="${classes}" style="--model-icon-mask: url(&quot;${escapeHtml(maskSrc)}&quot;)" aria-hidden="true"><span class="model-brand-mask"></span></span>`;
-    }
+    const modeClass = model.iconMode === "mask" ? " model-brand-monochrome" : "";
+    const classes = `${className} model-brand-icon model-logo-${model.id}${modeClass}`;
     return `<span class="${classes}" aria-hidden="true"><img src="${escapeHtml(model.iconSrc)}" alt="" /></span>`;
   }
   return `<span class="${className}" aria-hidden="true">${escapeHtml(model?.icon || "—")}</span>`;
@@ -5365,6 +5816,7 @@ function renderAspectIcon(value) {
 }
 
 const generationLockedActions = new Set([
+  "entity-picker",
   "material-panel",
   "material",
   "remove-material",
@@ -5432,6 +5884,14 @@ function handleAction(node, action, value) {
   const before = undoableActions.has(action) ? cloneNodeState(node) : null;
 
   switch (action) {
+    case "entity-picker":
+      if (!canNodeUseEntityReferences(node)) return;
+      node.expanded = true;
+      node.panel = null;
+      node.advancedSettingsExpanded = false;
+      render();
+      openEntityUsePicker(node.id);
+      return;
     case "material-panel":
       node.expanded = true;
       node.panel = node.panel === "material" ? null : "material";
@@ -6457,6 +6917,25 @@ function undoLastAction() {
       state.undoStack.push(action);
       showActionToast("提示词正在优化，完成后可撤销");
       return;
+    }
+  }
+
+  if (action.type === "create") {
+    const createdNodeIds = new Set(Array.isArray(action.nodeIds) ? action.nodeIds : []);
+    if (createdNodeIds.size) {
+      const removedConnectionIds = state.connections
+        .filter((connection) => createdNodeIds.has(connection.sourceNodeId) || createdNodeIds.has(connection.targetNodeId))
+        .map((connection) => connection.id);
+      state.nodes = state.nodes.filter((node) => !createdNodeIds.has(node.id));
+      state.connections = state.connections.filter(
+        (connection) => !createdNodeIds.has(connection.sourceNodeId) && !createdNodeIds.has(connection.targetNodeId),
+      );
+      state.groups = state.groups
+        .map((group) => ({ ...group, nodeIds: group.nodeIds.filter((nodeId) => !createdNodeIds.has(nodeId)) }))
+        .filter((group) => group.nodeIds.length);
+      clearRecentConnectionFeedback(removedConnectionIds);
+      clearSelection();
+      state.activeGroupId = null;
     }
   }
 
@@ -8258,6 +8737,19 @@ shell.addEventListener(
 
 window.addEventListener("keydown", (event) => {
   if (document.querySelector(".confirm-layer")) return;
+  if (state.entityUsePickerTargetNodeId) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeEntityUsePicker();
+    }
+    return;
+  }
+  if (event.key === "Escape" && state.entityUseDetailPinned) {
+    event.preventDefault();
+    closeEntityUseDetail({ restoreFocus: true });
+    return;
+  }
+  if (canvasEntityEditor.isOpen()) return;
   const target = event.target;
   const isTyping = target instanceof Element && target.closest("input, textarea, [contenteditable='true']");
   if (isTyping) return;
@@ -8413,6 +8905,7 @@ window.addEventListener("drop", (event) => {
 });
 
 function setAssetLibrarySelectionMode(enabled) {
+  closeEntityUseDetail();
   state.librarySelectionMode = Boolean(enabled);
   state.librarySelectedIds.clear();
   state.libraryToolbarMenu = null;
@@ -8768,31 +9261,30 @@ function defaultUploadContentType(mediaKind) {
   return "image/jpeg";
 }
 
-async function addFilesToAssetLibrary(files) {
-  if (!isAssetLibraryMutable()) return;
+async function persistAssetLibraryFiles(files, { space = state.librarySpace, folderId = null } = {}) {
   const accepted = Array.from(files || [])
     .map((file) => ({ file, mediaKind: getAssetType(file) }))
     .filter((entry) => entry.mediaKind);
   if (!accepted.length) {
-    showActionToast("请选择图片、视频或音频文件");
-    return;
+    throw new Error("请选择图片、视频或音频文件");
   }
   if (!canPersistLibraryMedia()) {
     showActionToast("当前项目尚未接入资产持久化");
     return;
   }
-  if (window.parent !== window && state.librarySpace !== "personal") {
-    showActionToast("首个持久化切片仅支持上传到个人空间");
-    return;
+  if (window.parent !== window && space !== "personal") {
+    throw new Error("首个持久化切片仅支持上传到个人空间");
   }
   showActionToast(`正在上传 ${accepted.length} 个素材…`);
-  try {
-    const media = window.parent === window
-      ? createAssetsFromFiles(accepted.map((entry) => entry.file)).map((asset) => ({
-        ...asset,
-        displayName: asset.name || asset.displayName,
+  const settled = window.parent === window
+    ? createAssetsFromFiles(accepted.map((entry) => entry.file)).map((asset) => ({
+        status: "fulfilled",
+        value: {
+          ...asset,
+          displayName: asset.name || asset.displayName,
+        },
       }))
-      : await Promise.all(accepted.map(async ({ file, mediaKind }) => {
+    : await Promise.allSettled(accepted.map(async ({ file, mediaKind }) => {
         const projectAsset = await canvasMediaAssets.persistFile(file, {
           mediaKind,
           displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
@@ -8800,18 +9292,38 @@ async function addFilesToAssetLibrary(files) {
         });
         return projectAssetToLibraryMedia(projectAsset);
       }));
-    media.forEach((asset) => {
-      assetLibraryStore.registerMedia({
-        media: asset,
-        space: state.librarySpace,
-        folderId: state.libraryFolderId,
-      });
-      if (window.parent !== window && state.librarySpace === "personal") {
-        hostPersonalMediaIds.add(asset.id);
-      }
+  const uploaded = settled
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+  const failures = settled.filter((result) => result.status === "rejected");
+  const hydrated = await Promise.all(uploaded.map(async (asset) => ({
+    ...asset,
+    ...await readAssetMetadata(asset),
+  })));
+  const media = hydrated.map((asset) => assetLibraryStore.registerMedia({
+    media: asset,
+    space,
+    folderId,
+  }).media);
+  if (window.parent !== window && space === "personal") {
+    media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+  }
+  if (!media.length && failures.length) {
+    throw failures[0].reason instanceof Error ? failures[0].reason : new Error("素材上传失败");
+  }
+  return { media, failedCount: failures.length };
+}
+
+async function addFilesToAssetLibrary(files) {
+  if (!isAssetLibraryMutable() || state.librarySection !== "media") return;
+  try {
+    const { media, failedCount } = await persistAssetLibraryFiles(files, {
+      space: state.librarySpace,
+      folderId: state.libraryFolderId,
     });
-    showActionToast(`已上传 ${media.length} 个素材`);
-    media.forEach((asset) => hydrateAssetMetadata(asset, null));
+    showActionToast(failedCount
+      ? `已上传 ${media.length} 个素材，${failedCount} 个失败`
+      : `已上传 ${media.length} 个素材`);
   } catch (error) {
     showActionToast(error?.message || "资产写入失败");
   }
@@ -8990,6 +9502,7 @@ railLibraryBtn?.addEventListener("click", (event) => {
 assetLibraryCloseBtn?.addEventListener("click", closeAssetLibrary);
 assetLibraryResizeHandle?.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) return;
+  closeEntityUseDetail();
   event.preventDefault();
   event.stopPropagation();
   state.action = {
@@ -9014,7 +9527,142 @@ assetLibraryResizeHandle?.addEventListener("keydown", (event) => {
 assetLibraryPanel?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
+assetLibraryGrid?.addEventListener("pointerover", (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
+  if (!card || (event.relatedTarget instanceof Node && card.contains(event.relatedTarget))) return;
+  openEntityUseDetail(card.dataset.libraryEntity, { delay: 130 });
+});
+assetLibraryGrid?.addEventListener("pointerout", (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
+  if (!card || (event.relatedTarget instanceof Node && card.contains(event.relatedTarget))) return;
+  if (event.relatedTarget instanceof Node && entityUseDetailPortal?.contains(event.relatedTarget)) return;
+  scheduleEntityUseDetailClose();
+});
+assetLibraryGrid?.addEventListener("focusin", (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
+  if (card) openEntityUseDetail(card.dataset.libraryEntity);
+});
+assetLibraryGrid?.addEventListener("focusout", (event) => {
+  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
+  if (!card) return;
+  if (event.relatedTarget instanceof Node && (card.contains(event.relatedTarget) || entityUseDetailPortal?.contains(event.relatedTarget))) return;
+  scheduleEntityUseDetailClose();
+});
+assetLibraryGrid?.addEventListener("scroll", () => {
+  if (!state.entityUseDetailId) return;
+  if (state.entityUseDetailPinned) renderEntityUseDetail();
+  else closeEntityUseDetail();
+}, { passive: true });
+entityUseDetailPortal?.addEventListener("pointerenter", () => {
+  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
+  state.entityUseDetailCloseTimer = 0;
+});
+entityUseDetailPortal?.addEventListener("pointerleave", () => scheduleEntityUseDetailClose());
+entityUseDetailPortal?.addEventListener("focusin", () => {
+  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
+  state.entityUseDetailCloseTimer = 0;
+});
+entityUseDetailPortal?.addEventListener("focusout", (event) => {
+  if (!(event.relatedTarget instanceof Node) || !entityUseDetailPortal.contains(event.relatedTarget)) scheduleEntityUseDetailClose();
+});
+entityUseDetailPortal?.addEventListener("pointerdown", (event) => event.stopPropagation());
+entityUseDetailPortal?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (event.target.closest("[data-entity-use-detail-close]")) {
+    closeEntityUseDetail({ restoreFocus: true });
+    return;
+  }
+  const addButton = event.target.closest("[data-entity-use-add-canvas]");
+  if (addButton) addEntityToCanvas(addButton.dataset.entityUseAddCanvas);
+});
+entityUseDetailPortal?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeEntityUseDetail({ restoreFocus: true });
+});
+entityUsePickerPortal?.addEventListener("pointerdown", (event) => event.stopPropagation());
+entityUsePickerPortal?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (event.target.matches("[data-entity-use-picker-backdrop]")) {
+    closeEntityUsePicker();
+    return;
+  }
+  const action = event.target.closest("[data-entity-use-action]")?.dataset.entityUseAction;
+  if (!action) return;
+  if (action === "close-picker" || action === "cancel-picker") {
+    closeEntityUsePicker();
+    return;
+  }
+  if (action === "change-space") {
+    const space = event.target.closest("[data-entity-use-space]")?.dataset.entityUseSpace;
+    state.entityUsePickerSpace = space === "organization" ? "organization" : "personal";
+    renderEntityUsePicker();
+    return;
+  }
+  if (action === "clear-search") {
+    state.entityUsePickerQuery = "";
+    state.entityUsePickerSelectionStart = 0;
+    state.entityUsePickerSelectionEnd = 0;
+    renderEntityUsePicker({ focusSearch: true });
+    return;
+  }
+  if (action === "toggle-entity") {
+    const entityId = event.target.closest("[data-entity-use-toggle]")?.dataset.entityUseToggle;
+    if (!entityId) return;
+    if (state.entityUsePickerSelectedIds.has(entityId)) {
+      state.entityUsePickerSelectedIds.delete(entityId);
+      state.entityUsePickerSelectedSpaces.delete(entityId);
+    } else {
+      state.entityUsePickerSelectedIds.add(entityId);
+      state.entityUsePickerSelectedSpaces.set(entityId, state.entityUsePickerSpace);
+    }
+    renderEntityUsePicker();
+    return;
+  }
+  if (action === "add-entities") addSelectedEntitiesToGenerator();
+});
+entityUsePickerPortal?.addEventListener("input", (event) => {
+  if (!event.target.matches("[data-entity-use-search]")) return;
+  state.entityUsePickerQuery = event.target.value;
+  state.entityUsePickerSelectionStart = event.target.selectionStart;
+  state.entityUsePickerSelectionEnd = event.target.selectionEnd;
+  if (!event.isComposing && !state.entityUsePickerComposing) renderEntityUsePicker({ focusSearch: true });
+});
+entityUsePickerPortal?.addEventListener("compositionstart", (event) => {
+  if (event.target.matches("[data-entity-use-search]")) state.entityUsePickerComposing = true;
+});
+entityUsePickerPortal?.addEventListener("compositionend", (event) => {
+  if (!event.target.matches("[data-entity-use-search]")) return;
+  state.entityUsePickerComposing = false;
+  state.entityUsePickerQuery = event.target.value;
+  state.entityUsePickerSelectionStart = event.target.selectionStart;
+  state.entityUsePickerSelectionEnd = event.target.selectionEnd;
+  renderEntityUsePicker({ focusSearch: true });
+});
+entityUsePickerPortal?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeEntityUsePicker();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = [...entityUsePickerPortal.querySelectorAll("button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])")]
+    .filter((element) => element.getClientRects().length);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
 assetLibrarySearchInput?.addEventListener("input", (event) => {
+  closeEntityUseDetail();
   state.librarySearch = event.currentTarget.value;
   state.librarySearchByContext[getAssetLibraryContextKey()] = state.librarySearch;
   state.librarySelectedIds.clear();
@@ -9168,6 +9816,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
   }
   const menuToggle = event.target.closest("[data-library-menu-toggle]");
   if (menuToggle) {
+    closeEntityUseDetail();
     const card = menuToggle.closest("[data-library-folder], [data-library-media], [data-library-entity]");
     const kind = card?.hasAttribute("data-library-folder")
       ? "folder"
@@ -9184,6 +9833,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
   }
   const itemActionButton = event.target.closest("[data-library-menu-item]");
   if (itemActionButton) {
+    closeEntityUseDetail();
     const itemAction = itemActionButton.dataset.libraryMenuItem;
     const card = itemActionButton.closest("[data-library-folder], [data-library-media], [data-library-entity]");
     const kind = itemActionButton.dataset.libraryItemKind
@@ -9199,13 +9849,22 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     else runAssetLibraryAction(itemAction, [getAssetLibraryItemRef(id, kind)]);
     return;
   }
+  const listRowCard = state.libraryDisplay === "list"
+    && event.detail < 2
+    && !event.target.closest("button, input, textarea, select, a, [contenteditable='true'], [role='menu']")
+    ? event.target.closest(".asset-library-card")
+    : null;
   const folderOpen = event.target.closest("[data-library-folder-open]");
-  if (folderOpen) {
-    selectAssetLibraryDirectory(folderOpen.dataset.libraryFolderOpen);
+  const folderCard = folderOpen?.closest("[data-library-folder]")
+    || (listRowCard?.matches("[data-library-folder]") ? listRowCard : null);
+  if (folderCard) {
+    selectAssetLibraryDirectory(folderCard.dataset.libraryFolder);
     return;
   }
-  const itemCard = event.target.closest("[data-library-media], [data-library-entity]");
-  if (itemCard && event.target.closest("[data-library-preview]")) {
+  const previewButton = event.target.closest("[data-library-preview]");
+  const itemCard = previewButton?.closest("[data-library-media], [data-library-entity]")
+    || (listRowCard?.matches("[data-library-media], [data-library-entity]") ? listRowCard : null);
+  if (itemCard) {
     const kind = itemCard.hasAttribute("data-library-entity") ? "entity" : "media";
     const id = itemCard.dataset.libraryEntity || itemCard.dataset.libraryMedia;
     if (state.librarySelectionMode) toggleAssetLibrarySelection(id);
@@ -9218,19 +9877,6 @@ assetLibraryUploadInput?.addEventListener("change", (event) => {
   event.currentTarget.value = "";
 });
 assetLibraryCreateFolderBtn?.addEventListener("click", createAssetLibraryFolder);
-assetLibraryGrid?.addEventListener("dblclick", (event) => {
-  const renameTarget = event.target.closest("[data-library-rename]");
-  if (!renameTarget) return;
-  const folder = event.target.closest("[data-library-folder]");
-  if (folder) {
-    startAssetLibraryRename("folder", folder.dataset.libraryFolder);
-    return;
-  }
-  const card = event.target.closest("[data-library-media], [data-library-entity]");
-  if (!card) return;
-  const kind = card.hasAttribute("data-library-entity") ? "entity" : "media";
-  startAssetLibraryRename(kind, card.dataset.libraryEntity || card.dataset.libraryMedia);
-});
 assetLibraryGrid?.addEventListener("focusout", (event) => {
   if (event.target.matches("[data-library-rename-input]")) void finishAssetLibraryRename(event.target);
 });

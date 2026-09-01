@@ -13,19 +13,20 @@ const policy = context.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
 const catalog = [
   { id: "image-a", type: "image" },
   { id: "image-b", type: "image" },
-  { id: "video-a", type: "video" },
+  { id: "seedance-video", type: "video", brand: "seedance" },
+  { id: "kling-video", type: "video", brand: "kling" },
 ];
 
 test("generator nodes only expose models matching their creation type", () => {
   const imageNode = { kind: "generator", mode: "image", model: "image-b" };
-  const videoNode = { kind: "generator", mode: "video", model: "video-a" };
+  const videoNode = { kind: "generator", mode: "video", model: "seedance-video" };
   assert.deepEqual(
     policy.getCompatibleModels(catalog, imageNode).map((model) => model.id),
     ["image-a", "image-b"],
   );
   assert.deepEqual(
     policy.getCompatibleModels(catalog, videoNode).map((model) => model.id),
-    ["video-a"],
+    ["seedance-video", "kling-video"],
   );
   assert.equal(policy.canUseModel(catalog, imageNode, catalog[2]), false);
   assert.equal(policy.canUseModel(catalog, videoNode, catalog[0]), false);
@@ -34,12 +35,30 @@ test("generator nodes only expose models matching their creation type", () => {
 test("invalid model ids fall back within the node type and never cross media types", () => {
   const videoNode = { kind: "generator", mode: "video", model: "image-a" };
   const resolved = policy.normalizeModelState(catalog, videoNode);
-  assert.equal(resolved.id, "video-a");
+  assert.equal(resolved.id, "seedance-video");
   assert.equal(videoNode.mode, "video");
-  assert.equal(videoNode.model, "video-a");
+  assert.equal(videoNode.model, "seedance-video");
 
   const unavailableNode = { kind: "generator", mode: "video", model: "image-a" };
   assert.equal(policy.resolveModel(catalog.filter((model) => model.type === "image"), unavailableNode), null);
+});
+
+test("only Seedance generator models can use Entity references", () => {
+  const seedanceNode = { kind: "generator", mode: "video", model: "seedance-video" };
+  const klingNode = { kind: "generator", mode: "video", model: "kling-video" };
+  const imageNode = { kind: "generator", mode: "image", model: "image-a" };
+  const invalidVideoNode = { kind: "generator", mode: "video", model: "missing-video" };
+
+  assert.equal(policy.canUseEntityReferences(catalog, seedanceNode), true);
+  assert.equal(policy.canUseEntityReferences(catalog, klingNode), false);
+  assert.equal(policy.canUseEntityReferences(catalog, imageNode), false);
+  assert.equal(policy.canUseEntityReferences(catalog, invalidVideoNode), true);
+  assert.equal(policy.canUseEntityReferences(catalog.filter((model) => model.type === "image"), invalidVideoNode), false);
+  assert.equal(policy.canUseEntityReferences(
+    [{ id: "seedance-image", type: "image", brand: "seedance" }],
+    { kind: "generator", mode: "image", model: "seedance-image" },
+  ), false);
+  assert.equal(policy.canUseEntityReferences(catalog, { kind: "asset", mode: "video", model: "seedance-video" }), false);
 });
 
 test("runtime model policy never lets legacy fields or results redefine a node creation type", () => {
