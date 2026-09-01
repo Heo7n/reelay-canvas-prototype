@@ -5,6 +5,7 @@
   const LEGACY_SOURCE = "reelay-legacy-canvas";
   const HOST_SOURCE = "reelay-shell";
   const MEDIA_KINDS = new Set(["image", "video", "audio"]);
+  const UPLOAD_TARGETS = new Set(["project", "personal"]);
   const ERROR_CODES = new Set(["invalid", "forbidden", "missing", "network", "unsupported"]);
   const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
@@ -15,6 +16,17 @@
   function isProjectAsset(value) {
     return Boolean(value && typeof value === "object"
       && isNonEmptyString(value.referenceId) && isNonEmptyString(value.assetId)
+      && Number.isInteger(value.assetVersion) && value.assetVersion > 0
+      && MEDIA_KINDS.has(value.mediaKind) && isNonEmptyString(value.displayName, 300)
+      && isNonEmptyString(value.contentType, 120)
+      && Number.isInteger(value.byteSize) && value.byteSize >= 0
+      && /^[a-f\d]{64}$/.test(value.checksumSha256)
+      && isNonEmptyString(value.contentUrl, 2048));
+  }
+
+  function isWorkspaceAsset(value) {
+    return Boolean(value && typeof value === "object"
+      && isNonEmptyString(value.assetId)
       && Number.isInteger(value.assetVersion) && value.assetVersion > 0
       && MEDIA_KINDS.has(value.mediaKind) && isNonEmptyString(value.displayName, 300)
       && isNonEmptyString(value.contentType, 120)
@@ -62,10 +74,11 @@
     async function persistFile(file, metadata = {}) {
       if (!isHosted()) throw commandError("unsupported", "当前画布未连接资产持久化服务");
       const mediaKind = metadata.mediaKind;
+      const target = metadata.target == null ? "project" : String(metadata.target);
       const displayName = String(metadata.displayName || file?.name || "").trim();
       const contentType = String(metadata.contentType || file?.type || "").trim().toLowerCase();
       const byteSize = file?.size;
-      if (!file || !MEDIA_KINDS.has(mediaKind) || !isNonEmptyString(displayName, 300)
+      if (!file || !UPLOAD_TARGETS.has(target) || !MEDIA_KINDS.has(mediaKind) || !isNonEmptyString(displayName, 300)
         || !isNonEmptyString(contentType, 120) || !Number.isInteger(byteSize)
         || byteSize <= 0 || byteSize > MAX_UPLOAD_BYTES) {
         throw commandError("invalid", "文件类型、大小或名称不符合上传要求");
@@ -77,8 +90,8 @@
       if (!requestId || !idempotencyKey || pending.has(requestId)) throw commandError("invalid", "无法创建唯一的上传请求");
       return new Promise((resolve, reject) => {
         const timeoutId = setTimer(() => finish(requestId, commandError("network", "资产上传请求已超时")), requestTimeoutMs);
-        pending.set(requestId, { file, resolve, reject, timeoutId, stage: "grant", uploadId: null });
-        send("canvas:create-media-upload", { requestId, idempotencyKey, mediaKind, displayName, contentType, byteSize, checksumSha256 });
+        pending.set(requestId, { file, resolve, reject, timeoutId, stage: "grant", target, uploadId: null });
+        send("canvas:create-media-upload", { requestId, idempotencyKey, target, mediaKind, displayName, contentType, byteSize, checksumSha256 });
       });
     }
 
@@ -127,8 +140,11 @@
     function acceptUploadResult(message) {
       const operation = pending.get(message.requestId);
       if (message.instanceId !== instanceId || !operation || operation.stage !== "finalize"
-        || message.uploadId !== operation.uploadId || !isProjectAsset(message.projectAsset)) return false;
-      return finish(message.requestId, null, { ...message.projectAsset });
+        || message.uploadId !== operation.uploadId || message.target !== operation.target) return false;
+      const asset = operation.target === "personal" ? message.workspaceAsset : message.projectAsset;
+      const valid = operation.target === "personal" ? isWorkspaceAsset(asset) : isProjectAsset(asset);
+      if (!valid) return false;
+      return finish(message.requestId, null, { ...asset });
     }
 
     function acceptError(message) {

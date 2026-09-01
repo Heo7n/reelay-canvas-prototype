@@ -251,6 +251,25 @@ html[data-theme="light"] .asset-library-panel {
   box-shadow: none;
 }
 
+.asset-library-panel[data-library-space="platform"] .asset-library-section-tabs {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.asset-library-panel[data-library-space="platform"] .asset-library-section-tabs button[hidden] {
+  display: none;
+}
+
+.asset-library-panel[data-library-space="platform"] .asset-library-section-tabs [data-library-section="media"] {
+  background: var(--asset-panel-subtle);
+  color: var(--text);
+  cursor: default;
+}
+
+.asset-library-search-row {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .asset-library-search {
   display: grid;
   width: auto;
@@ -265,6 +284,28 @@ html[data-theme="light"] .asset-library-panel {
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+}
+
+.asset-library-platform-command-anchor {
+  display: none;
+  min-width: 0;
+}
+
+.asset-library-panel[data-library-space="platform"] .asset-library-search-row {
+  display: grid;
+  margin: 0 14px 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.asset-library-panel[data-library-space="platform"] .asset-library-search {
+  width: auto;
+  margin: 0;
+}
+
+.asset-library-panel[data-library-space="platform"] .asset-library-platform-command-anchor {
+  display: block;
 }
 
 .asset-library-search:focus-within {
@@ -340,6 +381,22 @@ html[data-theme="light"] .asset-library-panel {
 .asset-library-directory-shell,
 .asset-library-command-slot {
   min-width: 0;
+}
+
+.asset-library-panel[data-library-section="entity"][data-library-folder-capability="false"] .asset-library-directorybar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.asset-library-panel[data-library-section="entity"][data-library-folder-capability="false"] .asset-library-directory-shell {
+  display: none;
+}
+
+.asset-library-panel[data-library-space="platform"][data-library-folder-capability="false"] .asset-library-directorybar {
+  display: none;
+}
+
+.asset-library-panel[data-library-space="platform"][data-library-folder-capability="false"] .asset-library-directory-shell {
+  display: none;
 }
 
 .asset-library-directory {
@@ -558,6 +615,10 @@ html[data-theme="light"] .asset-library-panel {
   gap: 10px;
 }
 
+.asset-library-commandbar.platform:not(.selection-mode) > .asset-library-command-popover {
+  margin-left: auto;
+}
+
 .asset-library-command-group {
   gap: 0;
   height: 30px;
@@ -704,6 +765,25 @@ html[data-theme="light"] .asset-library-panel {
   white-space: nowrap;
 }
 
+.asset-library-toolbar-menu.batch button:disabled {
+  background: transparent;
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.asset-library-toolbar-menu.batch button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+
+.asset-library-toolbar-menu.batch button small {
+  margin-left: auto;
+  color: inherit;
+  font-size: 9px;
+  font-weight: 600;
+}
+
 .asset-library-toolbar-menu button {
   width: 100%;
   height: 36px;
@@ -806,51 +886,29 @@ html[data-theme="light"] .asset-library-folder-preview {
   background: #ededed;
 }
 
-.asset-library-entity-collage {
+.asset-library-entity-cover {
   display: grid;
   width: 100%;
   height: 100%;
-  background: var(--asset-panel-subtle);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 2px;
-}
-
-.asset-library-entity-collage > span {
-  display: grid;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--asset-panel-preview);
+  background: var(--asset-panel-subtle);
   place-items: center;
 }
 
-.asset-library-entity-collage > span:first-child:last-child,
-.asset-library-entity-collage > span:first-child:nth-last-child(2) {
-  grid-row: 1 / -1;
-}
-
-.asset-library-entity-collage img,
-.asset-library-entity-collage video {
+.asset-library-entity-cover img,
+.asset-library-entity-cover video {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.asset-library-entity-badge {
-  position: absolute;
-  bottom: 7px;
-  left: 7px;
-  display: inline-flex;
-  min-height: 22px;
-  padding: 0 7px;
-  border-radius: 7px;
-  background: rgb(17 18 20 / 72%);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  align-items: center;
-  backdrop-filter: blur(8px);
+.asset-library-entity-cover > svg {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.7;
 }
 
 .asset-library-card-namebar {
@@ -1517,6 +1575,10 @@ html[data-theme="light"] .asset-library-folder-preview {
 
   .asset-library-command-group {
     width: calc(60% - 4px);
+  }
+
+  .asset-library-commandbar.platform:not(.selection-mode) .asset-library-command-group {
+    width: auto;
   }
 
   .asset-library-command-group > button {

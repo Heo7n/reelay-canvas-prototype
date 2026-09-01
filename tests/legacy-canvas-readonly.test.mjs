@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -27,12 +27,16 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-model.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-editor-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-editor-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-editor-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-media-toolbar-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-runtime-store.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-command-executor.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-document-codec.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-persistence-coordinator.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-media-asset-coordinator.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-asset-coordinator.js", root), "utf8"),
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
@@ -83,12 +87,16 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(pointerDispatchController);
   window.eval(assetLibraryModel);
   window.eval(assetLibraryView);
+  window.eval(entityEditorModel);
+  window.eval(entityEditorView);
+  window.eval(entityEditorController);
   window.eval(mediaToolbarView);
   window.eval(runtimeStore);
   window.eval(commandExecutor);
   window.eval(codec);
   window.eval(persistenceCoordinator);
   window.eval(mediaAssetCoordinator);
+  window.eval(entityAssetCoordinator);
   window.eval(app);
 
   const injectionProbe = window.document.createElement("div");
@@ -275,13 +283,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     window.document.querySelector("[data-library-filter-toggle]").getAttribute("aria-expanded"),
     "true",
   );
-  window.document.querySelector("[data-library-selection-toggle]")
-    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
-  const selectionCancel = window.document.querySelector("[data-library-selection-cancel]");
-  assert.ok(selectionCancel);
-  assert.match(selectionCancel.textContent, /取消/);
-  selectionCancel.dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
-  assert.ok(window.document.querySelector("[data-library-selection-toggle]"));
+  assert.equal(window.document.querySelector("[data-library-selection-toggle]"), null);
+  assert.equal(window.document.querySelector("[data-library-selection-cancel]"), null);
   window.document.querySelector("#agentLauncher")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
@@ -480,6 +483,45 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(lineModeWheel.defaultPrevented, true);
   assert.notEqual(stage.style.transform, scaleBeforeControlWheel);
 
+  dispatchHostMessage({
+    source: "reelay-shell",
+    type: "host:init",
+    context: { ...hostContext, writable: true },
+  });
+  dispatchHostMessage({
+    source: "reelay-shell",
+    type: "host:document",
+    protocolVersion: 1,
+    document: { id: "main", projectId: "project-1", schemaVersion: 1, revision: 1, content },
+    writable: true,
+  });
+
+  window.document.querySelector("#railLibraryBtn")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  window.document.querySelector("[data-library-space='platform']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(window.document.querySelector("#assetLibraryMediaTab").textContent, "灵感搜索");
+  assert.equal(window.document.querySelector("#assetLibraryEntityTab").hidden, true);
+  assert.equal(window.document.querySelector("#assetLibraryPanel").dataset.libraryFolderCapability, "false");
+  assert.equal(window.document.querySelector("#assetLibraryDirectoryButton").disabled, true);
+  assert.ok(window.document.querySelectorAll("[data-library-media]").length >= 1);
+  assert.equal(window.document.querySelector("[data-library-upload]"), null);
+  assert.equal(window.document.querySelector("[data-library-menu-toggle]"), null);
+  window.document.querySelector("[data-library-selection-toggle]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  const platformCard = window.document.querySelector("[data-library-media]");
+  platformCard.querySelector("[data-library-preview]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  window.document.querySelector("[data-library-batch-toggle]")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  assert.equal(window.document.querySelector("[data-library-batch-unavailable='save-personal']").disabled, true);
+  const nodesBeforePlatformAdd = window.document.querySelectorAll(".canvas-node").length;
+  window.document.querySelector("[data-library-batch-action='add-canvas']")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
+  assert.equal(window.document.querySelectorAll(".canvas-node").length, nodesBeforePlatformAdd + 1);
+  assert.equal(window.document.querySelector("[data-library-selection-cancel]"), null);
+  window.document.querySelector("#assetLibraryCloseBtn")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   dispatchHostMessage({
     source: "reelay-shell",
     type: "host:init",

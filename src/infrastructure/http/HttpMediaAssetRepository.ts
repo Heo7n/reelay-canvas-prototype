@@ -3,6 +3,7 @@ import type {
   FinalizedMediaAsset,
   MediaAssetRepository,
   MediaUploadGrant,
+  PersonalMediaAsset,
   ProjectMediaAsset,
 } from "../../application/assets/MediaAssetRepository";
 import type { ProjectId } from "../../domain/project/project";
@@ -10,6 +11,7 @@ import type { WorkspaceId } from "../../domain/workspace/workspace";
 import {
   FinalizeMediaUploadResponseDtoSchema,
   MediaUploadIntentResponseDtoSchema,
+  PersonalMediaAssetsResponseDtoSchema,
   ProjectAssetResponseDtoSchema,
   ProjectAssetsResponseDtoSchema,
 } from "./contracts";
@@ -47,6 +49,14 @@ export class HttpMediaAssetRepository implements MediaAssetRepository {
       { method: "PUT", body: JSON.stringify({}) },
     );
     return response.projectAsset;
+  }
+
+  async listPersonalAssets(workspaceId: WorkspaceId): Promise<PersonalMediaAsset[]> {
+    const response = await this.http.read(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/media-assets?scope=personal`,
+      PersonalMediaAssetsResponseDtoSchema,
+    );
+    return response.assets;
   }
 
   async listProjectAssets(projectId: ProjectId): Promise<ProjectMediaAsset[]> {

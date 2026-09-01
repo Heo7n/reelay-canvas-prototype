@@ -2,18 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import type { CanvasDocumentRepository } from "../application/canvases/CanvasDocumentRepository";
-import type { MediaAssetRepository, ProjectMediaAsset } from "../application/assets/MediaAssetRepository";
+import type { EntityRepository, WorkspaceEntity } from "../application/assets/EntityRepository";
+import type { MediaAssetRepository, PersonalMediaAsset, ProjectMediaAsset } from "../application/assets/MediaAssetRepository";
 import { isApplicationError } from "../application/shared/ApplicationError";
 import { routePaths } from "../app/routes";
 import type { CanvasDocument } from "../domain/canvas/canvas-document";
 import {
   hostDocumentMessageSchema,
   hostAssetCommandErrorMessageSchema,
+  hostEntityCommandResultMessageSchema,
   hostFlushMessageSchema,
   hostMediaUploadGrantMessageSchema,
   hostMediaUploadResultMessageSchema,
   hostMessageSchema,
   hostProjectAssetsMessageSchema,
+  hostWorkspaceAssetCatalogMessageSchema,
   hostSaveErrorMessageSchema,
   hostSaveResultMessageSchema,
   legacyCanvasContextSchema,
@@ -24,6 +27,7 @@ import {
 
 interface CanvasHostProps {
   context: LegacyCanvasContext;
+  entityRepository?: EntityRepository;
   onCreateProject?: () => void;
   onLogout?: () => void;
   onOpenAccountSettings?: (section: LegacyAccountSection) => void;
@@ -43,7 +47,31 @@ type NavigationRequest =
   | { kind: "project"; projectId: string }
   | { kind: "create-project" };
 
-export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onLogout, onOpenAccountSettings, repository }: CanvasHostProps) {
+function bridgeWorkspaceAsset(asset: PersonalMediaAsset) {
+  return {
+    assetId: asset.id,
+    assetVersion: asset.objectVersion,
+    mediaKind: asset.mediaKind,
+    displayName: asset.displayName,
+    contentType: asset.contentType,
+    byteSize: asset.byteSize,
+    checksumSha256: asset.checksumSha256,
+    contentUrl: asset.contentUrl,
+  };
+}
+
+function bridgeWorkspaceEntity(entity: WorkspaceEntity) {
+  return {
+    id: entity.id,
+    name: entity.name,
+    description: entity.description,
+    mediaRefs: entity.mediaRefs,
+    coverAssetId: entity.coverAssetId,
+    version: entity.version,
+  };
+}
+
+export function CanvasHost({ context, entityRepository, mediaAssetRepository, onCreateProject, onLogout, onOpenAccountSettings, repository }: CanvasHostProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -58,7 +86,11 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
   const authoritativeRefreshInFlightRef = useRef(false);
   const pendingNavigationRef = useRef<NavigationRequest | null>(null);
   const navigationTimeoutRef = useRef<number | null>(null);
-  const pendingAssetUploadsRef = useRef(new Map<string, { instanceId: string; uploadId: string }>());
+  const pendingAssetUploadsRef = useRef(new Map<string, {
+    instanceId: string;
+    uploadId: string;
+    target: "project" | "personal";
+  }>());
   const pendingAssetCommandIdsRef = useRef(new Set<string>());
   const [readyGeneration, setReadyGeneration] = useState(0);
   const [sameScopeInFlightSaveCount, setSameScopeInFlightSaveCount] = useState(0);
@@ -69,6 +101,10 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
   const [projectAssets, setProjectAssets] = useState<ProjectMediaAsset[]>([]);
   const [projectAssetsLoaded, setProjectAssetsLoaded] = useState(false);
   const [assetPersistenceAvailable, setAssetPersistenceAvailable] = useState(false);
+  const [workspaceAssets, setWorkspaceAssets] = useState<PersonalMediaAsset[]>([]);
+  const [workspaceEntities, setWorkspaceEntities] = useState<WorkspaceEntity[]>([]);
+  const [workspaceCatalogLoaded, setWorkspaceCatalogLoaded] = useState(false);
+  const [entityPersistenceAvailable, setEntityPersistenceAvailable] = useState(false);
   const safeContext = useMemo(() => legacyCanvasContextSchema.parse(context), [context]);
   const projectAuthorizationKey = JSON.stringify((safeContext.projects ?? []).map((project) => project.id));
   const authorizedProjectIds = useMemo(
@@ -161,6 +197,9 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
           ...(safeContext.capabilities?.assetPersistence === undefined
             ? {}
             : { assetPersistence: assetPersistenceAvailable }),
+          ...(safeContext.capabilities?.entityPersistence === undefined
+            ? {}
+            : { entityPersistence: entityPersistenceAvailable }),
         },
       },
     });
@@ -182,10 +221,21 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
         projectAssets,
       }));
     }
+    if (safeContext.capabilities?.entityPersistence !== undefined && workspaceCatalogLoaded) {
+      postToCanvas(hostWorkspaceAssetCatalogMessageSchema.parse({
+        source: "reelay-shell",
+        type: "host:workspace-asset-catalog",
+        protocolVersion: 1,
+        requestId: crypto.randomUUID(),
+        instanceId,
+        assets: workspaceAssets.map(bridgeWorkspaceAsset),
+        entities: workspaceEntities.map(bridgeWorkspaceEntity),
+      }));
+    }
     setPersistenceStatus(savingRef.current > 0
       ? "saving"
       : (dirtyRef.current ? "dirty" : "saved"));
-  }, [assetPersistenceAvailable, documentState, postToCanvas, projectAssets, safeContext]);
+  }, [assetPersistenceAvailable, documentState, entityPersistenceAvailable, postToCanvas, projectAssets, safeContext, workspaceAssets, workspaceCatalogLoaded, workspaceEntities]);
 
   const refreshAuthoritativeDocument = useCallback((): void => {
     if (authoritativeRefreshInFlightRef.current) return;
@@ -241,6 +291,10 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
     setProjectAssets([]);
     setProjectAssetsLoaded(false);
     setAssetPersistenceAvailable(false);
+    setWorkspaceAssets([]);
+    setWorkspaceEntities([]);
+    setWorkspaceCatalogLoaded(false);
+    setEntityPersistenceAvailable(false);
     setPersistenceStatus("loading");
     void repository.getCanvasDocument(safeContext.projectId, safeContext.canvasId).then(
       (document) => {
@@ -278,11 +332,39 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
     } else {
       setProjectAssetsLoaded(true);
     }
+    if (
+      safeContext.capabilities?.assetPersistence
+      && safeContext.capabilities?.entityPersistence
+      && mediaAssetRepository
+      && entityRepository
+    ) {
+      void Promise.all([
+        mediaAssetRepository.listPersonalAssets(safeContext.workspaceId),
+        entityRepository.listPersonal(safeContext.workspaceId),
+      ]).then(
+        ([assets, entities]) => {
+          if (!active) return;
+          setWorkspaceAssets(assets);
+          setWorkspaceEntities(entities);
+          setEntityPersistenceAvailable(true);
+          setWorkspaceCatalogLoaded(true);
+        },
+        () => {
+          if (!active) return;
+          setWorkspaceAssets([]);
+          setWorkspaceEntities([]);
+          setEntityPersistenceAvailable(false);
+          setWorkspaceCatalogLoaded(true);
+        },
+      );
+    } else {
+      setWorkspaceCatalogLoaded(true);
+    }
     return () => {
       active = false;
       if (navigationTimeoutRef.current !== null) window.clearTimeout(navigationTimeoutRef.current);
     };
-  }, [loadAttempt, mediaAssetRepository, repository, safeContext.canvasId, safeContext.projectId]);
+  }, [entityRepository, loadAttempt, mediaAssetRepository, repository, safeContext.canvasId, safeContext.capabilities?.assetPersistence, safeContext.capabilities?.entityPersistence, safeContext.projectId, safeContext.workspaceId]);
 
   const retryDocumentLoad = useCallback((): void => {
     setDocumentState({ status: "loading" });
@@ -298,13 +380,14 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
       authoritativeDocumentNeedsRefreshRef.current ||
       documentState.status !== "ready" ||
       !projectAssetsLoaded ||
+      !workspaceCatalogLoaded ||
       initializedReadyGenerationRef.current === readyGeneration
     ) return;
     const instanceId = activeCanvasInstanceIdRef.current;
     if (!instanceId) return;
     initializedReadyGenerationRef.current = readyGeneration;
     sendInit(instanceId);
-  }, [documentState.status, projectAssetsLoaded, readyGeneration, refreshingAuthoritativeDocument, sameScopeInFlightSaveCount, sendInit]);
+  }, [documentState.status, projectAssetsLoaded, readyGeneration, refreshingAuthoritativeDocument, sameScopeInFlightSaveCount, sendInit, workspaceCatalogLoaded]);
 
   useEffect(() => {
     const flushIfNeeded = (): void => {
@@ -346,7 +429,7 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
     const sendAssetError = (
       requestId: string,
       instanceId: string,
-      code: "invalid" | "forbidden" | "missing" | "network" | "unsupported",
+      code: "invalid" | "forbidden" | "missing" | "conflict" | "network" | "unsupported",
     ): void => {
       postToCanvas(hostAssetCommandErrorMessageSchema.parse({
         source: "reelay-shell",
@@ -357,9 +440,13 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
         code,
       }));
     };
-    const assetErrorCode = (error: unknown): "forbidden" | "missing" | "network" => {
+    const assetErrorCode = (error: unknown): "invalid" | "forbidden" | "missing" | "conflict" | "network" => {
       if (isApplicationError(error, "forbidden")) return "forbidden";
       if (isApplicationError(error, "not_found")) return "missing";
+      if (isApplicationError(error, "conflict")) return "conflict";
+      if (isApplicationError(error, "request_failed") && error.serviceCode?.startsWith("invalid_")) {
+        return "invalid";
+      }
       return "network";
     };
 
@@ -426,6 +513,7 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
             pendingAssetUploadsRef.current.set(message.requestId, {
               instanceId: message.instanceId,
               uploadId: grant.uploadIntent.id,
+              target: message.target,
             });
             postToCanvas(hostMediaUploadGrantMessageSchema.parse({
               source: "reelay-shell",
@@ -463,28 +551,56 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
         pendingAssetCommandIdsRef.current.add(message.requestId);
         const sourceFrame = event.source;
         void mediaAssetRepository.finalizeUpload(safeContext.workspaceId, pending.uploadId)
-          .then((asset) => mediaAssetRepository.attachToProject(safeContext.projectId, asset.id))
+          .then(async (finalizedAsset) => {
+            const asset: PersonalMediaAsset = {
+              ...finalizedAsset,
+              contentUrl: `/api/workspaces/${encodeURIComponent(finalizedAsset.workspaceId)}/media-assets/${encodeURIComponent(finalizedAsset.id)}/content`,
+            };
+            const projectAsset = pending.target === "project"
+              ? await mediaAssetRepository.attachToProject(safeContext.projectId, asset.id)
+              : null;
+            return { asset, projectAsset };
+          })
           .then(
-            (projectAsset) => {
+            ({ asset, projectAsset }) => {
               pendingAssetCommandIdsRef.current.delete(message.requestId);
               pendingAssetUploadsRef.current.delete(message.requestId);
               const stillActive = active
                 && sourceFrame === frameRef.current?.contentWindow
                 && message.instanceId === activeCanvasInstanceIdRef.current;
               if (!stillActive) return;
-              setProjectAssets((current) => [
-                ...current.filter((asset) => asset.referenceId !== projectAsset.referenceId),
-                projectAsset,
+              if (projectAsset) {
+                setProjectAssets((current) => [
+                  ...current.filter((candidate) => candidate.referenceId !== projectAsset.referenceId),
+                  projectAsset,
+                ]);
+              }
+              setWorkspaceAssets((current) => [
+                ...current.filter((candidate) => candidate.id !== asset.id),
+                asset,
               ]);
-              postToCanvas(hostMediaUploadResultMessageSchema.parse({
-                source: "reelay-shell",
-                type: "host:media-upload-result",
-                protocolVersion: 1,
-                requestId: message.requestId,
-                instanceId: message.instanceId,
-                uploadId: message.uploadId,
-                projectAsset,
-              }));
+              const result = projectAsset
+                ? {
+                    source: "reelay-shell" as const,
+                    type: "host:media-upload-result" as const,
+                    protocolVersion: 1 as const,
+                    requestId: message.requestId,
+                    instanceId: message.instanceId,
+                    uploadId: message.uploadId,
+                    target: "project" as const,
+                    projectAsset,
+                  }
+                : {
+                    source: "reelay-shell" as const,
+                    type: "host:media-upload-result" as const,
+                    protocolVersion: 1 as const,
+                    requestId: message.requestId,
+                    instanceId: message.instanceId,
+                    uploadId: message.uploadId,
+                    target: "personal" as const,
+                    workspaceAsset: bridgeWorkspaceAsset(asset),
+                  };
+              postToCanvas(hostMediaUploadResultMessageSchema.parse(result));
             },
             (error: unknown) => {
               pendingAssetCommandIdsRef.current.delete(message.requestId);
@@ -496,6 +612,70 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
               ) sendAssetError(message.requestId, message.instanceId, assetErrorCode(error));
             },
           );
+        return;
+      }
+      if (message.type === "canvas:create-entity" || message.type === "canvas:update-entity") {
+        if (!entityPersistenceAvailable || !entityRepository) {
+          sendAssetError(message.requestId, message.instanceId, "unsupported");
+          return;
+        }
+        if (!safeContext.writable) {
+          sendAssetError(message.requestId, message.instanceId, "forbidden");
+          return;
+        }
+        if (pendingAssetCommandIdsRef.current.has(message.requestId)) {
+          sendAssetError(message.requestId, message.instanceId, "invalid");
+          return;
+        }
+        pendingAssetCommandIdsRef.current.add(message.requestId);
+        const sourceFrame = event.source;
+        const operation = message.type === "canvas:create-entity"
+          ? entityRepository.create({
+              workspaceId: safeContext.workspaceId,
+              idempotencyKey: message.idempotencyKey,
+              name: message.name,
+              description: message.description,
+              assetIds: message.assetIds,
+              coverAssetId: message.coverAssetId,
+            })
+          : entityRepository.update({
+              workspaceId: safeContext.workspaceId,
+              entityId: message.entityId,
+              expectedVersion: message.expectedVersion,
+              name: message.name,
+              description: message.description,
+              assetIds: message.assetIds,
+              coverAssetId: message.coverAssetId,
+            });
+        void operation.then(
+          (entity) => {
+            pendingAssetCommandIdsRef.current.delete(message.requestId);
+            const stillActive = active
+              && sourceFrame === frameRef.current?.contentWindow
+              && message.instanceId === activeCanvasInstanceIdRef.current;
+            if (!stillActive) return;
+            setWorkspaceEntities((current) => [
+              ...current.filter((candidate) => candidate.id !== entity.id),
+              entity,
+            ]);
+            postToCanvas(hostEntityCommandResultMessageSchema.parse({
+              source: "reelay-shell",
+              type: "host:entity-command-result",
+              protocolVersion: 1,
+              requestId: message.requestId,
+              instanceId: message.instanceId,
+              entity: bridgeWorkspaceEntity(entity),
+            }));
+          },
+          (error: unknown) => {
+            pendingAssetCommandIdsRef.current.delete(message.requestId);
+            if (
+              active
+              && sourceFrame === frameRef.current?.contentWindow
+              && message.instanceId === activeCanvasInstanceIdRef.current
+            ) sendAssetError(message.requestId, message.instanceId, assetErrorCode(error));
+          },
+        );
         return;
       }
       if (message.type === "canvas:dirty") {
@@ -627,7 +807,7 @@ export function CanvasHost({ context, mediaAssetRepository, onCreateProject, onL
       active = false;
       window.removeEventListener("message", handleMessage);
     };
-  }, [assetPersistenceAvailable, authorizedProjectIds, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.projectId, safeContext.workspaceId, safeContext.writable]);
+  }, [assetPersistenceAvailable, authorizedProjectIds, entityPersistenceAvailable, entityRepository, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.projectId, safeContext.workspaceId, safeContext.writable]);
 
   return (
     <section

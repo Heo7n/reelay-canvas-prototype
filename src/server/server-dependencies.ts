@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import type { CollaborationStore } from "./application/CollaborationStore";
+import type { EntityStore } from "./application/EntityStore";
 import type { ObjectStore } from "./application/ObjectStore";
 import type { ProjectAssetReferenceStore } from "./application/ProjectAssetReferenceStore";
 import type { WorkspaceMediaAssetStore } from "./application/WorkspaceMediaAssetStore";
@@ -10,9 +11,11 @@ import { FileSystemObjectStore } from "./infrastructure/FileSystemObjectStore";
 import { InMemoryCollaborationStore } from "./infrastructure/InMemoryCollaborationStore";
 import { PostgresAssetStore } from "./infrastructure/PostgresAssetStore";
 import { PostgresCollaborationStore } from "./infrastructure/PostgresCollaborationStore";
+import { PostgresEntityStore } from "./infrastructure/PostgresEntityStore";
 
 export interface ServerDependencies {
   assetStore?: WorkspaceMediaAssetStore & ProjectAssetReferenceStore;
+  entityStore?: EntityStore;
   objectStore?: ObjectStore;
   store: CollaborationStore;
 }
@@ -32,6 +35,7 @@ export function createServerDependencies(environment: NodeJS.ProcessEnv = proces
     return {
       store: new PostgresCollaborationStore(pool),
       assetStore: new PostgresAssetStore(pool),
+      entityStore: new PostgresEntityStore(pool),
       objectStore: new FileSystemObjectStore(objectStoreRoot),
     };
   }

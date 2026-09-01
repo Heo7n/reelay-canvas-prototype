@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { EntityRepository } from "../../application/assets/EntityRepository";
 import type { CanvasDocumentRepository } from "../../application/canvases/CanvasDocumentRepository";
 import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
 import { LegacyCanvasRoute } from "./LegacyCanvasRoute";
@@ -42,7 +43,12 @@ vi.mock("../../shared/theme/theme", () => ({ readTheme: () => "light" }));
 vi.mock("../../legacy-canvas/CanvasHost", () => ({
   CanvasHost: ({ context, onCreateProject, onOpenAccountSettings }: {
     context: {
-      capabilities?: { accountSections?: boolean; projectSwitcher?: boolean; assetPersistence?: boolean };
+      capabilities?: {
+        accountSections?: boolean;
+        projectSwitcher?: boolean;
+        assetPersistence?: boolean;
+        entityPersistence?: boolean;
+      };
       projects?: Array<{ id: string; name: string; coverUrl: string | null }>;
     };
     onCreateProject?: () => void;
@@ -57,6 +63,9 @@ vi.mock("../../legacy-canvas/CanvasHost", () => ({
       </output>
       <output data-testid="asset-persistence-capability">
         {String(context.capabilities?.assetPersistence === true)}
+      </output>
+      <output data-testid="entity-persistence-capability">
+        {String(context.capabilities?.entityPersistence === true)}
       </output>
       <output data-testid="project-options">
         {context.projects?.map((project) => project.name).join(",")}
@@ -84,11 +93,21 @@ describe("LegacyCanvasRoute", () => {
       save: vi.fn(),
     } as unknown as CanvasDocumentRepository;
     const mediaAssetRepository = {
+      listPersonalAssets: vi.fn(async () => []),
       listProjectAssets: vi.fn(async () => []),
     } as unknown as MediaAssetRepository;
+    const entityRepository = {
+      listPersonal: vi.fn(async () => []),
+    } as unknown as EntityRepository;
     const router = createMemoryRouter([{
       path: "/w/:workspaceId/projects/:projectId/canvases/:canvasId",
-      element: <LegacyCanvasRoute canvasDocumentRepository={repository} mediaAssetRepository={mediaAssetRepository} />,
+      element: (
+        <LegacyCanvasRoute
+          canvasDocumentRepository={repository}
+          entityRepository={entityRepository}
+          mediaAssetRepository={mediaAssetRepository}
+        />
+      ),
     }], {
       initialEntries: ["/w/workspace-1/projects/project-1/canvases/main"],
     });
@@ -97,6 +116,7 @@ describe("LegacyCanvasRoute", () => {
     expect(screen.getByTestId("account-sections-capability")).toHaveTextContent("true");
     expect(screen.getByTestId("project-switcher-capability")).toHaveTextContent("true");
     expect(screen.getByTestId("asset-persistence-capability")).toHaveTextContent("true");
+    expect(screen.getByTestId("entity-persistence-capability")).toHaveTextContent("true");
     expect(screen.getByTestId("project-options")).toHaveTextContent("品牌故事");
     expect(screen.getByTestId("project-create-handler")).toHaveTextContent("function");
 

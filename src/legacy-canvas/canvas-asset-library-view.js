@@ -24,6 +24,14 @@
     { id: "delete", icon: "trash-2", label: "删除", danger: true },
   ]);
 
+  const ENTITY_ACTIONS = Object.freeze([
+    { id: "edit", icon: "pencil-line", label: "编辑" },
+    { id: "rename", icon: "pencil", label: "重命名" },
+    { id: "move", icon: "folder-input", label: "移动" },
+    { id: "share-organization", icon: "users", label: "复制到组织空间", personalOnly: true },
+    { id: "delete", icon: "trash-2", label: "删除", danger: true },
+  ]);
+
   const FOLDER_ACTIONS = Object.freeze([
     { id: "rename", icon: "pencil", label: "重命名" },
     { id: "move", icon: "folder-input", label: "移动" },
@@ -36,6 +44,11 @@
     { id: "move", label: "批量移动" },
     { id: "share-organization", label: "复制到组织空间", personalOnly: true },
     { id: "delete", label: "批量删除", danger: true },
+  ]);
+
+  const PLATFORM_BATCH_ACTIONS = Object.freeze([
+    { id: "add-canvas", label: "添加到画布" },
+    { id: "save-personal", label: "保存到素材" },
   ]);
 
   function escapeHtml(value) {
@@ -81,8 +94,21 @@
     return Boolean(mutable) && space !== "platform";
   }
 
-  function actionsForSpace(actions, space) {
-    return actions.filter((action) => !action.personalOnly || space === "personal");
+  function normalizeAllowedActions(value) {
+    if (value == null) return null;
+    const source = Array.isArray(value)
+      ? value
+      : typeof value !== "string" && typeof value?.[Symbol.iterator] === "function"
+        ? [...value]
+        : [];
+    return new Set(Array.from(source, (action) => String(action || "").trim()).filter(Boolean));
+  }
+
+  function actionsForSpace(actions, space, allowedActions = null) {
+    const allowed = normalizeAllowedActions(allowedActions);
+    return actions.filter((action) =>
+      (!action.personalOnly || space === "personal") && (!allowed || allowed.has(action.id)),
+    );
   }
 
   function renderFilterMenu(activeFilter) {
@@ -97,16 +123,33 @@
     `;
   }
 
-  function renderBatchMenu(space, reviewableSelection) {
-    const actions = actionsForSpace(BATCH_ACTIONS, space)
-      .filter((action) => action.id !== "review" || reviewableSelection);
+  function getBatchActions(space, reviewableSelection, section, allowedActions = null) {
+    const actions = space === "platform" ? PLATFORM_BATCH_ACTIONS : BATCH_ACTIONS;
+    return actionsForSpace(actions, space, allowedActions)
+      .filter((action) => action.id !== "review" || (section === "media" && reviewableSelection));
+  }
+
+  function isBatchActionAvailable(action, space, options = {}) {
+    if (space === "platform" && action.id === "save-personal") {
+      return options.canImportPlatformAssets === true;
+    }
+    return true;
+  }
+
+  function renderBatchMenu(actions, space, options = {}) {
     return `
       <div class="asset-library-toolbar-menu batch" role="menu" aria-label="批量操作">
-        ${actions.map((action) => `
-          <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem" data-library-batch-action="${action.id}">
-            <span>${action.label}</span>
-          </button>
-        `).join("")}
+        ${actions.map((action) => {
+          const available = isBatchActionAvailable(action, space, options);
+          return `
+            <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem"${available
+              ? ` data-library-batch-action="${action.id}"`
+              : ` disabled aria-disabled="true" aria-label="${action.label}，暂未接入" title="暂未接入" data-library-batch-unavailable="${action.id}"`}>
+              <span>${action.label}</span>
+              ${available ? "" : '<small aria-hidden="true">暂未接入</small>'}
+            </button>
+          `;
+        }).join("")}
       </div>
     `;
   }
@@ -122,10 +165,11 @@
   }
 
   function renderCommandBar(options = {}) {
-    const section = normalizeSection(options.section);
     const space = normalizeSpace(options.space);
+    const section = space === "platform" ? "media" : normalizeSection(options.section);
     const mutable = canMutate(options.mutable, space);
-    const selectionMode = mutable && Boolean(options.selectionMode);
+    const canCreateEntity = mutable && options.canCreateEntity !== false;
+    const canUploadMedia = mutable && options.canUploadMedia !== false;
     const selectedCount = Number.isFinite(Number(options.selectedCount))
       ? Math.max(0, Math.floor(Number(options.selectedCount)))
       : 0;
@@ -133,6 +177,11 @@
     const display = normalizeDisplay(options.display);
     const requestedMenu = normalizeMenu(options.menu);
     const reviewableSelection = options.reviewableSelection !== false;
+    const batchActions = getBatchActions(space, reviewableSelection, section, options.allowedBatchActions);
+    const hasBatchActions = batchActions.length > 0;
+    const hasExecutableBatchActions = batchActions.some((action) => isBatchActionAvailable(action, space, options));
+    const selectionEnabled = hasBatchActions && hasExecutableBatchActions && (mutable || space === "platform");
+    const selectionMode = selectionEnabled && Boolean(options.selectionMode);
     const hasSelection = selectedCount > 0;
     const menu = selectionMode && hasSelection && requestedMenu === "batch"
       ? "batch"
@@ -140,38 +189,50 @@
         ? "filter"
         : "";
 
-    const leadingCommand = !mutable
+    const leadingCommand = selectionMode
       ? `
-        <button class="asset-library-readonly-command" type="button" disabled aria-disabled="true">
-          ${icon("eye")}
-          <span>仅可查看</span>
-        </button>
-      `
-      : selectionMode
-        ? `
           <div class="asset-library-command-popover">
             <button class="asset-library-primary-command asset-library-batch-command" type="button" aria-haspopup="menu" aria-expanded="${menu === "batch"}" aria-label="${hasSelection ? `操作，已选 ${selectedCount} 项` : "操作，尚未选择资产"}" data-library-batch-toggle="true"${hasSelection ? "" : ' disabled aria-disabled="true"'}>
               ${icon("list-checks")}
               <span>操作</span>
             </button>
-            ${menu === "batch" ? renderBatchMenu(space, reviewableSelection) : ""}
+            ${menu === "batch" ? renderBatchMenu(batchActions, space, options) : ""}
           </div>
         `
-        : section === "entity"
+      : space === "platform"
+        ? ""
+        : !mutable
           ? `
-            <button class="asset-library-primary-command" type="button" data-library-create-entity="true">
-              ${icon("user-round-plus")}
-              <span>创建主体</span>
+            <button class="asset-library-readonly-command" type="button" disabled aria-disabled="true">
+              ${icon("eye")}
+              <span>仅可查看</span>
             </button>
           `
-          : `
+        : section === "entity"
+          ? canCreateEntity ? `
+            <button class="asset-library-primary-command" type="button" data-library-create-entity="true">
+              ${icon("plus")}
+              <span>新建主体</span>
+            </button>
+          ` : `
+            <button class="asset-library-readonly-command" type="button" disabled aria-disabled="true" title="当前项目暂不支持新建主体">
+              ${icon("lock-keyhole")}
+              <span>暂不可新建</span>
+            </button>
+          `
+          : canUploadMedia ? `
             <button class="asset-library-primary-command" type="button" data-library-upload="true">
               ${icon("upload")}
               <span>上传</span>
             </button>
+          ` : `
+            <button class="asset-library-readonly-command" type="button" disabled aria-disabled="true" title="当前项目暂不支持上传素材">
+              ${icon("lock-keyhole")}
+              <span>暂不可上传</span>
+            </button>
           `;
 
-    const selectionControl = mutable && !selectionMode
+    const selectionControl = selectionEnabled && !selectionMode
       ? `
         <button type="button" title="多选" aria-label="进入多选" aria-pressed="false" data-library-selection-toggle="true">
           ${icon("square-check-big")}
@@ -199,7 +260,7 @@
       : "";
 
     return `
-      <div class="${classNames("asset-library-commandbar", selectionMode && "selection-mode", !mutable && "readonly")}" data-library-commandbar="${section}" data-library-space="${space}" data-library-active-filter="${filter}" data-library-active-display="${display}" data-library-open-menu="${menu}" data-library-selection-mode="${selectionMode}">
+      <div class="${classNames("asset-library-commandbar", space === "platform" && "platform", selectionMode && "selection-mode", !mutable && "readonly")}" data-library-commandbar="${section}" data-library-space="${space}" data-library-active-filter="${filter}" data-library-active-display="${display}" data-library-open-menu="${menu}" data-library-selection-enabled="${selectionEnabled}" data-library-selection-mode="${selectionMode}">
         ${leadingCommand}
         <div class="asset-library-command-popover">
           <div class="asset-library-command-group">
@@ -406,12 +467,19 @@
       : icon("image");
   }
 
-  function renderItemMenu({ id, kind, space, mediaKind = null }) {
+  function getItemActions({ kind, space, mediaKind = null, allowedActions = null }) {
+    return actionsForSpace(
+      kind === "folder" ? FOLDER_ACTIONS : kind === "entity" ? ENTITY_ACTIONS : ITEM_ACTIONS,
+      space,
+      allowedActions,
+    ).filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio");
+  }
+
+  function renderItemMenu({ id, kind, space, mediaKind = null, allowedActions = null }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
     const itemLabel = safeKind === "folder" ? "文件夹" : safeKind === "entity" ? "主体" : "素材";
-    const actions = actionsForSpace(kind === "folder" ? FOLDER_ACTIONS : ITEM_ACTIONS, space)
-      .filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio");
+    const actions = getItemActions({ kind, space, mediaKind, allowedActions });
     return `
       <div class="asset-library-item-menu" role="menu" aria-label="${itemLabel}操作">
         ${actions.map((action) => `
@@ -424,9 +492,10 @@
     `;
   }
 
-  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, space, mediaKind = null }) {
+  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, space, mediaKind = null, allowedActions = null }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
+    const hasMenuActions = getItemActions({ kind, space, mediaKind, allowedActions }).length > 0;
     return `
       ${selectionMode
         ? `
@@ -435,12 +504,12 @@
           </button>
         `
         : ""}
-      ${mutable
+      ${mutable && hasMenuActions
         ? `
           <button class="asset-library-more-button" type="button" aria-label="更多操作" aria-haspopup="menu" aria-expanded="${menuOpen}" data-library-menu-toggle="${safeId}" data-library-item-kind="${safeKind}">
             ${icon("ellipsis-vertical")}
           </button>
-          ${menuOpen ? renderItemMenu({ id, kind, space, mediaKind }) : ""}
+          ${menuOpen ? renderItemMenu({ id, kind, space, mediaKind, allowedActions }) : ""}
         `
         : ""}
     `;
@@ -452,8 +521,9 @@
     const name = options.name ?? media.name ?? "未命名素材";
     const space = resolveSpace(options.space, media);
     const mutable = canMutate(options.mutable, space);
-    const selectionMode = mutable && Boolean(options.selectionMode);
-    const selected = mutable && Boolean(options.selected);
+    const selectionEnabled = mutable || space === "platform";
+    const selectionMode = selectionEnabled && Boolean(options.selectionMode);
+    const selected = selectionEnabled && Boolean(options.selected);
     const menuOpen = mutable && Boolean(options.menuOpen);
     const renaming = mutable && Boolean(options.renaming);
     const safeId = escapeHtml(id);
@@ -477,35 +547,41 @@
     const name = options.name ?? entity.name ?? "未命名主体";
     const space = resolveSpace(options.space, entity);
     const mutable = canMutate(options.mutable, space);
+    const entityActions = getItemActions({ kind: "entity", space, allowedActions: options.allowedActions });
+    const canRename = mutable && entityActions.some((action) => action.id === "rename");
     const selectionMode = mutable && Boolean(options.selectionMode);
     const selected = mutable && Boolean(options.selected);
-    const menuOpen = mutable && Boolean(options.menuOpen);
-    const renaming = mutable && Boolean(options.renaming);
-    const previews = (Array.isArray(options.mediaPreviews) ? options.mediaPreviews : []).slice(0, 4);
-    const mediaCount = options.mediaCount ?? previews.length;
+    const menuOpen = mutable && entityActions.length > 0 && Boolean(options.menuOpen);
+    const renaming = canRename && Boolean(options.renaming);
+    const previews = (Array.isArray(options.mediaPreviews) ? options.mediaPreviews : [])
+      .filter((preview) => preview && typeof preview === "object");
+    const explicitCover = options.coverPreview &&
+      typeof options.coverPreview === "object" &&
+      normalizeMediaKind(options.coverPreview) !== "audio"
+      ? options.coverPreview
+      : null;
+    const coverPreview = explicitCover || previews.find((preview) => normalizeMediaKind(preview) !== "audio") || null;
     const safeId = escapeHtml(id);
     const safeName = escapeHtml(name);
-    const safeCount = escapeHtml(mediaCount);
-    const collage = previews.length
-      ? previews.map((preview) => `<span>${renderStructuredPreview(preview)}</span>`).join("")
-      : `<span>${icon("user-round")}</span>`;
+    const cover = coverPreview ? renderStructuredPreview(coverPreview) : icon("user-round");
 
     return `
       <article class="${classNames("asset-library-card", "asset-library-entity-card", selected && "selected", selectionMode && "selection-mode", menuOpen && "menu-open", renaming && "renaming", !mutable && "readonly")}" data-library-entity="${safeId}" data-library-space="${space}">
-        <button class="asset-library-card-preview" type="button" aria-label="预览主体 ${safeName}" data-library-preview="${safeId}" data-library-item-kind="entity">
-          <span class="asset-library-entity-collage">${collage}</span>
-          <span class="asset-library-entity-badge">${safeCount} 个素材</span>
+        <button class="asset-library-card-preview" type="button" aria-label="打开主体 ${safeName}" data-library-preview="${safeId}" data-library-item-kind="entity">
+          <span class="asset-library-entity-cover" data-library-entity-cover="${coverPreview ? "media" : "placeholder"}">${cover}</span>
         </button>
-        ${renderNameBar({ id, kind: "entity", name, meta: options.meta ?? "", renaming, mutable })}
-        ${renderCardControls({ id, kind: "entity", selected, selectionMode, menuOpen, mutable, space })}
+        ${renderNameBar({ id, kind: "entity", name, meta: "", renaming, mutable: canRename })}
+        ${renderCardControls({ id, kind: "entity", selected, selectionMode, menuOpen, mutable, space, allowedActions: options.allowedActions })}
       </article>
     `;
   }
 
   function renderEmptyState(options = {}) {
-    const section = normalizeSection(options.section);
     const space = normalizeSpace(options.space);
+    const section = space === "platform" ? "media" : normalizeSection(options.section);
     const mutable = canMutate(options.mutable, space);
+    const canCreateEntity = mutable && options.canCreateEntity !== false;
+    const canUploadMedia = mutable && options.canUploadMedia !== false;
     const hasQuery = Boolean(options.hasQuery);
 
     let iconName;
@@ -520,16 +596,16 @@
       action = `<button type="button" data-library-clear-query="true" data-library-clear-filter="true">清除筛选</button>`;
     } else if (section === "entity") {
       iconName = "user-round";
-      title = mutable ? "还没有主体" : "暂无可用主体";
-      description = mutable ? "创建主体，把相关图片、视频和音频整理在一起。" : "这个空间暂时没有可用主体。";
-      action = mutable
-        ? `<button type="button" data-library-create-entity="true">创建主体</button>`
+      title = canCreateEntity ? "还没有主体" : "暂无可用主体";
+      description = canCreateEntity ? "新建主体，把相关图片、视频和音频整理在一起。" : "这个空间暂时没有可用主体。";
+      action = canCreateEntity
+        ? `<button type="button" data-library-create-entity="true">新建主体</button>`
         : "";
     } else {
       iconName = "image";
-      title = mutable ? "还没有素材" : "暂无可用素材";
-      description = mutable ? "上传图片、视频或音频，开始建立素材库。" : "这个空间暂时没有可用素材。";
-      action = mutable
+      title = canUploadMedia ? "还没有素材" : "暂无可用素材";
+      description = canUploadMedia ? "上传图片、视频或音频，开始建立素材库。" : "这个空间暂时没有可用素材。";
+      action = canUploadMedia
         ? `<button type="button" data-library-upload="true">上传素材</button>`
         : "";
     }

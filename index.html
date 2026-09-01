@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260901-asset-grid-24" />
+    <link rel="stylesheet" href="./styles.css?v=20260901-platform-space-27" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -201,10 +201,13 @@
           <button class="active" id="assetLibraryMediaTab" type="button" role="tab" data-library-section="media" aria-selected="true" aria-controls="assetLibraryGrid">素材</button>
           <button id="assetLibraryEntityTab" type="button" role="tab" data-library-section="entity" aria-selected="false" aria-controls="assetLibraryGrid">主体库</button>
         </nav>
-        <label class="asset-library-search" aria-label="搜索资产库">
-          <i data-lucide="search" aria-hidden="true"></i>
-          <input id="assetLibrarySearchInput" type="search" placeholder="搜索" autocomplete="off" />
-        </label>
+        <div class="asset-library-search-row">
+          <label class="asset-library-search" aria-label="搜索资产库">
+            <i data-lucide="search" aria-hidden="true"></i>
+            <input id="assetLibrarySearchInput" type="search" placeholder="搜索" autocomplete="off" />
+          </label>
+          <div class="asset-library-platform-command-anchor" id="assetLibraryPlatformCommandAnchor"></div>
+        </div>
         <div class="asset-library-body">
           <section class="asset-library-content">
             <div class="asset-library-directorybar">
@@ -233,6 +236,9 @@
         <input id="assetLibraryUploadInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
         <div class="asset-library-resize-handle" id="assetLibraryResizeHandle" role="separator" aria-orientation="vertical" aria-label="调整资产库宽度" aria-valuemin="380" aria-valuemax="780" aria-valuenow="550" tabindex="0" title="调整资产库宽度"></div>
       </aside>
+      <div id="canvasEntityEditorHost" hidden inert aria-hidden="true"></div>
+      <div id="canvasEntityPickerHost" hidden inert aria-hidden="true"></div>
+      <input id="canvasEntityEditorUploadInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
       <dialog class="asset-library-preview-dialog" id="assetLibraryPreviewDialog" aria-labelledby="assetLibraryPreviewTitle">
         <div class="asset-library-preview-shell">
           <header>
@@ -508,14 +514,18 @@
     <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260824-group-frame-24"></script>
     <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
     <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260824-selection-frame-drag-33"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260901-asset-grid-24"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260901-asset-grid-24"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260901-platform-space-27"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260901-platform-space-27"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-model.js?v=20260901-platform-space-27"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-view.js?v=20260901-platform-space-27"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-controller.js?v=20260901-platform-space-27"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260819-progressive-split-10"></script>
     <script src="./src/legacy-canvas/canvas-runtime-store.js?v=20260826-canvas-runtime-store-38"></script>
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260901-asset-grid-24"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js?v=20260901-asset-grid-24"></script>
-    <script src="./app.js?v=20260901-asset-grid-24"></script>
+    <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js?v=20260901-platform-space-27"></script>
+    <script src="./src/legacy-canvas/canvas-entity-asset-coordinator.js?v=20260901-platform-space-27"></script>
+    <script src="./app.js?v=20260901-platform-space-27"></script>
   </body>
 </html>

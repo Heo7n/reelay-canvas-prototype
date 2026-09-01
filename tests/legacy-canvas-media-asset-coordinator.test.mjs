@@ -13,6 +13,11 @@ const projectAsset = {
   displayName: "cover.png", contentType: "image/png", byteSize: 42,
   checksumSha256: checksum, contentUrl: "/api/assets/asset-1/content",
 };
+const workspaceAsset = {
+  assetId: "asset-2", assetVersion: 1, mediaKind: "image",
+  displayName: "portrait.png", contentType: "image/png", byteSize: 42,
+  checksumSha256: checksum, contentUrl: "/api/workspaces/workspace-1/media-assets/asset-2/content",
+};
 const flushTasks = () => new Promise((resolve) => setImmediate(resolve));
 
 function harness() {
@@ -50,6 +55,7 @@ test("coordinates checksum, same-origin upload grant, finalize and correlated re
   await flushTasks();
   const create = posted[0];
   assert.equal(create.type, "canvas:create-media-upload");
+  assert.equal(create.target, "project");
   assert.equal(create.instanceId, "instance-1");
   assert.equal(create.checksumSha256, checksum);
   assert.equal(Object.hasOwn(create, "workspaceId"), false);
@@ -70,10 +76,39 @@ test("coordinates checksum, same-origin upload grant, finalize and correlated re
   assert.equal(posted.at(-1).type, "canvas:finalize-media-upload");
   dispatch({
     source: "reelay-shell", type: "host:media-upload-result", protocolVersion: 1,
-    requestId: create.requestId, instanceId: "instance-1", uploadId: "upload-1", projectAsset,
+    requestId: create.requestId, instanceId: "instance-1", uploadId: "upload-1", target: "project", projectAsset,
   });
   assert.deepEqual(JSON.parse(JSON.stringify(await result)), projectAsset);
   assert.equal(coordinator.getPendingCount(), 0);
+});
+
+test("keeps personal-only uploads out of the project result path", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  const result = coordinator.persistFile(
+    { name: "portrait.png", type: "image/png", size: 42 },
+    { target: "personal", mediaKind: "image", displayName: "portrait.png", contentType: "image/png" },
+  );
+  await flushTasks();
+  const create = posted[0];
+  assert.equal(create.target, "personal");
+  assert.equal(dispatch({
+    source: "reelay-shell", type: "host:media-upload-grant", protocolVersion: 1,
+    requestId: create.requestId, instanceId: "instance-1",
+    uploadIntent: { id: "upload-personal", expiresAt: "2026-08-31T12:00:00.000Z" },
+    upload: { url: "/api/uploads/upload-personal", method: "PUT", headers: {} },
+  }), true);
+  await flushTasks();
+  assert.equal(dispatch({
+    source: "reelay-shell", type: "host:media-upload-result", protocolVersion: 1,
+    requestId: create.requestId, instanceId: "instance-1", uploadId: "upload-personal",
+    target: "project", projectAsset,
+  }), false);
+  assert.equal(dispatch({
+    source: "reelay-shell", type: "host:media-upload-result", protocolVersion: 1,
+    requestId: create.requestId, instanceId: "instance-1", uploadId: "upload-personal",
+    target: "personal", workspaceAsset,
+  }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(await result)), workspaceAsset);
 });
 
 test("rejects cross-origin grants and validates initial snapshot correlation", async () => {

@@ -54,10 +54,17 @@ function createServices(signedIn = true): ApplicationServices {
         content: input.content,
       })),
     },
+    entityRepository: {
+      create: vi.fn(),
+      get: vi.fn(),
+      listPersonal: vi.fn(async () => []),
+      update: vi.fn(),
+    },
     mediaAssetRepository: {
       createUploadIntent: vi.fn(),
       finalizeUpload: vi.fn(),
       attachToProject: vi.fn(),
+      listPersonalAssets: vi.fn(async () => []),
       listProjectAssets: vi.fn(async () => []),
     },
     organizationRepository: {

@@ -5,6 +5,7 @@
   const mutableSpaces = new Set(["personal", "organization"]);
   const itemKinds = new Set(["media", "entity"]);
   const mediaKinds = new Set(["image", "video", "audio"]);
+  const visualMediaKinds = new Set(["image", "video"]);
   const MAX_DIRECTORY_LEVELS = 5;
   const MAX_FOLDER_DEPTH = MAX_DIRECTORY_LEVELS - 1;
 
@@ -66,6 +67,7 @@
     const foldersById = new Map();
     const placementsByKey = new Map();
     const reviewRequests = new Map();
+    const persistedEntityIds = new Set();
     let generatedMediaId = 0;
     let generatedEntityId = 0;
     let generatedFolderId = 0;
@@ -85,10 +87,13 @@
       return record;
     }
 
-    function assertPersistedMediaCommandAvailable(item, action) {
+    function assertPersistedItemCommandAvailable(item, action) {
       const record = requireRecord(item);
       if (item.kind === "media" && record.workspaceAssetId) {
         throw new Error(`云端素材${action}尚未接入，当前操作已取消。`);
+      }
+      if (item.kind === "entity" && persistedEntityIds.has(item.id)) {
+        throw new Error(`持久主体${action}必须通过版本化主体命令执行。`);
       }
       return record;
     }
@@ -116,7 +121,9 @@
       const seen = new Set();
       const normalized = [];
       for (const value of refs || []) {
-        const mediaId = String(typeof value === "string" ? value : value?.mediaId || value?.id || "").trim();
+        const mediaId = String(
+          typeof value === "string" ? value : value?.mediaId || value?.assetId || value?.id || "",
+        ).trim();
         if (!mediaId || seen.has(mediaId)) continue;
         seen.add(mediaId);
         normalized.push({ mediaId, order: normalized.length });
@@ -137,7 +144,8 @@
       if (source.displayName != null) record.displayName = String(source.displayName);
       if (source.description != null) record.description = String(source.description);
       if (Array.isArray(source.tags)) record.tags = source.tags.map((tag) => String(tag));
-      if (source.coverMediaId != null) record.coverMediaId = String(source.coverMediaId);
+      const coverMediaId = source.coverMediaId ?? source.coverAssetId;
+      if (coverMediaId != null) record.coverMediaId = String(coverMediaId);
       if (source.createdBy != null) record.createdBy = String(source.createdBy);
       if (source.createdAt != null) record.createdAt = source.createdAt;
       if (source.updatedAt != null) record.updatedAt = source.updatedAt;
@@ -330,10 +338,20 @@
     }
 
     function validateEntityVisibility(entity, space, placementMap = placementsByKey, mediaMap = mediaById) {
+      if (!entity.mediaRefs.length) throw new Error(`Entity ${entity.id} must reference at least one Media item.`);
       for (const ref of entity.mediaRefs) {
         if (!mediaMap.has(ref.mediaId)) throw new Error(`Entity ${entity.id} references missing media: ${ref.mediaId}`);
         if (!placementMap.has(placementKey({ kind: "media", id: ref.mediaId }, space))) {
           throw new Error(`Entity ${entity.id} cannot be visible in ${space} before media ${ref.mediaId}.`);
+        }
+      }
+      if (entity.coverMediaId != null) {
+        const coverMediaId = String(entity.coverMediaId).trim();
+        if (!entity.mediaRefs.some((ref) => ref.mediaId === coverMediaId)) {
+          throw new Error(`Entity ${entity.id} cover must belong to its mediaRefs.`);
+        }
+        if (!visualMediaKinds.has(mediaMap.get(coverMediaId)?.mediaKind)) {
+          throw new Error(`Entity ${entity.id} cover must be an image or video.`);
         }
       }
     }
@@ -442,78 +460,167 @@
       return { media: cloneValue(record), created, placementCreated };
     }
 
-    function createEntityFromMedia({
-      entity: inputEntity,
-      media: inputMedia = [],
-      mediaRefs = null,
-      space = "personal",
-      folderId = null,
-      mediaFolderId = null,
-    } = {}) {
-      const resolvedSpace = resolveSpace(space);
-      assertMutable(resolvedSpace);
-      validateFolder(folderId, resolvedSpace, "entity");
-      validateFolder(mediaFolderId, resolvedSpace, "media");
+    function createEntityVersionConflict(currentVersion, message = "Entity version conflict.") {
+      const error = new Error(message);
+      error.code = "conflict";
+      error.currentVersion = currentVersion;
+      return error;
+    }
 
-      const entityId = String(inputEntity?.id || `entity-${++generatedEntityId}`).trim();
-      if (!entityId) throw new Error("Entity id is required.");
-      if (entitiesById.has(entityId)) throw new Error(`Duplicate entity id: ${entityId}`);
-
-      const stagedMedia = [];
-      const inputIdToCanonicalId = new Map();
-      for (const input of inputMedia || []) {
-        const duplicate = findDuplicateMedia(input, stagedMedia);
-        const record = duplicate || normalizeMediaRecord(input);
-        if (!duplicate) stagedMedia.push(record);
-        if (input?.id) inputIdToCanonicalId.set(String(input.id), record.id);
+    function normalizePersistedEntityRecord(input) {
+      const source = input?.entity || input;
+      if (!source || typeof source !== "object" || Array.isArray(source)) {
+        throw new TypeError("A persisted Entity record is required.");
       }
+      const id = String(source.id || "").trim();
+      const name = String(source.name || "").trim();
+      const description = String(source.description || "");
+      const version = source.version;
+      const requestedRefs = source.mediaRefs || (Array.isArray(source.assetIds)
+        ? source.assetIds.map((assetId) => ({ mediaId: assetId }))
+        : []);
+      const mediaRefs = normalizeMediaRefs(requestedRefs);
+      if (!id) throw new Error("Persisted Entity id is required.");
+      if (!name) throw new Error("Persisted Entity name is required.");
+      if (name.length > 200) throw new Error("Persisted Entity name cannot exceed 200 characters.");
+      if (description.length > 2_000) throw new Error("Persisted Entity description cannot exceed 2000 characters.");
+      if (!mediaRefs.length) throw new Error(`Entity ${id} must reference at least one Media item.`);
+      if (mediaRefs.length > 100) throw new Error(`Entity ${id} cannot reference more than 100 Media items.`);
+      if (!Number.isInteger(version) || version < 1) {
+        throw new Error(`Persisted Entity ${id} version must be a positive integer.`);
+      }
+      const record = normalizeEntityRecord({
+        ...source,
+        id,
+        name,
+        description,
+        coverMediaId: source.coverMediaId ?? source.coverAssetId ?? null,
+        version,
+      }, mediaRefs, id);
+      record.coverMediaId = source.coverMediaId == null && source.coverAssetId == null
+        ? null
+        : String(source.coverMediaId ?? source.coverAssetId).trim() || null;
+      return record;
+    }
 
-      const requestedRefs = mediaRefs || inputEntity?.mediaRefs || [];
-      const remappedRefs = requestedRefs.map((ref) => {
-        const requestedId = String(typeof ref === "string" ? ref : ref?.mediaId || ref?.id || "");
-        return { mediaId: inputIdToCanonicalId.get(requestedId) || requestedId };
+    function entityContentSignature(entity) {
+      return JSON.stringify({
+        name: entity.name,
+        description: entity.description || "",
+        mediaRefs: entity.mediaRefs,
+        coverMediaId: entity.coverMediaId ?? null,
       });
-      for (const input of inputMedia || []) {
-        const requestedId = String(input?.id || "");
-        const canonicalId = inputIdToCanonicalId.get(requestedId) || requestedId;
-        if (canonicalId) remappedRefs.push({ mediaId: canonicalId });
-      }
-      const normalizedRefs = normalizeMediaRefs(remappedRefs);
-      if (!normalizedRefs.length) throw new Error("An Entity must reference at least one Media item.");
+    }
 
-      const stagedMediaMap = new Map(mediaById);
-      for (const record of stagedMedia) stagedMediaMap.set(record.id, record);
-      const stagedPlacements = new Map(placementsByKey);
-      for (const ref of normalizedRefs) {
-        if (!stagedMediaMap.has(ref.mediaId)) throw new Error(`Entity ${entityId} references missing media: ${ref.mediaId}`);
-        const mediaItem = { kind: "media", id: ref.mediaId };
-        const key = placementKey(mediaItem, resolvedSpace);
-        const wasDirectlyRegistered = stagedMedia.some((record) => record.id === ref.mediaId) ||
-          [...inputIdToCanonicalId.values()].includes(ref.mediaId);
-        if (!stagedPlacements.has(key) && wasDirectlyRegistered) {
-          stagedPlacements.set(key, { item: mediaItem, space: resolvedSpace, folderId: mediaFolderId });
-        }
+    function validatePersistedEntityCandidate(entity) {
+      validateEntityVisibility(entity, "personal");
+      const existing = entitiesById.get(entity.id);
+      if (!existing) return;
+      if (!persistedEntityIds.has(entity.id)) {
+        throw new Error(`Entity id already belongs to a page-local record: ${entity.id}`);
       }
-
-      const entity = normalizeEntityRecord(inputEntity, normalizedRefs, entityId);
-      validateEntityVisibility(entity, resolvedSpace, stagedPlacements, stagedMediaMap);
-      const entityPlacement = {
-        item: { kind: "entity", id: entity.id },
-        space: resolvedSpace,
-        folderId,
-      };
-
-      for (const record of stagedMedia) mediaById.set(record.id, record);
-      for (const [key, placement] of stagedPlacements) {
-        if (!placementsByKey.has(key)) placementsByKey.set(key, placement);
+      if (entity.version < existing.version) {
+        throw createEntityVersionConflict(existing.version, `Persisted Entity ${entity.id} version cannot move backwards.`);
       }
+      if (entity.version === existing.version && entityContentSignature(entity) !== entityContentSignature(existing)) {
+        throw createEntityVersionConflict(existing.version, `Persisted Entity ${entity.id} changed without a new version.`);
+      }
+    }
+
+    function registerPersistedEntity(input = {}) {
+      if (input.space != null && resolveSpace(input.space) !== "personal") {
+        throw new Error("Persisted Entity projection currently supports only personal space.");
+      }
+      if (input.folderId != null) {
+        throw new Error("Persisted Entity projection belongs in the personal root directory.");
+      }
+      const entity = normalizePersistedEntityRecord(input);
+      validatePersistedEntityCandidate(entity);
+      const previous = entitiesById.get(entity.id) || null;
+      const item = { kind: "entity", id: entity.id };
+      const key = placementKey(item, "personal");
+      const previousPlacement = placementsByKey.get(key) || null;
+      const created = previous == null;
+      const updated = previous != null && entity.version > previous.version;
       entitiesById.set(entity.id, entity);
-      placementsByKey.set(placementKey(entityPlacement.item, resolvedSpace), entityPlacement);
+      persistedEntityIds.add(entity.id);
+      placementsByKey.set(key, { item, space: "personal", folderId: null });
       return {
         entity: cloneValue(entity),
-        media: entity.mediaRefs.map((ref) => cloneValue(mediaById.get(ref.mediaId))),
-        createdMediaIds: stagedMedia.map((record) => record.id),
+        created,
+        updated,
+        placementCreated: previousPlacement == null,
       };
+    }
+
+    function syncPersistedEntities(input = {}) {
+      const values = Array.isArray(input) ? input : input.entities;
+      if (!Array.isArray(values)) throw new TypeError("Persisted Entity catalog must be an array.");
+      const staged = new Map();
+      for (const value of values) {
+        const entity = normalizePersistedEntityRecord(value);
+        if (staged.has(entity.id)) throw new Error(`Duplicate persisted Entity id: ${entity.id}`);
+        validatePersistedEntityCandidate(entity);
+        staged.set(entity.id, entity);
+      }
+
+      const removedEntityIds = [...persistedEntityIds].filter((entityId) => !staged.has(entityId));
+      for (const entityId of removedEntityIds) {
+        const item = { kind: "entity", id: entityId };
+        placementsByKey.delete(placementKey(item, "personal"));
+        const hasOtherPlacement = [...placementsByKey.values()].some(
+          (placement) => placement.item.kind === "entity" && placement.item.id === entityId,
+        );
+        if (!hasOtherPlacement) {
+          entitiesById.delete(entityId);
+          persistedEntityIds.delete(entityId);
+        }
+      }
+      for (const entity of staged.values()) {
+        const item = { kind: "entity", id: entity.id };
+        entitiesById.set(entity.id, entity);
+        persistedEntityIds.add(entity.id);
+        placementsByKey.set(placementKey(item, "personal"), { item, space: "personal", folderId: null });
+      }
+      return {
+        entities: [...staged.values()].map(cloneValue),
+        removedEntityIds,
+      };
+    }
+
+    function updateEntity(input = {}) {
+      const entityId = String(input.entityId || input.item?.id || "").trim();
+      const current = entitiesById.get(entityId);
+      if (!current) throw new Error(`Entity not found: ${entityId}`);
+      if (!persistedEntityIds.has(entityId) || !Number.isInteger(current.version)) {
+        throw new Error(`Entity ${entityId} does not have a persistent version.`);
+      }
+      if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+        throw new Error("Entity expectedVersion must be a positive integer.");
+      }
+      if (input.expectedVersion !== current.version) {
+        throw createEntityVersionConflict(current.version);
+      }
+      const mediaRefs = Object.prototype.hasOwnProperty.call(input, "mediaRefs")
+        ? input.mediaRefs
+        : current.mediaRefs;
+      const coverMediaId = Object.prototype.hasOwnProperty.call(input, "coverMediaId")
+        ? input.coverMediaId
+        : current.coverMediaId;
+      const next = normalizePersistedEntityRecord({
+        ...current,
+        name: Object.prototype.hasOwnProperty.call(input, "name") ? input.name : current.name,
+        description: Object.prototype.hasOwnProperty.call(input, "description")
+          ? input.description
+          : current.description,
+        mediaRefs,
+        coverMediaId,
+        version: current.version + 1,
+        updatedAt: input.updatedAt ?? current.updatedAt,
+      });
+      validateEntityVisibility(next, "personal");
+      entitiesById.set(entityId, next);
+      return cloneValue(next);
     }
 
     function createFolder(input = {}) {
@@ -588,7 +695,7 @@
       if (!hasPlacementInternal(item, resolvedSpace)) throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
       const normalizedName = String(name || "").trim();
       if (!normalizedName) throw new Error("Item name is required.");
-      const record = assertPersistedMediaCommandAvailable(item, "重命名");
+      const record = assertPersistedItemCommandAvailable(item, "重命名");
       record.name = normalizedName;
       if (Object.prototype.hasOwnProperty.call(record, "displayName")) record.displayName = normalizedName;
       return cloneValue(record);
@@ -599,7 +706,7 @@
       assertMutable(resolvedSpace);
       const refs = items.map((item) => resolveItemRef(item));
       for (const item of refs) {
-        assertPersistedMediaCommandAvailable(item, "移动");
+        assertPersistedItemCommandAvailable(item, "移动");
         validateFolder(folderId, resolvedSpace, item.kind);
         if (!hasPlacementInternal(item, resolvedSpace)) throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
       }
@@ -745,7 +852,7 @@
       const refs = items.map((item) => resolveItemRef(item));
       const removalKeys = new Set();
       for (const item of refs) {
-        assertPersistedMediaCommandAvailable(item, "删除");
+        assertPersistedItemCommandAvailable(item, "删除");
         const key = placementKey(item, resolvedSpace);
         if (!placementsByKey.has(key)) throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
         removalKeys.add(key);
@@ -802,7 +909,9 @@
       hasPlacement,
       snapshot,
       registerMedia,
-      createEntityFromMedia,
+      registerPersistedEntity,
+      syncPersistedEntities,
+      updateEntity,
       createFolder,
       renameFolder,
       moveFolder,

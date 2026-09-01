@@ -84,6 +84,7 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
                   return (
                     <LegacyCanvasRoute
                       canvasDocumentRepository={services.canvasDocumentRepository}
+                      entityRepository={services.entityRepository}
                       mediaAssetRepository={services.mediaAssetRepository}
                     />
                   );

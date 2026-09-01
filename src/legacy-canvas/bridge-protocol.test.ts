@@ -32,6 +32,16 @@ describe("legacy canvas bridge", () => {
     checksumSha256: "a".repeat(64),
     contentUrl: "/api/assets/asset-1/content",
   };
+  const workspaceAsset = {
+    assetId: projectAsset.assetId,
+    assetVersion: projectAsset.assetVersion,
+    mediaKind: projectAsset.mediaKind,
+    displayName: projectAsset.displayName,
+    contentType: projectAsset.contentType,
+    byteSize: projectAsset.byteSize,
+    checksumSha256: projectAsset.checksumSha256,
+    contentUrl: "/api/workspaces/org-1/media-assets/asset-1/content",
+  };
   it("accepts versioned host context and a separate opaque document message", () => {
     const context = {
       protocolVersion: 1 as const,
@@ -190,6 +200,7 @@ describe("legacy canvas bridge", () => {
       checksumSha256: "a".repeat(64),
     });
     expect(create?.type).toBe("canvas:create-media-upload");
+    expect(create).toEqual(expect.objectContaining({ target: "project" }));
     expect(parseCanvasMessage({ ...create, workspaceId: "iframe-controlled" })).toBeNull();
     expect(parseCanvasMessage({ ...create, byteSize: 64 * 1024 * 1024 + 1 })).toBeNull();
     expect(parseCanvasMessage({ ...create, checksumSha256: "A".repeat(64) })).toBeNull();
@@ -211,15 +222,28 @@ describe("legacy canvas bridge", () => {
       uploadIntent: { id: "intent-1", expiresAt: "2026-08-31T12:00:00.000Z" },
       upload: { url: "/api/uploads/intent-1", method: "PUT", headers: { "x-upload": "one" } },
     }).upload.method).toBe("PUT");
-    expect(hostMediaUploadResultMessageSchema.parse({
+    const projectResult = hostMediaUploadResultMessageSchema.parse({
       source: "reelay-shell",
       type: "host:media-upload-result",
       protocolVersion: 1,
       requestId: "upload-1",
       instanceId: "canvas-instance-1",
       uploadId: "intent-1",
+      target: "project",
       projectAsset,
-    }).projectAsset.assetId).toBe("asset-1");
+    });
+    expect(projectResult.target === "project" && projectResult.projectAsset.assetId).toBe("asset-1");
+    const personalResult = hostMediaUploadResultMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:media-upload-result",
+      protocolVersion: 1,
+      requestId: "upload-2",
+      instanceId: "canvas-instance-1",
+      uploadId: "intent-2",
+      target: "personal",
+      workspaceAsset,
+    });
+    expect(personalResult.target === "personal" && personalResult.workspaceAsset.assetId).toBe("asset-1");
     expect(hostAssetCommandErrorMessageSchema.parse({
       source: "reelay-shell",
       type: "host:asset-command-error",

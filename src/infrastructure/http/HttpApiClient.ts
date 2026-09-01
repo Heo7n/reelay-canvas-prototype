@@ -89,9 +89,13 @@ export class HttpApiClient {
 
     const parsed = ErrorResponseDtoSchema.safeParse(payload);
     if (parsed.success) {
-      const details = parsed.data.error.currentRevision === undefined
+      const { currentRevision, currentVersion } = parsed.data.error;
+      const details = currentRevision === undefined && currentVersion === undefined
         ? undefined
-        : { currentRevision: parsed.data.error.currentRevision };
+        : {
+            ...(currentRevision === undefined ? {} : { currentRevision }),
+            ...(currentVersion === undefined ? {} : { currentVersion }),
+          };
       return new ApplicationError(
         toApplicationErrorCode(response.status),
         parsed.data.error.message,

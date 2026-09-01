@@ -153,72 +153,205 @@ test("registerMedia deduplicates by id, source id, or URL while adding a placeme
   assert.equal(store.hasPlacement(mediaRef("portrait"), "organization", "organization-media"), true);
 });
 
-test("creates new Media and an Entity atomically without copying media payload into the Entity", () => {
+test("registers persisted Entities idempotently in the personal root without weakening Media invariants", () => {
   const store = createFixtureStore();
-  const result = store.createEntityFromMedia({
-    entity: {
-      id: "supporting-role",
-      name: "配角",
-      mediaRefs: [{ mediaId: "portrait" }, { mediaId: "new-image" }, { mediaId: "portrait" }],
-      url: "blob:forbidden",
-      blob: { forbidden: true },
-      width: 2048,
-      height: 2048,
-    },
-    media: [
-      { id: "new-image", type: "image", name: "配角.png", url: "blob:supporting" },
-      { id: "new-audio", type: "audio", name: "配角台词.mp3", url: "blob:supporting-audio" },
+  const persisted = {
+    id: "persisted-hero",
+    name: " 持久主角 ",
+    description: "角色说明",
+    mediaRefs: [
+      { assetId: "portrait", order: 0 },
+      { assetId: "voice", order: 1 },
+      { assetId: "portrait", order: 2 },
     ],
-    space: "personal",
-    folderId: "personal-entity",
-    mediaFolderId: "personal-media",
-  });
+    coverAssetId: "portrait",
+    version: 1,
+  };
+  const first = store.registerPersistedEntity({ entity: persisted });
+  const repeated = store.registerPersistedEntity({ entity: persisted });
 
-  assert.deepEqual(plain(result.entity.mediaRefs), [
-    { mediaId: "portrait", order: 0 },
-    { mediaId: "new-image", order: 1 },
-    { mediaId: "new-audio", order: 2 },
-  ]);
-  assert.deepEqual(plain(result.createdMediaIds), ["new-image", "new-audio"]);
-  assert.equal("url" in result.entity, false);
-  assert.equal("blob" in result.entity, false);
-  assert.equal("width" in result.entity, false);
-  assert.equal("height" in result.entity, false);
-  assert.deepEqual(
-    plain(store.listItems({ space: "personal", kind: "media", folderId: "personal-media" })).map((item) => item.id),
-    ["portrait", "voice", "new-image", "new-audio"],
+  assert.equal(first.created, true);
+  assert.equal(first.updated, false);
+  assert.equal(first.placementCreated, true);
+  assert.equal(repeated.created, false);
+  assert.equal(repeated.updated, false);
+  assert.equal(repeated.placementCreated, false);
+  assert.deepEqual(plain(store.getEntity(entityRef("persisted-hero"))), {
+    id: "persisted-hero",
+    name: "持久主角",
+    mediaRefs: [
+      { mediaId: "portrait", order: 0 },
+      { mediaId: "voice", order: 1 },
+    ],
+    description: "角色说明",
+    coverMediaId: "portrait",
+    version: 1,
+  });
+  assert.equal(store.hasPlacement(entityRef("persisted-hero"), "personal", null), true);
+  assert.throws(
+    () => store.renameItem({ item: entityRef("persisted-hero"), name: "绕过版本改名", space: "personal" }),
+    /版本化主体命令/,
   );
-  assert.deepEqual(plain(store.getEntityMedia(entityRef("supporting-role"))).map((item) => item.id), [
-    "portrait",
-    "new-image",
-    "new-audio",
-  ]);
+  assert.throws(
+    () => store.moveItems({ items: [entityRef("persisted-hero")], space: "personal", folderId: "personal-entity" }),
+    /版本化主体命令/,
+  );
+  assert.throws(
+    () => store.removePlacements({ items: [entityRef("persisted-hero")], space: "personal" }),
+    /版本化主体命令/,
+  );
 
   const beforeFailure = plain(store.snapshot());
   assert.throws(
-    () => store.createEntityFromMedia({
-      entity: { id: "broken", name: "坏主体", mediaRefs: [{ mediaId: "missing" }] },
-      space: "personal",
-      folderId: "personal-entity",
+    () => store.registerPersistedEntity({
+      entity: { ...persisted, id: "audio-cover", coverAssetId: "voice" },
     }),
-    /missing media/,
+    /cover must be an image or video/,
+  );
+  assert.throws(
+    () => store.registerPersistedEntity({
+      entity: { ...persisted, id: "missing-media", mediaRefs: [{ assetId: "missing", order: 0 }] },
+    }),
+    /references missing media/,
+  );
+  assert.throws(
+    () => store.registerPersistedEntity({ entity: { ...persisted, id: "versionless", version: 0 } }),
+    /positive integer/,
+  );
+  assert.throws(
+    () => store.registerPersistedEntity({ entity: { ...persisted, id: "hero" } }),
+    /page-local record/,
   );
   assert.deepEqual(plain(store.snapshot()), beforeFailure);
 });
 
-test("rejects an Entity placement whose referenced Media is not visible in the target space", () => {
+test("syncs the complete persisted Entity projection atomically and rejects stale snapshots", () => {
   const store = createFixtureStore();
-  const before = plain(store.snapshot());
+  const firstCatalog = [
+    {
+      id: "persisted-a",
+      name: "主体 A",
+      description: "",
+      mediaRefs: [{ mediaId: "portrait", order: 0 }],
+      coverMediaId: "portrait",
+      version: 1,
+    },
+    {
+      id: "persisted-b",
+      name: "主体 B",
+      description: "声音主体",
+      mediaRefs: [{ mediaId: "voice", order: 0 }],
+      coverMediaId: null,
+      version: 1,
+    },
+  ];
+  assert.deepEqual(plain(store.syncPersistedEntities({ entities: firstCatalog }).removedEntityIds), []);
+  assert.equal(store.hasPlacement(entityRef("persisted-a"), "personal", null), true);
+  assert.equal(store.hasPlacement(entityRef("persisted-b"), "personal", null), true);
 
+  const second = store.syncPersistedEntities({ entities: [{ ...firstCatalog[1], name: "主体 B2", version: 2 }] });
+  assert.deepEqual(plain(second.removedEntityIds), ["persisted-a"]);
+  assert.equal(store.getEntity(entityRef("persisted-a")), null);
+  assert.equal(store.hasPlacement(entityRef("persisted-a"), "personal"), false);
+  assert.equal(store.getEntity(entityRef("persisted-b")).name, "主体 B2");
+
+  const beforeFailure = plain(store.snapshot());
   assert.throws(
-    () => store.createEntityFromMedia({
-      entity: { id: "organization-hero", name: "组织主体", mediaRefs: [{ mediaId: "portrait" }] },
-      space: "organization",
-      folderId: "organization-entity",
-    }),
-    /cannot be visible in organization/,
+    () => store.syncPersistedEntities({ entities: [{ ...firstCatalog[1], name: "旧名称", version: 1 }] }),
+    /version cannot move backwards/,
   );
-  assert.deepEqual(plain(store.snapshot()), before);
+  assert.throws(
+    () => store.syncPersistedEntities({
+      entities: [
+        { ...firstCatalog[1], name: "同版本不同内容", version: 2 },
+        { ...firstCatalog[1], name: "重复记录", version: 2 },
+      ],
+    }),
+    /changed without a new version|Duplicate persisted Entity id/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeFailure);
+});
+
+test("syncing the personal Entity catalog preserves projections in other spaces", () => {
+  const store = createFixtureStore();
+  const entity = {
+    id: "persisted-shared",
+    name: "已共享主体",
+    description: "",
+    mediaRefs: [{ mediaId: "portrait", order: 0 }],
+    coverMediaId: "portrait",
+    version: 1,
+  };
+  store.registerPersistedEntity({ entity });
+  store.shareToOrganization({ items: [entityRef(entity.id)] });
+
+  const result = store.syncPersistedEntities({ entities: [] });
+
+  assert.deepEqual(plain(result.removedEntityIds), [entity.id]);
+  assert.equal(store.hasPlacement(entityRef(entity.id), "personal"), false);
+  assert.equal(store.hasPlacement(entityRef(entity.id), "organization"), true);
+  assert.equal(store.getEntity(entityRef(entity.id)).version, 1);
+});
+
+test("updates persisted Entity content only from the expected version and advances exactly once", () => {
+  const store = createFixtureStore();
+  store.registerPersistedEntity({
+    entity: {
+      id: "persisted-edit",
+      name: "编辑前",
+      description: "旧描述",
+      mediaRefs: [{ mediaId: "portrait", order: 0 }],
+      coverMediaId: "portrait",
+      version: 3,
+    },
+  });
+  const beforeConflict = plain(store.snapshot());
+  assert.throws(
+    () => store.updateEntity({ entityId: "persisted-edit", expectedVersion: 2, name: "陈旧写入" }),
+    (error) => error.code === "conflict" && error.currentVersion === 3,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeConflict);
+
+  const updated = store.updateEntity({
+    entityId: "persisted-edit",
+    expectedVersion: 3,
+    name: " 编辑后 ",
+    description: "新描述",
+    mediaRefs: [
+      { mediaId: "voice", order: 0 },
+      { mediaId: "portrait", order: 1 },
+      { mediaId: "voice", order: 2 },
+    ],
+    coverMediaId: "portrait",
+  });
+  assert.equal(updated.version, 4);
+  assert.equal(updated.name, "编辑后");
+  assert.deepEqual(plain(updated.mediaRefs), [
+    { mediaId: "voice", order: 0 },
+    { mediaId: "portrait", order: 1 },
+  ]);
+  assert.equal(store.hasPlacement(entityRef("persisted-edit"), "personal", null), true);
+
+  const beforeInvalid = plain(store.snapshot());
+  assert.throws(
+    () => store.updateEntity({
+      entityId: "persisted-edit",
+      expectedVersion: 4,
+      mediaRefs: [{ mediaId: "voice", order: 0 }],
+      coverMediaId: "voice",
+    }),
+    /cover must be an image or video/,
+  );
+  assert.throws(
+    () => store.updateEntity({
+      entityId: "persisted-edit",
+      expectedVersion: 4,
+      mediaRefs: [],
+      coverMediaId: null,
+    }),
+    /must reference at least one Media item/,
+  );
+  assert.deepEqual(plain(store.snapshot()), beforeInvalid);
 });
 
 test("creates and renames folders, renames items, and moves placements without changing item ids", () => {
@@ -424,13 +557,6 @@ test("rejects every mutation whose source or target placement is the platform sp
 
   assert.throws(
     () => store.registerMedia({ media: { id: "platform-upload", type: "image" }, space: "platform" }),
-    /read-only/,
-  );
-  assert.throws(
-    () => store.createEntityFromMedia({
-      entity: { id: "platform-entity", mediaRefs: [{ mediaId: "platform-video" }] },
-      space: "platform",
-    }),
     /read-only/,
   );
   assert.throws(

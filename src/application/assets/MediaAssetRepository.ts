@@ -31,6 +31,10 @@ export interface FinalizedMediaAsset {
   updatedAt: string;
 }
 
+export interface PersonalMediaAsset extends FinalizedMediaAsset {
+  contentUrl: string;
+}
+
 export interface ProjectMediaAsset {
   referenceId: string;
   assetId: string;
@@ -47,5 +51,6 @@ export interface MediaAssetRepository {
   createUploadIntent(input: CreateMediaUploadIntentInput): Promise<MediaUploadGrant>;
   finalizeUpload(workspaceId: WorkspaceId, uploadId: string): Promise<FinalizedMediaAsset>;
   attachToProject(projectId: ProjectId, assetId: string): Promise<ProjectMediaAsset>;
+  listPersonalAssets(workspaceId: WorkspaceId): Promise<PersonalMediaAsset[]>;
   listProjectAssets(projectId: ProjectId): Promise<ProjectMediaAsset[]>;
 }

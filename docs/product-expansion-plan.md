@@ -98,7 +98,7 @@ flowchart TD
 
 这是登录后的默认页面，不是宣传落地页。
 
-> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；十个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据、成员关系、路由画布文档，以及首个 WorkspaceMediaAsset / personal placement / ProjectAssetReference 切片已持久化到本地 PostgreSQL；本地资产内容由 filesystem ObjectStore 保留。旧画布通过受控迁移快照加载 / 保存，但 Entity / Folder、生成任务、历史和积分账本仍未持久化，因此这仍不是正式账号或生产协作。
+> 当前状态：登录、主页和项目库已迁入 `/app` React 路由，通过 HTTP adapters 消费本地 Session / Workspace / Project API；十个固定演示账号属于同一组织，可验证个人项目隔离以及协作项目的 `admin/edit/view` 权限。用户、会话、项目元数据、成员关系、路由画布文档、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已持久化到本地 PostgreSQL；本地资产内容由 filesystem ObjectStore 保留。旧画布通过受控迁移快照加载 / 保存，但 Folder、组织资产、生成任务、历史和积分账本仍未持久化，因此这仍不是正式账号或生产协作。
 
 ### 页面目标
 
@@ -149,7 +149,7 @@ flowchart TD
 
 ## 4.2 资产中心
 
-资产中心是跨项目复用的 Media 与 Entity 管理页。画布内资产库已有高保真页面投影，并落地了个人 Media 上传、WorkspaceMediaAsset、personal placement、ProjectAssetReference、列表与内容读取的首个本地持久化切片。正式 React 资产中心、Entity / Folder repository、组织权限、平台目录和公网对象存储仍属于本规划。
+资产中心是跨项目复用的 Media 与 Entity 管理页。画布内资产库已有高保真页面投影，并落地了个人 Media 上传、WorkspaceMediaAsset、personal placement、ProjectAssetReference，以及个人根目录 Entity 的 create / get / list / update、字段编辑、有序引用、封面和乐观版本切片。正式 React 资产中心、Folder / organization placement、Entity 删除恢复、组织权限、平台目录和公网对象存储仍属于本规划。
 
 ### 页面目标
 
@@ -424,20 +424,20 @@ sequenceDiagram
 
 ### Phase 0B：可迁移基础
 
-> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、账号联系资料、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision、项目软删除和跨服务重启集成验证。CanvasDocument v1 现在通过 canonical allow-list 收敛字段、上限与媒体 URL，不支持的版本失败关闭；旧 `mode / lockedMode` 仅在 v1 读取边界迁移。首个资产切片已建立 WorkspaceMediaAsset、personal placement、ProjectAssetReference 与 ObjectStore 边界，可在本地 PostgreSQL + filesystem ObjectStore 中完成上传、挂到当前项目、列表 / 内容读取和跨服务重启恢复。Entity / Folder、组织共享、平台审核、生成任务、生成历史和积分账本尚未持久化；积分余额、流水和用量分析仍是可整体替换的确定性前端演示数据，不是真实 `CreditLedger`。公网 Vercel 还没有私有 Supabase Storage adapter，本地 filesystem ObjectStore 不是 serverless 持久化方案。
+> 当前进度：已完成 runtime ADR、React + TypeScript + Vite 壳、browser route contract、Session / Workspace / Membership / Project / CanvasDocument ports、类型安全的 HTTP adapters、Fastify 共享服务、登录 / 主页 / 项目库迁移和受保护的 legacy canvas host。Session、账号联系资料、Workspace、Membership、Project 与 CanvasDocument 已切换到 PostgreSQL，具备带 checksum 的 migration、幂等 demo seed、乐观 revision、项目软删除和跨服务重启集成验证。CanvasDocument v1 现在通过 canonical allow-list 收敛字段、上限与媒体 URL，不支持的版本失败关闭；旧 `mode / lockedMode` 仅在 v1 读取边界迁移。资产切片已建立 WorkspaceMediaAsset、personal placement、ProjectAssetReference、ObjectStore 与个人根目录 Entity 边界，可在本地 PostgreSQL + filesystem ObjectStore 中完成 Media 上传 / 读取和 Entity 幂等创建、有序引用、版本更新与重启恢复。Folder、组织共享、Entity 删除恢复、平台审核、生成任务、生成历史和积分账本尚未持久化；积分余额、流水和用量分析仍是可整体替换的确定性前端演示数据，不是真实 `CreditLedger`。公网 Vercel 还没有私有 Supabase Storage adapter，本地 filesystem ObjectStore 不是 serverless 持久化方案。
 
 - 按 `docs/adr/0001-application-runtime-and-migration.md` 建立正式 runtime、browser router、构建与测试壳；高保真静态入口在页面迁移完成前继续保留。现有画布始终作为受保护的 legacy host 接入，不整体重写。
 - 定义数据模型、schema 版本和迁移机制。
 - 优先建立 Session、Workspace、Membership、Project、ProjectMembership 和 CanvasDocument 的 repository / service 边界，让单组织容器和项目访问都由显式 actor scope 驱动。
 - 因为组织演示需要多个浏览器账号看到各自有权访问的共享数据，Phase 0B 同步建立最小共享后端、服务端会话和开发数据库；IndexedDB 只承担本地草稿、缓存和离线恢复。
-- 继续为 Entity / Folder、GenerationTask、GenerationResult 和 CreditLedger 定义核心不变量；WorkspaceMediaAsset 已有首个 repository / ObjectStore 边界，不把尚未落地的其他资产能力描述为完成。
+- 继续为 Folder、Entity 删除恢复、GenerationTask、GenerationResult 和 CreditLedger 定义核心不变量；WorkspaceMediaAsset 与个人根目录 Entity 已有首个 repository 边界，不把尚未落地的其他资产能力描述为完成。
 - 本地草稿与 Blob 使用 IndexedDB；localStorage 仅保存主题等设备偏好。
 - 建立通用通知、确认、菜单、对话框和焦点管理组件。
 
 ### Phase 0C：真实主链路
 
 - 把当前 legacy CanvasDocument bundle 逐步迁移为正式 Canvas / Node 数据边界，并补齐草稿恢复。
-- 在已有 WorkspaceMediaAsset + personal placement + ProjectAssetReference 切片上继续补齐 Entity / Folder、organization placement、Node 级稳定引用、删除 / 恢复与 GenerationResult 晋升；公网部署改用私有对象存储，不复用本地 filesystem adapter。
+- 在已有 WorkspaceMediaAsset + personal placement + ProjectAssetReference + personal Entity 切片上继续补齐 Folder、organization placement、Entity 删除 / 恢复、Node 级稳定引用与 GenerationResult 晋升；公网部署改用私有对象存储，不复用本地 filesystem adapter。
 - 生成任务与积分预占原子提交；成功只结算一次，失败 / 取消只释放或退款一次；重试复用幂等键且不得重复扣费。
 - 真实生成结果先登记为 GenerationResult，由用户或产品规则显式提升为 WorkspaceMediaAsset。
 

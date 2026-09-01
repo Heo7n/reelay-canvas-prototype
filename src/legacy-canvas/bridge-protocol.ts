@@ -15,6 +15,7 @@ const legacyCanvasCapabilitiesSchema = z
     accountSections: z.boolean(),
     projectSwitcher: z.boolean().optional(),
     assetPersistence: z.boolean().optional(),
+    entityPersistence: z.boolean().optional(),
   })
   .strict();
 
@@ -66,6 +67,40 @@ export const bridgeProjectAssetSchema = z.object({
   checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
   contentUrl: z.string().trim().min(1).max(2_048),
 }).strict();
+
+export const bridgeWorkspaceAssetSchema = z.object({
+  assetId: bridgeIdentifierSchema,
+  assetVersion: z.number().int().positive(),
+  mediaKind: mediaKindSchema,
+  displayName: z.string().trim().min(1).max(300),
+  contentType: z.string().trim().min(1).max(120),
+  byteSize: z.number().int().positive().max(64 * 1024 * 1024),
+  checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
+  contentUrl: z.string().trim().min(1).max(2_048),
+}).strict();
+
+export const bridgeWorkspaceEntitySchema = z.object({
+  id: bridgeIdentifierSchema,
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(2_000),
+  mediaRefs: z.array(z.object({
+    assetId: bridgeIdentifierSchema,
+    order: z.number().int().nonnegative(),
+  }).strict()).min(1).max(100),
+  coverAssetId: bridgeIdentifierSchema.nullable(),
+  version: z.number().int().positive(),
+}).strict().superRefine((entity, context) => {
+  const assetIds = new Set<string>();
+  entity.mediaRefs.forEach((reference, index) => {
+    if (assetIds.has(reference.assetId) || reference.order !== index) {
+      context.addIssue({ code: "custom", message: "Entity mediaRefs must be unique and contiguously ordered." });
+    }
+    assetIds.add(reference.assetId);
+  });
+  if (entity.coverAssetId && !assetIds.has(entity.coverAssetId)) {
+    context.addIssue({ code: "custom", message: "Entity coverAssetId must belong to mediaRefs." });
+  }
+});
 export const legacyAccountSectionSchema = z.enum(["profile", "credits"]);
 export type LegacyAccountSection = z.infer<typeof legacyAccountSectionSchema>;
 
@@ -124,6 +159,25 @@ export const hostProjectAssetsMessageSchema = z.object({
   projectAssets: z.array(bridgeProjectAssetSchema).max(10_000),
 }).strict();
 
+export const hostWorkspaceAssetCatalogMessageSchema = z.object({
+  source: z.literal("reelay-shell"),
+  type: z.literal("host:workspace-asset-catalog"),
+  protocolVersion: z.literal(1),
+  requestId: bridgeRequestIdSchema,
+  instanceId: canvasInstanceIdSchema,
+  assets: z.array(bridgeWorkspaceAssetSchema).max(10_000),
+  entities: z.array(bridgeWorkspaceEntitySchema).max(10_000),
+}).strict();
+
+export const hostEntityCommandResultMessageSchema = z.object({
+  source: z.literal("reelay-shell"),
+  type: z.literal("host:entity-command-result"),
+  protocolVersion: z.literal(1),
+  requestId: bridgeRequestIdSchema,
+  instanceId: canvasInstanceIdSchema,
+  entity: bridgeWorkspaceEntitySchema,
+}).strict();
+
 export const hostMediaUploadGrantMessageSchema = z.object({
   source: z.literal("reelay-shell"),
   type: z.literal("host:media-upload-grant"),
@@ -141,15 +195,27 @@ export const hostMediaUploadGrantMessageSchema = z.object({
   }).strict(),
 }).strict();
 
-export const hostMediaUploadResultMessageSchema = z.object({
+const hostMediaUploadResultFields = {
   source: z.literal("reelay-shell"),
   type: z.literal("host:media-upload-result"),
   protocolVersion: z.literal(1),
   requestId: bridgeRequestIdSchema,
   instanceId: canvasInstanceIdSchema,
   uploadId: bridgeIdentifierSchema,
-  projectAsset: bridgeProjectAssetSchema,
-}).strict();
+};
+
+export const hostMediaUploadResultMessageSchema = z.discriminatedUnion("target", [
+  z.object({
+    ...hostMediaUploadResultFields,
+    target: z.literal("project"),
+    projectAsset: bridgeProjectAssetSchema,
+  }).strict(),
+  z.object({
+    ...hostMediaUploadResultFields,
+    target: z.literal("personal"),
+    workspaceAsset: bridgeWorkspaceAssetSchema,
+  }).strict(),
+]);
 
 export const hostAssetCommandErrorMessageSchema = z.object({
   source: z.literal("reelay-shell"),
@@ -157,7 +223,7 @@ export const hostAssetCommandErrorMessageSchema = z.object({
   protocolVersion: z.literal(1),
   requestId: bridgeRequestIdSchema,
   instanceId: canvasInstanceIdSchema,
-  code: z.enum(["invalid", "forbidden", "missing", "network", "unsupported"]),
+  code: z.enum(["invalid", "forbidden", "missing", "conflict", "network", "unsupported"]),
 }).strict();
 
 export const canvasMessageSchema = z.discriminatedUnion("type", [
@@ -218,6 +284,7 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     instanceId: canvasInstanceIdSchema,
     requestId: bridgeRequestIdSchema,
     idempotencyKey: z.string().trim().min(1).max(200),
+    target: z.enum(["project", "personal"]).optional().default("project"),
     mediaKind: mediaKindSchema,
     displayName: z.string().trim().min(1).max(300),
     contentType: z.string().trim().min(1).max(120),
@@ -231,6 +298,31 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     instanceId: canvasInstanceIdSchema,
     requestId: bridgeRequestIdSchema,
     uploadId: bridgeIdentifierSchema,
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:create-entity"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    requestId: bridgeRequestIdSchema,
+    idempotencyKey: z.string().trim().min(8).max(200),
+    name: z.string().trim().min(1).max(200),
+    description: z.string().max(2_000),
+    assetIds: z.array(bridgeIdentifierSchema).min(1).max(100),
+    coverAssetId: bridgeIdentifierSchema.nullable(),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:update-entity"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    requestId: bridgeRequestIdSchema,
+    entityId: bridgeIdentifierSchema,
+    expectedVersion: z.number().int().positive(),
+    name: z.string().trim().min(1).max(200),
+    description: z.string().max(2_000),
+    assetIds: z.array(bridgeIdentifierSchema).min(1).max(100),
+    coverAssetId: bridgeIdentifierSchema.nullable(),
   }).strict(),
 ]);
 

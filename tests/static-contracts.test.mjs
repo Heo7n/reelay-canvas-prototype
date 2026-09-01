@@ -348,8 +348,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260901-asset-grid-24/);
-  assert.match(html, /app\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /styles\.css\?v=20260901-platform-space-27/);
+  assert.match(html, /app\.js\?v=20260901-platform-space-27/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -733,7 +733,8 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
   assert.match(stylesEntry, /styles\/app\.css\?v=20260901-asset-grid-24/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260901-asset-grid-24/);
-  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260901-asset-grid-24/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260901-platform-space-27/);
+  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260901-platform-space-27/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
@@ -788,13 +789,13 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
 });
 
 test("asset library actions stay scoped to their real controls and canvas drop target", () => {
-  assert.match(html, /styles\.css\?v=20260901-asset-grid-24/);
+  assert.match(html, /styles\.css\?v=20260901-platform-space-27/);
   assert.match(html, /prototype-config\.js\?v=20260901-ui-alignment-19/);
-  assert.match(html, /canvas-asset-library-model\.js\?v=20260901-asset-grid-24/);
-  assert.match(html, /canvas-asset-library-view\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /canvas-asset-library-model\.js\?v=20260901-platform-space-27/);
+  assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-document-codec\.js\?v=20260901-asset-grid-24/);
-  assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260901-asset-grid-24/);
-  assert.match(html, /app\.js\?v=20260901-asset-grid-24/);
+  assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260901-platform-space-27/);
+  assert.match(html, /app\.js\?v=20260901-platform-space-27/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
   assert.match(appSource, /closest\("#assetLibrarySpaceMenu \[data-library-space\]"\)/);
@@ -806,6 +807,12 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.doesNotMatch(appSource, /window\.prompt\("新建文件夹名称"/);
   assert.match(appSource, /window\.parent !== window && state\.librarySpace !== "personal"[\s\S]*?仅支持上传到个人空间/);
   assert.match(appSource, /event\.target\.closest\("\[data-library-batch-toggle\]"\)[\s\S]*?state\.librarySelectedIds\.size === 0[\s\S]*?state\.libraryToolbarMenu = null/);
+  assert.match(appSource, /state\.librarySpace === "platform"[\s\S]*?\? "media"/);
+  assert.match(appSource, /flatPlatformResults = state\.librarySpace === "platform"[\s\S]*?flatPlatformResults \? \[\]/);
+  assert.match(appSource, /allowedBatchActions:\s*platformResults[\s\S]*?\["add-canvas", "save-personal"\][\s\S]*?canImportPlatformAssets:\s*false/);
+  assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetToCanvas/);
+  assert.match(appSource, /action === "save-personal"[\s\S]*?保存平台素材到个人素材库尚未接入/);
+  assert.doesNotMatch(appSource, /savePlatformMediaToPersonal/);
   assert.match(assetLibraryCss, /\.asset-library-batch-command:disabled\s*\{[\s\S]*?background:\s*var\(--text\) !important;[\s\S]*?color:\s*var\(--bg\) !important;[\s\S]*?cursor:\s*not-allowed;[\s\S]*?opacity:\s*0\.68/);
   assert.match(assetLibraryCss, /\.asset-library-panel \.asset-library-card-namebar input:focus-visible\s*\{[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix/);
   assert.match(assetLibraryCss, /--asset-card-size:\s*164px/);

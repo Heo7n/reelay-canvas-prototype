@@ -393,6 +393,219 @@ describe("CanvasHost", () => {
     ));
   });
 
+  it("finalizes personal-only uploads without creating a project reference", async () => {
+    const finalizedAsset = {
+      id: "asset-personal",
+      workspaceId: "organization-1",
+      mediaKind: "image" as const,
+      displayName: "portrait.png",
+      objectVersion: 1,
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "b".repeat(64),
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    const createUploadIntent = vi.fn(async () => ({
+      uploadIntent: { id: "upload-personal", expiresAt: "2026-08-31T12:00:00.000Z" },
+      upload: { url: "/api/uploads/upload-personal", method: "PUT" as const, headers: {} },
+    }));
+    const finalizeUpload = vi.fn(async () => finalizedAsset);
+    const attachToProject = vi.fn();
+    const mediaAssetRepository = {
+      listProjectAssets: vi.fn(async () => []),
+      createUploadIntent,
+      finalizeUpload,
+      attachToProject,
+    } as never;
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        mediaAssetRepository={mediaAssetRepository}
+        context={{
+          ...editableContext,
+          capabilities: { ...editableContext.capabilities, assetPersistence: true },
+        }}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:init" }),
+      window.location.origin,
+    ));
+    dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:create-media-upload",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: "request-personal",
+      idempotencyKey: "attempt-personal",
+      target: "personal",
+      mediaKind: "image",
+      displayName: "portrait.png",
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "b".repeat(64),
+    });
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:media-upload-grant", requestId: "request-personal" }),
+      window.location.origin,
+    ));
+    dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:finalize-media-upload",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: "request-personal",
+      uploadId: "upload-personal",
+    });
+    await waitFor(() => expect(finalizeUpload).toHaveBeenCalledWith("organization-1", "upload-personal"));
+    expect(attachToProject).not.toHaveBeenCalled();
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:media-upload-result",
+        requestId: "request-personal",
+        target: "personal",
+        workspaceAsset: expect.objectContaining({ assetId: "asset-personal" }),
+      }),
+      window.location.origin,
+    ));
+  });
+
+  it("loads the personal Entity catalog and scopes create/update commands through the host", async () => {
+    const personalAsset = {
+      id: "asset-front",
+      workspaceId: "organization-1",
+      mediaKind: "image" as const,
+      displayName: "front.png",
+      objectVersion: 1,
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "a".repeat(64),
+      contentUrl: "/api/workspaces/organization-1/media-assets/asset-front/content",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    const entity = {
+      id: "entity-lirael",
+      workspaceId: "organization-1",
+      name: "莉瑞尔",
+      description: "精灵感角色",
+      mediaRefs: [{ assetId: "asset-front", order: 0 }],
+      coverAssetId: "asset-front",
+      version: 1,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    const create = vi.fn(async () => entity);
+    const update = vi.fn(async () => {
+      throw new ApplicationError("conflict", "stale entity", { serviceCode: "entity_version_conflict" });
+    });
+    const entityRepository = {
+      create,
+      update,
+      listPersonal: vi.fn(async () => [entity]),
+    } as never;
+    const mediaAssetRepository = {
+      listPersonalAssets: vi.fn(async () => [personalAsset]),
+      listProjectAssets: vi.fn(async () => []),
+    } as never;
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        entityRepository={entityRepository}
+        mediaAssetRepository={mediaAssetRepository}
+        context={{
+          ...editableContext,
+          capabilities: {
+            ...editableContext.capabilities,
+            assetPersistence: true,
+            entityPersistence: true,
+          },
+        }}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:init",
+        context: expect.objectContaining({
+          capabilities: expect.objectContaining({ assetPersistence: true, entityPersistence: true }),
+        }),
+      }),
+      window.location.origin,
+    ));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:workspace-asset-catalog",
+        assets: [expect.objectContaining({ assetId: "asset-front", assetVersion: 1 })],
+        entities: [expect.objectContaining({ id: "entity-lirael", coverAssetId: "asset-front" })],
+      }),
+      window.location.origin,
+    ));
+
+    dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:create-entity",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: "entity-create-1",
+      idempotencyKey: "create-lirael-1",
+      name: "莉瑞尔",
+      description: "精灵感角色",
+      assetIds: ["asset-front"],
+      coverAssetId: "asset-front",
+    });
+    await waitFor(() => expect(create).toHaveBeenCalledWith({
+      workspaceId: "organization-1",
+      idempotencyKey: "create-lirael-1",
+      name: "莉瑞尔",
+      description: "精灵感角色",
+      assetIds: ["asset-front"],
+      coverAssetId: "asset-front",
+    }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:entity-command-result",
+        requestId: "entity-create-1",
+        entity: expect.objectContaining({ id: "entity-lirael", version: 1 }),
+      }),
+      window.location.origin,
+    ));
+
+    dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:update-entity",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: "entity-update-stale",
+      entityId: "entity-lirael",
+      expectedVersion: 1,
+      name: "莉瑞尔新版",
+      description: "",
+      assetIds: ["asset-front"],
+      coverAssetId: null,
+    });
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: "organization-1",
+      entityId: "entity-lirael",
+      expectedVersion: 1,
+    })));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:asset-command-error",
+        requestId: "entity-update-stale",
+        code: "conflict",
+      }),
+      window.location.origin,
+    ));
+  });
+
   it("ignores ready and save messages from the wrong origin or window", async () => {
     const save = vi.fn(async () => document);
     const getCanvasDocument = vi.fn(async () => document);

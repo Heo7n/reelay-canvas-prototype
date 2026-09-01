@@ -4,6 +4,7 @@ import { ApplicationError } from "../../application/shared/ApplicationError";
 import { createHttpServices } from "./createHttpServices";
 import { HttpAccountRepository } from "./HttpAccountRepository";
 import { HttpCanvasDocumentRepository } from "./HttpCanvasDocumentRepository";
+import { HttpEntityRepository } from "./HttpEntityRepository";
 import { HttpMediaAssetRepository } from "./HttpMediaAssetRepository";
 import { HttpOrganizationRepository } from "./HttpOrganizationRepository";
 import { HttpProjectRepository } from "./HttpProjectRepository";
@@ -431,9 +432,11 @@ describe("HttpMediaAssetRepository", () => {
       uploadIntent: { id: "upload/one", expiresAt: "2026-08-31T12:10:00.000Z" },
       upload: { url: "/api/uploads/upload-one", method: "PUT", headers: { "x-upload": "one" } },
     };
+    const personalAsset = { ...asset, contentUrl: "/api/workspaces/workspace%2Fone/media-assets/asset-1/content" };
     const transport = createFetchQueue(
       { body: grant },
       { body: { asset } },
+      { body: { assets: [personalAsset] } },
       { body: { projectAsset } },
       { body: { projectAssets: [projectAsset] } },
     );
@@ -449,12 +452,14 @@ describe("HttpMediaAssetRepository", () => {
       checksumSha256: "a".repeat(64),
     })).resolves.toEqual(grant);
     await expect(repository.finalizeUpload("workspace/one", "upload/one")).resolves.toEqual(asset);
+    await expect(repository.listPersonalAssets("workspace/one")).resolves.toEqual([personalAsset]);
     await expect(repository.attachToProject("project/one", "asset/one")).resolves.toEqual(projectAsset);
     await expect(repository.listProjectAssets("project/one")).resolves.toEqual([projectAsset]);
 
     expect(transport.requests.map((request) => request.url)).toEqual([
       "/backend/api/workspaces/workspace%2Fone/media-upload-intents",
       "/backend/api/workspaces/workspace%2Fone/media-upload-intents/upload%2Fone/finalize",
+      "/backend/api/workspaces/workspace%2Fone/media-assets?scope=personal",
       "/backend/api/projects/project%2Fone/asset-references/asset%2Fone",
       "/backend/api/projects/project%2Fone/asset-references",
     ]);
@@ -469,6 +474,116 @@ describe("HttpMediaAssetRepository", () => {
   });
 });
 
+describe("HttpEntityRepository", () => {
+  const entity = {
+    id: "entity/one",
+    workspaceId: "workspace/one",
+    name: "莉瑞尔",
+    description: "精灵感角色",
+    mediaRefs: [
+      { assetId: "asset-front", order: 0 },
+      { assetId: "asset-voice", order: 1 },
+    ],
+    coverAssetId: "asset-front",
+    version: 1,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  };
+
+  it("creates, gets, lists, and version-updates Entities through the server contract", async () => {
+    const updated = { ...entity, name: "莉瑞尔新版", version: 2 };
+    const transport = createFetchQueue(
+      { body: { entity } },
+      { body: { entity } },
+      { body: { entities: [entity] } },
+      { body: { entity: updated } },
+    );
+    const repository = new HttpEntityRepository({ baseUrl: "/backend", fetch: transport.fetch });
+
+    await expect(repository.create({
+      workspaceId: "workspace/one",
+      idempotencyKey: "create-lirael-1",
+      name: entity.name,
+      description: entity.description,
+      assetIds: ["asset-front", "asset-voice"],
+      coverAssetId: "asset-front",
+    })).resolves.toEqual(entity);
+    await expect(repository.get("workspace/one", "entity/one")).resolves.toEqual(entity);
+    await expect(repository.listPersonal("workspace/one")).resolves.toEqual([entity]);
+    await expect(repository.update({
+      workspaceId: "workspace/one",
+      entityId: "entity/one",
+      expectedVersion: 1,
+      name: "莉瑞尔新版",
+      description: entity.description,
+      assetIds: ["asset-front", "asset-voice"],
+      coverAssetId: "asset-front",
+    })).resolves.toEqual(updated);
+
+    expect(transport.requests.map((request) => request.url)).toEqual([
+      "/backend/api/workspaces/workspace%2Fone/entities",
+      "/backend/api/workspaces/workspace%2Fone/entities/entity%2Fone",
+      "/backend/api/workspaces/workspace%2Fone/entities",
+      "/backend/api/workspaces/workspace%2Fone/entities/entity%2Fone",
+    ]);
+    expect(transport.requests.map((request) => request.init.method)).toEqual(["POST", undefined, undefined, "PATCH"]);
+    expect(JSON.parse(String(transport.requests[0]?.init.body))).toEqual({
+      idempotencyKey: "create-lirael-1",
+      name: entity.name,
+      description: entity.description,
+      assetIds: ["asset-front", "asset-voice"],
+      coverAssetId: "asset-front",
+    });
+    expect(JSON.parse(String(transport.requests[3]?.init.body))).toEqual({
+      expectedVersion: 1,
+      name: "莉瑞尔新版",
+      description: entity.description,
+      assetIds: ["asset-front", "asset-voice"],
+      coverAssetId: "asset-front",
+    });
+  });
+
+  it("rejects a malformed ordered-reference or cover relation at the HTTP boundary", async () => {
+    const malformed = {
+      ...entity,
+      mediaRefs: [{ assetId: "asset-front", order: 1 }],
+      coverAssetId: "asset-missing",
+    };
+    const repository = new HttpEntityRepository({ fetch: createFetchQueue({ body: { entity: malformed } }).fetch });
+
+    await expect(repository.get("workspace-one", "entity-one"))
+      .rejects.toBeInstanceOf(HttpResponseValidationError);
+  });
+
+  it("preserves the typed Entity version-conflict envelope", async () => {
+    const transport = createFetchQueue({
+      status: 409,
+      body: {
+        error: {
+          code: "entity_version_conflict",
+          message: "主体已更新。",
+          currentVersion: 3,
+        },
+      },
+    });
+    const repository = new HttpEntityRepository({ fetch: transport.fetch });
+
+    await expect(repository.update({
+      workspaceId: "workspace-one",
+      entityId: "entity-one",
+      expectedVersion: 2,
+      name: "莉瑞尔",
+      description: "",
+      assetIds: ["asset-front"],
+      coverAssetId: null,
+    })).rejects.toMatchObject({
+      code: "conflict",
+      serviceCode: "entity_version_conflict",
+      details: { currentVersion: 3 },
+    });
+  });
+});
+
 describe("createHttpServices", () => {
   it("creates all application adapters from one injectable transport configuration", async () => {
     const transport = createFetchQueue({ body: { actor: null } });
@@ -476,6 +591,7 @@ describe("createHttpServices", () => {
 
     await expect(services.sessionGateway.getCurrent()).resolves.toEqual({ actor: null });
     expect(services.canvasDocumentRepository).toBeInstanceOf(HttpCanvasDocumentRepository);
+    expect(services.entityRepository).toBeInstanceOf(HttpEntityRepository);
     expect(services.mediaAssetRepository).toBeInstanceOf(HttpMediaAssetRepository);
     expect(services.accountRepository).toBeInstanceOf(HttpAccountRepository);
     expect(services.workspaceContextGateway).toBeInstanceOf(HttpWorkspaceContextGateway);

@@ -7,6 +7,7 @@ describe("server dependency composition", () => {
   it("does not advertise process-local asset persistence in memory mode", async () => {
     const dependencies = createServerDependencies({ REELAY_STORAGE: "memory" });
     expect(dependencies.assetStore).toBeUndefined();
+    expect(dependencies.entityStore).toBeUndefined();
     expect(dependencies.objectStore).toBeUndefined();
 
     const app = await buildServer(dependencies);
