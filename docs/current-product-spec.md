@@ -325,6 +325,7 @@ Agent 对话栏展开或调整宽度时，不拖动左上、左侧和左下工�
 持久化边界：
 
 - 组织 / 平台素材、主体、文件夹和 placement 仍来自确定性 seed。受保护宿主中的个人 Media 与个人根目录 Entity 来自服务端目录并可在本地 PostgreSQL 重启后恢复；目录整理、组织共享和审核仍只保存在页面运行内存中。平台内容只是只读 seed，不是已上线的公共目录服务。
+- 本地 `db:seed` 还会为 Hoo 的个人空间幂等创建六张 Image 2 演示图片与两个主体，并把六张图片关联到“香水品牌 TVC”项目。两个主体各含三种画幅，用于验证卡片、编辑器、封面和素材筛选；这些源图随仓库同步，而 PostgreSQL 元数据和 filesystem ObjectStore 必须在每台开发电脑上重新 seed。公网 preview 因没有持久对象存储而跳过这批媒体夹具，不能把临时文件系统伪装成可跨部署恢复的资产服务。
 - 首个持久化切片将媒体所有权留在 WorkspaceMediaAsset，个人可见性由 personal placement 表达，项目复用由 ProjectAssetReference 表达。本地 PostgreSQL + filesystem ObjectStore 支持列表、内容读取与跨服务重启恢复；filesystem adapter 不适用于 Vercel serverless。
 - Entity 已有个人根目录 create / get / list / update repository；Folder repository、Entity 删除、organization placement、平台目录版本与导入策略、组织资产权限、Node 级引用、恢复和 GenerationResult 显式晋升仍未实现。公网还需私有 Supabase Storage adapter，不能把本地文件系统当作云端对象存储。
 - 完整资产中心仍应进入 React 工作台路由；当前切片只实现画布内高保真资产面板与可替换的领域模型。

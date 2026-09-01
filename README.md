@@ -58,13 +58,15 @@ npm run db:up
 npm run db:migrate
 ```
 
-空库需要显式写入十个本地演示账号和示例项目；生产环境会强制拒绝这个 seed：
+空库需要显式写入十个本地演示账号、示例项目，以及 Hoo 个人空间中的六个图片素材和两个主体；非预览生产环境会强制拒绝这个 seed：
 
 ```powershell
 $env:ALLOW_DEMO_SEED='true'
 npm run db:seed
 Remove-Item Env:ALLOW_DEMO_SEED
 ```
+
+该命令可重复执行且不会产生重复卡片。六个图片文件随仓库同步，二进制对象写入本机 `.reelay-data/object-store`，资产、项目引用和主体元数据写入 PostgreSQL；因此换电脑后需要重新执行 migration 与 seed，不能只复制某台电脑的本地数据库。公网 preview 没有持久 ObjectStore，seed 会保留账号和项目但明确跳过这批本地媒体夹具。
 
 默认连接为 `postgresql://reelay:reelay-local-only@127.0.0.1:54329/reelay`，只用于本机开发；需要改端口或凭据时参考 `.env.example`，并同步设置服务端的 `DATABASE_URL`。
 

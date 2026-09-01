@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import type { CollaborationStore } from "./application/CollaborationStore";
 import type { EntityStore } from "./application/EntityStore";
 import type { ObjectStore } from "./application/ObjectStore";
@@ -12,6 +10,7 @@ import { InMemoryCollaborationStore } from "./infrastructure/InMemoryCollaborati
 import { PostgresAssetStore } from "./infrastructure/PostgresAssetStore";
 import { PostgresCollaborationStore } from "./infrastructure/PostgresCollaborationStore";
 import { PostgresEntityStore } from "./infrastructure/PostgresEntityStore";
+import { getObjectStoreRoot } from "./object-store-config";
 
 export interface ServerDependencies {
   assetStore?: WorkspaceMediaAssetStore & ProjectAssetReferenceStore;
@@ -30,13 +29,11 @@ export function createServerDependencies(environment: NodeJS.ProcessEnv = proces
   }
   if (storage === "postgresql") {
     const pool = createPostgresPool();
-    const objectStoreRoot = environment.REELAY_OBJECT_STORE_ROOT?.trim()
-      || path.resolve(".reelay-data/object-store");
     return {
       store: new PostgresCollaborationStore(pool),
       assetStore: new PostgresAssetStore(pool),
       entityStore: new PostgresEntityStore(pool),
-      objectStore: new FileSystemObjectStore(objectStoreRoot),
+      objectStore: new FileSystemObjectStore(getObjectStoreRoot(environment)),
     };
   }
   throw new Error(`Unsupported REELAY_STORAGE value: ${storage}`);

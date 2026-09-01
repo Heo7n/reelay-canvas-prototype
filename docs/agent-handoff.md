@@ -78,7 +78,7 @@ npm run db:migrate
 npm run check
 ```
 
-空库首次需要显式设置 `ALLOW_DEMO_SEED=true` 后运行 `npm run db:seed`；服务启动不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
+空库首次需要显式设置 `ALLOW_DEMO_SEED=true` 后运行 `npm run db:seed`；该幂等命令除账号和项目外，还会在本地开发环境为 Hoo 写入六个图片素材、对应项目引用和两个主体。素材源文件随 Git 同步，但 PostgreSQL 元数据与 `.reelay-data/object-store` 都是本机状态，所以另一台电脑拉取后仍需重新执行 migration 与 seed。公网 preview 因缺少持久 ObjectStore 会明确跳过媒体夹具。服务启动不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
 
 - 已安装依赖时不必重复执行 `npm ci`。
 - 开发中的定向检查与文档选读按 `docs/development-workflow.md` 执行。
