@@ -179,7 +179,7 @@ test("personal Entity batch actions contain only move, organization copy, and de
   assert.equal(markup.match(/data-library-batch-action=/g)?.length, 3);
 });
 
-test("Entity command bar hides selection when no batch capability is implemented", () => {
+test("an explicit empty batch capability disables Entity selection", () => {
   const markup = view.renderCommandBar({
     mutable: true,
     canCreateEntity: true,
@@ -541,7 +541,7 @@ test("Entity cards render one explicit cover without count badges or review acti
   assert.doesNotMatch(markup, /data-library-menu-item="review"/);
 });
 
-test("persisted Entity cards render only explicitly supported actions", () => {
+test("an explicit item-action capability can restrict Entity menus", () => {
   const editable = view.renderEntityCard({
     entity: { id: "entity-persisted", name: "持久主体", version: 3 },
     mutable: true,
@@ -605,7 +605,7 @@ test("Entity cover CSS fills the preview and removes the retired collage and cou
   assert.doesNotMatch(css, /\.asset-library-entity-badge/);
 });
 
-test("Entity section CSS removes the unsupported directory lane", async () => {
+test("an unavailable Entity folder capability can collapse the directory lane", async () => {
   const css = await readFile(new URL("../styles/canvas-asset-library.css", import.meta.url), "utf8");
 
   assert.match(css, /data-library-section="entity"\]\[data-library-folder-capability="false"\][^}]+\.asset-library-directorybar\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/s);

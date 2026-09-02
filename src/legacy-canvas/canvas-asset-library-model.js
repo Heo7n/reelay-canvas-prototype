@@ -98,6 +98,12 @@
       return record;
     }
 
+    function requireOrganizationShareRecord(item) {
+      return item.kind === "entity"
+        ? assertPersistedItemCommandAvailable(item, "共享")
+        : requireRecord(item);
+    }
+
     function assertMutable(space) {
       if (!isMutableSpace(space)) throw new Error(`The ${space} asset library space is read-only.`);
     }
@@ -359,6 +365,7 @@
       validateEntityStructure(record, mediaById);
       if (entitiesById.has(record.id)) throw new Error(`Duplicate entity id: ${record.id}`);
       entitiesById.set(record.id, record);
+      if (Number.isInteger(record.version) && record.version > 0) persistedEntityIds.add(record.id);
     }
     for (const input of placements) {
       const placement = normalizePlacementRecord(input);
@@ -763,15 +770,14 @@
       if (sourceSpace !== "personal") throw new Error("Only personal library items can be shared to the organization.");
       const refs = items.map((item) => resolveItemRef(item));
       for (const item of refs) {
-        requireRecord(item);
+        const record = requireOrganizationShareRecord(item);
         if (!hasPlacementInternal(item, sourceSpace)) throw new Error(`${item.kind} ${item.id} is not visible in ${sourceSpace}.`);
         const targetFolderId = item.kind === "media" ? mediaFolderId ?? folderId : entityFolderId ?? folderId;
         validateFolder(targetFolderId, "organization", item.kind);
         if (item.kind === "entity") {
-          const entity = requireRecord(item);
-          for (const mediaRef of entity.mediaRefs) {
+          for (const mediaRef of record.mediaRefs) {
             if (!hasPlacementInternal({ kind: "media", id: mediaRef.mediaId }, sourceSpace)) {
-              throw new Error(`Entity ${entity.id} references media ${mediaRef.mediaId} outside ${sourceSpace}.`);
+              throw new Error(`Entity ${record.id} references media ${mediaRef.mediaId} outside ${sourceSpace}.`);
             }
           }
         }
@@ -804,6 +810,15 @@
       if (sourceSpace !== "personal") throw new Error("Only personal folders can be shared to the organization.");
       const sourceRoot = validateFolder(folderId, sourceSpace, foldersById.get(String(folderId || ""))?.kind);
       const sourceFolders = listFolderSubtreeInternal(sourceRoot.id);
+      const itemsBySourceFolderId = new Map(sourceFolders.map((sourceFolder) => [
+        sourceFolder.id,
+        [...placementsByKey.values()]
+          .filter((placement) => placement.space === sourceSpace && placement.folderId === sourceFolder.id)
+          .map((placement) => placement.item),
+      ]));
+      for (const items of itemsBySourceFolderId.values()) {
+        for (const item of items) requireOrganizationShareRecord(item);
+      }
       const targetBySourceId = new Map();
       let sharedItemCount = 0;
 
@@ -825,9 +840,7 @@
         }
         targetBySourceId.set(sourceFolder.id, targetFolder);
 
-        const items = [...placementsByKey.values()]
-          .filter((placement) => placement.space === sourceSpace && placement.folderId === sourceFolder.id)
-          .map((placement) => placement.item);
+        const items = itemsBySourceFolderId.get(sourceFolder.id) || [];
         if (items.length) {
           shareToOrganization({ items, fromSpace: sourceSpace, folderId: targetFolder.id });
           sharedItemCount += items.length;

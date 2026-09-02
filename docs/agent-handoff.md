@@ -73,12 +73,15 @@ CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画
 git branch --show-current
 git status --short
 npm ci
-npm run db:up
-npm run db:migrate
+npm run db:setup
 npm run check
 ```
 
-空库首次需要显式设置 `ALLOW_DEMO_SEED=true` 后运行 `npm run db:seed`；该幂等命令除账号和项目外，还会在本地开发环境为 Hoo 写入六个图片素材、对应项目引用和两个主体。素材源文件随 Git 同步，但 PostgreSQL 元数据与 `.reelay-data/object-store` 都是本机状态，所以另一台电脑拉取后仍需重新执行 migration 与 seed。公网 preview 因缺少持久 ObjectStore 会明确跳过媒体夹具。服务启动不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
+`npm run db:setup` 是显式的本地开发初始化入口，依次执行 `db:up`、`db:migrate` 和幂等 `db:seed`；`db:up` 会等待 PostgreSQL 健康。脚本只在 seed 子进程中注入 `ALLOW_DEMO_SEED=true`，不会修改当前终端环境，也不会清空、重置或硬删除业务资产；子命令失败会保留非零退出码。它拒绝 production / preview 环境和非回环数据库地址，公网预览仍必须按 `docs/vercel-supabase-preview.md` 人工迁移与 seed，不能复用这个本地入口。
+
+该 seed 除账号和项目外，还会为 Hoo 写入与静态原型一致的六个图片素材及“雾森信使 / 曜石勘探体”两个主体。旧版“绯雾调香师 / 曜金香氛核心”仅在完整旧 fixture 指纹匹配时原位校准，保留 Entity ID 与 placement；旧六图在无额外 Entity、项目或画布引用时只撤销个人 placement 和演示项目引用，底层资产 / blob 不硬删。用户编辑过的旧主体会 fail closed，不会追加成四个主体；并发编辑发生在上传与事务校准之间时，事务仍会二次校验并失败，已经完成的 canonical Media 可在解决冲突后由下一次 seed 幂等收敛。
+
+素材源文件随 Git 同步，但 PostgreSQL 元数据与 `.reelay-data/object-store` 都是本机状态，所以另一台电脑拉取后需要运行 `npm run db:setup` 来重建相同夹具。公网 preview 因缺少持久 ObjectStore 会明确跳过媒体夹具。服务启动和依赖安装不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
 
 - 已安装依赖时不必重复执行 `npm ci`。
 - 开发中的定向检查与文档选读按 `docs/development-workflow.md` 执行。

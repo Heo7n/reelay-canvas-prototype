@@ -892,6 +892,16 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
 });
 
 test("asset library actions stay scoped to their real controls and canvas drop target", () => {
+  const renderAssetLibraryStart = appSource.indexOf("function renderAssetLibrary()");
+  const renderAssetLibraryEnd = appSource.indexOf("\nfunction findLibraryAsset", renderAssetLibraryStart);
+  const renderAssetLibrarySource = appSource.slice(renderAssetLibraryStart, renderAssetLibraryEnd);
+  const createFolderStart = appSource.indexOf("function createAssetLibraryFolder()");
+  const createFolderEnd = appSource.indexOf("\nfunction projectAssetToLibraryMedia", createFolderStart);
+  const createFolderSource = appSource.slice(createFolderStart, createFolderEnd);
+  const runLibraryActionStart = appSource.indexOf("function runAssetLibraryAction(action, items)");
+  const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
+  const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
+
   assert.match(html, /styles\.css\?v=20260902-agent-composer-53/);
   assert.match(html, /prototype-config\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260901-platform-space-27/);
@@ -938,7 +948,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
 
   assert.match(appSource, /state\.librarySpace === "platform"[\s\S]*?\? "media"/);
   assert.match(appSource, /flatPlatformResults = state\.librarySpace === "platform"[\s\S]*?flatPlatformResults \? \[\]/);
-  assert.match(appSource, /allowedBatchActions:\s*platformResults[\s\S]*?\["add-canvas", "save-personal"\][\s\S]*?canImportPlatformAssets:\s*false/);
+  assert.match(renderAssetLibrarySource, /const canManageFolders = mutable;[\s\S]*?data-library-folder-capability", canManageFolders \? "true" : "false"/);
+  assert.doesNotMatch(renderAssetLibrarySource, /canManageFolders\s*=\s*mutable\s*&&\s*section\s*===\s*"media"/);
+  assert.match(createFolderSource, /MAX_DIRECTORY_LEVELS[\s\S]*?kind:\s*state\.librarySection/);
+  assert.doesNotMatch(createFolderSource, /state\.librarySection === "entity"/);
+  assert.match(renderAssetLibrarySource, /allowedBatchActions:\s*platformResults\s*\?\s*\["add-canvas", "save-personal"\]\s*:\s*undefined/);
+  assert.doesNotMatch(renderAssetLibrarySource, /section === "entity"\s*\?\s*\[\]/);
+  assert.doesNotMatch(renderAssetLibrarySource, /allowedActions:/);
+  assert.match(runLibraryActionSource, /if \(includesPersistedEntity && \["move", "share-organization", "delete"\]\.includes\(action\)\) \{\s*showActionToast\("主体的移动、共享与删除将在对应持久化切片接入；本次未执行"\);\s*return;\s*\}/);
   assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetToCanvas/);
   assert.match(appSource, /action === "save-personal"[\s\S]*?保存平台素材到个人素材库尚未接入/);
   assert.doesNotMatch(appSource, /savePlatformMediaToPersonal|savePlatformSelectionToPersonal|save-material/);

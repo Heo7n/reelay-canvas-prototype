@@ -51,22 +51,24 @@ Reelay 是一个 AIGC 创作平台原型。当前已形成一条本地可运行�
 npm ci
 ```
 
-首次运行或数据库 schema 更新后，启动 PostgreSQL 并执行迁移：
+首次运行，或在另一台电脑拉取项目后，用一条本地初始化命令启动 PostgreSQL、等待健康检查、执行迁移，并幂等写入十个演示账号、示例项目，以及 Hoo 个人空间中与静态原型一致的六个图片素材和“雾森信使 / 曜石勘探体”两个主体：
+
+```powershell
+npm run db:setup
+```
+
+`db:setup` 只面向本机开发：它只给 `db:seed` 子进程设置 `ALLOW_DEMO_SEED=true`，不会修改或遗留当前终端的环境变量，也不会清空、重置或硬删除已有业务资产。任一步失败都会立即停止并返回非零退出码。为避免误写远端，它会拒绝 production / preview 部署环境以及指向非回环主机的 `DATABASE_URL` / `MIGRATION_DATABASE_URL`；公网预览初始化仍按 [docs/vercel-supabase-preview.md](docs/vercel-supabase-preview.md) 的人工流程执行。
+
+如果只需要启动本地数据库并更新 schema、不需要演示数据，可以继续分别运行：
 
 ```powershell
 npm run db:up
 npm run db:migrate
 ```
 
-空库需要显式写入十个本地演示账号、示例项目，以及 Hoo 个人空间中的六个图片素材和两个主体；非预览生产环境会强制拒绝这个 seed：
+初始化命令可重复执行且不会产生重复卡片。若本机已有旧版“绯雾调香师 / 曜金香氛核心”夹具，seed 只在两个主体及其六张图仍完整匹配已发布指纹时原位校准：主体 ID 和 placement 保留，旧六图只撤销个人列表与演示项目引用，底层资产记录和对象文件保留。任何用户编辑或额外引用都会关闭相应覆盖 / 隐藏操作并明确失败或保留旧素材，不会用新增主体掩盖冲突。seed 在写入前预检并在事务内再次校验；若恰有并发编辑发生在素材上传阶段，事务会失败关闭，但已经幂等完成的 canonical Media 可能保留，解决冲突后重跑即可收敛。
 
-```powershell
-$env:ALLOW_DEMO_SEED='true'
-npm run db:seed
-Remove-Item Env:ALLOW_DEMO_SEED
-```
-
-该命令可重复执行且不会产生重复卡片。六个图片文件随仓库同步，二进制对象写入本机 `.reelay-data/object-store`，资产、项目引用和主体元数据写入 PostgreSQL；因此换电脑后需要重新执行 migration 与 seed，不能只复制某台电脑的本地数据库。公网 preview 没有持久 ObjectStore，seed 会保留账号和项目但明确跳过这批本地媒体夹具。
+六个 canonical 图片文件随仓库同步，二进制对象写入本机 `.reelay-data/object-store`，资产、项目引用和主体元数据写入 PostgreSQL；因此每台电脑都应在拉取和安装依赖后运行 `npm run db:setup`，不复制其他电脑的本地数据库。公网 preview 没有持久 ObjectStore，远端 seed 会保留账号和项目但明确跳过这批本地媒体夹具。
 
 默认连接为 `postgresql://reelay:reelay-local-only@127.0.0.1:54329/reelay`，只用于本机开发；需要改端口或凭据时参考 `.env.example`，并同步设置服务端的 `DATABASE_URL`。
 

@@ -3157,7 +3157,7 @@ function renderAssetLibrary() {
   const display = state.libraryDisplay;
   const canCreateEntity = mutable && space === "personal" && section === "entity" && canPersistLibraryEntities();
   const canUploadMedia = mutable && space === "personal" && section === "media" && canPersistLibraryMedia();
-  const canManageFolders = mutable && section === "media";
+  const canManageFolders = mutable;
   if (!canManageFolders) state.libraryDirectoryMenuOpen = false;
   const folder = getAssetLibraryFolder();
   const folderPath = getAssetLibraryFolderPath();
@@ -3256,7 +3256,7 @@ function renderAssetLibrary() {
       canUploadMedia,
       allowedBatchActions: platformResults
         ? ["add-canvas", "save-personal"]
-        : section === "entity" ? [] : undefined,
+        : undefined,
       canImportPlatformAssets: false,
       selectionMode: state.librarySelectionMode,
       selectedCount,
@@ -3301,9 +3301,6 @@ function renderAssetLibrary() {
           name: item.name || "未命名主体",
           mediaPreviews: entityMedia.slice(0, 4),
           coverPreview: entityMedia.find((media) => media.id === item.coverMediaId) || null,
-          allowedActions: space === "personal" && canPersistLibraryEntities() && Number.isInteger(item.version)
-            ? ["edit", "rename"]
-            : [],
         });
       }
       return canvasAssetLibraryView.renderMediaCard({
@@ -9196,7 +9193,6 @@ function selectAllVisibleAssetLibraryItems() {
 function startAssetLibraryRename(kind, id) {
   if (!isAssetLibraryMutable()) return;
   if (kind === "entity" && !canPersistLibraryEntities()) return;
-  if (kind === "folder" && state.librarySection === "entity") return;
   state.libraryRenameTarget = { kind, id };
   state.libraryMenuTarget = null;
   state.libraryToolbarMenu = null;
@@ -9245,7 +9241,6 @@ async function finishAssetLibraryRename(input, { cancel = false } = {}) {
 
 function createAssetLibraryFolder() {
   if (!isAssetLibraryMutable()) return;
-  if (state.librarySection === "entity") return;
   if (getAssetLibraryFolderPath().length + 1 >= canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS) {
     showActionToast(`最多支持 ${canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS} 层目录`);
     return;

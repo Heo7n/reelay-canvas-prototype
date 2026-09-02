@@ -191,6 +191,7 @@ test("registers persisted Entities idempotently in the personal root without wea
     version: 1,
   });
   assert.equal(store.hasPlacement(entityRef("persisted-hero"), "personal", null), true);
+  const beforeUnsupportedCommands = plain(store.snapshot());
   assert.throws(
     () => store.renameItem({ item: entityRef("persisted-hero"), name: "绕过版本改名", space: "personal" }),
     /版本化主体命令/,
@@ -200,9 +201,14 @@ test("registers persisted Entities idempotently in the personal root without wea
     /版本化主体命令/,
   );
   assert.throws(
+    () => store.shareToOrganization({ items: [entityRef("persisted-hero")], fromSpace: "personal" }),
+    /持久主体共享必须通过版本化主体命令/,
+  );
+  assert.throws(
     () => store.removePlacements({ items: [entityRef("persisted-hero")], space: "personal" }),
     /版本化主体命令/,
   );
+  assert.deepEqual(plain(store.snapshot()), beforeUnsupportedCommands);
 
   const beforeFailure = plain(store.snapshot());
   assert.throws(
@@ -276,7 +282,6 @@ test("syncs the complete persisted Entity projection atomically and rejects stal
 });
 
 test("syncing the personal Entity catalog preserves projections in other spaces", () => {
-  const store = createFixtureStore();
   const entity = {
     id: "persisted-shared",
     name: "已共享主体",
@@ -285,8 +290,16 @@ test("syncing the personal Entity catalog preserves projections in other spaces"
     coverMediaId: "portrait",
     version: 1,
   };
-  store.registerPersistedEntity({ entity });
-  store.shareToOrganization({ items: [entityRef(entity.id)] });
+  const store = model.createAssetLibraryStore({
+    media: [{ id: "portrait", type: "image", name: "主体封面" }],
+    entities: [entity],
+    placements: [
+      { item: mediaRef("portrait"), space: "personal", folderId: null },
+      { item: mediaRef("portrait"), space: "organization", folderId: null },
+      { item: entityRef(entity.id), space: "personal", folderId: null },
+      { item: entityRef(entity.id), space: "organization", folderId: null },
+    ],
+  });
 
   const result = store.syncPersistedEntities({ entities: [] });
 
@@ -575,7 +588,36 @@ test("blocks removal of referenced Media unless its Entity placement is removed 
   assert.equal(store.getEntity(entityRef("hero")).id, "hero");
 });
 
-test("fails closed for unsupported rename, move and delete commands on persisted media", () => {
+test("preflights persisted Entities before copying a folder tree and leaves the snapshot unchanged", () => {
+  const store = model.createAssetLibraryStore({
+    media: [{ id: "persisted-cover", type: "image", name: "持久主体封面" }],
+    entities: [{
+      id: "persisted-in-folder",
+      name: "目录中的持久主体",
+      description: "",
+      mediaRefs: [{ mediaId: "persisted-cover", order: 0 }],
+      coverMediaId: "persisted-cover",
+      version: 1,
+    }],
+    folders: [
+      { id: "entity-tree", name: "角色库", space: "personal", kind: "entity" },
+      { id: "entity-leaf", name: "主角", space: "personal", kind: "entity", parentId: "entity-tree" },
+    ],
+    placements: [
+      { item: mediaRef("persisted-cover"), space: "personal", folderId: null },
+      { item: entityRef("persisted-in-folder"), space: "personal", folderId: "entity-leaf" },
+    ],
+  });
+  const before = plain(store.snapshot());
+
+  assert.throws(
+    () => store.copyFolderToOrganization({ folderId: "entity-tree", fromSpace: "personal" }),
+    /持久主体共享必须通过版本化主体命令/,
+  );
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
+test("fails closed for unsupported persisted Media commands while preserving organization sharing", () => {
   const store = createFixtureStore();
   store.registerMedia({
     media: {
@@ -599,7 +641,9 @@ test("fails closed for unsupported rename, move and delete commands on persisted
     () => store.removePlacements({ items: [mediaRef("workspace-asset-1")], space: "personal" }),
     /尚未接入/,
   );
+  store.shareToOrganization({ items: [mediaRef("workspace-asset-1")], fromSpace: "personal" });
   assert.equal(store.hasPlacement(mediaRef("workspace-asset-1"), "personal"), true);
+  assert.equal(store.hasPlacement(mediaRef("workspace-asset-1"), "organization"), true);
 });
 
 test("rejects every mutation whose source or target placement is the platform space", () => {

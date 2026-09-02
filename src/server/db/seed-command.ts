@@ -24,6 +24,7 @@ async function main(): Promise<void> {
       return;
     }
     const seeded = await seedDemoAssetLibrary({
+      pool,
       assetStore: new PostgresAssetStore(pool),
       entityStore: new PostgresEntityStore(pool),
       objectStore: new FileSystemObjectStore(getObjectStoreRoot()),
