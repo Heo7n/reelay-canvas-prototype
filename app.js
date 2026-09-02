@@ -109,10 +109,20 @@ const agentHistoryList = document.querySelector("#agentHistoryList");
 const agentHistorySearch = document.querySelector("#agentHistorySearch");
 const agentConversationTitle = document.querySelector("#agentConversationTitle");
 const agentMessages = document.querySelector("#agentMessages");
+const agentComposer = document.querySelector("#agentComposer");
 const agentInput = document.querySelector("#agentInput");
 const agentSendButton = document.querySelector(".agent-send");
+const agentAddBtn = document.querySelector("#agentAddBtn");
+const agentPromptOptimizationBtn = document.querySelector("#agentPromptOptimizationBtn");
+const agentAdvancedBtn = document.querySelector("#agentAdvancedBtn");
+const agentAdvancedSettings = document.querySelector("#agentAdvancedSettings");
+const agentAutoLinkBtn = document.querySelector("#agentAutoLinkBtn");
+const agentModeBtn = document.querySelector("#agentModeBtn");
+const agentModeMenu = document.querySelector("#agentModeMenu");
 const agentModelBtn = document.querySelector("#agentModelBtn");
 const agentModelMenu = document.querySelector("#agentModelMenu");
+const agentParamSummary = document.querySelector("#agentParamSummary");
+const agentCreditValue = document.querySelector("#agentCreditValue");
 const canvasAccessStatus = document.querySelector("#canvasAccessStatus");
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -239,7 +249,7 @@ const state = {
   generationTasks: new Map(),
   promptOptimizationTasks: new Map(),
   agentOpen: false,
-  agentWidth: 420,
+  agentWidth: 600,
   zoomTipTimer: 0,
   projectId: crypto.randomUUID(),
   projectName: "Untitled",
@@ -247,9 +257,13 @@ const state = {
   projectSearch: "",
   canvasMoreTargetId: null,
   activeConversationId: "new",
-  agentModelId: "gpt-image-2",
-  agentModelIds: ["gpt-image-2"],
-  agentModelTab: "image",
+  agentComposerMode: "video",
+  agentAdvancedSettingsExpanded: false,
+  agentAutoLinkEnabled: true,
+  agentPromptOptimizationTask: null,
+  agentModelId: "seedance-2",
+  agentModelIds: ["seedance-2"],
+  agentModelTab: "video",
   agentModelAuto: false,
   account: {
     credits: 3000,
@@ -584,7 +598,7 @@ function syncCanvasAccessUi() {
       delete control.dataset.accessDisabled;
     }
   });
-  document.querySelectorAll(".prompt-input").forEach((input) => {
+  nodeLayer.querySelectorAll("[data-node-prompt-input]").forEach((input) => {
     if (!(input instanceof HTMLTextAreaElement)) return;
     input.readOnly = locked;
     input.setAttribute("aria-readonly", String(locked));
@@ -2277,6 +2291,7 @@ const fallbackIconPaths = {
   "align-horizontal-space-around": '<path d="M4 18V6"/><path d="M20 18V6"/><path d="M8 12h8"/><path d="m14 9 3 3-3 3"/><path d="m10 9-3 3 3 3"/>',
   "align-vertical-space-around": '<path d="M6 4h12"/><path d="M6 20h12"/><path d="M12 8v8"/><path d="m9 14 3 3 3-3"/><path d="m9 10 3-3 3 3"/>',
   "archive": '<path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M4 4h16v3H4z"/><path d="M9 11h6"/>',
+  "arrow-right-from-line": '<path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/>',
   "arrow-up": '<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>',
   "audio-lines": '<path d="M4 10v4"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 8v8"/><path d="M20 10v4"/>',
   "audio-waveform": '<path d="M3 12h2"/><path d="M7 9v6"/><path d="M11 5v14"/><path d="M15 8v8"/><path d="M19 10v4"/><path d="M21 12h-1"/>',
@@ -2287,6 +2302,7 @@ const fallbackIconPaths = {
   "bot": '<path d="M12 8V4"/><path d="M8 4h8"/><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M9 17h6"/>',
   "box": '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
   "building-2": '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18"/><path d="M4 22h16"/><path d="M9 6h1"/><path d="M14 6h1"/><path d="M9 10h1"/><path d="M14 10h1"/><path d="M9 14h1"/><path d="M14 14h1"/>',
+  "calendar-days": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/>',
   "check": '<path d="m5 12 4 4 10-10"/>',
   "chevron-down": '<path d="m6 9 6 6 6-6"/>',
   "chevron-left": '<path d="m15 18-6-6 6-6"/>',
@@ -2322,6 +2338,7 @@ const fallbackIconPaths = {
   "list-filter": '<path d="M3 6h18"/><path d="M6 12h12"/><path d="M10 18h4"/>',
   "log-out": '<path d="M10 17v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2"/><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/>',
   "map": '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
+  "message-square-plus": '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/><path d="M12 8v6"/><path d="M9 11h6"/>',
   "maximize-2": '<path d="M15 3h6v6"/><path d="m14 10 7-7"/><path d="M9 21H3v-6"/><path d="m10 14-7 7"/>',
   "minimize-2": '<path d="M4 14h6v6"/><path d="m10 14-7 7"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/>',
   "monitor": '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/>',
@@ -2426,10 +2443,17 @@ function formatCredit(value) {
 
 function syncCreditDisplay() {
   const credits = new Intl.NumberFormat("zh-CN").format(Math.max(0, Math.round(state.account.credits || 0)));
-  if (!profileCreditValue) return;
-  profileCreditValue.textContent = credits;
-  profileCreditValue.closest("[data-profile-action='credits']")
-    ?.setAttribute("aria-label", `查看我的积分，当前 ${credits}`);
+  if (profileCreditValue) {
+    profileCreditValue.textContent = credits;
+    profileCreditValue.closest("[data-profile-action='credits']")
+      ?.setAttribute("aria-label", `查看我的积分，当前 ${credits}`);
+  }
+  if (agentCreditValue) agentCreditValue.textContent = credits;
+  if (agentSendButton) {
+    const label = `发送；当前可用积分 ${credits}`;
+    agentSendButton.title = label;
+    agentSendButton.setAttribute("aria-label", label);
+  }
 }
 
 function hasEnoughCredits(cost) {
@@ -4702,13 +4726,13 @@ function createGeneratorNodeElement(node) {
 
   const promptPanel = node.expanded
     ? `
-      <section class="prompt-panel ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
+      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
         ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
-        <textarea class="prompt-input" placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
+        <textarea class="prompt-input" data-node-prompt-input placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
-          <button class="control-chip model-chip ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
+          <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
             ${modelIconMarkup(model, "model-chip-glyph")}
             <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
           </button>
@@ -4718,12 +4742,12 @@ function createGeneratorNodeElement(node) {
           </button>
           <div class="control-spacer"></div>
           ${isVideoNode ? `
-            <button class="control-chip prompt-optimization-button ${node.promptOptimizing ? "is-processing" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" title="${node.promptOptimizing ? "正在优化提示词" : node.prompt.trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="${node.promptOptimizing ? "正在优化提示词" : "提示词优化"}" aria-busy="${node.promptOptimizing}" ${node.generating || node.promptOptimizing || !node.prompt.trim() ? "disabled" : ""}>
+            <button class="control-chip composer-tool-button prompt-optimization-button ${node.promptOptimizing ? "is-processing" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" title="${node.promptOptimizing ? "正在优化提示词" : node.prompt.trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="${node.promptOptimizing ? "正在优化提示词" : "提示词优化"}" aria-busy="${node.promptOptimizing}" ${node.generating || node.promptOptimizing || !node.prompt.trim() ? "disabled" : ""}>
               <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
               <span class="prompt-optimization-spinner" aria-hidden="true"></span>
             </button>
           ` : ""}
-          <button class="control-chip advanced-settings-chip ${node.advancedSettingsExpanded ? "active" : ""}" data-action="advanced-settings-toggle" type="button" title="高级设置" aria-label="高级设置" aria-expanded="${node.advancedSettingsExpanded}" aria-controls="advanced-settings-${escapeHtml(node.id)}" ${generationInputsDisabled}>
+          <button class="control-chip composer-tool-button advanced-settings-chip ${node.advancedSettingsExpanded ? "active" : ""}" data-action="advanced-settings-toggle" type="button" title="高级设置" aria-label="高级设置" aria-expanded="${node.advancedSettingsExpanded}" aria-controls="advanced-settings-${escapeHtml(node.id)}" ${generationInputsDisabled}>
             <svg class="advanced-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h11M4 11.5h8M4 16.5h5"/><circle cx="17" cy="15.5" r="3.1"/><path d="M17 10.8v1.2M17 19v1.2M12.3 15.5h1.2M20.5 15.5h1.2M13.7 12.2l.85.85M19.45 17.95l.85.85M20.3 12.2l-.85.85M14.55 17.95l-.85.85"/></svg>
           </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
@@ -7130,7 +7154,76 @@ function renderAgentMessages(conversation = getConversation(state.activeConversa
   agentMessages.scrollTop = agentMessages.scrollHeight;
 }
 
+const agentComposerModes = {
+  image: { label: "图片生成", icon: "image" },
+  video: { label: "视频生成", icon: "play-square" },
+  agent: { label: "Agent 托管", icon: "bot" },
+};
+
+function setAgentHistoryOpen(open, { focus = false } = {}) {
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) {
+    setAgentModeMenuOpen(false);
+    setAgentModelMenuOpen(false);
+  }
+  agentHistoryMenu?.classList.toggle("hidden", !shouldOpen);
+  agentHistoryBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen && focus) window.requestAnimationFrame(() => agentHistorySearch?.focus());
+}
+
+function setAgentModeMenuOpen(open, { focus = false } = {}) {
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) {
+    setAgentHistoryOpen(false);
+    setAgentModelMenuOpen(false);
+  }
+  agentModeMenu?.classList.toggle("hidden", !shouldOpen);
+  agentModeBtn?.classList.toggle("active", shouldOpen);
+  agentModeBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen && focus) {
+    window.requestAnimationFrame(() => agentModeMenu?.querySelector('[aria-checked="true"]')?.focus());
+  }
+}
+
+function setAgentModelMenuOpen(open, { focus = false } = {}) {
+  const shouldOpen = Boolean(open) && !agentModelBtn?.disabled;
+  if (shouldOpen) {
+    setAgentHistoryOpen(false);
+    setAgentModeMenuOpen(false);
+    renderAgentModelMenu();
+  }
+  agentModelMenu?.classList.toggle("hidden", !shouldOpen);
+  agentModelBtn?.classList.toggle("active", shouldOpen);
+  agentModelBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen && focus) {
+    window.requestAnimationFrame(() => agentModelMenu?.querySelector(".agent-model-option.active")?.focus());
+  }
+}
+
+function closeAgentPopovers() {
+  setAgentHistoryOpen(false);
+  setAgentModeMenuOpen(false);
+  setAgentModelMenuOpen(false);
+}
+
+function setAgentAdvancedOpen(open) {
+  const shouldOpen = Boolean(open);
+  state.agentAdvancedSettingsExpanded = shouldOpen;
+  agentAdvancedSettings?.classList.toggle("hidden", !shouldOpen);
+  agentAdvancedSettings?.setAttribute("aria-hidden", String(!shouldOpen));
+  agentAdvancedBtn?.classList.toggle("active", shouldOpen);
+  agentAdvancedBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  agentComposer?.classList.toggle("advanced-open", shouldOpen);
+}
+
+function setAgentAutoLinkEnabled(enabled) {
+  state.agentAutoLinkEnabled = Boolean(enabled);
+  agentAutoLinkBtn?.setAttribute("aria-checked", String(state.agentAutoLinkEnabled));
+  agentAutoLinkBtn?.classList.toggle("is-on", state.agentAutoLinkEnabled);
+}
+
 function setAgentConversation(id) {
+  cancelAgentPromptOptimization();
   const conversation = getConversation(id);
   state.activeConversationId = conversation.id;
   if (agentConversationTitle) {
@@ -7140,7 +7233,7 @@ function setAgentConversation(id) {
     item.classList.toggle("active", item.dataset.chatId === conversation.id);
   });
   renderAgentMessages(conversation);
-  agentHistoryMenu?.classList.add("hidden");
+  setAgentHistoryOpen(false);
 }
 
 function filterAgentHistory(keyword = "") {
@@ -7151,7 +7244,69 @@ function filterAgentHistory(keyword = "") {
   });
 }
 
+function syncAgentPromptOptimizationControl() {
+  const busy = Boolean(state.agentPromptOptimizationTask);
+  const hasPrompt = Boolean(agentInput?.value.trim());
+  if (agentPromptOptimizationBtn) {
+    agentPromptOptimizationBtn.disabled = busy || !hasPrompt;
+    agentPromptOptimizationBtn.classList.toggle("is-processing", busy);
+    agentPromptOptimizationBtn.setAttribute("aria-busy", String(busy));
+    agentPromptOptimizationBtn.setAttribute("aria-label", busy ? "正在优化提示词" : "提示词优化");
+    agentPromptOptimizationBtn.title = busy
+      ? "正在优化提示词"
+      : hasPrompt
+        ? "优化提示词"
+        : "输入提示词后优化";
+  }
+  if (agentInput) {
+    agentInput.readOnly = busy;
+    agentInput.setAttribute("aria-busy", String(busy));
+    agentInput.setAttribute("aria-readonly", String(busy));
+  }
+  if (agentSendButton) {
+    agentSendButton.disabled = busy;
+    agentSendButton.classList.toggle("disabled", busy);
+    agentSendButton.setAttribute("aria-disabled", String(busy));
+  }
+}
+
+function cancelAgentPromptOptimization() {
+  const task = state.agentPromptOptimizationTask;
+  if (task?.timeoutId) window.clearTimeout(task.timeoutId);
+  state.agentPromptOptimizationTask = null;
+  syncAgentPromptOptimizationControl();
+}
+
+function completeAgentPromptOptimization() {
+  const task = state.agentPromptOptimizationTask;
+  if (!task) return;
+  const optimizedPrompt = buildOptimizedPrompt(task.sourcePrompt);
+  state.agentPromptOptimizationTask = null;
+  if (agentInput && optimizedPrompt) agentInput.value = optimizedPrompt;
+  syncAgentPromptOptimizationControl();
+  if (agentInput) {
+    agentInput.focus();
+    agentInput.setSelectionRange(agentInput.value.length, agentInput.value.length);
+  }
+}
+
+function startAgentPromptOptimization() {
+  const sourcePrompt = agentInput?.value.trim();
+  if (!sourcePrompt || state.agentPromptOptimizationTask) return;
+  const task = {
+    conversationId: state.activeConversationId,
+    sourcePrompt,
+    timeoutId: 0,
+  };
+  state.agentPromptOptimizationTask = task;
+  syncAgentPromptOptimizationControl();
+  task.timeoutId = window.setTimeout(() => {
+    if (state.agentPromptOptimizationTask === task) completeAgentPromptOptimization();
+  }, 900);
+}
+
 function sendAgentMessage() {
+  if (state.agentPromptOptimizationTask) return;
   const content = agentInput?.value.trim();
   if (!content) return;
   const conversation = getConversation(state.activeConversationId);
@@ -7161,6 +7316,7 @@ function sendAgentMessage() {
     content: "我已收到。后续可以把这条需求拆成画布节点、素材输入和生成参数。",
   });
   agentInput.value = "";
+  syncAgentPromptOptimizationControl();
   renderAgentMessages(conversation);
 }
 
@@ -7176,16 +7332,110 @@ function getSelectedAgentModels() {
   return selectedIds.map((id) => models.find((model) => model.id === id)).filter(Boolean);
 }
 
+function getAgentComposerModel(mode = state.agentComposerMode) {
+  if (mode !== "image" && mode !== "video") return null;
+  const active = models.find((model) => model.id === state.agentModelId && model.type === mode);
+  if (active) return active;
+  const preferred = getSelectedAgentModels().find((model) => model.type === mode);
+  if (preferred) return preferred;
+  const fallbackId = mode === "video" ? "seedance-2" : "gpt-image-2";
+  return models.find((model) => model.id === fallbackId)
+    || models.find((model) => model.type === mode)
+    || null;
+}
+
+function getAgentComposerParameterParts(model) {
+  if (!model) {
+    return { beforeAspect: "自动规划模型与参数", aspect: "", afterAspect: "" };
+  }
+  const defaults = model.defaults || {};
+  if (model.type === "video") {
+    const workflow = generationWorkflows.video?.find((item) => item.id === defaults.workflow);
+    const after = [defaults.quality, defaults.duration].filter(Boolean).join(" · ");
+    return {
+      beforeAspect: workflow?.label ? `${workflow.label} · ` : "",
+      aspect: defaults.aspect || "自动",
+      afterAspect: after ? ` · ${after}` : "",
+    };
+  }
+  const after = [defaults.resolution, defaults.quality].filter(Boolean).join(" · ");
+  return {
+    beforeAspect: "",
+    aspect: defaults.aspect || "自动",
+    afterAspect: after ? ` · ${after}` : "",
+  };
+}
+
+function getAgentComposerParameterSummary(model) {
+  const parts = getAgentComposerParameterParts(model);
+  return `${parts.beforeAspect}${parts.aspect}${parts.afterAspect}`;
+}
+
+function getAgentComposerParameterMarkup(model) {
+  const parts = getAgentComposerParameterParts(model);
+  if (!parts.aspect) return `<span class="param-summary-before">${escapeHtml(parts.beforeAspect)}</span>`;
+  return `<span class="param-summary-before">${escapeHtml(parts.beforeAspect)}</span><span class="param-summary-aspect">${escapeHtml(parts.aspect)}</span><span class="param-summary-after">${escapeHtml(parts.afterAspect)}</span>`;
+}
+
+function syncAgentComposerControls() {
+  const mode = agentComposerModes[state.agentComposerMode] ? state.agentComposerMode : "video";
+  const definition = agentComposerModes[mode];
+  if (agentModeBtn) {
+    agentModeBtn.innerHTML = `<i data-agent-mode-icon data-lucide="${definition.icon}" aria-hidden="true"></i><span class="control-chip-label" data-agent-mode-label>${definition.label}</span>`;
+    agentModeBtn.title = `生成模式：${definition.label}`;
+    agentModeBtn.setAttribute("aria-label", `生成模式：${definition.label}`);
+  }
+  agentModeMenu?.querySelectorAll("[data-agent-mode]").forEach((button) => {
+    const active = button.dataset.agentMode === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-checked", String(active));
+  });
+  syncAgentModelButton();
+}
+
+function setAgentComposerMode(mode, { focusInput = false } = {}) {
+  const nextMode = agentComposerModes[mode] ? mode : "video";
+  state.agentComposerMode = nextMode;
+  if (nextMode === "image" || nextMode === "video") {
+    const model = getAgentComposerModel(nextMode);
+    if (model) {
+      state.agentModelId = model.id;
+      if (!getSelectedAgentModelIds().includes(model.id)) {
+        state.agentModelIds = [...getSelectedAgentModelIds(), model.id];
+      }
+    }
+    state.agentModelTab = nextMode;
+  }
+  setAgentModeMenuOpen(false);
+  syncAgentComposerControls();
+  if (focusInput) agentInput?.focus();
+}
+
 function syncAgentModelButton() {
-  if (!agentModelBtn) return;
   const selectedModels = getSelectedAgentModels();
   const names = selectedModels.map((model) => model.name);
-  const label =
+  const preferenceLabel =
     names.length > 2
       ? `已选模型：${names.slice(0, 2).join("、")} 等 ${names.length} 个`
       : `已选模型：${names.join("、") || "未选择"}`;
-  agentModelBtn.title = label;
-  agentModelBtn.setAttribute("aria-label", label);
+  const model = getAgentComposerModel();
+  const agentManaged = state.agentComposerMode === "agent";
+  if (agentModelBtn) {
+    agentModelBtn.disabled = agentManaged;
+    agentModelBtn.classList.toggle("agent-managed", agentManaged);
+    agentModelBtn.innerHTML = agentManaged
+      ? '<i data-lucide="bot" aria-hidden="true"></i><span class="agent-model-button-label control-chip-label">自动编排</span>'
+      : `${modelIconMarkup(model, "model-chip-glyph agent-composer-model-icon")}<span class="agent-model-button-label control-chip-label">${escapeHtml(model?.name || "选择模型")}</span>`;
+    const label = agentManaged ? "Agent 托管将自动编排模型" : `${preferenceLabel}；当前 ${model?.name || "未选择"}`;
+    agentModelBtn.title = label;
+    agentModelBtn.setAttribute("aria-label", label);
+  }
+  if (agentParamSummary) {
+    const summary = getAgentComposerParameterSummary(model);
+    agentParamSummary.innerHTML = `<span class="control-chip-label param-chip-label">${getAgentComposerParameterMarkup(model)}</span>${model?.type === "video" ? '<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="volume-2" aria-label="音频开启"></i>' : ""}`;
+    agentParamSummary.setAttribute("aria-label", `当前生成参数：${summary}`);
+  }
+  refreshIcons();
 }
 
 function renderAgentModelMenu() {
@@ -7249,14 +7499,24 @@ function toggleAgentModel(modelId) {
   const scrollTop = agentModelMenu?.querySelector(".agent-model-scroll")?.scrollTop || 0;
   const selectedIds = getSelectedAgentModelIds();
   const exists = selectedIds.includes(selected.id);
-  if (exists && selectedIds.length > 1) {
+  const isActiveGenerationType = selected.type === state.agentComposerMode;
+  const sameTypeCount = selectedIds
+    .map((id) => models.find((model) => model.id === id))
+    .filter((model) => model?.type === selected.type).length;
+  if (exists && selectedIds.length > 1 && (!isActiveGenerationType || sameTypeCount > 1)) {
     state.agentModelIds = selectedIds.filter((id) => id !== selected.id);
+    if (state.agentModelId === selected.id) {
+      state.agentModelId = state.agentModelIds
+        .map((id) => models.find((model) => model.id === id))
+        .find((model) => model?.type === state.agentComposerMode)?.id
+        || state.agentModelIds[0];
+    }
   } else if (!exists) {
     state.agentModelIds = [...selectedIds, selected.id];
+    if (isActiveGenerationType) state.agentModelId = selected.id;
   } else {
     state.agentModelIds = selectedIds;
   }
-  state.agentModelId = state.agentModelIds[0] || selected.id;
   syncAgentModelButton();
   renderAgentModelMenu();
   const nextScroll = agentModelMenu?.querySelector(".agent-model-scroll");
@@ -7388,7 +7648,9 @@ function setAgentOpen(open) {
     agentLauncher.setAttribute("aria-expanded", String(open));
   }
   if (!open) {
-    agentHistoryMenu?.classList.add("hidden");
+    cancelAgentPromptOptimization();
+    closeAgentPopovers();
+    setAgentAdvancedOpen(false);
   }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
   scheduleNodePopoverLayouts();
@@ -10407,11 +10669,7 @@ agentNewChatBtn?.addEventListener("click", () => {
 });
 agentHistoryBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  agentHistoryMenu?.classList.toggle("hidden");
-  agentModelMenu?.classList.add("hidden");
-  if (!agentHistoryMenu?.classList.contains("hidden")) {
-    agentHistorySearch?.focus();
-  }
+  setAgentHistoryOpen(agentHistoryMenu?.classList.contains("hidden"), { focus: true });
 });
 agentHistoryMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -10425,6 +10683,7 @@ agentHistorySearch?.addEventListener("input", (event) => {
   filterAgentHistory(event.currentTarget.value);
 });
 agentSendButton?.addEventListener("click", sendAgentMessage);
+agentInput?.addEventListener("input", syncAgentPromptOptimizationControl);
 agentInput?.addEventListener("keydown", (event) => {
   if (event.isComposing) return;
   if (event.key === "Enter" && !event.shiftKey) {
@@ -10432,11 +10691,32 @@ agentInput?.addEventListener("keydown", (event) => {
     sendAgentMessage();
   }
 });
+agentAddBtn?.addEventListener("click", () => {
+  showActionToast("附件能力将在 Agent 任务接入后开放");
+});
+agentPromptOptimizationBtn?.addEventListener("click", startAgentPromptOptimization);
+agentAdvancedBtn?.addEventListener("click", () => {
+  setAgentAdvancedOpen(!state.agentAdvancedSettingsExpanded);
+});
+agentAutoLinkBtn?.addEventListener("click", () => {
+  setAgentAutoLinkEnabled(!state.agentAutoLinkEnabled);
+});
+agentModeBtn?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setAgentModeMenuOpen(agentModeMenu?.classList.contains("hidden"), { focus: true });
+});
+agentModeMenu?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+agentModeMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const option = event.target.closest("[data-agent-mode]");
+  if (!option) return;
+  setAgentComposerMode(option.dataset.agentMode, { focusInput: true });
+});
 agentModelBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  agentHistoryMenu?.classList.add("hidden");
-  renderAgentModelMenu();
-  agentModelMenu?.classList.toggle("hidden");
+  setAgentModelMenuOpen(agentModelMenu?.classList.contains("hidden"), { focus: true });
 });
 agentModelMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -10457,6 +10737,36 @@ agentModelMenu?.addEventListener("change", (event) => {
   const autoInput = target?.closest("[data-agent-auto]");
   if (!autoInput) return;
   state.agentModelAuto = autoInput.checked;
+});
+agentPanel?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!agentHistoryMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentHistoryOpen(false);
+    agentHistoryBtn?.focus();
+    return;
+  }
+  if (!agentModeMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentModeMenuOpen(false);
+    agentModeBtn?.focus();
+    return;
+  }
+  if (!agentModelMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentModelMenuOpen(false);
+    agentModelBtn?.focus();
+    return;
+  }
+  if (state.agentAdvancedSettingsExpanded) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentAdvancedOpen(false);
+    agentAdvancedBtn?.focus();
+  }
 });
 agentResizeHandle?.addEventListener("pointerdown", (event) => {
   event.preventDefault();
@@ -10496,9 +10806,8 @@ document.addEventListener("click", (event) => {
   const pathMatches = (selector) => eventPath.some(
     (entry) => entry instanceof Element && entry.matches(selector),
   );
-  if (!target?.closest(".agent-actions, .agent-history-menu, .agent-model-wrap")) {
-    agentHistoryMenu?.classList.add("hidden");
-    agentModelMenu?.classList.add("hidden");
+  if (!target?.closest(".agent-actions, .agent-history-menu, .agent-mode-wrap, .agent-model-wrap")) {
+    closeAgentPopovers();
   }
   if (!target?.closest(".top-actions")) {
     closeProfileMenu();
@@ -10576,7 +10885,10 @@ setAgentWidth(state.agentWidth);
 setAgentOpen(false);
 renderAgentHistory();
 setAgentConversation(state.activeConversationId);
-syncAgentModelButton();
+setAgentAdvancedOpen(state.agentAdvancedSettingsExpanded);
+setAgentAutoLinkEnabled(state.agentAutoLinkEnabled);
+syncAgentComposerControls();
+syncAgentPromptOptimizationControl();
 syncCreditDisplay();
 applyTheme(state.themeMode);
 syncFaviconContrast();

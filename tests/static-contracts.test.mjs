@@ -58,7 +58,6 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(appSource, /placeholder="描述你想生成的内容，或输入 @ 引用"/);
   assert.match(appSource, /modelIconMarkup\(model, "agent-model-provider"\)/);
   assert.match(appSource, /"box":\s*'<path/);
-  assert.match(html, /id="agentModelBtn"[\s\S]*?data-lucide="box"/);
   assert.match(appSource, /commitGenerationUndoBoundary\(canvas, node\.id\)/);
   assert.match(appSource, /action\.type === "node-update" && action\.node\?\.id === nodeId/);
   assert.match(appCss, /\.model-mode-contract/);
@@ -361,8 +360,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260901-entity-use-43/);
-  assert.match(html, /app\.js\?v=20260901-platform-space-27/);
+  assert.match(html, /styles\.css\?v=20260902-agent-composer-53/);
+  assert.match(html, /app\.js\?v=20260902-agent-composer-53/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -499,11 +498,12 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.match(appSource, /Number\(node\.promptPanelHeight\) \|\| layoutRules\.compactPanelHeight/);
   assert.match(appSource, /const advancedSettingsHeight = node\.advancedSettingsExpanded[\s\S]*?layoutRules\.advancedSettingsHeightByMode\[getNodeGenerationMode\(node\)\]/);
   assert.match(appSource, /function syncPromptPanelContentHeight\(node, element\)/);
-  assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?width:\s*705px[\s\S]*?height:\s*291px[\s\S]*?border-radius:\s*12px/);
+  assert.match(appCss, /\.prompt-composer-surface\s*\{[\s\S]*?border-radius:\s*12px[\s\S]*?background:\s*var\(--node-panel-bg\)[\s\S]*?box-shadow:\s*var\(--node-panel-shadow\)/);
+  assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?width:\s*705px[\s\S]*?height:\s*291px/);
   assert.match(appCss, /\.asset-drop\s*\{[\s\S]*?top:\s*11px[\s\S]*?left:\s*13px[\s\S]*?width:\s*46px[\s\S]*?height:\s*46px/);
   assert.match(appCss, /\.prompt-input\s*\{[\s\S]*?top:\s*var\(--prompt-input-top, 73px\)[\s\S]*?bottom:\s*calc\(var\(--prompt-input-bottom, 51px\) \+ var\(--prompt-advanced-height, 0px\)\)/);
   assert.match(appCss, /\.control-bar\s*\{[\s\S]*?left:\s*12px[\s\S]*?right:\s*9px[\s\S]*?bottom:\s*calc\(6px \+ var\(--prompt-advanced-height, 0px\)\)/);
-  assert.match(appCss, /\.prompt-optimization-button,[\s\S]*?\.advanced-settings-chip\s*\{[\s\S]*?flex:\s*0 0 36px[\s\S]*?height:\s*36px/);
+  assert.match(appCss, /\.composer-tool-button\s*\{[\s\S]*?flex:\s*0 0 36px[\s\S]*?height:\s*36px/);
   assert.match(appSource, /\$\{isVideoNode \? `[\s\S]*?data-action="prompt-optimization"[\s\S]*?` : ""\}[\s\S]*?data-action="advanced-settings-toggle"/);
   assert.match(appSource, /data-action="prompt-optimization"[\s\S]*?aria-busy="\$\{node\.promptOptimizing\}"[\s\S]*?node\.generating \|\| node\.promptOptimizing \|\| !node\.prompt\.trim\(\)/);
   assert.match(appSource, /class="prompt-optimization-spinner"/);
@@ -586,7 +586,7 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.match(appSource, /class="model-check" data-lucide="check"/);
   assert.match(appCss, /\.model-option\.active \.model-check\s*\{[\s\S]*?opacity:\s*1/);
   assert.match(appSource, /sourceIcon\?\.classList\?\.forEach\(\(className\) => svg\.classList\.add\(className\)\)/);
-  assert.match(appCss, /\.control-chip\.model-chip::after\s*\{[\s\S]*?width:\s*1px[\s\S]*?height:\s*20px/);
+  assert.match(appCss, /\.control-chip\.has-divider::after\s*\{[\s\S]*?width:\s*1px[\s\S]*?height:\s*20px/);
   assert.doesNotMatch(appCss, /promptPanelReveal|\.generator-node\.selected \.prompt-panel\s*\{[\s\S]*?animation:/);
   assert.doesNotMatch(appSource, /toggle-large|promptLarge|promptInputHeight|expand-corner/);
 });
@@ -696,6 +696,92 @@ test("the hosted legacy canvas uses its local icon subset instead of the full ve
   assert.match(appSource, /function renderFallbackIcons\(\)/);
 });
 
+test("the Agent composer keeps its icon, disclosure, and accessibility contracts", () => {
+  const agentStart = html.indexOf('<aside class="agent-dock');
+  const agentEnd = html.indexOf("</aside>", agentStart);
+  assert.ok(agentStart >= 0 && agentEnd > agentStart);
+  const agentMarkup = html.slice(agentStart, agentEnd);
+
+  assert.match(
+    agentMarkup,
+    /id="agentNewChatBtn"[^>]*aria-label="新建对话"[^>]*>[\s\S]*?data-lucide="message-square-plus" aria-hidden="true"/,
+  );
+  assert.match(
+    agentMarkup,
+    /id="agentCloseBtn"[^>]*aria-label="收起 Reelay Agent"[^>]*>[\s\S]*?data-lucide="arrow-right-from-line" aria-hidden="true"/,
+  );
+  assert.match(appSource, /"message-square-plus":\s*'<path/);
+  assert.match(appSource, /"arrow-right-from-line":\s*'<path/);
+
+  assert.match(appCss, /\.agent-icon-button\s*\{[^}]*width:\s*36px;[^}]*height:\s*36px;/);
+  assert.match(appCss, /\.agent-icon-button \.lucide\s*\{[^}]*width:\s*20px;[^}]*height:\s*20px;/);
+  assert.doesNotMatch(appCss, /\.agent-icon-button \.lucide\s*\{[^}]*\b(?:width|height):\s*48px/);
+
+  assert.match(agentMarkup, /<textarea[^>]*id="agentInput"[^>]*aria-label="给 Reelay Agent 的消息"/);
+  assert.match(agentMarkup, /class="agent-composer prompt-composer-surface" id="agentComposer"/);
+  assert.match(agentMarkup, /class="agent-composer-stage prompt-composer-layout"/);
+  assert.match(appCss, /\.agent-composer\.prompt-composer-surface\s*\{[\s\S]*?--node-panel-bg:\s*var\(--agent-panel-bg\);[\s\S]*?--node-panel-line:\s*var\(--agent-panel-line\);/);
+  assert.match(appSource, /class="prompt-panel prompt-composer-surface prompt-composer-layout/);
+  assert.match(appSource, /data-node-prompt-input/);
+  assert.match(appSource, /nodeLayer\.querySelectorAll\("\[data-node-prompt-input\]"\)/);
+  assert.doesNotMatch(appCss, /\.agent-composer textarea/);
+  assert.doesNotMatch(appCss, /\.agent-composer-bar\s*\{[^}]*\bposition:/);
+  assert.match(
+    agentMarkup,
+    /id="agentHistoryBtn"[^>]*aria-controls="agentHistoryMenu"[^>]*aria-expanded="false"/,
+  );
+  assert.match(
+    agentMarkup,
+    /id="agentModeBtn"[^>]*aria-controls="agentModeMenu"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"/,
+  );
+  assert.match(
+    agentMarkup,
+    /id="agentModelBtn"[^>]*aria-controls="agentModelMenu"[^>]*aria-haspopup="dialog"[^>]*aria-expanded="false"/,
+  );
+
+  const modeMenuStart = agentMarkup.indexOf('id="agentModeMenu"');
+  const modelWrapStart = agentMarkup.indexOf('class="agent-model-wrap"', modeMenuStart);
+  assert.ok(modeMenuStart >= 0 && modelWrapStart > modeMenuStart);
+  const modeMenuMarkup = agentMarkup.slice(modeMenuStart, modelWrapStart);
+  assert.equal((modeMenuMarkup.match(/role="menuitemradio"/g) || []).length, 3);
+  assert.match(modeMenuMarkup, /role="menuitemradio" data-agent-mode="image" aria-checked="false"/);
+  assert.match(modeMenuMarkup, /role="menuitemradio" data-agent-mode="video" aria-checked="true"/);
+  assert.match(modeMenuMarkup, /role="menuitemradio" data-agent-mode="agent" aria-checked="false"/);
+
+  assert.match(
+    agentMarkup,
+    /class="agent-advanced-settings hidden" id="agentAdvancedSettings" aria-label="高级设置" aria-hidden="true"/,
+  );
+  assert.match(
+    agentMarkup,
+    /id="agentAdvancedBtn"[^>]*aria-controls="agentAdvancedSettings"[^>]*aria-expanded="false"/,
+  );
+  assert.match(
+    agentMarkup,
+    /id="agentScheduleBtn"[^>]*aria-label="定时任务暂未开放"[^>]*aria-disabled="true" disabled/,
+  );
+  assert.match(
+    agentMarkup,
+    /id="agentAutoLinkBtn"[^>]*role="switch"[^>]*aria-label="智能引用 AutoLink"[^>]*aria-checked="true"/,
+  );
+  const promptOptimizationStart = agentMarkup.indexOf('id="agentPromptOptimizationBtn"');
+  const advancedSettingsStart = agentMarkup.indexOf('id="agentAdvancedBtn"');
+  assert.ok(promptOptimizationStart >= 0 && advancedSettingsStart > promptOptimizationStart);
+  assert.match(
+    agentMarkup,
+    /class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn"[^>]*title="输入提示词后优化"[^>]*aria-label="提示词优化"[^>]*aria-busy="false" disabled>[\s\S]*?class="prompt-optimization-icon"[\s\S]*?class="prompt-optimization-spinner"/,
+  );
+  assert.match(appSource, /function startAgentPromptOptimization\(\)[\s\S]*?state\.agentPromptOptimizationTask = task[\s\S]*?window\.setTimeout\(\(\) => \{[\s\S]*?completeAgentPromptOptimization\(\);[\s\S]*?\}, 900\)/);
+  assert.match(appSource, /function completeAgentPromptOptimization\(\)[\s\S]*?buildOptimizedPrompt\(task\.sourcePrompt\)[\s\S]*?agentInput\.value = optimizedPrompt/);
+  const agentOptimizationStart = appSource.indexOf("function syncAgentPromptOptimizationControl");
+  const agentOptimizationEnd = appSource.indexOf("function sendAgentMessage", agentOptimizationStart);
+  assert.ok(agentOptimizationStart >= 0 && agentOptimizationEnd > agentOptimizationStart);
+  const agentOptimizationSource = appSource.slice(agentOptimizationStart, agentOptimizationEnd);
+  assert.doesNotMatch(agentOptimizationSource, /scheduleCanvasDocumentSave|pushCanvasUndoAction|GenerationTask|account\.credits/);
+  assert.doesNotMatch(agentMarkup, /agentReferenceBtn|agent-reference-icon|插入画布引用/);
+  assert.doesNotMatch(appSource, /agentReferenceBtn|setRangeText\("@"/);
+});
+
 test("the current prototype still starts with the Agent panel closed", () => {
   assert.match(appSource, /\bsetAgentOpen\(false\);/);
 });
@@ -747,7 +833,7 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260901-entity-use-43/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260902-agent-composer-53/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260901-asset-grid-24/);
   assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260901-platform-space-27/);
   assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260901-platform-space-27/);
@@ -806,14 +892,14 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
 });
 
 test("asset library actions stay scoped to their real controls and canvas drop target", () => {
-  assert.match(html, /styles\.css\?v=20260901-entity-use-43/);
+  assert.match(html, /styles\.css\?v=20260902-agent-composer-53/);
   assert.match(html, /prototype-config\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260901-platform-space-27/);
-  assert.match(html, /app\.js\?v=20260901-platform-space-27/);
+  assert.match(html, /app\.js\?v=20260902-agent-composer-53/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);

@@ -289,16 +289,181 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   );
   assert.equal(window.document.querySelector("[data-library-selection-toggle]"), null);
   assert.equal(window.document.querySelector("[data-library-selection-cancel]"), null);
-  window.document.querySelector("#agentLauncher")
-    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const agentLauncher = window.document.querySelector("#agentLauncher");
+  const agentPanel = window.document.querySelector("#agentPanel");
+  const agentInput = window.document.querySelector("#agentInput");
+  const agentHistoryBtn = window.document.querySelector("#agentHistoryBtn");
+  const agentHistoryMenu = window.document.querySelector("#agentHistoryMenu");
+  const agentModeBtn = window.document.querySelector("#agentModeBtn");
+  const agentModeMenu = window.document.querySelector("#agentModeMenu");
+  const agentModelBtn = window.document.querySelector("#agentModelBtn");
+  const agentModelMenu = window.document.querySelector("#agentModelMenu");
+  const agentAdvancedBtn = window.document.querySelector("#agentAdvancedBtn");
+  const agentAdvancedSettings = window.document.querySelector("#agentAdvancedSettings");
+  const agentAutoLinkBtn = window.document.querySelector("#agentAutoLinkBtn");
+  const agentPromptOptimizationBtn = window.document.querySelector("#agentPromptOptimizationBtn");
+  const agentCloseBtn = window.document.querySelector("#agentCloseBtn");
+
+  agentLauncher.focus();
+  agentLauncher.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentPanel.inert, false);
+  assert.equal(agentPanel.getAttribute("aria-hidden"), "false");
+  assert.equal(agentLauncher.inert, true);
+  assert.equal(agentLauncher.getAttribute("aria-expanded"), "true");
+  assert.equal(window.document.activeElement, agentInput);
+  assert.equal(agentInput.readOnly, false);
+
+  agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "true");
+  assert.equal(agentModeBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, window.document.querySelector("#agentHistorySearch"));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Escape",
+  }));
+  assert.equal(agentHistoryMenu.classList.contains("hidden"), true);
+  assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, agentHistoryBtn);
+
+  agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  agentModeBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentModeBtn.getAttribute("aria-expanded"), "true");
+  assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, agentModeMenu.querySelector('[aria-checked="true"]'));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Escape",
+  }));
+  assert.equal(agentModeMenu.classList.contains("hidden"), true);
+  assert.equal(agentModeBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, agentModeBtn);
+
+  agentModeBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  agentModelBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentModeBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentModelBtn.getAttribute("aria-expanded"), "true");
+  assert.equal(window.document.activeElement, agentModelMenu.querySelector(".agent-model-option.active"));
+  window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Escape",
+  }));
+  assert.equal(agentModelMenu.classList.contains("hidden"), true);
+  assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, agentModelBtn);
+
+  agentAdvancedBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentAdvancedBtn.getAttribute("aria-expanded"), "true");
+  assert.equal(agentAdvancedSettings.classList.contains("hidden"), false);
+  assert.equal(agentAdvancedSettings.getAttribute("aria-hidden"), "false");
+  assert.equal(window.document.querySelector("#agentScheduleBtn").disabled, true);
+  assert.equal(window.document.querySelector("#agentScheduleBtn").getAttribute("aria-disabled"), "true");
+  assert.equal(agentAutoLinkBtn.getAttribute("role"), "switch");
+  agentAutoLinkBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentAutoLinkBtn.getAttribute("aria-checked"), "false");
+  agentAutoLinkBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentAutoLinkBtn.getAttribute("aria-checked"), "true");
+  agentAutoLinkBtn.focus();
+  agentAutoLinkBtn.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Escape",
+  }));
+  assert.equal(agentAdvancedSettings.classList.contains("hidden"), true);
+  assert.equal(agentAdvancedBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(window.document.activeElement, agentAdvancedBtn);
+
+  assert.equal(agentPromptOptimizationBtn.disabled, true);
+  const originalSetTimeout = window.setTimeout;
+  let completeAgentPromptOptimization;
+  window.setTimeout = (callback, delay, ...args) => {
+    if (delay === 900) {
+      completeAgentPromptOptimization = () => callback(...args);
+      return 900;
+    }
+    return originalSetTimeout.call(window, callback, delay, ...args);
+  };
+  const creditBeforeOptimization = window.document.querySelector("#agentCreditValue").textContent;
+  postedMessages.length = 0;
+  agentInput.value = "镜头";
+  agentInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  assert.equal(agentPromptOptimizationBtn.disabled, false);
+  agentPromptOptimizationBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentPromptOptimizationBtn.getAttribute("aria-busy"), "true");
+  assert.equal(agentPromptOptimizationBtn.classList.contains("is-processing"), true);
+  assert.equal(agentInput.readOnly, true);
+  assert.equal(window.document.querySelector(".agent-send").disabled, true);
+  assert.equal(window.document.querySelector(".agent-send").classList.contains("disabled"), true);
+  assert.equal(typeof completeAgentPromptOptimization, "function");
+  completeAgentPromptOptimization();
+  window.setTimeout = originalSetTimeout;
+  assert.equal(agentInput.value.startsWith("镜头"), true);
+  assert.match(agentInput.value, /镜头运动自然连贯/);
+  assert.notEqual(agentInput.value, "镜头");
+  assert.equal(agentPromptOptimizationBtn.getAttribute("aria-busy"), "false");
+  assert.equal(agentPromptOptimizationBtn.classList.contains("is-processing"), false);
+  assert.equal(agentInput.readOnly, false);
+  assert.equal(window.document.querySelector(".agent-send").disabled, false);
+  assert.equal(window.document.querySelector(".agent-send").classList.contains("disabled"), false);
+  assert.equal(window.document.querySelector("#agentCreditValue").textContent, creditBeforeOptimization);
+  assert.equal(postedMessages.some((message) => message.type === "canvas:save"), false);
+  assert.equal(window.document.activeElement, agentInput);
+
+  const userMessageCount = window.document.querySelectorAll(".agent-message.user").length;
+  postedMessages.length = 0;
+  agentInput.value = "保留换行";
+  const shiftEnter = new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Enter",
+    shiftKey: true,
+  });
+  agentInput.dispatchEvent(shiftEnter);
+  assert.equal(shiftEnter.defaultPrevented, false);
+  assert.equal(agentInput.value, "保留换行");
+  assert.equal(window.document.querySelectorAll(".agent-message.user").length, userMessageCount);
+
+  agentInput.value = "第一行\n第二行";
+  const enter = new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Enter",
+  });
+  agentInput.dispatchEvent(enter);
+  assert.equal(enter.defaultPrevented, true);
+  assert.equal(agentInput.value, "");
+  assert.equal(window.document.querySelectorAll(".agent-message.user").length, userMessageCount + 1);
+  assert.equal(postedMessages.some((message) => message.type === "canvas:save"), false);
+
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
   const agentWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--agent-width"));
   const assetResizeHandle = window.document.querySelector("#assetLibraryResizeHandle");
   assert.ok(assetWidth + agentWidth <= window.innerWidth - 280);
   assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), assetWidth);
   assert.ok(Number(assetResizeHandle.getAttribute("aria-valuemax")) >= assetWidth);
-  window.document.querySelector("#agentCloseBtn")
-    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  agentAdvancedBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  agentModeBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentAdvancedBtn.getAttribute("aria-expanded"), "true");
+  assert.equal(agentModeBtn.getAttribute("aria-expanded"), "true");
+  agentCloseBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentPanel.inert, true);
+  assert.equal(agentPanel.getAttribute("aria-hidden"), "true");
+  assert.equal(agentLauncher.inert, false);
+  assert.equal(agentLauncher.getAttribute("aria-expanded"), "false");
+  assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentModeBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentAdvancedBtn.getAttribute("aria-expanded"), "false");
+  assert.equal(agentHistoryMenu.classList.contains("hidden"), true);
+  assert.equal(agentModeMenu.classList.contains("hidden"), true);
+  assert.equal(agentModelMenu.classList.contains("hidden"), true);
+  assert.equal(agentAdvancedSettings.classList.contains("hidden"), true);
+  assert.equal(window.document.activeElement, agentLauncher);
   const restoredAssetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
   assert.equal(restoredAssetWidth, 550);
   assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), restoredAssetWidth);

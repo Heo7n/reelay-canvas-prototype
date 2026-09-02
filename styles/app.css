@@ -2859,6 +2859,18 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   transform: translate(-50%, 0);
 }
 
+.prompt-composer-surface {
+  border: 0.5px solid var(--node-panel-line);
+  border-radius: 12px;
+  background: var(--node-panel-bg);
+  box-shadow: var(--node-panel-shadow);
+  overflow: visible;
+}
+
+.prompt-composer-layout {
+  height: 291px;
+}
+
 .prompt-panel {
   position: absolute;
   top: 0;
@@ -2868,11 +2880,6 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   width: 705px;
   height: 291px;
   margin: 0;
-  border: 0.5px solid var(--node-panel-line);
-  border-radius: 12px;
-  background: var(--node-panel-bg);
-  box-shadow: var(--node-panel-shadow);
-  overflow: visible;
   translate: -50% 0;
   transform: scale(var(--prompt-scale, 1));
   transform-origin: top center;
@@ -3115,6 +3122,7 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   height: 40px;
 }
 
@@ -3153,7 +3161,7 @@ html[data-theme="light"] .toolbar-dropdown button:hover {
   padding: 0 8px 0 6px;
 }
 
-.control-chip.model-chip::after {
+.control-chip.has-divider::after {
   position: absolute;
   top: 7px;
   right: -3px;
@@ -3281,8 +3289,7 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   min-width: 12px;
 }
 
-.prompt-optimization-button,
-.advanced-settings-chip {
+.composer-tool-button {
   flex: 0 0 36px;
   width: 36px;
   height: 36px;
@@ -3433,7 +3440,7 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   color: var(--node-send-disabled-text);
 }
 
-.generate-button::after {
+.generate-button[data-tooltip]::after {
   position: absolute;
   left: 50%;
   bottom: calc(100% + 9px);
@@ -3453,7 +3460,7 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
     transform 0.14s ease;
 }
 
-.generate-button:hover::after {
+.generate-button[data-tooltip]:hover::after {
   opacity: 1;
   transform: translate(-50%, 0);
 }
@@ -4389,7 +4396,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   top: 0;
   right: 0;
   display: grid;
-  grid-template-rows: 48px 1fr auto;
+  grid-template-rows: 56px 1fr auto;
   width: var(--agent-width);
   max-width: 100vw;
   height: 100%;
@@ -4447,7 +4454,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 12px 0 14px;
+  padding: 0 14px 0 16px;
 }
 
 .agent-title {
@@ -4463,7 +4470,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 .agent-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   margin-left: auto;
 }
 
@@ -4472,12 +4479,12 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--agent-panel-muted);
+  color: color-mix(in srgb, var(--agent-panel-text) 80%, transparent);
   cursor: pointer;
   font-weight: 850;
 }
@@ -4485,6 +4492,12 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 .agent-icon-button:hover {
   background: var(--agent-panel-hover);
   color: var(--agent-panel-text);
+}
+
+.agent-icon-button .lucide {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
 }
 
 .agent-messages {
@@ -4495,78 +4508,45 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   padding: 42px 26px 24px;
 }
 
-.agent-composer {
+.agent-composer.prompt-composer-surface {
+  --node-panel-bg: var(--agent-panel-bg);
+  --node-panel-line: var(--agent-panel-line);
   position: relative;
   z-index: 12;
   margin: 0 8px 8px;
-  border: 1px solid var(--agent-panel-line);
-  border-radius: 22px;
-  background: var(--agent-input-bg);
-  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.08);
-  overflow: visible;
 }
 
-.agent-composer textarea {
-  display: block;
-  width: 100%;
-  min-height: 88px;
-  padding: 16px 16px 8px;
-  border: 0;
-  outline: 0;
-  resize: none;
-  background: transparent;
-  color: var(--agent-panel-text);
-  font-size: 14px;
-  line-height: 1.5;
+.agent-composer-stage {
+  position: relative;
+  container-name: agent-composer;
+  container-type: inline-size;
 }
 
-.agent-composer textarea::placeholder {
-  color: var(--agent-panel-subtle);
+.agent-composer-topbar {
+  display: contents;
 }
 
-.agent-composer-bar {
+.agent-composer-top-actions {
+  position: absolute;
+  z-index: 3;
+  top: 11px;
+  right: 13px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 8px 8px;
+  gap: 10px;
 }
 
-.agent-composer-bar button {
-  display: grid;
-  place-items: center;
-  min-width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--agent-panel-muted);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 750;
+.agent-composer-topbar button {
+  pointer-events: auto;
 }
 
-.agent-composer-bar button:hover {
-  background: var(--agent-panel-hover);
-  color: var(--agent-panel-text);
-}
-
-.agent-mode {
-  grid-auto-flow: column;
-  gap: 5px;
-  padding: 0 8px;
+.agent-composer-topbar .advanced-settings-chip {
+  margin-right: 0;
 }
 
 .agent-composer-spacer {
-  flex: 1 1 auto;
-}
-
-.agent-send {
-  width: 34px;
-  height: 34px;
-  border-radius: 50% !important;
-  background: var(--agent-send-bg) !important;
-  color: var(--agent-send-text) !important;
+  flex: 0 0 0;
+  min-width: 0;
 }
 
 .lucide {
@@ -4580,32 +4560,27 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 1px;
-  border: 1px solid transparent;
-  border-radius: 9px;
+  padding: 0;
+  border: 0;
 }
 
-.new-chat-button {
-  width: 26px;
-  height: 26px;
+.history-toggle-button .lucide {
+  transition: transform 0.16s ease;
 }
 
-.history-toggle-button {
-  width: 22px;
-  height: 26px;
+.history-toggle-button[aria-expanded="true"] .lucide {
+  transform: rotate(180deg);
 }
 
 .close-chat-button {
-  margin-left: 6px;
-  width: 28px;
-  height: 28px;
+  margin-left: 8px;
 }
 
 .agent-history-menu {
   position: absolute;
   z-index: 8;
-  top: 42px;
-  right: 12px;
+  top: 50px;
+  right: 14px;
   display: grid;
   gap: 8px;
   width: min(260px, calc(var(--agent-width) - 24px));
@@ -4694,7 +4669,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   justify-items: center;
   width: 100%;
   height: 100%;
-  min-height: 360px;
+  min-height: 100%;
   text-align: center;
 }
 
@@ -4762,61 +4737,127 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   background: color-mix(in srgb, var(--accent) 18%, var(--agent-panel-raised));
 }
 
-.agent-add-button {
-  width: 30px;
-  min-width: 30px;
+.agent-advanced-settings {
+  padding: 8px 16px 7px;
+  border-bottom: 1px solid var(--node-setting-divider);
+  color: var(--node-setting-text);
+}
+
+.agent-mode-wrap {
+  position: relative;
+  display: flex;
+  flex: 0 0 96px;
+  min-width: 0;
 }
 
 .agent-mode {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: auto;
-  min-width: 0;
-  padding: 0 9px;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 8px 0 6px;
   white-space: nowrap;
 }
 
-.agent-mode span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.agent-mode > .lucide {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.7;
+}
+
+.agent-mode-menu {
+  position: absolute;
+  z-index: 31;
+  bottom: 42px;
+  left: 0;
+  display: grid;
+  gap: 2px;
+  width: 168px;
+  padding: 6px;
+  border: 1px solid var(--agent-panel-line);
+  border-radius: 12px;
+  background: var(--agent-panel-raised);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.2);
+}
+
+.agent-mode-menu button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  gap: 8px;
+  align-items: center;
+  justify-items: start;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--agent-panel-text);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.agent-mode-menu button:hover,
+.agent-mode-menu button.active {
+  background: var(--agent-panel-hover);
+}
+
+.agent-mode-check {
+  opacity: 0;
+}
+
+.agent-mode-menu button.active .agent-mode-check {
+  opacity: 1;
 }
 
 .agent-model-wrap {
-  position: relative;
+  position: static;
   display: flex;
+  flex: 0 1 138px;
   min-width: 0;
 }
 
 .agent-model-button {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  min-width: 32px;
-  padding: 0;
-  border: 1px solid var(--agent-panel-line) !important;
-  border-radius: 10px;
-  background: transparent !important;
-  color: var(--agent-panel-muted) !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.agent-model-button:hover,
-.agent-model-button.active {
-  background: var(--agent-panel-hover) !important;
-  color: var(--agent-panel-text) !important;
+.agent-model-button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.agent-model-button:disabled:hover {
+  background: transparent !important;
+}
+
+.agent-model-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-param-summary {
+  flex: 1 1 148px;
+  max-width: none;
+  cursor: default;
+}
+
+.agent-param-summary:hover {
+  background: transparent;
 }
 
 .agent-model-menu {
   position: absolute;
   z-index: 30;
-  right: -4px;
-  bottom: 44px;
+  right: 8px;
+  bottom: 48px;
+  left: 8px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
-  width: min(408px, calc(var(--agent-width) - 16px));
+  width: auto;
   max-height: min(520px, calc(100vh - 112px));
   padding: 0;
   border: 1px solid var(--agent-panel-line);
@@ -5055,6 +5096,30 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   font-weight: 750;
 }
 
+@container agent-composer (max-width: 440px) {
+  .agent-composer-bar {
+    gap: 3px;
+  }
+
+  .agent-mode-wrap {
+    flex: 0 1 86px;
+  }
+
+  .agent-mode {
+    max-width: 86px;
+  }
+
+  .agent-model-wrap {
+    flex: 0 1 92px;
+  }
+}
+
+@container agent-composer (max-width: 370px) {
+  .agent-param-summary {
+    display: none;
+  }
+}
+
 .confirm-layer {
   position: fixed;
   z-index: 90;
@@ -5199,6 +5264,20 @@ html[data-theme="light"] .confirm-cancel {
 }
 
 @media (max-width: 480px) {
+  .agent-dock,
+  .agent-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .agent-resize-handle {
+    display: none;
+  }
+
+  .agent-param-summary {
+    flex-basis: 90px;
+  }
+
   .top-bar {
     top: 62px;
     left: 10px;
