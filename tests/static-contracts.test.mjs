@@ -360,8 +360,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260902-agent-composer-53/);
-  assert.match(html, /app\.js\?v=20260902-agent-composer-53/);
+  assert.match(html, /styles\.css\?v=20260902-canvas-integration-59/);
+  assert.match(html, /app\.js\?v=20260902-canvas-integration-59/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -833,7 +833,7 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260902-agent-composer-53/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260902-canvas-integration-59/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260901-asset-grid-24/);
   assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260901-platform-space-27/);
   assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260901-platform-space-27/);
@@ -902,14 +902,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260902-agent-composer-53/);
+  assert.match(html, /styles\.css\?v=20260902-canvas-integration-59/);
   assert.match(html, /prototype-config\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260901-platform-space-27/);
-  assert.match(html, /app\.js\?v=20260902-agent-composer-53/);
+  assert.match(html, /app\.js\?v=20260902-canvas-integration-59/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
