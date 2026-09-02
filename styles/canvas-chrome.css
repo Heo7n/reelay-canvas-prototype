@@ -12,12 +12,12 @@
 }
 
 html[data-theme="light"] {
-  --canvas-chrome-bg: color-mix(in srgb, #ffffff 88%, transparent);
-  --canvas-chrome-bg-raised: color-mix(in srgb, #ffffff 96%, transparent);
-  --canvas-chrome-border: rgba(17, 24, 39, 0.13);
-  --canvas-chrome-hover: rgba(17, 24, 39, 0.065);
-  --canvas-chrome-shadow: 0 10px 28px rgba(16, 24, 40, 0.1);
-  --canvas-chrome-focus: rgba(17, 24, 39, 0.62);
+  --canvas-chrome-bg: color-mix(in srgb, var(--surface) 88%, transparent);
+  --canvas-chrome-bg-raised: color-mix(in srgb, var(--surface) 96%, transparent);
+  --canvas-chrome-border: color-mix(in srgb, var(--text) 13%, transparent);
+  --canvas-chrome-hover: color-mix(in srgb, var(--text) 6.5%, transparent);
+  --canvas-chrome-shadow: 0 10px 28px rgba(17, 18, 20, 0.09);
+  --canvas-chrome-focus: color-mix(in srgb, var(--text) 62%, transparent);
 }
 
 /* Project-level navigation */
