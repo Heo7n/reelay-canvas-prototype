@@ -10,14 +10,14 @@ export function canvasLayoutTunerTags(pathname: string): HtmlTagDescriptor[] {
       tag: "link",
       attrs: {
         rel: "stylesheet",
-        href: "/dev/canvas-layout-tuner.css?v=20260903-layout-tune-2",
+        href: "/dev/canvas-layout-tuner.css?v=20260903-layout-tune-3",
       },
       injectTo: "head",
     },
     {
       tag: "script",
       attrs: {
-        src: "/dev/canvas-layout-tuner.js?v=20260903-layout-tune-2",
+        src: "/dev/canvas-layout-tuner.js?v=20260903-layout-tune-3",
       },
       injectTo: "head",
     },

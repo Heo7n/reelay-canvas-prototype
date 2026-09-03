@@ -338,7 +338,7 @@
           const start = definition.axis === "x" ? rect.left : rect.top;
           const end = definition.axis === "x" ? rect.right : rect.bottom;
           const viewportSize = definition.axis === "x" ? window.innerWidth : window.innerHeight;
-          const safeInset = 8;
+          const safeInset = definition.positionTarget === "agent" ? 0 : 8;
           const visibleMin = Math.ceil(current + safeInset - start);
           const visibleMax = Math.floor(current + viewportSize - safeInset - end);
           if (visibleMin <= visibleMax) {
