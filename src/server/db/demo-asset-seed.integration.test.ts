@@ -14,6 +14,8 @@ import {
   DemoAssetFixtureConflictError,
   LEGACY_DEMO_ASSET_FIXTURES,
   LEGACY_DEMO_ENTITY_FIXTURES,
+  PREVIOUS_DEMO_ASSET_FIXTURES,
+  PREVIOUS_DEMO_ENTITY_FIXTURES,
   resolveDemoAssetFixtures,
   seedDemoAssetLibrary,
 } from "./demo-asset-seed";
@@ -21,7 +23,11 @@ import {
   DEMO_ACTOR_ID,
   DEMO_PROJECT_ID,
   DEMO_WORKSPACE_ID,
+  demoAssetIdempotencyKey,
   legacyDemoAssetIdempotencyKey,
+  previousDemoAssetIdempotencyKey,
+  type DemoAssetFixture,
+  type DemoEntityFixture,
 } from "./demo-asset-fixtures";
 import { runMigrations } from "./migrate";
 import { seedDemoDatabase } from "./seed";
@@ -36,7 +42,7 @@ databaseUrl.pathname = `/${databaseName}`;
 
 let adminPool: Pool;
 
-interface SeededLegacyLibrary {
+interface SeededHistoricalLibrary {
   assetIdsByKey: Map<string, string>;
   entityIdsByCreateKey: Map<string, string>;
 }
@@ -112,15 +118,18 @@ function fixtureUrl(fileName: string): URL {
   return new URL(`../../../assets/home/${fileName}`, import.meta.url);
 }
 
-async function seedLegacyDemoAssetLibrary(
+async function seedHistoricalDemoAssetLibrary(
   pool: Pool,
   objectStore: InMemoryObjectStore,
-): Promise<SeededLegacyLibrary> {
+  assetFixtures: readonly DemoAssetFixture[],
+  entityFixtures: readonly DemoEntityFixture[],
+  idempotencyKeyFor: (fixture: DemoAssetFixture) => string,
+): Promise<SeededHistoricalLibrary> {
   const assetStore = new PostgresAssetStore(pool);
   const entityStore = new PostgresEntityStore(pool);
   const resolvedAssets = await resolveDemoAssetFixtures(
-    LEGACY_DEMO_ASSET_FIXTURES,
-    legacyDemoAssetIdempotencyKey,
+    assetFixtures,
+    idempotencyKeyFor,
   );
   const assetIdsByKey = new Map<string, string>();
   for (const fixture of resolvedAssets) {
@@ -129,13 +138,17 @@ async function seedLegacyDemoAssetLibrary(
       actorId: DEMO_ACTOR_ID,
       workspaceId: DEMO_WORKSPACE_ID,
       idempotencyKey: fixture.idempotencyKey,
-      mediaKind: "image",
+      mediaKind: fixture.mediaKind,
       displayName: fixture.displayName,
-      contentType: "image/png",
+      contentType: fixture.contentType,
       byteSize: fixture.byteSize,
       checksumSha256: fixture.checksumSha256,
     });
-    const stored = await objectStore.putObject({ objectKey: intent.objectKey, contentType: "image/png", body });
+    const stored = await objectStore.putObject({
+      objectKey: intent.objectKey,
+      contentType: fixture.contentType,
+      body,
+    });
     await assetStore.recordUpload({
       actorId: DEMO_ACTOR_ID,
       workspaceId: DEMO_WORKSPACE_ID,
@@ -160,7 +173,7 @@ async function seedLegacyDemoAssetLibrary(
   }
 
   const entityIdsByCreateKey = new Map<string, string>();
-  for (const fixture of LEGACY_DEMO_ENTITY_FIXTURES) {
+  for (const fixture of entityFixtures) {
     const mediaAssetIds = fixture.assetKeys.map((key) => {
       const assetId = assetIdsByKey.get(key);
       if (!assetId) throw new Error(`Legacy test fixture references an unavailable asset: ${key}.`);
@@ -182,6 +195,32 @@ async function seedLegacyDemoAssetLibrary(
   return { assetIdsByKey, entityIdsByCreateKey };
 }
 
+function seedLegacyDemoAssetLibrary(
+  pool: Pool,
+  objectStore: InMemoryObjectStore,
+): Promise<SeededHistoricalLibrary> {
+  return seedHistoricalDemoAssetLibrary(
+    pool,
+    objectStore,
+    LEGACY_DEMO_ASSET_FIXTURES,
+    LEGACY_DEMO_ENTITY_FIXTURES,
+    legacyDemoAssetIdempotencyKey,
+  );
+}
+
+function seedPreviousDemoAssetLibrary(
+  pool: Pool,
+  objectStore: InMemoryObjectStore,
+): Promise<SeededHistoricalLibrary> {
+  return seedHistoricalDemoAssetLibrary(
+    pool,
+    objectStore,
+    PREVIOUS_DEMO_ASSET_FIXTURES,
+    PREVIOUS_DEMO_ENTITY_FIXTURES,
+    previousDemoAssetIdempotencyKey,
+  );
+}
+
 async function readDemoEntityRows(pool: Pool) {
   return pool.query<{
     id: string;
@@ -197,6 +236,31 @@ async function readDemoEntityRows(pool: Pool) {
      ORDER BY create_idempotency_key`,
     [DEMO_WORKSPACE_ID, DEMO_ACTOR_ID, DEMO_ENTITY_FIXTURES.map(({ createIdempotencyKey }) => createIdempotencyKey)],
   );
+}
+
+function expectCanonicalEntityContents(
+  seeded: Awaited<ReturnType<typeof seedDemoAssetLibrary>>,
+): void {
+  const assetsByKey = new Map(
+    DEMO_ASSET_FIXTURES.map((fixture, index) => [fixture.key, seeded.assets[index]!] as const),
+  );
+  const assetsById = new Map(seeded.assets.map((asset) => [asset.id, asset]));
+
+  for (const fixture of DEMO_ENTITY_FIXTURES) {
+    const entity = seeded.entities.find(({ name }) => name === fixture.name);
+    const expectedMediaIds = fixture.assetKeys.map((key) => assetsByKey.get(key)?.id);
+    expect(entity?.description).toBe(fixture.description);
+    expect(entity?.mediaRefs.map(({ mediaAssetId, order }) => ({ mediaAssetId, order }))).toEqual(
+      expectedMediaIds.map((mediaAssetId, order) => ({ mediaAssetId, order })),
+    );
+    expect(entity?.coverMediaId).toBe(assetsByKey.get(fixture.coverAssetKey)?.id);
+    expect(entity?.mediaRefs.map(({ mediaAssetId }) => assetsById.get(mediaAssetId)?.mediaKind))
+      .toEqual(fixture.assetKeys.map((key) => (
+        DEMO_ASSET_FIXTURES.find((assetFixture) => assetFixture.key === key)?.mediaKind
+      )));
+    expect(entity?.mediaRefs.filter(({ mediaAssetId }) =>
+      assetsById.get(mediaAssetId)?.mediaKind === "audio")).toHaveLength(1);
+  }
 }
 
 describe("demo asset library seed", () => {
@@ -237,13 +301,16 @@ describe("demo asset library seed", () => {
       const seededEntities = personalEntities.filter(({ name }) =>
         DEMO_ENTITY_FIXTURES.some((fixture) => fixture.name === name));
       expect(seededEntities).toHaveLength(DEMO_ENTITY_FIXTURES.length);
-      expect(seededEntities.every(({ mediaRefs }) => mediaRefs.length === 3)).toBe(true);
-      expect(seededEntities.every(({ coverMediaId, mediaRefs }) =>
-        coverMediaId === mediaRefs[0]?.mediaAssetId)).toBe(true);
+      expect(seededEntities.map(({ mediaRefs }) => mediaRefs.length).sort()).toEqual(
+        DEMO_ENTITY_FIXTURES.map(({ assetKeys }) => assetKeys.length).sort(),
+      );
+      expectCanonicalEntityContents(first);
 
-      for (const asset of first.assets) {
+      for (const [index, asset] of first.assets.entries()) {
+        const fixture = DEMO_ASSET_FIXTURES[index];
         await expect(objectStore.headObject(asset.objectKey)).resolves.toEqual(expect.objectContaining({
           objectKey: asset.objectKey,
+          contentType: fixture?.contentType,
           checksumSha256: asset.checksumSha256,
         }));
       }
@@ -251,10 +318,13 @@ describe("demo asset library seed", () => {
       const counts = await pool.query<{ intents: string; entities: string }>(
         `SELECT
            (SELECT count(*) FROM asset_upload_intents
-             WHERE idempotency_key LIKE 'reelay-demo-entity-library-v2-asset-%')::text AS intents,
+             WHERE idempotency_key = ANY($1::text[]))::text AS intents,
            (SELECT count(*) FROM workspace_entities
-             WHERE create_idempotency_key = ANY($1::text[]))::text AS entities`,
-        [DEMO_ENTITY_FIXTURES.map(({ createIdempotencyKey }) => createIdempotencyKey)],
+             WHERE create_idempotency_key = ANY($2::text[]))::text AS entities`,
+        [
+          DEMO_ASSET_FIXTURES.map(demoAssetIdempotencyKey),
+          DEMO_ENTITY_FIXTURES.map(({ createIdempotencyKey }) => createIdempotencyKey),
+        ],
       );
       expect(counts.rows[0]).toEqual({
         intents: String(DEMO_ASSET_FIXTURES.length),
@@ -284,7 +354,7 @@ describe("demo asset library seed", () => {
       const second = await seedDemoAssetLibrary(dependencies);
       const rowsAfterSecond = await readDemoEntityRows(pool);
 
-      expect(rowsAfterFirst.rows).toHaveLength(2);
+      expect(rowsAfterFirst.rows).toHaveLength(DEMO_ENTITY_FIXTURES.length);
       expect(rowsAfterFirst.rows.map(({ id }) => id).sort()).toEqual(
         [...legacy.entityIdsByCreateKey.values()].sort(),
       );
@@ -295,18 +365,7 @@ describe("demo asset library seed", () => {
       expect(rowsAfterSecond.rows).toEqual(rowsAfterFirst.rows);
       expect(second.entities.map(({ id }) => id)).toEqual(first.entities.map(({ id }) => id));
 
-      const canonicalAssetIdsByKey = new Map(
-        DEMO_ASSET_FIXTURES.map((fixture, index) => [fixture.key, first.assets[index]!.id]),
-      );
-      for (const fixture of DEMO_ENTITY_FIXTURES) {
-        const entity = first.entities.find(({ name }) => name === fixture.name);
-        const expectedMediaIds = fixture.assetKeys.map((key) => canonicalAssetIdsByKey.get(key));
-        expect(entity?.description).toBe(fixture.description);
-        expect(entity?.mediaRefs.map(({ mediaAssetId, order }) => ({ mediaAssetId, order }))).toEqual(
-          expectedMediaIds.map((mediaAssetId, order) => ({ mediaAssetId, order })),
-        );
-        expect(entity?.coverMediaId).toBe(canonicalAssetIdsByKey.get(fixture.coverAssetKey));
-      }
+      expectCanonicalEntityContents(first);
       const bindings = await pool.query<{ count: string }>(
         `SELECT count(*)::text AS count
          FROM entity_personal_media_bindings AS binding
@@ -316,7 +375,9 @@ describe("demo asset library seed", () => {
          WHERE entity.create_idempotency_key = ANY($1::text[])`,
         [DEMO_ENTITY_FIXTURES.map(({ createIdempotencyKey }) => createIdempotencyKey)],
       );
-      expect(bindings.rows[0]?.count).toBe("6");
+      expect(bindings.rows[0]?.count).toBe(String(
+        DEMO_ENTITY_FIXTURES.reduce((total, fixture) => total + fixture.assetKeys.length, 0),
+      ));
 
       const placementsAfter = await pool.query<{ id: string; entity_id: string }>(
         `SELECT id, entity_id FROM entity_placements
@@ -349,8 +410,106 @@ describe("demo asset library seed", () => {
           [...legacy.assetIdsByKey.values()],
         ],
       );
-      expect(underlying.rows[0]).toEqual({ assets: "12", entities: "2", legacy_placements: "0" });
+      expect(underlying.rows[0]).toEqual({
+        assets: String(LEGACY_DEMO_ASSET_FIXTURES.length + DEMO_ASSET_FIXTURES.length),
+        entities: String(DEMO_ENTITY_FIXTURES.length),
+        legacy_placements: "0",
+      });
       for (const assetId of legacy.assetIdsByKey.values()) {
+        const asset = await pool.query<{ object_key: string }>(
+          "SELECT object_key FROM workspace_media_assets WHERE id = $1",
+          [assetId],
+        );
+        await expect(objectStore.headObject(asset.rows[0]!.object_key)).resolves.toBeTruthy();
+      }
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("upgrades pristine v2 fixtures to v3 in place with audio while preserving Entity identities and placements", async () => {
+    const pool = createPool();
+    const objectStore = new InMemoryObjectStore();
+    const assetStore = new PostgresAssetStore(pool);
+    const entityStore = new PostgresEntityStore(pool);
+    const dependencies = { pool, assetStore, entityStore, objectStore };
+    try {
+      const previous = await seedPreviousDemoAssetLibrary(pool, objectStore);
+      const rowsBefore = await readDemoEntityRows(pool);
+      const placementsBefore = await pool.query<{ id: string; entity_id: string }>(
+        `SELECT id, entity_id FROM entity_placements
+         WHERE workspace_id = $1 AND owner_user_id = $2 ORDER BY entity_id`,
+        [DEMO_WORKSPACE_ID, DEMO_ACTOR_ID],
+      );
+
+      const first = await seedDemoAssetLibrary(dependencies);
+      const rowsAfterFirst = await readDemoEntityRows(pool);
+      const second = await seedDemoAssetLibrary(dependencies);
+      const rowsAfterSecond = await readDemoEntityRows(pool);
+
+      expect(rowsBefore.rows).toHaveLength(PREVIOUS_DEMO_ENTITY_FIXTURES.length);
+      expect(rowsAfterFirst.rows).toHaveLength(DEMO_ENTITY_FIXTURES.length);
+      expect(rowsAfterFirst.rows.map(({ id }) => id).sort()).toEqual(
+        [...previous.entityIdsByCreateKey.values()].sort(),
+      );
+      const versionsBeforeByCreateKey = new Map(
+        rowsBefore.rows.map(({ create_idempotency_key, version }) => [create_idempotency_key, version]),
+      );
+      for (const row of rowsAfterFirst.rows) {
+        expect(row.version).toBe(versionsBeforeByCreateKey.get(row.create_idempotency_key)! + 1);
+      }
+      expect(rowsAfterSecond.rows).toEqual(rowsAfterFirst.rows);
+      expect(second.entities.map(({ id }) => id)).toEqual(first.entities.map(({ id }) => id));
+      expectCanonicalEntityContents(first);
+
+      const placementsAfter = await pool.query<{ id: string; entity_id: string }>(
+        `SELECT id, entity_id FROM entity_placements
+         WHERE workspace_id = $1 AND owner_user_id = $2 ORDER BY entity_id`,
+        [DEMO_WORKSPACE_ID, DEMO_ACTOR_ID],
+      );
+      expect(placementsAfter.rows).toEqual(placementsBefore.rows);
+
+      const bindings = await pool.query<{ count: string }>(
+        `SELECT count(*)::text AS count
+         FROM entity_personal_media_bindings AS binding
+         JOIN workspace_entities AS entity
+           ON entity.workspace_id = binding.workspace_id
+          AND entity.id = binding.entity_id
+         WHERE entity.create_idempotency_key = ANY($1::text[])`,
+        [DEMO_ENTITY_FIXTURES.map(({ createIdempotencyKey }) => createIdempotencyKey)],
+      );
+      expect(bindings.rows[0]?.count).toBe(String(
+        DEMO_ENTITY_FIXTURES.reduce((total, fixture) => total + fixture.assetKeys.length, 0),
+      ));
+
+      const personalAssets = await assetStore.listPersonalAssets({
+        actorId: DEMO_ACTOR_ID,
+        workspaceId: DEMO_WORKSPACE_ID,
+      });
+      const projectAssets = await assetStore.listProjectAssets({
+        actorId: DEMO_ACTOR_ID,
+        projectId: DEMO_PROJECT_ID,
+      });
+      expect(personalAssets.map(({ id }) => id).sort()).toEqual(first.assets.map(({ id }) => id).sort());
+      expect(projectAssets.map(({ asset }) => asset.id).sort()).toEqual(first.assets.map(({ id }) => id).sort());
+
+      const previousAssetIds = [...previous.assetIdsByKey.values()];
+      const historicalLinks = await pool.query<{ placements: string; project_references: string; assets: string }>(
+        `SELECT
+           (SELECT count(*) FROM media_asset_placements
+             WHERE asset_id = ANY($1::text[]))::text AS placements,
+           (SELECT count(*) FROM project_asset_references
+             WHERE asset_id = ANY($1::text[]))::text AS project_references,
+           (SELECT count(*) FROM workspace_media_assets
+             WHERE id = ANY($1::text[]))::text AS assets`,
+        [previousAssetIds],
+      );
+      expect(historicalLinks.rows[0]).toEqual({
+        placements: "0",
+        project_references: "0",
+        assets: String(PREVIOUS_DEMO_ASSET_FIXTURES.length),
+      });
+      for (const assetId of previousAssetIds) {
         const asset = await pool.query<{ object_key: string }>(
           "SELECT object_key FROM workspace_media_assets WHERE id = $1",
           [assetId],
@@ -392,14 +551,59 @@ describe("demo asset library seed", () => {
         .rejects.toBeInstanceOf(DemoAssetFixtureConflictError);
 
       const canonicalIntents = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM asset_upload_intents WHERE idempotency_key LIKE 'reelay-demo-entity-library-v2-asset-%'",
+        "SELECT count(*)::text AS count FROM asset_upload_intents WHERE idempotency_key = ANY($1::text[])",
+        [DEMO_ASSET_FIXTURES.map(demoAssetIdempotencyKey)],
       );
       expect(canonicalIntents.rows[0]?.count).toBe("0");
       const entityRows = await readDemoEntityRows(pool);
-      expect(entityRows.rows).toHaveLength(2);
+      expect(entityRows.rows).toHaveLength(DEMO_ENTITY_FIXTURES.length);
       expect(entityRows.rows.find(({ id }) => id === entityId)).toEqual(expect.objectContaining({
         name: "用户修改后的主体",
         version: 2,
+      }));
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("fails closed before creating v3 media when a previous v2 Entity was edited", async () => {
+    const pool = createPool();
+    const objectStore = new InMemoryObjectStore();
+    const assetStore = new PostgresAssetStore(pool);
+    const entityStore = new PostgresEntityStore(pool);
+    try {
+      const previous = await seedPreviousDemoAssetLibrary(pool, objectStore);
+      const firstFixture = PREVIOUS_DEMO_ENTITY_FIXTURES[0];
+      const entityId = previous.entityIdsByCreateKey.get(firstFixture.createIdempotencyKey)!;
+      const current = await entityStore.getPersonalEntity({
+        actorId: DEMO_ACTOR_ID,
+        workspaceId: DEMO_WORKSPACE_ID,
+        entityId,
+      });
+      if (!current) throw new Error("Expected the previous v2 Entity to exist.");
+      await entityStore.updatePersonalEntity({
+        actorId: DEMO_ACTOR_ID,
+        workspaceId: DEMO_WORKSPACE_ID,
+        entityId,
+        expectedVersion: current.version,
+        name: "用户修改后的 v2 主体",
+        description: current.description,
+        mediaAssetIds: current.mediaRefs.map(({ mediaAssetId }) => mediaAssetId),
+        coverMediaId: current.coverMediaId,
+      });
+
+      await expect(seedDemoAssetLibrary({ pool, assetStore, entityStore, objectStore }))
+        .rejects.toBeInstanceOf(DemoAssetFixtureConflictError);
+
+      const canonicalIntents = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM asset_upload_intents WHERE idempotency_key = ANY($1::text[])",
+        [DEMO_ASSET_FIXTURES.map(demoAssetIdempotencyKey)],
+      );
+      expect(canonicalIntents.rows[0]?.count).toBe("0");
+      const entityRows = await readDemoEntityRows(pool);
+      expect(entityRows.rows.find(({ id }) => id === entityId)).toEqual(expect.objectContaining({
+        name: "用户修改后的 v2 主体",
+        version: current.version + 1,
       }));
     } finally {
       await pool.end();

@@ -12,4 +12,5 @@
 *.json text eol=lf
 *.sql text eol=lf
 *.png binary
+*.mp3 binary
 *.webp binary

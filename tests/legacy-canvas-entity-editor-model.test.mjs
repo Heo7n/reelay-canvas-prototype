@@ -168,21 +168,35 @@ test("filters the referenced Media with live counts without making view state di
   assert.throws(() => draft.selectPreview("detail"), /not referenced/);
 });
 
-test("allows only referenced visual Media as cover and falls back when the cover is removed", () => {
+test("renames referenced Media without making Entity content dirty", () => {
+  const draft = editDraft();
+  const renamed = draft.renameMedia("portrait", "角色定妆.png");
+
+  assert.equal(renamed.name, "角色定妆.png");
+  assert.equal(renamed.displayName, "角色定妆.png");
+  assert.equal(draft.listMedia("image")[0].name, "角色定妆.png");
+  assert.equal(draft.isDirty(), false);
+  assert.throws(() => draft.renameMedia("detail", "未引用.png"), /not referenced/);
+  assert.throws(() => draft.renameMedia("portrait", "   "), /required/);
+});
+
+test("allows only referenced image Media as cover and falls back to the next image", () => {
   const draft = editDraft();
   draft.addMediaBatch(["turnaround", "detail"]);
 
-  assert.throws(() => draft.setCover("voice"), /image or video/);
+  assert.throws(() => draft.setCover("voice"), /must be an image/);
+  assert.throws(() => draft.setCover("turnaround"), /must be an image/);
   assert.throws(() => draft.setCover("missing"), /not referenced/);
-  draft.setCover("turnaround");
-  assert.equal(draft.removeMedia("turnaround").removed, true);
+  draft.setCover("detail");
+  assert.equal(draft.removeMedia("detail").removed, true);
   assert.equal(draft.getState().coverMediaId, "portrait");
   assert.equal(draft.removeMedia("portrait").removed, true);
-  assert.equal(draft.getState().coverMediaId, "detail");
-  assert.equal(draft.removeMedia("detail").removed, true);
   assert.equal(draft.getState().coverMediaId, null);
   assert.equal(draft.removeMedia("detail").removed, false);
-  assert.deepEqual(plain(draft.createCommitPayload().mediaRefs), [{ mediaId: "voice", order: 0 }]);
+  assert.deepEqual(plain(draft.createCommitPayload().mediaRefs), [
+    { mediaId: "voice", order: 0 },
+    { mediaId: "turnaround", order: 1 },
+  ]);
 });
 
 test("derives dirty state from persisted draft fields and cancel restores the baseline", () => {
@@ -227,7 +241,7 @@ test("fails closed for invalid initialization and malformed Media boundaries", (
   );
   assert.throws(
     () => editDraft({ entity: { id: "broken", name: "Broken", mediaRefs: [{ mediaId: "voice" }], coverMediaId: "voice" } }),
-    /image or video/,
+    /must be an image/,
   );
   assert.throws(
     () => editDraft({ expectedVersion: -1 }),

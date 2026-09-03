@@ -394,7 +394,7 @@
       <div class="entity-use-picker-backdrop" data-entity-use-picker-backdrop="true">
         <section class="${classNames("entity-use-picker", busy && "is-busy")}" role="dialog" aria-modal="true" aria-labelledby="entity-use-picker-title" data-entity-use-picker="true" data-space="${activeSpace}"${busy ? ' aria-busy="true"' : ""}>
           <header>
-            <h2 id="entity-use-picker-title">主体库</h2>
+            <h2 id="entity-use-picker-title">选择主体</h2>
           </header>
           <div class="entity-use-picker-tools">
             <div class="entity-use-picker-spaces" role="group" aria-label="主体空间">

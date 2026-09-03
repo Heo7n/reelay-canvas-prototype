@@ -15,6 +15,7 @@ import {
   AssetUploadConflictError,
   AssetUploadIntentUnavailableError,
   AssetWorkspaceUnavailableError,
+  PersonalAssetUnavailableError,
   type WorkspaceMediaAssetStore,
 } from "../application/WorkspaceMediaAssetStore";
 import {
@@ -24,6 +25,7 @@ import {
   ProjectAssetContentParamsSchema,
   ProjectAssetItemParamsSchema,
   ProjectAssetParamsSchema,
+  RenamePersonalAssetBodySchema,
   WorkspaceAssetItemParamsSchema,
   WorkspaceAssetParamsSchema,
 } from "./asset-contracts";
@@ -367,6 +369,33 @@ export async function registerAssetRoutes(
         })),
       };
     } catch (error) {
+      if (error instanceof AssetWorkspaceUnavailableError) {
+        return reply.code(404).send({ error: { code: "workspace_not_found", message: "工作空间不存在。" } });
+      }
+      throw error;
+    }
+  });
+
+  app.patch("/api/workspaces/:workspaceId/media-assets/:assetId", async (request, reply) => {
+    const actor = await requireActor(request, reply, dependencies.sessions);
+    if (!actor) return reply;
+    const params = WorkspaceAssetItemParamsSchema.safeParse(request.params);
+    const body = RenamePersonalAssetBodySchema.safeParse(request.body);
+    if (!params.success || !body.success) {
+      return reply.code(400).send({ error: { code: "invalid_request", message: "素材名称无效。" } });
+    }
+    try {
+      const asset = await dependencies.assetStore.renamePersonalAsset({
+        actorId: actor.id,
+        workspaceId: params.data.workspaceId,
+        assetId: params.data.assetId,
+        displayName: body.data.displayName,
+      });
+      return { asset: workspaceAssetDto(asset) };
+    } catch (error) {
+      if (error instanceof PersonalAssetUnavailableError) {
+        return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
+      }
       if (error instanceof AssetWorkspaceUnavailableError) {
         return reply.code(404).send({ error: { code: "workspace_not_found", message: "工作空间不存在。" } });
       }

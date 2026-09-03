@@ -4,7 +4,7 @@
   const MODES = new Set(["create", "edit"]);
   const MEDIA_KINDS = new Set(["image", "video", "audio"]);
   const FILTERS = new Set(["all", ...MEDIA_KINDS]);
-  const VISUAL_MEDIA_KINDS = new Set(["image", "video"]);
+  const COVER_MEDIA_KINDS = new Set(["image"]);
 
   function cloneValue(value) {
     if (Array.isArray(value)) return value.map(cloneValue);
@@ -104,8 +104,8 @@
         throw new Error("Entity cover must belong to its mediaRefs.");
       }
       const cover = mediaById.get(initialCoverMediaId);
-      if (!VISUAL_MEDIA_KINDS.has(cover.mediaKind)) {
-        throw new Error("Entity cover must be an image or video.");
+      if (!COVER_MEDIA_KINDS.has(cover.mediaKind)) {
+        throw new Error("Entity cover must be an image.");
       }
     }
 
@@ -180,8 +180,8 @@
         const cover = mediaById.get(draft.coverMediaId);
         if (!draft.mediaIds.includes(draft.coverMediaId)) {
           errors.coverMediaId = "主体封面必须属于当前主体。";
-        } else if (!cover || !VISUAL_MEDIA_KINDS.has(cover.mediaKind)) {
-          errors.coverMediaId = "主体封面必须是图片或视频。";
+        } else if (!cover || !COVER_MEDIA_KINDS.has(cover.mediaKind)) {
+          errors.coverMediaId = "主体封面必须是图片。";
         }
       }
       return { valid: Object.keys(errors).length === 0, errors };
@@ -259,11 +259,21 @@
         return getState();
       }
       const media = requireReferencedMedia(value);
-      if (!VISUAL_MEDIA_KINDS.has(media.mediaKind)) {
-        throw new Error("Entity cover must be an image or video.");
+      if (!COVER_MEDIA_KINDS.has(media.mediaKind)) {
+        throw new Error("Entity cover must be an image.");
       }
       draft.coverMediaId = media.id;
       return getState();
+    }
+
+    function renameMedia(value, displayName) {
+      const media = requireReferencedMedia(value);
+      const normalizedName = String(displayName == null ? "" : displayName).trim();
+      if (!normalizedName) throw new Error("Media display name is required.");
+      if (normalizedName.length > 300) throw new Error("Media display name cannot exceed 300 characters.");
+      media.name = normalizedName;
+      media.displayName = normalizedName;
+      return cloneValue(media);
     }
 
     function removeMedia(value) {
@@ -272,7 +282,7 @@
       if (index < 0) return { removed: false, state: getState() };
       draft.mediaIds.splice(index, 1);
       if (draft.coverMediaId === mediaId) {
-        draft.coverMediaId = draft.mediaIds.find((id) => VISUAL_MEDIA_KINDS.has(mediaById.get(id).mediaKind)) || null;
+        draft.coverMediaId = draft.mediaIds.find((id) => COVER_MEDIA_KINDS.has(mediaById.get(id).mediaKind)) || null;
       }
       if (selectedPreviewId === mediaId) {
         selectedPreviewId = draft.mediaIds[index] || draft.mediaIds[index - 1] || null;
@@ -319,6 +329,7 @@
       isDirty,
       listMedia,
       removeMedia,
+      renameMedia,
       selectPreview,
       setCover,
       setDescription,

@@ -5,7 +5,7 @@
   const mutableSpaces = new Set(["personal", "organization"]);
   const itemKinds = new Set(["media", "entity"]);
   const mediaKinds = new Set(["image", "video", "audio"]);
-  const visualMediaKinds = new Set(["image", "video"]);
+  const coverMediaKinds = new Set(["image"]);
   const MAX_DIRECTORY_LEVELS = 5;
   const MAX_FOLDER_DEPTH = MAX_DIRECTORY_LEVELS - 1;
 
@@ -173,8 +173,8 @@
       if (entity.coverMediaId != null) {
         const coverMedia = mediaMap.get(entity.coverMediaId);
         if (!coverMedia) throw new Error(`Entity ${entity.id} references missing cover media: ${entity.coverMediaId}`);
-        if (!visualMediaKinds.has(coverMedia.mediaKind)) {
-          throw new Error(`Entity ${entity.id} cover media must be an image or video: ${entity.coverMediaId}`);
+        if (!coverMediaKinds.has(coverMedia.mediaKind)) {
+          throw new Error(`Entity ${entity.id} cover media must be an image: ${entity.coverMediaId}`);
         }
       }
       return entity;
@@ -389,8 +389,8 @@
         if (!entity.mediaRefs.some((ref) => ref.mediaId === coverMediaId)) {
           throw new Error(`Entity ${entity.id} cover must belong to its mediaRefs.`);
         }
-        if (!visualMediaKinds.has(mediaMap.get(coverMediaId)?.mediaKind)) {
-          throw new Error(`Entity ${entity.id} cover must be an image or video.`);
+        if (!coverMediaKinds.has(mediaMap.get(coverMediaId)?.mediaKind)) {
+          throw new Error(`Entity ${entity.id} cover must be an image.`);
         }
       }
     }
@@ -502,6 +502,26 @@
       if (created) mediaById.set(record.id, record);
       const placementCreated = createPlacement({ kind: "media", id: record.id }, resolvedSpace, folderId);
       return { media: cloneValue(record), created, placementCreated };
+    }
+
+    function syncPersistedMedia(input = {}) {
+      const source = input.media || input;
+      const id = String(source?.id || source?.assetId || source?.workspaceAssetId || "").trim();
+      const current = mediaById.get(id);
+      if (!current || !current.workspaceAssetId) {
+        throw new Error(`Persisted Media not found: ${id}`);
+      }
+      const displayName = String(source.displayName ?? source.name ?? "").trim();
+      if (!displayName) throw new Error("Persisted Media display name is required.");
+      if (displayName.length > 300) throw new Error("Persisted Media display name cannot exceed 300 characters.");
+      const next = normalizeMediaRecord({ ...current, ...source, id }, id);
+      if (next.mediaKind !== current.mediaKind || next.workspaceAssetId !== current.workspaceAssetId) {
+        throw new Error(`Persisted Media identity cannot change: ${id}`);
+      }
+      next.name = displayName;
+      next.displayName = displayName;
+      mediaById.set(id, next);
+      return cloneValue(next);
     }
 
     function createEntityVersionConflict(currentVersion, message = "Entity version conflict.") {
@@ -959,6 +979,7 @@
       hasPlacement,
       snapshot,
       registerMedia,
+      syncPersistedMedia,
       registerPersistedEntity,
       syncPersistedEntities,
       updateEntity,

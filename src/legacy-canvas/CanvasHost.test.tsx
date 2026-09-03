@@ -474,6 +474,182 @@ describe("CanvasHost", () => {
     ));
   });
 
+  it("renames personal Media in host scope and synchronizes workspace and project snapshots", async () => {
+    const projectAsset = {
+      referenceId: "reference-rename",
+      assetId: "asset-rename",
+      assetVersion: 1,
+      mediaKind: "image" as const,
+      displayName: "before.png",
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "c".repeat(64),
+      contentUrl: "/api/assets/asset-rename/content",
+    };
+    const personalAsset = {
+      id: "asset-rename",
+      workspaceId: "organization-1",
+      mediaKind: "image" as const,
+      displayName: "before.png",
+      objectVersion: 1,
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "c".repeat(64),
+      contentUrl: "/api/workspaces/organization-1/media-assets/asset-rename/content",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    const renamedAsset = {
+      id: "asset-rename",
+      workspaceId: "organization-1",
+      mediaKind: "image" as const,
+      displayName: "after.png",
+      objectVersion: 1,
+      contentType: "image/png",
+      byteSize: 42,
+      checksumSha256: "c".repeat(64),
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-03T00:00:00.000Z",
+    };
+    let resolveRename!: (asset: typeof renamedAsset) => void;
+    const renamePersonalAsset = vi.fn(() => new Promise<typeof renamedAsset>((resolve) => {
+      resolveRename = resolve;
+    }));
+    const mediaAssetRepository = {
+      listPersonalAssets: vi.fn(async () => [personalAsset]),
+      listProjectAssets: vi.fn(async () => [projectAsset]),
+      renamePersonalAsset,
+    } as never;
+    const entityRepository = { listPersonal: vi.fn(async () => []) } as never;
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        entityRepository={entityRepository}
+        mediaAssetRepository={mediaAssetRepository}
+        context={{
+          ...editableContext,
+          capabilities: {
+            ...editableContext.capabilities,
+            assetPersistence: true,
+            entityPersistence: true,
+          },
+        }}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:workspace-asset-catalog",
+        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "before.png" })],
+      }),
+      window.location.origin,
+    ));
+
+    const renameMessage = {
+      source: "reelay-legacy-canvas",
+      type: "canvas:rename-media",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: "media-rename-1",
+      assetId: "asset-rename",
+      displayName: "after.png",
+    };
+    dispatchCanvasMessage(frame, renameMessage);
+    await waitFor(() => expect(renamePersonalAsset).toHaveBeenCalledWith(
+      "organization-1",
+      "asset-rename",
+      "after.png",
+    ));
+    dispatchCanvasMessage(frame, renameMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:asset-command-error",
+        requestId: "media-rename-1",
+        code: "invalid",
+      }),
+      window.location.origin,
+    ));
+    expect(renamePersonalAsset).toHaveBeenCalledTimes(1);
+
+    resolveRename(renamedAsset);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:media-rename-result",
+        requestId: "media-rename-1",
+        workspaceAsset: expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" }),
+      }),
+      window.location.origin,
+    ));
+
+    postMessage.mockClear();
+    dispatchCanvasMessage(frame, { ...readyMessage, instanceId: "canvas-instance-2" });
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:project-assets",
+        instanceId: "canvas-instance-2",
+        projectAssets: [expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" })],
+      }),
+      window.location.origin,
+    ));
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:workspace-asset-catalog",
+        instanceId: "canvas-instance-2",
+        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" })],
+      }),
+      window.location.origin,
+    );
+  });
+
+  it.each([
+    { label: "missing capability", assetPersistence: false, writable: true, code: "unsupported" },
+    { label: "read-only access", assetPersistence: true, writable: false, code: "forbidden" },
+  ] as const)("rejects Media rename for $label", async ({ assetPersistence, writable, code }) => {
+    const renamePersonalAsset = vi.fn();
+    const mediaAssetRepository = {
+      listProjectAssets: vi.fn(async () => []),
+      renamePersonalAsset,
+    } as never;
+    render(
+      <CanvasHost
+        repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+        mediaAssetRepository={mediaAssetRepository}
+        context={{
+          ...editableContext,
+          writable,
+          capabilities: { ...editableContext.capabilities, assetPersistence },
+        }}
+      />,
+    );
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:init" }),
+      window.location.origin,
+    ));
+    dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas",
+      type: "canvas:rename-media",
+      protocolVersion: 1,
+      instanceId: canvasInstanceId,
+      requestId: `rename-${code}`,
+      assetId: "asset-rename",
+      displayName: "after.png",
+    });
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:asset-command-error",
+        requestId: `rename-${code}`,
+        code,
+      }),
+      window.location.origin,
+    ));
+    expect(renamePersonalAsset).not.toHaveBeenCalled();
+  });
+
   it("loads the personal Entity catalog and scopes create/update commands through the host", async () => {
     const personalAsset = {
       id: "asset-front",

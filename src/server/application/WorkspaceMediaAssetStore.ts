@@ -49,6 +49,10 @@ export interface ReadPersonalAssetInput extends ListPersonalAssetsInput {
   assetId: WorkspaceMediaAssetId;
 }
 
+export interface RenamePersonalAssetInput extends ReadPersonalAssetInput {
+  displayName: string;
+}
+
 export class AssetWorkspaceUnavailableError extends Error {
   constructor() {
     super("The workspace is unavailable or inaccessible to the actor.");
@@ -76,6 +80,13 @@ export class AssetUploadIntentUnavailableError extends Error {
   }
 }
 
+export class PersonalAssetUnavailableError extends Error {
+  constructor() {
+    super("The personal media asset is unavailable or inaccessible to the actor.");
+    this.name = "PersonalAssetUnavailableError";
+  }
+}
+
 export interface WorkspaceMediaAssetStore {
   createUploadIntent(input: CreateAssetUploadIntentInput): Promise<AssetUploadIntent>;
   getUploadIntent(input: ReadAssetUploadIntentInput): Promise<AssetUploadIntent | null>;
@@ -83,4 +94,5 @@ export interface WorkspaceMediaAssetStore {
   finalizeUpload(input: FinalizeAssetUploadInput): Promise<WorkspaceMediaAsset>;
   listPersonalAssets(input: ListPersonalAssetsInput): Promise<WorkspaceMediaAsset[]>;
   getPersonalAsset(input: ReadPersonalAssetInput): Promise<WorkspaceMediaAsset | null>;
+  renamePersonalAsset(input: RenamePersonalAssetInput): Promise<WorkspaceMediaAsset>;
 }

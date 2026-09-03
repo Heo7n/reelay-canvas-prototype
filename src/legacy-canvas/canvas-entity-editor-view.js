@@ -105,6 +105,24 @@
     }));
   }
 
+  function mediaKindIcon(mediaKind) {
+    if (mediaKind === "video") return "play-square";
+    if (mediaKind === "audio") return "audio-lines";
+    return "image";
+  }
+
+  function splitFileName(value) {
+    const name = String(value || "");
+    const extensionIndex = name.lastIndexOf(".");
+    if (extensionIndex <= 0 || extensionIndex === name.length - 1) {
+      return { baseName: name, extension: "" };
+    }
+    return {
+      baseName: name.slice(0, extensionIndex),
+      extension: name.slice(extensionIndex),
+    };
+  }
+
   function renderAudioWave() {
     return `
       <span class="entity-editor-audio-wave" aria-hidden="true">
@@ -178,7 +196,7 @@
           return `
             <button class="${selected ? "active" : ""}" id="${idPrefix}-${filter.id}" type="button" role="tab" aria-controls="${panelId}" aria-selected="${selected}" tabindex="${selected ? "0" : "-1"}" ${hook}="${filter.id}"${disabled ? ' disabled aria-disabled="true"' : ""}>
               <span>${filter.label}</span>
-              <span aria-label="${counts[filter.id]} 个">${counts[filter.id]}</span>
+              <span aria-label="${counts[filter.id]} 个">(${counts[filter.id]})</span>
             </button>
           `;
         }).join("")}
@@ -198,9 +216,8 @@
         <button class="entity-editor-media-select" type="button" aria-label="预览 ${safeName}" aria-pressed="${selected}" data-entity-editor-media-select="${safeId}"${interactive ? "" : ' disabled aria-disabled="true"'}>
           <span class="entity-editor-media-thumbnail">${renderCardMedia(media)}</span>
           <span class="entity-editor-media-name" title="${safeName}">${safeName}</span>
-          <span class="entity-editor-media-kind">${MEDIA_KIND_LABELS[media.mediaKind]}</span>
         </button>
-        ${isCover ? `<span class="entity-editor-cover-badge">${icon("bookmark-check")}<span>封面</span></span>` : ""}
+        ${isCover ? '<span class="entity-editor-cover-badge">封面</span>' : ""}
         ${mutable ? `
           <button class="entity-editor-media-remove" type="button" aria-label="移除 ${safeName}" data-entity-editor-media-remove="${safeId}">
             ${icon("x")}
@@ -244,7 +261,23 @@
     const canSubmit = editable && options.valid !== false && Boolean(name.trim()) && counts.all > 0;
     const selectedId = selectedMedia?.id || "";
     const selectedIsCover = Boolean(selectedId && selectedId === coverMediaId);
-    const selectedCanCover = selectedMedia?.mediaKind === "image" || selectedMedia?.mediaKind === "video";
+    const selectedCanCover = selectedMedia?.mediaKind === "image";
+    const selectedFileName = selectedMedia?.name || "";
+    const selectedFileParts = splitFileName(selectedFileName);
+    const renamingSelectedMedia = Boolean(
+      selectedMedia
+      && String(options.renamingMediaId || "") === selectedId,
+    );
+    const renameBaseName = renamingSelectedMedia
+      ? String(options.mediaRenameValue ?? selectedFileParts.baseName)
+      : selectedFileParts.baseName;
+    const coverControl = !selectedMedia
+      ? ""
+      : selectedIsCover
+        ? `<span class="entity-editor-cover-control entity-editor-cover-status" role="status" aria-label="${escapeHtml(selectedMedia.name)} 当前为封面">当前封面</span>`
+        : selectedCanCover
+          ? `<button class="entity-editor-cover-control entity-editor-cover-action" type="button" data-entity-editor-set-cover="${escapeHtml(selectedMedia.id)}"${editable ? "" : ' disabled aria-disabled="true"'}>设为封面</button>`
+          : "";
     const submitLabel = uploading ? "正在上传…" : submitting ? "正在保存…" : mode === "create" ? "创建" : "保存";
     const emptyLabel = counts.all === 0
       ? "还没有添加素材"
@@ -273,6 +306,14 @@
             <section class="entity-editor-media-section" aria-labelledby="canvasEntityEditorMediaTitle">
               <div class="entity-editor-media-heading">
                 <h3 id="canvasEntityEditorMediaTitle">添加素材</h3>
+              </div>
+
+              <div class="entity-editor-media-toolbar">
+                ${renderFilterTabs(activeFilter, counts, {
+                  disabled: busy,
+                  idPrefix: "canvasEntityEditorFilter",
+                  panelId: "canvasEntityEditorMediaGrid",
+                })}
                 <div class="entity-editor-media-actions">
                   <button type="button" data-entity-editor-add-from-library="true"${canAddFromLibrary ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持从素材库添加" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
                     ${icon("images")}
@@ -285,12 +326,6 @@
                   </button>
                 </div>
               </div>
-
-              ${renderFilterTabs(activeFilter, counts, {
-                disabled: busy,
-                idPrefix: "canvasEntityEditorFilter",
-                panelId: "canvasEntityEditorMediaGrid",
-              })}
               ${safeMediaError ? `<span class="entity-editor-field-error" id="canvasEntityEditorMediaError" role="alert">${safeMediaError}</span>` : ""}
               <div class="entity-editor-media-grid" id="canvasEntityEditorMediaGrid" role="list" aria-label="${FILTERS.find((filter) => filter.id === activeFilter).label}素材" aria-labelledby="canvasEntityEditorFilter-${activeFilter}"${safeMediaError ? ' aria-describedby="canvasEntityEditorMediaError"' : ""}>
                 ${filteredMedia.length
@@ -313,16 +348,27 @@
 
         <section class="entity-editor-preview" aria-labelledby="canvasEntityEditorPreviewTitle">
           <header>
-            <div>
-              <span>${selectedMedia ? MEDIA_KIND_LABELS[selectedMedia.mediaKind] : "素材预览"}</span>
-              <h3 id="canvasEntityEditorPreviewTitle">${selectedMedia ? escapeHtml(selectedMedia.name) : "预览"}</h3>
+            <div class="entity-editor-preview-meta">
+              ${selectedMedia ? `
+                <span class="entity-editor-preview-kind-icon" title="${MEDIA_KIND_LABELS[selectedMedia.mediaKind]}">
+                  ${icon(mediaKindIcon(selectedMedia.mediaKind))}
+                  <span class="sr-only">${MEDIA_KIND_LABELS[selectedMedia.mediaKind]}</span>
+                </span>
+                <h3 class="sr-only" id="canvasEntityEditorPreviewTitle">${escapeHtml(selectedFileName)}</h3>
+                ${renamingSelectedMedia ? `
+                  <label class="entity-editor-preview-rename" aria-label="重命名 ${escapeHtml(selectedFileName)}">
+                    <input type="text" maxlength="${Math.max(1, 300 - selectedFileParts.extension.length)}" value="${escapeHtml(renameBaseName)}" autocomplete="off" aria-label="文件名称，不含扩展名" data-entity-editor-preview-rename="${escapeHtml(selectedId)}"${options.mediaRenameBusy ? ' disabled aria-disabled="true"' : ""}>
+                    ${selectedFileParts.extension ? `<span aria-label="固定扩展名 ${escapeHtml(selectedFileParts.extension)}">${escapeHtml(selectedFileParts.extension)}</span>` : ""}
+                  </label>
+                ` : `
+                  <button class="entity-editor-preview-filename" type="button" title="双击重命名文件（扩展名保持不变）" aria-label="文件名称 ${escapeHtml(selectedFileName)}，双击或按 F2 重命名" data-entity-editor-preview-name="${escapeHtml(selectedId)}"${editable ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(selectedFileName)}</button>
+                `}
+              ` : `
+                <span class="entity-editor-preview-kind-icon">${icon("images")}</span>
+                <h3 id="canvasEntityEditorPreviewTitle">预览</h3>
+              `}
             </div>
-            ${selectedMedia ? `
-              <button type="button" data-entity-editor-set-cover="${escapeHtml(selectedMedia.id)}"${editable && selectedCanCover && !selectedIsCover ? "" : ' disabled aria-disabled="true"'}${selectedCanCover ? "" : ' title="音频不能设为封面"'}>
-                ${icon(selectedIsCover ? "bookmark-check" : "bookmark")}
-                <span>${selectedIsCover ? "当前封面" : "设为封面"}</span>
-              </button>
-            ` : ""}
+            ${coverControl}
           </header>
           <div class="entity-editor-preview-stage" data-entity-editor-preview="${escapeHtml(selectedId)}">
             ${renderPreviewMedia(selectedMedia)}

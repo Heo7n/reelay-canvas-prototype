@@ -39,10 +39,12 @@ describe("Entity persistence routes", () => {
       assets: [
         { id: "asset-front", workspaceId, mediaKind: "image", finalized: true },
         { id: "asset-voice", workspaceId, mediaKind: "audio", finalized: true },
+        { id: "asset-motion", workspaceId, mediaKind: "video", finalized: true },
       ],
       personalAssetPlacements: [
         { workspaceId, assetId: "asset-front", ownerActorId: ownerId },
         { workspaceId, assetId: "asset-voice", ownerActorId: ownerId },
+        { workspaceId, assetId: "asset-motion", ownerActorId: ownerId },
       ],
     });
     app = await buildServer({ store, entityStore });
@@ -190,5 +192,19 @@ describe("Entity persistence routes", () => {
     });
     expect(audioCover.statusCode).toBe(400);
     expect(audioCover.json().error.code).toBe("invalid_entity_cover");
+
+    const videoCover = await app.inject({
+      method: "POST",
+      url,
+      headers: { cookie: session },
+      payload: {
+        idempotencyKey: "create-video-cover",
+        name: "视频封面",
+        assetIds: ["asset-front", "asset-motion"],
+        coverAssetId: "asset-motion",
+      },
+    });
+    expect(videoCover.statusCode).toBe(400);
+    expect(videoCover.json().error.code).toBe("invalid_entity_cover");
   });
 });

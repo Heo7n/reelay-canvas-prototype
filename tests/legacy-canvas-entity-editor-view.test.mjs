@@ -53,6 +53,7 @@ test("create mode keeps the title 新建主体 and renders the complete empty dr
   assert.match(markup, /required aria-required="true"/);
   assert.match(markup, /data-entity-editor-description="true"/);
   assert.match(markup, /<h3 id="canvasEntityEditorMediaTitle">添加素材<\/h3>/);
+  assert.match(markup, /class="entity-editor-media-heading">\s*<h3[^>]*>添加素材<\/h3>\s*<\/div>\s*<div class="entity-editor-media-toolbar">[\s\S]*?class="entity-editor-media-filters"[\s\S]*?class="entity-editor-media-actions"/);
   assert.match(markup, /data-entity-editor-add-from-library="true"/);
   assert.match(markup, />从素材库添加<\/span>/);
   assert.match(markup, /data-entity-editor-upload="true"/);
@@ -85,13 +86,13 @@ test("edit mode uses the live Entity name as its title and exposes save state", 
   assert.match(markup, /data-entity-editor-selected-media="turnaround"/);
   assert.match(markup, /data-entity-editor-media="portrait"[^]*class="entity-editor-cover-badge"/);
   assert.match(markup, /data-entity-editor-media="turnaround"/);
-  assert.match(markup, /data-entity-editor-set-cover="turnaround"/);
+  assert.doesNotMatch(markup, /data-entity-editor-set-cover="turnaround"/);
   assert.match(markup, /data-entity-editor-submit="true">保存<\/button>/);
   assert.equal(markup.match(/data-entity-editor-media="/g)?.length, 3);
-  assert.match(markup, /全部<\/span>\s*<span aria-label="3 个">3<\/span>/);
-  assert.match(markup, /图片<\/span>\s*<span aria-label="1 个">1<\/span>/);
-  assert.match(markup, /视频<\/span>\s*<span aria-label="1 个">1<\/span>/);
-  assert.match(markup, /音频<\/span>\s*<span aria-label="1 个">1<\/span>/);
+  assert.match(markup, /全部<\/span>\s*<span aria-label="3 个">\(3\)<\/span>/);
+  assert.match(markup, /图片<\/span>\s*<span aria-label="1 个">\(1\)<\/span>/);
+  assert.match(markup, /视频<\/span>\s*<span aria-label="1 个">\(1\)<\/span>/);
+  assert.match(markup, /音频<\/span>\s*<span aria-label="1 个">\(1\)<\/span>/);
 });
 
 test("model-shaped state can drive title, values, counts, filter, and preview directly", () => {
@@ -100,21 +101,24 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
     title: "重命名后的主体",
     name: "重命名后的主体",
     description: "草稿描述",
-    filter: "video",
-    filteredMedia: [media[1]],
+    filter: "image",
+    filteredMedia: [media[0]],
     counts: { all: 3, image: 1, video: 1, audio: 1 },
-    selectedPreviewId: "turnaround",
-    coverMediaId: "turnaround",
+    selectedPreviewId: "portrait",
+    coverMediaId: "portrait",
   });
 
   assert.match(markup, /title="重命名后的主体">重命名后的主体<\/h2>/);
   assert.match(markup, /value="重命名后的主体"/);
   assert.match(markup, />草稿描述<\/textarea>/);
-  assert.match(markup, /data-entity-editor-filter-active="video"/);
-  assert.match(markup, /aria-selected="true"[^>]*data-entity-editor-filter="video"/);
-  assert.match(markup, /aria-label="3 个">3<\/span>/);
-  assert.match(markup, /data-entity-editor-preview="turnaround"/);
-  assert.match(markup, /当前封面/);
+  assert.match(markup, /data-entity-editor-filter-active="image"/);
+  assert.match(markup, /aria-selected="true"[^>]*data-entity-editor-filter="image"/);
+  assert.match(markup, /aria-label="3 个">\(3\)<\/span>/);
+  assert.doesNotMatch(markup, /entity-editor-media-kind/);
+  assert.match(markup, /data-entity-editor-preview="portrait"/);
+  assert.match(markup, /entity-editor-preview-kind-icon[^]*data-lucide="image"/);
+  assert.match(markup, /data-entity-editor-preview-name="portrait"[^>]*>正面照<\/button>/);
+  assert.match(markup, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<span class="entity-editor-cover-control entity-editor-cover-status" role="status"[^>]*>当前封面<\/span>/);
 });
 
 test("filtering limits the Media grid while preserving live category counts", () => {
@@ -130,7 +134,7 @@ test("filtering limits the Media grid while preserving live category counts", ()
   assert.match(markup, /data-entity-editor-media="portrait"/);
   assert.doesNotMatch(markup, /data-entity-editor-media="turnaround"/);
   assert.doesNotMatch(markup, /data-entity-editor-media="voice"/);
-  assert.match(markup, /aria-label="3 个">3<\/span>/);
+  assert.match(markup, /aria-label="3 个">\(3\)<\/span>/);
   assert.match(markup, /data-entity-editor-submit="true">创建<\/button>/);
 });
 
@@ -152,12 +156,33 @@ test("image, video, and audio previews use only structured safe Media fields", (
   });
 
   assert.match(image, /<img src="https:\/\/cdn\.example\/portrait\.jpg\?x=1&amp;y=2" alt="正面照">/);
+  assert.match(image, /data-lucide="image"/);
+  assert.match(video, /data-lucide="play-square"/);
+  assert.match(audio, /data-lucide="audio-lines"/);
+  assert.match(image, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<button class="entity-editor-cover-control entity-editor-cover-action"[^>]*data-entity-editor-set-cover="portrait"[^>]*>设为封面<\/button>/);
   assert.match(video, /<video src="blob:https:\/\/reelay\.example\/video-1" poster="\/thumbs\/turnaround\.webp" controls playsinline/);
   assert.match(audio, /<audio src="https:\/\/cdn\.example\/voice\.mp3" controls preload="metadata"/);
-  assert.match(audio, /data-entity-editor-set-cover="voice" disabled aria-disabled="true" title="音频不能设为封面"/);
+  assert.doesNotMatch(video, /data-entity-editor-set-cover/);
+  assert.doesNotMatch(audio, /data-entity-editor-set-cover/);
   assert.doesNotMatch(unsafe, /javascript:/i);
   assert.doesNotMatch(unsafe, /<img src=x/);
   assert.match(unsafe, /图片暂不可预览/);
+});
+
+test("preview filename rename keeps the suffix fixed in a horizontal inline control", () => {
+  const markup = view.renderEntityEditor({
+    mode: "edit",
+    name: "主体",
+    media: [{ id: "portrait", name: "角色.正面.webp", mediaKind: "image" }],
+    selectedMediaId: "portrait",
+    renamingMediaId: "portrait",
+    mediaRenameValue: "角色定妆",
+  });
+
+  assert.match(markup, /data-lucide="image"[^]*data-entity-editor-preview-rename="portrait"/);
+  assert.match(markup, /value="角色定妆"/);
+  assert.match(markup, /固定扩展名 \.webp[^>]*>\.webp<\/span>/);
+  assert.doesNotMatch(markup, /value="角色定妆\.webp"/);
 });
 
 test("the editor escapes all user content and renders accessible validation errors", () => {
@@ -290,11 +315,19 @@ test("dedicated CSS covers theme parity, visible hover removal, focus, and defen
   assert.match(css, /html\[data-theme="light"\] \.canvas-entity-editor/);
   assert.match(css, /\.entity-editor-media-card:hover \.entity-editor-media-remove/);
   assert.match(css, /\.entity-editor-media-card:focus-within \.entity-editor-media-remove/);
+  assert.match(css, /\.entity-editor-details-scroll\s*\{[^}]*padding:\s*18px 20px 0;[^}]*overflow:\s*hidden;[^}]*flex-direction:\s*column;/s);
+  assert.match(css, /\.entity-editor-media-section\s*\{[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;[^}]*flex:\s*1 1 0;/s);
+  assert.match(css, /\.entity-editor-media-grid\s*\{[^}]*padding:\s*0 3px 14px 0;[^}]*overflow-y:\s*auto;[^}]*grid-auto-rows:\s*max-content;[^}]*flex:\s*1 1 0;/s);
+  assert.match(css, /\.entity-editor-preview-meta\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
+  assert.match(css, /\.entity-editor-preview > header \.entity-editor-cover-control\s*\{[^}]*width:\s*80px;[^}]*min-width:\s*80px;[^}]*max-width:\s*80px;[^}]*height:\s*30px;[^}]*appearance:\s*none;[^}]*font-size:\s*12px;/s);
+  assert.match(css, /\.entity-editor-cover-status\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.doesNotMatch(css, /\.entity-editor-cover-badge svg/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /\.entity-media-picker\s*\{/);
   assert.match(css, /\.canvas-entity-editor\s*\{[^}]*background: var\(--entity-editor-bg\);/s);
   assert.match(css, /\.entity-picker-footer\s*\{[^}]*flex-wrap: wrap;/s);
-  assert.match(css, /\.entity-editor-media-actions button\s*\{[^}]*flex: 1 1 0;/s);
+  assert.match(css, /\.entity-editor-details\s*\{[^}]*container-type: inline-size;[^}]*container-name: entity-editor-details;/s);
+  assert.match(css, /@container entity-editor-details \(max-width: 520px\)[\s\S]*?\.entity-editor-media-toolbar\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\);/s);
   assert.match(css, /@media \(max-width: 720px\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });

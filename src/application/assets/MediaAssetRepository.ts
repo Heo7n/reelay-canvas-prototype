@@ -50,6 +50,11 @@ export interface ProjectMediaAsset {
 export interface MediaAssetRepository {
   createUploadIntent(input: CreateMediaUploadIntentInput): Promise<MediaUploadGrant>;
   finalizeUpload(workspaceId: WorkspaceId, uploadId: string): Promise<FinalizedMediaAsset>;
+  renamePersonalAsset(
+    workspaceId: WorkspaceId,
+    assetId: string,
+    displayName: string,
+  ): Promise<PersonalMediaAsset>;
   attachToProject(projectId: ProjectId, assetId: string): Promise<ProjectMediaAsset>;
   listPersonalAssets(workspaceId: WorkspaceId): Promise<PersonalMediaAsset[]>;
   listProjectAssets(projectId: ProjectId): Promise<ProjectMediaAsset[]>;

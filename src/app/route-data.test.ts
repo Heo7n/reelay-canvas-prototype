@@ -63,6 +63,7 @@ function createServices(signedIn = true): ApplicationServices {
     mediaAssetRepository: {
       createUploadIntent: vi.fn(),
       finalizeUpload: vi.fn(),
+      renamePersonalAsset: vi.fn(),
       attachToProject: vi.fn(),
       listPersonalAssets: vi.fn(async () => []),
       listProjectAssets: vi.fn(async () => []),

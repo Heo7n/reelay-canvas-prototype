@@ -443,7 +443,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
   const agentWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--agent-width"));
   const assetResizeHandle = window.document.querySelector("#assetLibraryResizeHandle");
-  assert.ok(assetWidth + agentWidth <= window.innerWidth - 280);
+  assert.ok(assetWidth + agentWidth <= window.innerWidth - 280 - 24);
   assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), assetWidth);
   assert.ok(Number(assetResizeHandle.getAttribute("aria-valuemax")) >= assetWidth);
   agentAdvancedBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

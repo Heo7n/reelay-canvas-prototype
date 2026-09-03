@@ -29,6 +29,7 @@ interface EntityRow extends QueryResultRow {
   name: string;
   description: string;
   cover_asset_id: string | null;
+  cover_media_kind: "image" | "video" | "audio" | null;
   version: number;
   created_by_user_id: string;
   created_at: Date | string;
@@ -50,6 +51,9 @@ function mapEntities(rows: EntityRow[]): WorkspaceEntity[] {
   for (const row of rows) {
     let entity = entities.get(row.id);
     if (!entity) {
+      if (row.cover_asset_id && row.cover_media_kind !== "image") {
+        throw new EntityCoverMediaInvalidError();
+      }
       entity = {
         id: row.id,
         workspaceId: row.workspace_id,
@@ -86,6 +90,12 @@ const entityColumns = `
   entity.name,
   entity.description,
   entity.cover_asset_id,
+  (
+    SELECT cover_asset.media_kind
+    FROM workspace_media_assets AS cover_asset
+    WHERE cover_asset.workspace_id = entity.workspace_id
+      AND cover_asset.id = entity.cover_asset_id
+  ) AS cover_media_kind,
   entity.version,
   entity.created_by_user_id,
   entity.created_at,
@@ -280,7 +290,9 @@ export class PostgresEntityStore implements EntityStore {
     const cover = content.coverMediaId
       ? available.rows.find((asset) => asset.id === content.coverMediaId)
       : null;
-    if (cover?.media_kind === "audio") throw new EntityCoverMediaInvalidError();
+    if (content.coverMediaId && cover?.media_kind !== "image") {
+      throw new EntityCoverMediaInvalidError();
+    }
   }
 
   private async insertMediaReferences(

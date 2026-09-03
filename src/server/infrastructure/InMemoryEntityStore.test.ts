@@ -17,12 +17,14 @@ const seed: InMemoryEntityStoreSeed = {
   assets: [
     { id: "asset-front", workspaceId, mediaKind: "image", finalized: true },
     { id: "asset-voice", workspaceId, mediaKind: "audio", finalized: true },
+    { id: "asset-motion", workspaceId, mediaKind: "video", finalized: true },
     { id: "asset-other", workspaceId, mediaKind: "image", finalized: true },
     { id: "asset-pending", workspaceId, mediaKind: "video", finalized: false },
   ],
   personalAssetPlacements: [
     { workspaceId, assetId: "asset-front", ownerActorId: ownerId },
     { workspaceId, assetId: "asset-voice", ownerActorId: ownerId },
+    { workspaceId, assetId: "asset-motion", ownerActorId: ownerId },
     { workspaceId, assetId: "asset-pending", ownerActorId: ownerId },
     { workspaceId, assetId: "asset-other", ownerActorId: otherId },
   ],
@@ -69,6 +71,14 @@ describe("InMemoryEntityStore", () => {
 
     await expect(store.createPersonalEntity({ ...input, name: "另一个主体" }))
       .rejects.toMatchObject({ reason: "idempotency_key_reused" });
+    await expect(store.createPersonalEntity({
+      ...input,
+      idempotencyKey: "create-video-cover",
+      name: "视频封面主体",
+      mediaAssetIds: ["asset-motion"],
+      coverMediaId: "asset-motion",
+    })).rejects.toBeInstanceOf(EntityCoverMediaInvalidError);
+    await expect(store.listPersonalEntities({ actorId: ownerId, workspaceId })).resolves.toEqual([created]);
   });
 
   it("rejects non-finalized, foreign-personal, and inaccessible-workspace media atomically", async () => {
@@ -127,6 +137,16 @@ describe("InMemoryEntityStore", () => {
       name: "错误音频封面",
       mediaAssetIds: ["asset-voice", "asset-front"],
       coverMediaId: "asset-voice",
+    })).rejects.toBeInstanceOf(EntityCoverMediaInvalidError);
+
+    await expect(store.updatePersonalEntity({
+      actorId: ownerId,
+      workspaceId,
+      entityId: created.id,
+      expectedVersion: 2,
+      name: "错误视频封面",
+      mediaAssetIds: ["asset-motion", "asset-front"],
+      coverMediaId: "asset-motion",
     })).rejects.toBeInstanceOf(EntityCoverMediaInvalidError);
 
     await expect(store.updatePersonalEntity({

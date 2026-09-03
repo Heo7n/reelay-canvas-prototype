@@ -48,7 +48,7 @@ export class EntityMediaUnavailableError extends Error {
 
 export class EntityCoverMediaInvalidError extends Error {
   constructor() {
-    super("The Entity cover must reference an image or video asset.");
+    super("The Entity cover must reference an image asset.");
     this.name = "EntityCoverMediaInvalidError";
   }
 }

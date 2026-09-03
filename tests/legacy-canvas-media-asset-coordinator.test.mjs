@@ -111,6 +111,54 @@ test("keeps personal-only uploads out of the project result path", async () => {
   assert.deepEqual(JSON.parse(JSON.stringify(await result)), workspaceAsset);
 });
 
+test("correlates personal Media rename results by request, instance, and asset", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  const result = coordinator.renameMedia(" asset-2 ", " renamed-portrait.png ");
+  const rename = posted[0];
+  assert.deepEqual(JSON.parse(JSON.stringify(rename)), {
+    source: "reelay-legacy-canvas",
+    type: "canvas:rename-media",
+    protocolVersion: 1,
+    instanceId: "instance-1",
+    requestId: "request-1",
+    assetId: "asset-2",
+    displayName: "renamed-portrait.png",
+  });
+  assert.equal(dispatch({
+    source: "reelay-shell", type: "host:media-rename-result", protocolVersion: 1,
+    requestId: rename.requestId, instanceId: "wrong-instance",
+    workspaceAsset: { ...workspaceAsset, displayName: "renamed-portrait.png" },
+  }), false);
+  assert.equal(dispatch({
+    source: "reelay-shell", type: "host:media-rename-result", protocolVersion: 1,
+    requestId: rename.requestId, instanceId: "instance-1",
+    workspaceAsset: { ...workspaceAsset, assetId: "asset-other", displayName: "renamed-portrait.png" },
+  }), false);
+  assert.equal(dispatch({
+    source: "reelay-shell", type: "host:media-rename-result", protocolVersion: 1,
+    requestId: rename.requestId, instanceId: "instance-1",
+    workspaceAsset: { ...workspaceAsset, displayName: "renamed-portrait.png" },
+  }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(await result)), {
+    ...workspaceAsset,
+    displayName: "renamed-portrait.png",
+  });
+  assert.equal(coordinator.getPendingCount(), 0);
+});
+
+test("rejects invalid rename input and maps correlated command errors", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  await assert.rejects(coordinator.renameMedia("", "name.png"), (error) => error.code === "invalid");
+  await assert.rejects(coordinator.renameMedia("asset-2", "   "), (error) => error.code === "invalid");
+  const result = coordinator.renameMedia("asset-2", "portrait-v2.png");
+  const rename = posted[0];
+  assert.equal(dispatch({
+    source: "reelay-shell", type: "host:asset-command-error", protocolVersion: 1,
+    requestId: rename.requestId, instanceId: "instance-1", code: "conflict",
+  }), true);
+  await assert.rejects(result, (error) => error.code === "conflict");
+});
+
 test("rejects cross-origin grants and validates initial snapshot correlation", async () => {
   const { coordinator, dispatch, posted, snapshots, uploads } = harness();
   assert.equal(dispatch({

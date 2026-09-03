@@ -158,9 +158,20 @@ describe("PostgreSQL Entity persistence", () => {
     );
 
     let entityId = "";
+    let motionAssetId = "";
     try {
       const front = await createPersonalAsset(assetStore, actorId, workspaceId, "a1");
       const voice = await createPersonalAsset(assetStore, actorId, workspaceId, "b2", "audio");
+      const motion = await createPersonalAsset(assetStore, actorId, workspaceId, "v9", "video");
+      motionAssetId = motion.id;
+      await expect(entityStore.createPersonalEntity({
+        actorId,
+        workspaceId,
+        idempotencyKey: "postgres-entity-video-cover",
+        name: "视频封面主体",
+        mediaAssetIds: [motion.id],
+        coverMediaId: motion.id,
+      })).rejects.toBeInstanceOf(EntityCoverMediaInvalidError);
       const createInput = {
         actorId,
         workspaceId,
@@ -221,6 +232,15 @@ describe("PostgreSQL Entity persistence", () => {
         actorId,
         workspaceId,
         entityId,
+        expectedVersion: 2,
+        name: "错误视频封面",
+        mediaAssetIds: [motion.id, front.id],
+        coverMediaId: motion.id,
+      })).rejects.toBeInstanceOf(EntityCoverMediaInvalidError);
+      await expect(entityStore.updatePersonalEntity({
+        actorId,
+        workspaceId,
+        entityId,
         expectedVersion: 1,
         name: "陈旧更新",
         mediaAssetIds: [front.id],
@@ -249,6 +269,20 @@ describe("PostgreSQL Entity persistence", () => {
         version: 2,
       }));
       await expect(restartedStore.listPersonalEntities({ actorId, workspaceId })).resolves.toEqual([restored]);
+
+      await restartedPool.query(
+        `INSERT INTO entity_media_references (workspace_id, entity_id, asset_id, position)
+         VALUES ($1, $2, $3, 2)`,
+        [workspaceId, entityId, motionAssetId],
+      );
+      await restartedPool.query(
+        "UPDATE workspace_entities SET cover_asset_id = $3 WHERE workspace_id = $1 AND id = $2",
+        [workspaceId, entityId, motionAssetId],
+      );
+      await expect(restartedStore.getPersonalEntity({ actorId, workspaceId, entityId }))
+        .rejects.toBeInstanceOf(EntityCoverMediaInvalidError);
+      await expect(restartedStore.listPersonalEntities({ actorId, workspaceId }))
+        .rejects.toBeInstanceOf(EntityCoverMediaInvalidError);
     } finally {
       await restartedPool.end();
     }

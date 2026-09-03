@@ -217,6 +217,15 @@ export const hostMediaUploadResultMessageSchema = z.discriminatedUnion("target",
   }).strict(),
 ]);
 
+export const hostMediaRenameResultMessageSchema = z.object({
+  source: z.literal("reelay-shell"),
+  type: z.literal("host:media-rename-result"),
+  protocolVersion: z.literal(1),
+  requestId: bridgeRequestIdSchema,
+  instanceId: canvasInstanceIdSchema,
+  workspaceAsset: bridgeWorkspaceAssetSchema,
+}).strict();
+
 export const hostAssetCommandErrorMessageSchema = z.object({
   source: z.literal("reelay-shell"),
   type: z.literal("host:asset-command-error"),
@@ -298,6 +307,15 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     instanceId: canvasInstanceIdSchema,
     requestId: bridgeRequestIdSchema,
     uploadId: bridgeIdentifierSchema,
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:rename-media"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    requestId: bridgeRequestIdSchema,
+    assetId: bridgeIdentifierSchema,
+    displayName: z.string().trim().min(1).max(300),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

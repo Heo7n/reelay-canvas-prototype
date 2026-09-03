@@ -415,7 +415,7 @@ describe("HttpMediaAssetRepository", () => {
     contentUrl: "/api/assets/asset-1/content",
   };
 
-  it("creates, finalizes, attaches and lists media through encoded scoped routes", async () => {
+  it("creates, finalizes, renames, attaches and lists media through encoded scoped routes", async () => {
     const asset = {
       id: "asset-1",
       workspaceId: "workspace/one",
@@ -428,6 +428,15 @@ describe("HttpMediaAssetRepository", () => {
       createdAt: "2026-08-31T12:00:00.000Z",
       updatedAt: "2026-08-31T12:00:00.000Z",
     };
+    const renamedAsset = {
+      ...asset,
+      displayName: "hero cover.png",
+      updatedAt: "2026-08-31T12:01:00.000Z",
+    };
+    const renamedPersonalAsset = {
+      ...renamedAsset,
+      contentUrl: "/api/workspaces/workspace%2Fone/media-assets/asset%2Fone/content",
+    };
     const grant = {
       uploadIntent: { id: "upload/one", expiresAt: "2026-08-31T12:10:00.000Z" },
       upload: { url: "/api/uploads/upload-one", method: "PUT", headers: { "x-upload": "one" } },
@@ -436,6 +445,7 @@ describe("HttpMediaAssetRepository", () => {
     const transport = createFetchQueue(
       { body: grant },
       { body: { asset } },
+      { body: { asset: renamedAsset } },
       { body: { assets: [personalAsset] } },
       { body: { projectAsset } },
       { body: { projectAssets: [projectAsset] } },
@@ -452,6 +462,8 @@ describe("HttpMediaAssetRepository", () => {
       checksumSha256: "a".repeat(64),
     })).resolves.toEqual(grant);
     await expect(repository.finalizeUpload("workspace/one", "upload/one")).resolves.toEqual(asset);
+    await expect(repository.renamePersonalAsset("workspace/one", "asset/one", "hero cover.png"))
+      .resolves.toEqual(renamedPersonalAsset);
     await expect(repository.listPersonalAssets("workspace/one")).resolves.toEqual([personalAsset]);
     await expect(repository.attachToProject("project/one", "asset/one")).resolves.toEqual(projectAsset);
     await expect(repository.listProjectAssets("project/one")).resolves.toEqual([projectAsset]);
@@ -459,6 +471,7 @@ describe("HttpMediaAssetRepository", () => {
     expect(transport.requests.map((request) => request.url)).toEqual([
       "/backend/api/workspaces/workspace%2Fone/media-upload-intents",
       "/backend/api/workspaces/workspace%2Fone/media-upload-intents/upload%2Fone/finalize",
+      "/backend/api/workspaces/workspace%2Fone/media-assets/asset%2Fone",
       "/backend/api/workspaces/workspace%2Fone/media-assets?scope=personal",
       "/backend/api/projects/project%2Fone/asset-references/asset%2Fone",
       "/backend/api/projects/project%2Fone/asset-references",
@@ -471,6 +484,8 @@ describe("HttpMediaAssetRepository", () => {
       byteSize: 42,
       checksumSha256: "a".repeat(64),
     });
+    expect(transport.requests[2]?.init.method).toBe("PATCH");
+    expect(JSON.parse(String(transport.requests[2]?.init.body))).toEqual({ displayName: "hero cover.png" });
   });
 });
 

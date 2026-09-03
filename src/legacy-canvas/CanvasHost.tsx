@@ -12,6 +12,7 @@ import {
   hostAssetCommandErrorMessageSchema,
   hostEntityCommandResultMessageSchema,
   hostFlushMessageSchema,
+  hostMediaRenameResultMessageSchema,
   hostMediaUploadGrantMessageSchema,
   hostMediaUploadResultMessageSchema,
   hostMessageSchema,
@@ -612,6 +613,67 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, on
               ) sendAssetError(message.requestId, message.instanceId, assetErrorCode(error));
             },
           );
+        return;
+      }
+      if (message.type === "canvas:rename-media") {
+        if (!assetPersistenceAvailable || !mediaAssetRepository) {
+          sendAssetError(message.requestId, message.instanceId, "unsupported");
+          return;
+        }
+        if (!safeContext.writable) {
+          sendAssetError(message.requestId, message.instanceId, "forbidden");
+          return;
+        }
+        if (
+          pendingAssetCommandIdsRef.current.has(message.requestId)
+          || pendingAssetUploadsRef.current.has(message.requestId)
+        ) {
+          sendAssetError(message.requestId, message.instanceId, "invalid");
+          return;
+        }
+        pendingAssetCommandIdsRef.current.add(message.requestId);
+        const sourceFrame = event.source;
+        void mediaAssetRepository.renamePersonalAsset(
+          safeContext.workspaceId,
+          message.assetId,
+          message.displayName,
+        ).then(
+          (renamedAsset) => {
+            pendingAssetCommandIdsRef.current.delete(message.requestId);
+            const stillActive = active
+              && sourceFrame === frameRef.current?.contentWindow
+              && message.instanceId === activeCanvasInstanceIdRef.current;
+            if (!stillActive) return;
+            const asset: PersonalMediaAsset = {
+              ...renamedAsset,
+              contentUrl: `/api/workspaces/${encodeURIComponent(renamedAsset.workspaceId)}/media-assets/${encodeURIComponent(renamedAsset.id)}/content`,
+            };
+            setWorkspaceAssets((current) => {
+              const assetIndex = current.findIndex((candidate) => candidate.id === asset.id);
+              if (assetIndex < 0) return [...current, asset];
+              return current.map((candidate, index) => index === assetIndex ? asset : candidate);
+            });
+            setProjectAssets((current) => current.map((candidate) => candidate.assetId === asset.id
+              ? { ...candidate, displayName: asset.displayName }
+              : candidate));
+            postToCanvas(hostMediaRenameResultMessageSchema.parse({
+              source: "reelay-shell",
+              type: "host:media-rename-result",
+              protocolVersion: 1,
+              requestId: message.requestId,
+              instanceId: message.instanceId,
+              workspaceAsset: bridgeWorkspaceAsset(asset),
+            }));
+          },
+          (error: unknown) => {
+            pendingAssetCommandIdsRef.current.delete(message.requestId);
+            if (
+              active
+              && sourceFrame === frameRef.current?.contentWindow
+              && message.instanceId === activeCanvasInstanceIdRef.current
+            ) sendAssetError(message.requestId, message.instanceId, assetErrorCode(error));
+          },
+        );
         return;
       }
       if (message.type === "canvas:create-entity" || message.type === "canvas:update-entity") {

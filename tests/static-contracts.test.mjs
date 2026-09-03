@@ -360,8 +360,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260902-entity-agent-61/);
-  assert.match(html, /app\.js\?v=20260902-canvas-integration-59/);
+  assert.match(html, /styles\.css\?v=20260903-shell-panel-frame-72/);
+  assert.match(html, /app\.js\?v=20260903-shell-panel-frame-72/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -846,11 +846,12 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps four floating zones without coupling to group surfaces", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260902-entity-agent-61/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260902-canvas-surface-60/);
-  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260902-canvas-surface-60/);
-  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260901-platform-space-27/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260903-shell-panel-frame-72/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260903-shell-panel-frame-72/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260903-shell-panel-frame-72/);
+  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260903-shell-panel-frame-72/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
+  assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
   assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-disabled="true"[^>]*disabled>[\s\S]*?data-lucide="layout-grid"[\s\S]*?id="zoomSlider"/);
@@ -869,9 +870,12 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.match(appSource, /function requestHostProjectNavigation\(projectId\)[\s\S]*?canvasPersistence\.post\("canvas:open-project", \{ projectId \}\)/);
   assert.match(appSource, /function requestHostProjectCreation\(\)[\s\S]*?canvasPersistence\.post\("canvas:create-project"\)/);
   assert.match(canvasChromeCss, /--canvas-edge-bar-width:\s*248px/);
+  assert.match(canvasChromeCss, /--canvas-edge-inset:\s*12px/);
   assert.match(canvasChromeCss, /--canvas-project-bar-height:\s*40px/);
   assert.match(canvasChromeCss, /--canvas-viewport-toolbar-height:\s*44px/);
   assert.match(canvasChromeCss, /--canvas-chrome-panel-gap:\s*8px/);
+  assert.match(canvasChromeCss, /--canvas-side-panel-top:\s*calc\(var\(--canvas-edge-inset\) \+ var\(--canvas-project-bar-height\) \+ var\(--canvas-chrome-panel-gap\)\)/);
+  assert.match(canvasChromeCss, /--canvas-side-panel-bottom:\s*calc\(var\(--canvas-edge-inset\) \+ var\(--canvas-viewport-toolbar-height\) \+ var\(--canvas-chrome-panel-gap\)\)/);
   assert.match(canvasChromeCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--canvas-chrome-bg:\s*color-mix\(in srgb, var\(--surface\) 88%, transparent\)[\s\S]*?--canvas-chrome-bg-raised:\s*color-mix\(in srgb, var\(--surface\) 96%, transparent\)/);
   assert.doesNotMatch(canvasChromeCss, /--canvas-chrome-bg(?:-raised)?:\s*color-mix\(in srgb, #ffffff/);
   assert.match(canvasChromeCss, /\.top-bar \.canvas-project-switcher\s*\{[\s\S]*?width:\s*min\(var\(--canvas-edge-bar-width\), calc\(100vw - 96px\)\)/);
@@ -893,18 +897,21 @@ test("canvas chrome keeps four floating zones without coupling to group surfaces
   assert.doesNotMatch(`${html}\n${appSource}\n${appCss}`, /profile-help-inline|profileHelpInline/);
   assert.doesNotMatch(appCss, /\.profile-help-trigger\s*>\s*\.lucide:last-child[\s\S]*?transform/);
   assert.doesNotMatch(canvasChromeCss, /\.share-reveal/);
-  assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*12px[\s\S]*?bottom:\s*12px/);
+  assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*var\(--canvas-edge-inset\)[\s\S]*?bottom:\s*var\(--canvas-edge-inset\)/);
   assert.match(canvasChromeCss, /\.canvas-tool-row\s*\{[\s\S]*?height:\s*var\(--canvas-viewport-toolbar-height\);[\s\S]*?padding:\s*4px/);
   assert.match(canvasChromeCss, /\.canvas-tool-button\s*\{[\s\S]*?width:\s*34px;[\s\S]*?height:\s*34px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-control:hover,[\s\S]*?\.canvas-zoom-control\.value-visible\s*\{[\s\S]*?width:\s*168px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-value\s*\{[\s\S]*?position:\s*static[\s\S]*?width:\s*0[\s\S]*?transform:\s*translateX\(-4px\)/);
   assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*38px[\s\S]*?margin-left:\s*8px/);
-  assert.match(assetLibraryCss, /top:\s*calc\(12px \+ var\(--canvas-project-bar-height,\s*40px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
-  assert.match(assetLibraryCss, /bottom:\s*calc\(12px \+ var\(--canvas-viewport-toolbar-height,\s*44px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
+  assert.match(assetLibraryCss, /top:\s*var\(--canvas-side-panel-top,\s*60px\)/);
+  assert.match(assetLibraryCss, /bottom:\s*var\(--canvas-side-panel-bottom,\s*64px\)/);
   assert.match(assetLibraryCss, /\.asset-library-panel\s*\{[\s\S]*?--asset-panel-bg:\s*var\(--surface\);[\s\S]*?--asset-panel-subtle:\s*var\(--surface-2\);[\s\S]*?--asset-panel-line:\s*var\(--floating-line\);/);
   assert.doesNotMatch(assetLibraryCss, /--asset-panel-bg:\s*#(?:fff|ffffff)\b/i);
   assert.doesNotMatch(appCss, /html\[data-theme="light"\] \.canvas-tool-row/);
-  assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*calc\(12px \+ var\(--canvas-project-bar-height,\s*40px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)[\s\S]*?bottom:\s*calc\(12px \+ var\(--canvas-viewport-toolbar-height,\s*44px\) \+ var\(--canvas-chrome-panel-gap,\s*8px\)\)/);
+  assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*var\(--canvas-side-panel-top,\s*60px\)[\s\S]*?bottom:\s*var\(--canvas-side-panel-bottom,\s*64px\)/);
+  assert.match(appCss, /\.agent-dock\s*\{[\s\S]*?top:\s*var\(--canvas-side-panel-top,\s*60px\)[\s\S]*?right:\s*var\(--canvas-edge-inset,\s*12px\)[\s\S]*?bottom:\s*var\(--canvas-side-panel-bottom,\s*64px\)/);
+  assert.match(appCss, /\.agent-panel\s*\{[\s\S]*?border:\s*1px solid var\(--agent-panel-line\);[\s\S]*?border-radius:\s*14px/);
+  assert.match(appCss, /\.agent-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--agent-panel-line\)/);
   assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
   assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
 });
@@ -920,14 +927,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260902-entity-agent-61/);
-  assert.match(html, /prototype-config\.js\?v=20260901-entity-use-43/);
-  assert.match(html, /canvas-asset-library-model\.js\?v=20260901-platform-space-27/);
+  assert.match(html, /styles\.css\?v=20260903-shell-panel-frame-72/);
+  assert.match(html, /prototype-config\.js\?v=20260903-entity-fixtures-64/);
+  assert.match(html, /canvas-asset-library-model\.js\?v=20260903-entity-preview-filename-70/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
-  assert.match(html, /canvas-entity-use-view\.js\?v=20260901-entity-use-43/);
-  assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260901-platform-space-27/);
-  assert.match(html, /app\.js\?v=20260902-canvas-integration-59/);
+  assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
+  assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
+  assert.match(html, /app\.js\?v=20260903-shell-panel-frame-72/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);

@@ -21,12 +21,14 @@ import {
   AssetUploadConflictError,
   AssetUploadIntentUnavailableError,
   AssetWorkspaceUnavailableError,
+  PersonalAssetUnavailableError,
   type CreateAssetUploadIntentInput,
   type FinalizeAssetUploadInput,
   type ListPersonalAssetsInput,
   type ReadAssetUploadIntentInput,
   type ReadPersonalAssetInput,
   type RecordAssetUploadInput,
+  type RenamePersonalAssetInput,
   type WorkspaceMediaAssetStore,
 } from "../application/WorkspaceMediaAssetStore";
 
@@ -52,6 +54,12 @@ export interface InMemoryAssetStoreSeed {
 function requiredText(value: string, label: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`${label} is required.`);
+  return normalized;
+}
+
+function validDisplayName(value: string): string {
+  const normalized = requiredText(value, "Asset display name");
+  if (normalized.length > 300) throw new Error("Asset display name must not exceed 300 characters.");
   return normalized;
 }
 
@@ -247,6 +255,22 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     const placement = this.placements.get(this.personalPlacementKey(input.workspaceId, input.assetId, input.actorId));
     const asset = placement ? this.assets.get(input.assetId) : null;
     return asset ? clone(asset) : null;
+  }
+
+  async renamePersonalAsset(input: RenamePersonalAssetInput): Promise<WorkspaceMediaAsset> {
+    this.requireWorkspaceMembership(input.workspaceId, input.actorId);
+    const displayName = validDisplayName(input.displayName);
+    const placement = this.placements.get(this.personalPlacementKey(input.workspaceId, input.assetId, input.actorId));
+    const asset = placement ? this.assets.get(input.assetId) : null;
+    if (!asset || asset.workspaceId !== input.workspaceId) throw new PersonalAssetUnavailableError();
+
+    const renamed: WorkspaceMediaAsset = {
+      ...asset,
+      displayName,
+      updatedAt: this.now().toISOString(),
+    };
+    this.assets.set(renamed.id, renamed);
+    return clone(renamed);
   }
 
   async attachAssetToProject(input: AttachAssetToProjectInput): Promise<ProjectAssetReference> {

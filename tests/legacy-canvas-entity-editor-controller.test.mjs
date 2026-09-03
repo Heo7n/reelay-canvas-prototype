@@ -52,6 +52,7 @@ function createHarness(overrides = {}) {
     confirms: 0,
     errors: [],
     persistedFiles: [],
+    renamedMedia: [],
     saved: [],
     savePayloads: [],
     visibility: [],
@@ -66,6 +67,10 @@ function createHarness(overrides = {}) {
     calls.savePayloads.push(payload);
     return { id: payload.entityId || "entity-created", ...payload, version: 1 };
   });
+  const renameMedia = overrides.renameMedia || (async ({ mediaId, displayName: nextName }) => {
+    calls.renamedMedia.push({ mediaId, displayName: nextName });
+    return { id: mediaId, displayName: nextName };
+  });
   const controller = window.REELAY_CANVAS_ENTITY_EDITOR_CONTROLLER.createCanvasEntityEditorController({
     host,
     pickerHost,
@@ -74,6 +79,7 @@ function createHarness(overrides = {}) {
     view: window.REELAY_CANVAS_ENTITY_EDITOR_VIEW,
     getAvailableMedia,
     persistFiles,
+    renameMedia,
     saveEntity,
     confirmDiscard: async () => {
       calls.confirms += 1;
@@ -165,6 +171,59 @@ test("all four filters apply only to Media already referenced by the Entity", ()
     video: 1,
     audio: 1,
   });
+  harness.controller.destroy();
+});
+
+test("double-click renames only the file stem and preserves the extension", async () => {
+  const harness = createHarness();
+  harness.controller.open({ mode: "edit", entity: editEntity, media });
+  const fileName = harness.host.querySelector('[data-entity-editor-preview-name="portrait"]');
+  fileName.dispatchEvent(new harness.window.MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+
+  const input = harness.host.querySelector('[data-entity-editor-preview-rename="portrait"]');
+  assert.ok(input);
+  assert.equal(input.value, "角色正面");
+  assert.equal(input.nextElementSibling?.textContent, ".png");
+  input.value = "角色定妆";
+  input.dispatchEvent(new harness.window.Event("input", { bubbles: true }));
+  input.dispatchEvent(new harness.window.FocusEvent("focusout", { bubbles: true }));
+  await flushAsync();
+
+  assert.deepEqual(harness.calls.renamedMedia, [
+    { mediaId: "portrait", displayName: "角色定妆.png" },
+  ]);
+  assert.equal(
+    harness.host.querySelector('[data-entity-editor-preview-name="portrait"]')?.textContent,
+    "角色定妆.png",
+  );
+  assert.equal(harness.controller.getDraftState().dirty, false);
+  harness.controller.destroy();
+});
+
+test("Escape cancels file rename without calling persistence", async () => {
+  const harness = createHarness();
+  harness.controller.open({ mode: "edit", entity: editEntity, media });
+  const fileName = harness.host.querySelector('[data-entity-editor-preview-name="portrait"]');
+  fileName.dispatchEvent(new harness.window.KeyboardEvent("keydown", {
+    key: "F2",
+    bubbles: true,
+    cancelable: true,
+  }));
+  await flushAsync();
+  const input = harness.host.querySelector('[data-entity-editor-preview-rename="portrait"]');
+  input.value = "不会保存";
+  input.dispatchEvent(new harness.window.KeyboardEvent("keydown", {
+    key: "Escape",
+    bubbles: true,
+    cancelable: true,
+  }));
+  await flushAsync();
+
+  assert.deepEqual(harness.calls.renamedMedia, []);
+  assert.equal(
+    harness.host.querySelector('[data-entity-editor-preview-name="portrait"]')?.textContent,
+    "角色正面.png",
+  );
   harness.controller.destroy();
 });
 

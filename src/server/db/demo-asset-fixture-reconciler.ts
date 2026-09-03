@@ -7,6 +7,7 @@ import {
   DEMO_PROJECT_ID,
   DEMO_WORKSPACE_ID,
   LEGACY_DEMO_ENTITY_FIXTURES,
+  PREVIOUS_DEMO_ENTITY_FIXTURES,
   type DemoAssetFixture,
   type DemoEntityFixture,
 } from "./demo-asset-fixtures";
@@ -193,20 +194,20 @@ function referenceMatchesFixture(
   reference: EntityReferenceRow,
   expected: ResolvedDemoAssetFixture,
 ): boolean {
-  return reference.asset_media_kind === "image"
+  return reference.asset_media_kind === expected.mediaKind
     && reference.asset_display_name === expected.displayName
     && reference.asset_object_version === 1
-    && reference.asset_content_type === "image/png"
+    && reference.asset_content_type === expected.contentType
     && Number(reference.asset_byte_size) === expected.byteSize
     && reference.asset_checksum_sha256 === expected.checksumSha256
     && reference.asset_created_by_user_id === DEMO_ACTOR_ID
     && reference.intent_idempotency_key === expected.idempotencyKey
     && reference.intent_object_key === reference.asset_object_key
-    && reference.intent_expected_content_type === "image/png"
+    && reference.intent_expected_content_type === expected.contentType
     && Number(reference.intent_expected_byte_size) === expected.byteSize
     && reference.intent_expected_checksum_sha256 === expected.checksumSha256
     && reference.intent_status === "finalized"
-    && reference.intent_uploaded_content_type === "image/png"
+    && reference.intent_uploaded_content_type === expected.contentType
     && Number(reference.intent_uploaded_byte_size) === expected.byteSize
     && reference.intent_uploaded_checksum_sha256 === expected.checksumSha256
     && reference.intent_asset_id === reference.asset_id;
@@ -216,14 +217,14 @@ function stateMatchesFixture(
   state: EntityState,
   fixture: DemoEntityFixture,
   assetFixtures: readonly ResolvedDemoAssetFixture[],
-  requireInitialVersion: boolean,
+  allowedVersions: readonly number[] | null,
 ): boolean {
   if (
     state.entity.create_idempotency_key !== fixture.createIdempotencyKey
     || state.entity.created_by_user_id !== DEMO_ACTOR_ID
     || state.entity.name !== fixture.name
     || state.entity.description !== fixture.description
-    || (requireInitialVersion && state.entity.version !== 1)
+    || (allowedVersions != null && !allowedVersions.includes(state.entity.version))
     || !hasExpectedPlacement(state)
     || state.references.length !== fixture.assetKeys.length
   ) return false;
@@ -249,29 +250,35 @@ function matchingCanonicalFixture(createIdempotencyKey: string): DemoEntityFixtu
 function assertReconcileableState(
   state: EntityState,
   canonicalAssets: readonly ResolvedDemoAssetFixture[],
+  previousAssets: readonly ResolvedDemoAssetFixture[],
   legacyAssets: readonly ResolvedDemoAssetFixture[],
-): "canonical" | "legacy" {
+): "canonical" | "previous" | "legacy" {
   const canonicalFixture = matchingCanonicalFixture(state.entity.create_idempotency_key);
-  if (stateMatchesFixture(state, canonicalFixture, canonicalAssets, false)) return "canonical";
+  if (stateMatchesFixture(state, canonicalFixture, canonicalAssets, null)) return "canonical";
+  const previousFixture = PREVIOUS_DEMO_ENTITY_FIXTURES.find(
+    (candidate) => candidate.createIdempotencyKey === state.entity.create_idempotency_key,
+  );
+  if (previousFixture && stateMatchesFixture(state, previousFixture, previousAssets, [1, 2])) return "previous";
   const legacyFixture = LEGACY_DEMO_ENTITY_FIXTURES.find(
     (candidate) => candidate.createIdempotencyKey === state.entity.create_idempotency_key,
   );
-  if (legacyFixture && stateMatchesFixture(state, legacyFixture, legacyAssets, true)) return "legacy";
+  if (legacyFixture && stateMatchesFixture(state, legacyFixture, legacyAssets, [1])) return "legacy";
   throw new DemoAssetFixtureConflictError(
-    `Demo Entity ${state.entity.id} no longer matches its original or canonical fixture; refusing to overwrite user changes.`,
+    `Demo Entity ${state.entity.id} no longer matches a published fixture generation; refusing to overwrite user changes.`,
   );
 }
 
 export async function assertDemoEntityFixturesCanBeReconciled(
   pool: Pool,
   canonicalAssets: readonly ResolvedDemoAssetFixture[],
+  previousAssets: readonly ResolvedDemoAssetFixture[],
   legacyAssets: readonly ResolvedDemoAssetFixture[],
 ): Promise<void> {
   const client = await pool.connect();
   try {
     for (const fixture of DEMO_ENTITY_FIXTURES) {
       const state = await readEntityState(client, fixture.createIdempotencyKey, false);
-      if (state) assertReconcileableState(state, canonicalAssets, legacyAssets);
+      if (state) assertReconcileableState(state, canonicalAssets, previousAssets, legacyAssets);
     }
   } finally {
     client.release();
@@ -329,9 +336,10 @@ async function replaceEntityContent(
   );
 }
 
-export async function reconcileLegacyDemoEntities(
+export async function reconcileHistoricalDemoEntities(
   pool: Pool,
   canonicalAssets: readonly ResolvedDemoAssetFixture[],
+  previousAssets: readonly ResolvedDemoAssetFixture[],
   legacyAssets: readonly ResolvedDemoAssetFixture[],
   canonicalAssetsByKey: ReadonlyMap<string, WorkspaceMediaAsset>,
 ): Promise<void> {
@@ -339,13 +347,16 @@ export async function reconcileLegacyDemoEntities(
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [DEMO_FIXTURE_LOCK_KEY]);
-    const staged: Array<{ state: EntityState; status: "canonical" | "legacy" }> = [];
+    const staged: Array<{ state: EntityState; status: "canonical" | "previous" | "legacy" }> = [];
     for (const fixture of DEMO_ENTITY_FIXTURES) {
       const state = await readEntityState(client, fixture.createIdempotencyKey, true);
-      if (state) staged.push({ state, status: assertReconcileableState(state, canonicalAssets, legacyAssets) });
+      if (state) staged.push({
+        state,
+        status: assertReconcileableState(state, canonicalAssets, previousAssets, legacyAssets),
+      });
     }
     for (const { state, status } of staged) {
-      if (status !== "legacy") continue;
+      if (status === "canonical") continue;
       await replaceEntityContent(
         client,
         state,
@@ -364,21 +375,21 @@ export async function reconcileLegacyDemoEntities(
 
 function seedAssetMatchesFixture(row: SeedAssetRow, fixture: ResolvedDemoAssetFixture): boolean {
   return row.intent_idempotency_key === fixture.idempotencyKey
-    && row.intent_media_kind === "image"
+    && row.intent_media_kind === fixture.mediaKind
     && row.intent_display_name === fixture.displayName
-    && row.intent_expected_content_type === "image/png"
+    && row.intent_expected_content_type === fixture.contentType
     && Number(row.intent_expected_byte_size) === fixture.byteSize
     && row.intent_expected_checksum_sha256 === fixture.checksumSha256
     && row.intent_status === "finalized"
-    && row.intent_uploaded_content_type === "image/png"
+    && row.intent_uploaded_content_type === fixture.contentType
     && Number(row.intent_uploaded_byte_size) === fixture.byteSize
     && row.intent_uploaded_checksum_sha256 === fixture.checksumSha256
     && row.intent_asset_id === row.asset_id
-    && row.asset_media_kind === "image"
+    && row.asset_media_kind === fixture.mediaKind
     && row.asset_display_name === fixture.displayName
     && row.asset_object_key === row.intent_object_key
     && row.asset_object_version === 1
-    && row.asset_content_type === "image/png"
+    && row.asset_content_type === fixture.contentType
     && Number(row.asset_byte_size) === fixture.byteSize
     && row.asset_checksum_sha256 === fixture.checksumSha256
     && row.asset_created_by_user_id === DEMO_ACTOR_ID;
@@ -400,16 +411,16 @@ async function canvasContainsAny(client: PoolClient, needles: readonly string[])
   return result.rows[0]?.found === true;
 }
 
-export async function retireUnreferencedLegacyDemoAssets(
+export async function retireUnreferencedHistoricalDemoAssets(
   pool: Pool,
-  legacyAssets: readonly ResolvedDemoAssetFixture[],
+  historicalAssets: readonly ResolvedDemoAssetFixture[],
 ): Promise<string[]> {
   const client = await pool.connect();
   const retiredAssetIds: string[] = [];
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [DEMO_FIXTURE_LOCK_KEY]);
-    for (const fixture of legacyAssets) {
+    for (const fixture of historicalAssets) {
       const assetResult = await client.query<SeedAssetRow>(
         `SELECT intent.id AS intent_id,
                 intent.idempotency_key AS intent_idempotency_key,

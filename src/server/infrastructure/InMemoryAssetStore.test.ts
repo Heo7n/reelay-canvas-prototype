@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { ProjectAssetUnavailableError } from "../application/ProjectAssetReferenceStore";
+import { PersonalAssetUnavailableError } from "../application/WorkspaceMediaAssetStore";
 import { InMemoryAssetStore, type InMemoryAssetStoreSeed } from "./InMemoryAssetStore";
 import { InMemoryObjectStore } from "./InMemoryObjectStore";
 
@@ -26,11 +27,11 @@ const seed: InMemoryAssetStoreSeed = {
   }],
 };
 
-function createStore() {
+function createStore(now: () => Date = () => new Date("2026-08-31T00:00:00.000Z")) {
   let nextId = 0;
   return new InMemoryAssetStore(
     seed,
-    () => new Date("2026-08-31T00:00:00.000Z"),
+    now,
     () => String(++nextId),
   );
 }
@@ -144,5 +145,51 @@ describe("InMemoryAssetStore", () => {
     const { asset } = await uploadAsset(store);
     await expect(store.attachAssetToProject({ actorId: editorId, projectId, assetId: asset.id }))
       .rejects.toBeInstanceOf(ProjectAssetUnavailableError);
+  });
+
+  it("renames only the actor's personal asset without changing object or reference versions", async () => {
+    let currentTime = new Date("2026-08-31T00:00:00.000Z");
+    const store = createStore(() => currentTime);
+    const { asset } = await uploadAsset(store);
+    const reference = await store.attachAssetToProject({ actorId: ownerId, projectId, assetId: asset.id });
+
+    await expect(store.renamePersonalAsset({
+      actorId: editorId,
+      workspaceId,
+      assetId: asset.id,
+      displayName: "越权改名.webp",
+    })).rejects.toBeInstanceOf(PersonalAssetUnavailableError);
+    await expect(store.renamePersonalAsset({
+      actorId: ownerId,
+      workspaceId,
+      assetId: asset.id,
+      displayName: "   ",
+    })).rejects.toThrow("Asset display name is required.");
+    await expect(store.renamePersonalAsset({
+      actorId: ownerId,
+      workspaceId,
+      assetId: asset.id,
+      displayName: "x".repeat(301),
+    })).rejects.toThrow("Asset display name must not exceed 300 characters.");
+    await expect(store.getPersonalAsset({ actorId: ownerId, workspaceId, assetId: asset.id }))
+      .resolves.toEqual(asset);
+
+    currentTime = new Date("2026-08-31T00:01:00.000Z");
+    const renamed = await store.renamePersonalAsset({
+      actorId: ownerId,
+      workspaceId,
+      assetId: asset.id,
+      displayName: "  最终主视觉.webp  ",
+    });
+    expect(renamed).toEqual({
+      ...asset,
+      displayName: "最终主视觉.webp",
+      updatedAt: currentTime.toISOString(),
+    });
+    expect(renamed.objectVersion).toBe(asset.objectVersion);
+
+    const projectAssets = await store.listProjectAssets({ actorId: viewerId, projectId });
+    expect(projectAssets).toEqual([{ reference, asset: renamed }]);
+    expect(projectAssets[0].reference.assetVersion).toBe(asset.objectVersion);
   });
 });

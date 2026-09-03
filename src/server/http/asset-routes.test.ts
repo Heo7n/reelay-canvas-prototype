@@ -48,7 +48,7 @@ describe("asset persistence routes", () => {
 
   afterEach(async () => app.close());
 
-  it("uploads, finalizes, attaches, lists, ranges, and repeats the complete story idempotently", async () => {
+  it("uploads, finalizes, renames, attaches, lists, ranges, and repeats the complete story idempotently", async () => {
     const session = await login(app, "creator@reelay.test");
     const body = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
     const checksumSha256 = createHash("sha256").update(body).digest("hex");
@@ -118,6 +118,20 @@ describe("asset persistence routes", () => {
     expect(attached.json().projectAsset).toEqual(expect.objectContaining({ assetId, checksumSha256 }));
     const referenceId = attached.json().projectAsset.referenceId as string;
 
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/workspaces/workspace-organization-reelay/media-assets/${assetId}`,
+      headers: { cookie: session },
+      payload: { displayName: "  角色最终参考.png  " },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().asset).toEqual(expect.objectContaining({
+      id: assetId,
+      displayName: "角色最终参考.png",
+      objectVersion: finalized.json().asset.objectVersion,
+    }));
+    expect(renamed.json().asset).not.toHaveProperty("contentUrl");
+
     const repeatedAttach = await app.inject({ method: "PUT", url: attachUrl, headers: { cookie: session } });
     expect(repeatedAttach.statusCode).toBe(200);
     expect(repeatedAttach.json().projectAsset.referenceId).toBe(referenceId);
@@ -129,6 +143,12 @@ describe("asset persistence routes", () => {
     });
     expect(listed.statusCode).toBe(200);
     expect(listed.json().projectAssets).toHaveLength(1);
+    expect(listed.json().projectAssets[0]).toEqual(expect.objectContaining({
+      referenceId,
+      assetId,
+      assetVersion: finalized.json().asset.objectVersion,
+      displayName: "角色最终参考.png",
+    }));
 
     const contentUrl = listed.json().projectAssets[0].contentUrl as string;
     const getObject = vi.spyOn(objectStore, "getObject");
@@ -203,12 +223,33 @@ describe("asset persistence routes", () => {
     });
     const assetId = finalized.json().asset.id as string;
 
+    const viewerRename = await app.inject({
+      method: "PATCH",
+      url: `/api/workspaces/workspace-organization-reelay/media-assets/${assetId}`,
+      headers: { cookie: viewerSession },
+      payload: { displayName: "越权名称.png" },
+    });
+    expect(viewerRename.statusCode).toBe(404);
+    expect(viewerRename.json().error.code).toBe("asset_not_found");
+
+    for (const displayName of ["   ", "x".repeat(301)]) {
+      const invalidRename = await app.inject({
+        method: "PATCH",
+        url: `/api/workspaces/workspace-organization-reelay/media-assets/${assetId}`,
+        headers: { cookie: ownerSession },
+        payload: { displayName },
+      });
+      expect(invalidRename.statusCode).toBe(400);
+      expect(invalidRename.json().error.code).toBe("invalid_request");
+    }
+
     const ownerAssets = await app.inject({
       method: "GET",
       url: "/api/workspaces/workspace-organization-reelay/media-assets?scope=personal",
       headers: { cookie: ownerSession },
     });
     expect(ownerAssets.json().assets).toHaveLength(1);
+    expect(ownerAssets.json().assets[0].displayName).toBe("私有参考.png");
 
     const viewerAssets = await app.inject({
       method: "GET",

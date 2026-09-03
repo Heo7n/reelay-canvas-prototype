@@ -6,7 +6,7 @@
   const HOST_SOURCE = "reelay-shell";
   const MEDIA_KINDS = new Set(["image", "video", "audio"]);
   const UPLOAD_TARGETS = new Set(["project", "personal"]);
-  const ERROR_CODES = new Set(["invalid", "forbidden", "missing", "network", "unsupported"]);
+  const ERROR_CODES = new Set(["invalid", "forbidden", "missing", "conflict", "network", "unsupported"]);
   const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
   function isNonEmptyString(value, maxLength = 200) {
@@ -95,6 +95,22 @@
       });
     }
 
+    async function renameMedia(assetIdValue, displayNameValue) {
+      if (!isHosted()) throw commandError("unsupported", "当前画布未连接资产持久化服务");
+      const assetId = String(assetIdValue || "").trim();
+      const displayName = String(displayNameValue || "").trim();
+      if (!isNonEmptyString(assetId) || !isNonEmptyString(displayName, 300)) {
+        throw commandError("invalid", "素材名称不符合要求");
+      }
+      const requestId = String(makeRequestId()).trim();
+      if (!requestId || pending.has(requestId)) throw commandError("invalid", "无法创建唯一的重命名请求");
+      return new Promise((resolve, reject) => {
+        const timeoutId = setTimer(() => finish(requestId, commandError("network", "素材重命名请求已超时")), requestTimeoutMs);
+        pending.set(requestId, { assetId, resolve, reject, timeoutId, stage: "rename" });
+        send("canvas:rename-media", { requestId, assetId, displayName });
+      });
+    }
+
     function isTrustedHostEvent(event) {
       return Boolean(isHosted() && event && event.origin === getExpectedOrigin() && event.source === getExpectedSource());
     }
@@ -147,6 +163,13 @@
       return finish(message.requestId, null, { ...asset });
     }
 
+    function acceptRenameResult(message) {
+      const operation = pending.get(message.requestId);
+      if (message.instanceId !== instanceId || !operation || operation.stage !== "rename"
+        || !isWorkspaceAsset(message.workspaceAsset) || message.workspaceAsset.assetId !== operation.assetId) return false;
+      return finish(message.requestId, null, { ...message.workspaceAsset });
+    }
+
     function acceptError(message) {
       const operation = pending.get(message.requestId);
       if (message.instanceId !== instanceId || !operation || !ERROR_CODES.has(message.code)) return false;
@@ -160,6 +183,7 @@
       if (message.type === "host:project-assets") return acceptProjectAssets(message);
       if (message.type === "host:media-upload-grant") return acceptUploadGrant(message);
       if (message.type === "host:media-upload-result") return acceptUploadResult(message);
+      if (message.type === "host:media-rename-result") return acceptRenameResult(message);
       if (message.type === "host:asset-command-error") return acceptError(message);
       return false;
     }
@@ -169,7 +193,7 @@
       seenProjectAssetRequests.clear();
     }
 
-    return Object.freeze({ dispose, getPendingCount: () => pending.size, handleHostMessage, persistFile });
+    return Object.freeze({ dispose, getPendingCount: () => pending.size, handleHostMessage, persistFile, renameMedia });
   }
 
   root.REELAY_CANVAS_MEDIA_ASSET_COORDINATOR = Object.freeze({ createCanvasMediaAssetCoordinator });

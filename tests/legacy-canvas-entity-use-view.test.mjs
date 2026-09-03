@@ -149,7 +149,7 @@ test("picker renders personal and organization tabs, search, checkbox multi-sele
   });
 
   assert.match(markup, /class="entity-use-picker" role="dialog" aria-modal="true" aria-labelledby="entity-use-picker-title"/);
-  assert.match(markup, /<h2 id="entity-use-picker-title">主体库<\/h2>/);
+  assert.match(markup, /<h2 id="entity-use-picker-title">选择主体<\/h2>/);
   assert.match(markup, /role="group" aria-label="主体空间"/);
   assert.match(markup, /id="entity-use-space-personal" type="button" aria-label="个人，3 个主体" aria-pressed="true"[^>]*data-entity-use-space="personal">\s*<span>个人<\/span>/);
   assert.match(markup, /id="entity-use-space-organization" type="button" aria-label="组织，2 个主体" aria-pressed="false"[^>]*data-entity-use-space="organization">\s*<span>组织<\/span>/);
@@ -163,7 +163,7 @@ test("picker renders personal and organization tabs, search, checkbox multi-sele
   assert.match(markup, /data-entity-use-picker-count="true">已选 2 个<\/span>/);
   assert.match(markup, /data-entity-use-picker-cancel="true">取消<\/button>/);
   assert.match(markup, /data-entity-use-picker-add="true" data-entity-use-action="add-entities">\s*<span>添加<\/span>/);
-  assert.doesNotMatch(markup, /选择主体|添加主体|确定|参考素材|data-entity-use-picker-close|已选 2 个[^]*<span>添加 ·/);
+  assert.doesNotMatch(markup, /主体库|添加主体|确定|参考素材|data-entity-use-picker-close|已选 2 个[^]*<span>添加 ·/);
   assert.doesNotMatch(markup, /\bautoplay\b|<audio|<video| controls(?:\s|>)/);
 });
 

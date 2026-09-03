@@ -18,6 +18,7 @@
     }
     const getAvailableMedia = requireFunction(options.getAvailableMedia, "getAvailableMedia");
     const persistFiles = requireFunction(options.persistFiles, "persistFiles");
+    const renameMedia = requireFunction(options.renameMedia, "renameMedia");
     const saveEntity = requireFunction(options.saveEntity, "saveEntity");
     const confirmDiscard = typeof options.confirmDiscard === "function" ? options.confirmDiscard : () => true;
     const onVisibilityChange = typeof options.onVisibilityChange === "function" ? options.onVisibilityChange : () => undefined;
@@ -35,6 +36,10 @@
     let entityId = null;
     let submitting = false;
     let uploading = false;
+    let mediaRenameBusy = false;
+    let renamingMediaId = null;
+    let mediaRenameValue = "";
+    let mediaRenameExtension = "";
     let errors = {};
     let pickerOpen = false;
     let pickerQuery = "";
@@ -44,7 +49,7 @@
     let permissions = { ...basePermissions };
 
     function isBusy() {
-      return submitting || uploading;
+      return submitting || uploading || mediaRenameBusy;
     }
 
     function canEditDraft() {
@@ -85,6 +90,9 @@
         canUpload: permissions.canUpload,
         submitting,
         uploading,
+        mediaRenameBusy,
+        renamingMediaId,
+        mediaRenameValue,
         errors,
       });
       setHostVisibility(host, true);
@@ -93,8 +101,79 @@
         queueMicrotask(() => {
           const element = host.querySelector(focus);
           element?.focus();
-          if (element?.select && focus.includes("name")) element.select();
+          if (element?.select && (focus.includes("name") || focus.includes("preview-rename"))) element.select();
         });
+      }
+    }
+
+    function splitFileName(value) {
+      const name = String(value || "");
+      const extensionIndex = name.lastIndexOf(".");
+      if (extensionIndex <= 0 || extensionIndex === name.length - 1) {
+        return { baseName: name, extension: "" };
+      }
+      return { baseName: name.slice(0, extensionIndex), extension: name.slice(extensionIndex) };
+    }
+
+    function startMediaRename(mediaId) {
+      if (!canEditDraft()) return;
+      const media = currentMedia().find((item) => item.id === mediaId);
+      if (!media) return;
+      const parts = splitFileName(media.name || media.displayName);
+      renamingMediaId = media.id;
+      mediaRenameValue = parts.baseName;
+      mediaRenameExtension = parts.extension;
+      renderEditor({ focus: "[data-entity-editor-preview-rename]" });
+    }
+
+    async function finishMediaRename(input, { cancel = false } = {}) {
+      const mediaId = renamingMediaId;
+      if (!mediaId || mediaRenameBusy) return false;
+      if (cancel) {
+        renamingMediaId = null;
+        mediaRenameValue = "";
+        mediaRenameExtension = "";
+        renderEditor({ focus: "[data-entity-editor-preview-name]" });
+        return false;
+      }
+      const baseName = String(input?.value ?? mediaRenameValue).trim();
+      if (!baseName) {
+        onError(new Error("文件名称不能为空"));
+        renderEditor({ focus: "[data-entity-editor-preview-rename]" });
+        return false;
+      }
+      const displayName = `${baseName}${mediaRenameExtension}`;
+      if (displayName.length > 300) {
+        onError(new Error("文件名称不能超过 300 个字符"));
+        renderEditor({ focus: "[data-entity-editor-preview-rename]" });
+        return false;
+      }
+      const current = currentMedia().find((item) => item.id === mediaId);
+      if (!current || displayName === String(current.name || current.displayName || "")) {
+        renamingMediaId = null;
+        mediaRenameValue = "";
+        mediaRenameExtension = "";
+        renderEditor({ focus: "[data-entity-editor-preview-name]" });
+        return false;
+      }
+
+      mediaRenameBusy = true;
+      mediaRenameValue = baseName;
+      renderEditor();
+      try {
+        const updated = await renameMedia({ mediaId, displayName, media: current });
+        draft?.renameMedia(mediaId, updated?.displayName || updated?.name || displayName);
+        renamingMediaId = null;
+        mediaRenameValue = "";
+        mediaRenameExtension = "";
+        mediaRenameBusy = false;
+        if (draft) renderEditor({ focus: "[data-entity-editor-preview-name]" });
+        return true;
+      } catch (error) {
+        mediaRenameBusy = false;
+        onError(error);
+        if (draft) renderEditor({ focus: "[data-entity-editor-preview-rename]" });
+        return false;
       }
     }
 
@@ -175,6 +254,10 @@
       entityId = null;
       submitting = false;
       uploading = false;
+      mediaRenameBusy = false;
+      renamingMediaId = null;
+      mediaRenameValue = "";
+      mediaRenameExtension = "";
       errors = {};
       closePicker();
       renderEditor();
@@ -224,6 +307,10 @@
       errors = {};
       submitting = false;
       uploading = false;
+      mediaRenameBusy = false;
+      renamingMediaId = null;
+      mediaRenameValue = "";
+      mediaRenameExtension = "";
       permissions = {
         mutable: basePermissions.mutable && input.mutable !== false,
         canAddFromLibrary: basePermissions.canAddFromLibrary && input.canAddFromLibrary !== false,
@@ -262,7 +349,27 @@
     }
 
     host.addEventListener("keydown", (event) => {
-      if (!draft || isBusy()) return;
+      if (!draft) return;
+      const renameInput = event.target.closest?.("[data-entity-editor-preview-rename]");
+      if (renameInput) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
+          void finishMediaRename(renameInput);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          void finishMediaRename(renameInput, { cancel: true });
+        }
+        return;
+      }
+      if (isBusy()) return;
+      const previewName = event.target.closest?.("[data-entity-editor-preview-name]");
+      if (previewName && (event.key === "Enter" || event.key === "F2")) {
+        event.preventDefault();
+        startMediaRename(previewName.dataset.entityEditorPreviewName);
+        return;
+      }
       moveFilterFromKey(
         event,
         host,
@@ -277,7 +384,9 @@
 
     host.addEventListener("input", (event) => {
       if (!canEditDraft()) return;
-      if (event.target.matches("[data-entity-editor-name]")) {
+      if (event.target.matches("[data-entity-editor-preview-rename]")) {
+        mediaRenameValue = event.target.value;
+      } else if (event.target.matches("[data-entity-editor-name]")) {
         draft.setName(event.target.value);
         clearErrors("name");
         syncTextState();
@@ -292,6 +401,18 @@
       if (!event.target.matches("[data-entity-editor-form]")) return;
       event.preventDefault();
       void submit();
+    });
+
+    host.addEventListener("dblclick", (event) => {
+      if (!draft || isBusy()) return;
+      const previewName = event.target.closest?.("[data-entity-editor-preview-name]");
+      if (previewName) startMediaRename(previewName.dataset.entityEditorPreviewName);
+    });
+
+    host.addEventListener("focusout", (event) => {
+      if (event.target.matches?.("[data-entity-editor-preview-rename]")) {
+        void finishMediaRename(event.target);
+      }
     });
 
     host.addEventListener("click", (event) => {

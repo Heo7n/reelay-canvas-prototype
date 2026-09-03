@@ -20,12 +20,14 @@ import {
   AssetUploadConflictError,
   AssetUploadIntentUnavailableError,
   AssetWorkspaceUnavailableError,
+  PersonalAssetUnavailableError,
   type CreateAssetUploadIntentInput,
   type FinalizeAssetUploadInput,
   type ListPersonalAssetsInput,
   type ReadAssetUploadIntentInput,
   type ReadPersonalAssetInput,
   type RecordAssetUploadInput,
+  type RenamePersonalAssetInput,
   type WorkspaceMediaAssetStore,
 } from "../application/WorkspaceMediaAssetStore";
 
@@ -92,6 +94,12 @@ interface ProjectAssetReferenceRow extends QueryResultRow {
 function requiredText(value: string, label: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`${label} is required.`);
+  return normalized;
+}
+
+function validDisplayName(value: string): string {
+  const normalized = requiredText(value, "Asset display name");
+  if (normalized.length > 300) throw new Error("Asset display name must not exceed 300 characters.");
   return normalized;
 }
 
@@ -407,6 +415,29 @@ export class PostgresAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       [input.actorId, input.workspaceId, input.assetId],
     );
     return result.rows[0] ? mapAsset(result.rows[0]) : null;
+  }
+
+  async renamePersonalAsset(input: RenamePersonalAssetInput): Promise<WorkspaceMediaAsset> {
+    const displayName = validDisplayName(input.displayName);
+    const result = await this.pool.query<AssetRow>(
+      `UPDATE workspace_media_assets AS asset
+       SET display_name = $4,
+           updated_at = $5
+       FROM media_asset_placements AS placement
+       JOIN memberships AS membership
+         ON membership.workspace_id = placement.workspace_id
+        AND membership.user_id = $1
+       WHERE asset.workspace_id = $2
+         AND asset.id = $3
+         AND placement.workspace_id = asset.workspace_id
+         AND placement.asset_id = asset.id
+         AND placement.scope_kind = 'personal'
+         AND placement.owner_user_id = $1
+       RETURNING ${assetColumns.split(",").map((column) => `asset.${column.trim()}`).join(", ")}`,
+      [input.actorId, input.workspaceId, input.assetId, displayName, this.now().toISOString()],
+    );
+    if (!result.rows[0]) throw new PersonalAssetUnavailableError();
+    return mapAsset(result.rows[0]);
   }
 
   async attachAssetToProject(input: AttachAssetToProjectInput): Promise<ProjectAssetReference> {

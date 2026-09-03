@@ -196,7 +196,7 @@ export class InMemoryEntityStore implements EntityStore {
     if (!available) throw new EntityMediaUnavailableError();
     if (content.coverMediaId) {
       const cover = this.assets.get(this.assetKey(workspaceId, content.coverMediaId));
-      if (!cover || cover.mediaKind === "audio") throw new EntityCoverMediaInvalidError();
+      if (!cover || cover.mediaKind !== "image") throw new EntityCoverMediaInvalidError();
     }
   }
 

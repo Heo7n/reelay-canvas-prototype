@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ProjectAssetUnavailableError } from "../application/ProjectAssetReferenceStore";
+import { PersonalAssetUnavailableError } from "../application/WorkspaceMediaAssetStore";
 import { DEFAULT_LOCAL_DATABASE_URL } from "../db/config";
 import { runMigrations } from "../db/migrate";
 import { seedDemoDatabase } from "../db/seed";
@@ -134,10 +135,11 @@ describe("PostgreSQL asset persistence", () => {
     const projectId = "project-scifi-trailer";
     const checksumSha256 = "b".repeat(64);
     let nextId = 0;
+    let currentTime = new Date("2026-08-31T00:00:00.000Z");
     const firstPool = createPool();
     const store = new PostgresAssetStore(
       firstPool,
-      () => new Date("2026-08-31T00:00:00.000Z"),
+      () => currentTime,
       () => String(++nextId),
     );
 
@@ -195,6 +197,30 @@ describe("PostgreSQL asset persistence", () => {
       const reference = await store.attachAssetToProject({ actorId: ownerId, projectId, assetId: asset.id });
       await expect(store.attachAssetToProject({ actorId: ownerId, projectId, assetId: asset.id }))
         .resolves.toEqual(reference);
+      await expect(store.renamePersonalAsset({
+        actorId: "actor-linjing",
+        workspaceId,
+        assetId: asset.id,
+        displayName: "越权改名.webp",
+      })).rejects.toBeInstanceOf(PersonalAssetUnavailableError);
+
+      currentTime = new Date("2026-08-31T00:01:00.000Z");
+      const renamed = await store.renamePersonalAsset({
+        actorId: ownerId,
+        workspaceId,
+        assetId: asset.id,
+        displayName: "  最终主视觉.webp  ",
+      });
+      expect(renamed).toEqual({
+        ...asset,
+        displayName: "最终主视觉.webp",
+        updatedAt: currentTime.toISOString(),
+      });
+      expect(renamed.objectVersion).toBe(asset.objectVersion);
+      await expect(store.listProjectAssets({ actorId: ownerId, projectId })).resolves.toEqual([
+        { reference, asset: renamed },
+      ]);
+      expect(reference.assetVersion).toBe(asset.objectVersion);
       await expect(store.attachAssetToProject({ actorId: "actor-linjing", projectId, assetId: asset.id }))
         .rejects.toBeInstanceOf(ProjectAssetUnavailableError);
       await expect(store.listProjectAssets({ actorId: "actor-chenxi", projectId }))
@@ -210,8 +236,9 @@ describe("PostgreSQL asset persistence", () => {
       expect(restored).toHaveLength(1);
       expect(restored[0]).toEqual(expect.objectContaining({
         reference: expect.objectContaining({ projectId }),
-        asset: expect.objectContaining({ displayName: "主视觉.webp", checksumSha256 }),
+        asset: expect.objectContaining({ displayName: "最终主视觉.webp", checksumSha256, objectVersion: 1 }),
       }));
+      expect(restored[0].reference.assetVersion).toBe(restored[0].asset.objectVersion);
       await expect(restartedStore.getProjectAsset({
         actorId: "actor-zhouyu",
         projectId,

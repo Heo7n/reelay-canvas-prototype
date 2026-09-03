@@ -28,7 +28,7 @@
   --agent-panel-muted: rgba(255, 255, 255, 0.52);
   --agent-panel-subtle: rgba(255, 255, 255, 0.52);
   --agent-panel-line: rgba(255, 255, 255, 0.11);
-  --agent-panel-shadow: -26px 0 70px rgba(0, 0, 0, 0.38);
+  --agent-panel-shadow: 0 22px 60px rgba(0, 0, 0, 0.38);
   --agent-input-bg: var(--surface);
   --agent-send-bg: #f4f4f5;
   --agent-send-text: #111214;
@@ -145,7 +145,7 @@ html[data-theme="light"] {
   --agent-panel-muted: rgba(17, 18, 20, 0.58);
   --agent-panel-subtle: rgba(17, 18, 20, 0.58);
   --agent-panel-line: rgba(17, 18, 20, 0.1);
-  --agent-panel-shadow: -26px 0 70px rgba(0, 0, 0, 0.18);
+  --agent-panel-shadow: 0 14px 38px rgba(17, 18, 20, 0.09);
   --agent-input-bg: var(--surface);
   --agent-send-bg: #18191d;
   --agent-send-text: #ffffff;
@@ -4211,10 +4211,10 @@ html[data-theme="light"] .duration-scale-tick.is-major {
 
 .agent-dock {
   position: fixed;
-  z-index: 42;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  z-index: 70;
+  top: var(--canvas-side-panel-top, 60px);
+  right: var(--canvas-edge-inset, 12px);
+  bottom: var(--canvas-side-panel-bottom, 64px);
   width: var(--agent-width);
   pointer-events: none;
 }
@@ -4396,10 +4396,12 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   right: 0;
   display: grid;
   grid-template-rows: 52px 1fr auto;
-  width: var(--agent-width);
-  max-width: 100vw;
+  width: 100%;
+  max-width: 100%;
   height: 100%;
-  border-left: 1px solid var(--agent-panel-line);
+  overflow: hidden;
+  border: 1px solid var(--agent-panel-line);
+  border-radius: 14px;
   background: var(--agent-panel-bg);
   color: var(--agent-panel-text);
   box-shadow: var(--agent-panel-shadow);
@@ -4454,6 +4456,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   align-items: center;
   gap: 12px;
   padding: 0 14px 0 16px;
+  border-bottom: 1px solid var(--agent-panel-line);
 }
 
 .agent-title {
@@ -4505,7 +4508,18 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   --node-panel-shadow: none;
   position: relative;
   z-index: 12;
-  margin: 0 8px 8px;
+  margin: 0 10px 10px;
+}
+
+.agent-composer .agent-add-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+
+.agent-composer .agent-add-button > svg {
+  width: 20px;
+  height: 20px;
 }
 
 .agent-composer-stage {
@@ -4665,38 +4679,6 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   padding: 42px 26px 24px;
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-.agent-start-state {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
-  text-align: center;
-}
-
-.agent-start-brand {
-  color: var(--agent-panel-text);
-  font-size: 34px;
-  font-weight: 750;
-  letter-spacing: 0;
-  transform: skewX(-4deg);
-}
-
-.agent-start-title {
-  margin-top: 22px;
-  color: var(--agent-panel-text);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.agent-start-subtitle {
-  margin-top: 8px;
-  color: var(--agent-panel-muted);
-  font-size: 14px;
-  font-weight: 500;
 }
 
 .agent-message-list {
@@ -5357,10 +5339,19 @@ html[data-theme="light"] .confirm-cancel {
 }
 
 @media (max-width: 480px) {
-  .agent-dock,
+  .agent-dock {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    max-width: 100vw;
+  }
+
   .agent-panel {
     width: 100vw;
     max-width: 100vw;
+    border: 0;
+    border-radius: 0;
   }
 
   .agent-resize-handle {

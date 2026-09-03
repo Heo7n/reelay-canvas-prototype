@@ -11,8 +11,8 @@ import type { ProjectAssetReferenceStore } from "../application/ProjectAssetRefe
 import type { WorkspaceMediaAssetStore } from "../application/WorkspaceMediaAssetStore";
 import {
   assertDemoEntityFixturesCanBeReconciled,
-  reconcileLegacyDemoEntities,
-  retireUnreferencedLegacyDemoAssets,
+  reconcileHistoricalDemoEntities,
+  retireUnreferencedHistoricalDemoAssets,
   type ResolvedDemoAssetFixture,
 } from "./demo-asset-fixture-reconciler";
 import {
@@ -22,8 +22,10 @@ import {
   DEMO_PROJECT_ID,
   DEMO_WORKSPACE_ID,
   LEGACY_DEMO_ASSET_FIXTURES,
+  PREVIOUS_DEMO_ASSET_FIXTURES,
   demoAssetIdempotencyKey,
   legacyDemoAssetIdempotencyKey,
+  previousDemoAssetIdempotencyKey,
   type DemoAssetFixture,
 } from "./demo-asset-fixtures";
 
@@ -32,6 +34,8 @@ export {
   DEMO_ENTITY_FIXTURES,
   LEGACY_DEMO_ASSET_FIXTURES,
   LEGACY_DEMO_ENTITY_FIXTURES,
+  PREVIOUS_DEMO_ASSET_FIXTURES,
+  PREVIOUS_DEMO_ENTITY_FIXTURES,
 } from "./demo-asset-fixtures";
 export { DemoAssetFixtureConflictError } from "./demo-asset-fixture-reconciler";
 
@@ -82,15 +86,15 @@ async function seedAsset(
     actorId: DEMO_ACTOR_ID,
     workspaceId: DEMO_WORKSPACE_ID,
     idempotencyKey: fixture.idempotencyKey,
-    mediaKind: "image",
+    mediaKind: fixture.mediaKind,
     displayName: fixture.displayName,
-    contentType: "image/png",
+    contentType: fixture.contentType,
     byteSize: fixture.byteSize,
     checksumSha256: fixture.checksumSha256,
   });
   const stored = await dependencies.objectStore.putObject({
     objectKey: intent.objectKey,
-    contentType: "image/png",
+    contentType: fixture.contentType,
     body,
   });
   await dependencies.assetStore.recordUpload({
@@ -132,6 +136,10 @@ export async function seedDemoAssetLibrary(
     DEMO_ASSET_FIXTURES,
     demoAssetIdempotencyKey,
   );
+  const previousFixtureAssets = await resolveDemoAssetFixtures(
+    PREVIOUS_DEMO_ASSET_FIXTURES,
+    previousDemoAssetIdempotencyKey,
+  );
   const legacyFixtureAssets = await resolveDemoAssetFixtures(
     LEGACY_DEMO_ASSET_FIXTURES,
     legacyDemoAssetIdempotencyKey,
@@ -139,6 +147,7 @@ export async function seedDemoAssetLibrary(
   await assertDemoEntityFixturesCanBeReconciled(
     dependencies.pool,
     canonicalFixtureAssets,
+    previousFixtureAssets,
     legacyFixtureAssets,
   );
 
@@ -150,9 +159,10 @@ export async function seedDemoAssetLibrary(
     assetsByKey.set(fixture.key, asset);
   }
 
-  await reconcileLegacyDemoEntities(
+  await reconcileHistoricalDemoEntities(
     dependencies.pool,
     canonicalFixtureAssets,
+    previousFixtureAssets,
     legacyFixtureAssets,
     assetsByKey,
   );
@@ -172,7 +182,10 @@ export async function seedDemoAssetLibrary(
     }));
   }
 
-  await retireUnreferencedLegacyDemoAssets(dependencies.pool, legacyFixtureAssets);
+  await retireUnreferencedHistoricalDemoAssets(
+    dependencies.pool,
+    [...previousFixtureAssets, ...legacyFixtureAssets],
+  );
 
   return { assets, entities };
 }

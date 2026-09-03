@@ -3,6 +3,7 @@ import {
   hostDocumentMessageSchema,
   hostAssetCommandErrorMessageSchema,
   hostFlushMessageSchema,
+  hostMediaRenameResultMessageSchema,
   hostMediaUploadGrantMessageSchema,
   hostMediaUploadResultMessageSchema,
   hostMessageSchema,
@@ -244,6 +245,34 @@ describe("legacy canvas bridge", () => {
       workspaceAsset,
     });
     expect(personalResult.target === "personal" && personalResult.workspaceAsset.assetId).toBe("asset-1");
+    const rename = parseCanvasMessage({
+      source: "reelay-legacy-canvas",
+      type: "canvas:rename-media",
+      protocolVersion: 1,
+      requestId: "rename-1",
+      instanceId: "canvas-instance-1",
+      assetId: "asset-1",
+      displayName: "  renamed-cover.png  ",
+    });
+    expect(rename).toEqual({
+      source: "reelay-legacy-canvas",
+      type: "canvas:rename-media",
+      protocolVersion: 1,
+      requestId: "rename-1",
+      instanceId: "canvas-instance-1",
+      assetId: "asset-1",
+      displayName: "renamed-cover.png",
+    });
+    expect(parseCanvasMessage({ ...rename, workspaceId: "iframe-controlled" })).toBeNull();
+    expect(parseCanvasMessage({ ...rename, displayName: "   " })).toBeNull();
+    expect(hostMediaRenameResultMessageSchema.parse({
+      source: "reelay-shell",
+      type: "host:media-rename-result",
+      protocolVersion: 1,
+      requestId: "rename-1",
+      instanceId: "canvas-instance-1",
+      workspaceAsset: { ...workspaceAsset, displayName: "renamed-cover.png" },
+    }).workspaceAsset.displayName).toBe("renamed-cover.png");
     expect(hostAssetCommandErrorMessageSchema.parse({
       source: "reelay-shell",
       type: "host:asset-command-error",

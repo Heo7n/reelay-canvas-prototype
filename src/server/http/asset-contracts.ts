@@ -39,6 +39,10 @@ export const CreateAssetUploadIntentBodySchema = z.object({
   checksumSha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
 
+export const RenamePersonalAssetBodySchema = z.object({
+  displayName: z.string().trim().min(1).max(300),
+}).strict();
+
 export const PersonalAssetQuerySchema = z.object({
   scope: z.literal("personal").optional().default("personal"),
 }).strict();

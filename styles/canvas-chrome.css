@@ -1,8 +1,11 @@
 :root {
+  --canvas-edge-inset: 12px;
   --canvas-edge-bar-width: 248px;
   --canvas-project-bar-height: 40px;
   --canvas-viewport-toolbar-height: 44px;
   --canvas-chrome-panel-gap: 8px;
+  --canvas-side-panel-top: calc(var(--canvas-edge-inset) + var(--canvas-project-bar-height) + var(--canvas-chrome-panel-gap));
+  --canvas-side-panel-bottom: calc(var(--canvas-edge-inset) + var(--canvas-viewport-toolbar-height) + var(--canvas-chrome-panel-gap));
   --canvas-chrome-bg: color-mix(in srgb, var(--surface) 82%, transparent);
   --canvas-chrome-bg-raised: color-mix(in srgb, var(--surface) 94%, transparent);
   --canvas-chrome-border: color-mix(in srgb, var(--text) 13%, transparent);
@@ -22,8 +25,8 @@ html[data-theme="light"] {
 
 /* Project-level navigation */
 .top-bar {
-  top: 12px;
-  left: 12px;
+  top: var(--canvas-edge-inset);
+  left: var(--canvas-edge-inset);
 }
 
 .top-bar .canvas-project-switcher {
@@ -552,8 +555,8 @@ html[data-theme="light"] {
 
 /* Bottom-left viewport tools */
 .canvas-tools {
-  left: 12px;
-  bottom: 12px;
+  left: var(--canvas-edge-inset);
+  bottom: var(--canvas-edge-inset);
 }
 
 .canvas-tool-row {

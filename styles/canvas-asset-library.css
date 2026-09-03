@@ -8,9 +8,9 @@
   --asset-card-size: 164px;
   position: fixed;
   z-index: 70;
-  top: calc(12px + var(--canvas-project-bar-height, 40px) + var(--canvas-chrome-panel-gap, 8px));
-  bottom: calc(12px + var(--canvas-viewport-toolbar-height, 44px) + var(--canvas-chrome-panel-gap, 8px));
-  left: 12px;
+  top: var(--canvas-side-panel-top, 60px);
+  bottom: var(--canvas-side-panel-bottom, 64px);
+  left: var(--canvas-edge-inset, 12px);
   display: flex;
   width: var(--asset-panel-width, 550px);
   min-width: min(380px, calc(100vw - 24px));
@@ -349,6 +349,7 @@ html[data-theme="light"] .asset-library-panel {
   min-height: 0;
   padding: 0;
   overflow: hidden;
+  flex: 1 1 0;
   flex-direction: column;
 }
 

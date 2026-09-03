@@ -249,7 +249,7 @@ const state = {
   generationTasks: new Map(),
   promptOptimizationTasks: new Map(),
   agentOpen: false,
-  agentWidth: 600,
+  agentWidth: 560,
   zoomTipTimer: 0,
   projectId: crypto.randomUUID(),
   projectName: "Untitled",
@@ -515,6 +515,20 @@ const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntit
     .listItems({ space: "personal", kind: "media" })
     .filter((media) => window.parent === window || hostPersonalMediaIds.has(media.id)),
   persistFiles: persistEntityEditorFiles,
+  renameMedia: async ({ mediaId, displayName }) => {
+    if (window.parent === window) {
+      return assetLibraryStore.renameItem({
+        item: { kind: "media", id: mediaId },
+        name: displayName,
+        space: "personal",
+      });
+    }
+    if (!canPersistLibraryMedia()) throw new Error("当前项目尚未接入素材持久化");
+    const workspaceAsset = await canvasMediaAssets.renameMedia(mediaId, displayName);
+    const updated = assetLibraryStore.syncPersistedMedia(workspaceAssetToLibraryMedia(workspaceAsset));
+    renderAssetLibrary();
+    return updated;
+  },
   saveEntity: saveEntityEditorDraft,
   confirmDiscard: confirmEntityEditorDiscard,
   onVisibilityChange: setEntityEditorOpen,
@@ -670,6 +684,7 @@ function clamp(value, min, max) {
 }
 
 const panelWidthRules = Object.freeze({
+  edgeInset: 12,
   assetMin: 380,
   assetMax: 780,
   agentMin: 340,
@@ -684,7 +699,8 @@ function isAssetLibraryOpen() {
 function canShowAssetAndAgent() {
   return window.innerWidth >= panelWidthRules.assetMin
     + panelWidthRules.agentMin
-    + panelWidthRules.canvasCorridor;
+    + panelWidthRules.canvasCorridor
+    + panelWidthRules.edgeInset * 2;
 }
 
 function clampPanelWidth(width, minWidth, maxWidth) {
@@ -693,10 +709,10 @@ function clampPanelWidth(width, minWidth, maxWidth) {
 }
 
 function getAssetLibraryWidthBounds() {
-  const viewportMax = Math.max(0, Math.min(panelWidthRules.assetMax, window.innerWidth - 24));
+  const viewportMax = Math.max(0, Math.min(panelWidthRules.assetMax, window.innerWidth - panelWidthRules.edgeInset * 2));
   const opposingWidth = state.agentOpen ? state.agentWidth : 0;
   const coupledMax = state.agentOpen && isAssetLibraryOpen()
-    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.canvasCorridor - opposingWidth)
+    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor - opposingWidth)
     : viewportMax;
   const max = Math.max(0, coupledMax);
   return {
@@ -729,7 +745,7 @@ function applyAgentWidth(width) {
 
 function reconcileDualPanelWidths(preferredPanel) {
   if (!state.agentOpen || !isAssetLibraryOpen() || !canShowAssetAndAgent()) return;
-  const capacity = window.innerWidth - panelWidthRules.canvasCorridor;
+  const capacity = window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor;
   let nextAssetWidth;
   let nextAgentWidth;
   if (preferredPanel === "asset") {
@@ -1200,10 +1216,11 @@ function getNodePopoverBoundary() {
   const libraryRect = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
     ? assetLibraryPanel.getBoundingClientRect()
     : null;
+  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
   return {
     left: Math.max(shellRect.left, libraryRect?.right || shellRect.left),
     top: Math.max(shellRect.top, topRect?.bottom || shellRect.top),
-    right: shellRect.right - (state.agentOpen ? state.agentWidth : 0),
+    right: Math.min(shellRect.right, agentRect?.left || shellRect.right),
     bottom: shellRect.bottom,
   };
 }
@@ -1325,10 +1342,10 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
 
 function getCanvasFitFrame() {
   const rect = shell.getBoundingClientRect();
-  const leftInset = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
-    ? assetLibraryPanel.getBoundingClientRect().width
-    : 0;
-  const rightInset = state.agentOpen ? state.agentWidth : 0;
+  const libraryRect = isAssetLibraryOpen() ? assetLibraryPanel?.getBoundingClientRect() : null;
+  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
+  const leftInset = Math.max(0, (libraryRect?.right || rect.left) - rect.left);
+  const rightInset = Math.max(0, rect.right - (agentRect?.left || rect.right));
   const padding = 72;
   return {
     leftInset,
@@ -3794,11 +3811,10 @@ function closeAssetLibraryPreview() {
 function focusWorldBounds(bounds) {
   if (!bounds) return;
   const rect = shell.getBoundingClientRect();
-  const leftInset =
-    assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
-      ? assetLibraryPanel.getBoundingClientRect().width
-      : 0;
-  const rightInset = state.agentOpen ? state.agentWidth : 0;
+  const libraryRect = isAssetLibraryOpen() ? assetLibraryPanel?.getBoundingClientRect() : null;
+  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
+  const leftInset = Math.max(0, (libraryRect?.right || rect.left) - rect.left);
+  const rightInset = Math.max(0, rect.right - (agentRect?.left || rect.right));
   const viewWidth = Math.max(260, rect.width - leftInset - rightInset);
   const centerX = (bounds.left + bounds.right) / 2;
   const centerY = (bounds.top + bounds.bottom) / 2;
@@ -7124,13 +7140,7 @@ function renderAgentHistory() {
 function renderAgentMessages(conversation = getConversation(state.activeConversationId)) {
   if (!agentMessages) return;
   if (!conversation.messages.length) {
-    agentMessages.innerHTML = `
-      <div class="agent-start-state">
-        <div class="agent-start-brand">Reelay 立画</div>
-        <div class="agent-start-title">开始创作</div>
-        <div class="agent-start-subtitle">描述你想要生成的内容</div>
-      </div>
-    `;
+    agentMessages.replaceChildren();
     return;
   }
 
@@ -7609,9 +7619,9 @@ function applyTheme(mode = state.themeMode, options = {}) {
 
 function setAgentWidth(width) {
   const opposingWidth = isAssetLibraryOpen() ? state.assetLibraryWidth : 0;
-  const viewportMax = Math.min(panelWidthRules.agentMax, window.innerWidth);
+  const viewportMax = Math.min(panelWidthRules.agentMax, window.innerWidth - panelWidthRules.edgeInset * 2);
   const maxWidth = state.agentOpen && isAssetLibraryOpen()
-    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.canvasCorridor - opposingWidth)
+    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor - opposingWidth)
     : viewportMax;
   applyAgentWidth(clampPanelWidth(width, panelWidthRules.agentMin, maxWidth));
   renderSelectionToolbar();

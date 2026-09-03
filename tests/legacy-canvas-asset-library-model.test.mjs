@@ -215,7 +215,7 @@ test("registers persisted Entities idempotently in the personal root without wea
     () => store.registerPersistedEntity({
       entity: { ...persisted, id: "audio-cover", coverAssetId: "voice" },
     }),
-    /cover must be an image or video/,
+    /cover must be an image/,
   );
   assert.throws(
     () => store.registerPersistedEntity({
@@ -356,7 +356,7 @@ test("updates persisted Entity content only from the expected version and advanc
       mediaRefs: [{ mediaId: "voice", order: 0 }],
       coverMediaId: "voice",
     }),
-    /cover must be an image or video/,
+    /cover must be an image/,
   );
   assert.throws(
     () => store.updateEntity({
@@ -404,18 +404,20 @@ test("rejects structurally invalid Entity seed records", () => {
         coverMediaId: "voice",
       }],
     }),
-    /cover media must be an image or video/,
+    /cover media must be an image/,
   );
-  const videoCoverStore = model.createAssetLibraryStore({
-    media: [{ id: "motion", type: "video" }],
-    entities: [{
-      id: "video-cover",
-      name: "视频封面",
-      mediaRefs: [{ mediaId: "motion" }],
-      coverMediaId: "motion",
-    }],
-  });
-  assert.equal(videoCoverStore.getEntity(entityRef("video-cover")).coverMediaId, "motion");
+  assert.throws(
+    () => model.createAssetLibraryStore({
+      media: [{ id: "motion", type: "video" }],
+      entities: [{
+        id: "video-cover",
+        name: "视频封面",
+        mediaRefs: [{ mediaId: "motion" }],
+        coverMediaId: "motion",
+      }],
+    }),
+    /cover media must be an image/,
+  );
 });
 
 test("creates and renames folders, renames items, and moves placements without changing item ids", () => {
@@ -644,6 +646,41 @@ test("fails closed for unsupported persisted Media commands while preserving org
   store.shareToOrganization({ items: [mediaRef("workspace-asset-1")], fromSpace: "personal" });
   assert.equal(store.hasPlacement(mediaRef("workspace-asset-1"), "personal"), true);
   assert.equal(store.hasPlacement(mediaRef("workspace-asset-1"), "organization"), true);
+});
+
+test("refreshes a persisted Media display name without changing its identity or placements", () => {
+  const store = createFixtureStore();
+  store.registerMedia({
+    media: {
+      id: "workspace-asset-rename",
+      workspaceAssetId: "workspace-asset-rename",
+      mediaKind: "image",
+      name: "旧名称.webp",
+      displayName: "旧名称.webp",
+      assetVersion: 1,
+      url: "/api/assets/workspace-asset-rename/content",
+    },
+    space: "personal",
+  });
+
+  const updated = store.syncPersistedMedia({
+    id: "workspace-asset-rename",
+    workspaceAssetId: "workspace-asset-rename",
+    mediaKind: "image",
+    displayName: "新名称.webp",
+    assetVersion: 1,
+    url: "/api/assets/workspace-asset-rename/content",
+  });
+
+  assert.equal(updated.name, "新名称.webp");
+  assert.equal(updated.displayName, "新名称.webp");
+  assert.equal(updated.assetVersion, 1);
+  assert.equal(store.getMedia(mediaRef("workspace-asset-rename")).name, "新名称.webp");
+  assert.equal(store.hasPlacement(mediaRef("workspace-asset-rename"), "personal", null), true);
+  assert.throws(
+    () => store.syncPersistedMedia({ ...updated, mediaKind: "video" }),
+    /identity cannot change/,
+  );
 });
 
 test("rejects every mutation whose source or target placement is the platform space", () => {

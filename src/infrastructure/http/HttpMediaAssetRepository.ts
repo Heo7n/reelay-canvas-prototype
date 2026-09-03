@@ -42,6 +42,22 @@ export class HttpMediaAssetRepository implements MediaAssetRepository {
     return response.asset;
   }
 
+  async renamePersonalAsset(
+    workspaceId: WorkspaceId,
+    assetId: string,
+    displayName: string,
+  ): Promise<PersonalMediaAsset> {
+    const response = await this.http.read(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/media-assets/${encodeURIComponent(assetId)}`,
+      FinalizeMediaUploadResponseDtoSchema,
+      { method: "PATCH", body: JSON.stringify({ displayName }) },
+    );
+    return {
+      ...response.asset,
+      contentUrl: `/api/workspaces/${encodeURIComponent(workspaceId)}/media-assets/${encodeURIComponent(assetId)}/content`,
+    };
+  }
+
   async attachToProject(projectId: ProjectId, assetId: string): Promise<ProjectMediaAsset> {
     const response = await this.http.read(
       `/api/projects/${encodeURIComponent(projectId)}/asset-references/${encodeURIComponent(assetId)}`,
