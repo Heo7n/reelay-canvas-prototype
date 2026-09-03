@@ -3523,6 +3523,55 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   border-radius: 12px;
 }
 
+.param-panel.is-task-type-transitioning {
+  transform-origin: left bottom;
+  will-change: height, transform;
+  transition:
+    height 240ms cubic-bezier(0.33, 1, 0.68, 1),
+    transform 240ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.param-panel.is-task-type-transitioning.is-task-type-details-changing
+  .parameter-task-details:not(.parameter-task-details-outgoing) {
+  opacity: 0;
+  transform: translateY(var(--task-type-enter-offset, 7px));
+  will-change: opacity, transform;
+  transition:
+    opacity 170ms ease 35ms,
+    transform 220ms cubic-bezier(0.33, 1, 0.68, 1) 20ms;
+}
+
+.param-panel.is-task-type-transitioning.is-task-type-details-changing.is-task-type-entered
+  .parameter-task-details:not(.parameter-task-details-outgoing) {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.parameter-task-details-outgoing {
+  position: absolute;
+  z-index: 2;
+  margin: 0 !important;
+  opacity: var(--task-type-outgoing-start-opacity, 1);
+  pointer-events: none;
+  transform: translateY(0);
+  will-change: opacity, transform;
+  transition:
+    opacity 145ms ease,
+    transform 200ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.param-panel.is-task-type-transitioning.is-task-type-details-changing.is-task-type-entered
+  .parameter-task-details-outgoing {
+  opacity: 0;
+  transform: translateY(var(--task-type-exit-offset, -5px));
+}
+
+.param-panel.is-task-type-preparing,
+.param-panel.is-task-type-preparing.is-task-type-details-changing .parameter-task-details,
+.param-panel.is-task-type-preparing .omni-reference-task-type-segmented::before {
+  transition: none !important;
+}
+
 .material-panel {
   position: absolute;
   z-index: 54;
@@ -3927,6 +3976,10 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   padding: 12px 12px 14px;
 }
 
+.parameter-task-details:not(:first-child) {
+  margin-top: 10px;
+}
+
 .parameter-group + .parameter-group {
   margin-top: 10px;
 }
@@ -3964,6 +4017,10 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   font-weight: 560;
   line-height: var(--node-leading-control);
   cursor: pointer;
+  transition:
+    color 150ms ease,
+    opacity 150ms ease,
+    background 150ms ease;
 }
 
 .segmented button.active {
@@ -3971,15 +4028,64 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   color: #fff;
 }
 
+.omni-reference-task-type-segmented {
+  position: relative;
+  isolation: isolate;
+}
+
+.omni-reference-task-type-segmented::before {
+  position: absolute;
+  z-index: 0;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--option-columns, 3));
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.13);
+  content: "";
+  pointer-events: none;
+  transform: translateX(
+    var(--task-type-selection-offset, calc(var(--task-type-selection-index, 0) * 100%))
+  );
+  transition: transform 240ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.omni-reference-task-type-segmented button {
+  position: relative;
+  z-index: 1;
+}
+
+.omni-reference-task-type-segmented button.active {
+  background: transparent;
+}
+
+.segmented button:disabled {
+  cursor: not-allowed;
+}
+
+.segmented button:disabled:not(.active) {
+  opacity: 0.36;
+}
+
+.duration-locked-segmented button:disabled {
+  cursor: default;
+}
+
 .segmented button.aspect-option {
+  display: grid;
+  grid-template-rows: 16px 14px;
   height: 44px;
-  flex-direction: column;
-  gap: 5px;
+  align-content: center;
+  align-items: center;
+  justify-items: center;
+  gap: 4px;
   padding: 5px 3px;
 }
 
 .aspect-option-icon {
   display: block;
+  grid-row: 1;
+  place-self: center;
   width: var(--aspect-width);
   height: var(--aspect-height);
   max-width: 16px;
@@ -3987,6 +4093,24 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   border: 1.5px solid currentColor;
   border-radius: 2px;
   opacity: 0.72;
+}
+
+.aspect-option > span {
+  grid-row: 2;
+  height: 14px;
+  line-height: 14px;
+}
+
+.aspect-option-icon-auto {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
 }
 
 .duration-heading {
@@ -4053,56 +4177,6 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
 }
 
-.duration-scale {
-  position: relative;
-  height: 19px;
-  margin-top: 2px;
-  color: rgba(255, 255, 255, 0.42);
-  user-select: none;
-}
-
-.duration-scale-ticks,
-.duration-scale-labels {
-  position: absolute;
-  inset: 0;
-}
-
-.duration-scale-tick {
-  position: absolute;
-  top: 0;
-  left: var(--duration-mark-offset);
-  width: 1px;
-  height: 3px;
-  border-radius: 1px;
-  background: rgba(255, 255, 255, 0.18);
-  transform: translateX(-0.5px);
-}
-
-.duration-scale-tick.is-major {
-  height: 5px;
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.duration-scale-label {
-  position: absolute;
-  top: 7px;
-  left: var(--duration-mark-offset);
-  font-size: 10px;
-  font-weight: 520;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  transform: translateX(-50%);
-}
-
-.duration-scale-label.is-start {
-  transform: none;
-}
-
-.duration-scale-label.is-end {
-  transform: translateX(-100%);
-}
-
 .aspect-option.active .aspect-option-icon {
   opacity: 1;
 }
@@ -4138,6 +4212,14 @@ html[data-theme="light"] .segmented button.active {
   background: #ffffff;
   color: rgba(17, 24, 39, 0.9);
   box-shadow: none;
+}
+
+html[data-theme="light"] .omni-reference-task-type-segmented::before {
+  background: #ffffff;
+}
+
+html[data-theme="light"] .omni-reference-task-type-segmented button.active {
+  background: transparent;
 }
 
 html[data-theme="light"] .model-option:hover,
@@ -4195,18 +4277,6 @@ html[data-theme="light"] .duration-range-input::-moz-range-progress {
 html[data-theme="light"] .duration-range-input::-moz-range-thumb {
   border-color: rgba(17, 24, 39, 0.2);
   background: #ffffff;
-}
-
-html[data-theme="light"] .duration-scale {
-  color: rgba(17, 24, 39, 0.46);
-}
-
-html[data-theme="light"] .duration-scale-tick {
-  background: rgba(17, 24, 39, 0.15);
-}
-
-html[data-theme="light"] .duration-scale-tick.is-major {
-  background: rgba(17, 24, 39, 0.28);
 }
 
 .agent-dock {

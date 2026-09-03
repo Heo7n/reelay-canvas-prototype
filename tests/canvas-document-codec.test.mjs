@@ -29,6 +29,7 @@ test("the canvas document codec persists only explicit content fields and restor
       duration: "4s",
       count: 2,
       workflow: "reference-image",
+      omniReferenceTaskType: "auto",
       audioEnabled: false,
       promptOptimization: true,
       credits: 999,
@@ -59,6 +60,7 @@ test("the canvas document codec persists only explicit content fields and restor
             duration: "4s",
             count: 2,
             workflow: "reference-image",
+            omniReferenceTaskType: "edit",
             audioEnabled: true,
             promptOptimization: true,
             promptOptimizing: true,
@@ -187,7 +189,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
   assert.deepEqual(sortedKeys(generator), [
     "activeAssetId", "aspect", "assetValidationEnabled", "assets", "audioEnabled", "autoLinkEnabled", "count", "duration", "generatedAsset", "groupId", "id", "kind",
-    "mediaKind", "model", "name", "preview", "prompt", "quality", "resolution",
+    "mediaKind", "model", "name", "omniReferenceTaskType", "preview", "prompt", "quality", "resolution",
     "workflow", "x", "y", "z",
   ]);
   assert.deepEqual(sortedKeys(assetNode), ["activeAssetId", "assets", "id", "kind", "mode", "x", "y", "z"]);
@@ -205,7 +207,7 @@ test("the canvas document codec persists only explicit content fields and restor
   }]);
   assert.deepEqual(sortedKeys(group), ["height", "id", "name", "nodeIds", "width", "x", "y", "z"]);
   assert.deepEqual(sortedKeys(snapshot.lastPreset), [
-    "aspect", "audioEnabled", "count", "duration", "mode", "model", "quality",
+    "aspect", "audioEnabled", "count", "duration", "mode", "model", "omniReferenceTaskType", "quality",
     "resolution", "workflow",
   ]);
   assert.equal(referenceAsset.url, "");
@@ -238,6 +240,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(Object.hasOwn(restoredGenerator, "lockedMode"), false);
   assert.equal(restoredGenerator.model, "seedance-2.0");
   assert.equal(restoredGenerator.workflow, "reference-image");
+  assert.equal(restoredGenerator.omniReferenceTaskType, "edit");
   assert.equal(restoredGenerator.audioEnabled, true);
   assert.equal(restoredGenerator.promptOptimizing, false);
   assert.equal(Object.hasOwn(restoredGenerator, "promptOptimization"), false);
@@ -266,8 +269,45 @@ test("the canvas document codec persists only explicit content fields and restor
   }]);
   assert.deepEqual(plain(restoredCanvas.groups[0].nodeIds), ["generator-1"]);
   assert.equal(restored.lastPreset.workflow, "reference-image");
+  assert.equal(restored.lastPreset.omniReferenceTaskType, "auto");
   assert.equal(restored.lastPreset.audioEnabled, false);
   assert.equal(Object.hasOwn(restored.lastPreset, "promptOptimization"), false);
+});
+
+test("the optional omni reference task type is bounded and ignores non-string values", () => {
+  const longTaskType = `<script>alert("task-type")</script>${"x".repeat(100)}`;
+  const state = {
+    activeCanvasId: "canvas-task-type",
+    lastPreset: { mode: "video", omniReferenceTaskType: longTaskType },
+    canvases: [{
+      id: "canvas-task-type",
+      name: "任务类型",
+      nodes: [{
+        id: "generator-task-type",
+        kind: "generator",
+        mode: "video",
+        omniReferenceTaskType: longTaskType,
+      }],
+      groups: [],
+      viewport: { tx: 0, ty: 0, scale: 1 },
+      zCounter: 1,
+    }],
+  };
+
+  const snapshot = codec.createSnapshot(state);
+  const expectedTaskType = longTaskType.slice(0, 80);
+  assert.equal(snapshot.canvases[0].nodes[0].omniReferenceTaskType, expectedTaskType);
+  assert.equal(snapshot.lastPreset.omniReferenceTaskType, expectedTaskType);
+
+  const restored = codec.restoreSnapshot(plain(snapshot));
+  assert.equal(restored.canvases[0].nodes[0].omniReferenceTaskType, expectedTaskType);
+  assert.equal(restored.lastPreset.omniReferenceTaskType, expectedTaskType);
+
+  state.canvases[0].nodes[0].omniReferenceTaskType = { hostile: true };
+  state.lastPreset.omniReferenceTaskType = ["edit"];
+  const sanitized = codec.createSnapshot(state);
+  assert.equal(Object.hasOwn(sanitized.canvases[0].nodes[0], "omniReferenceTaskType"), false);
+  assert.equal(Object.hasOwn(sanitized.lastPreset, "omniReferenceTaskType"), false);
 });
 
 test("the codec rejects unknown versions and normalizes hostile or invalid content", () => {

@@ -239,6 +239,7 @@ const state = {
     duration: "4s",
     count: 1,
     workflow: "",
+    omniReferenceTaskType: "",
     audioEnabled: false,
   },
   action: null,
@@ -932,10 +933,17 @@ function hydrateCanvasDocumentSnapshot(content) {
   state.canvases.forEach((canvas) => {
     canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
     canvas.nodes.forEach((node) => {
-      if (node.kind === "generator") normalizeNodeParameters(node);
+      if (node.kind !== "generator") return;
+      normalizeNodeParameters(node);
+      if (
+        node.generatedAsset?.type === "video"
+        && (!Number.isFinite(node.generatedAsset.duration) || node.generatedAsset.duration <= 0)
+      ) {
+        hydrateAssetMetadata(node.generatedAsset, node.id);
+      }
     });
   });
-  state.lastPreset = {
+  const hydratedPreset = {
     mode: restored.lastPreset.mode,
     model: restored.lastPreset.model || state.lastPreset.model,
     aspect: restored.lastPreset.aspect || state.lastPreset.aspect,
@@ -944,8 +952,11 @@ function hydrateCanvasDocumentSnapshot(content) {
     duration: restored.lastPreset.duration || state.lastPreset.duration,
     count: clamp(restored.lastPreset.count, 1, 4),
     workflow: restored.lastPreset.workflow || state.lastPreset.workflow,
+    omniReferenceTaskType: restored.lastPreset.omniReferenceTaskType || "",
     audioEnabled: restored.lastPreset.audioEnabled === true,
   };
+  normalizeNodeParameters(Object.assign(hydratedPreset, { kind: "generator" }));
+  state.lastPreset = presetFrom(hydratedPreset);
   state.libraryTargetNodeId = null;
   clearAssetLibrarySelection();
   resetActiveCanvasSession(getActiveCanvas());
@@ -1148,7 +1159,7 @@ function syncNodeVisualLayout(
 function syncNodeAspectUi(node, element) {
   if (node.kind !== "generator") return;
   const aspectLabel = element.querySelector("[data-param-aspect]");
-  if (aspectLabel) aspectLabel.textContent = node.aspect;
+  if (aspectLabel) aspectLabel.textContent = getCapabilityDisplayLabel(node, "aspect", node.aspect);
   element.querySelectorAll('[data-action="aspect"]').forEach((button) => {
     const active = button.dataset.value === node.aspect;
     button.classList.toggle("active", active);
@@ -1248,6 +1259,7 @@ function syncNodePopoverLayout(element) {
   const promptPanel = element?.querySelector(".prompt-panel");
   const popover = promptPanel?.querySelector("[data-node-popover]");
   if (!promptPanel || !popover) return;
+  if (popover.classList.contains("is-task-type-transitioning")) return;
   const anchorAction = popover.dataset.anchorAction;
   const anchor = promptPanel.querySelector(`[data-action="${anchorAction}"]`)
     || promptPanel.querySelector(".control-bar");
@@ -1324,6 +1336,175 @@ function scheduleNodePopoverLayouts() {
     state.nodePopoverFrame = 0;
     nodeLayer.querySelectorAll(".canvas-node").forEach(syncNodePopoverLayout);
     syncVisibleAdvancedSettingTooltips();
+  });
+}
+
+function getTaskTypeSelectionOffset(segmented, fallbackIndex) {
+  const transform = getComputedStyle(segmented, "::before").transform;
+  if (transform && transform !== "none") {
+    try {
+      const offset = new DOMMatrixReadOnly(transform).m41;
+      if (Number.isFinite(offset)) return offset;
+    } catch {
+      // Fall back to the semantic index if the browser returns an unsupported transform format.
+    }
+  }
+  const columns = Math.max(
+    1,
+    Number.parseInt(getComputedStyle(segmented).getPropertyValue("--option-columns"), 10) || 1,
+  );
+  return Math.max(0, fallbackIndex) * Math.max(0, segmented.clientWidth - 4) / columns;
+}
+
+function captureTaskTypeParameterTransition(node, nextTaskType) {
+  if (node?.panel !== "params") return null;
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  const values = Array.isArray(capability?.uiValues) ? capability.uiValues : [];
+  const fromIndex = values.indexOf(node.omniReferenceTaskType);
+  const toIndex = values.indexOf(nextTaskType);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return null;
+  const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+  const panel = element?.querySelector(".param-panel");
+  const currentDetails = panel?.querySelector(
+    ".parameter-task-details:not(.parameter-task-details-outgoing)",
+  );
+  const detailLayers = currentDetails ? [currentDetails] : [];
+  const segmented = panel?.querySelector(".omni-reference-task-type-segmented");
+  if (!panel) return null;
+
+  const restoreFocus = panel.contains(document.activeElement)
+    && document.activeElement?.matches?.('[data-action="omni-reference-task-type"]');
+  if (reducedMotionQuery.matches || !panel.offsetHeight || !detailLayers.length || !segmented) {
+    return { fromIndex, toIndex, restoreFocus, shouldAnimate: false };
+  }
+
+  const panelRect = panel.getBoundingClientRect();
+  const compositeScale = panel.offsetWidth > 0 ? panelRect.width / panel.offsetWidth : 1;
+  if (!compositeScale) {
+    return { fromIndex, toIndex, restoreFocus, shouldAnimate: false };
+  }
+
+  const outgoingDetails = detailLayers.map((details) => {
+    const detailsRect = details.getBoundingClientRect();
+    const clone = details.cloneNode(true);
+    clone.classList.add("parameter-task-details-outgoing");
+    clone.setAttribute("aria-hidden", "true");
+    clone.inert = true;
+    [clone, ...clone.querySelectorAll("[id]")]
+      .forEach((item) => item.removeAttribute("id"));
+    return {
+      element: clone,
+      top: (detailsRect.top - panelRect.top) / compositeScale - panel.clientTop,
+      left: (detailsRect.left - panelRect.left) / compositeScale - panel.clientLeft,
+      width: detailsRect.width / compositeScale,
+      opacity: getComputedStyle(details).opacity,
+    };
+  });
+
+  return {
+    fromHeight: panelRect.height / compositeScale,
+    fromLeft: panelRect.left,
+    fromBottom: panelRect.bottom,
+    fromSelectionOffset: getTaskTypeSelectionOffset(segmented, fromIndex),
+    fromIndex,
+    toIndex,
+    direction: Math.sign(toIndex - fromIndex) || 1,
+    restoreFocus,
+    shouldAnimate: true,
+    fromDetailsSignature: currentDetails.innerHTML,
+    outgoingDetails,
+  };
+}
+
+function animateTaskTypeParameterTransition(node, transition) {
+  if (!transition) return;
+  const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+  const panel = element?.querySelector(".param-panel");
+  const details = panel?.querySelector(
+    ".parameter-task-details:not(.parameter-task-details-outgoing)",
+  );
+  const segmented = panel?.querySelector(".omni-reference-task-type-segmented");
+  if (!element || !panel || !details || !segmented) return;
+
+  syncNodeVisualLayout(node, element);
+  syncNodePopoverLayout(element);
+  const buttons = [...segmented.querySelectorAll('[data-action="omni-reference-task-type"]')];
+  const targetButton = buttons[transition.toIndex];
+  if (transition.restoreFocus) targetButton?.focus({ preventScroll: true });
+  if (!transition.shouldAnimate || reducedMotionQuery.matches) return;
+
+  const targetHeight = panel.offsetHeight;
+  const targetRect = panel.getBoundingClientRect();
+  const compositeScale = panel.offsetWidth > 0 ? targetRect.width / panel.offsetWidth : 1;
+  if (!targetHeight || !compositeScale) return;
+
+  const detailsChanging = transition.fromDetailsSignature !== details.innerHTML;
+  const startTranslateX = (transition.fromLeft - targetRect.left) / compositeScale;
+  const startTranslateY = (transition.fromBottom - targetRect.bottom) / compositeScale
+    + targetHeight - transition.fromHeight;
+  const outgoingDetails = detailsChanging ? transition.outgoingDetails : [];
+  outgoingDetails.forEach((outgoing) => {
+    outgoing.element.style.top = `${outgoing.top}px`;
+    outgoing.element.style.left = `${outgoing.left}px`;
+    outgoing.element.style.width = `${outgoing.width}px`;
+    outgoing.element.style.setProperty("--task-type-outgoing-start-opacity", outgoing.opacity);
+    outgoing.element.style.setProperty(
+      "--task-type-exit-offset",
+      `${transition.direction * -5}px`,
+    );
+    panel.append(outgoing.element);
+  });
+
+  panel.classList.add("is-task-type-transitioning", "is-task-type-preparing");
+  if (detailsChanging) panel.classList.add("is-task-type-details-changing");
+  panel.style.height = `${transition.fromHeight}px`;
+  panel.style.transform = `translate(${startTranslateX}px, ${startTranslateY}px)`;
+  if (detailsChanging) {
+    details.style.setProperty("--task-type-enter-offset", `${transition.direction * 7}px`);
+  }
+  segmented.style.setProperty(
+    "--task-type-selection-offset",
+    `${transition.fromSelectionOffset}px`,
+  );
+  panel.getBoundingClientRect();
+
+  let finished = false;
+  let fallbackTimer = 0;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    window.clearTimeout(fallbackTimer);
+    panel.classList.remove(
+      "is-task-type-transitioning",
+      "is-task-type-preparing",
+      "is-task-type-entered",
+      "is-task-type-details-changing",
+    );
+    panel.style.removeProperty("height");
+    panel.style.removeProperty("transform");
+    details.style.removeProperty("--task-type-enter-offset");
+    segmented.style.removeProperty("--task-type-selection-offset");
+    outgoingDetails.forEach((outgoing) => outgoing.element.remove());
+    if (panel.isConnected) scheduleNodePopoverLayouts();
+  };
+  const onTransitionEnd = (event) => {
+    if (event.target !== panel || event.propertyName !== "height") return;
+    panel.removeEventListener("transitionend", onTransitionEnd);
+    finish();
+  };
+  panel.addEventListener("transitionend", onTransitionEnd);
+
+  requestAnimationFrame(() => {
+    if (!panel.isConnected) {
+      finish();
+      return;
+    }
+    panel.classList.remove("is-task-type-preparing");
+    panel.classList.add("is-task-type-entered");
+    panel.style.height = `${targetHeight}px`;
+    panel.style.transform = "translate(0, 0)";
+    segmented.style.removeProperty("--task-type-selection-offset");
+    fallbackTimer = window.setTimeout(finish, 360);
   });
 }
 
@@ -1487,6 +1668,7 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     duration: "",
     count: 1,
     workflow: "",
+    omniReferenceTaskType: "",
     audioEnabled: generationMode === "video",
     promptOptimizing: false,
     autoLinkEnabled: true,
@@ -1542,6 +1724,12 @@ function getCapabilityValues(node, key) {
   return capabilities[key] || [];
 }
 
+function getCapabilityDisplayLabel(node, action, value) {
+  const labels = getModelCapabilities(node)[`${action}Labels`];
+  const label = labels && typeof labels === "object" ? labels[value] : null;
+  return typeof label === "string" && label ? label : String(value ?? "");
+}
+
 function getDurationCapability(node, quality = node?.quality) {
   const capabilities = getModelCapabilities(node);
   const candidate = capabilities.durationRangesByQuality?.[quality] || capabilities.durationRange;
@@ -1585,10 +1773,100 @@ function getWorkflowDefinition(node) {
   return workflows.find((workflow) => workflow.id === node.workflow) || workflows[0] || null;
 }
 
+function getOmniReferenceTaskTypeCapability(node) {
+  const capability = getModelCapabilities(node).omniReferenceTaskType;
+  return capability && typeof capability === "object" && Array.isArray(capability.values)
+    ? capability
+    : null;
+}
+
+function getOmniReferenceTaskTypeConstraint(node) {
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  if (!capability) return null;
+  const constraint = capability.constraints?.[node.omniReferenceTaskType];
+  return constraint && typeof constraint === "object" ? constraint : {};
+}
+
+function getOmniReferenceTaskTypeLabel(node, value = node?.omniReferenceTaskType) {
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  const label = capability?.labels?.[value];
+  return typeof label === "string" && label ? label : String(value ?? "");
+}
+
+function getReferenceVideoAssets(node) {
+  if (!node || node.kind !== "generator") return [];
+  const directAssets = (Array.isArray(node.assets) ? node.assets : [])
+    .map((asset) => ({ asset, sourceNodeId: null }));
+  const linkedAssets = getIncomingConnections(node.id)
+    .map((connection) => {
+      const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
+      return source ? { asset: getEditableMedia(source), sourceNodeId: source.id } : null;
+    })
+    .filter(Boolean);
+  return [...directAssets, ...linkedAssets].flatMap(({ asset, sourceNodeId }) => {
+    const url = typeof asset?.url === "string" ? asset.url.trim() : "";
+    if (asset?.type !== "video" || !url) return [];
+    const duration = Number(asset.duration);
+    return [{
+      assetId: typeof asset.id === "string" ? asset.id : null,
+      sourceNodeId,
+      url,
+      duration: Number.isFinite(duration) && duration > 0 ? duration : null,
+    }];
+  });
+}
+
+function getOmniReferenceTaskTypeIssue(node) {
+  const constraint = getOmniReferenceTaskTypeConstraint(node);
+  if (!constraint?.referenceVideoRequired) return "";
+  const label = getOmniReferenceTaskTypeLabel(node) || "当前任务";
+  const referenceVideos = getReferenceVideoAssets(node);
+  if (!referenceVideos.length) return `${label}需要至少添加一个参考视频`;
+
+  const durationRange = constraint.referenceVideoDurationRange;
+  if (!durationRange) return "";
+  const durations = referenceVideos.map((asset) => Number(asset.duration));
+  if (durations.some((duration) => !Number.isFinite(duration) || duration <= 0)) {
+    return "请等待参考视频时长读取完成";
+  }
+  if (durations.some((duration) => duration < durationRange.min || duration > durationRange.max)) {
+    return `${label}的参考视频时长须为 ${durationRange.min}–${durationRange.max} 秒`;
+  }
+  return "";
+}
+
+function getGenerationOutputDurationSeconds(node, referenceVideos) {
+  const taskConstraint = getOmniReferenceTaskTypeConstraint(node);
+  if (taskConstraint?.duration !== -1) return getNormalizedDurationSeconds(node);
+  const resolvedReferences = Array.isArray(referenceVideos)
+    ? referenceVideos
+    : getReferenceVideoAssets(node);
+  const durations = resolvedReferences.map((asset) => Number(asset.duration));
+  if (!durations.length || durations.some((duration) => !Number.isFinite(duration) || duration <= 0)) return null;
+  return Math.max(...durations);
+}
+
 function normalizeNodeParameters(node) {
   if (!node || node.kind !== "generator") return node;
+  const legacyWorkflow = node.workflow;
   const model = generatorModelPolicy.normalizeModelState(models, node);
   const expectedMode = getNodeGenerationMode(node) || "image";
+  const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+  if (taskTypeCapability) {
+    const legacyTaskType = legacyWorkflow === "video-edit"
+      ? "edit"
+      : legacyWorkflow === "video-extend" ? "extend" : "";
+    const defaultTaskType = model?.defaults?.omniReferenceTaskType;
+    node.omniReferenceTaskType = taskTypeCapability.values.includes(legacyTaskType)
+      ? legacyTaskType
+      : taskTypeCapability.values.includes(node.omniReferenceTaskType)
+        ? node.omniReferenceTaskType
+        : taskTypeCapability.values.includes(defaultTaskType)
+          ? defaultTaskType
+          : taskTypeCapability.values[0] || "";
+  } else {
+    delete node.omniReferenceTaskType;
+  }
   const workflows = getWorkflowDefinitions(node);
   if (!workflows.some((workflow) => workflow.id === node.workflow)) {
     const defaultWorkflow = model?.defaults?.workflow;
@@ -1608,6 +1886,9 @@ function normalizeNodeParameters(node) {
     resolution: "resolutions",
     quality: "qualities",
   };
+  if (node.aspect === "Auto" && getCapabilityValues(node, "aspects").includes("adaptive")) {
+    node.aspect = "adaptive";
+  }
   for (const [field, capabilityKey] of Object.entries(fieldMap)) {
     const values = getCapabilityValues(node, capabilityKey);
     if (!values.length) {
@@ -1618,6 +1899,11 @@ function normalizeNodeParameters(node) {
       const defaultValue = model?.defaults?.[field];
       node[field] = values.includes(defaultValue) ? defaultValue : values[0];
     }
+  }
+
+  const constrainedAspect = getOmniReferenceTaskTypeConstraint(node)?.aspect;
+  if (constrainedAspect && getCapabilityValues(node, "aspects").includes(constrainedAspect)) {
+    node.aspect = constrainedAspect;
   }
 
   const durationSeconds = getNormalizedDurationSeconds(node);
@@ -1655,24 +1941,28 @@ function getCost(node) {
   const quality = qualities.includes(node.quality) ? node.quality : qualities[0];
   const baseCost = Number(videoQualityCost[quality]);
   if (!quality || !Number.isFinite(baseCost)) return null;
-  const seconds = getNormalizedDurationSeconds(node);
+  const seconds = getGenerationOutputDurationSeconds(node);
   if (!Number.isFinite(seconds)) return null;
   const durationMultiplier = Math.ceil(seconds / 4);
   return baseCost * durationMultiplier * count;
 }
 
 function getGenerationAvailability(node) {
+  const taskTypeIssue = getOmniReferenceTaskTypeIssue(node);
   const cost = getCost(node);
   const hasValidPrice = Number.isFinite(cost) && cost > 0;
   const hasPrompt = Boolean(node.prompt.trim());
-  const canGenerate = hasPrompt && !node.generating && !node.promptOptimizing && hasValidPrice;
+  const canGenerate = hasPrompt && !node.generating && !node.promptOptimizing && hasValidPrice && !taskTypeIssue;
   return {
     cost,
     hasValidPrice,
+    taskTypeIssue,
     canGenerate,
     tooltip: canGenerate
       ? "生成"
-      : !hasValidPrice
+      : taskTypeIssue
+        ? taskTypeIssue
+        : !hasValidPrice
         ? "当前模型暂不可计价"
         : node.promptOptimizing
           ? "正在优化提示词"
@@ -1689,11 +1979,22 @@ function getParamLabel(node) {
 
 function getParamLabelParts(node) {
   if (getNodeGenerationMode(node) === "video") {
+    const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+    const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
+    const workflows = getWorkflowDefinitions(node);
     const workflow = getWorkflowDefinition(node);
+    const modeLabel = taskTypeCapability
+      ? getOmniReferenceTaskTypeLabel(node)
+      : workflows.length > 1 ? workflow?.label : "";
+    const aspect = getCapabilityDisplayLabel(node, "aspect", node.aspect);
+    const quality = getCapabilityDisplayLabel(node, "quality", node.quality);
+    const duration = taskTypeConstraint?.duration === -1
+      ? "跟随原视频"
+      : node.duration;
     return {
-      beforeAspect: workflow?.label ? `${workflow.label} · ` : "",
-      aspect: node.aspect,
-      afterAspect: ` · ${node.quality} · ${node.duration}`,
+      beforeAspect: modeLabel ? `${modeLabel} · ` : "",
+      aspect,
+      afterAspect: ` · ${quality}${taskTypeConstraint?.hideDuration ? "" : ` · ${duration}`}`,
     };
   }
   const quality = getCapabilityValues(node, "qualities").length ? ` · ${node.quality}` : "";
@@ -2170,6 +2471,7 @@ function presetFrom(node) {
     duration: node.duration,
     count: node.count,
     workflow: node.workflow,
+    omniReferenceTaskType: node.omniReferenceTaskType,
     audioEnabled: node.audioEnabled,
   };
 }
@@ -2188,6 +2490,7 @@ function applyPreset(node, preset) {
   node.duration = preset.duration;
   node.count = preset.count;
   node.workflow = preset.workflow;
+  node.omniReferenceTaskType = preset.omniReferenceTaskType;
   node.audioEnabled = preset.audioEnabled;
   normalizeNodeParameters(node);
   node.modelFilter = node.mode;
@@ -2588,7 +2891,7 @@ function getMediaSpec(node, asset = getActiveAsset(node)) {
   }
 
   if (!node.preview) return "";
-  if (node.mode === "video") return node.quality;
+  if (node.mode === "video") return getCapabilityDisplayLabel(node, "quality", node.quality);
   if (node.generatedAsset?.width && node.generatedAsset?.height) return formatMediaSize(node.generatedAsset.width, node.generatedAsset.height);
   const size = getGeneratedResolution(node);
   return formatMediaSize(size.width, size.height);
@@ -4068,21 +4371,45 @@ function audioWaveformBars(repeat = 1) {
 }
 
 function createGenerationParameterSnapshot(node) {
-  return {
+  const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+  const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
+  const requestAspect = taskTypeConstraint?.aspect || node.aspect;
+  const hasFixedDuration = Boolean(taskTypeConstraint && Object.hasOwn(taskTypeConstraint, "duration"));
+  const requestDuration = hasFixedDuration ? taskTypeConstraint.duration : node.duration;
+  const referenceVideos = getReferenceVideoAssets(node);
+  const outputDuration = getGenerationOutputDurationSeconds(node, referenceVideos);
+  const snapshot = {
     mediaKind: getNodeGenerationMode(node),
     model: node.model,
     prompt: node.prompt,
-    aspect: node.aspect,
+    aspect: requestAspect,
     resolution: node.resolution,
     quality: node.quality,
-    duration: node.duration,
+    duration: requestDuration,
+    outputDuration,
     count: node.count,
     workflow: node.workflow,
     audioEnabled: node.audioEnabled,
     autoLinkEnabled: node.autoLinkEnabled,
     assetValidationEnabled: node.assetValidationEnabled,
     assetIds: (node.assets || []).map((asset) => asset.id),
+    referenceVideos: referenceVideos.map(({ assetId, sourceNodeId, url, duration }) => ({
+      assetId,
+      sourceNodeId,
+      url,
+      duration,
+    })),
   };
+  if (taskTypeCapability) {
+    const parameter = taskTypeCapability.parameter || "omni_reference_task_type";
+    snapshot.omniReferenceTaskType = node.omniReferenceTaskType;
+    snapshot.providerParameters = {
+      [parameter]: node.omniReferenceTaskType,
+      ratio: requestAspect,
+      duration: hasFixedDuration ? taskTypeConstraint.duration : getNormalizedDurationSeconds(node),
+    };
+  }
+  return snapshot;
 }
 
 function createGeneratedAsset(parameterSnapshot) {
@@ -4104,6 +4431,9 @@ function createGeneratedAsset(parameterSnapshot) {
 
   if (mediaKind === "video") {
     generated.aspectRatio = aspectStringToRatio(parameterSnapshot.aspect);
+    if (Number.isFinite(parameterSnapshot.outputDuration) && parameterSnapshot.outputDuration > 0) {
+      generated.duration = parameterSnapshot.outputDuration;
+    }
   }
 
   return generated;
@@ -4802,11 +5132,11 @@ function createGeneratorNodeElement(node) {
 
   const durationRange = el.querySelector("[data-duration-range]");
   durationRange?.addEventListener("input", (event) => {
-    const min = Number(event.currentTarget.dataset.durationMin);
+    const min = Number(event.currentTarget.min);
     const max = Number(event.currentTarget.max);
     const seconds = clamp(Number(event.currentTarget.value), min, max);
     const value = `${seconds}s`;
-    const progress = max > 0 ? (seconds / max) * 100 : 100;
+    const progress = max > min ? ((seconds - min) / (max - min)) * 100 : 100;
     event.currentTarget.value = String(seconds);
     event.currentTarget.style.setProperty("--duration-progress", `${progress}%`);
     event.currentTarget.setAttribute("aria-valuetext", value);
@@ -4814,7 +5144,7 @@ function createGeneratorNodeElement(node) {
     if (current) current.textContent = value;
   });
   durationRange?.addEventListener("change", (event) => {
-    const min = Number(event.currentTarget.dataset.durationMin);
+    const min = Number(event.currentTarget.min);
     const max = Number(event.currentTarget.max);
     const seconds = clamp(Number(event.currentTarget.value), min, max);
     event.currentTarget.value = String(seconds);
@@ -5600,6 +5930,17 @@ function startSimulatedGeneration(node, options = {}) {
     return false;
   }
 
+  const taskTypeIssue = getOmniReferenceTaskTypeIssue(node);
+  if (taskTypeIssue) {
+    showConfirmDialog({
+      title: "任务参数不完整",
+      body: taskTypeIssue,
+      confirmText: "知道了",
+      showCancel: false,
+    });
+    return false;
+  }
+
   const cost = getCost(node);
   if (!Number.isFinite(cost) || cost <= 0) {
     showConfirmDialog({
@@ -5706,16 +6047,24 @@ function materialPanel() {
 function paramPanel(node) {
   normalizeNodeParameters(node);
   const mode = getNodeGenerationMode(node) || "image";
-  const sections = [
+  const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
+  const constrainedAspect = taskTypeConstraint?.aspect;
+  const aspectValues = constrainedAspect && getCapabilityValues(node, "aspects").includes(constrainedAspect)
+    ? [constrainedAspect]
+    : getCapabilityValues(node, "aspects");
+  const modeSections = [
+    mode === "video" ? omniReferenceTaskTypeParameterSection(node) : "",
     mode === "video" ? workflowParameterSection(node) : "",
-    parameterSection(node, "比例", "aspect", getCapabilityValues(node, "aspects")),
+  ];
+  const detailSections = [
+    parameterSection(node, "比例", "aspect", aspectValues),
     mode === "video"
       ? parameterSection(node, "分辨率", "quality", getCapabilityValues(node, "qualities"))
       : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
     mode === "image" && getCapabilityValues(node, "qualities").length
       ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
       : "",
-    mode === "video" ? durationParameterSection(node) : "",
+    mode === "video" && !taskTypeConstraint?.hideDuration ? durationParameterSection(node) : "",
     mode === "video" ? `
       <section class="parameter-group parameter-audio">
         <div class="param-heading">音频</div>
@@ -5726,19 +6075,44 @@ function paramPanel(node) {
       </section>
     ` : "",
   ];
+  const taskType = taskTypeCapabilityValue(node);
   return `
-    <section class="panel-popover param-panel" data-node-popover data-anchor-action="param-panel" aria-label="综合参数">
-      <div class="param-section">${sections.join("")}</div>
+    <section class="panel-popover param-panel ${taskTypeConstraint?.hideDuration ? "is-task-type-compact" : ""}" data-node-popover data-anchor-action="param-panel" data-omni-reference-task-type="${escapeHtml(taskType)}" aria-label="综合参数">
+      <div class="param-section">
+        ${modeSections.join("")}
+        <div class="parameter-task-details">${detailSections.join("")}</div>
+      </div>
+    </section>
+  `;
+}
+
+function taskTypeCapabilityValue(node) {
+  return getOmniReferenceTaskTypeCapability(node) ? node.omniReferenceTaskType || "" : "";
+}
+
+function omniReferenceTaskTypeParameterSection(node) {
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  const values = Array.isArray(capability?.uiValues) ? capability.uiValues : [];
+  if (!values.length) return "";
+  const activeIndex = Math.max(0, values.indexOf(node.omniReferenceTaskType));
+  return `
+    <section class="parameter-group parameter-omni-reference-task-type">
+      <div class="param-heading">模式</div>
+      <div class="segmented omni-reference-task-type-segmented" style="--option-columns: ${values.length}; --task-type-selection-index: ${activeIndex}">
+        ${values.map((value) => `
+          <button class="${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" data-canvas-mutation type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
+        `).join("")}
+      </div>
     </section>
   `;
 }
 
 function workflowParameterSection(node) {
   const workflows = getWorkflowDefinitions(node);
-  if (!workflows.length) return "";
+  if (workflows.length <= 1) return "";
   return `
     <section class="parameter-group parameter-workflow">
-      <div class="param-heading">生成方式</div>
+      <div class="param-heading">模式</div>
       <div class="segmented workflow-segmented" style="--option-columns: ${workflows.length}">
         ${workflows.map((workflow) => `
           <button class="${node.workflow === workflow.id ? "active" : ""}" data-action="workflow" data-value="${workflow.id}" data-canvas-mutation type="button">${escapeHtml(workflow.label)}</button>
@@ -5749,38 +6123,26 @@ function workflowParameterSection(node) {
 }
 
 function durationParameterSection(node) {
+  if (getOmniReferenceTaskTypeConstraint(node)?.duration === -1) {
+    return `
+      <section class="parameter-group parameter-duration parameter-duration-locked">
+        <div class="duration-heading"><span class="param-heading">时长</span><span class="duration-current">-1</span></div>
+        <div class="segmented duration-locked-segmented" style="--option-columns: 1">
+          <button class="active" type="button" disabled aria-disabled="true">跟随原视频</button>
+        </div>
+      </section>
+    `;
+  }
   const range = getDurationCapability(node);
   const seconds = getNormalizedDurationSeconds(node);
   if (!range || !Number.isFinite(seconds)) return "";
-  const progress = range.max > 0
-    ? (seconds / range.max) * 100
+  const progress = range.max > range.min
+    ? ((seconds - range.min) / (range.max - range.min)) * 100
     : 100;
-  const durationOffset = (value) => range.max > 0
-    ? (value / range.max) * 100
-    : 0;
-  const usesCompactScale = range.max <= 15;
-  const declaredMarks = Array.isArray(range.marks) ? range.marks : [];
-  const compactGuide = declaredMarks.reduce((nearest, value) => (
-    Math.abs(value - range.max * (2 / 3)) < Math.abs(nearest - range.max * (2 / 3)) ? value : nearest
-  ), range.max);
-  const scaleLabels = usesCompactScale
-    ? [...new Set([0, range.min, compactGuide, range.max])]
-    : [...new Set([0, ...declaredMarks, range.max])];
-  const scaleMarks = usesCompactScale
-    ? [...new Set([range.min, compactGuide])]
-    : declaredMarks.filter((value) => value > 0 && value < range.max);
   return `
     <section class="parameter-group parameter-duration">
       <div class="duration-heading"><span class="param-heading">时长</span><span class="duration-current">${seconds}s</span></div>
-      <input class="duration-range-input" data-duration-range data-duration-min="${range.min}" type="range" min="0" max="${range.max}" step="${range.step}" value="${seconds}" style="--duration-progress: ${progress}%" aria-label="时长" aria-valuemin="${range.min}" aria-valuetext="${seconds}s" />
-      <div class="duration-scale ${usesCompactScale ? "is-compact-range" : "is-wide-range"}" aria-hidden="true">
-        <div class="duration-scale-ticks">
-          ${scaleMarks.map((value) => `<i class="duration-scale-tick${scaleLabels.includes(value) ? " is-major" : ""}" style="--duration-mark-offset: ${durationOffset(value)}%"></i>`).join("")}
-        </div>
-        <div class="duration-scale-labels">
-          ${scaleLabels.map((value, index) => `<span class="duration-scale-label${index === 0 ? " is-start" : index === scaleLabels.length - 1 ? " is-end" : " is-middle"}" style="--duration-mark-offset: ${durationOffset(value)}%">${value}</span>`).join("")}
-        </div>
-      </div>
+      <input class="duration-range-input" data-duration-range type="range" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" style="--duration-progress: ${progress}%" aria-label="时长" aria-valuemin="${range.min}" aria-valuetext="${seconds}s" />
     </section>
   `;
 }
@@ -5842,10 +6204,19 @@ function parameterSection(node, label, action, values) {
 function paramButton(node, action, value) {
   const aspectIcon = action === "aspect" ? renderAspectIcon(value) : "";
   const pressed = action === "aspect" ? ` aria-pressed="${node[action] === value}"` : "";
-  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" data-canvas-mutation type="button"${pressed}>${aspectIcon}<span>${value}</span></button>`;
+  const displayLabel = getCapabilityDisplayLabel(node, action, value);
+  const constrainedAspect = action === "aspect" ? getOmniReferenceTaskTypeConstraint(node)?.aspect : "";
+  const disabled = Boolean(constrainedAspect && value !== constrainedAspect);
+  const disabledAttributes = disabled
+    ? ` disabled aria-disabled="true" title="当前任务类型仅支持 ${escapeHtml(getCapabilityDisplayLabel(node, "aspect", constrainedAspect))} 比例"`
+    : "";
+  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${escapeHtml(value)}" data-canvas-mutation type="button"${pressed}${disabledAttributes}>${aspectIcon}<span>${escapeHtml(displayLabel)}</span></button>`;
 }
 
 function renderAspectIcon(value) {
+  if (["auto", "adaptive"].includes(String(value).toLowerCase())) {
+    return `<svg class="aspect-option-icon aspect-option-icon-auto" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2H2v4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>`;
+  }
   const ratio = aspectStringToRatio(value);
   const width = ratio >= 1 ? 16 : Math.max(6, Math.round(16 * ratio));
   const height = ratio >= 1 ? Math.max(6, Math.round(16 / ratio)) : 16;
@@ -5863,6 +6234,7 @@ const generationLockedActions = new Set([
   "param-panel",
   "model",
   "workflow",
+  "omni-reference-task-type",
   "audio",
   "prompt-optimization",
   "auto-link",
@@ -5874,7 +6246,9 @@ const generationLockedActions = new Set([
 ]);
 
 function handleAction(node, action, value) {
-  if (action !== "aspect") canvasNodeLayoutTransition.finishAll();
+  if (action !== "aspect" && action !== "omni-reference-task-type") {
+    canvasNodeLayoutTransition.finishAll();
+  }
   if (action === "focus-linked-source") {
     const connection = state.connections.find((item) => item.id === value);
     const source = connection && state.nodes.find((item) => item.id === connection.sourceNodeId);
@@ -5897,6 +6271,7 @@ function handleAction(node, action, value) {
     "generate",
     "model",
     "workflow",
+    "omni-reference-task-type",
     "audio",
     "auto-link",
     "asset-validation",
@@ -5910,6 +6285,7 @@ function handleAction(node, action, value) {
   const undoableActions = new Set([
     "model",
     "workflow",
+    "omni-reference-task-type",
     "audio",
     "auto-link",
     "asset-validation",
@@ -5919,6 +6295,7 @@ function handleAction(node, action, value) {
     "resolution",
   ]);
   const before = undoableActions.has(action) ? cloneNodeState(node) : null;
+  let taskTypeTransition = null;
 
   switch (action) {
     case "entity-picker":
@@ -6007,6 +6384,22 @@ function handleAction(node, action, value) {
       node.panel = "params";
       rememberPreset(node);
       break;
+    case "omni-reference-task-type": {
+      const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+      if (!taskTypeCapability?.uiValues?.includes(value)) return;
+      if (node.omniReferenceTaskType === value) return;
+      taskTypeTransition = captureTaskTypeParameterTransition(node, value);
+      node.omniReferenceTaskType = value;
+      const constrainedAspect = taskTypeCapability.constraints?.[value]?.aspect;
+      if (constrainedAspect && node.aspect !== constrainedAspect) {
+        applyNodeAspect(node, constrainedAspect);
+      } else {
+        normalizeNodeParameters(node);
+      }
+      node.panel = "params";
+      rememberPreset(node);
+      break;
+    }
     case "audio":
       if (getNodeGenerationMode(node) !== "video") return;
       node.audioEnabled = value !== "off";
@@ -6042,6 +6435,7 @@ function handleAction(node, action, value) {
     pushUndoAction({ type: "node-update", node: before });
   }
   render();
+  if (taskTypeTransition) animateTaskTypeParameterTransition(node, taskTypeTransition);
 }
 
 function closeConnectionCreateMenu() {
@@ -8286,10 +8680,19 @@ function requestRunGroup(group) {
     return;
   }
 
-  const generationCosts = generators.map((node) => {
-    normalizeNodeParameters(node);
-    return getCost(node);
-  });
+  generators.forEach((node) => normalizeNodeParameters(node));
+  const taskTypeIssues = generators.map((node) => getOmniReferenceTaskTypeIssue(node)).filter(Boolean);
+  if (taskTypeIssues.length) {
+    showConfirmDialog({
+      title: "组内任务参数不完整",
+      body: taskTypeIssues[0],
+      confirmText: "知道了",
+      showCancel: false,
+    });
+    return;
+  }
+
+  const generationCosts = generators.map((node) => getCost(node));
   if (generationCosts.some((cost) => !Number.isFinite(cost) || cost <= 0)) {
     showConfirmDialog({
       title: "组内存在不可用模型",

@@ -31,6 +31,64 @@ for (const model of catalog) {
   assert.ok(Array.isArray(capabilities.counts) && capabilities.counts.length > 0, `${model.id} needs counts.`);
   assert.ok(capabilities.counts.every((count) => Number.isInteger(count) && count > 0), `${model.id} has invalid counts.`);
 
+  for (const [valuesField, labelsField] of [
+    ["aspects", "aspectLabels"],
+    ["qualities", "qualityLabels"],
+  ]) {
+    const labels = capabilities[labelsField];
+    if (!labels) continue;
+    assert.ok(labels && typeof labels === "object" && !Array.isArray(labels), `${model.id} has invalid ${labelsField}.`);
+    for (const [value, label] of Object.entries(labels)) {
+      assert.ok(capabilities[valuesField]?.includes(value), `${model.id} labels an unavailable ${valuesField} value: ${value}.`);
+      assert.ok(typeof label === "string" && label.trim(), `${model.id} has an empty label for ${value}.`);
+    }
+  }
+
+  const taskType = capabilities.omniReferenceTaskType;
+  if (taskType !== undefined) {
+    assert.equal(model.type, "video", `${model.id} exposes an omni-reference task type outside video generation.`);
+    assert.ok(typeof taskType.parameter === "string" && taskType.parameter.trim(), `${model.id} needs a task type parameter.`);
+    assert.ok(Array.isArray(taskType.values) && taskType.values.length > 0, `${model.id} needs task type values.`);
+    assert.equal(new Set(taskType.values).size, taskType.values.length, `${model.id} has duplicate task type values.`);
+    assert.ok(taskType.values.every((value) => typeof value === "string" && value.trim()), `${model.id} has an invalid task type value.`);
+    assert.ok(Array.isArray(taskType.uiValues) && taskType.uiValues.length > 0, `${model.id} needs visible task type values.`);
+    assert.equal(new Set(taskType.uiValues).size, taskType.uiValues.length, `${model.id} has duplicate visible task type values.`);
+    assert.ok(taskType.uiValues.every((value) => taskType.values.includes(value)), `${model.id} exposes an unsupported task type in the UI.`);
+    assert.ok(taskType.labels && typeof taskType.labels === "object" && !Array.isArray(taskType.labels), `${model.id} needs task type labels.`);
+    assert.ok(
+      taskType.values.every((value) => typeof taskType.labels[value] === "string" && taskType.labels[value].trim()),
+      `${model.id} has incomplete task type labels.`,
+    );
+    assert.ok(taskType.constraints && typeof taskType.constraints === "object" && !Array.isArray(taskType.constraints), `${model.id} needs task type constraints.`);
+    assert.ok(
+      Object.keys(taskType.constraints).every((value) => taskType.values.includes(value)),
+      `${model.id} defines constraints for an unsupported task type.`,
+    );
+    assert.ok(
+      taskType.values.filter((value) => value !== "auto").every((value) => Object.hasOwn(taskType.constraints, value)),
+      `${model.id} has incomplete explicit task type constraints.`,
+    );
+    for (const [value, constraints] of Object.entries(taskType.constraints)) {
+      assert.ok(constraints && typeof constraints === "object" && !Array.isArray(constraints), `${model.id} has invalid constraints for ${value}.`);
+      if (constraints.aspect !== undefined) {
+        assert.ok(capabilities.aspects.includes(constraints.aspect), `${model.id} constrains ${value} to an unavailable aspect.`);
+      }
+      if (constraints.duration !== undefined) {
+        assert.ok(Number.isInteger(constraints.duration), `${model.id} has an invalid fixed duration for ${value}.`);
+      }
+      if (constraints.referenceVideoDurationRange !== undefined) {
+        const range = constraints.referenceVideoDurationRange;
+        assert.ok(
+          Number.isInteger(range?.min) && Number.isInteger(range?.max) && range.min > 0 && range.max >= range.min,
+          `${model.id} has an invalid reference video duration range for ${value}.`,
+        );
+      }
+    }
+    assert.ok(taskType.values.includes(model.defaults?.omniReferenceTaskType), `${model.id} default task type is unavailable.`);
+  } else {
+    assert.equal(model.defaults?.omniReferenceTaskType, undefined, `${model.id} has a task type default without declaring the capability.`);
+  }
+
   for (const [field, capability] of Object.entries({
     aspect: "aspects",
     resolution: "resolutions",
@@ -50,7 +108,7 @@ for (const model of catalog) {
     assert.ok(range.min > 0 && range.max >= range.min, `${model.id} has an invalid duration range.`);
     assert.equal(range.step, 1, `${model.id} duration must support one-second steps.`);
     assert.ok(seconds >= range.min && seconds <= range.max, `${model.id} default duration is outside its range.`);
-    assert.equal(seconds, range.min, `${model.id} default duration must start at the model minimum.`);
+    assert.equal((seconds - range.min) % range.step, 0, `${model.id} default duration does not align to its step.`);
     assert.ok(
       Array.isArray(range.marks) && range.marks.every((mark) => mark >= range.min && mark <= range.max),
       `${model.id} has invalid duration marks.`,
@@ -110,6 +168,15 @@ for (const model of catalog) {
       assert.ok(config.videoQualityCost[quality] > 0, `Missing video cost for ${quality}.`);
     }
   }
+}
+
+const declaredVideoWorkflowIds = new Set(
+  catalog
+    .filter((model) => model.type === "video")
+    .flatMap((model) => model.capabilities?.workflows || []),
+);
+for (const workflow of config.generationWorkflows.video || []) {
+  assert.ok(declaredVideoWorkflowIds.has(workflow.id), `Video workflow ${workflow.id} is not used by any model.`);
 }
 
 const toolIds = new Set(Object.keys(config.mediaToolDefinitions));
