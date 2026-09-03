@@ -117,6 +117,9 @@
     node.duration = boundedString(candidate.duration, "", 40);
     node.count = finiteInteger(candidate.count, 1, 1, 100);
     node.workflow = boundedString(candidate.workflow, "", 80);
+    if (typeof candidate.omniReferenceTaskType === "string") {
+      node.omniReferenceTaskType = boundedString(candidate.omniReferenceTaskType, "", 80);
+    }
     node.audioEnabled = candidate.audioEnabled === true;
     node.autoLinkEnabled = candidate.autoLinkEnabled !== false;
     node.assetValidationEnabled = node.mediaKind === "video" && candidate.assetValidationEnabled === true;
@@ -234,7 +237,7 @@
   function serializeLastPreset(candidate) {
     const preset = candidate && typeof candidate === "object" ? candidate : {};
     const mode = GENERATOR_MODES.has(preset.mode) ? preset.mode : "image";
-    return {
+    const serializedPreset = {
       mode,
       model: boundedString(preset.model, "", 200),
       aspect: boundedString(preset.aspect, "", 40),
@@ -245,6 +248,10 @@
       workflow: boundedString(preset.workflow, "", 80),
       audioEnabled: preset.audioEnabled === true,
     };
+    if (typeof preset.omniReferenceTaskType === "string") {
+      serializedPreset.omniReferenceTaskType = boundedString(preset.omniReferenceTaskType, "", 80);
+    }
+    return serializedPreset;
   }
 
   function createSnapshot(state) {

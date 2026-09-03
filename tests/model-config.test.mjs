@@ -65,23 +65,71 @@ test("default GPT Image 2 generation keeps the five-credit prototype cost", () =
 test("Seedance 2.5 drives the reference parameter layout", () => {
   const seedance = catalog.find((model) => model.id === "seedance-2-5");
   assert.ok(seedance);
-  assert.deepEqual([...seedance.capabilities.workflows], ["omni-reference", "first-last-frame"]);
-  assert.deepEqual([...seedance.capabilities.aspects], ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+  assert.deepEqual([...seedance.capabilities.workflows], ["omni-reference"]);
+  assert.deepEqual({
+    ...seedance.capabilities.omniReferenceTaskType,
+    values: [...seedance.capabilities.omniReferenceTaskType.values],
+    uiValues: [...seedance.capabilities.omniReferenceTaskType.uiValues],
+    labels: { ...seedance.capabilities.omniReferenceTaskType.labels },
+    constraints: {
+      reference: { ...seedance.capabilities.omniReferenceTaskType.constraints.reference },
+      edit: {
+        ...seedance.capabilities.omniReferenceTaskType.constraints.edit,
+        referenceVideoDurationRange: {
+          ...seedance.capabilities.omniReferenceTaskType.constraints.edit.referenceVideoDurationRange,
+        },
+      },
+      extend: { ...seedance.capabilities.omniReferenceTaskType.constraints.extend },
+    },
+  }, {
+    parameter: "omni_reference_task_type",
+    values: ["auto", "reference", "edit", "extend"],
+    uiValues: ["auto", "edit", "extend"],
+    labels: {
+      auto: "全模态参考",
+      reference: "参考生视频",
+      edit: "视频编辑",
+      extend: "视频延长",
+    },
+    constraints: {
+      reference: {},
+      edit: {
+        referenceVideoRequired: true,
+        referenceVideoDurationRange: { min: 4, max: 30 },
+        aspect: "adaptive",
+        duration: -1,
+        hideDuration: true,
+      },
+      extend: {
+        referenceVideoRequired: true,
+        aspect: "adaptive",
+        hideDuration: true,
+      },
+    },
+  });
+  assert.deepEqual([...seedance.capabilities.aspects], ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+  assert.deepEqual({ ...seedance.capabilities.aspectLabels }, { adaptive: "Auto" });
   assert.deepEqual([...seedance.capabilities.qualities], ["480p", "720p", "1080p"]);
+  assert.deepEqual({ ...seedance.capabilities.qualityLabels }, {
+    "480p": "480P",
+    "720p": "720P",
+    "1080p": "1080P",
+  });
   assert.deepEqual({
     ...seedance.capabilities.durationRange,
     marks: [...seedance.capabilities.durationRange.marks],
   }, {
-    min: 5,
+    min: 4,
     max: 30,
     step: 1,
-    marks: [5, 10, 15, 20, 25, 30],
+    marks: [4, 5, 10, 15, 20, 25, 30],
   });
   assert.deepEqual({ ...seedance.defaults }, {
     workflow: "omni-reference",
     aspect: "16:9",
-    quality: "720p",
-    duration: "5s",
+    quality: "480p",
+    duration: "10s",
+    omniReferenceTaskType: "auto",
   });
 });
 
@@ -111,19 +159,49 @@ test("video models expose their own second-level duration ranges and workflows",
   const seedance20 = catalog.find((model) => model.id === "seedance-2");
   const seedanceFast = catalog.find((model) => model.id === "seedance-2-fast");
   const kling = catalog.find((model) => model.id === "kling-video-3");
+  assert.deepEqual([...seedance20.capabilities.workflows], ["omni-reference"]);
+  assert.deepEqual([...seedance20.capabilities.qualities], ["480p", "720p", "1080p"]);
+  assert.deepEqual({ ...seedance20.capabilities.qualityLabels }, {
+    "480p": "480P",
+    "720p": "720P",
+    "1080p": "1080P",
+  });
   assert.deepEqual({ ...seedance20.capabilities.durationRange, marks: [...seedance20.capabilities.durationRange.marks] }, { min: 4, max: 15, step: 1, marks: [4, 5, 10, 15] });
+  assert.deepEqual([...seedanceFast.capabilities.workflows], ["omni-reference"]);
+  assert.deepEqual([...seedanceFast.capabilities.qualities], ["480p", "720p"]);
+  assert.deepEqual({ ...seedanceFast.capabilities.qualityLabels }, {
+    "480p": "480P",
+    "720p": "720P",
+  });
+  assert.equal(seedanceFast.capabilities.qualityLabels["1080p"], undefined);
   assert.deepEqual({ ...seedanceFast.capabilities.durationRange, marks: [...seedanceFast.capabilities.durationRange.marks] }, { min: 4, max: 15, step: 1, marks: [4, 5, 10, 15] });
+  assert.deepEqual([...kling.capabilities.workflows], ["text-to-video", "image-to-video", "first-last-frame"]);
+  assert.deepEqual([...kling.capabilities.aspects], ["16:9", "1:1", "9:16"]);
+  assert.deepEqual([...kling.capabilities.qualities], ["720p", "1080p", "4K"]);
+  assert.deepEqual({ ...kling.capabilities.qualityLabels }, {
+    "720p": "std (720p)",
+    "1080p": "pro (1080p)",
+    "4K": "4K",
+  });
   assert.deepEqual({ ...kling.capabilities.durationRange, marks: [...kling.capabilities.durationRange.marks] }, { min: 3, max: 15, step: 1, marks: [3, 5, 10, 15] });
   assert.equal(seedance20.defaults.duration, "4s");
   assert.equal(seedanceFast.defaults.duration, "4s");
-  assert.equal(kling.defaults.duration, "3s");
-  assert.deepEqual([...kling.capabilities.workflows], ["text-to-video", "image-to-video"]);
+  assert.equal(kling.defaults.duration, "4s");
+  assert.equal(seedanceFast.badge, "15s");
+  assert.equal(seedanceFast.defaults.workflow, "omni-reference");
+  assert.equal(seedance20.capabilities.omniReferenceTaskType, undefined);
+  assert.equal(seedanceFast.capabilities.omniReferenceTaskType, undefined);
 });
 
 test("only video nodes expose generation workflows", () => {
   assert.deepEqual([...config.generationWorkflows.image], []);
   assert.deepEqual(
-    [...config.generationWorkflows.video].map((workflow) => workflow.label),
-    ["文生视频", "全能参考", "首尾帧", "图生视频"],
+    Object.fromEntries([...config.generationWorkflows.video].map(({ id, label }) => [id, label])),
+    {
+      "text-to-video": "文生视频",
+      "omni-reference": "全能参考",
+      "first-last-frame": "首尾帧",
+      "image-to-video": "图生视频",
+    },
   );
 });
