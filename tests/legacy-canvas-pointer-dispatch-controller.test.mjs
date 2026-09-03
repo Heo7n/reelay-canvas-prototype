@@ -39,6 +39,8 @@ function createHarness() {
     moveMinimap: mark("moveMinimap"),
     resizeAssetLibrary: mark("resizeAssetLibrary"),
     resizeAgent: mark("resizeAgent"),
+    resizeAgentTop: mark("resizeAgentTop"),
+    resizeAgentBottom: mark("resizeAgentBottom"),
     finishMarquee: mark("finishMarquee"),
     finishNodeDrag: mark("finishNodeDrag"),
     finishNodeClick: mark("finishNodeClick"),
@@ -95,6 +97,14 @@ test("move dispatches candidate promotion, scheduled moves, and direct resize ac
   harness.setAction({ type: "resize-agent", startWidth: 300, startClientX: 100 });
   harness.controller.handleMove({ clientX: 70 });
   assert.deepEqual(harness.calls.at(-1), ["resizeAgent", 330]);
+
+  harness.setAction({ type: "resize-agent-top", startInset: 60, startClientY: 200 });
+  harness.controller.handleMove({ clientY: 224 });
+  assert.deepEqual(harness.calls.at(-1), ["resizeAgentTop", 84]);
+
+  harness.setAction({ type: "resize-agent-bottom", startInset: 52, startClientY: 600 });
+  harness.controller.handleMove({ clientY: 618 });
+  assert.deepEqual(harness.calls.at(-1), ["resizeAgentBottom", 34]);
 });
 
 test("asset resize finalizes once and releases its capture target", () => {

@@ -1,9 +1,9 @@
 :root {
-  --canvas-edge-inset: 12px;
+  --canvas-edge-inset: 8px;
   --canvas-edge-bar-width: 248px;
-  --canvas-project-bar-height: 40px;
-  --canvas-viewport-toolbar-height: 44px;
-  --canvas-chrome-panel-gap: 8px;
+  --canvas-project-bar-height: 38px;
+  --canvas-viewport-toolbar-height: 40px;
+  --canvas-chrome-panel-gap: 4px;
   --canvas-side-panel-top: calc(var(--canvas-edge-inset) + var(--canvas-project-bar-height) + var(--canvas-chrome-panel-gap));
   --canvas-side-panel-bottom: calc(var(--canvas-edge-inset) + var(--canvas-viewport-toolbar-height) + var(--canvas-chrome-panel-gap));
   --canvas-chrome-bg: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -34,7 +34,7 @@ html[data-theme="light"] {
   grid-template-columns: 32px 1px minmax(0, 1fr) 32px;
   gap: 4px;
   height: var(--canvas-project-bar-height);
-  padding: 3px 4px;
+  padding: 2px 4px;
   border-color: var(--canvas-chrome-border);
   border-radius: 12px;
   background: var(--canvas-chrome-bg);
@@ -340,7 +340,7 @@ html[data-theme="light"] {
 .left-rail {
   top: 50%;
   bottom: auto;
-  left: 12px;
+  left: var(--canvas-edge-inset);
   display: block;
   width: 52px;
   height: auto;
@@ -562,7 +562,7 @@ html[data-theme="light"] {
 .canvas-tool-row {
   gap: 2px;
   height: var(--canvas-viewport-toolbar-height);
-  padding: 4px;
+  padding: 3px;
   border: 1px solid var(--canvas-chrome-border);
   border-radius: 13px;
   background: var(--canvas-chrome-bg);
@@ -571,8 +571,8 @@ html[data-theme="light"] {
 }
 
 .canvas-tool-button {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 9px;
   background: transparent;
   color: var(--muted);
@@ -603,7 +603,7 @@ html[data-theme="light"] {
 }
 
 .canvas-tool-tip {
-  bottom: 41px;
+  bottom: 37px;
   font-size: 11px;
   font-weight: 680;
 }
@@ -615,8 +615,8 @@ html[data-theme="light"] {
 }
 
 .canvas-zoom-control {
-  width: 130px;
-  height: 34px;
+  width: 138px;
+  height: 32px;
   padding: 0 10px;
   overflow: hidden;
   border-radius: 9px;

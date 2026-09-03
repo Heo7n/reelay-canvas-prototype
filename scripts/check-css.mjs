@@ -66,6 +66,7 @@ function checkStructure(css, source = "combined styles") {
 }
 
 const css = await readStyle("styles.css");
+await readStyle("dev/canvas-layout-tuner.css");
 
 for (const selector of [
   ":root",

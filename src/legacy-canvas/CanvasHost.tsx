@@ -118,8 +118,11 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, on
       projectId: safeContext.projectId,
       canvasId: safeContext.canvasId,
     });
+    if (import.meta.env.DEV && new URLSearchParams(location.search).get("layoutTune") === "1") {
+      query.set("layoutTune", "1");
+    }
     return `/index.html?${query.toString()}`;
-  }, [safeContext.canvasId, safeContext.projectId, safeContext.workspaceId]);
+  }, [location.search, safeContext.canvasId, safeContext.projectId, safeContext.workspaceId]);
 
   const postToCanvas = useCallback((message: unknown): void => {
     frameRef.current?.contentWindow?.postMessage(message, window.location.origin);

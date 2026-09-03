@@ -4282,9 +4282,9 @@ html[data-theme="light"] .duration-range-input::-moz-range-thumb {
 .agent-dock {
   position: fixed;
   z-index: 70;
-  top: var(--canvas-side-panel-top, 60px);
-  right: var(--canvas-edge-inset, 12px);
-  bottom: var(--canvas-side-panel-bottom, 64px);
+  top: var(--agent-top-inset, 0px);
+  right: 0;
+  bottom: var(--agent-bottom-inset, 0px);
   width: var(--agent-width);
   pointer-events: none;
 }
@@ -4470,8 +4470,9 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   max-width: 100%;
   height: 100%;
   overflow: hidden;
-  border: 1px solid var(--agent-panel-line);
-  border-radius: 14px;
+  border: 0;
+  border-left: 1px solid var(--agent-panel-line);
+  border-radius: 0;
   background: var(--agent-panel-bg);
   color: var(--agent-panel-text);
   box-shadow: var(--agent-panel-shadow);
@@ -4481,6 +4482,16 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   transition:
     transform 0.22s ease,
     opacity 0.18s ease;
+}
+
+.agent-dock.is-inset-top .agent-panel {
+  border-top: 1px solid var(--agent-panel-line);
+  border-top-left-radius: 14px;
+}
+
+.agent-dock.is-inset-bottom .agent-panel {
+  border-bottom: 1px solid var(--agent-panel-line);
+  border-bottom-left-radius: 14px;
 }
 
 .agent-dock.collapsed .agent-panel {
@@ -4519,6 +4530,56 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 
 .agent-resize-handle:hover::after {
   opacity: 1;
+}
+
+.agent-height-resize-handle {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  left: 12px;
+  height: 12px;
+  cursor: ns-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.agent-height-resize-handle-top {
+  top: 0;
+}
+
+.agent-height-resize-handle-bottom {
+  bottom: 0;
+}
+
+.agent-height-resize-handle::after {
+  position: absolute;
+  left: 50%;
+  width: 56px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--agent-panel-line);
+  content: "";
+  opacity: 0;
+  translate: -50% 0;
+  transition: opacity 0.14s ease;
+}
+
+.agent-height-resize-handle-top::after {
+  top: 4px;
+}
+
+.agent-height-resize-handle-bottom::after {
+  bottom: 4px;
+}
+
+.agent-height-resize-handle:hover::after,
+.agent-height-resize-handle:focus-visible::after,
+.agent-dock.resizing-vertical .agent-height-resize-handle::after {
+  opacity: 1;
+}
+
+.agent-height-resize-handle:focus-visible {
+  outline: 0;
 }
 
 .agent-header {
@@ -5424,7 +5485,8 @@ html[data-theme="light"] .confirm-cancel {
     border-radius: 0;
   }
 
-  .agent-resize-handle {
+  .agent-resize-handle,
+  .agent-height-resize-handle {
     display: none;
   }
 

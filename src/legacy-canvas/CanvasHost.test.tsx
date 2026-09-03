@@ -178,6 +178,19 @@ describe("CanvasHost", () => {
     );
   });
 
+  it("forwards the explicit development layout tuner flag without leaking other route queries", async () => {
+    renderTestingLibrary(
+      <MemoryRouter initialEntries={["/w/organization-1/projects/project-1/canvases/main?layoutTune=1&draft=private"]}>
+        <CanvasHost repository={repository} context={editableContext} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTitle("Reelay 项目画布")).toHaveAttribute(
+      "src",
+      "/index.html?workspaceId=organization-1&projectId=project-1&canvasId=main&layoutTune=1",
+    );
+  });
+
   it("starts the iframe while the document loads and supports retry after failure", async () => {
     let attempt = 0;
     const getCanvasDocument = vi.fn(async () => {

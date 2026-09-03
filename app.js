@@ -101,6 +101,8 @@ const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
 const agentPanel = document.querySelector("#agentPanel");
 const agentResizeHandle = document.querySelector("#agentResizeHandle");
+const agentTopResizeHandle = document.querySelector("#agentTopResizeHandle");
+const agentBottomResizeHandle = document.querySelector("#agentBottomResizeHandle");
 const agentCloseBtn = document.querySelector("#agentCloseBtn");
 const agentNewChatBtn = document.querySelector("#agentNewChatBtn");
 const agentHistoryBtn = document.querySelector("#agentHistoryBtn");
@@ -251,6 +253,8 @@ const state = {
   promptOptimizationTasks: new Map(),
   agentOpen: false,
   agentWidth: 560,
+  agentTopInset: 0,
+  agentBottomInset: 0,
   zoomTipTimer: 0,
   projectId: crypto.randomUUID(),
   projectName: "Untitled",
@@ -380,6 +384,8 @@ const canvasPointerInteractionControllerFactory = window.REELAY_CANVAS_POINTER_I
 if (!canvasPointerInteractionControllerFactory) throw new Error("Canvas pointer interaction controller is unavailable.");
 const canvasPointerDispatchControllerFactory = window.REELAY_CANVAS_POINTER_DISPATCH_CONTROLLER;
 if (!canvasPointerDispatchControllerFactory) throw new Error("Canvas pointer dispatch controller is unavailable.");
+const canvasAgentPanelGeometry = window.REELAY_CANVAS_AGENT_PANEL_GEOMETRY;
+if (!canvasAgentPanelGeometry) throw new Error("Canvas Agent panel geometry is unavailable.");
 const canvasConnectionRendererFactory = window.REELAY_CANVAS_CONNECTION_RENDERER;
 if (!canvasConnectionRendererFactory) throw new Error("Canvas connection renderer is unavailable.");
 const canvasConnectionFeedbackControllerFactory = window.REELAY_CANVAS_CONNECTION_FEEDBACK_CONTROLLER;
@@ -685,12 +691,18 @@ function clamp(value, min, max) {
 }
 
 const panelWidthRules = Object.freeze({
-  edgeInset: 12,
+  edgeInset: 8,
   assetMin: 380,
   assetMax: 780,
   agentMin: 340,
   agentMax: 640,
   canvasCorridor: 280,
+});
+
+const agentPanelHeightRules = Object.freeze({
+  minHeight: 420,
+  keyboardStep: 16,
+  coarseKeyboardStep: 64,
 });
 
 function isAssetLibraryOpen() {
@@ -742,6 +754,62 @@ function applyAgentWidth(width) {
   agentDock?.style.setProperty("--agent-width", `${width}px`);
   appShell?.style.setProperty("--agent-width", `${width}px`);
   syncAssetLibraryResizeSemantics();
+}
+
+function getAgentVerticalGeometry({
+  top = state.agentTopInset,
+  bottom = state.agentBottomInset,
+  preferredEdge = "top",
+} = {}) {
+  return canvasAgentPanelGeometry.normalizeInsets({
+    top,
+    bottom,
+    viewportHeight: window.innerHeight,
+    minHeight: agentPanelHeightRules.minHeight,
+    preferredEdge,
+  });
+}
+
+function syncAgentVerticalResizeSemantics(geometry = getAgentVerticalGeometry()) {
+  const availableInset = Math.max(0, window.innerHeight - agentPanelHeightRules.minHeight);
+  const topMax = Math.max(0, availableInset - geometry.bottom);
+  const bottomMax = Math.max(0, availableInset - geometry.top);
+  const syncHandle = (handle, edge, value, max) => {
+    if (!handle) return;
+    const roundedValue = Math.round(value);
+    handle.setAttribute("aria-valuemin", "0");
+    handle.setAttribute("aria-valuemax", String(Math.round(max)));
+    handle.setAttribute("aria-valuenow", String(roundedValue));
+    handle.setAttribute(
+      "aria-valuetext",
+      roundedValue === 0 ? `Agent ${edge}贴合屏幕` : `Agent ${edge}内缩 ${roundedValue} 像素`,
+    );
+  };
+  syncHandle(agentTopResizeHandle, "顶部", geometry.top, topMax);
+  syncHandle(agentBottomResizeHandle, "底部", geometry.bottom, bottomMax);
+}
+
+function applyAgentVerticalGeometry(geometry) {
+  state.agentTopInset = geometry.top;
+  state.agentBottomInset = geometry.bottom;
+  agentDock?.style.setProperty("--agent-top-inset", `${Math.round(geometry.top)}px`);
+  agentDock?.style.setProperty("--agent-bottom-inset", `${Math.round(geometry.bottom)}px`);
+  agentDock?.classList.toggle("is-inset-top", geometry.top > 0.5);
+  agentDock?.classList.toggle("is-inset-bottom", geometry.bottom > 0.5);
+  syncAgentVerticalResizeSemantics(geometry);
+  scheduleNodePopoverLayouts();
+}
+
+function setAgentTopInset(top) {
+  applyAgentVerticalGeometry(getAgentVerticalGeometry({ top, preferredEdge: "top" }));
+}
+
+function setAgentBottomInset(bottom) {
+  applyAgentVerticalGeometry(getAgentVerticalGeometry({ bottom, preferredEdge: "bottom" }));
+}
+
+function reconcileAgentVerticalInsets(preferredEdge = "top") {
+  applyAgentVerticalGeometry(getAgentVerticalGeometry({ preferredEdge }));
 }
 
 function reconcileDualPanelWidths(preferredPanel) {
@@ -9029,6 +9097,8 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
   moveMinimap: moveMinimapDrag,
   resizeAssetLibrary: setAssetLibraryWidth,
   resizeAgent: setAgentWidth,
+  resizeAgentTop: setAgentTopInset,
+  resizeAgentBottom: setAgentBottomInset,
   finishMarquee: (action) => canvasPointerInteractionController.finishMarquee(action),
   finishNodeDrag: (action, options) => canvasNodeDragController.finish(action, options),
   finishNodeClick: (action, _pointer, options = {}) => {
@@ -9053,6 +9123,7 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
   clearAction: () => {
     state.action = null;
     if (groupResizeOverlay) delete groupResizeOverlay.dataset.activeResize;
+    agentDock?.classList.remove("resizing-vertical");
     shell.classList.remove("selection-frame-pressed");
   },
   setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
@@ -11177,6 +11248,7 @@ agentPanel?.addEventListener("keydown", (event) => {
   }
 });
 agentResizeHandle?.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
   event.preventDefault();
   event.stopPropagation();
   state.action = {
@@ -11188,6 +11260,58 @@ agentResizeHandle?.addEventListener("pointerdown", (event) => {
   };
   agentResizeHandle.setPointerCapture(event.pointerId);
 });
+
+function bindAgentHeightResizeHandle(handle, edge) {
+  if (!handle) return;
+  const isTop = edge === "top";
+  const setInset = isTop ? setAgentTopInset : setAgentBottomInset;
+  const getInset = () => isTop ? state.agentTopInset : state.agentBottomInset;
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    state.action = {
+      type: isTop ? "resize-agent-top" : "resize-agent-bottom",
+      pointerId: event.pointerId,
+      startClientY: event.clientY,
+      startInset: getInset(),
+      captureTarget: handle,
+    };
+    agentDock?.classList.add("resizing-vertical");
+    handle.setPointerCapture(event.pointerId);
+  });
+
+  handle.addEventListener("keydown", (event) => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Home") {
+      setInset(0);
+      return;
+    }
+    if (event.key === "End") {
+      setInset(Number(handle.getAttribute("aria-valuemax")) || 0);
+      return;
+    }
+    const step = event.shiftKey
+      ? agentPanelHeightRules.coarseKeyboardStep
+      : agentPanelHeightRules.keyboardStep;
+    const direction = isTop
+      ? (event.key === "ArrowDown" ? 1 : -1)
+      : (event.key === "ArrowUp" ? 1 : -1);
+    setInset(getInset() + direction * step);
+  });
+
+  handle.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setInset(0);
+  });
+}
+
+bindAgentHeightResizeHandle(agentTopResizeHandle, "top");
+bindAgentHeightResizeHandle(agentBottomResizeHandle, "bottom");
 
 document.addEventListener("focusin", (event) => {
   const target = event.target instanceof Element ? event.target : null;
@@ -11275,6 +11399,7 @@ window.addEventListener("resize", () => {
   }
   setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
   setAgentWidth(state.agentWidth);
+  reconcileAgentVerticalInsets("top");
   syncPromptPanelLayouts();
   renderSelectionToolbar();
   renderMinimap();
@@ -11290,6 +11415,7 @@ document.addEventListener("visibilitychange", () => {
 
 setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
 setAgentWidth(state.agentWidth);
+reconcileAgentVerticalInsets("top");
 setAgentOpen(false);
 renderAgentHistory();
 setAgentConversation(state.activeConversationId);
@@ -11305,4 +11431,24 @@ initializeCanvases();
 applyTransform();
 consumeHomeLaunchIntent();
 render();
+window.REELAY_CANVAS_LAYOUT_TUNER_BOOTSTRAP?.({
+  getRuntimeValues: () => ({
+    assetWidth: state.assetLibraryWidth,
+    agentWidth: state.agentWidth,
+    agentTopInset: state.agentTopInset,
+    agentBottomInset: state.agentBottomInset,
+  }),
+  setRuntimeValue: (key, value) => {
+    if (key === "assetWidth") setAssetLibraryWidth(value);
+    else if (key === "agentWidth") setAgentWidth(value);
+    else if (key === "agentTopInset") setAgentTopInset(value);
+    else if (key === "agentBottomInset") setAgentBottomInset(value);
+    return {
+      assetWidth: state.assetLibraryWidth,
+      agentWidth: state.agentWidth,
+      agentTopInset: state.agentTopInset,
+      agentBottomInset: state.agentBottomInset,
+    }[key];
+  },
+});
 canvasPersistence.post("canvas:ready");

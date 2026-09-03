@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, mediaToolbarView, runtimeStore, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -25,6 +25,7 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("src/legacy-canvas/canvas-group-interaction-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-pointer-interaction-controller.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-pointer-dispatch-controller.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-agent-panel-geometry.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-model.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-asset-library-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-entity-editor-model.js", root), "utf8"),
@@ -87,6 +88,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(groupInteractionController);
   window.eval(pointerInteractionController);
   window.eval(pointerDispatchController);
+  window.eval(agentPanelGeometry);
   window.eval(assetLibraryModel);
   window.eval(assetLibraryView);
   window.eval(entityEditorModel);
@@ -290,7 +292,10 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.querySelector("[data-library-selection-toggle]"), null);
   assert.equal(window.document.querySelector("[data-library-selection-cancel]"), null);
   const agentLauncher = window.document.querySelector("#agentLauncher");
+  const agentDock = window.document.querySelector("#agentDock");
   const agentPanel = window.document.querySelector("#agentPanel");
+  const agentTopResizeHandle = window.document.querySelector("#agentTopResizeHandle");
+  const agentBottomResizeHandle = window.document.querySelector("#agentBottomResizeHandle");
   const agentInput = window.document.querySelector("#agentInput");
   const agentHistoryBtn = window.document.querySelector("#agentHistoryBtn");
   const agentHistoryMenu = window.document.querySelector("#agentHistoryMenu");
@@ -312,6 +317,54 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(agentLauncher.getAttribute("aria-expanded"), "true");
   assert.equal(window.document.activeElement, agentInput);
   assert.equal(agentInput.readOnly, false);
+
+  assert.equal(agentDock.style.getPropertyValue("--agent-top-inset"), "0px");
+  assert.equal(agentDock.style.getPropertyValue("--agent-bottom-inset"), "0px");
+  assert.equal(agentTopResizeHandle.getAttribute("aria-valuenow"), "0");
+  assert.equal(agentBottomResizeHandle.getAttribute("aria-valuenow"), "0");
+  const saveCountBeforeAgentResize = postedMessages.filter((message) => message.type === "canvas:save").length;
+
+  agentTopResizeHandle.focus();
+  agentTopResizeHandle.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "ArrowDown",
+  }));
+  assert.equal(agentDock.style.getPropertyValue("--agent-top-inset"), "16px");
+  assert.equal(agentDock.style.getPropertyValue("--agent-bottom-inset"), "0px");
+  assert.equal(agentTopResizeHandle.getAttribute("aria-valuenow"), "16");
+  assert.equal(agentDock.classList.contains("is-inset-top"), true);
+  agentTopResizeHandle.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Home",
+  }));
+  assert.equal(agentDock.style.getPropertyValue("--agent-top-inset"), "0px");
+  assert.equal(agentTopResizeHandle.getAttribute("aria-valuenow"), "0");
+  assert.equal(agentDock.classList.contains("is-inset-top"), false);
+
+  agentBottomResizeHandle.focus();
+  agentBottomResizeHandle.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "ArrowUp",
+  }));
+  assert.equal(agentDock.style.getPropertyValue("--agent-top-inset"), "0px");
+  assert.equal(agentDock.style.getPropertyValue("--agent-bottom-inset"), "16px");
+  assert.equal(agentBottomResizeHandle.getAttribute("aria-valuenow"), "16");
+  assert.equal(agentDock.classList.contains("is-inset-bottom"), true);
+  agentBottomResizeHandle.dispatchEvent(new window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "Home",
+  }));
+  assert.equal(agentDock.style.getPropertyValue("--agent-bottom-inset"), "0px");
+  assert.equal(agentBottomResizeHandle.getAttribute("aria-valuenow"), "0");
+  assert.equal(agentDock.classList.contains("is-inset-bottom"), false);
+  assert.equal(
+    postedMessages.filter((message) => message.type === "canvas:save").length,
+    saveCountBeforeAgentResize,
+  );
 
   agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "true");
@@ -443,7 +496,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
   const agentWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--agent-width"));
   const assetResizeHandle = window.document.querySelector("#assetLibraryResizeHandle");
-  assert.ok(assetWidth + agentWidth <= window.innerWidth - 280 - 24);
+  assert.ok(assetWidth + agentWidth <= window.innerWidth - 280 - 16);
   assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), assetWidth);
   assert.ok(Number(assetResizeHandle.getAttribute("aria-valuemax")) >= assetWidth);
   agentAdvancedBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

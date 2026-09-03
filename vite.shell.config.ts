@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+import { canvasLayoutTunerPlugin } from "./src/dev/canvas-layout-tuner-plugin";
+
 function shellHistoryFallback() {
   return {
     name: "reelay-shell-history-fallback",
@@ -22,7 +24,7 @@ function shellHistoryFallback() {
 
 export default defineConfig({
   base: "/",
-  plugins: [react(), shellHistoryFallback()],
+  plugins: [react(), shellHistoryFallback(), canvasLayoutTunerPlugin()],
   server: {
     proxy: {
       "/api": "http://127.0.0.1:5175",

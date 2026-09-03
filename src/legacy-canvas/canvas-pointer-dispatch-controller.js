@@ -44,6 +44,14 @@
         options.resizeAgent(action.startWidth + action.startClientX - pointer.clientX);
         return true;
       }
+      if (action.type === "resize-agent-top") {
+        options.resizeAgentTop(action.startInset + pointer.clientY - action.startClientY);
+        return true;
+      }
+      if (action.type === "resize-agent-bottom") {
+        options.resizeAgentBottom(action.startInset + action.startClientY - pointer.clientY);
+        return true;
+      }
       return false;
     }
 

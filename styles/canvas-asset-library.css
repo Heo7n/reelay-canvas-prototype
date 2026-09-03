@@ -8,13 +8,13 @@
   --asset-card-size: 164px;
   position: fixed;
   z-index: 70;
-  top: var(--canvas-side-panel-top, 60px);
-  bottom: var(--canvas-side-panel-bottom, 64px);
-  left: var(--canvas-edge-inset, 12px);
+  top: var(--canvas-side-panel-top, 50px);
+  bottom: var(--canvas-side-panel-bottom, 52px);
+  left: var(--canvas-edge-inset, 8px);
   display: flex;
   width: var(--asset-panel-width, 550px);
-  min-width: min(380px, calc(100vw - 24px));
-  max-width: min(780px, calc(100vw - 24px));
+  min-width: min(380px, calc(100vw - 16px));
+  max-width: min(780px, calc(100vw - 16px));
   padding: 0;
   overflow: visible;
   border: 1px solid var(--asset-panel-line);
@@ -1478,7 +1478,7 @@ html[data-theme="light"] .asset-library-folder-preview {
 }
 
 .app-shell.asset-library-open .canvas-tools {
-  left: 12px;
+  left: var(--canvas-edge-inset);
 }
 
 @media (hover: hover) and (pointer: fine) {

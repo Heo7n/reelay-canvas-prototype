@@ -25,6 +25,7 @@ async function collectModules(relativeDirectory, extensions) {
 
 const files = [
   ...entryFiles,
+  ...(await collectModules("dev", [".js", ".mjs"])),
   ...(await collectModules("data", [".js", ".mjs"])),
   ...(await collectModules("src", [".js", ".mjs"])),
   ...(await collectModules("scripts", [".mjs"])),
