@@ -1062,7 +1062,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260903-agent-layout-75/);
+  assert.match(html, /styles\.css\?v=20260903-ui-rhythm-78/);
   assert.match(html, /app\.js\?v=20260903-layout-tune-76/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
@@ -1435,7 +1435,7 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
   assert.match(appCss, /\.agent-composer-bar\s*\{\s*gap:\s*4px;/);
   assert.match(appCss, /\.agent-send\.generate-button\s*\{\s*flex-basis:\s*96px;/);
   assert.match(appCss, /\.agent-send \.credit-mark\s*\{[^}]*font-size:\s*14px;/);
-  assert.match(appCss, /@container agent-composer \(max-width:\s*520px\)\s*\{[\s\S]*?\.agent-composer-model-icon\s*\{\s*display:\s*none;[\s\S]*?\.agent-param-summary \.param-summary-before\s*\{\s*display:\s*none;/);
+  assert.match(appCss, /@container agent-composer \(max-width:\s*540px\)\s*\{[\s\S]*?\.agent-composer-model-icon\s*\{\s*display:\s*none;[\s\S]*?\.agent-param-summary \.param-summary-before\s*\{\s*display:\s*none;/);
   assert.match(appCss, /@container agent-composer \(max-width:\s*500px\)\s*\{[\s\S]*?\.agent-mode \.control-chip-label\s*\{\s*display:\s*none;/);
   assert.match(appCss, /@container agent-composer \(max-width:\s*440px\)\s*\{[\s\S]*?\.agent-model-button \.agent-composer-model-icon\s*\{\s*display:\s*grid;[\s\S]*?\.agent-model-button-label\s*\{\s*display:\s*none;/);
   assert.match(appCss, /@container agent-composer \(max-width:\s*380px\)\s*\{[\s\S]*?\.agent-param-summary \.param-summary-after\s*\{\s*display:\s*none;[\s\S]*?\.agent-param-summary \.control-chip-audio-separator\s*\{\s*display:\s*none;/);
@@ -1551,10 +1551,10 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps compact left zones and an independently sized Agent dock", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260903-agent-layout-75/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260903-agent-layout-75/);
-  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260903-agent-layout-75/);
-  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260903-agent-layout-75/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260903-ui-rhythm-78/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260903-ui-rhythm-78/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260903-ui-rhythm-78/);
+  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260903-ui-rhythm-78/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
@@ -1577,7 +1577,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(canvasChromeCss, /--canvas-edge-bar-width:\s*248px/);
   assert.match(canvasChromeCss, /--canvas-edge-inset:\s*8px/);
   assert.match(canvasChromeCss, /--canvas-project-bar-height:\s*38px/);
-  assert.match(canvasChromeCss, /--canvas-viewport-toolbar-height:\s*40px/);
+  assert.match(canvasChromeCss, /--canvas-viewport-toolbar-height:\s*38px/);
   assert.match(canvasChromeCss, /--canvas-chrome-panel-gap:\s*4px/);
   assert.match(canvasChromeCss, /--canvas-side-panel-top:\s*calc\(var\(--canvas-edge-inset\) \+ var\(--canvas-project-bar-height\) \+ var\(--canvas-chrome-panel-gap\)\)/);
   assert.match(canvasChromeCss, /--canvas-side-panel-bottom:\s*calc\(var\(--canvas-edge-inset\) \+ var\(--canvas-viewport-toolbar-height\) \+ var\(--canvas-chrome-panel-gap\)\)/);
@@ -1586,11 +1586,11 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(canvasChromeCss, /\.top-bar \.canvas-project-switcher\s*\{[\s\S]*?width:\s*min\(var\(--canvas-edge-bar-width\), calc\(100vw - 96px\)\)/);
   assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\]\s*\{[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
-  assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?width:\s*52px/);
-  assert.match(canvasChromeCss, /\.left-rail \.rail-button,[\s\S]*?width:\s*42px;[\s\S]*?height:\s*42px/);
+  assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?width:\s*48px/);
+  assert.match(canvasChromeCss, /\.left-rail \.rail-button,[\s\S]*?width:\s*40px;[\s\S]*?height:\s*40px/);
   assert.match(canvasChromeCss, /\.left-rail \.avatar-button\.active \+ \.profile-button-tip\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?opacity:\s*0;/);
   assert.match(canvasChromeCss, /\.left-rail \.rail-button\s*\{[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/);
-  assert.match(canvasChromeCss, /\.left-rail \.profile-menu\s*\{[\s\S]*?top:\s*auto;[\s\S]*?bottom:\s*-5px;[\s\S]*?left:\s*calc\(100% \+ 12px\)/);
+  assert.match(canvasChromeCss, /\.left-rail \.profile-menu\s*\{[\s\S]*?top:\s*auto;[\s\S]*?bottom:\s*-4px;[\s\S]*?left:\s*calc\(100% \+ 12px\)/);
   assert.match(appCss, /\.profile-help-flyout\s*\{[\s\S]*?position:\s*static/);
   assert.match(appCss, /\.profile-help-flyout-panel\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?bottom:\s*-1px;[\s\S]*?left:\s*calc\(100% \+ 8px\);[\s\S]*?width:\s*168px/);
   assert.match(appCss, /\.profile-shortcut-sheet\s*\{[\s\S]*?top:\s*calc\(100% \+ 8px\);[\s\S]*?left:\s*-1px;[\s\S]*?width:\s*min\(620px, calc\(100vw - 368px\)\)/);
@@ -1603,17 +1603,17 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.doesNotMatch(appCss, /\.profile-help-trigger\s*>\s*\.lucide:last-child[\s\S]*?transform/);
   assert.doesNotMatch(canvasChromeCss, /\.share-reveal/);
   assert.match(canvasChromeCss, /\.canvas-tools\s*\{[\s\S]*?left:\s*var\(--canvas-edge-inset\)[\s\S]*?bottom:\s*var\(--canvas-edge-inset\)/);
-  assert.match(canvasChromeCss, /\.canvas-tool-row\s*\{[\s\S]*?height:\s*var\(--canvas-viewport-toolbar-height\);[\s\S]*?padding:\s*3px/);
+  assert.match(canvasChromeCss, /\.canvas-tool-row\s*\{[\s\S]*?height:\s*var\(--canvas-viewport-toolbar-height\);[\s\S]*?padding:\s*2px 3px/);
   assert.match(canvasChromeCss, /\.canvas-tool-button\s*\{[\s\S]*?width:\s*32px;[\s\S]*?height:\s*32px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-control:hover,[\s\S]*?\.canvas-zoom-control\.value-visible\s*\{[\s\S]*?width:\s*168px/);
   assert.match(canvasChromeCss, /\.canvas-zoom-value\s*\{[\s\S]*?position:\s*static[\s\S]*?width:\s*0[\s\S]*?transform:\s*translateX\(-4px\)/);
   assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*38px[\s\S]*?margin-left:\s*8px/);
   assert.match(assetLibraryCss, /top:\s*var\(--canvas-side-panel-top,\s*50px\)/);
-  assert.match(assetLibraryCss, /bottom:\s*var\(--canvas-side-panel-bottom,\s*52px\)/);
+  assert.match(assetLibraryCss, /bottom:\s*var\(--canvas-side-panel-bottom,\s*50px\)/);
   assert.match(assetLibraryCss, /\.asset-library-panel\s*\{[\s\S]*?--asset-panel-bg:\s*var\(--surface\);[\s\S]*?--asset-panel-subtle:\s*var\(--surface-2\);[\s\S]*?--asset-panel-line:\s*var\(--floating-line\);/);
   assert.doesNotMatch(assetLibraryCss, /--asset-panel-bg:\s*#(?:fff|ffffff)\b/i);
   assert.doesNotMatch(appCss, /html\[data-theme="light"\] \.canvas-tool-row/);
-  assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*var\(--canvas-side-panel-top,\s*50px\)[\s\S]*?bottom:\s*var\(--canvas-side-panel-bottom,\s*52px\)/);
+  assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*var\(--canvas-side-panel-top,\s*50px\)[\s\S]*?bottom:\s*var\(--canvas-side-panel-bottom,\s*50px\)/);
   assert.match(appCss, /\.agent-dock\s*\{[\s\S]*?top:\s*var\(--agent-top-inset,\s*0px\)[\s\S]*?right:\s*0;[\s\S]*?bottom:\s*var\(--agent-bottom-inset,\s*0px\)/);
   assert.match(appCss, /\.agent-panel\s*\{[\s\S]*?border:\s*0;[\s\S]*?border-left:\s*1px solid var\(--agent-panel-line\);[\s\S]*?border-radius:\s*0/);
   assert.match(appCss, /\.agent-dock\.is-inset-top \.agent-panel\s*\{[\s\S]*?border-top-left-radius:\s*14px/);
@@ -1641,7 +1641,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260903-agent-layout-75/);
+  assert.match(html, /styles\.css\?v=20260903-ui-rhythm-78/);
   assert.match(html, /prototype-config\.js\?v=20260903-entity-fixtures-64/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260903-entity-preview-filename-70/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);

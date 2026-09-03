@@ -1,6 +1,6 @@
 :root[data-layout-tune-active="true"] {
   --layout-tune-project-control-size: clamp(28px, calc(var(--canvas-project-bar-height) - 6px), 42px);
-  --layout-tune-viewport-control-size: clamp(28px, calc(var(--canvas-viewport-toolbar-height) - 8px), 42px);
+  --layout-tune-viewport-control-size: clamp(28px, calc(var(--canvas-viewport-toolbar-height) - 6px), 42px);
   --layout-tune-zoom-width: max(
     96px,
     calc(

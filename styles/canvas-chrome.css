@@ -2,7 +2,7 @@
   --canvas-edge-inset: 8px;
   --canvas-edge-bar-width: 248px;
   --canvas-project-bar-height: 38px;
-  --canvas-viewport-toolbar-height: 40px;
+  --canvas-viewport-toolbar-height: 38px;
   --canvas-chrome-panel-gap: 4px;
   --canvas-side-panel-top: calc(var(--canvas-edge-inset) + var(--canvas-project-bar-height) + var(--canvas-chrome-panel-gap));
   --canvas-side-panel-bottom: calc(var(--canvas-edge-inset) + var(--canvas-viewport-toolbar-height) + var(--canvas-chrome-panel-gap));
@@ -342,7 +342,7 @@ html[data-theme="light"] {
   bottom: auto;
   left: var(--canvas-edge-inset);
   display: block;
-  width: 52px;
+  width: 48px;
   height: auto;
   transform: translateY(-50%);
   transition:
@@ -359,11 +359,11 @@ html[data-theme="light"] {
   flex-direction: column;
   gap: 2px;
   align-items: center;
-  width: 52px;
+  width: 48px;
   height: auto;
-  padding: 4px;
+  padding: 3px;
   border: 1px solid var(--canvas-chrome-border);
-  border-radius: 26px;
+  border-radius: 24px;
   background: var(--canvas-chrome-bg);
   box-shadow: var(--canvas-chrome-shadow);
   backdrop-filter: blur(18px) saturate(120%);
@@ -385,9 +385,9 @@ html[data-theme="light"] {
 
 .left-rail .rail-button,
 .left-rail .profile-anchor {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
 }
 
 .left-rail .rail-button {
@@ -416,8 +416,8 @@ html[data-theme="light"] {
 }
 
 .left-rail .rail-button svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
   stroke-width: 1.9;
 }
 
@@ -449,8 +449,8 @@ html[data-theme="light"] {
 }
 
 .left-rail .avatar-button {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--text) 96%, var(--bg)), color-mix(in srgb, var(--text) 78%, var(--bg))),
@@ -469,7 +469,7 @@ html[data-theme="light"] {
 }
 
 .left-rail .avatar-button::before {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 560;
 }
 
@@ -514,7 +514,7 @@ html[data-theme="light"] {
 .left-rail .profile-menu {
   top: auto;
   right: auto;
-  bottom: -5px;
+  bottom: -4px;
   left: calc(100% + 12px);
   z-index: 7;
   overflow: visible;
@@ -562,9 +562,9 @@ html[data-theme="light"] {
 .canvas-tool-row {
   gap: 2px;
   height: var(--canvas-viewport-toolbar-height);
-  padding: 3px;
+  padding: 2px 3px;
   border: 1px solid var(--canvas-chrome-border);
-  border-radius: 13px;
+  border-radius: 12px;
   background: var(--canvas-chrome-bg);
   box-shadow: var(--canvas-chrome-shadow);
   backdrop-filter: blur(18px) saturate(120%);

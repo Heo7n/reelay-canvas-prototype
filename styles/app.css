@@ -4594,8 +4594,9 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   min-width: 0;
   overflow: hidden;
   color: var(--agent-panel-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4639,18 +4640,20 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   --node-panel-shadow: none;
   position: relative;
   z-index: 12;
-  margin: 0 10px 10px;
+  margin: 0 14px 14px;
+  border: 1px solid var(--agent-panel-line);
+  border-radius: 14px;
 }
 
 .agent-composer .agent-add-button {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
 }
 
 .agent-composer .agent-add-button > svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .agent-composer-stage {
@@ -5216,7 +5219,14 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 }
 
 .agent-composer-bar {
+  height: 36px;
   gap: 4px;
+}
+
+.agent-composer-bar .control-chip,
+.agent-send.generate-button {
+  height: 36px;
+  border-radius: 8px;
 }
 
 .agent-send.generate-button {
@@ -5246,7 +5256,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
   height: 18px;
 }
 
-@container agent-composer (max-width: 520px) {
+@container agent-composer (max-width: 540px) {
   .agent-composer-bar {
     gap: 4px;
   }
