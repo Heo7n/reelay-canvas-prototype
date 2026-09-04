@@ -239,6 +239,7 @@ const state = {
     resolution: "2K",
     quality: "480p",
     duration: "4s",
+    outputFormat: "",
     count: 1,
     workflow: "",
     omniReferenceTaskType: "",
@@ -1018,6 +1019,7 @@ function hydrateCanvasDocumentSnapshot(content) {
     resolution: restored.lastPreset.resolution || state.lastPreset.resolution,
     quality: restored.lastPreset.quality || state.lastPreset.quality,
     duration: restored.lastPreset.duration || state.lastPreset.duration,
+    outputFormat: restored.lastPreset.outputFormat || "",
     count: clamp(restored.lastPreset.count, 1, 4),
     workflow: restored.lastPreset.workflow || state.lastPreset.workflow,
     omniReferenceTaskType: restored.lastPreset.omniReferenceTaskType || "",
@@ -1734,6 +1736,7 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     resolution: "",
     quality: "",
     duration: "",
+    outputFormat: "",
     count: 1,
     workflow: "",
     omniReferenceTaskType: "",
@@ -1953,6 +1956,7 @@ function normalizeNodeParameters(node) {
     aspect: "aspects",
     resolution: "resolutions",
     quality: "qualities",
+    outputFormat: "outputFormats",
   };
   if (node.aspect === "Auto" && getCapabilityValues(node, "aspects").includes("adaptive")) {
     node.aspect = "adaptive";
@@ -2537,6 +2541,7 @@ function presetFrom(node) {
     resolution: node.resolution,
     quality: node.quality,
     duration: node.duration,
+    outputFormat: node.outputFormat,
     count: node.count,
     workflow: node.workflow,
     omniReferenceTaskType: node.omniReferenceTaskType,
@@ -2556,6 +2561,7 @@ function applyPreset(node, preset) {
   node.resolution = preset.resolution;
   node.quality = preset.quality;
   node.duration = preset.duration;
+  node.outputFormat = preset.outputFormat;
   node.count = preset.count;
   node.workflow = preset.workflow;
   node.omniReferenceTaskType = preset.omniReferenceTaskType;
@@ -4455,6 +4461,7 @@ function createGenerationParameterSnapshot(node) {
     quality: node.quality,
     duration: requestDuration,
     outputDuration,
+    outputFormat: node.outputFormat,
     count: node.count,
     workflow: node.workflow,
     audioEnabled: node.audioEnabled,
@@ -5199,24 +5206,34 @@ function createGeneratorNodeElement(node) {
   });
 
   const durationRange = el.querySelector("[data-duration-range]");
+  const durationNumber = el.querySelector("[data-duration-number]");
   durationRange?.addEventListener("input", (event) => {
-    const min = Number(event.currentTarget.min);
-    const max = Number(event.currentTarget.max);
-    const seconds = clamp(Number(event.currentTarget.value), min, max);
-    const value = `${seconds}s`;
-    const progress = max > min ? ((seconds - min) / (max - min)) * 100 : 100;
-    event.currentTarget.value = String(seconds);
-    event.currentTarget.style.setProperty("--duration-progress", `${progress}%`);
-    event.currentTarget.setAttribute("aria-valuetext", value);
-    const current = event.currentTarget.closest(".parameter-duration")?.querySelector(".duration-current");
-    if (current) current.textContent = value;
+    const seconds = normalizeDurationControlSeconds(event.currentTarget, event.currentTarget.value);
+    syncDurationRangeControl(event.currentTarget, seconds);
+    if (durationNumber) durationNumber.value = String(seconds);
   });
   durationRange?.addEventListener("change", (event) => {
-    const min = Number(event.currentTarget.min);
-    const max = Number(event.currentTarget.max);
-    const seconds = clamp(Number(event.currentTarget.value), min, max);
-    event.currentTarget.value = String(seconds);
+    const seconds = normalizeDurationControlSeconds(event.currentTarget, event.currentTarget.value);
+    syncDurationRangeControl(event.currentTarget, seconds);
+    if (durationNumber) durationNumber.value = String(seconds);
     handleAction(node, "duration", `${seconds}s`);
+  });
+  durationNumber?.addEventListener("input", (event) => {
+    if (!durationRange || event.currentTarget.value === "") return;
+    const seconds = normalizeDurationControlSeconds(durationRange, event.currentTarget.value);
+    syncDurationRangeControl(durationRange, seconds);
+  });
+  durationNumber?.addEventListener("change", (event) => {
+    if (!durationRange) return;
+    const seconds = normalizeDurationControlSeconds(durationRange, event.currentTarget.value);
+    event.currentTarget.value = String(seconds);
+    syncDurationRangeControl(durationRange, seconds);
+    handleAction(node, "duration", `${seconds}s`);
+  });
+  durationNumber?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.currentTarget.blur();
   });
 
   el.querySelectorAll("[data-action]").forEach((button) => {
@@ -6124,6 +6141,16 @@ function paramPanel(node) {
     mode === "video" ? omniReferenceTaskTypeParameterSection(node) : "",
     mode === "video" ? workflowParameterSection(node) : "",
   ];
+  const outputFormatSection = mode === "video" ? outputFormatParameterSection(node) : "";
+  const audioSection = mode === "video" ? `
+    <section class="parameter-group parameter-audio">
+      <div class="param-heading">音频</div>
+      <div class="segmented audio-segmented" style="--option-columns: 2">
+        <button class="${node.audioEnabled ? "active" : ""}" data-action="audio" data-value="on" data-canvas-mutation type="button">开启</button>
+        <button class="${node.audioEnabled ? "" : "active"}" data-action="audio" data-value="off" data-canvas-mutation type="button">关闭</button>
+      </div>
+    </section>
+  ` : "";
   const detailSections = [
     parameterSection(node, "比例", "aspect", aspectValues),
     mode === "video"
@@ -6134,13 +6161,10 @@ function paramPanel(node) {
       : "",
     mode === "video" && !taskTypeConstraint?.hideDuration ? durationParameterSection(node) : "",
     mode === "video" ? `
-      <section class="parameter-group parameter-audio">
-        <div class="param-heading">音频</div>
-        <div class="segmented audio-segmented" style="--option-columns: 2">
-          <button class="${node.audioEnabled ? "active" : ""}" data-action="audio" data-value="on" data-canvas-mutation type="button">开启</button>
-          <button class="${node.audioEnabled ? "" : "active"}" data-action="audio" data-value="off" data-canvas-mutation type="button">关闭</button>
-        </div>
-      </section>
+      <div class="parameter-footer-grid ${outputFormatSection ? "has-output-format" : ""}">
+        ${audioSection}
+        ${outputFormatSection}
+      </div>
     ` : "",
   ];
   const taskType = taskTypeCapabilityValue(node);
@@ -6191,16 +6215,6 @@ function workflowParameterSection(node) {
 }
 
 function durationParameterSection(node) {
-  if (getOmniReferenceTaskTypeConstraint(node)?.duration === -1) {
-    return `
-      <section class="parameter-group parameter-duration parameter-duration-locked">
-        <div class="duration-heading"><span class="param-heading">时长</span><span class="duration-current">-1</span></div>
-        <div class="segmented duration-locked-segmented" style="--option-columns: 1">
-          <button class="active" type="button" disabled aria-disabled="true">跟随原视频</button>
-        </div>
-      </section>
-    `;
-  }
   const range = getDurationCapability(node);
   const seconds = getNormalizedDurationSeconds(node);
   if (!range || !Number.isFinite(seconds)) return "";
@@ -6209,10 +6223,48 @@ function durationParameterSection(node) {
     : 100;
   return `
     <section class="parameter-group parameter-duration">
-      <div class="duration-heading"><span class="param-heading">时长</span><span class="duration-current">${seconds}s</span></div>
-      <input class="duration-range-input" data-duration-range type="range" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" style="--duration-progress: ${progress}%" aria-label="时长" aria-valuemin="${range.min}" aria-valuetext="${seconds}s" />
+      <div class="param-heading">时长</div>
+      <div class="duration-control-row">
+        <input class="duration-range-input" data-duration-range type="range" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" style="--duration-progress: ${progress}%" aria-label="时长（秒）" aria-valuemin="${range.min}" aria-valuetext="${seconds} 秒" />
+        <input class="duration-number-input" data-duration-number type="number" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" inputmode="numeric" aria-label="时长（秒）" />
+        <span class="duration-unit" aria-hidden="true">s</span>
+      </div>
     </section>
   `;
+}
+
+function outputFormatParameterSection(node) {
+  const values = getCapabilityValues(node, "outputFormats");
+  if (!values.length) return "";
+  return `
+    <section class="parameter-group parameter-output-format">
+      <div class="param-heading">输出格式</div>
+      <div class="segmented output-format-segmented" style="--option-columns: ${values.length}">
+        ${values.map((value) => `
+          <button class="${node.outputFormat === value ? "active" : ""}" data-action="output-format" data-value="${escapeHtml(value)}" data-canvas-mutation type="button" aria-pressed="${node.outputFormat === value}">${escapeHtml(getCapabilityDisplayLabel(node, "outputFormat", value))}</button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function normalizeDurationControlSeconds(input, value) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const step = Math.max(1, Number(input.step) || 1);
+  const requested = Number(value);
+  const fallback = Number(input.value);
+  const base = Number.isFinite(requested) ? requested : Number.isFinite(fallback) ? fallback : min;
+  return clamp(min + Math.round((base - min) / step) * step, min, max);
+}
+
+function syncDurationRangeControl(input, seconds) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const progress = max > min ? ((seconds - min) / (max - min)) * 100 : 100;
+  input.value = String(seconds);
+  input.style.setProperty("--duration-progress", `${progress}%`);
+  input.setAttribute("aria-valuetext", `${seconds} 秒`);
 }
 
 const advancedSettingHints = Object.freeze({
@@ -6304,6 +6356,7 @@ const generationLockedActions = new Set([
   "workflow",
   "omni-reference-task-type",
   "audio",
+  "output-format",
   "prompt-optimization",
   "auto-link",
   "asset-validation",
@@ -6341,6 +6394,7 @@ function handleAction(node, action, value) {
     "workflow",
     "omni-reference-task-type",
     "audio",
+    "output-format",
     "auto-link",
     "asset-validation",
     "aspect",
@@ -6355,6 +6409,7 @@ function handleAction(node, action, value) {
     "workflow",
     "omni-reference-task-type",
     "audio",
+    "output-format",
     "auto-link",
     "asset-validation",
     "aspect",
@@ -6471,6 +6526,11 @@ function handleAction(node, action, value) {
     case "audio":
       if (getNodeGenerationMode(node) !== "video") return;
       node.audioEnabled = value !== "off";
+      rememberPreset(node);
+      break;
+    case "output-format":
+      if (!getCapabilityValues(node, "outputFormats").includes(value)) return;
+      node.outputFormat = value;
       rememberPreset(node);
       break;
     case "prompt-optimization":

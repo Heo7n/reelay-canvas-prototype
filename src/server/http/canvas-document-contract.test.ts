@@ -35,10 +35,17 @@ describe("CanvasDocument v1 cross-runtime contract", () => {
           id: "generator-1",
           kind: "generator",
           lockedMode: "video",
+          outputFormat: "mov",
+          omniReferenceTaskType: "extend",
           generatedAsset: { id: "asset-1", type: "video", url: "https://cdn.example.test/a.mp4" },
           unknownRuntimeState: true,
         }],
       }],
+      lastPreset: {
+        mode: "video",
+        outputFormat: "mp4",
+        omniReferenceTaskType: "auto",
+      },
     };
 
     expect(canonicalizeLegacyCanvasDocumentV1(input)).toEqual(plain(codec.createSnapshot(input)));

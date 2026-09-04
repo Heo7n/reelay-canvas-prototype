@@ -121,6 +121,7 @@
         qualities: ["480p", "720p", "1080p"],
         qualityLabels: { "480p": "480P", "720p": "720P", "1080p": "1080P" },
         durationRange: { min: 4, max: 30, step: 1, marks: [4, 5, 10, 15, 20, 25, 30] },
+        outputFormats: ["mp4", "mov"],
         counts: [1, 2, 4],
       },
       defaults: {
@@ -128,6 +129,7 @@
         aspect: "16:9",
         quality: "480p",
         duration: "10s",
+        outputFormat: "mp4",
         omniReferenceTaskType: "auto",
       },
       demoUsage: [

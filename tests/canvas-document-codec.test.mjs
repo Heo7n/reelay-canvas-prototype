@@ -27,6 +27,7 @@ test("the canvas document codec persists only explicit content fields and restor
       resolution: "2K",
       quality: "high",
       duration: "4s",
+      outputFormat: "mov",
       count: 2,
       workflow: "reference-image",
       omniReferenceTaskType: "auto",
@@ -58,6 +59,7 @@ test("the canvas document codec persists only explicit content fields and restor
             resolution: "2K",
             quality: "high",
             duration: "4s",
+            outputFormat: "mov",
             count: 2,
             workflow: "reference-image",
             omniReferenceTaskType: "edit",
@@ -189,7 +191,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
   assert.deepEqual(sortedKeys(generator), [
     "activeAssetId", "aspect", "assetValidationEnabled", "assets", "audioEnabled", "autoLinkEnabled", "count", "duration", "generatedAsset", "groupId", "id", "kind",
-    "mediaKind", "model", "name", "omniReferenceTaskType", "preview", "prompt", "quality", "resolution",
+    "mediaKind", "model", "name", "omniReferenceTaskType", "outputFormat", "preview", "prompt", "quality", "resolution",
     "workflow", "x", "y", "z",
   ]);
   assert.deepEqual(sortedKeys(assetNode), ["activeAssetId", "assets", "id", "kind", "mode", "x", "y", "z"]);
@@ -207,7 +209,7 @@ test("the canvas document codec persists only explicit content fields and restor
   }]);
   assert.deepEqual(sortedKeys(group), ["height", "id", "name", "nodeIds", "width", "x", "y", "z"]);
   assert.deepEqual(sortedKeys(snapshot.lastPreset), [
-    "aspect", "audioEnabled", "count", "duration", "mode", "model", "omniReferenceTaskType", "quality",
+    "aspect", "audioEnabled", "count", "duration", "mode", "model", "omniReferenceTaskType", "outputFormat", "quality",
     "resolution", "workflow",
   ]);
   assert.equal(referenceAsset.url, "");
@@ -241,6 +243,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(restoredGenerator.model, "seedance-2.0");
   assert.equal(restoredGenerator.workflow, "reference-image");
   assert.equal(restoredGenerator.omniReferenceTaskType, "edit");
+  assert.equal(restoredGenerator.outputFormat, "mov");
   assert.equal(restoredGenerator.audioEnabled, true);
   assert.equal(restoredGenerator.promptOptimizing, false);
   assert.equal(Object.hasOwn(restoredGenerator, "promptOptimization"), false);
@@ -270,6 +273,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(plain(restoredCanvas.groups[0].nodeIds), ["generator-1"]);
   assert.equal(restored.lastPreset.workflow, "reference-image");
   assert.equal(restored.lastPreset.omniReferenceTaskType, "auto");
+  assert.equal(restored.lastPreset.outputFormat, "mov");
   assert.equal(restored.lastPreset.audioEnabled, false);
   assert.equal(Object.hasOwn(restored.lastPreset, "promptOptimization"), false);
 });

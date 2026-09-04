@@ -133,11 +133,13 @@ test("Seedance 2.5 drives the reference parameter layout", () => {
     step: 1,
     marks: [4, 5, 10, 15, 20, 25, 30],
   });
+  assert.deepEqual([...seedance.capabilities.outputFormats], ["mp4", "mov"]);
   assert.deepEqual({ ...seedance.defaults }, {
     workflow: "omni-reference",
     aspect: "16:9",
     quality: "480p",
     duration: "10s",
+    outputFormat: "mp4",
     omniReferenceTaskType: "auto",
   });
 });
@@ -200,6 +202,9 @@ test("video models expose their own second-level duration ranges and workflows",
   assert.equal(seedanceFast.defaults.workflow, "omni-reference");
   assert.equal(seedance20.capabilities.omniReferenceTaskType, undefined);
   assert.equal(seedanceFast.capabilities.omniReferenceTaskType, undefined);
+  assert.equal(seedance20.capabilities.outputFormats, undefined);
+  assert.equal(seedanceFast.capabilities.outputFormats, undefined);
+  assert.equal(kling.capabilities.outputFormats, undefined);
 });
 
 test("only video nodes expose generation workflows", () => {

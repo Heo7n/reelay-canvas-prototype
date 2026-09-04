@@ -166,6 +166,7 @@ test("parameter controls preserve canonical values and omit redundant workflow c
     taskTypeConstraint: {},
   });
   assert.match(autoDurationMarkup, /data-duration-range/);
+  assert.match(autoDurationMarkup, /data-duration-number/);
   assert.match(autoDurationMarkup, /min="4" max="30" step="1"/);
 });
 
@@ -186,6 +187,7 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     "getWorkflowDefinitions",
     "getDurationCapability",
     "getNormalizedDurationSeconds",
+    "getCapabilityDisplayLabel",
     "escapeHtml",
     `${paramPanelSource}; return paramPanel;`,
   )(
@@ -206,6 +208,7 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     (node) => node.workflowDefinitions,
     () => ({ min: 4, max: 30, step: 1 }),
     () => 10,
+    (_node, _action, value) => String(value),
     String,
   );
   const taskTypeCapability = {
@@ -226,10 +229,12 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     capabilityValues: {
       aspects: ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
       qualities: ["480p", "720p", "1080p"],
+      outputFormats: ["mp4", "mov"],
     },
     aspect: omniReferenceTaskType === "auto" ? "16:9" : "adaptive",
     quality: "480p",
     duration: "10s",
+    outputFormat: "mp4",
     audioEnabled: true,
   });
   const parameterGroup = (markup, action) => {
@@ -245,7 +250,11 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
   assert.match(autoMarkup, /class="parameter-task-details"/);
   assert.equal((parameterGroup(autoMarkup, "aspect").match(/data-action="aspect"/g) || []).length, 7);
   assert.match(autoMarkup, /data-duration-range/);
+  assert.match(autoMarkup, /data-duration-number/);
   assert.match(autoMarkup, /min="4" max="30" step="1"/);
+  assert.match(autoMarkup, /parameter-output-format/);
+  assert.match(autoMarkup, /data-action="output-format" data-value="mp4"/);
+  assert.match(autoMarkup, /data-action="output-format" data-value="mov"/);
 
   for (const taskType of ["edit", "extend"]) {
     const compactMarkup = renderParamPanel(createNode(taskType));
@@ -259,6 +268,7 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     assert.doesNotMatch(compactMarkup, /parameter-duration|data-duration-range|>时长</);
     assert.match(compactMarkup, /parameter-quality/);
     assert.match(compactMarkup, /parameter-audio/);
+    assert.match(compactMarkup, /parameter-output-format/);
   }
 });
 
@@ -536,14 +546,24 @@ test("task type changes participate in generation locks, persistence, and undo",
     'case "omni-reference-task-type":',
     'case "audio":',
   );
+  const outputFormatActionSource = sourceBetween(
+    handleActionSource,
+    'case "output-format":',
+    'case "prompt-optimization":',
+  );
 
   for (const actionSetSource of [lockedActionsSource, persistentActionsSource, undoableActionsSource]) {
     assert.match(actionSetSource, /"omni-reference-task-type"/);
+    assert.match(actionSetSource, /"output-format"/);
   }
   assert.match(taskTypeActionSource, /taskTypeCapability\?\.uiValues\?\.includes\(value\)/);
   assert.match(taskTypeActionSource, /node\.omniReferenceTaskType = value/);
   assert.match(taskTypeActionSource, /applyNodeAspect\(node, constrainedAspect\)/);
   assert.match(taskTypeActionSource, /rememberPreset\(node\)/);
+  assert.match(outputFormatActionSource, /getCapabilityValues\(node, "outputFormats"\)\.includes\(value\)/);
+  assert.match(outputFormatActionSource, /node\.outputFormat = value/);
+  assert.match(outputFormatActionSource, /rememberPreset\(node\)/);
+  assert.match(appSource, /function createGenerationParameterSnapshot\(node\)[\s\S]*?outputFormat:\s*node\.outputFormat/);
 });
 
 test("task type summaries, provider snapshots, and generation guards share one constraint source", () => {
@@ -1062,8 +1082,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260903-ui-rhythm-78/);
-  assert.match(html, /app\.js\?v=20260903-layout-tune-76/);
+  assert.match(html, /styles\.css\?v=20260904-video-params-79/);
+  assert.match(html, /app\.js\?v=20260904-video-params-77/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1249,6 +1269,7 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.ok(durationSectionStart >= 0 && durationSectionEnd > durationSectionStart);
   const durationSectionSource = appSource.slice(durationSectionStart, durationSectionEnd);
   assert.match(durationSectionSource, /data-duration-range/);
+  assert.match(durationSectionSource, /data-duration-number/);
   assert.match(durationSectionSource, /type="range" min="\$\{range\.min\}" max="\$\{range\.max\}" step="\$\{range\.step\}"/);
   assert.match(durationSectionSource, /aria-valuemin="\$\{range\.min\}"/);
   assert.match(durationSectionSource, /\(seconds - range\.min\) \/ \(range\.max - range\.min\)/);
@@ -1257,9 +1278,16 @@ test("prompt workspace keeps the reference width while content drives height and
   const durationInputEnd = appSource.indexOf('durationRange?.addEventListener("change"', durationInputStart);
   assert.ok(durationInputStart >= 0 && durationInputEnd > durationInputStart);
   const durationInputSource = appSource.slice(durationInputStart, durationInputEnd);
-  assert.match(durationInputSource, /Number\(event\.currentTarget\.min\)/);
-  assert.match(durationInputSource, /\(seconds - min\) \/ \(max - min\)/);
+  assert.match(durationInputSource, /normalizeDurationControlSeconds\(event\.currentTarget, event\.currentTarget\.value\)/);
+  assert.match(durationInputSource, /syncDurationRangeControl\(event\.currentTarget, seconds\)/);
   assert.doesNotMatch(durationInputSource, /dataset\.durationMin/);
+  assert.match(appSource, /function normalizeDurationControlSeconds\(input, value\)[\s\S]*?Number\(input\.min\)[\s\S]*?Number\(input\.max\)[\s\S]*?Math\.round\(\(base - min\) \/ step\)/);
+  assert.match(appSource, /durationNumber\?\.addEventListener\("change"[\s\S]*?handleAction\(node, "duration", `\$\{seconds\}s`\)/);
+  assert.match(appCss, /\.duration-control-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 44px 10px/);
+  assert.match(appCss, /\.duration-range-input::\-webkit-slider-runnable-track\s*\{[\s\S]*?height:\s*4px/);
+  assert.match(appCss, /\.duration-range-input::\-webkit-slider-thumb\s*\{[\s\S]*?width:\s*10px[\s\S]*?border-radius:\s*50%/);
+  assert.match(appSource, /function outputFormatParameterSection\(node\)[\s\S]*?getCapabilityValues\(node, "outputFormats"\)[\s\S]*?data-action="output-format"/);
+  assert.match(appCss, /\.parameter-footer-grid\.has-output-format\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(appSource, /node\.model = selected\.id;[\s\S]*?node\.duration = selected\.defaults\?\.duration \|\| "";[\s\S]*?normalizeNodeParameters\(node\)/);
   assert.doesNotMatch(appCss, /\.duration-scale(?:\b|-)/);
   assert.doesNotMatch(appSource, /data-duration-offset|data-duration-values/);
@@ -1551,7 +1579,7 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps compact left zones and an independently sized Agent dock", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260903-ui-rhythm-78/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260904-video-params-79/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260903-ui-rhythm-78/);
   assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260903-ui-rhythm-78/);
   assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260903-ui-rhythm-78/);
@@ -1641,14 +1669,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260903-ui-rhythm-78/);
+  assert.match(html, /styles\.css\?v=20260904-video-params-79/);
   assert.match(html, /prototype-config\.js\?v=20260903-entity-fixtures-64/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260903-entity-preview-filename-70/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260903-layout-tune-76/);
+  assert.match(html, /app\.js\?v=20260904-video-params-77/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);

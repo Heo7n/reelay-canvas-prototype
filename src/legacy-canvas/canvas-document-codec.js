@@ -115,6 +115,7 @@
     node.resolution = boundedString(candidate.resolution, "", 40);
     node.quality = boundedString(candidate.quality, "", 40);
     node.duration = boundedString(candidate.duration, "", 40);
+    node.outputFormat = boundedString(candidate.outputFormat, "", 40);
     node.count = finiteInteger(candidate.count, 1, 1, 100);
     node.workflow = boundedString(candidate.workflow, "", 80);
     if (typeof candidate.omniReferenceTaskType === "string") {
@@ -244,6 +245,7 @@
       resolution: boundedString(preset.resolution, "", 40),
       quality: boundedString(preset.quality, "", 40),
       duration: boundedString(preset.duration, "", 40),
+      outputFormat: boundedString(preset.outputFormat, "", 40),
       count: finiteInteger(preset.count, 1, 1, 100),
       workflow: boundedString(preset.workflow, "", 80),
       audioEnabled: preset.audioEnabled === true,

@@ -34,8 +34,10 @@ export interface LegacyCanvasNodeV1 {
   resolution?: string;
   quality?: string;
   duration?: string;
+  outputFormat?: string;
   count?: number;
   workflow?: string;
+  omniReferenceTaskType?: string;
   audioEnabled?: boolean;
   autoLinkEnabled?: boolean;
   assetValidationEnabled?: boolean;
@@ -91,8 +93,10 @@ export interface LegacyCanvasDocumentV1 {
     resolution: string;
     quality: string;
     duration: string;
+    outputFormat: string;
     count: number;
     workflow: string;
+    omniReferenceTaskType?: string;
     audioEnabled: boolean;
   };
 }
@@ -220,8 +224,12 @@ function serializeNode(value: unknown): LegacyCanvasNodeV1 | null {
   node.resolution = boundedString(candidate.resolution, "", 40);
   node.quality = boundedString(candidate.quality, "", 40);
   node.duration = boundedString(candidate.duration, "", 40);
+  node.outputFormat = boundedString(candidate.outputFormat, "", 40);
   node.count = finiteInteger(candidate.count, 1, 1, 100);
   node.workflow = boundedString(candidate.workflow, "", 80);
+  if (typeof candidate.omniReferenceTaskType === "string") {
+    node.omniReferenceTaskType = boundedString(candidate.omniReferenceTaskType, "", 80);
+  }
   node.audioEnabled = candidate.audioEnabled === true;
   node.autoLinkEnabled = candidate.autoLinkEnabled !== false;
   node.assetValidationEnabled = mediaKind === "video" && candidate.assetValidationEnabled === true;
@@ -313,17 +321,22 @@ function serializeCanvas(value: unknown, index: number): LegacyCanvasV1 | null {
 
 function serializeLastPreset(value: unknown): LegacyCanvasDocumentV1["lastPreset"] {
   const candidate = record(value) ?? {};
-  return {
+  const preset: LegacyCanvasDocumentV1["lastPreset"] = {
     mode: GENERATOR_MEDIA_TYPES.has(candidate.mode as GeneratorMediaKind) ? candidate.mode as GeneratorMediaKind : "image",
     model: boundedString(candidate.model, "", 200),
     aspect: boundedString(candidate.aspect, "", 40),
     resolution: boundedString(candidate.resolution, "", 40),
     quality: boundedString(candidate.quality, "", 40),
     duration: boundedString(candidate.duration, "", 40),
+    outputFormat: boundedString(candidate.outputFormat, "", 40),
     count: finiteInteger(candidate.count, 1, 1, 100),
     workflow: boundedString(candidate.workflow, "", 80),
     audioEnabled: candidate.audioEnabled === true,
   };
+  if (typeof candidate.omniReferenceTaskType === "string") {
+    preset.omniReferenceTaskType = boundedString(candidate.omniReferenceTaskType, "", 80);
+  }
+  return preset;
 }
 
 export function canonicalizeLegacyCanvasDocumentV1(value: unknown): LegacyCanvasDocumentV1 | null {

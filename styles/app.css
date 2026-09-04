@@ -4067,10 +4067,6 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   opacity: 0.36;
 }
 
-.duration-locked-segmented button:disabled {
-  cursor: default;
-}
-
 .segmented button.aspect-option {
   display: grid;
   grid-template-rows: 16px 14px;
@@ -4113,23 +4109,18 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   stroke-width: 1.4;
 }
 
-.duration-heading {
-  display: flex;
+.duration-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px 10px;
+  gap: 8px;
   align-items: center;
-  justify-content: space-between;
-}
-
-.duration-current {
-  color: rgba(255, 255, 255, 0.82);
-  font-size: var(--node-font-label);
-  font-weight: 560;
-  line-height: var(--node-leading-caption);
+  min-height: 26px;
 }
 
 .duration-range-input {
   display: block;
   width: 100%;
-  height: 16px;
+  height: 22px;
   margin: 0;
   border: 0;
   outline: 0;
@@ -4139,42 +4130,116 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
 }
 
 .duration-range-input::-webkit-slider-runnable-track {
-  height: 14px;
-  border-radius: 4px;
+  height: 4px;
+  border-radius: 999px;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.34) 0 var(--duration-progress), rgba(255, 255, 255, 0.08) var(--duration-progress) 100%);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.34) 0 var(--duration-progress), rgba(255, 255, 255, 0.09) var(--duration-progress) 100%);
 }
 
 .duration-range-input::-webkit-slider-thumb {
-  width: 5px;
-  height: 18px;
-  margin-top: -2px;
+  width: 10px;
+  height: 10px;
+  margin-top: -3px;
   border: 1px solid rgba(255, 255, 255, 0.46);
-  border-radius: 2px;
+  border-radius: 50%;
   appearance: none;
   background: #d6d8dc;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
 }
 
 .duration-range-input::-moz-range-track {
-  height: 14px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .duration-range-input::-moz-range-progress {
-  height: 14px;
-  border-radius: 4px;
+  height: 4px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.34);
 }
 
 .duration-range-input::-moz-range-thumb {
-  width: 5px;
-  height: 18px;
+  width: 10px;
+  height: 10px;
   border: 1px solid rgba(255, 255, 255, 0.46);
-  border-radius: 2px;
+  border-radius: 50%;
   background: #d6d8dc;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+}
+
+.duration-range-input:focus-visible {
+  outline: 0;
+}
+
+.duration-range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.24),
+    0 0 0 3px color-mix(in srgb, var(--selection-stroke) 34%, transparent);
+}
+
+.duration-range-input:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.24),
+    0 0 0 3px color-mix(in srgb, var(--selection-stroke) 34%, transparent);
+}
+
+.duration-number-input {
+  box-sizing: border-box;
+  width: 44px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  appearance: textfield;
+  outline: 0;
+  background: var(--node-chip-bg);
+  color: var(--node-chip-text);
+  font-family: inherit;
+  font-size: var(--node-font-label);
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  line-height: 1;
+  text-align: center;
+}
+
+.duration-number-input::-webkit-inner-spin-button,
+.duration-number-input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.duration-number-input:focus-visible {
+  border-color: color-mix(in srgb, var(--selection-stroke) 42%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--selection-stroke) 18%, transparent);
+}
+
+.duration-unit {
+  color: var(--node-setting-title);
+  font-size: var(--node-font-caption);
+  line-height: 1;
+  text-align: left;
+}
+
+.parameter-footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.parameter-footer-grid.has-output-format {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.parameter-footer-grid > .parameter-group,
+.parameter-footer-grid > .parameter-group + .parameter-group {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.parameter-footer-grid .segmented {
+  width: 100%;
 }
 
 .aspect-option.active .aspect-option-icon {
@@ -4248,10 +4313,6 @@ html[data-theme="light"] .model-check {
 }
 
 html[data-theme="light"] .material-option {
-  color: rgba(17, 24, 39, 0.82);
-}
-
-html[data-theme="light"] .duration-current {
   color: rgba(17, 24, 39, 0.82);
 }
 
