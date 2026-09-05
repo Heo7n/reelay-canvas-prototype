@@ -64,43 +64,167 @@ test("the routed legacy canvas delegates persistence to the versioned document c
   assert.match(appSource, /document\.visibilityState === "hidden"\) flushCanvasDocumentSave\(\)/);
 });
 
-test("a home launch intent becomes the first real persisted canvas mutation", () => {
-  const functionStart = appSource.indexOf("function consumeHomeLaunchIntent()");
+function createHomeLaunchHarness({
+  storedValue,
+  state = { workspaceId: "workspace-1", projectId: "project-1" },
+  canMutate = true,
+  node = {},
+}) {
+  const functionStart = appSource.indexOf("function removeHomeLaunchIntent()");
   const functionEnd = appSource.indexOf("function cloneNodeState", functionStart);
   assert.ok(functionStart >= 0 && functionEnd > functionStart);
   const functionSource = appSource.slice(functionStart, functionEnd);
-  const node = {};
-  const removedKeys = [];
-  const scheduledDelays = [];
-  let renderCount = 0;
+  const metrics = {
+    addNodeCalls: 0,
+    removedKeys: [],
+    renderCount: 0,
+    scheduledDelays: [],
+  };
   const consumeLaunchIntent = Function(
     "isCanvasMutationAllowed",
     "sessionStorage",
     "homeLaunchIntentKey",
+    "state",
     "addNodeAt",
     "window",
     "render",
     "scheduleCanvasDocumentSave",
     `${functionSource}; return consumeHomeLaunchIntent;`,
   )(
-    () => true,
+    () => canMutate,
     {
-      getItem: () => "  Create a quiet product shot  ",
-      removeItem: (key) => removedKeys.push(key),
+      getItem: () => storedValue,
+      removeItem: (key) => metrics.removedKeys.push(key),
     },
     "reelay-home-launch-intent",
-    () => node,
+    state,
+    () => {
+      metrics.addNodeCalls += 1;
+      return node;
+    },
     { innerWidth: 1440, innerHeight: 900 },
-    () => { renderCount += 1; },
-    (delay) => scheduledDelays.push(delay),
+    () => { metrics.renderCount += 1; },
+    (delay) => metrics.scheduledDelays.push(delay),
   );
 
-  assert.equal(consumeLaunchIntent(), true);
-  assert.equal(node.prompt, "Create a quiet product shot");
-  assert.equal(node.expanded, true);
-  assert.deepEqual(removedKeys, ["reelay-home-launch-intent"]);
-  assert.equal(renderCount, 1);
-  assert.deepEqual(scheduledDelays, [0]);
+  return { consumeLaunchIntent, metrics, node };
+}
+
+test("a matching versioned home launch intent becomes the first persisted canvas mutation", () => {
+  assert.match(
+    appSource,
+    /onContext\(context\)[\s\S]*?state\.workspaceId = String\(context\.workspaceId[\s\S]*?state\.projectId = String\(context\.projectId/,
+  );
+  assert.match(
+    appSource,
+    /onDocumentReady\(\{ writable \}\)[\s\S]*?if \(writable\) \{\s*consumeHomeLaunchIntent\(\);/,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /applyTransform\(\);\s*consumeHomeLaunchIntent\(\);\s*render\(\);/,
+  );
+  const harness = createHomeLaunchHarness({
+    storedValue: JSON.stringify({
+      version: 1,
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      prompt: "  Create a quiet product shot  ",
+    }),
+  });
+
+  assert.equal(harness.consumeLaunchIntent(), true);
+  assert.equal(harness.node.prompt, "Create a quiet product shot");
+  assert.equal(harness.node.expanded, true);
+  assert.equal(harness.metrics.addNodeCalls, 1);
+  assert.deepEqual(harness.metrics.removedKeys, ["reelay-home-launch-intent"]);
+  assert.equal(harness.metrics.renderCount, 1);
+  assert.deepEqual(harness.metrics.scheduledDelays, [0]);
+});
+
+test("home launch intent rejects workspace and project scope mismatches", () => {
+  const storedValue = JSON.stringify({
+    version: 1,
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    prompt: "Create a quiet product shot",
+  });
+  const currentScopes = [
+    { workspaceId: "workspace-2", projectId: "project-1" },
+    { workspaceId: "workspace-1", projectId: "project-2" },
+  ];
+
+  currentScopes.forEach((state) => {
+    const harness = createHomeLaunchHarness({ storedValue, state });
+    assert.equal(harness.consumeLaunchIntent(), false);
+    assert.equal(harness.metrics.addNodeCalls, 0);
+    assert.equal(harness.metrics.renderCount, 0);
+    assert.deepEqual(harness.metrics.scheduledDelays, []);
+    assert.deepEqual(harness.metrics.removedKeys, ["reelay-home-launch-intent"]);
+  });
+});
+
+test("home launch intent discards malformed, legacy, and invalid payloads", () => {
+  const baseIntent = {
+    version: 1,
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    prompt: "Create a quiet product shot",
+  };
+  const invalidValues = [
+    "legacy plain-text prompt",
+    JSON.stringify("legacy JSON string prompt"),
+    "{malformed-json",
+    JSON.stringify({ ...baseIntent, version: 2 }),
+    JSON.stringify({ ...baseIntent, workspaceId: "   " }),
+    JSON.stringify({ ...baseIntent, projectId: 42 }),
+    JSON.stringify({ ...baseIntent, prompt: "   " }),
+    JSON.stringify({ ...baseIntent, extra: true }),
+  ];
+
+  invalidValues.forEach((storedValue) => {
+    const harness = createHomeLaunchHarness({ storedValue });
+    assert.equal(harness.consumeLaunchIntent(), false);
+    assert.equal(harness.metrics.addNodeCalls, 0);
+    assert.deepEqual(harness.metrics.removedKeys, ["reelay-home-launch-intent"]);
+  });
+});
+
+test("a stranded launch intent cannot write into a subsequently opened project", () => {
+  const harness = createHomeLaunchHarness({
+    storedValue: JSON.stringify({
+      version: 1,
+      workspaceId: "workspace-1",
+      projectId: "project-created-from-prompt",
+      prompt: "This must stay in the original project",
+    }),
+    state: {
+      workspaceId: "workspace-1",
+      projectId: "unrelated-project-opened-later",
+    },
+  });
+
+  assert.equal(harness.consumeLaunchIntent(), false);
+  assert.equal(harness.metrics.addNodeCalls, 0);
+  assert.deepEqual(harness.node, {});
+  assert.deepEqual(harness.metrics.removedKeys, ["reelay-home-launch-intent"]);
+});
+
+test("a matching launch intent remains available until node creation succeeds", () => {
+  const harness = createHomeLaunchHarness({
+    storedValue: JSON.stringify({
+      version: 1,
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      prompt: "Retry after placement is ready",
+    }),
+    node: null,
+  });
+
+  assert.equal(harness.consumeLaunchIntent(), false);
+  assert.equal(harness.metrics.addNodeCalls, 1);
+  assert.deepEqual(harness.metrics.removedKeys, []);
+  assert.equal(harness.metrics.renderCount, 0);
+  assert.deepEqual(harness.metrics.scheduledDelays, []);
 });
 
 test("background generation completion marks the project document for persistence", () => {
@@ -334,7 +458,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260831-group-surface-language-58/);
+  assert.match(html, /styles\.css\?v=20260831-selection-surface-55/);
   assert.match(html, /app\.js\?v=20260831-exact-group-selection-54/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
@@ -424,7 +548,7 @@ test("group chrome uses bounded labels, neutral fixed-width framing, and corner 
   assert.match(appSource, /setProperty\("--group-interaction-scale",\s*inverseCanvasScale\)/);
   assert.match(
     appCss,
-    /\.group-title\s*\{[\s\S]*?bottom:\s*calc\(100% - 6px \* var\(--group-ui-scale[\s\S]*?padding:\s*4px 9px[\s\S]*?border:\s*1px solid var\(--group-title-boundary\)[\s\S]*?background:\s*var\(--group-title-surface\)[\s\S]*?transform:\s*scale\(var\(--group-ui-scale/,
+    /\.group-title\s*\{[\s\S]*?bottom:\s*calc\(100% \+ 8px \* var\(--group-ui-scale[\s\S]*?transform:\s*scale\(var\(--group-ui-scale/,
   );
   assert.match(
     appCss,
@@ -432,7 +556,7 @@ test("group chrome uses bounded labels, neutral fixed-width framing, and corner 
   );
   assert.match(appSource, /function scheduleGroupChromeLayout\(\)[\s\S]*?titleRect\.right \+ 6 > toolbarRect\.left[\s\S]*?--group-toolbar-lift/);
   assert.match(appCss, /var\(--group-toolbar-lift,\s*0px\)/);
-  assert.match(appCss, /\.group-frame\s*\{[\s\S]*?linear-gradient\(180deg, var\(--group-frame-top-wash\)[\s\S]*?calc\(1px \* var\(--group-interaction-scale[\s\S]*?var\(--group-frame-boundary\)/);
+  assert.match(appCss, /\.group-frame\s*\{[\s\S]*?calc\(1px \* var\(--group-interaction-scale[\s\S]*?var\(--group-frame-boundary\)/);
   assert.match(appCss, /\.group-frame:hover\s*\{[\s\S]*?var\(--group-frame-fill-hover\)[\s\S]*?var\(--group-frame-boundary-hover\)/);
   assert.match(appCss, /\.group-frame\.selected\s*\{[\s\S]*?calc\(1px \* var\(--group-interaction-scale[\s\S]*?var\(--group-frame-boundary-active\)/);
   assert.doesNotMatch(appCss, /calc\(1\.35px \* var\(--group-interaction-scale/);
@@ -585,7 +709,7 @@ test("aspect changes preserve node identity and isolate the prompt workspace fro
   assert.match(appSource, /querySelectorAll\('\[data-action="aspect"\]'\)[\s\S]*?aria-pressed/);
 });
 
-test("multi-selection uses an inset selection film and one aggregate output port", async () => {
+test("multi-selection uses a quiet shared container and one aggregate output port", async () => {
   const connectionStyles = await readFile(new URL("styles/canvas-connections.css", root), "utf8");
   assert.match(html, /id="canvasGrid"[\s\S]*?id="multiSelectionSurface"[\s\S]*?id="canvasStage"/);
   assert.match(html, /id="multiSelectionChrome"[\s\S]*?id="multiSelectionPort"/);
@@ -593,17 +717,17 @@ test("multi-selection uses an inset selection film and one aggregate output port
   assert.doesNotMatch(html, /id="selectionCount"|批量下载（默认）/);
   assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getSelectionScreenRect\(bounds,\s*state,\s*0\)/);
   assert.match(appSource, /function getDefaultGroupBounds\(nodes\)[\s\S]*?groupFrameRules\.paddingX[\s\S]*?groupFrameRules\.paddingTop[\s\S]*?groupFrameRules\.paddingBottom/);
-  assert.match(appCss, /:root\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\(205, 214, 228, 0\.008\)[\s\S]*?--multi-selection-edge:\s*rgba\(225, 232, 242, 0\.11\)/);
-  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\(45, 59, 80, 0\.004\)[\s\S]*?--multi-selection-edge:\s*rgba\(37, 49, 68, 0\.065\)/);
-  assert.match(appCss, /\.multi-selection-surface\s*\{[\s\S]*?z-index:\s*1;[\s\S]*?border:\s*0;[\s\S]*?border-radius:\s*var\(--multi-selection-surface-radius,[\s\S]*?background:\s*var\(--multi-selection-surface-fill\)[\s\S]*?box-shadow:\s*inset 0 0 16px var\(--multi-selection-edge\)[\s\S]*?pointer-events:\s*none/);
+  assert.match(appCss, /:root\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\(205, 214, 228, 0\.085\)[\s\S]*?--multi-selection-boundary:\s*rgba\(225, 232, 242, 0\.18\)[\s\S]*?--multi-selection-depth:\s*rgba\(/);
+  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--multi-selection-surface-fill:\s*rgba\(45, 59, 80, 0\.034\)[\s\S]*?--multi-selection-boundary:\s*rgba\(37, 49, 68, 0\.055\)[\s\S]*?--multi-selection-depth:\s*rgba\(/);
+  assert.match(appCss, /\.multi-selection-surface\s*\{[\s\S]*?z-index:\s*1;[\s\S]*?border:\s*1px solid var\(--multi-selection-boundary\)[\s\S]*?border-radius:\s*var\(--multi-selection-surface-radius,[\s\S]*?background:\s*var\(--multi-selection-surface-fill\)[\s\S]*?box-shadow:\s*0 6px 18px var\(--multi-selection-depth\)[\s\S]*?pointer-events:\s*none/);
   assert.match(appCss, /\.canvas-stage\s*\{[\s\S]*?z-index:\s*2;/);
   assert.match(appCss, /\.multi-selection-chrome\s*\{[\s\S]*?z-index:\s*30;[\s\S]*?pointer-events:\s*none/);
   assert.doesNotMatch(appCss, /\.multi-selection-chrome\s*\{[^}]*(?:border|background|box-shadow)\s*:/);
-  assert.match(appCss, /\.canvas-shell\.selection-frame-hover \.multi-selection-surface\s*\{[\s\S]*?--multi-selection-surface-fill-hover[\s\S]*?box-shadow:\s*inset 0 0 18px var\(--multi-selection-edge-hover\)/);
-  assert.match(appCss, /\.canvas-shell\.selection-frame-pressed \.multi-selection-surface\s*\{[\s\S]*?--multi-selection-surface-fill-active[\s\S]*?box-shadow:\s*inset 0 0 20px var\(--multi-selection-edge-active\)/);
+  assert.match(appCss, /\.canvas-shell\.selection-frame-hover \.multi-selection-surface\s*\{[\s\S]*?--multi-selection-boundary-hover[\s\S]*?--multi-selection-surface-fill-hover/);
+  assert.match(appCss, /\.canvas-shell\.selection-frame-pressed \.multi-selection-surface\s*\{[\s\S]*?--multi-selection-boundary-active[\s\S]*?--multi-selection-surface-fill-active[\s\S]*?--multi-selection-depth-active/);
   assert.match(appCss, /\.multi-selection-chrome\.is-connecting \.multi-selection-port/);
   assert.doesNotMatch(appCss, /\.multi-selection-surface\.is-connecting/);
-  assert.doesNotMatch(appCss, /--multi-selection-boundary|--multi-selection-depth|--multi-selection-shadow-near|--multi-selection-shadow-far|--multi-selection-highlight/);
+  assert.doesNotMatch(appCss, /--multi-selection-shadow-near|--multi-selection-shadow-far|--multi-selection-highlight/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-hover[\s\S]*?cursor:\s*grab/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-pressed[\s\S]*?cursor:\s*grabbing/);
   assert.match(appCss, /\.selection-toolbar \.icon-toolbar-button\s*\{[\s\S]*?background:\s*transparent/);

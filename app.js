@@ -213,6 +213,7 @@ const state = {
   agentOpen: false,
   agentWidth: 420,
   zoomTipTimer: 0,
+  workspaceId: "",
   projectId: crypto.randomUUID(),
   projectName: "Untitled",
   canvasMoreTargetId: null,
@@ -338,6 +339,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   getExpectedSource: () => window.parent,
   onAccessChange: applyCanvasAccessMode,
   onContext(context) {
+    state.workspaceId = String(context.workspaceId || "");
     state.projectId = String(context.projectId || state.projectId);
     state.projectName = String(context.projectName || state.projectName);
     syncHostedIdentity(context);
@@ -5942,24 +5944,73 @@ function addNodeAt(clientX, clientY, mode = "image", options = {}) {
   return node;
 }
 
-function consumeHomeLaunchIntent() {
-  if (!isCanvasMutationAllowed()) return false;
-  let prompt = "";
-  try {
-    prompt = sessionStorage.getItem(homeLaunchIntentKey)?.trim() || "";
-  } catch {
-    return false;
-  }
-  if (!prompt) return false;
-  const node = addNodeAt(window.innerWidth / 2, window.innerHeight / 2);
-  if (!node) return false;
-  node.prompt = prompt;
-  node.expanded = true;
+function removeHomeLaunchIntent() {
   try {
     sessionStorage.removeItem(homeLaunchIntentKey);
   } catch {
-    // The node is already created; storage cleanup can safely fail.
+    // Storage cleanup is best-effort when the browser blocks session storage.
   }
+}
+
+function parseHomeLaunchIntent(rawValue) {
+  if (typeof rawValue !== "string") return null;
+
+  let value;
+  try {
+    value = JSON.parse(rawValue);
+  } catch {
+    return null;
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const expectedKeys = ["projectId", "prompt", "version", "workspaceId"];
+  const actualKeys = Object.keys(value).sort();
+  if (
+    actualKeys.length !== expectedKeys.length
+    || actualKeys.some((key, index) => key !== expectedKeys[index])
+    || value.version !== 1
+    || typeof value.workspaceId !== "string"
+    || !value.workspaceId.trim()
+    || typeof value.projectId !== "string"
+    || !value.projectId.trim()
+    || typeof value.prompt !== "string"
+  ) return null;
+
+  const prompt = value.prompt.trim();
+  if (!prompt || prompt.length > 600) return null;
+  return {
+    version: 1,
+    workspaceId: value.workspaceId,
+    projectId: value.projectId,
+    prompt,
+  };
+}
+
+function consumeHomeLaunchIntent() {
+  if (!isCanvasMutationAllowed()) return false;
+  let rawIntent = null;
+  try {
+    rawIntent = sessionStorage.getItem(homeLaunchIntentKey);
+  } catch {
+    return false;
+  }
+  if (rawIntent === null) return false;
+
+  const intent = parseHomeLaunchIntent(rawIntent);
+  if (
+    !intent
+    || intent.workspaceId !== state.workspaceId
+    || intent.projectId !== state.projectId
+  ) {
+    removeHomeLaunchIntent();
+    return false;
+  }
+
+  const node = addNodeAt(window.innerWidth / 2, window.innerHeight / 2);
+  if (!node) return false;
+  node.prompt = intent.prompt;
+  node.expanded = true;
+  removeHomeLaunchIntent();
   render();
   scheduleCanvasDocumentSave(0);
   return true;
@@ -8566,6 +8617,5 @@ syncFaviconContrast();
 officialLibraryAssets.forEach((asset) => hydrateAssetMetadata(asset, null));
 initializeCanvases();
 applyTransform();
-consumeHomeLaunchIntent();
 render();
 canvasPersistence.post("canvas:ready");

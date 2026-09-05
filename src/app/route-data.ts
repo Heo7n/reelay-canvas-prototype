@@ -38,6 +38,7 @@ export interface WorkspaceActionData {
   error?: string;
   notice?: string;
   ok?: boolean;
+  projectId?: string;
 }
 
 function selectDefaultWorkspace(workspaces: Workspace[]): Workspace | null {
@@ -227,10 +228,17 @@ export function createRouteHandlers(services: ApplicationServices) {
       }
 
       try {
-        if (intent === "create") {
+        if (intent === "launch-from-prompt") {
           const prompt = String(formData.get("prompt") ?? "").trim();
-          const name = prompt ? prompt.slice(0, 32) : "未命名项目";
-          const project = await services.projectRepository.create(workspaceId, { name });
+          if (!prompt) return { error: "请先输入创作需求。" };
+          const project = await services.projectRepository.create(workspaceId, {
+            name: prompt.slice(0, 32),
+          });
+          return { ok: true, projectId: project.id };
+        }
+
+        if (intent === "create") {
+          const project = await services.projectRepository.create(workspaceId, { name: "未命名项目" });
           return redirect(routePaths.canvas(workspaceId, project.id, "main"));
         }
 

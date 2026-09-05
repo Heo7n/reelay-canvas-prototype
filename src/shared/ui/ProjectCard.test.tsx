@@ -14,6 +14,7 @@ afterEach(cleanup);
 function renderCard(
   project: ProjectSummary,
   action: ({ request }: { request: Request }) => Promise<unknown> = async () => null,
+  onNotice = vi.fn(),
 ): void {
   const router = createMemoryRouter(
     [
@@ -22,7 +23,7 @@ function renderCard(
         action,
         element: (
           <ProjectMenuProvider>
-            <ProjectCard project={project} onNotice={vi.fn()} />
+            <ProjectCard project={project} onNotice={onNotice} />
           </ProjectMenuProvider>
         ),
       },
@@ -118,6 +119,37 @@ describe("ProjectCard access projection", () => {
     );
   });
 
+  it("derives deletion from the explicit admin role even for a private projection", () => {
+    renderCard({
+      ...collaborativeViewerProject,
+      id: "project-private-editor",
+      accessKind: "private",
+      currentUserRole: "edit",
+      name: "个人编辑项目",
+    });
+
+    fireEvent.click(screen.getByLabelText("打开 个人编辑项目 的项目菜单"));
+
+    expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /删除项目/ })).toBeNull();
+  });
+
+  it("describes cover editing as a future asset capability instead of stale project persistence", () => {
+    const onNotice = vi.fn();
+    renderCard({
+      ...collaborativeViewerProject,
+      id: "project-cover",
+      currentUserRole: "edit",
+      name: "封面项目",
+    }, async () => null, onNotice);
+
+    fireEvent.click(screen.getByLabelText("打开 封面项目 的项目菜单"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "修改封面" }));
+
+    expect(onNotice).toHaveBeenCalledWith("项目封面编辑尚未接入；后续将与可复用资产能力一起开放。");
+    expect(onNotice.mock.calls[0]?.[0]).not.toContain("项目持久化阶段");
+  });
+
   it("keeps only one card menu open and dismisses it outside or with Escape", () => {
     const firstProject = {
       ...collaborativeViewerProject,
@@ -188,5 +220,83 @@ describe("ProjectCard access projection", () => {
       intent: "delete",
       projectId: "project-admin",
     });
+  });
+});
+
+describe("ProjectCard rename reliability", () => {
+  const editableProject: ProjectSummary = {
+    ...collaborativeViewerProject,
+    id: "project-rename",
+    accessKind: "private",
+    currentUserRole: "admin",
+    name: "原项目名",
+  };
+
+  it("closes without a request when the normalized name did not change", () => {
+    const action = vi.fn(async () => ({ ok: true }));
+    renderCard(editableProject, action);
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 原项目名" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(input, { target: { value: "  原项目名  " } });
+    fireEvent.blur(input);
+
+    expect(action).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull();
+  });
+
+  it("keeps an empty name editable and shows a visible validation error", () => {
+    const action = vi.fn(async () => ({ ok: true }));
+    renderCard(editableProject, action);
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 原项目名" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.blur(input);
+
+    expect(action).not.toHaveBeenCalled();
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("项目名称不能为空");
+  });
+
+  it("submits the trimmed name once, disables editing while pending, and exits after success", async () => {
+    const submitted = vi.fn();
+    let resolveAction: ((value: unknown) => void) | undefined;
+    renderCard(editableProject, async ({ request }) => {
+      submitted(Object.fromEntries(await request.formData()));
+      return new Promise((resolve) => {
+        resolveAction = resolve;
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 原项目名" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(input, { target: { value: "  新项目名  " } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(submitted).toHaveBeenCalledWith({
+      intent: "rename",
+      name: "新项目名",
+      projectId: "project-rename",
+    }));
+    await waitFor(() => expect(input).toBeDisabled());
+    expect(input).toHaveValue("新项目名");
+
+    resolveAction?.({ ok: true });
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull());
+  });
+
+  it("keeps the normalized draft editable and exposes the server error after failure", async () => {
+    renderCard(editableProject, async () => ({ error: "这个项目名称暂时无法保存。" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 原项目名" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(input, { target: { value: "  新项目名  " } });
+    fireEvent.submit(input.closest("form")!);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("这个项目名称暂时无法保存");
+    expect(screen.getByRole("textbox", { name: "项目名称" })).toHaveValue("新项目名");
+    expect(screen.getByRole("textbox", { name: "项目名称" })).toBeEnabled();
   });
 });

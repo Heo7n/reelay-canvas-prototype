@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { Link, useActionData } from "react-router-dom";
+import { Link, useActionData, useFetchers, useNavigation } from "react-router-dom";
 import { useState } from "react";
 
 import { routePaths } from "../../app/routes";
@@ -19,12 +19,21 @@ import styles from "./WorkspacePages.module.css";
 export function WorkspaceHomePage() {
   const data = useWorkspaceRouteData();
   const actionData = useActionData() as WorkspaceActionData | undefined;
+  const fetchers = useFetchers();
+  const navigation = useNavigation();
   const [activeSlide, setActiveSlide] = useState(1);
   const [prompt, setPrompt] = useState("");
   const { notice, showNotice } = useTransientNotice();
   const recentProjects = [...data.projects]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, 4);
+  const projectCreationBusy = (
+    navigation.state !== "idle"
+    && navigation.formData?.get("intent") === "create"
+  ) || fetchers.some((fetcher) => (
+    fetcher.state !== "idle"
+    && fetcher.formData?.get("intent") === "launch-from-prompt"
+  ));
 
   function chooseSlide(slide: HeroSlide): void {
     setPrompt(`我想从「${slide.title}」开始一个新项目`);
@@ -40,13 +49,20 @@ export function WorkspaceHomePage() {
 
   return (
     <div className={styles.workspaceShell}>
-      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} />
+      <WorkspaceHeader activeSection="home" actor={data.actor} currentWorkspace={data.currentWorkspace} />
       <main className={styles.homeMain}>
-        <h1 className={styles.srOnly}>Reelay 创作主页</h1>
-        <HeroCarousel slides={heroSlides} activeIndex={activeSlide} onActiveIndexChange={setActiveSlide} onChooseSlide={chooseSlide} />
-
-        <section className={styles.creationStart} aria-label="开始创作">
-          <CreationComposer prompt={prompt} onPromptChange={setPrompt} onNotice={showNotice} />
+        <section className={styles.creationStart} aria-labelledby="home-title">
+          <div className={styles.homeIntro}>
+            <span>创作工作台</span>
+            <h1 id="home-title">从一个创作意图开始</h1>
+            <p>描述你想完成的内容，Reelay 会建立项目并带你进入画布。</p>
+          </div>
+          <CreationComposer
+            disabled={projectCreationBusy}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onNotice={showNotice}
+          />
           <CapabilityStrip capabilities={capabilities} onChoose={chooseCapability} />
         </section>
 
@@ -57,12 +73,22 @@ export function WorkspaceHomePage() {
           </div>
           <ProjectMenuProvider>
             <div className={styles.projectGrid}>
-              <NewProjectCard />
+              <NewProjectCard disabled={projectCreationBusy} />
               {recentProjects.map((project) => (
                 <ProjectCard key={project.id} project={project} onNotice={showNotice} />
               ))}
             </div>
           </ProjectMenuProvider>
+        </section>
+
+        <section className={styles.inspirationSection} aria-labelledby="creation-inspiration-title">
+          <div className={styles.sectionHeading}>
+            <div>
+              <span className={styles.sectionEyebrow}>发现方向</span>
+              <h2 id="creation-inspiration-title">创作灵感</h2>
+            </div>
+          </div>
+          <HeroCarousel slides={heroSlides} activeIndex={activeSlide} onActiveIndexChange={setActiveSlide} onChooseSlide={chooseSlide} />
         </section>
       </main>
 

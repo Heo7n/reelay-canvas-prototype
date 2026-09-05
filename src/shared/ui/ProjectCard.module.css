@@ -158,6 +158,16 @@
   font-weight: 700;
 }
 
+.renameFeedback {
+  display: block;
+  margin-top: 4px;
+  color: #b74e4e;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+:global(html[data-theme="dark"]) .renameFeedback { color: #ff929b; }
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -182,9 +192,11 @@
   color: var(--workspace-text, #171719);
   cursor: pointer;
 }
+.newCard > button:disabled { cursor: wait; opacity: 0.66; }
 .addIcon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 50%; background: var(--workspace-text, #171719); color: var(--workspace-bg, #f8f8f7); }
 .addIcon svg { width: 22px; height: 22px; }
 .newCard strong { font-size: 13px; }
+.newCardDescription { color: var(--workspace-muted, #77777d); font-size: 11px; line-height: 1.35; }
 
 .visualLink:focus-visible,
 .menuTrigger:focus-visible,

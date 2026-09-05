@@ -219,6 +219,41 @@ describe("application route data", () => {
     expect((response as Response).headers.get("Location")).toBe("/w/workspace-organization/projects/project-created/canvases/main");
   });
 
+  it("returns the created project identity for a non-empty prompt launch without redirecting", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const response = await handlers.workspaceAction(
+      actionArgs(
+        "http://reelay.local/app/w/workspace-organization",
+        {
+          intent: "launch-from-prompt",
+          prompt: "  帮我把这个很长的创作想法整理成可执行的分镜与视频生成计划  ",
+        },
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(services.projectRepository.create).toHaveBeenCalledWith("workspace-organization", {
+      name: "帮我把这个很长的创作想法整理成可执行的分镜与视频生成计划".slice(0, 32),
+    });
+    expect(response).toEqual({ ok: true, projectId: "project-created" });
+  });
+
+  it("rejects a blank prompt launch without creating a project", async () => {
+    const services = createServices();
+    const handlers = createRouteHandlers(services);
+    const response = await handlers.workspaceAction(
+      actionArgs(
+        "http://reelay.local/app/w/workspace-organization",
+        { intent: "launch-from-prompt", prompt: "   " },
+        { workspaceId: "workspace-organization" },
+      ),
+    );
+
+    expect(response).toEqual({ error: "请先输入创作需求。" });
+    expect(services.projectRepository.create).not.toHaveBeenCalled();
+  });
+
   it("moves an admin project to trash through the current workspace route", async () => {
     const services = createServices();
     const handlers = createRouteHandlers(services);

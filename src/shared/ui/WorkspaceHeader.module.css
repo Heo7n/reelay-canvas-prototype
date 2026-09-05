@@ -10,7 +10,50 @@
   background: var(--workspace-bg, #f8f8f7);
 }
 
-.account { display: flex; align-items: center; }
+.headerWithNavigation {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+}
+
+.primaryNavigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--workspace-text, #171719) 7%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--workspace-surface, #fff) 72%, transparent);
+}
+
+.primaryNavigation a {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border-radius: 9px;
+  color: var(--workspace-muted, #77777d);
+  font-size: 12px;
+  font-weight: 680;
+  text-decoration: none;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.primaryNavigation a:hover {
+  background: var(--workspace-hover, rgba(23, 23, 25, 0.055));
+  color: var(--workspace-text, #171719);
+}
+
+.primaryNavigation a.activePrimaryNavigation {
+  background: var(--workspace-surface, #fff);
+  box-shadow: 0 3px 10px rgba(16, 16, 20, 0.07);
+  color: var(--workspace-text, #171719);
+}
+
+.primaryNavigation svg { width: 15px; height: 15px; }
+
+.account { display: flex; align-items: center; justify-self: end; }
 .profile { position: relative; }
 .profile summary { list-style: none; }
 .profile summary::-webkit-details-marker { display: none; }
@@ -243,12 +286,17 @@
 :global(html[data-theme="dark"]) .shortcutSheetPortal .shortcutRow kbd { border-color: rgba(244, 244, 245, 0.12); background: rgba(244, 244, 245, 0.08); color: #f4f4f5; }
 
 .accountTrigger:focus-visible,
+.primaryNavigation a:focus-visible,
 .menuItem:focus-visible,
 .helpLink:focus-visible,
 .overviewRow:focus-visible { outline: 3px solid rgba(87, 112, 207, 0.24); outline-offset: -3px; }
 
 @media (max-width: 680px) {
   .header { height: 64px; padding: 12px 16px; }
+  .headerWithNavigation { grid-template-columns: auto 1fr auto; gap: 8px; }
+  .primaryNavigation { justify-self: center; }
+  .primaryNavigation a { width: 34px; padding: 0; justify-content: center; }
+  .primaryNavigation a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .accountTrigger { grid-template-columns: 24px minmax(0, 72px) 12px 28px; min-height: 36px; }
   .menu { right: -2px; width: min(286px, calc(100vw - 30px)); overflow-y: auto; }
   .shortcutSheetPortal { right: 16px !important; left: 16px; width: auto; }
@@ -257,6 +305,7 @@
 @media (prefers-reduced-motion: reduce) {
   .accountTrigger,
   .accountChevron,
+  .primaryNavigation a,
   .themeSwitch,
   .themeThumb,
   .helpTrigger > svg:last-child { transition: none; }

@@ -24,6 +24,30 @@ const workspace = {
 afterEach(cleanup);
 
 describe("workspace account menu", () => {
+  it("exposes the workbench primary navigation with the current section", () => {
+    const router = createMemoryRouter([
+      {
+        path: "*",
+        action: async () => null,
+        element: (
+          <WorkspaceHeader
+            activeSection="projects"
+            actor={actor}
+            currentWorkspace={workspace}
+          />
+        ),
+      },
+    ], { initialEntries: ["/w/workspace-organization/projects"] });
+    render(<RouterProvider router={router} />);
+
+    expect(screen.getByRole("navigation", { name: "工作台主导航" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "创作首页" })).toHaveAttribute(
+      "href",
+      "/w/workspace-organization",
+    );
+    expect(screen.getByRole("link", { name: "项目空间" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("can keep only the brand on focused management surfaces", () => {
     const router = createMemoryRouter([
       {

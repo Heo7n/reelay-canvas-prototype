@@ -8,8 +8,7 @@ describe("application route contract", () => {
     );
   });
 
-  it("keeps personal and organization workspaces on the same route shape", () => {
-    expect(appRoutes.projects("personal-user-1")).toBe("/app/w/personal-user-1/projects");
+  it("keeps project access kinds inside one workspace-scoped project route", () => {
     expect(appRoutes.projects("organization-1")).toBe("/app/w/organization-1/projects");
     expect(appRoutes.organization("organization-1")).toBe("/app/w/organization-1/organization");
   });

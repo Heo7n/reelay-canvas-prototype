@@ -6,6 +6,8 @@ import {
   ChevronDown,
   ChevronRight,
   CircleHelp,
+  FolderKanban,
+  House,
   Keyboard,
   LogOut,
   Moon,
@@ -47,6 +49,7 @@ const shortcuts = [
 ] as const;
 
 interface WorkspaceHeaderProps {
+  activeSection?: "home" | "projects";
   actor: SessionActor;
   currentWorkspace: Workspace;
   showAccount?: boolean;
@@ -137,6 +140,7 @@ function ShortcutHelp() {
 }
 
 export function WorkspaceHeader({
+  activeSection,
   actor,
   currentWorkspace,
   showAccount = true,
@@ -191,8 +195,29 @@ export function WorkspaceHeader({
 
   return (
     <>
-      <header className={styles.header}>
+      <header className={`${styles.header} ${activeSection ? styles.headerWithNavigation : ""}`}>
         <Brand to={routePaths.workspaceHome(currentWorkspace.id)} />
+
+        {activeSection ? (
+          <nav className={styles.primaryNavigation} aria-label="工作台主导航">
+            <Link
+              className={activeSection === "home" ? styles.activePrimaryNavigation : ""}
+              to={routePaths.workspaceHome(currentWorkspace.id)}
+              aria-current={activeSection === "home" ? "page" : undefined}
+            >
+              <House aria-hidden="true" />
+              <span>创作首页</span>
+            </Link>
+            <Link
+              className={activeSection === "projects" ? styles.activePrimaryNavigation : ""}
+              to={routePaths.projects(currentWorkspace.id)}
+              aria-current={activeSection === "projects" ? "page" : undefined}
+            >
+              <FolderKanban aria-hidden="true" />
+              <span>项目空间</span>
+            </Link>
+          </nav>
+        ) : null}
 
         {showAccount ? (
           <div className={styles.account}>

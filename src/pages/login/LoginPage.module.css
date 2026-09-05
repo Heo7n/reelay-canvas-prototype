@@ -5,6 +5,10 @@
   --muted: #76767d;
   --border: rgba(23, 23, 25, 0.14);
   --hover: rgba(23, 23, 25, 0.055);
+  --accent: #6868e8;
+  --accent-soft: rgba(104, 104, 232, 0.09);
+  --error: #a83f47;
+  --error-soft: rgba(168, 63, 71, 0.08);
   display: grid;
   grid-template-columns: minmax(0, 64fr) minmax(420px, 36fr);
   min-height: 100vh;
@@ -19,6 +23,10 @@
   --muted: #a5a5ac;
   --border: rgba(244, 244, 245, 0.14);
   --hover: rgba(244, 244, 245, 0.07);
+  --accent: #a5a5ff;
+  --accent-soft: rgba(165, 165, 255, 0.11);
+  --error: #ff9ba3;
+  --error-soft: rgba(255, 155, 163, 0.09);
 }
 
 .visual {
@@ -69,59 +77,143 @@
 }
 
 .panel {
-  position: relative;
   display: grid;
   min-height: 100vh;
   place-items: center;
-  padding: 56px clamp(36px, 4vw, 72px);
+  padding: 48px clamp(32px, 3.8vw, 68px);
   background: radial-gradient(circle at 45% 16%, color-mix(in srgb, var(--surface) 92%, transparent), transparent 52%), var(--bg);
 }
 
 .formWrap {
-  width: min(100%, 400px);
+  width: min(100%, 420px);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .formWrap h1 {
-  margin: 0 0 clamp(42px, 5vh, 60px);
+  margin: 0;
   font-size: clamp(36px, 3vw, 44px);
   line-height: 1.08;
   letter-spacing: -0.045em;
 }
 
-.close {
-  position: absolute;
-  top: clamp(24px, 3vw, 44px);
-  right: clamp(24px, 3vw, 44px);
-  display: grid;
-  width: 44px;
-  height: 44px;
+.lede {
+  margin: 12px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.identityPicker {
+  min-width: 0;
+  margin: 0;
   padding: 0;
-  place-items: center;
   border: 0;
-  border-radius: 50%;
-  background: transparent;
+}
+
+.identityPicker legend {
+  margin-bottom: 9px;
+  padding: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.identityGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.identityButton {
+  display: grid;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 8px;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
   color: var(--text);
   cursor: pointer;
 }
 
-.close:hover { background: var(--hover); }
-.close svg { width: 25px; height: 25px; }
+.identityButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: var(--hover);
+}
+
+.identityButton span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.identityButton strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identityButtonSelected {
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border));
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.identityPicker:disabled .identityButton {
+  cursor: wait;
+  opacity: 0.66;
+}
+
+.identityStatus {
+  min-height: 18px;
+  margin: 9px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demoGuardrail {
+  margin: 12px 0 20px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.demoGuardrail strong {
+  color: var(--text);
+}
 
 .form {
   display: grid;
-  gap: 10px;
+  gap: 9px;
 }
 
 .form label {
-  margin-top: 4px;
-  font-size: 14px;
+  margin-top: 3px;
+  font-size: 13px;
   font-weight: 660;
 }
 
 .form input {
   width: 100%;
-  height: 54px;
-  padding: 0 16px;
+  height: 50px;
+  padding: 0 15px;
   border: 1px solid var(--border);
   border-radius: 9px;
   outline: none;
@@ -132,49 +224,82 @@
 }
 
 .form input:focus {
-  border-color: #7d7df0;
-  box-shadow: 0 0 0 3px rgba(110, 110, 255, 0.13);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
-.passwordField { position: relative; }
-.passwordField input { padding-right: 52px; }
+.form input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--error) 70%, var(--border));
+}
+
+.passwordField {
+  position: relative;
+}
+
+.passwordField input {
+  padding-right: 52px;
+}
+
 .passwordField button {
   position: absolute;
-  top: 5px;
-  right: 4px;
+  top: 3px;
+  right: 3px;
   display: grid;
   width: 44px;
   height: 44px;
   padding: 0;
   place-items: center;
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
-.passwordField button:hover { background: var(--hover); color: var(--text); }
-.passwordField svg { width: 18px; height: 18px; }
 
-.textAction,
-.agreement button,
-.register button {
-  padding: 3px 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
+.passwordField button:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
-.textAction { justify-self: start; font-size: 12px; }
-.error { margin: 2px 0 0; color: #b74e4e; font-size: 12px; }
+.passwordField svg {
+  width: 18px;
+  height: 18px;
+}
 
-.submit {
+.unavailableLine {
+  display: flex;
+  margin: 2px 0 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.unavailableLine small,
+.google small,
+.agreement span {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.error {
+  margin: 3px 0 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--error-soft);
+  color: var(--error);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.primaryAction {
   width: 100%;
-  min-height: 54px;
-  margin-top: 25px;
+  min-height: 50px;
+  margin-top: 18px;
   border: 1px solid var(--text);
   border-radius: 9px;
   background: var(--text);
@@ -185,102 +310,194 @@
   cursor: pointer;
 }
 
-.submit:disabled { cursor: wait; opacity: 0.68; }
+.primaryAction:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
 
 .divider {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 18px;
-  margin: 31px 0;
+  gap: 14px;
+  margin: 21px 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
+
 .divider::before,
-.divider::after { height: 1px; background: var(--border); content: ""; }
+.divider::after {
+  height: 1px;
+  background: var(--border);
+  content: "";
+}
 
 .google {
   display: flex;
   width: 100%;
-  min-height: 54px;
+  min-height: 48px;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 9px;
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  color: var(--muted);
   font: inherit;
-  font-weight: 660;
-  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: not-allowed;
+  opacity: 0.74;
 }
-.google:hover { background: var(--hover); }
 
 .googleMark {
-  font: 800 19px/1 Arial, sans-serif;
+  font: 800 18px/1 Arial, sans-serif;
   background: conic-gradient(from -45deg, #4285f4 0 25%, #34a853 0 45%, #fbbc05 0 70%, #ea4335 0);
   background-clip: text;
   color: transparent;
 }
 
 .agreement,
-.register {
-  margin: 30px 0 0;
+.register,
+.registrationNote {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
 }
-.agreement button { margin: 0 3px; }
-.register { margin-top: 35px; color: var(--text); font-size: 14px; }
-.register button { margin-left: 5px; color: var(--text); font-size: 14px; font-weight: 650; }
 
-.notice {
-  position: fixed;
-  z-index: 10;
-  right: 32px;
-  bottom: 30px;
-  max-width: min(420px, calc(100vw - 40px));
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  box-shadow: 0 14px 36px rgba(20, 20, 24, 0.12);
+.agreement {
+  display: flex;
+  margin: 15px 0 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.register {
+  margin: 24px 0 0;
   color: var(--text);
   font-size: 13px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(8px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
 }
-.noticeVisible { opacity: 1; transform: translateY(0); }
 
-.close:focus-visible,
+.register button {
+  margin-left: 5px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 680;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.registrationCard {
+  margin-top: 30px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+}
+
+.registrationCard > strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.registrationCard p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.registrationCard ul {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding-left: 19px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.registrationCard li::marker {
+  color: var(--accent);
+}
+
+.registrationNote {
+  margin: 18px auto 0;
+  max-width: 360px;
+  line-height: 1.65;
+}
+
+.identityButton:focus-visible,
 .form input:focus-visible,
 .form button:focus-visible,
-.google:focus-visible,
-.agreement button:focus-visible,
+.primaryAction:focus-visible,
 .register button:focus-visible {
-  outline: 3px solid rgba(110, 110, 255, 0.28);
+  outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
   outline-offset: 3px;
 }
 
 @media (max-width: 900px) {
-  .shell { grid-template-columns: 1fr; }
-  .visual { min-height: 34vh; }
-  .visualShade { background: linear-gradient(0deg, var(--bg), transparent 58%); }
-  .visualShade::after { right: auto; bottom: 0; width: 100%; height: 130px; mask-image: linear-gradient(0deg, #000, transparent); }
-  .panel { min-height: 66vh; padding: 62px 28px 44px; }
-  .formWrap h1 { margin-bottom: 34px; font-size: 34px; }
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .visual {
+    min-height: 30vh;
+  }
+
+  .visualShade {
+    background: linear-gradient(0deg, var(--bg), transparent 58%);
+  }
+
+  .visualShade::after {
+    right: auto;
+    bottom: 0;
+    width: 100%;
+    height: 130px;
+    mask-image: linear-gradient(0deg, #000, transparent);
+  }
+
+  .panel {
+    min-height: 70vh;
+    padding: 50px 28px 44px;
+  }
+
+  .formWrap h1 {
+    font-size: 34px;
+  }
 }
 
 @media (max-width: 520px) {
-  .visual { min-height: 25vh; }
-  .panel { min-height: 75vh; padding: 54px 20px 36px; }
-  .brand { top: 22px; left: 20px; }
-  .close { top: 10px; right: 10px; }
-  .notice { right: 20px; bottom: 20px; }
-}
+  .visual {
+    min-height: 23vh;
+  }
 
-@media (prefers-reduced-motion: reduce) {
-  .notice { transition: none; }
+  .panel {
+    min-height: 77vh;
+    padding: 42px 20px 36px;
+  }
+
+  .brand {
+    top: 22px;
+    left: 20px;
+  }
+
+  .identityGrid {
+    gap: 6px;
+  }
+
+  .identityButton {
+    min-height: 60px;
+    padding-inline: 5px;
+  }
+
+  .registrationCard {
+    padding: 19px;
+  }
 }

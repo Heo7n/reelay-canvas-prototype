@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
@@ -53,7 +53,7 @@ const routeData: WorkspaceRouteData = {
   ],
 };
 
-function renderProjectsPage(initialEntry: string): void {
+function renderProjectsPage(initialEntry: string) {
   const router = createMemoryRouter(
     [
       {
@@ -66,15 +66,18 @@ function renderProjectsPage(initialEntry: string): void {
     { initialEntries: [initialEntry] },
   );
   render(<RouterProvider router={router} />);
+  return router;
 }
 
 describe("ProjectsPage project access filters", () => {
-  it("defaults to private projects without changing the organization route", async () => {
+  it("defaults to every accessible project and exposes stable workspace navigation", async () => {
     renderProjectsPage("/w/workspace-organization/projects");
 
     expect(await screen.findByRole("link", { name: "个人故事片" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "团队广告片" })).toBeNull();
-    expect(screen.getByRole("link", { name: "协作项目" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "团队广告片" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "项目空间" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "全部 2" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "协作 1" })).toHaveAttribute(
       "href",
       "/w/workspace-organization/projects?kind=collaborative",
     );
@@ -86,5 +89,35 @@ describe("ProjectsPage project access filters", () => {
     expect(await screen.findByRole("link", { name: "团队广告片" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "个人故事片" })).toBeNull();
     expect(screen.getByLabelText("协作项目")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^新建个人项目/ })).toBeNull();
+  });
+
+  it("keeps search in the URL and searches across all accessible projects", async () => {
+    const router = renderProjectsPage("/w/workspace-organization/projects");
+
+    const search = await screen.findByRole("searchbox", { name: "搜索项目" });
+    fireEvent.change(search, { target: { value: "团队" } });
+
+    expect(await screen.findByRole("link", { name: "团队广告片" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("link", { name: "个人故事片" })).toBeNull());
+    expect(search).toHaveValue("团队");
+    expect(new URLSearchParams(router.state.location.search).get("q")).toBe("团队");
+  });
+
+  it("explains an empty collaborative filter without offering a private-project card", async () => {
+    const emptyRouteData = { ...routeData, projects: routeData.projects.filter((project) => project.accessKind === "private") };
+    const router = createMemoryRouter(
+      [{
+        path: "/w/:workspaceId/projects",
+        loader: async () => emptyRouteData,
+        action: async () => null,
+        element: <ProjectsPage />,
+      }],
+      { initialEntries: ["/w/workspace-organization/projects?kind=collaborative"] },
+    );
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText(/项目管理员添加你后/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^新建个人项目/ })).toBeNull();
   });
 });
