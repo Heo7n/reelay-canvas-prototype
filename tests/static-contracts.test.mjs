@@ -48,7 +48,7 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(appSource, /function getNodeGenerationMode\(node\)[\s\S]*?generatorModelPolicy\.getNodeModeContract\(node\)/);
   assert.match(appSource, /function getCompatibleModelsForNode\(node\)[\s\S]*?generatorModelPolicy\.getCompatibleModels\(models, node\)/);
   assert.match(appSource, /mediaKind:\s*getNodeGenerationMode\(node\)/);
-  assert.match(appSource, /task\.parameterSnapshot\.mediaKind/);
+  assert.match(appSource, /parameterSnapshot\.mediaKind/);
   assert.match(appSource, /generatedAsset\.type !== outputMode/);
   assert.match(appSource, /if \(!canUseModelForNode\(node, selected\)\)/);
   assert.doesNotMatch(appSource, /node\.mode\s*=\s*selected\.type/);
@@ -478,6 +478,7 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
     "function requestHostNavigation(target)",
   );
   const hydrateCanvasDocumentSnapshot = Function(
+    "canvasNodeTasks",
     "canvasDocumentCodec",
     "canvasScaleLimits",
     "canvasRuntimeStore",
@@ -491,6 +492,7 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
     "clearAssetLibrarySelection",
     `${hydrateSource}; return hydrateCanvasDocumentSnapshot;`,
   )(
+    { cancelScope: () => 0 },
     { restoreSnapshot: () => restored },
     { min: 0.2, max: 2 },
     { replaceCanvases: (canvases) => { hydrationState.canvases = canvases; } },
@@ -793,7 +795,7 @@ test("the routed legacy canvas delegates persistence to the versioned document c
   assert.match(appSource, /return canvasPersistence\.handleHostMessage\(event\)/);
   assert.match(appSource, /return canvasPersistence\.schedule\(delay\)/);
   assert.match(appSource, /return canvasPersistence\.flush\(\)/);
-  assert.match(appSource, /window\.addEventListener\("pagehide", flushCanvasDocumentSave\)/);
+  assert.match(appSource, /window\.addEventListener\("pagehide", \(event\) => \{[\s\S]*?canvasNodeTasks\.dispose\(\)[\s\S]*?flushCanvasDocumentSave\(\)/);
   assert.match(appSource, /document\.visibilityState === "hidden"\) flushCanvasDocumentSave\(\)/);
 });
 
@@ -836,73 +838,19 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
   assert.deepEqual(scheduledDelays, [0]);
 });
 
-test("background generation completion marks the project document for persistence", () => {
-  const functionStart = appSource.indexOf("function completeSimulatedGeneration(taskId)");
-  const functionEnd = appSource.indexOf("function syncGenerateButton", functionStart);
-  assert.ok(functionStart >= 0 && functionEnd > functionStart);
-  const functionSource = appSource.slice(functionStart, functionEnd);
-  const node = {
-    id: "node-1",
-    kind: "generator",
-    mode: "image",
-    model: "image-model",
-    generationTaskId: "task-1",
-    name: "",
-  };
-  const canvas = { id: "background-canvas", nodes: [node] };
-  const task = {
-    id: "task-1",
-    canvasId: canvas.id,
-    nodeId: node.id,
-    parameterSnapshot: { mediaKind: "image", model: "image-model" },
-  };
-  const state = {
-    activeCanvasId: "active-canvas",
-    generationTasks: new Map([[task.id, task]]),
-  };
-  let renderCount = 0;
-  let saveScheduleCount = 0;
-  const completeGeneration = Function(
-    "state",
-    "getGenerationTaskTarget",
-    "normalizeGeneratorMode",
-    "models",
-    "getNodeGenerationMode",
-    "showActionToast",
-    "createGeneratedAsset",
-    "hydrateAssetMetadata",
-    "defaultGeneratedName",
-    "commitGenerationUndoBoundary",
-    "render",
-    "scheduleCanvasDocumentSave",
-    `${functionSource}; return completeSimulatedGeneration;`,
-  )(
-    state,
-    () => ({ canvas, node }),
-    (mode) => mode,
-    [{ id: "image-model", type: "image" }],
-    (targetNode) => targetNode.mode,
-    () => undefined,
-    () => ({ type: "image", displayName: "result" }),
-    () => undefined,
-    () => "result",
-    () => undefined,
-    () => { renderCount += 1; },
-    () => { saveScheduleCount += 1; },
-  );
-
-  completeGeneration(task.id);
-
-  assert.equal(renderCount, 0);
-  assert.equal(saveScheduleCount, 1);
-  assert.equal(node.generatedAsset.displayName, "result");
-  assert.equal(state.generationTasks.size, 0);
+test("node task lifecycle has one scoped owner while content commits remain in the canvas adapter", () => {
+  assert.match(html, /canvas-node-task-runner\.js/);
+  assert.match(appSource, /createCanvasNodeTaskRunner\(\{[\s\S]*?resolveTarget: resolveCanvasNodeTaskTarget/);
+  assert.doesNotMatch(appSource, /state\.(?:generationTasks|promptOptimizationTasks)|function cancel(?:Generation|PromptOptimization)Task/);
+  assert.match(appSource, /function startSimulatedGeneration\(node, options = \{\}\)[\s\S]*?!canvas\.nodes\.includes\(node\)[\s\S]*?normalizeNodeParameters\(node\)/);
+  assert.match(appSource, /function completeSimulatedGeneration\(task, node\)[\s\S]*?resolveCanvasNodeTaskTarget\(task\) !== node[\s\S]*?commitGenerationUndoBoundary\(canvas, node\.id\)[\s\S]*?scheduleCanvasDocumentSave\(\)/);
 });
 
 test("model data, config and document codec load before the application", () => {
   const catalogIndex = html.indexOf("./data/model-catalog.js");
   const configIndex = html.indexOf("./src/config/prototype-config.js");
   const runtimeStoreIndex = html.indexOf("./src/legacy-canvas/canvas-runtime-store.js");
+  const nodeTaskRunnerIndex = html.indexOf("./src/legacy-canvas/canvas-node-task-runner.js");
   const commandExecutorIndex = html.indexOf("./src/legacy-canvas/canvas-command-executor.js");
   const codecIndex = html.indexOf("./src/legacy-canvas/canvas-document-codec.js");
   const persistenceIndex = html.indexOf("./src/legacy-canvas/canvas-persistence-coordinator.js");
@@ -928,7 +876,8 @@ test("model data, config and document codec load before the application", () => 
     entityUseModelIndex < entityUseViewIndex &&
     entityUseViewIndex < entityUseControllerIndex &&
     entityUseControllerIndex < runtimeStoreIndex &&
-    runtimeStoreIndex < commandExecutorIndex &&
+    runtimeStoreIndex < nodeTaskRunnerIndex &&
+    nodeTaskRunnerIndex < commandExecutorIndex &&
     commandExecutorIndex < codecIndex &&
     codecIndex < persistenceIndex &&
     persistenceIndex < mediaAssetCoordinatorIndex &&
@@ -1086,7 +1035,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
   assert.match(html, /styles\.css\?v=20260904-video-params-79/);
-  assert.match(html, /app\.js\?v=20260905-entity-controller-78/);
+  assert.match(html, /app\.js\?v=20260905-node-task-runner-1/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1234,10 +1183,10 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.match(appSource, /class="prompt-optimization-spinner"/);
   assert.match(appSource, /promptInput\?\.addEventListener\("input"[\s\S]*?syncPromptOptimizationButton\(el\.querySelector\("\.prompt-optimization-button"\), node\)/);
   assert.match(appSource, /function syncPromptOptimizationButton\(button, node\)[\s\S]*?button\.disabled = disabled/);
-  assert.match(appSource, /function startPromptOptimization\(node\)[\s\S]*?node\.promptOptimizing = true[\s\S]*?promptOptimizationTasks\.set\(task\.id, task\)[\s\S]*?setTimeout\(\(\) => completePromptOptimization\(task\.id\), 900\)/);
-  assert.match(appSource, /function completePromptOptimization\(taskId\)[\s\S]*?buildOptimizedPrompt\(task\.sourcePrompt\)[\s\S]*?pushCanvasUndoAction\(canvas,[\s\S]*?scheduleCanvasDocumentSave\(\)/);
-  assert.match(appSource, /cancelPromptOptimizationTasks\([\s\S]*?task\.canvasId === activeCanvas\.id && selectedNodeIds\.has\(task\.nodeId\)/);
-  assert.match(appSource, /cancelPromptOptimizationTasks\(\(task\) => task\.canvasId === canvasId\)/);
+  assert.match(appSource, /function startPromptOptimization\(node\)[\s\S]*?canvasNodeTasks\.start\(\{[\s\S]*?kind: "prompt-optimization"[\s\S]*?delayMs: 900/);
+  assert.match(appSource, /function completePromptOptimization\(task, node\)[\s\S]*?buildOptimizedPrompt\(sourcePrompt\)[\s\S]*?pushCanvasUndoAction\(canvas,[\s\S]*?scheduleCanvasDocumentSave\(\)/);
+  assert.match(appSource, /canvasNodeTasks\.cancelScope\(\{ projectId: state\.projectId, canvasId: activeCanvas\.id, nodeIds: selectedNodeIds \}/);
+  assert.match(appSource, /canvasNodeTasks\.cancelScope\(\{ projectId: state\.projectId, canvasId \}, "canvas-deleted"\)/);
   assert.doesNotMatch(appSource, /promptOptimization:\s*(?:true|false)/);
   assert.match(appCss, /\.prompt-optimization-button\.is-processing \.prompt-optimization-spinner\s*\{[\s\S]*?animation:\s*promptOptimizationSpin 720ms linear infinite/);
   assert.match(appSource, /function advancedSettingsPanel\(node\)[\s\S]*?getNodeGenerationMode\(node\) === "video"[\s\S]*?自动校验素材[\s\S]*?智能引用 AutoLink[\s\S]*?assetValidationSetting[\s\S]*?定时任务/);
@@ -1679,7 +1628,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260905-entity-controller-78/);
+  assert.match(html, /app\.js\?v=20260905-node-task-runner-1/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);

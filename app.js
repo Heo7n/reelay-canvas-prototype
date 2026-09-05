@@ -249,8 +249,6 @@ const state = {
   pendingCanvasUploadPoint: null,
   nodeCreatePoint: null,
   isSpaceDown: false,
-  generationTasks: new Map(),
-  promptOptimizationTasks: new Map(),
   agentOpen: false,
   agentWidth: 560,
   agentTopInset: 0,
@@ -403,6 +401,20 @@ const canvasNodeLayoutTransition = canvasNodeLayoutTransitionFactory.createNodeL
   onFrame: renderNodeLayoutTransitionFrame,
   onFinish: renderNodeLayoutTransitionFrame,
 });
+const canvasNodeTaskRunnerFactory = window.REELAY_CANVAS_NODE_TASK_RUNNER;
+if (!canvasNodeTaskRunnerFactory) throw new Error("Canvas node task runner is unavailable.");
+const canvasNodeTasks = canvasNodeTaskRunnerFactory.createCanvasNodeTaskRunner({
+  makeTaskId: () => crypto.randomUUID(),
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  resolveTarget: resolveCanvasNodeTaskTarget,
+  onStart: applyCanvasNodeTaskStart,
+  onComplete(task, node) {
+    if (task.kind === "generation") completeSimulatedGeneration(task, node);
+    else completePromptOptimization(task, node);
+  },
+  onCancel: applyCanvasNodeTaskCancellation,
+});
 let canvasAccessNoticeTimer = 0;
 const canvasInstanceId = crypto.randomUUID();
 const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
@@ -418,6 +430,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   getExpectedSource: () => window.parent,
   onAccessChange: applyCanvasAccessMode,
   onContext(context) {
+    canvasNodeTasks.cancelScope({}, "context-replaced");
     state.projectId = String(context.projectId || state.projectId);
     state.projectName = String(context.projectName || state.projectName);
     state.hostCapabilities.hostWritable = context.writable === true;
@@ -658,8 +671,10 @@ function syncCanvasAccessUi() {
 
 function applyCanvasAccessMode(mode) {
   if (!isCanvasMutationAllowed()) {
+    const cancelledTasks = canvasNodeTasks.cancelScope({}, "access-revoked");
     state.action = null;
     shell?.classList.remove("dragging");
+    if (cancelledTasks) render();
   }
   syncCanvasAccessUi();
   canvasEntityUse.refresh({ renderPicker: true });
@@ -1010,6 +1025,7 @@ function hydrateCanvasDocumentSnapshot(content) {
     maxScale: canvasScaleLimits.max,
   });
   if (!restored) return false;
+  canvasNodeTasks.cancelScope({}, "document-replaced");
   canvasRuntimeStore.replaceCanvases(restored.canvases, restored.activeCanvasId);
   state.canvases.forEach((canvas) => {
     canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
@@ -2594,6 +2610,7 @@ function cloneNode(source) {
     activeAssetId: assets[activeAssetIndex]?.id || assets[0]?.id || null,
     generatedAsset: source.generatedAsset ? { ...source.generatedAsset, id: crypto.randomUUID() } : null,
     generating: false,
+    promptOptimizing: false,
     expanded: source.kind === "generator" ? source.expanded : false,
     panel: null,
     modelFilter: source.kind === "generator" ? source.mode : undefined,
@@ -5583,41 +5600,35 @@ function bindAudioEvents(el) {
   updateAudioProgress();
 }
 
-function getGenerationTaskTarget(task) {
-  if (!task || task.projectId !== state.projectId) return null;
-  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
-  if (!canvas) return null;
-  const node = canvas.nodes.find((item) => item.id === task.nodeId);
-  return node ? { canvas, node } : null;
+function resolveCanvasNodeTaskTarget({ projectId, canvasId, nodeId }) {
+  if (projectId !== state.projectId) return null;
+  return canvasRuntimeStore.getCanvas(canvasId)?.nodes.find((node) => node.id === nodeId) || null;
 }
 
-function cancelGenerationTask(taskId, resetNode = true) {
-  const task = state.generationTasks.get(taskId);
-  if (!task) return;
-  window.clearTimeout(task.timeoutId);
-  if (resetNode) {
-    const target = getGenerationTaskTarget(task);
-    if (target?.node.generationTaskId === task.id) {
-      target.node.generating = false;
-      delete target.node.generationTaskId;
-      scheduleCanvasDocumentSave();
-    }
+function applyCanvasNodeTaskStart(task, node) {
+  if (task.kind === "generation") {
+    if (task.inputs.charge) chargeCredits(task.inputs.cost);
+    node.generating = true;
+    node.generationTaskId = task.id;
+    node.preview = false;
+    node.generatedAsset = null;
+    node.expanded = false;
+    node.name = "";
+  } else {
+    node.promptOptimizing = true;
   }
-  state.generationTasks.delete(taskId);
+  node.panel = null;
+  render();
 }
 
-function cancelGenerationTasks(predicate, resetNodes = true) {
-  for (const task of [...state.generationTasks.values()]) {
-    if (predicate(task)) cancelGenerationTask(task.id, resetNodes);
+function applyCanvasNodeTaskCancellation(task, node) {
+  if (task.kind === "generation") {
+    if (node.generationTaskId !== task.id) return;
+    node.generating = false;
+    delete node.generationTaskId;
+  } else {
+    node.promptOptimizing = false;
   }
-}
-
-function getPromptOptimizationTaskTarget(task) {
-  if (!task || task.projectId !== state.projectId) return null;
-  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
-  if (!canvas) return null;
-  const node = canvas.nodes.find((item) => item.id === task.nodeId);
-  return node ? { canvas, node } : null;
 }
 
 function buildOptimizedPrompt(prompt) {
@@ -5645,41 +5656,20 @@ function pushCanvasUndoAction(canvas, action) {
   canvas.undoStack = undoStack;
 }
 
-function cancelPromptOptimizationTask(taskId, resetNode = true) {
-  const task = state.promptOptimizationTasks.get(taskId);
-  if (!task) return;
-  window.clearTimeout(task.timeoutId);
-  if (resetNode) {
-    const target = getPromptOptimizationTaskTarget(task);
-    if (target?.node.promptOptimizing) target.node.promptOptimizing = false;
-  }
-  state.promptOptimizationTasks.delete(taskId);
-}
-
-function cancelPromptOptimizationTasks(predicate, resetNodes = true) {
-  for (const task of [...state.promptOptimizationTasks.values()]) {
-    if (predicate(task)) cancelPromptOptimizationTask(task.id, resetNodes);
-  }
-}
-
-function completePromptOptimization(taskId) {
-  const task = state.promptOptimizationTasks.get(taskId);
-  if (!task) return;
-  state.promptOptimizationTasks.delete(taskId);
-  const target = getPromptOptimizationTaskTarget(task);
-  if (!target) return;
-  const { canvas, node } = target;
-  if (node.kind !== "generator" || !node.promptOptimizing) return;
+function completePromptOptimization(task, node) {
+  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
+  if (!canvas || resolveCanvasNodeTaskTarget(task) !== node || node.kind !== "generator" || !node.promptOptimizing) return;
+  const { sourcePrompt } = task.inputs;
 
   node.promptOptimizing = false;
-  if (node.prompt === task.sourcePrompt) {
-    const optimizedPrompt = buildOptimizedPrompt(task.sourcePrompt);
+  if (node.prompt === sourcePrompt) {
+    const optimizedPrompt = buildOptimizedPrompt(sourcePrompt);
     if (optimizedPrompt && optimizedPrompt !== node.prompt) {
       node.prompt = optimizedPrompt;
       pushCanvasUndoAction(canvas, {
         type: "prompt-update",
         nodeId: node.id,
-        before: task.sourcePrompt,
+        before: sourcePrompt,
         after: optimizedPrompt,
       });
     }
@@ -5702,24 +5692,12 @@ function startPromptOptimization(node) {
   const canvas = getActiveCanvas();
   if (!canvas || !canvas.nodes.includes(node)) return false;
 
-  const staleTask = [...state.promptOptimizationTasks.values()]
-    .find((task) => task.canvasId === canvas.id && task.nodeId === node.id);
-  if (staleTask) cancelPromptOptimizationTask(staleTask.id, false);
-
-  const task = {
-    id: crypto.randomUUID(),
-    projectId: state.projectId,
-    canvasId: canvas.id,
-    nodeId: node.id,
-    sourcePrompt,
-    timeoutId: 0,
-  };
-  node.promptOptimizing = true;
-  node.panel = null;
-  state.promptOptimizationTasks.set(task.id, task);
-  render();
-  task.timeoutId = window.setTimeout(() => completePromptOptimization(task.id), 900);
-  return true;
+  return Boolean(canvasNodeTasks.start({
+    kind: "prompt-optimization",
+    scope: { projectId: state.projectId, canvasId: canvas.id, nodeId: node.id },
+    inputs: { sourcePrompt },
+    delayMs: 900,
+  }));
 }
 
 function commitGenerationUndoBoundary(canvas, nodeId) {
@@ -5733,18 +5711,14 @@ function commitGenerationUndoBoundary(canvas, nodeId) {
   canvas.undoStack = nextUndoStack;
 }
 
-function completeSimulatedGeneration(taskId) {
-  const task = state.generationTasks.get(taskId);
-  if (!task) return;
-  state.generationTasks.delete(taskId);
-  const target = getGenerationTaskTarget(task);
-  if (!target) return;
-  const { canvas, node } = target;
-  if (node.kind !== "generator" || node.generationTaskId !== task.id) return;
+function completeSimulatedGeneration(task, node) {
+  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
+  if (!canvas || resolveCanvasNodeTaskTarget(task) !== node || node.kind !== "generator" || node.generationTaskId !== task.id) return;
+  const { parameterSnapshot } = task.inputs;
   node.generating = false;
   delete node.generationTaskId;
-  const outputMode = normalizeGeneratorMode(task.parameterSnapshot.mediaKind);
-  const taskModel = models.find((model) => model.id === task.parameterSnapshot.model);
+  const outputMode = normalizeGeneratorMode(parameterSnapshot.mediaKind);
+  const taskModel = models.find((model) => model.id === parameterSnapshot.model);
   const nodeMode = getNodeGenerationMode(node);
   if (
     !outputMode
@@ -5758,7 +5732,7 @@ function completeSimulatedGeneration(taskId) {
     scheduleCanvasDocumentSave();
     return;
   }
-  const generatedAsset = createGeneratedAsset({ id: node.id, ...task.parameterSnapshot });
+  const generatedAsset = createGeneratedAsset({ id: node.id, ...parameterSnapshot });
   if (generatedAsset.type !== outputMode) {
     if (canvas.id === state.activeCanvasId) {
       showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
@@ -5797,6 +5771,8 @@ function syncPromptOptimizationButton(button, node) {
 
 function startSimulatedGeneration(node, options = {}) {
   if (!requireCanvasMutation()) return false;
+  const canvas = getActiveCanvas();
+  if (!canvas || node?.kind !== "generator" || !canvas.nodes.includes(node)) return false;
   const { charge = true } = options;
   if (node.generating || node.promptOptimizing) return false;
   normalizeNodeParameters(node);
@@ -5841,33 +5817,12 @@ function startSimulatedGeneration(node, options = {}) {
     return false;
   }
 
-  const canvas = getActiveCanvas();
-  if (!canvas) return false;
-  if (charge) chargeCredits(cost);
-  if (node.generationTaskId) cancelGenerationTask(node.generationTaskId);
-  const task = {
-    id: crypto.randomUUID(),
-    projectId: state.projectId,
-    canvasId: canvas.id,
-    nodeId: node.id,
-    parameterSnapshot: createGenerationParameterSnapshot(node),
-    cost,
-    timeoutId: 0,
-  };
-  node.generating = true;
-  node.generationTaskId = task.id;
-  node.preview = false;
-  node.generatedAsset = null;
-  node.panel = null;
-  node.expanded = false;
-  node.name = "";
-  render();
-  state.generationTasks.set(task.id, task);
-  task.timeoutId = window.setTimeout(
-    () => completeSimulatedGeneration(task.id),
-    900 + Math.round(Math.random() * 700),
-  );
-  return true;
+  return Boolean(canvasNodeTasks.start({
+    kind: "generation",
+    scope: { projectId: state.projectId, canvasId: canvas.id, nodeId: node.id },
+    inputs: { parameterSnapshot: createGenerationParameterSnapshot(node), cost, charge },
+    delayMs: 900 + Math.round(Math.random() * 700),
+  }));
 }
 
 function modelPanel(node) {
@@ -7190,12 +7145,7 @@ function deleteSelectedNodes(confirmed = false) {
   const activeCanvas = getActiveCanvas();
   const selectedNodeIds = new Set(state.selectedIds);
   if (activeCanvas) {
-    cancelGenerationTasks(
-      (task) => task.canvasId === activeCanvas.id && selectedNodeIds.has(task.nodeId),
-    );
-    cancelPromptOptimizationTasks(
-      (task) => task.canvasId === activeCanvas.id && selectedNodeIds.has(task.nodeId),
-    );
+    canvasNodeTasks.cancelScope({ projectId: state.projectId, canvasId: activeCanvas.id, nodeIds: selectedNodeIds }, "nodes-deleted");
   }
 
   const deleted = state.nodes
@@ -7289,6 +7239,7 @@ function undoLastAction() {
   if (action.type === "create") {
     const createdNodeIds = new Set(Array.isArray(action.nodeIds) ? action.nodeIds : []);
     if (createdNodeIds.size) {
+      canvasNodeTasks.cancelScope({ projectId: state.projectId, canvasId: state.activeCanvasId, nodeIds: createdNodeIds }, "nodes-deleted");
       const removedConnectionIds = state.connections
         .filter((connection) => createdNodeIds.has(connection.sourceNodeId) || createdNodeIds.has(connection.targetNodeId))
         .map((connection) => connection.id);
@@ -8380,8 +8331,7 @@ function deleteCanvas(canvasId) {
     confirmText: "删除",
     danger: true,
     onConfirm: () => {
-      cancelGenerationTasks((task) => task.canvasId === canvasId);
-      cancelPromptOptimizationTasks((task) => task.canvasId === canvasId);
+      canvasNodeTasks.cancelScope({ projectId: state.projectId, canvasId }, "canvas-deleted");
       const removal = canvasRuntimeStore.removeCanvas(canvasId);
       if (!removal) return;
       if (removal.activeChanged) {
@@ -11141,7 +11091,10 @@ window.addEventListener("resize", () => {
 
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
-window.addEventListener("pagehide", flushCanvasDocumentSave);
+window.addEventListener("pagehide", (event) => {
+  if (!event.persisted) canvasNodeTasks.dispose();
+  flushCanvasDocumentSave();
+});
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushCanvasDocumentSave();
 });
