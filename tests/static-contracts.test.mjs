@@ -729,7 +729,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
   const availabilitySource = sourceBetween(
     appSource,
     "function getGenerationAvailability(node)",
-    "function getParamLabel(node)",
+    "function getParamLabelParts(node)",
   );
   assert.match(availabilitySource, /const taskTypeIssue = getOmniReferenceTaskTypeIssue\(node\)/);
   assert.match(availabilitySource, /!taskTypeIssue/);

@@ -211,7 +211,7 @@ Agent 对话栏展开或调整尺寸时，不拖动左上、左侧和左下工�
 
 ## 7. 生成节点
 
-用户描述中“图像节点/视频节点”在产品语言中统一称为“生成节点”；需要区分时称为“图片生成节点 / 视频生成节点”。节点在创建时即写入非空且不可变的 `mediaKind`（`image / video`），之后只允许在同一媒体类型内切换模型；音频暂不作为独立生成节点类型，仍可作为上传、播放和编辑的画布素材，视频生成节点也可在综合参数中保存是否生成音频的开关状态。
+用户描述中“图像节点/视频节点”在产品语言中统一称为“生成节点”；需要区分时称为“图片生成节点 / 视频生成节点”。节点在创建时即确定图片 / 视频类型，之后只允许在同一媒体类型内切换模型；CanvasDocument 与任务快照用 `mediaKind`（`image / video`）表达该类型，当前 legacy runtime 暂用内部 `mode` 适配。音频暂不作为独立生成节点类型，仍可作为上传、播放和编辑的画布素材，视频生成节点也可在综合参数中保存是否生成音频的开关状态。
 
 ### 7.1 初始状态
 
@@ -608,7 +608,7 @@ src/legacy-canvas
 - 撤销：每个内部 CanvasRecord 持有上限为 50 条的混合 `undoStack`。CanvasCommand 覆盖连接、离散节点参数、生成结果命名、建组 / 解组和现有局部排列；旧移动 / 缩放记录的恢复通过同一组关系事务保持双向成员一致。字段命令提交前校验前置内容，整批失败时不修改内容、不新增撤销、不触发保存；提交与撤销保留仍存在的节点身份。项目重命名不写入该栈，生成成功时只清理第 7.7 节规定的本节点输入历史。
 - 节点任务：`canvas-node-task-runner.js` 独占生成与提示词优化的运行记录、timer、取消和完成判定，不再由根 `state` 保存任务 Map。任务记录项目 / 画布 / 节点 / task 归属、启动时的实际节点身份以及不可变输入；`app.js` 保留模拟扣费、结果字段写入、撤销与保存适配。Agent 对话任务尚未进入该 runner。
 - 主体使用：`canvas-entity-use-controller.js` 独占选择器 / 详情状态、焦点、背景隔离与监听器生命周期；确认时仍按打开的项目 / 画布 / 节点重新验证，不使用全局浮层状态修复内容。
-- 节点媒体类型：生成节点在创建时写入非空且不可变的 `mediaKind`。当前 legacy 运行时仍把它适配为内部 `mode`，但 `mode / lockedMode / generatedAsset.type` 只允许作为 v1 旧快照的迁移输入；新快照只写 `mediaKind`，首次生成成功不再写类型锁。
+- 节点媒体类型：图片 / 视频类型在创建时确定，CanvasDocument 与任务快照以 `mediaKind` 为统一表达。当前 legacy 节点对象内部仍使用 `mode`；codec 将规范文档的 `mediaKind` 转为运行时适配值，保存时再输出 `mediaKind`，不维护两个可独立变化的类型。旧文档的 `mode / lockedMode / generatedAsset.type` 仅用于 v1 兼容读取；新文档不写节点 `mode / lockedMode`，首次生成成功不再写类型锁。正式 Node 对象的字段迁移尚未完成。
 - Agent：`agentOpen`、`agentWidth`、`agentTopInset`、`agentBottomInset`、`activeConversationId`、`agentModelId`、`agentModelIds`；尺寸偏好与单双模型字段都是当前页面会话状态，不应写入 CanvasDocument 或直接复制到正式 Conversation schema。
 - 资产库 UI：`librarySection`、`librarySpace`、`libraryFolderId`、`librarySearch`、`libraryFilter`、`libraryDisplay`、多选 / 菜单 / 重命名 / 移动 / 预览状态，以及按空间与分栏记忆的搜索和筛选；个人 Media 与 Entity 由宿主 repository 投影进页面 store，Folder 和 organization / platform placement 仍由页面内存 store 持有。这些 UI 状态和资产实体都不写入 CanvasDocument。
 - 主题：`themeMode`。
@@ -644,7 +644,7 @@ src/legacy-canvas
 - Legacy canvas host 与旧画布已接通 `CanvasDocument` 加载 / 保存；iframe 侧保存协调器独占 baseline、dirty、debounce、单一 in-flight、revision、重试和错误降级状态，宿主按 iframe instance 与 route scope 拒绝重复 ready 和旧 scope 的异步保存回调。首次打开空画布不会制造空 `CanvasDocument`，首次真实修改才写 revision 1。浏览器强制终止仍不能保证异步 HTTP 完成，这是 Web 生命周期本身的边界，后续正式任务系统不能只依赖页面退出钩子。
 - 首次以 `view` 权限加载时已经真正只读；如果一个正在生成的可编辑会话被服务端动态降级，完成回调的权限切换仍需在引入实时权限刷新时单独验证。
 - CanvasDocument v1 在服务端与 legacy codec 共享 canonical allow-list 边界：不支持的版本会失败关闭，字段、数量与数值被收敛，持久媒体 URL 只保留经安全校验的 HTTP(S) 或相对地址。它仍是迁移快照，不应继续容纳生成历史、资产二进制、积分或账号运行态；新增字段必须先明确恢复语义并扩展行为测试。
-- 当前生成任务只存在页面内存中，虽已记录与节点 `mediaKind` 一致的启动参数快照，但还没有持久化、节点内多结果历史、取消 UI 或失败退款。
+- 当前生成任务只存在页面内存中，启动快照已记录与节点创建类型一致的 `mediaKind` 及当次参数，但还没有持久化、节点内多结果历史、取消 UI 或失败退款。
 - 当前撤销仍不是完整 command 系统：连接、离散节点参数、生成结果命名、建组 / 解组与现有局部排列已进入带前置冲突检查、事务校验和 50 条上限的原子命令；节点删除、Alt 复制与 pointer 移动 / 缩放的历史格式仍沿用 legacy action，成员结算和恢复已通过组关系事务。普通双击新建尚未统一登记创建撤销，整画布整理、生成任务和结果版本撤销也未实现；后续节点命令继续使用内容字段白名单，不能恢复任务、临时 UI 或创建类型。项目重命名暂不支持撤销。
 - 资产库已落地 WorkspaceMediaAsset、personal placement、ProjectAssetReference、ObjectStore 与个人根目录 Entity 的最小切片，但画布消费仍会创建 legacy 媒体投影。Folder / organization placement、Entity 删除恢复、公网私有对象存储、Node 级引用、回收站和 GenerationResult 晋升尚未落地。
 - 完整演进顺序只在 `docs/product-expansion-plan.md` 维护，本说明不再保留第二套路线路。

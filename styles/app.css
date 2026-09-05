@@ -64,7 +64,6 @@
   --node-chip-hover: rgba(255, 255, 255, 0.12);
   --node-chip-text: rgba(255, 255, 255, 0.86);
   --node-chip-strong-bg: #202124;
-  --node-chip-icon-bg: rgba(255, 255, 255, 0.1);
   --node-send-bg: #2d2e32;
   --node-send-hover: #36373c;
   --node-send-text: #f4f4f5;
@@ -176,7 +175,6 @@ html[data-theme="light"] {
   --node-chip-hover: rgba(17, 18, 20, 0.1);
   --node-chip-text: rgba(17, 18, 20, 0.82);
   --node-chip-strong-bg: #f4f4f4;
-  --node-chip-icon-bg: rgba(17, 18, 20, 0.075);
   --node-send-bg: #ffffff;
   --node-send-hover: #ffffff;
   --node-send-text: #111111;
@@ -340,46 +338,8 @@ textarea {
   backdrop-filter: blur(18px);
 }
 
-.project-logo-button,
-.canvas-nav-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  height: 28px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.project-logo-button {
-  padding: 0 2px 0 0;
-}
-
-.project-logo-button:hover,
-.canvas-nav-button:hover,
 .project-nav-name:hover {
   background: color-mix(in srgb, var(--text) 7%, transparent);
-}
-
-.project-logo-button img {
-  width: 24px;
-  height: 24px;
-  object-fit: contain;
-}
-
-html[data-theme="dark"] .project-logo-button img {
-  filter: invert(1);
-}
-
-.project-logo-button svg,
-.canvas-nav-button svg {
-  width: 12px;
-  height: 12px;
-  color: var(--muted);
-  flex: 0 0 auto;
 }
 
 .project-nav-divider {
@@ -403,22 +363,7 @@ html[data-theme="dark"] .project-logo-button img {
   cursor: text;
 }
 
-.canvas-nav-button {
-  max-width: 150px;
-  padding: 0 7px;
-  font-size: 12px;
-  font-weight: 780;
-}
-
-.canvas-nav-button span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-nav-name[contenteditable="true"],
-.canvas-nav-button span[contenteditable="true"] {
+.project-nav-name[contenteditable="true"] {
   min-width: 82px;
   outline: 1px solid color-mix(in srgb, var(--accent, #5f8cff) 64%, transparent);
   background: color-mix(in srgb, var(--accent, #5f8cff) 12%, transparent);
@@ -1920,13 +1865,6 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   backdrop-filter: blur(22px);
 }
 
-.popover-title {
-  margin-bottom: 12px;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 820;
-}
-
 .minimap-popover {
   width: 258px;
   padding: 10px;
@@ -3269,18 +3207,6 @@ html:not([data-theme="light"]) .model-icon.model-brand-icon {
   flex: 0 0 auto;
   margin-right: -3px;
   color: currentColor;
-}
-
-.chip-icon {
-  display: grid;
-  place-items: center;
-  min-width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: var(--node-chip-icon-bg);
-  color: var(--node-chip-text);
-  font-size: 11px;
-  letter-spacing: 0;
 }
 
 .control-spacer {

@@ -4,9 +4,11 @@
 - 日期：2026-07-21
 - 适用阶段：Phase 0B 可迁移基础
 
+本文保留 2026-07-21 的决策背景与原有迁移顺序，并记录后续决定；它不是当前完成状态清单，也不要求重新执行已完成的迁移。当前实现见[实现规范](../current-product-spec.md)，下一产品切片以[滚动路线](../product-expansion-plan.md#81-当前滚动路线2026-09-05)为准。
+
 ## 背景
 
-Reelay 已有登录样机、登录后主页、项目库页面状态和一套交互密集的无限画布，但三者仍是静态入口。画布依赖全局 DOM、全局状态和大体量单文件，当前不适合直接组件化重写；账号、Workspace、Project、Membership 和持久化也不能继续叠加在静态脚本中。
+决策起草时，Reelay 已有登录样机、登录后主页、项目库页面状态和一套交互密集的无限画布，但仍使用静态入口。画布依赖全局 DOM、全局状态和大体量单文件，当时不适合直接组件化重写；账号、Workspace、Project、Membership 和持久化也不能继续叠加在静态脚本中。登录、主页和项目库现已迁入 React 路由，静态双轨已删除，画布继续通过 legacy host 接入。
 
 本决策的目标不是一次完成生产架构，而是让新工作台逐步接管页面，同时让现有画布保持可运行、可验证和可回退。
 
@@ -19,9 +21,9 @@ Reelay 已有登录样机、登录后主页、项目库页面状态和一套交�
 - React Router 使用浏览器历史路由，不再扩写 `#all-projects` 一类 hash 路由。
 - npm 继续作为包管理器，当前没有更换 pnpm 或建立 monorepo 的收益。
 - 新工作台样式使用 CSS Modules 和共享设计变量；现有 `styles/app.css` 作为 legacy canvas 样式隔离保留，不迁入 Tailwind。
-- Zod 只用于 URL、IndexedDB、消息桥和未来 API 等运行时边界，不让领域对象依赖表单或网络结构。
-- 本地草稿和 Blob 使用 Dexie / IndexedDB；`localStorage` 继续只保存主题等设备偏好。
-- 新代码使用 Vitest、Testing Library 和 `fake-indexeddb`；现有 `node:test` 契约测试继续保留，直到被等价行为测试覆盖。
+- Zod 用于 URL、消息桥和 API 等运行时边界，不让领域对象依赖表单或网络结构；当前 HTTP adapters 已执行 DTO 校验。
+- 原方案为本地草稿和 Blob 预留 Dexie / IndexedDB；该离线草稿层尚未实现，不代表当前资产存储。已有个人媒体二进制由服务端 filesystem ObjectStore 持久保存；`localStorage` 保存主题等设备偏好。
+- 新代码使用 Vitest 和 Testing Library；后续若实现 IndexedDB 草稿层，再引入相应测试适配。现有 `node:test` 契约测试继续保留，直到被等价行为测试覆盖。
 - 端到端主链路稳定后再引入 Playwright，不在第一批脚手架中制造空测试。
 - 构建后图标使用 `lucide-react`；旧静态画布在迁移完成前使用 `app.js` 内的最小图标路径子集，不加载外部 CDN 或完整 vendor runtime。
 
@@ -122,6 +124,8 @@ src/
 
 ## 迁移顺序
 
+以下为原有迁移依赖与历史分期；当前已完成与未完成范围以实现规范和滚动路线为准。产品预演版的任务与积分行为可以模拟，不因本列表要求接入真实生成或结算服务。
+
 1. 固化当前原型为可运行 Git 基线。
 2. 加入 TypeScript、Vite、React Router 和新的检查流程，不改变产品行为。
 3. 建立最小共享服务端、服务端会话和 Session / Workspace / Membership / Project repository adapter，先用可替换的服务端内存存储验证两个浏览器能看到同一组织项目；此状态只用于开发，不描述为持久化。
@@ -140,7 +144,7 @@ src/
 
 `DECIDED`：共享数据源必须位于浏览器进程之外，并通过服务端会话识别 actor；不得用 localStorage 或 IndexedDB 冒充组织协作。
 
-`DECIDED`：当前使用 TypeScript Fastify 模块化单体和 PostgreSQL adapter，通过同源会话和 API 服务前端。Session、Workspace、Membership 与 Project 已通过 migration / seed 流程持久化，并完成双浏览器与跨服务重启验证；服务端内存 adapter 只保留作快速契约测试和显式开发回退，不允许数据库故障时自动降级。公网部署、域名和国内云厂商后续再定。
+`DECIDED`：当前使用 TypeScript Fastify 模块化单体和 PostgreSQL adapter，通过同源会话和 API 服务前端。Session、Workspace、Membership 与 Project 已通过 migration / seed 流程持久化，并完成双浏览器与跨服务重启验证；服务端内存 adapter 只保留作快速契约测试和显式开发回退，不允许数据库故障时自动降级。产品评审已有 Vercel + Supabase 公网预览，边界见[公网预览说明](../vercel-supabase-preview.md)；正式产品的部署环境、域名和云厂商仍待后续决定。
 
 首版数据库将可登录的人类主体存为 `users`，请求上下文继续使用领域名 `SessionActor`；登录标识使用可多条扩展的 identity 记录，不把当前邮箱外观的 `.test` 账号固化为正式邮箱策略。浏览器会话 token 只以摘要存库并具有过期 / 撤销状态。组织角色为 `owner/admin/member`，项目角色为 `admin/edit/view`；二者不得互相推断。
 
