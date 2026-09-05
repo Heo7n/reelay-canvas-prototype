@@ -4,7 +4,7 @@
 
 ## 当前定位
 
-- 日常开发入口是主工作目录检出的本地 `main`，实际路径由 `npm run worktrees` 显示；分支名、worktree 和未提交改动必须在接手时用 `git branch --show-current`、`git status --short` 与 `npm run worktrees` 重新确认，本交接不把静态分支名当成事实。此前改崩的用量看板实验 worktree 与本地分支已经清理，不再作为可恢复或可合并来源。
+- 日常开发使用主工作目录中的活动开发分支，`main` 保留已验证集成基线；分支名、worktree 和未提交改动必须在接手时用 `git branch --show-current`、`git status --short` 与 `npm run worktrees` 重新确认，本交接不把静态分支名当成事实。此前改崩的用量看板实验 worktree 与本地分支已经清理，不再作为可恢复或可合并来源。
 - 当前本地主链路是 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。登录、主页和项目库只保留 React 正式路由；旧静态双轨已经删除，`index.html` 仅作为迁移期画布 iframe。
 - 公网原型已部署到 `https://reelay-canvas-prototype.vercel.app`。Vercel Hobby
   提供同源静态页面和 Fastify API，Supabase Free PostgreSQL 保存服务端状态；
@@ -28,11 +28,13 @@
 - 画布壳层 disclosure 已补齐键盘闭环：项目 / 画布 / 更多操作 / 个人入口同步 expanded 状态，键盘打开后进入首个可用项，Escape 分层关闭并回焦，画布改名结束回到对应行。资产面板和 Agent 同开时至少保留 `280px` 画布走廊，`1000px` 以下改为互斥；后续调整面板最小宽度时要一起更新联合约束和行为测试。
 - 开发服务器必须让 `/app/*` 回退到 `app-shell.html`，同时保留 `/index.html` 给旧画布 iframe；不要重新引入会吞掉 Vite 内部脚本或旧画布入口的宽泛回退。
 - 本地 Vite `serve` 支持在画布路由追加 `?layoutTune=1` 打开开发专用布局调节器；它只调节白名单几何并把临时值放在当前标签页的 `sessionStorage`，不写 CanvasDocument。项目条、资产库、工具条和 Agent 可通过选框标签独立移动并用四边手柄调整尺寸，移动值始终是相对正式基准的 X / Y 偏移。该工具通过 development-only HTML 插件注入，生产构建不得携带其 JS / CSS；评审后的参数仍需显式固化回正式布局变量与状态约束。
-- 当前生成节点在创建时即确定不可变的 `mediaKind`（`image / video`）；模型、任务快照与结果必须保持同类型。CanvasDocument v1 读取器仍兼容旧 `mode / lockedMode / generatedAsset.type`，但恢复后会归一为单一运行时类型，新快照不再写 `lockedMode`。入口使用统一模型选择图标，选择器内部仍保留具体模型图标。
+- 当前生成节点在创建时即确定不可变的图片 / 视频类型；CanvasDocument 与任务快照用 `mediaKind` 表达，legacy runtime 暂用内部 `mode` 适配，模型与结果必须保持同类型。CanvasDocument v1 读取器仍兼容旧 `mode / lockedMode / generatedAsset.type`，恢复后归一为单一运行时类型，新文档不写节点 `mode / lockedMode`。入口使用统一模型选择图标，选择器内部仍保留具体模型图标。
 
 ## 下一开发切片
 
 2026-09-05 当前切片：节点 / 分组基础治理已接入离散参数、生成媒体命名、建组 / 解组 / 成员结算和已有局部布局；下方记录实际边界。按 `development-workflow.md` 第 1.2 / 4.1 节复用活动分支与完整路由预览，不把全量拆分 `app.js` 或迁移 React Flow 当作继续主体库设计的前置条件。下一产品入口优先复核主体库与节点配合，具体范围仍结合用户当次反馈决定。
+
+开发前收尾已移除 3 个无调用函数、旧连接快照撤销分支和废弃样式，同步修正测试锚点、实现状态文案与本地启动说明。`npm run check` 的 588 项测试通过；原项目画布、浅深主题与个人菜单局部复核正常，控制台无 error / warn。此次未修改产品交互、迁移数据或部署公网；不把这次已确认的死代码清理描述为全仓库不存在历史代码。
 
 后续目标与阶段入口统一见 [产品扩展规划第 8.1 节](product-expansion-plan.md#81-当前滚动路线2026-09-05)：主体与节点、Agent 模拟生成、项目生成历史、整理、消息与必要配置，以及分享权限 / 申请加入和最终真实双浏览器同时编辑均已确认；顺序是可重审的建议，详细规则仍按阶段决定。新切片开始时主动提醒该阶段目标与待定边界，完成时更新实际范围和下一入口，不依赖用户记住本次讨论。通知不是审批真相；历史独立于画布展示；后台区分共享服务、组织管理、最小运营页与开发演练控制，当前不要求完整独立后台网站。
 
@@ -44,7 +46,7 @@
 
 主体使用规则已确认：主体只组织与圈定素材，使用时展开为独立 Media 输入 / 连接，放入画布时拆成独立素材节点；后续编辑或删除主体不联动既有使用。底层 Media 的删除、权限、版本，以及模型容量与类型不兼容是另外的设计边界，不从该规则推导。详见 `product-expansion-plan.md` 第 4.2 节。
 
-2026-09-05 本机运行数据边界：日常代码入口收敛到根目录 `0707` 的本地 `main`；当前 `5175` API 仍由 `0707-wt-canvas-integration` 提供，使用该目录的 `.reelay-data/object-store`。`0707-wt-canvas-shell-redesign` 还保存另一批不重复的本机素材，两处都保留。前端主线可更新，但迁移 API 时必须显式指定并验证已有 ObjectStore，不直接从根目录启动空的默认存储，也不重新 seed。
+本机服务与数据目录统一记录在 [本地开发与数据位置](local-development.md)：前端使用当前活动代码目录，API 与两处保留的 ObjectStore 需分别核对。恢复预览不重新 seed；迁移 API 时必须显式指定并验证既有 ObjectStore。
 
 2026-09-05 产品方向澄清：项目是正式 Reelay 前端的产品行为预演版，已确认规则需可执行，后端可模拟；后续范围与滚动路线已补入 `product-expansion-plan.md` 第 1 / 8.1 节。首页 / 登录大规模重设计仍后置。手机号 / 邮箱注册和邀请码保留为后续能力方向，详细流程尚未确定；不要把参考图或其他 worktree 的登录草稿当作定稿需求。
 
@@ -98,16 +100,15 @@ CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画
 ```powershell
 git branch --show-current
 git status --short
-npm ci
-npm run db:setup
+npm run worktrees
 npm run check
 ```
 
-`npm run db:setup` 是显式的本地开发初始化入口，依次执行 `db:up`、`db:migrate` 和幂等 `db:seed`；`db:up` 会等待 PostgreSQL 健康。脚本只在 seed 子进程中注入 `ALLOW_DEMO_SEED=true`，不会修改当前终端环境，也不会清空、重置或硬删除业务资产；子命令失败会保留非零退出码。它拒绝 production / preview 环境和非回环数据库地址，公网预览仍必须按 `docs/vercel-supabase-preview.md` 人工迁移与 seed，不能复用这个本地入口。
+启动前先按 [本地开发与数据位置](local-development.md) 区分继续现有环境与首次初始化；依赖已安装时不重复 `npm ci`。`npm run db:setup` 用于显式初始化或经复核的演示夹具更新，不是每天恢复预览的步骤。它依次执行 `db:up`、`db:migrate` 和幂等 `db:seed`，拒绝 production / preview 环境。当前本机目标检查优先读取 `MIGRATION_DATABASE_URL`，未设置时检查 `DATABASE_URL`，并非分别验证两者；首次初始化必须按启动说明让两者指向同一本机数据库。公网初始化仍按 `docs/vercel-supabase-preview.md` 单独执行。
 
 该 seed 除账号和项目外，还会为 Hoo 写入 v3 演示夹具：共 9 张图片与 2 条本地 MP3；“雾森信使”引用 6 项，“曜石勘探体”引用 5 项，合计覆盖 `16:9`、`9:16`、方形 / `4:3` 和音频。旧版“绯雾调香师 / 曜金香氛核心”仅在完整旧 fixture 指纹匹配时原位校准，保留 Entity ID 与 placement；旧六图在无额外 Entity、项目或画布引用时只撤销个人 placement 和演示项目引用，底层资产 / blob 不硬删。用户编辑过的旧主体会 fail closed，不会追加成四个主体；并发编辑发生在上传与事务校准之间时，事务仍会二次校验并失败，已经完成的 canonical Media 可在解决冲突后由下一次 seed 幂等收敛。
 
-素材源文件随 Git 同步，但 PostgreSQL 元数据与 `.reelay-data/object-store` 都是本机状态，所以跨电脑执行 `git pull` 后仍须运行 `npm run db:setup`，才能重建相同的 PostgreSQL 元数据和本地 filesystem ObjectStore。公网 preview 因缺少持久 ObjectStore 会继续跳过这些本地媒体夹具。服务启动和依赖安装不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
+素材源文件随 Git 同步，但 PostgreSQL 元数据与 ObjectStore 都是本机状态。新电脑首次初始化可重建仓库定义的演示夹具，不能恢复另一台电脑上用户创建的项目、主体和上传素材；这些状态需要数据库与 ObjectStore 配套备份。已有环境日常拉取后按变更范围决定是否执行 migration 或 seed。公网 preview 因缺少持久 ObjectStore 会继续跳过这些本地媒体夹具。服务启动和依赖安装不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
 
 - 已安装依赖时不必重复执行 `npm ci`。
 - 开发中的定向检查与文档选读按 `docs/development-workflow.md` 执行。

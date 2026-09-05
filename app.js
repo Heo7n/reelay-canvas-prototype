@@ -2068,11 +2068,6 @@ function getGenerationAvailability(node) {
   };
 }
 
-function getParamLabel(node) {
-  const parts = getParamLabelParts(node);
-  return `${parts.beforeAspect}${parts.aspect}${parts.afterAspect}`;
-}
-
 function getParamLabelParts(node) {
   if (getNodeGenerationMode(node) === "video") {
     const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
@@ -3978,41 +3973,6 @@ function closeAssetLibraryPreview() {
   state.libraryPreviewTarget = null;
   assetLibraryPreviewDialog?.close?.();
   if (assetLibraryPreviewBody) assetLibraryPreviewBody.innerHTML = "";
-}
-
-function focusWorldBounds(bounds) {
-  if (!bounds) return;
-  const rect = shell.getBoundingClientRect();
-  const libraryRect = isAssetLibraryOpen() ? assetLibraryPanel?.getBoundingClientRect() : null;
-  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
-  const leftInset = Math.max(0, (libraryRect?.right || rect.left) - rect.left);
-  const rightInset = Math.max(0, rect.right - (agentRect?.left || rect.right));
-  const viewWidth = Math.max(260, rect.width - leftInset - rightInset);
-  const centerX = (bounds.left + bounds.right) / 2;
-  const centerY = (bounds.top + bounds.bottom) / 2;
-  state.tx = leftInset + viewWidth / 2 - centerX * state.scale;
-  state.ty = rect.height / 2 - centerY * state.scale;
-  applyTransform();
-}
-
-function focusCanvasLibraryItem(id, kind = "node") {
-  if (kind === "group") {
-    const group = getGroupById(id);
-    const bounds = getGroupBounds(group);
-    if (!group || !bounds) return;
-    setActiveGroup(group.id);
-    focusWorldBounds(bounds);
-    render();
-    return;
-  }
-
-  const node = state.nodes.find((item) => item.id === id);
-  if (!node) return;
-  collapseInactiveNodes(node.id);
-  bringNodesToFront([node]);
-  setSelection([node.id], node.id);
-  focusWorldBounds(getNodeBounds(node));
-  render();
 }
 
 function setNarrowViewportInertTargets(targets) {
@@ -7278,11 +7238,6 @@ function undoLastAction() {
     }
     state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
     setSelection(restored.map((node) => node.id), restored[0]?.id || null);
-  }
-
-  if (action.type === "connections") {
-    state.connections = canvasConnections.normalizeConnections(action.connections, state.nodes);
-    state.activeConnectionId = null;
   }
 
   if (action.type === "move") {
