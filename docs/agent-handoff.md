@@ -38,6 +38,8 @@
 
 主体使用交互现由 `canvas-entity-use-controller.js` 持有选择器 / 详情 UI 状态、timer / animation frame、焦点、背景隔离和监听器生命周期；入口只注入最小读取与提交能力，旧状态和事件路径已移除。选择器绑定打开时的 project / canvas / node，确认前重新验证可写与节点可用性；陈旧回调不能跨作用域恢复弹层或焦点。逐 Media 展开与内容写入仍复用既有 model 和 app 适配器，本轮没有把已有节点快照撤销迁移成字段命令。
 
+节点生成与提示词优化现由无 DOM 的 `canvas-node-task-runner.js` 独占运行记录、timer、取消与完成归属，已移除根 `state` 中的两套任务 Map。runner 保留启动输入快照和实际节点身份，完成前验证 project / canvas / node / task，拒绝重复启动与陈旧回调；`app.js` 继续负责输入验证、原有模拟扣费、字段提交、撤销和保存。普通切画布允许原画布后台完成，删除（含撤销创建）、hydrate、宿主上下文替换和访问失效会取消任务。Alt 复制正在优化的节点已修复为可编辑的空闲副本。生成耗时仍为 900–1600ms、提示词优化为 900ms，刷新积分仍为 `3000 / 0`，没有新增退款或持久任务规则。此次没有改动样式、节点模板、拖动、选择和连线手势。
+
 主体使用规则已确认：主体只组织与圈定素材，使用时展开为独立 Media 输入 / 连接，放入画布时拆成独立素材节点；后续编辑或删除主体不联动既有使用。底层 Media 的删除、权限、版本，以及模型容量与类型不兼容是另外的设计边界，不从该规则推导。详见 `product-expansion-plan.md` 第 4.2 节。
 
 2026-09-05 本机运行数据边界：日常代码入口收敛到根目录 `0707` 的本地 `main`；当前 `5175` API 仍由 `0707-wt-canvas-integration` 提供，使用该目录的 `.reelay-data/object-store`。`0707-wt-canvas-shell-redesign` 还保存另一批不重复的本机素材，两处都保留。前端主线可更新，但迁移 API 时必须显式指定并验证已有 ObjectStore，不直接从根目录启动空的默认存储，也不重新 seed。
@@ -59,8 +61,10 @@ iframe 侧文档保存已经从 `app.js` 提取为无 DOM 的持久化协调器�
 当前先继续主体库设计与逐素材展开的行为核对，不启动 React Flow 迁移或完整创作故事。后续需要处理画布工程边界时，沿以下方向逐步推进：
 
 1. 在现有 CanvasCommand 上建立字段级 Node patch 与 Group membership invariant，先迁移媒体命名和离散参数，再迁移解组；不能使用整节点快照，不能修改运行时创建类型或恢复生成 / 提示词任务态。高频 pointer preview 仍保留在 session/adapter 层，pointerup 后续只提交最终字段事务。
-2. 把生成与提示词优化的异步 timer 提取为不依赖 DOM 的 task runner，完成事件只通过带 project / canvas / node / task scope 的命令写入。
+2. 任务 runner 已完成；后续节点字段命令成熟后，再把当前 app 中显式的完成写入适配到字段命令，继续保留任务作用域验证、提示词字段撤销和生成成功时的撤销边界。Agent 对话任务尚不在该 runner 的范围内。
 3. 资产下一步以已落地的 WorkspaceMediaAsset + personal placement + ProjectAssetReference + ObjectStore + personal Entity 为基线，把 Folder / organization placement、Entity 删除恢复，以及主体选定 Media 的独立引用 / 节点创建纳入明确应用边界，再接组织发布与审核。不把这些逻辑塞进 `CollaborationStore`、`app.js` 或 CanvasDocument；GenerationResult 只有显式保存后才幂等晋升为 WorkspaceMediaAsset。
+
+节点创建撤销尚未统一：当前 `create` action 用于主体展开等入口，普通双击新建和 Alt 复制还未登记创建撤销。本轮补齐的是既有 `create` 撤销分支的任务取消，不应描述为已经实现所有节点创建的撤销；后续迁移节点命令时需一并明确覆盖范围。
 
 积分前端模拟需另开切片。开始前至少确认组织月度额度与结转规则、一次生成的预占 / 扣减 / 失败退款、成员与项目统计维度、管理员可见范围，以及演示月份和异常场景；没有这些口径前，不把当前 `3000 / 0` mock 扩成伪账本。
 
