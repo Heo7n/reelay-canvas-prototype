@@ -40,7 +40,7 @@
   function sanitizeMediaUrl(value) {
     if (typeof value !== "string") return "";
     const url = value.trim().slice(0, 2_048);
-    if (!url) return "";
+    if (!url || /[\u0000-\u001f\u007f<>"'`]/.test(url)) return "";
     if (/^https?:\/\//i.test(url)) return url;
     if (/^\/(?!\/)/.test(url) || /^\.\.?\//.test(url)) return url;
     return "";
@@ -69,6 +69,14 @@
     }
     if (typeof candidate.enhanced === "boolean") asset.enhanced = candidate.enhanced;
     return asset;
+  }
+
+  function resolveGeneratorMediaKind(candidate, generatedAsset) {
+    if (GENERATOR_MODES.has(candidate.mediaKind)) return candidate.mediaKind;
+    if (GENERATOR_MODES.has(candidate.lockedMode)) return candidate.lockedMode;
+    if (GENERATOR_MODES.has(generatedAsset?.type)) return generatedAsset.type;
+    if (GENERATOR_MODES.has(candidate.mode)) return candidate.mode;
+    return "image";
   }
 
   function serializeNode(candidate) {
@@ -101,18 +109,25 @@
     }
 
     const generatedAsset = serializeAsset(candidate.generatedAsset);
-    node.mode = GENERATOR_MODES.has(candidate.mode) ? candidate.mode : "image";
+    node.mediaKind = resolveGeneratorMediaKind(candidate, generatedAsset);
     node.model = boundedString(candidate.model, "", 200);
     node.aspect = boundedString(candidate.aspect, "", 40);
     node.resolution = boundedString(candidate.resolution, "", 40);
     node.quality = boundedString(candidate.quality, "", 40);
     node.duration = boundedString(candidate.duration, "", 40);
+    node.outputFormat = boundedString(candidate.outputFormat, "", 40);
     node.count = finiteInteger(candidate.count, 1, 1, 100);
+    node.workflow = boundedString(candidate.workflow, "", 80);
+    if (typeof candidate.omniReferenceTaskType === "string") {
+      node.omniReferenceTaskType = boundedString(candidate.omniReferenceTaskType, "", 80);
+    }
+    node.audioEnabled = candidate.audioEnabled === true;
+    node.autoLinkEnabled = candidate.autoLinkEnabled !== false;
+    node.assetValidationEnabled = node.mediaKind === "video" && candidate.assetValidationEnabled === true;
     node.prompt = boundedString(candidate.prompt, "", 20_000);
     node.preview = candidate.preview === true;
     node.name = boundedString(candidate.name, "", 300);
-    node.generatedAsset = generatedAsset;
-    node.lockedMode = GENERATOR_MODES.has(candidate.lockedMode) ? candidate.lockedMode : null;
+    node.generatedAsset = generatedAsset?.type === node.mediaKind ? generatedAsset : null;
     node.assets = assets;
     node.activeAssetId = activeAssetId && assets.some((asset) => asset.id === activeAssetId)
       ? activeAssetId
@@ -222,15 +237,23 @@
 
   function serializeLastPreset(candidate) {
     const preset = candidate && typeof candidate === "object" ? candidate : {};
-    return {
-      mode: GENERATOR_MODES.has(preset.mode) ? preset.mode : "image",
+    const mode = GENERATOR_MODES.has(preset.mode) ? preset.mode : "image";
+    const serializedPreset = {
+      mode,
       model: boundedString(preset.model, "", 200),
       aspect: boundedString(preset.aspect, "", 40),
       resolution: boundedString(preset.resolution, "", 40),
       quality: boundedString(preset.quality, "", 40),
       duration: boundedString(preset.duration, "", 40),
+      outputFormat: boundedString(preset.outputFormat, "", 40),
       count: finiteInteger(preset.count, 1, 1, 100),
+      workflow: boundedString(preset.workflow, "", 80),
+      audioEnabled: preset.audioEnabled === true,
     };
+    if (typeof preset.omniReferenceTaskType === "string") {
+      serializedPreset.omniReferenceTaskType = boundedString(preset.omniReferenceTaskType, "", 80);
+    }
+    return serializedPreset;
   }
 
   function createSnapshot(state) {
@@ -251,7 +274,7 @@
     };
   }
 
-  function restoreNode(node, promptInputHeight) {
+  function restoreNode(node) {
     if (node.kind === "asset") {
       return {
         ...node,
@@ -260,16 +283,18 @@
         mediaMenuOpen: false,
       };
     }
+    const { mediaKind, ...content } = node;
     return {
-      ...node,
+      ...content,
+      mode: mediaKind,
       credits: 0,
       generating: false,
+      promptOptimizing: false,
       expanded: false,
-      promptLarge: false,
-      promptInputHeight,
+      advancedSettingsExpanded: false,
       mediaMenuOpen: false,
       panel: null,
-      modelFilter: node.mode,
+      modelFilter: mediaKind,
     };
   }
 
@@ -285,11 +310,10 @@
     if (!snapshot.canvases.length) return null;
     const minScale = Number.isFinite(options.minScale) ? options.minScale : 0.2;
     const maxScale = Number.isFinite(options.maxScale) ? options.maxScale : 2;
-    const promptInputHeight = finiteNumber(options.promptInputHeight, 112, 1, 10_000);
     const canvases = snapshot.canvases.map((canvas) => ({
       id: canvas.id,
       name: canvas.name,
-      nodes: canvas.nodes.map((node) => restoreNode(node, promptInputHeight)),
+      nodes: canvas.nodes.map((node) => restoreNode(node)),
       connections: canvas.connections,
       groups: canvas.groups,
       tx: canvas.viewport.tx,
@@ -312,5 +336,6 @@
   root.REELAY_CANVAS_DOCUMENT_CODEC = Object.freeze({
     createSnapshot,
     restoreSnapshot,
+    sanitizeMediaUrl,
   });
 }(typeof globalThis === "object" ? globalThis : window));

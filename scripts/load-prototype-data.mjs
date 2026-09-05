@@ -17,6 +17,7 @@ export async function loadPrototypeData() {
 
   return {
     catalog: sandbox.window.REELAY_MODEL_CATALOG,
+    modelDirectory: sandbox.window.REELAY_MODEL_DIRECTORY,
     config: sandbox.window.REELAY_PROTOTYPE_CONFIG,
   };
 }

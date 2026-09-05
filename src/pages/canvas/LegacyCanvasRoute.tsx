@@ -1,22 +1,44 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Navigate, useParams, useSubmit } from "react-router-dom";
 import type { CanvasDocumentRepository } from "../../application/canvases/CanvasDocumentRepository";
+import type { EntityRepository } from "../../application/assets/EntityRepository";
+import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
 import { routePaths } from "../../app/routes";
 import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { CanvasHost } from "../../legacy-canvas/CanvasHost";
-import { AccountSettingsDialog } from "../../features/account/AccountSettingsDialog";
+import {
+  AccountSettingsDialog,
+  type AccountSection,
+} from "../../features/account/AccountSettingsDialog";
+import { resolveProjectCoverUrl } from "../../shared/projects/project-cover";
 import { readTheme } from "../../shared/theme/theme";
 
 interface LegacyCanvasRouteProps {
   canvasDocumentRepository: CanvasDocumentRepository;
+  entityRepository: EntityRepository;
+  mediaAssetRepository: MediaAssetRepository;
 }
 
-export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRouteProps) {
+export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, mediaAssetRepository }: LegacyCanvasRouteProps) {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [accountSettingsSection, setAccountSettingsSection] = useState<AccountSection>("profile");
   const { workspaceId, projectId, canvasId } = useParams();
   const { actor, currentWorkspace, projects } = useWorkspaceRouteData();
   const project = projects.find((candidate) => candidate.id === projectId);
   const submit = useSubmit();
+  const logout = useCallback(() => {
+    submit(null, { action: routePaths.logout(), method: "post" });
+  }, [submit]);
+  const createProject = useCallback(() => {
+    if (!workspaceId) return;
+    const formData = new FormData();
+    formData.set("intent", "create");
+    submit(formData, { action: routePaths.projects(workspaceId), method: "post" });
+  }, [submit, workspaceId]);
+  const openAccountSettings = useCallback((section: AccountSection) => {
+    setAccountSettingsSection(section);
+    setAccountSettingsOpen(true);
+  }, []);
 
   if (!workspaceId || !projectId || !canvasId) {
     return <Navigate to="/login" replace />;
@@ -27,29 +49,39 @@ export function LegacyCanvasRoute({ canvasDocumentRepository }: LegacyCanvasRout
     <>
       <CanvasHost
         repository={canvasDocumentRepository}
-        onLogout={() => submit(null, { action: routePaths.logout(), method: "post" })}
-        onOpenAccountSettings={() => setAccountSettingsOpen(true)}
+        entityRepository={entityRepository}
+        mediaAssetRepository={mediaAssetRepository}
+        onLogout={logout}
+        onCreateProject={createProject}
+        onOpenAccountSettings={openAccountSettings}
         context={{
-        protocolVersion: 1,
-        workspaceId,
-        projectId,
-        projectName: project.name,
-        canvasId,
-        theme: readTheme(),
-        writable: project.currentUserRole !== "view",
-        actor: {
-          account: actor.account,
-          displayName: actor.displayName,
-        },
-        workspace: {
-          name: currentWorkspace.name,
-          role: currentWorkspace.currentUserRole ?? "member",
-        },
+          protocolVersion: 1,
+          capabilities: { accountSections: true, projectSwitcher: true, assetPersistence: true, entityPersistence: true },
+          workspaceId,
+          projectId,
+          projectName: project.name,
+          projects: projects.map((candidate) => ({
+            id: candidate.id,
+            name: candidate.name,
+            coverUrl: resolveProjectCoverUrl(candidate.coverAssetId),
+          })),
+          canvasId,
+          theme: readTheme(),
+          writable: project.currentUserRole !== "view",
+          actor: {
+            account: actor.account,
+            displayName: actor.displayName,
+          },
+          workspace: {
+            name: currentWorkspace.name,
+            role: currentWorkspace.currentUserRole ?? "member",
+          },
         }}
       />
       <AccountSettingsDialog
         actor={actor}
         workspace={currentWorkspace}
+        initialSection={accountSettingsSection}
         open={accountSettingsOpen}
         onClose={() => setAccountSettingsOpen(false)}
       />

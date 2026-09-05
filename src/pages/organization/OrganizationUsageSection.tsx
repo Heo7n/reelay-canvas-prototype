@@ -11,10 +11,12 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { OrganizationMember } from "../../domain/workspace/workspace";
-import { UsageDetailDrawer } from "./UsageDetailDrawer";
 import {
   buildUsageExcelXml,
-  createOrganizationUsageDemoData,
+  buildUsageTimeline,
+  buildUsageTypeViewModels,
+  chooseTimelineGranularity,
+  createUsageDemoData,
   filterUsageRecords,
   formatUsageDateInput,
   getUsageComposition,
@@ -24,15 +26,11 @@ import {
   type UsageCompositionItem,
   type UsageDimension,
   type UsageRangePreset,
-} from "./organization-usage-data";
+} from "../../features/usage";
+import { UsageDetailDrawer } from "./UsageDetailDrawer";
 import { UsageDistributionChart } from "./usage/UsageDistributionChart";
 import { UsageLongTermActivity } from "./usage/UsageLongTermActivity";
 import { UsageSourceTable } from "./usage/UsageSourceTable";
-import {
-  buildUsageTimeline,
-  buildUsageTypeViewModels,
-  chooseTimelineGranularity,
-} from "./usage/usage-analytics";
 import styles from "./usage/UsageDashboard.module.css";
 
 interface OrganizationUsageSectionProps {
@@ -59,11 +57,6 @@ const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
-});
-const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
 });
 
 function downloadFile(content: string, fileName: string, mimeType: string): void {
@@ -145,7 +138,7 @@ export function OrganizationUsageSection({
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const demoData = useMemo(
-    () => createOrganizationUsageDemoData(members, refreshedAt),
+    () => createUsageDemoData(members, refreshedAt),
     [members, refreshedAt],
   );
   const earliestRecordDate = useMemo(

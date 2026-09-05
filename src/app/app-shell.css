@@ -31,14 +31,6 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-.legacy-route-status {
-  display: grid;
-  min-height: 100%;
-  place-items: center;
-  color: #737373;
-  font-size: 14px;
-}
-
 .legacy-canvas-host,
 .legacy-canvas-frame {
   width: 100%;

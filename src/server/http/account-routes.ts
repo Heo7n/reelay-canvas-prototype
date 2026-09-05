@@ -1,15 +1,18 @@
 import type { FastifyInstance } from "fastify";
 
-import type { CollaborationStore } from "../application/CollaborationStore";
+import type { AccountStore } from "../application/AccountStore";
+import type { SessionActorReader } from "../application/SessionStore";
 import { UpdateAccountContactsBodySchema } from "./contracts";
 import { getRequestActor } from "./session-context";
 
+type AccountRouteCapabilities = AccountStore & SessionActorReader;
+
 export async function registerAccountRoutes(
   app: FastifyInstance,
-  store: CollaborationStore,
+  capabilities: AccountRouteCapabilities,
 ): Promise<void> {
   app.patch("/api/account", async (request, reply) => {
-    const actor = await getRequestActor(request, store);
+    const actor = await getRequestActor(request, capabilities);
     if (!actor) {
       return reply.code(401).send({
         error: { code: "session_required", message: "请先登录演示账号。" },
@@ -21,7 +24,7 @@ export async function registerAccountRoutes(
         error: { code: "invalid_request", message: "请检查联系邮箱和手机号码格式。" },
       });
     }
-    const updated = await store.updateAccountContacts(actor.id, {
+    const updated = await capabilities.updateAccountContacts(actor.id, {
       contactEmail: body.data.contactEmail ?? null,
       contactPhone: body.data.contactPhone ?? null,
     });

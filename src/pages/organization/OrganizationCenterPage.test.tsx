@@ -233,7 +233,24 @@ describe("organization center", () => {
     fireEvent.change(creditAmountInput, { target: { value: "1000" } });
     expect(grantConfirm).toBeEnabled();
     fireEvent.click(grantConfirm);
-    expect(screen.getByText("已为 Hoo 提交 1,000 积分发放。")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("积分发放尚未开放，本次未执行。");
+    expect(screen.queryByRole("dialog", { name: "调整 Hoo 的积分额度" })).toBeNull();
+    expect(screen.getByText("12,000")).toBeInTheDocument();
+    expect(screen.getByRole("img", {
+      name: "未分配积分 67,000，成员账户积分 33,000",
+    })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "调整 Hoo 的积分额度" }));
+    const reclaimDialog = screen.getByRole("dialog", { name: "调整 Hoo 的积分额度" });
+    fireEvent.click(within(reclaimDialog).getByRole("button", { name: "回收" }));
+    fireEvent.click(within(reclaimDialog).getByRole("button", { name: "全部回收" }));
+    fireEvent.click(within(reclaimDialog).getByRole("button", { name: "确认回收" }));
+    expect(screen.getByRole("status")).toHaveTextContent("积分回收尚未开放，本次未执行。");
+    expect(screen.queryByRole("dialog", { name: "调整 Hoo 的积分额度" })).toBeNull();
+    expect(screen.getByText("12,000")).toBeInTheDocument();
+    expect(screen.getByRole("img", {
+      name: "未分配积分 67,000，成员账户积分 33,000",
+    })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "查看积分变动记录" }));
     const creditDialog = screen.getByRole("dialog", { name: "积分变动记录" });

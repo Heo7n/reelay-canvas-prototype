@@ -1,6 +1,7 @@
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { canonicalizeLegacyCanvasDocumentV1 } from "../contracts/canvas-document-v1";
 import { buildServer } from "./app";
 import { createDemoSeed, DEMO_PASSWORD } from "./demo-fixtures";
 import { InMemoryCollaborationStore } from "./infrastructure/InMemoryCollaborationStore";
@@ -22,11 +23,28 @@ async function login(app: FastifyInstance, account: string): Promise<string> {
   return getCookie(response);
 }
 
+function canvasContent(nodeIds: string[] = []) {
+  const content = canonicalizeLegacyCanvasDocumentV1({
+    kind: "reelay-legacy-canvas",
+    version: 1,
+    activeCanvasId: "canvas-main",
+    canvases: [{
+      id: "canvas-main",
+      name: "Main canvas",
+      nodes: nodeIds.map((id) => ({ id, kind: "generator" })),
+    }],
+  });
+  if (!content) throw new Error("Expected valid CanvasDocument v1 test fixture.");
+  return content;
+}
+
 describe("organization project access API", () => {
   let app: FastifyInstance;
+  let store: InMemoryCollaborationStore;
 
   beforeEach(async () => {
-    app = await buildServer({ store: new InMemoryCollaborationStore() });
+    store = new InMemoryCollaborationStore();
+    app = await buildServer({ store });
   });
 
   afterEach(async () => {
@@ -308,7 +326,7 @@ describe("organization project access API", () => {
       method: "PUT",
       url: canvasUrl,
       headers: { cookie: adminCookie },
-      payload: { schemaVersion: 1, expectedRevision: 0, content: { nodes: [{ id: "preserved" }] } },
+      payload: { schemaVersion: 1, expectedRevision: 0, content: canvasContent(["preserved"]) },
     });
     expect(canvas.statusCode).toBe(201);
 
@@ -340,7 +358,7 @@ describe("organization project access API", () => {
       method: "PUT",
       url: canvasUrl,
       headers: { cookie: editCookie },
-      payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [{ id: "late-write" }] } },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent(["late-write"]) },
     });
     expect(lateCanvasSave.statusCode).toBe(404);
 
@@ -360,7 +378,7 @@ describe("organization project access API", () => {
       method: "PUT",
       url,
       headers: { cookie: adminCookie },
-      payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [] } },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent() },
     });
     expect(missingRevision.statusCode).toBe(409);
     expect(missingRevision.json().error.currentRevision).toBe(0);
@@ -372,7 +390,7 @@ describe("organization project access API", () => {
       payload: {
         schemaVersion: 1,
         expectedRevision: 0,
-        content: { viewport: { x: 12, y: -8, zoom: 0.9 }, nodes: [{ id: "node-one" }] },
+        content: canvasContent(["node-one"]),
       },
     });
     expect(created.statusCode).toBe(201);
@@ -381,7 +399,7 @@ describe("organization project access API", () => {
       projectId: "project-perfume-tvc",
       schemaVersion: 1,
       revision: 1,
-      content: { viewport: { x: 12, y: -8, zoom: 0.9 }, nodes: [{ id: "node-one" }] },
+      content: canvasContent(["node-one"]),
     });
 
     const updated = await app.inject({
@@ -391,19 +409,28 @@ describe("organization project access API", () => {
       payload: {
         schemaVersion: 2,
         expectedRevision: 1,
-        content: { viewport: { x: 24, y: 4, zoom: 1 }, nodes: [] },
+        content: canvasContent(),
       },
     });
-    expect(updated.statusCode).toBe(200);
-    expect(updated.json().document).toEqual(
-      expect.objectContaining({ schemaVersion: 2, revision: 2 }),
+    expect(updated.statusCode).toBe(400);
+    expect(updated.json().error.code).toBe("unsupported_canvas_document");
+
+    const validUpdate = await app.inject({
+      method: "PUT",
+      url,
+      headers: { cookie: adminCookie },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent() },
+    });
+    expect(validUpdate.statusCode).toBe(200);
+    expect(validUpdate.json().document).toEqual(
+      expect.objectContaining({ schemaVersion: 1, revision: 2 }),
     );
 
     const stale = await app.inject({
       method: "PUT",
       url,
       headers: { cookie: adminCookie },
-      payload: { schemaVersion: 2, expectedRevision: 1, content: { nodes: ["stale"] } },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent(["stale"]) },
     });
     expect(stale.statusCode).toBe(409);
     expect(stale.json().error).toEqual(
@@ -412,7 +439,7 @@ describe("organization project access API", () => {
 
     const restored = await app.inject({ method: "GET", url, headers: { cookie: adminCookie } });
     expect(restored.json().document).toEqual(
-      expect.objectContaining({ revision: 2, content: { viewport: { x: 24, y: 4, zoom: 1 }, nodes: [] } }),
+      expect.objectContaining({ revision: 2, schemaVersion: 1, content: canvasContent() }),
     );
   });
 
@@ -427,7 +454,7 @@ describe("organization project access API", () => {
       method: "PUT",
       url,
       headers: { cookie: adminCookie },
-      payload: { schemaVersion: 1, expectedRevision: 0, content: { nodes: [] } },
+      payload: { schemaVersion: 1, expectedRevision: 0, content: canvasContent() },
     });
     expect(created.statusCode).toBe(201);
 
@@ -435,20 +462,20 @@ describe("organization project access API", () => {
       method: "PUT",
       url,
       headers: { cookie: editCookie },
-      payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [{ id: "shared" }] } },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent(["shared"]) },
     });
     expect(edited.statusCode).toBe(200);
     expect(edited.json().document.revision).toBe(2);
 
     const viewed = await app.inject({ method: "GET", url, headers: { cookie: viewCookie } });
     expect(viewed.statusCode).toBe(200);
-    expect(viewed.json().document.content).toEqual({ nodes: [{ id: "shared" }] });
+    expect(viewed.json().document.content).toEqual(canvasContent(["shared"]));
 
     const viewWrite = await app.inject({
       method: "PUT",
       url,
       headers: { cookie: viewCookie },
-      payload: { schemaVersion: 1, expectedRevision: 2, content: { nodes: [] } },
+      payload: { schemaVersion: 1, expectedRevision: 2, content: canvasContent() },
     });
     expect(viewWrite.statusCode).toBe(403);
     expect(viewWrite.json().error.code).toBe("project_forbidden");
@@ -461,7 +488,7 @@ describe("organization project access API", () => {
       method: "PUT",
       url,
       headers: { cookie: outsiderCookie },
-      payload: { schemaVersion: 1, expectedRevision: 2, content: { nodes: [] } },
+      payload: { schemaVersion: 1, expectedRevision: 2, content: canvasContent() },
     });
     expect(hiddenWrite.statusCode).toBe(404);
   });
@@ -476,6 +503,77 @@ describe("organization project access API", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("invalid_request");
+
+    const unsupportedInnerVersion = await app.inject({
+      method: "PUT",
+      url: "/api/projects/project-perfume-tvc/canvases/main/document",
+      headers: { cookie: adminCookie },
+      payload: {
+        schemaVersion: 1,
+        expectedRevision: 0,
+        content: { ...canvasContent(), version: 2 },
+      },
+    });
+    expect(unsupportedInnerVersion.statusCode).toBe(400);
+    expect(unsupportedInnerVersion.json().error.code).toBe("unsupported_canvas_document");
+  });
+
+  it("canonicalizes stored v1 documents and fails closed for unsupported or corrupt stored content", async () => {
+    const cookie = await login(app, "creator@reelay.test");
+    const baseInput = {
+      actorId: "actor-tianmaochao",
+      projectId: "project-perfume-tvc",
+      expectedRevision: 0,
+    };
+
+    const legacyContent = {
+      kind: "reelay-legacy-canvas",
+      version: 1,
+      activeCanvasId: "legacy",
+      canvases: [{ id: "legacy", unknown: "drop-me", nodes: [] }],
+      hostile: true,
+    };
+    await store.saveCanvasDocument({
+      ...baseInput,
+      canvasId: "legacy-v1",
+      schemaVersion: 1,
+      content: legacyContent,
+    });
+    const canonical = await app.inject({
+      method: "GET",
+      url: "/api/projects/project-perfume-tvc/canvases/legacy-v1/document",
+      headers: { cookie },
+    });
+    expect(canonical.statusCode).toBe(200);
+    expect(canonical.json().document.content).toEqual(canonicalizeLegacyCanvasDocumentV1(legacyContent));
+
+    await store.saveCanvasDocument({
+      ...baseInput,
+      canvasId: "future",
+      schemaVersion: 2,
+      content: { ...canvasContent(), version: 2 },
+    });
+    const unsupported = await app.inject({
+      method: "GET",
+      url: "/api/projects/project-perfume-tvc/canvases/future/document",
+      headers: { cookie },
+    });
+    expect(unsupported.statusCode).toBe(422);
+    expect(unsupported.json().error.code).toBe("unsupported_canvas_document");
+
+    await store.saveCanvasDocument({
+      ...baseInput,
+      canvasId: "corrupt",
+      schemaVersion: 1,
+      content: { nodes: [] },
+    });
+    const corrupt = await app.inject({
+      method: "GET",
+      url: "/api/projects/project-perfume-tvc/canvases/corrupt/document",
+      headers: { cookie },
+    });
+    expect(corrupt.statusCode).toBe(422);
+    expect(corrupt.json().error.code).toBe("corrupt_canvas_document");
   });
 
   it("requires a valid session and keeps project lookup inside its workspace", async () => {

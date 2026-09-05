@@ -18,13 +18,28 @@
   });
 
   const DEFAULTS = Object.freeze({
-    activationInside: 8,
-    activationRadius: 28,
-    portOffset: 18,
-    portTravelRadius: 22,
-    portMinOutside: 11,
-    snapEnterRadius: 20,
-    snapExitRadius: 32,
+    fieldOutwardRadius: 148,
+    fieldVerticalRadius: 108,
+    snapOutwardRadius: 104,
+    snapVerticalRadius: 78,
+    snapExitPadding: 18,
+    portOffset: 38,
+    portMinOutside: 17,
+    snapSwitchBias: 10,
+  });
+
+  const PORT_GEOMETRY = Object.freeze({
+    fieldOutwardRadius: 148,
+    fieldVerticalRadius: 108,
+    minScreenOutwardRadius: 64,
+    minScreenVerticalRadius: 24,
+    snapOutwardRadius: 104,
+    snapVerticalRadius: 78,
+    minScreenSnapOutwardRadius: 52,
+    minScreenSnapVerticalRadius: 20,
+    snapExitPadding: 18,
+    portOffset: 38,
+    portMinOutside: 17,
   });
 
   function finite(value, fallback) {
@@ -39,27 +54,81 @@
   function mergeOptions(options) {
     const source = options && typeof options === "object" ? options : {};
     const merged = {
-      activationInside: positive(source.activationInside, DEFAULTS.activationInside),
-      activationRadius: positive(source.activationRadius, DEFAULTS.activationRadius),
+      fieldOutwardRadius: positive(source.fieldOutwardRadius, DEFAULTS.fieldOutwardRadius),
+      fieldVerticalRadius: positive(source.fieldVerticalRadius, DEFAULTS.fieldVerticalRadius),
+      snapOutwardRadius: positive(source.snapOutwardRadius, DEFAULTS.snapOutwardRadius),
+      snapVerticalRadius: positive(source.snapVerticalRadius, DEFAULTS.snapVerticalRadius),
+      snapExitPadding: positive(source.snapExitPadding, DEFAULTS.snapExitPadding),
       portOffset: positive(source.portOffset, DEFAULTS.portOffset),
-      portTravelRadius: positive(source.portTravelRadius, DEFAULTS.portTravelRadius),
       portMinOutside: positive(source.portMinOutside, DEFAULTS.portMinOutside),
-      snapEnterRadius: positive(source.snapEnterRadius, DEFAULTS.snapEnterRadius),
-      snapExitRadius: positive(source.snapExitRadius, DEFAULTS.snapExitRadius),
+      snapSwitchBias: positive(source.snapSwitchBias, DEFAULTS.snapSwitchBias),
     };
-    merged.portTravelRadius = Math.max(merged.portMinOutside, merged.portTravelRadius);
+    merged.fieldOutwardRadius = Math.max(0.01, merged.portMinOutside, merged.fieldOutwardRadius);
+    merged.fieldVerticalRadius = Math.max(0.01, merged.fieldVerticalRadius);
+    merged.snapOutwardRadius = clamp(
+      Math.max(0.01, merged.snapOutwardRadius),
+      0.01,
+      merged.fieldOutwardRadius,
+    );
+    merged.snapVerticalRadius = clamp(
+      Math.max(0.01, merged.snapVerticalRadius),
+      0.01,
+      merged.fieldVerticalRadius,
+    );
     merged.portOffset = clamp(
       merged.portOffset,
       merged.portMinOutside,
-      merged.portTravelRadius,
+      merged.fieldOutwardRadius,
     );
-    merged.snapExitRadius = Math.max(merged.snapEnterRadius, merged.snapExitRadius);
     return merged;
+  }
+
+  function getScaledPortGeometry(canvasScale) {
+    const scale = Math.max(0.01, finite(canvasScale, 1));
+    return {
+      fieldOutwardRadius: Math.max(
+        PORT_GEOMETRY.minScreenOutwardRadius,
+        PORT_GEOMETRY.fieldOutwardRadius * scale,
+      ),
+      fieldVerticalRadius: Math.max(
+        PORT_GEOMETRY.minScreenVerticalRadius,
+        PORT_GEOMETRY.fieldVerticalRadius * scale,
+      ),
+      snapOutwardRadius: Math.max(
+        PORT_GEOMETRY.minScreenSnapOutwardRadius,
+        PORT_GEOMETRY.snapOutwardRadius * scale,
+      ),
+      snapVerticalRadius: Math.max(
+        PORT_GEOMETRY.minScreenSnapVerticalRadius,
+        PORT_GEOMETRY.snapVerticalRadius * scale,
+      ),
+      snapExitPadding: PORT_GEOMETRY.snapExitPadding,
+      portOffset: PORT_GEOMETRY.portOffset * scale,
+      portMinOutside: PORT_GEOMETRY.portMinOutside * scale,
+    };
   }
 
   function normalizePoint(point) {
     if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
     return { x: point.x, y: point.y };
+  }
+
+  function normalizeRect(rect) {
+    if (!rect || typeof rect !== "object") return null;
+    const left = finite(rect.left, NaN);
+    const right = finite(rect.right, NaN);
+    const top = finite(rect.top, NaN);
+    const bottom = finite(rect.bottom, NaN);
+    if (![left, right, top, bottom].every(Number.isFinite)) return null;
+    const normalized = {
+      left: Math.min(left, right),
+      right: Math.max(left, right),
+      top: Math.min(top, bottom),
+      bottom: Math.max(top, bottom),
+    };
+    normalized.width = normalized.right - normalized.left;
+    normalized.height = normalized.bottom - normalized.top;
+    return normalized.width > 0 && normalized.height > 0 ? normalized : null;
   }
 
   function clamp(value, min, max) {
@@ -78,6 +147,7 @@
       ? definition.side
       : null;
     const anchor = normalizePoint(definition.anchor);
+    const targetRect = normalizeRect(definition.targetRect);
     if (!id || !nodeId || !side || !anchor) return null;
 
     const settings = mergeOptions({ ...options, ...definition.options });
@@ -88,16 +158,16 @@
     };
     const activationRect = side === "left"
       ? {
-        left: anchor.x - settings.activationRadius,
-        right: anchor.x + settings.activationInside,
-        top: anchor.y - settings.activationRadius,
-        bottom: anchor.y + settings.activationRadius,
+        left: anchor.x - settings.fieldOutwardRadius,
+        right: anchor.x,
+        top: anchor.y - settings.fieldVerticalRadius,
+        bottom: anchor.y + settings.fieldVerticalRadius,
       }
       : {
-        left: anchor.x - settings.activationInside,
-        right: anchor.x + settings.activationRadius,
-        top: anchor.y - settings.activationRadius,
-        bottom: anchor.y + settings.activationRadius,
+        left: anchor.x,
+        right: anchor.x + settings.fieldOutwardRadius,
+        top: anchor.y - settings.fieldVerticalRadius,
+        bottom: anchor.y + settings.fieldVerticalRadius,
       };
 
     return Object.freeze({
@@ -107,10 +177,15 @@
       anchor: Object.freeze(anchor),
       restCenter: Object.freeze(restCenter),
       activationRect: Object.freeze(activationRect),
-      activationInside: settings.activationInside,
-      activationRadius: settings.activationRadius,
-      portTravelRadius: settings.portTravelRadius,
+      fieldOutwardRadius: settings.fieldOutwardRadius,
+      fieldVerticalRadius: settings.fieldVerticalRadius,
+      snapOutwardRadius: settings.snapOutwardRadius,
+      snapVerticalRadius: settings.snapVerticalRadius,
+      snapExitPadding: settings.snapExitPadding,
       portMinOutside: settings.portMinOutside,
+      targetRect: targetRect ? Object.freeze(targetRect) : null,
+      targetInset: positive(definition.targetInset, 12),
+      targetPriority: finite(definition.targetPriority, 0),
       disabled: definition.disabled === true,
     });
   }
@@ -127,25 +202,46 @@
     return Object.freeze(registry);
   }
 
+  function getPortFieldCoordinates(pointer, port) {
+    const nextPointer = normalizePoint(pointer);
+    if (!nextPointer || !port) return null;
+    const direction = port.side === "left" ? -1 : 1;
+    return {
+      direction,
+      outward: direction * (nextPointer.x - port.anchor.x),
+      vertical: nextPointer.y - port.anchor.y,
+    };
+  }
+
+  function isPointInPortField(pointer, port, outwardRadius, verticalRadius) {
+    const coordinates = getPortFieldCoordinates(pointer, port);
+    if (!coordinates) return false;
+    const rx = Math.max(0.01, finite(outwardRadius, port.fieldOutwardRadius));
+    const ry = Math.max(0.01, finite(verticalRadius, port.fieldVerticalRadius));
+    return coordinates.outward >= 0
+      && ((coordinates.outward / rx) ** 2)
+        + ((coordinates.vertical / ry) ** 2) <= 1;
+  }
+
   function clampPointerToPort(pointer, port, options) {
     const nextPointer = normalizePoint(pointer);
     if (!nextPointer || !port || port.disabled) return null;
     const requireActivation = options?.requireActivation !== false;
-    const direction = port.side === "left" ? -1 : 1;
-    const outward = direction * (nextPointer.x - port.anchor.x);
-    const vertical = nextPointer.y - port.anchor.y;
-    const insideActivation = outward >= -port.activationInside
-      && Math.hypot(Math.max(0, outward), vertical) <= port.activationRadius;
+    const coordinates = getPortFieldCoordinates(nextPointer, port);
+    const { direction, outward, vertical } = coordinates;
+    if (outward < 0) return null;
+    const insideActivation = isPointInPortField(nextPointer, port);
     if (requireActivation && !insideActivation) return null;
 
     const clampedOutward = clamp(
       outward,
       port.portMinOutside,
-      port.portTravelRadius,
+      port.fieldOutwardRadius,
     );
-    const verticalLimit = Math.sqrt(Math.max(
+    const outwardRatio = clampedOutward / port.fieldOutwardRadius;
+    const verticalLimit = port.fieldVerticalRadius * Math.sqrt(Math.max(
       0,
-      (port.portTravelRadius ** 2) - (clampedOutward ** 2),
+      1 - (outwardRatio ** 2),
     ));
     return {
       x: port.anchor.x + direction * clampedOutward,
@@ -161,13 +257,17 @@
       const point = clampPointerToPort(nextPointer, port);
       if (!point) continue;
       const distance = distanceBetween(nextPointer, point);
-      if (!nearest || distance < nearest.distance) {
+      const restDistance = distanceBetween(nextPointer, port.restCenter);
+      if (!nearest
+        || distance < nearest.distance
+        || (distance === nearest.distance && restDistance < nearest.restDistance)) {
         nearest = {
           portId: port.id,
           nodeId: port.nodeId,
           side: port.side,
           point,
           distance,
+          restDistance,
         };
       }
     }
@@ -195,17 +295,19 @@
     return null;
   }
 
-  function createSnapResult(pointer, origin, port, canConnect, options) {
+  function createSnapResult(pointer, origin, port, canConnect, radii) {
     if (!port || port.disabled) return null;
     const direction = resolveConnectionDirection(origin, port);
     if (!direction || (canConnect && !canConnect(direction, port, origin))) return null;
-    const point = clampPointerToPort(pointer, port, options);
+    if (!isPointInPortField(pointer, port, radii?.outward, radii?.vertical)) return null;
+    const point = clampPointerToPort(pointer, port, { requireActivation: false });
     if (!point) return null;
     return {
       targetPortId: port.id,
       targetNodeId: port.nodeId,
       point,
       distance: distanceBetween(pointer, point),
+      restDistance: distanceBetween(pointer, port.restCenter),
       direction,
     };
   }
@@ -218,6 +320,7 @@
     const settings = mergeOptions(input.options);
     const canConnect = typeof input.canConnect === "function" ? input.canConnect : null;
 
+    let retained = null;
     if (input.previousTargetId) {
       const previousPort = registry.find((port) => port.id === input.previousTargetId);
       const previous = createSnapResult(
@@ -225,18 +328,113 @@
         origin,
         previousPort,
         canConnect,
-        { requireActivation: false },
+        {
+          outward: previousPort
+            ? previousPort.snapOutwardRadius + previousPort.snapExitPadding
+            : undefined,
+          vertical: previousPort
+            ? previousPort.snapVerticalRadius + previousPort.snapExitPadding
+            : undefined,
+        },
       );
-      if (previous && previous.distance <= settings.snapExitRadius) return previous;
+      if (previous) retained = previous;
     }
 
     let nearest = null;
     for (const port of registry) {
-      if (port.id === origin.id) continue;
-      const candidate = createSnapResult(pointer, origin, port, canConnect);
-      if (!candidate || candidate.distance > settings.snapEnterRadius) continue;
-      if (!nearest || candidate.distance < nearest.distance) nearest = candidate;
+      if (port.id === origin.id || port.id === retained?.targetPortId) continue;
+      const candidate = createSnapResult(pointer, origin, port, canConnect, {
+        outward: port.snapOutwardRadius,
+        vertical: port.snapVerticalRadius,
+      });
+      if (!candidate) continue;
+      if (!nearest || candidate.restDistance < nearest.restDistance) nearest = candidate;
     }
+    if (!retained) return nearest;
+    if (nearest && nearest.restDistance + settings.snapSwitchBias < retained.restDistance) {
+      return nearest;
+    }
+    return retained;
+  }
+
+  function createNodeBodyCandidate(pointer, origin, port, canConnect) {
+    if (!port || port.disabled || !port.targetRect) return null;
+    const direction = resolveConnectionDirection(origin, port);
+    if (!direction || (canConnect && !canConnect(direction, port, origin))) return null;
+    const rect = port.targetRect;
+    if (pointer.x < rect.left || pointer.x > rect.right
+      || pointer.y < rect.top || pointer.y > rect.bottom) return null;
+    const inset = clamp(port.targetInset, 0, rect.height / 2);
+    const connectionPoint = {
+      x: port.side === "left" ? rect.left : rect.right,
+      y: clamp(pointer.y, rect.top + inset, rect.bottom - inset),
+    };
+    return {
+      targetPortId: port.id,
+      targetNodeId: port.nodeId,
+      point: port.restCenter,
+      connectionPoint,
+      distance: distanceBetween(pointer, connectionPoint),
+      restDistance: distanceBetween(pointer, port.restCenter),
+      targetPriority: port.targetPriority,
+      hitKind: "body",
+      direction,
+    };
+  }
+
+  function selectNodeBodyCandidate(input) {
+    const pointer = normalizePoint(input?.pointer);
+    const origin = input?.origin;
+    if (!pointer || !origin) return null;
+    const registry = Array.isArray(input.registry) ? input.registry : [];
+    const canConnect = typeof input.canConnect === "function" ? input.canConnect : null;
+    let selected = null;
+
+    for (const port of registry) {
+      if (port.id === origin.id) continue;
+      const candidate = createNodeBodyCandidate(pointer, origin, port, canConnect);
+      if (!candidate) continue;
+      if (!selected
+        || candidate.targetPriority > selected.targetPriority
+        || (candidate.targetPriority === selected.targetPriority
+          && candidate.restDistance < selected.restDistance)) selected = candidate;
+    }
+    return selected;
+  }
+
+  function selectSnapProximity(input) {
+    const pointer = normalizePoint(input?.pointer);
+    const origin = input?.origin;
+    if (!pointer || !origin) return null;
+    const registry = Array.isArray(input.registry) ? input.registry : [];
+    const canConnect = typeof input.canConnect === "function" ? input.canConnect : null;
+    let nearest = null;
+
+    for (const port of registry) {
+      if (port.id === origin.id || port.disabled) continue;
+      const direction = resolveConnectionDirection(origin, port);
+      if (!direction || (canConnect && !canConnect(direction, port, origin))) continue;
+      if (!isPointInPortField(pointer, port)) continue;
+      const point = clampPointerToPort(pointer, port, { requireActivation: false });
+      if (!point) continue;
+      const distance = distanceBetween(pointer, port.restCenter);
+      const coordinates = getPortFieldCoordinates(pointer, port);
+      const normalizedDistance = Math.sqrt(
+        ((coordinates.outward / port.fieldOutwardRadius) ** 2)
+        + ((coordinates.vertical / port.fieldVerticalRadius) ** 2),
+      );
+      if (!nearest || distance < nearest.distance) {
+        nearest = {
+          targetPortId: port.id,
+          targetNodeId: port.nodeId,
+          point,
+          distance,
+          strength: 1 - normalizedDistance,
+          direction,
+        };
+      }
+    }
+
     return nearest;
   }
 
@@ -312,8 +510,12 @@
     clampPointerToPort,
     createInteractionState,
     findHoveredPort,
+    getScaledPortGeometry,
+    isPointInPortField,
     resolveConnectionDirection,
+    selectNodeBodyCandidate,
     selectSnapCandidate,
+    selectSnapProximity,
     transitionInteraction,
   });
 }(typeof globalThis === "object" ? globalThis : window));

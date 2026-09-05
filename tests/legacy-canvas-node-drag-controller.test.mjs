@@ -53,15 +53,24 @@ function candidate(overrides = {}) {
     startClientY: 100,
     origins: [{ id: "a", x: 10, y: 20 }, { id: "b", x: 70, y: 90 }],
     groups: [{ id: "group-1" }],
+    revealMediaToolbar: true,
+    revealGeneratorPanel: true,
     ...overrides,
   };
 }
 
 test("promoting a drag candidate preserves offsets and begins immediate movement", () => {
   const harness = createHarness();
-  const action = harness.controller.promote(candidate(), { clientX: 120, clientY: 110 });
+  const action = harness.controller.promote(
+    candidate({ interactionSource: "selection-frame" }),
+    { clientX: 120, clientY: 110 },
+  );
 
   assert.equal(action.type, "drag-nodes");
+  assert.equal(action.activeId, "a");
+  assert.equal(action.revealMediaToolbar, true);
+  assert.equal(action.revealGeneratorPanel, true);
+  assert.equal(action.interactionSource, "selection-frame");
   assert.equal(harness.getAction(), action);
   assert.deepEqual(harness.nodes.slice(0, 2).map(({ id, x, y }) => ({ id, x, y })), [
     { id: "a", x: 20, y: 25 },
@@ -75,6 +84,7 @@ test("Alt promotion duplicates nodes and drags only the copies", () => {
   const action = harness.controller.promote(candidate({ altKey: true }), { clientX: 120, clientY: 110 });
 
   assert.deepEqual(action.ids, ["a-copy-1", "b-copy-2"]);
+  assert.equal(action.activeId, "a-copy-1");
   assert.equal(harness.nodes.length, 4);
   assert.deepEqual(harness.nodes.slice(0, 2).map(({ x, y }) => ({ x, y })), [{ x: 10, y: 20 }, { x: 70, y: 90 }]);
   assert.deepEqual(harness.nodes.slice(2).map(({ x, y }) => ({ x, y })), [{ x: 20, y: 25 }, { x: 80, y: 95 }]);
@@ -85,6 +95,13 @@ test("Alt promotion duplicates nodes and drags only the copies", () => {
     "dragging:true",
     "movement",
   ]);
+});
+
+test("Alt promotion maps the active node to its corresponding copy", () => {
+  const harness = createHarness();
+  const action = harness.controller.promote(candidate({ activeId: "b", altKey: true }), { clientX: 120, clientY: 110 });
+  assert.equal(action.activeId, "b-copy-2");
+  assert.equal(harness.calls[0], "select:a-copy-1,b-copy-2:b-copy-2");
 });
 
 test("finishing a moved original records undo while duplicate movement does not", () => {
@@ -101,4 +118,27 @@ test("finishing a moved original records undo while duplicate movement does not"
   const duplicate = createHarness();
   duplicate.controller.finish({ ...originalAction, isDuplicate: true });
   assert.equal(duplicate.undoActions.length, 0);
+});
+
+test("cancelling a shared drag restores every origin without membership or undo work", () => {
+  const harness = createHarness();
+  harness.nodes[0].x = 44;
+  harness.nodes[0].y = 55;
+  harness.nodes[1].x = 104;
+  harness.nodes[1].y = 125;
+  const action = {
+    ...candidate({ interactionSource: "selection-frame" }),
+    type: "drag-nodes",
+    moved: true,
+    isDuplicate: false,
+  };
+
+  harness.controller.finish(action, { cancelled: true });
+
+  assert.deepEqual(harness.nodes.map(({ id, x, y }) => ({ id, x, y })), [
+    { id: "a", x: 10, y: 20 },
+    { id: "b", x: 70, y: 90 },
+  ]);
+  assert.deepEqual(harness.calls, ["render"]);
+  assert.equal(harness.undoActions.length, 0);
 });

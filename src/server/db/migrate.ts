@@ -12,6 +12,28 @@ interface AppliedMigrationRow {
   checksum: string;
 }
 
+function hashMigrationSql(sql: string): string {
+  return createHash("sha256").update(sql).digest("hex");
+}
+
+function normalizeMigrationSql(sql: string): string {
+  return sql.replace(/\r\n?/g, "\n");
+}
+
+export function calculateMigrationChecksum(sql: string): string {
+  return hashMigrationSql(normalizeMigrationSql(sql));
+}
+
+export function isRecordedMigrationChecksumCompatible(sql: string, recordedChecksum: string): boolean {
+  const normalizedSql = normalizeMigrationSql(sql);
+  const compatibleChecksums = new Set([
+    hashMigrationSql(normalizedSql),
+    hashMigrationSql(sql),
+    hashMigrationSql(normalizedSql.replaceAll("\n", "\r\n")),
+  ]);
+  return compatibleChecksums.has(recordedChecksum);
+}
+
 async function ensureMigrationTable(client: PoolClient): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -40,12 +62,21 @@ export async function runMigrations(pool: Pool): Promise<string[]> {
 
     for (const fileName of files) {
       const sql = await readFile(join(migrationsDirectory, fileName), "utf8");
-      const checksum = createHash("sha256").update(sql).digest("hex");
+      const checksum = calculateMigrationChecksum(sql);
       const existingChecksum = applied.get(fileName);
 
       if (existingChecksum) {
         if (existingChecksum !== checksum) {
-          throw new Error(`Applied migration ${fileName} no longer matches its recorded checksum.`);
+          if (!isRecordedMigrationChecksumCompatible(sql, existingChecksum)) {
+            throw new Error(`Applied migration ${fileName} no longer matches its recorded checksum.`);
+          }
+          const upgraded = await client.query(
+            "UPDATE schema_migrations SET checksum = $2 WHERE file_name = $1 AND checksum = $3",
+            [fileName, checksum, existingChecksum],
+          );
+          if (upgraded.rowCount !== 1) {
+            throw new Error(`Applied migration ${fileName} checksum changed while it was being upgraded.`);
+          }
         }
         continue;
       }

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { OrganizationMember } from "../../domain/workspace/workspace";
+import { MODEL_DIRECTORY } from "../../features/models/model-catalog";
 import {
   buildUsageCsv,
   buildUsageExcelXml,
-  createOrganizationUsageDemoData,
+  createUsageDemoData,
   filterUsageRecords,
   formatUsageDateInput,
   getComparisonRange,
@@ -14,8 +15,9 @@ import {
   getUsageSummary,
   getWeeklyActivity,
   type UsageRecord,
-} from "./organization-usage-data";
-import { buildUsageTimeline, chooseTimelineGranularity } from "./usage/usage-analytics";
+  buildUsageTimeline,
+  chooseTimelineGranularity,
+} from "../../features/usage";
 
 const members: OrganizationMember[] = [
   {
@@ -35,8 +37,17 @@ const members: OrganizationMember[] = [
 const now = new Date("2026-07-27T12:00:00+08:00");
 
 describe("organization usage demo data", () => {
+  it("is deterministic and resolves model names from the shared model directory", () => {
+    const first = createUsageDemoData(members, now);
+    const second = createUsageDemoData(members, now);
+    const namesById = new Map(MODEL_DIRECTORY.map((model) => [model.id, model.name]));
+
+    expect(second).toEqual(first);
+    expect(first.records.every((record) => namesById.get(record.modelId) === record.modelName)).toBe(true);
+  });
+
   it("keeps summary and breakdown totals internally consistent", () => {
-    const demo = createOrganizationUsageDemoData(members, now);
+    const demo = createUsageDemoData(members, now);
     const range = getUsageRange("month", now);
     const previousRange = getComparisonRange("month", range);
     const currentRecords = filterUsageRecords(demo.records, range);
@@ -63,7 +74,7 @@ describe("organization usage demo data", () => {
   });
 
   it("keeps the organization forecast stable when the page range changes", () => {
-    const demo = createOrganizationUsageDemoData(members, now);
+    const demo = createUsageDemoData(members, now);
     const monthRecords = filterUsageRecords(demo.records, getUsageRange("month", now));
     const weekRecords = filterUsageRecords(demo.records, getUsageRange("rolling7", now));
     const todayRecords = filterUsageRecords(demo.records, getUsageRange("today", now));
@@ -82,7 +93,7 @@ describe("organization usage demo data", () => {
   });
 
   it("keeps recent demo days within a believable studio usage range", () => {
-    const demo = createOrganizationUsageDemoData(members, now);
+    const demo = createUsageDemoData(members, now);
     const range = getUsageRange("rolling30", now);
     const timeline = buildUsageTimeline(filterUsageRecords(demo.records, range), range, "day");
     const saturdayTotals: number[] = [];
@@ -230,7 +241,7 @@ describe("organization usage demo data", () => {
   });
 
   it("builds navigable annual activity views from the same ledger records", () => {
-    const demo = createOrganizationUsageDemoData(members, now);
+    const demo = createUsageDemoData(members, now);
     const heatmap = getHeatmapDays(demo.records, now);
     const weekly = getWeeklyActivity(demo.records, now);
 
@@ -253,7 +264,7 @@ describe("organization usage demo data", () => {
   });
 
   it("groups source dimensions with a model-only generation scope", () => {
-    const demo = createOrganizationUsageDemoData(members, now);
+    const demo = createUsageDemoData(members, now);
     const records = filterUsageRecords(demo.records, getUsageRange("month", now));
     const total = records.reduce((sum, record) => sum + record.credits, 0);
 
@@ -292,7 +303,7 @@ describe("organization usage demo data", () => {
   });
 
   it("applies ledger filters and produces useful export files", () => {
-    const demo = createOrganizationUsageDemoData(members, now);
+    const demo = createUsageDemoData(members, now);
     const records = filterUsageRecords(demo.records, getUsageRange("all", now), {
       memberId: "actor-linjing",
       projectId: "",

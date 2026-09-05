@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 
+import { ApplicationError, type ApplicationErrorCode } from "../../application/shared/ApplicationError";
 import { ErrorResponseDtoSchema } from "./contracts";
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -9,16 +10,6 @@ export interface HttpAdapterOptions {
   fetch?: FetchLike;
 }
 
-export class HttpRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "HttpRequestError";
-  }
-}
 export class HttpResponseValidationError extends Error {
   constructor(
     readonly path: string,
@@ -66,11 +57,16 @@ export class HttpApiClient {
       headers.set("Content-Type", "application/json");
     }
 
-    const response = await this.fetchImpl(this.resolveUrl(path), {
-      ...init,
-      credentials: init.credentials ?? "include",
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.resolveUrl(path), {
+        ...init,
+        credentials: init.credentials ?? "include",
+        headers,
+      });
+    } catch (cause) {
+      throw new ApplicationError("request_failed", "暂时无法连接 Reelay 服务，请稍后重试。", { cause });
+    }
 
     if (!response.ok) {
       throw await this.toRequestError(response);
@@ -83,7 +79,7 @@ export class HttpApiClient {
     return `${this.baseUrl}${normalizedPath}`;
   }
 
-  private async toRequestError(response: Response): Promise<HttpRequestError> {
+  private async toRequestError(response: Response): Promise<ApplicationError> {
     let payload: unknown;
     try {
       payload = await response.json();
@@ -93,13 +89,35 @@ export class HttpApiClient {
 
     const parsed = ErrorResponseDtoSchema.safeParse(payload);
     if (parsed.success) {
-      return new HttpRequestError(response.status, parsed.data.error.code, parsed.data.error.message);
+      const { currentRevision, currentVersion } = parsed.data.error;
+      const details = currentRevision === undefined && currentVersion === undefined
+        ? undefined
+        : {
+            ...(currentRevision === undefined ? {} : { currentRevision }),
+            ...(currentVersion === undefined ? {} : { currentVersion }),
+          };
+      return new ApplicationError(
+        toApplicationErrorCode(response.status),
+        parsed.data.error.message,
+        {
+          details,
+          serviceCode: parsed.data.error.code,
+        },
+      );
     }
 
-    return new HttpRequestError(
-      response.status,
-      "http_error",
+    return new ApplicationError(
+      toApplicationErrorCode(response.status),
       response.statusText || `HTTP request failed with status ${response.status}.`,
+      { serviceCode: "http_error" },
     );
   }
+}
+
+function toApplicationErrorCode(status: number): ApplicationErrorCode {
+  if (status === 401) return "authentication_required";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status === 409) return "conflict";
+  return "request_failed";
 }

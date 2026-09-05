@@ -10,10 +10,9 @@ dist/
 build/
 coverage/
 .vercel/
+.reelay-data/
 
 # Environment files
 .env
 .env.*
 !.env.example
-
-.vercel/

@@ -69,3 +69,35 @@ test("getBezierPath returns stable horizontal and vertical cubic paths", () => {
     "M 5 5 C 77 5, -67 205, 5 205",
   );
 });
+
+test("batch planning deduplicates sources and keeps every legal edge", () => {
+  const existing = [
+    { id: "existing", sourceNodeId: "asset-1", targetNodeId: "generator-1", mediaType: "image" },
+    { id: "downstream", sourceNodeId: "generator-1", targetNodeId: "generator-2", mediaType: "video" },
+  ];
+  const plan = connectionsApi.planBatchConnections(
+    existing,
+    nodes,
+    ["asset-1", "generator-1", "generator-2", "generator-2"],
+    "generator-1",
+  );
+  assert.deepEqual(plain(plan), {
+    validSourceIds: [],
+    rejected: [
+      { sourceNodeId: "asset-1", reason: "duplicate" },
+      { sourceNodeId: "generator-1", reason: "self" },
+      { sourceNodeId: "generator-2", reason: "cycle" },
+    ],
+  });
+
+  const cleanPlan = connectionsApi.planBatchConnections(
+    [],
+    nodes,
+    ["asset-1", "generator-2", "asset-1"],
+    "generator-1",
+  );
+  assert.deepEqual(plain(cleanPlan), {
+    validSourceIds: ["asset-1", "generator-2"],
+    rejected: [],
+  });
+});

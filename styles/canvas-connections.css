@@ -21,9 +21,9 @@
 }
 
 .connection-group:hover .connection-path {
-  stroke: color-mix(in srgb, #5c7cfa 64%, var(--text, #18191c));
-  opacity: 0.9;
-  stroke-width: 1.7;
+  stroke: var(--relation-stroke-strong);
+  opacity: 1;
+  stroke-width: 1.9;
 }
 
 .connection-underlay {
@@ -34,26 +34,33 @@
 }
 
 .connection-path {
-  stroke: color-mix(in srgb, var(--text-muted, #8a8d94) 48%, transparent);
+  stroke: var(--relation-stroke-soft);
   stroke-width: 1.35;
   transition: stroke 160ms ease, opacity 160ms ease, stroke-width 160ms ease;
 }
 
-.connection-group.is-new .connection-underlay,
-.connection-group.is-new .connection-path {
-  animation: connection-settle 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+.connection-confirmation-path,
+.connection-confirmation-endpoint {
+  pointer-events: none;
+  opacity: 0;
 }
 
-@keyframes connection-settle {
-  from {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
-    opacity: 0.38;
-  }
-  to {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 0;
-  }
+.connection-confirmation-path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--relation-stroke-ready) 78%, white 22%);
+  stroke-width: 2.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--relation-stroke-ready) 48%, transparent));
+}
+
+.connection-confirmation-endpoint {
+  fill: color-mix(in srgb, var(--relation-stroke-ready) 88%, white 12%);
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  filter: drop-shadow(0 0 2.6px color-mix(in srgb, var(--relation-stroke-ready) 68%, transparent));
 }
 
 .connection-hit-path {
@@ -73,14 +80,22 @@
   opacity: 0.24;
 }
 
-.connection-group.is-related .connection-path,
-.connection-group.is-active .connection-path {
-  stroke: color-mix(in srgb, #5c7cfa 76%, var(--text, #18191c));
-  opacity: 0.95;
+.connection-group.is-muted:hover .connection-path {
+  stroke: var(--relation-stroke-strong);
+  opacity: 0.9;
+  stroke-width: 1.8;
+}
+
+.connection-group.is-related .connection-path {
+  stroke: var(--relation-stroke-strong);
+  opacity: 1;
+  stroke-width: 1.8;
 }
 
 .connection-group.is-active .connection-path {
-  stroke-width: 2;
+  stroke: var(--relation-stroke-ready);
+  opacity: 1;
+  stroke-width: 2.3;
 }
 
 .connection-cut-control {
@@ -128,57 +143,142 @@
 
 .connection-preview {
   fill: none;
-  stroke: color-mix(in srgb, #5c7cfa 84%, var(--text, #18191c));
+  stroke: var(--relation-stroke);
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgb(92 124 250 / 24%));
+  opacity: 0.84;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 18%));
+  transition:
+    stroke 110ms ease,
+    stroke-width 110ms ease,
+    opacity 110ms ease,
+    filter 110ms ease;
+}
+
+.selection-connection-preview {
+  opacity: 0.7;
+}
+
+.selection-connection-preview.is-near-target,
+.selection-connection-preview.is-snapped {
+  opacity: 0.92;
+}
+
+.connection-preview.is-near-target {
+  stroke: var(--relation-stroke-strong);
+  stroke-width: 2.1;
+  opacity: 0.96;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 20%));
+}
+
+.connection-preview.is-snapped {
+  stroke: var(--relation-stroke-ready);
+  stroke-width: 2.4;
+  opacity: 1;
+  filter: drop-shadow(0 1px 4px rgb(0 0 0 / 22%));
+}
+
+.connection-preview.is-pending-create {
+  stroke: var(--relation-stroke-strong);
+  stroke-width: 2.15;
+  opacity: 0.92;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 20%));
+  animation: connection-preview-hold 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes connection-preview-hold {
+  from {
+    opacity: 0.58;
+    stroke-width: 1.75;
+  }
+  to {
+    opacity: 0.92;
+    stroke-width: 2.15;
+  }
 }
 
 .connection-preview-endpoint {
-  fill: var(--panel-solid, #fff);
-  stroke: color-mix(in srgb, #5c7cfa 88%, var(--text, #18191c));
+  fill: var(--node-media-bg, transparent);
+  stroke: var(--relation-stroke);
   stroke-width: 1.6;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgb(92 124 250 / 22%));
-  transition: r 120ms ease;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 18%));
+  transition:
+    r 110ms ease,
+    fill 110ms ease,
+    stroke 110ms ease,
+    filter 110ms ease;
+}
+
+.connection-preview-endpoint.is-near-target {
+  r: 4.8px;
+  fill: var(--node-media-bg, transparent);
+  stroke: var(--relation-stroke-strong);
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 20%));
 }
 
 .connection-preview-endpoint.is-snapped {
-  r: 5.25px;
-  fill: color-mix(in srgb, #5c7cfa 12%, var(--panel-solid, #fff));
+  r: 5.8px;
+  fill: var(--node-media-bg, transparent);
+  stroke: var(--relation-stroke-ready);
+  filter: drop-shadow(0 1px 4px rgb(0 0 0 / 22%));
 }
 
 .node-port-zone {
   position: absolute;
   top: 50%;
-  width: 36px;
-  height: 56px;
-  margin-top: -28px;
-  pointer-events: auto;
+  width: var(--port-zone-outward, 148px);
+  height: var(--port-zone-height, 216px);
+  translate: 0 -50%;
+  pointer-events: none;
   touch-action: none;
   cursor: crosshair;
-  zoom: var(--connection-ui-scale, 1);
   z-index: 8;
+}
+
+.node-port-zone::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: transparent;
+  pointer-events: auto;
+}
+
+.canvas-shell.space-pan .node-port-zone::before {
+  cursor: grab;
+}
+
+.canvas-shell.group-editing .node-port-zone::before {
+  pointer-events: none;
 }
 
 .node-port-zone-input {
   right: 100%;
 }
 
+.node-port-zone-input::before {
+  clip-path: ellipse(100% 50% at 100% 50%);
+}
+
 .node-port-zone-output {
   left: 100%;
 }
 
+.node-port-zone-output::before {
+  clip-path: ellipse(100% 50% at 0 50%);
+}
+
 .node-port {
-  --port-accent: #5c7cfa;
+  --port-accent: var(--relation-stroke);
   --port-enter-x: 0px;
-  --port-size: 22px;
-  --port-stroke: 1px;
-  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 30%, transparent);
+  --port-size: var(--connection-port-size);
+  --port-stroke: var(--connection-port-stroke);
+  --port-stroke-color: var(--relation-stroke-soft);
+  --port-mark-color: var(--relation-stroke);
   position: absolute;
   top: var(--port-y, 50%);
   left: var(--port-x, 50%);
@@ -188,18 +288,18 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--panel-solid, #fff) 97%, transparent);
-  box-shadow:
-    inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
-    0 1px 3px rgb(0 0 0 / 8%);
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--port-stroke) var(--port-stroke-color);
   opacity: 0;
   pointer-events: none;
   translate: calc(-50% + var(--port-enter-x)) -50%;
+  scale: 1;
   transition:
     left 36ms linear,
     top 36ms linear,
     opacity 105ms ease-out,
     translate 150ms cubic-bezier(0.2, 0.85, 0.2, 1),
+    scale 130ms cubic-bezier(0.2, 0.85, 0.2, 1),
     background 130ms ease,
     box-shadow 150ms ease;
   cursor: inherit;
@@ -213,16 +313,16 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 8px;
-  height: 1.25px;
+  width: var(--connection-port-mark-width);
+  height: var(--connection-port-mark-height);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text, #18191c) 66%, transparent);
+  background: var(--port-mark-color);
   transform: translate(-50%, -50%);
   transition: background 120ms ease, transform 140ms ease;
 }
 
 .node-port.is-connected {
-  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 34%, transparent);
+  --port-stroke-color: var(--relation-stroke);
 }
 
 .node-port::after {
@@ -230,97 +330,257 @@
 }
 
 .node-port-input {
-  --port-x: 50%;
+  --port-x: calc(100% - 38px - var(--node-media-border-width));
   --port-enter-x: 8px;
 }
 
 .node-port-output {
-  --port-x: 50%;
+  --port-x: calc(38px + var(--node-media-border-width));
   --port-enter-x: -8px;
 }
 
 .node-port-zone:hover .node-port,
 .media-frame:hover .node-port,
 .canvas-node.selected .node-port,
+.canvas-shell.connecting .node-port.is-connectable-target,
+.node-port.is-snap-near,
 .node-port.is-drag-origin,
 .node-port.is-valid-target {
   --port-enter-x: 0px;
   opacity: 1;
-  pointer-events: auto;
 }
 
 .node-port-zone:hover .node-port {
-  --port-stroke-color: color-mix(in srgb, var(--port-accent) 76%, transparent);
+  --port-stroke-color: var(--relation-stroke);
+  --port-mark-color: var(--relation-stroke-strong);
   box-shadow:
     inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
-    0 1px 4px rgb(0 0 0 / 12%),
-    0 0 0 3px rgb(92 124 250 / 7%);
+    0 1px 4px rgb(0 0 0 / 12%);
 }
 
 .canvas-node:not(.selected) .media-frame:hover .node-port {
-  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 28%, transparent);
+  --port-stroke-color: var(--relation-stroke);
+  --port-mark-color: var(--relation-stroke);
   box-shadow:
     inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
     0 1px 3px rgb(0 0 0 / 10%);
 }
 
 .canvas-node.selected .node-port {
-  --port-stroke-color: color-mix(in srgb, var(--text, #18191c) 32%, transparent);
+  --port-stroke-color: var(--relation-stroke);
+  --port-mark-color: var(--relation-stroke);
   box-shadow:
     inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
     0 1px 3px rgb(0 0 0 / 10%);
 }
 
-.canvas-shell.connecting .canvas-node.connection-origin .node-port.is-drag-origin {
+.canvas-shell.connecting .node-port.is-connectable-target {
+  --port-stroke-color: var(--relation-stroke-soft);
+  --port-mark-color: var(--relation-stroke-soft);
+  opacity: 0.48;
+  box-shadow: inset 0 0 0 var(--port-stroke) var(--port-stroke-color);
+}
+
+.canvas-shell.connecting .node-port:not(.is-drag-origin):not(.is-connectable-target) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.canvas-shell.multi-selection-active .canvas-node.selected .node-port-zone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.canvas-shell.connecting-selection {
+  cursor: crosshair;
+}
+
+.canvas-shell.connecting .node-port.is-snap-near {
+  --port-stroke-color: var(--relation-stroke-strong);
+  --port-mark-color: var(--relation-stroke-strong);
+  background: transparent;
   opacity: 1;
-  pointer-events: auto;
-  --port-stroke-color: var(--port-accent);
+  scale: 1.07;
   box-shadow:
     inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
-    0 0 0 5px rgb(92 124 250 / 12%);
+    0 0 0 4px var(--relation-halo),
+    0 2px 7px rgb(0 0 0 / 12%);
+}
+
+.canvas-shell.connecting .canvas-node.connection-origin .node-port.is-drag-origin {
+  opacity: 0;
+  pointer-events: none;
+  scale: 0.82;
+  box-shadow: none;
+  transition: none;
+}
+
+.canvas-shell.connection-pending-create .node-port-zone::before {
+  pointer-events: none;
+}
+
+.canvas-shell.connection-pending-create .node-port {
+  opacity: 0;
+  pointer-events: none;
+  scale: 0.82;
 }
 
 .node-port.is-valid-target {
-  --port-stroke-color: var(--port-accent);
-  background: var(--port-accent);
+  --port-stroke-color: var(--relation-stroke-ready);
+  --port-mark-color: var(--relation-stroke-ready);
+  background: transparent;
+  scale: 1.12;
   box-shadow:
     inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
-    0 0 0 5px rgb(92 124 250 / 14%);
+    0 0 0 5px var(--relation-halo);
+}
+
+.canvas-shell.connecting .canvas-node.connection-near .media-frame::before {
+  content: "";
+  position: absolute;
+  z-index: 21;
+  inset: calc(-3px * var(--connection-feedback-scale, 1));
+  border: calc(1.5px * var(--connection-feedback-scale, 1)) solid var(--relation-stroke);
+  border-radius: inherit;
+  box-shadow: 0 0 0 calc(3px * var(--connection-feedback-scale, 1)) var(--relation-halo);
+  opacity: 1;
+  pointer-events: none;
 }
 
 .node-port.is-valid-target::before,
 .node-port.is-valid-target::after {
-  background: white;
+  background: var(--port-mark-color);
 }
 
-.canvas-shell.connecting .canvas-node.connection-target .media-frame::before {
+.connection-target-glow {
+  --connection-target-edge-reduced: rgb(248 250 255 / 42%);
+  --connection-target-flare-peak: rgb(255 255 255 / 100%);
+  --connection-target-flare-core: rgb(255 255 255 / 96%);
+  --connection-target-flare-mid: rgb(244 247 255 / 72%);
+  --connection-target-flare-soft: rgb(236 241 250 / 24%);
+  position: absolute;
+  z-index: 6;
+  isolation: isolate;
+  overflow: visible;
+  border-radius: var(--connection-target-radius, 18px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 105ms ease-out;
+  will-change: opacity;
+}
+
+.connection-target-glow.is-active {
+  opacity: 1;
+}
+
+.connection-target-glow::before,
+.connection-target-glow::after {
   content: "";
   position: absolute;
-  z-index: 21;
-  inset: calc(-5px * var(--connection-ui-scale, 1));
-  border: calc(2px * var(--connection-ui-scale, 1)) solid color-mix(in srgb, #5c7cfa 84%, transparent);
-  border-radius: inherit;
-  box-shadow:
-    0 0 0 calc(4px * var(--connection-ui-scale, 1)) rgb(92 124 250 / 10%),
-    0 8px 24px rgb(92 124 250 / 12%);
-  opacity: 1;
+  box-sizing: border-box;
   pointer-events: none;
-  animation: connection-target-ready 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-@keyframes connection-target-ready {
-  from {
+.connection-target-glow::before {
+  z-index: 1;
+  inset: -0.6px;
+  border: 0.9px solid var(--connection-target-flare-mid);
+  border-radius: calc(var(--connection-target-radius, 18px) + 0.6px);
+  clip-path: inset(0 72% 0 0 round calc(var(--connection-target-radius, 18px) + 0.6px));
+  opacity: 0;
+  transform: scaleX(var(--connection-target-scan-direction, 1));
+  filter: drop-shadow(0 0 1px var(--connection-target-flare-soft));
+}
+
+.connection-target-glow::after {
+  z-index: 2;
+  inset: -0.8px;
+  padding: 1.1px;
+  border-radius: calc(var(--connection-target-radius, 18px) + 0.8px);
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--connection-target-flare-soft) 22%,
+      var(--connection-target-flare-mid) 52%,
+      var(--connection-target-flare-core) 72%,
+      var(--connection-target-flare-peak) 79%,
+      var(--connection-target-flare-mid) 87%,
+      transparent 100%
+    ),
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--connection-target-flare-soft) 26%,
+      var(--connection-target-flare-mid) 66%,
+      transparent 100%
+    );
+  background-repeat: no-repeat;
+  background-size:
+    var(--connection-target-sweep-window, 112px) 100%,
+    var(--connection-target-sweep-window, 112px) 100%;
+  background-position:
+    var(--connection-target-sweep-start, -48%) 50%,
+    var(--connection-target-sweep-start, -48%) 50%;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transform: scaleX(var(--connection-target-scan-direction, 1));
+  filter: drop-shadow(0 0 1.25px var(--connection-target-flare-mid));
+}
+
+.connection-target-glow.is-active::after {
+  animation: connection-target-edge-sweep var(--connection-target-sweep-duration, 940ms) linear 54ms infinite;
+}
+
+.connection-target-glow.is-active::before {
+  animation: connection-target-edge-capture 250ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+html[data-theme="light"] .connection-target-glow {
+  --connection-target-edge-reduced: rgb(30 43 59 / 44%);
+  --connection-target-flare-peak: rgb(18 30 47 / 100%);
+  --connection-target-flare-core: rgb(24 38 57 / 92%);
+  --connection-target-flare-mid: rgb(48 68 94 / 64%);
+  --connection-target-flare-soft: rgb(76 98 126 / 18%);
+}
+
+@keyframes connection-target-edge-capture {
+  0% {
     opacity: 0;
-    transform: scale(0.992);
   }
-  to {
-    opacity: 1;
-    transform: scale(1);
+  18% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
-.canvas-shell.connection-low-detail .connection-layer {
+@keyframes connection-target-edge-sweep {
+  0% {
+    background-position:
+      var(--connection-target-sweep-start, -48%) 50%,
+      var(--connection-target-sweep-start, -48%) 50%;
+  }
+  74%, 100% {
+    background-position:
+      var(--connection-target-sweep-end, 148%) 50%,
+      var(--connection-target-sweep-end, 148%) 50%;
+  }
+}
+
+.canvas-shell.connection-low-detail .connection-group:not(.is-muted):not(:hover):not(.is-related):not(.is-active) .connection-path {
   opacity: 0.46;
+}
+
+.canvas-shell.connection-low-detail .connection-group:not(.is-muted):not(:hover):not(.is-related):not(.is-active) .connection-underlay {
+  opacity: 0.38;
 }
 
 .canvas-shell.connection-low-detail .node-port-zone {
@@ -329,49 +589,88 @@
 
 .connection-create-menu {
   position: absolute;
+  z-index: 70;
   display: grid;
-  grid-template-columns: repeat(2, minmax(112px, 1fr));
-  gap: 6px;
-  min-width: 250px;
+  width: 236px;
   padding: 8px;
   border: 1px solid var(--border, rgb(127 127 127 / 22%));
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--panel-solid, #fff);
-  box-shadow: 0 12px 30px rgb(0 0 0 / 16%);
-  z-index: 70;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 10%);
+  user-select: none;
 }
 
 .connection-create-menu.hidden {
   display: none;
 }
 
-.connection-create-label {
-  grid-column: 1 / -1;
-  padding: 2px 6px 5px;
-  color: var(--text-muted, #777b84);
-  font-size: 12px;
-}
-
-.connection-create-menu button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text, #18191c);
-  cursor: pointer;
-}
-
-.connection-create-menu button:hover,
-.connection-create-menu button:focus-visible {
-  background: var(--button-hover, rgb(127 127 127 / 10%));
+.connection-create-menu:focus {
   outline: none;
 }
 
-.connection-create-menu svg { width: 16px; height: 16px; }
+.connection-create-menu:not(.hidden)[data-placement="below"] {
+  transform-origin: center top;
+  animation: connection-create-menu-enter-below 170ms cubic-bezier(0.18, 0.8, 0.24, 1) both;
+}
+
+.connection-create-menu:not(.hidden)[data-placement="above"] {
+  transform-origin: center bottom;
+  animation: connection-create-menu-enter-above 170ms cubic-bezier(0.18, 0.8, 0.24, 1) both;
+}
+
+@keyframes connection-create-menu-enter-below {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes connection-create-menu-enter-above {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.connection-create-label {
+  padding: 4px 8px 6px;
+  color: var(--text-muted, #777b84);
+  font-size: 12px;
+  font-weight: 520;
+  line-height: 1.25;
+}
+
+.connection-create-menu button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text, #18191c);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 130ms ease;
+}
+
+.connection-create-menu button.is-preview,
+.connection-create-menu button:hover,
+.connection-create-menu button:focus-visible {
+  background: var(--button-hover, rgb(127 127 127 / 7%));
+  outline: none;
+}
 
 .node-create-menu {
   position: absolute;
@@ -453,8 +752,10 @@
   stroke-width: 1.7;
 }
 
-.node-create-menu [data-node-create="video"] .node-create-icon svg polygon,
-.node-create-menu [data-node-create="video"] .node-create-icon svg path:last-child {
+:is(.node-create-menu, .connection-create-menu) [data-node-create="video"] .node-create-icon svg polygon,
+:is(.node-create-menu, .connection-create-menu) [data-node-create="video"] .node-create-icon svg path:last-child,
+.connection-create-menu [data-connection-create="video"] .node-create-icon svg polygon,
+.connection-create-menu [data-connection-create="video"] .node-create-icon svg path:last-child {
   fill: currentColor;
   stroke-width: 1.35;
 }
@@ -500,16 +801,16 @@
   white-space: nowrap;
 }
 
-.node-create-menu button.is-preview .node-create-description,
-.node-create-menu button:hover .node-create-description,
-.node-create-menu button:focus-visible .node-create-description {
+:is(.node-create-menu, .connection-create-menu) button.is-preview .node-create-description,
+:is(.node-create-menu, .connection-create-menu) button:hover .node-create-description,
+:is(.node-create-menu, .connection-create-menu) button:focus-visible .node-create-description {
   opacity: 0.72;
   transform: translateY(0);
 }
 
-.node-create-menu button.is-preview .node-create-title,
-.node-create-menu button:hover .node-create-title,
-.node-create-menu button:focus-visible .node-create-title {
+:is(.node-create-menu, .connection-create-menu) button.is-preview .node-create-title,
+:is(.node-create-menu, .connection-create-menu) button:hover .node-create-title,
+:is(.node-create-menu, .connection-create-menu) button:focus-visible .node-create-title {
   transform: translateY(-16px);
 }
 
@@ -528,7 +829,6 @@
   gap: 4px;
 }
 
-html[data-theme="dark"] .node-port,
 html[data-theme="dark"] .connection-create-menu,
 html[data-theme="dark"] .node-create-menu {
   background: #242528;
@@ -543,17 +843,35 @@ html[data-theme="dark"] .connection-cut-surface {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-create-menu {
+  .node-create-menu,
+  .connection-create-menu {
     animation: none;
   }
 
-  .connection-group.is-new .connection-underlay,
-  .connection-group.is-new .connection-path {
-    animation: none;
+  .connection-confirmation-path,
+  .connection-confirmation-endpoint {
+    display: none;
   }
 
 
-  .canvas-shell.connecting .canvas-node.connection-target .media-frame::before {
+  .connection-target-glow {
+    transition: none;
+  }
+
+  .connection-target-glow::before {
+    border-color: var(--connection-target-edge-reduced);
+    clip-path: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .connection-target-glow.is-active::after {
+    animation: none;
+    display: none;
+  }
+
+  .connection-target-glow.is-active::before {
     animation: none;
   }
+
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { HeatmapDay } from "../organization-usage-data";
+import type { HeatmapDay } from "../../../features/usage";
 import {
   UsageActivityChart,
   type UsageActivityMode,

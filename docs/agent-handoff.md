@@ -4,35 +4,67 @@
 
 ## 当前定位
 
-- 当前稳定基线位于 `D:\Software\codePro\0707` 的 `main`，已合入“角色差异化的组织视角 + 个人我的积分”功能。此前改崩的用量看板实验 worktree 与本地分支已经清理，不再作为可恢复或可合并来源；后续用量看板调整必须从当前稳定基线建立新分支。
+- 日常开发入口是主工作目录检出的本地 `main`，实际路径由 `npm run worktrees` 显示；分支名、worktree 和未提交改动必须在接手时用 `git branch --show-current`、`git status --short` 与 `npm run worktrees` 重新确认，本交接不把静态分支名当成事实。此前改崩的用量看板实验 worktree 与本地分支已经清理，不再作为可恢复或可合并来源。
 - 当前本地主链路是 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。登录、主页和项目库只保留 React 正式路由；旧静态双轨已经删除，`index.html` 仅作为迁移期画布 iframe。
 - 公网原型已部署到 `https://reelay-canvas-prototype.vercel.app`。Vercel Hobby
   提供同源静态页面和 Fastify API，Supabase Free PostgreSQL 保存服务端状态；
   具体部署边界、初始化和验收项见 `docs/vercel-supabase-preview.md`。
 - React 页面通过 `src/infrastructure/http` adapters 消费共享 API；Zod 在传输边界校验 DTO，页面不直接依赖 server-memory store。
+- HTTP adapter 已把 401 / 403 / 404 / 409 和网络失败映射为 application error，route data 与 `CanvasHost` 不再依赖 HTTP 错误类型；登录、主页、项目库、画布与组织中心按 route 延迟加载，loader / action 契约不变。
+- 服务端 route 已改为只依赖 Session / Account / Workspace / Project / CanvasDocument 的最小 capability 组合；资产路由另外依赖 WorkspaceMediaAssetStore、ProjectAssetReferenceStore 与 ObjectStore，没有扩写 `CollaborationStore`。项目、画布与资产读写会在内存和 PostgreSQL adapter 内再次按 actor scope 原子授权，不能依赖 route 前置检查作为唯一安全边界。
+- 个人与组织用量共用 `src/features/usage` 的分析函数和确定性 fixture，不再从账号 feature 反向依赖组织页面。`data/model-catalog.js` 同时提供 legacy `REELAY_MODEL_CATALOG` 与共享 `REELAY_MODEL_DIRECTORY`，React 只通过类型化 adapter 读取，模型元数据和 demo 成本不再散落在用量页面。
+- migration checksum 会先把 CRLF / CR 归一为 LF，SQL 也由 `.gitattributes` 固定为 LF；迁移器可安全升级旧 CRLF ledger，但仍会拒绝语义变更。当前 schema 通过 0010 加入 WorkspaceMediaAsset、MediaAssetPlacement、upload intent 与 ProjectAssetReference，0011 修正长期资产审计记录与可撤销 membership 之间的生命周期约束，0012 加入个人根目录 Entity、有序 Media 引用和 placement。
 - 十个固定演示账号使用 HttpOnly 服务端会话并属于唯一的 `星海视觉工作室`，角色为一名主账户、两名管理员和七名成员。个人 / 协作是 Project 的 `accessKind`，不是两类 Workspace；项目读取和修改由服务端 ProjectMembership 的 `admin/edit/view` 过滤。Session、Workspace、Membership、Project 与 ProjectMembership 已切换到 PostgreSQL，migration / seed 可重复；固定 demo seed 会精确校准固定账号与固定项目之间的预置关系，但不会触碰用户创建项目或非 demo 成员。集成测试覆盖该边界和跨服务重启持久化。浏览器 token 只以摘要存库并具有过期 / 撤销状态，但固定账号与 demo 密码散列仍不是生产鉴权。
 - 个人项目由当前创建者从卡片菜单二次确认后删除；协作项目仅项目级 `admin` 可删除，组织角色不越权。删除立即撤销相关列表、详情和画布访问，已打开画布保存收到 404 后会停止 iframe。项目、成员关系和 CanvasDocument 仍保留；回收站列表、恢复与永久删除尚未实现。
 - 账号设置是 React 弹出面板，只包含个人主页与“我的积分”；组织用量仍由组织中心承接。可选联系邮箱与手机号通过 PostgreSQL 持久化，但它们不是登录标识、未做验证，也不会自动订阅报表。“我的积分”以确定性前端演示数据展示当前账号余额、本月获得 / 消耗、统一的获得 / 消耗流水及个人用量分析；流水按时间、类型、项目、任务类型、模型、生成规格和积分变化呈现，类型与日期合并为一个即时生效的极简筛选面板，日期只通过整块按钮唤起系统日期选择器，不提供年月日键盘录入。该页面仍不是真实 `CreditLedger`，不能把演示余额或流水当成持久账本。
 - 头像菜单中的组织入口已改为独立 Workspace 路由。`/app/w/:workspaceId/organization` 把精简组织信息与真实只读成员列表放在同一页；`/organization/credits` 展示组织余额、成员额度以及入账 / 分配 / 消耗明细；`/organization/usage` 仅对主账户与管理员展示确定性前端演示看板。用量页已重构为“概览—用量分析—消耗来源”：概览并列展示可用积分、预计可用、今日消耗与近 30 天日均；用量分析默认近 7 天，可切换近 30 天和确认后才生效的自定义日期范围；近 7 天使用每日横向条形图，近 30 天使用默认可见最近约 15 天的每日堆叠柱形图与总消耗折线；消耗类型统一展示视频生成、图片生成和媒体处理。消耗来源可按项目、模型、成员切换并保留搜索和聚合详情抽屉，完整来源项在表格区域滚动，不静默截断。Agent 与增强处理当前只在展示层归入媒体处理。任务级流水继续由积分管理承接，组织用量演示数据后续必须由 `GenerationTask`、计费快照和不可变 `CreditLedger` 替换。
 - 当前组织中心作为 `w/:workspaceId` 的子路由复用工作台已经加载的 `WorkspaceContext`，首次进入只额外读取组织成员。主账户与管理员可访问组织信息、积分管理和用量看板，普通成员只显示只读“组织信息”；直接访问积分管理或用量看板会返回组织信息。三个分区切换不重复请求工作区和项目数据，内容区保留隐藏的语义标题。用量看板布局按笔记本与宽屏自适应；30 天图按视口计算柱宽以稳定展示约 15 根柱，来源表独立滚动。
-- Vercel / Supabase 公网演示链已经合入并从 `codex/integration-organization-canvas` 部署；后续公网更新应从该集成链验证并发布，不要从仍在开发的功能 worktree 直接覆盖生产预览。
-- `LegacyCanvasHost` 已受路由权限保护；旧 `index.html` 消费版本化账号 / 组织 / 项目上下文和 CanvasDocument 消息，按 `projectId + canvasId` 加载 / 自动保存。PostgreSQL 使用 revision 乐观并发，`admin/edit` 可写、`view` 只读，非成员不可见；只读画布保留选择、浏览、缩放和下载，但会禁用拖动、删除、生成、重命名与参数修改。
+- 后续公网更新从验收后的集成主线发布，发布前单独核对部署范围和环境。2026-09-05 核验公网生产部署为 `dpl_3e9rT3hKtg6p6XuKHKnxZdfF9hMv`，记录的代码 SHA 为 `ed5b4012b658e33652d7b4a2aa9ac80141a8230c`；项目尚未连接 Git 自动部署。当前用户只授权远端代码同步，暂不部署，不能根据本地或远端 `main` 推断线上版本。
+- `LegacyCanvasHost` 已受路由权限保护；旧 `index.html` 消费版本化账号 / 组织 / 项目上下文和 CanvasDocument 消息，按 `projectId + canvasId` 加载 / 自动保存。PostgreSQL 使用 revision 乐观并发，`admin/edit` 可写、`view` 只读，非成员不可见；只读画布保留选择、浏览、缩放和下载，但会禁用拖动、删除、生成、重命名与参数修改。CanvasDocument v1 已收敛到 canonical allow-list，不支持的版本失败关闭，持久媒体 URL 会经过安全校验后才进入快照与 DOM sink。
+- legacy 画布壳层已重排为四个独立区域：左上返回主页 / 项目名 / 项目选择，左侧中部常显内部画布 / 资产 / 分享 / 个人，左下小地图 / 适应视图 / 禁用的整理占位 / 缩放滑条，右上只保留 Agent。左上项目栏、左中竖条和左下工具栏分别收敛为约 `248 × 38px`、`48px` 宽和 `248 × 38px`；中部入口使用约 `40px` 命中区，两端等高后资产面板获得对称的上下边界。共享的 `8px` 外边距和 `4px` 沟槽只继续定义资产面板与主体编辑器的上下边界。展开后的 Agent 默认约 `560px` 宽，并恢复为顶、右、底贴合视口的完整高度抽屉；桌面端顶部和底部可独立拖动或键盘调整，最小高度为 `420px`，脱离视口的一侧才恢复边界和左侧圆角，高度偏好不写入 CanvasDocument。空会话由输入框占位文案引导，不重复显示大号品牌欢迎区。积分已从右上常驻徽标迁入个人菜单，并通过严格 `canvas:open-account` 的 `profile | credits` bridge 打开 React 对应分栏；旧无 `section` 消息兼容为 `profile`。个人入口只在 hover 时显示文字提示，点击才展开菜单；菜单与左侧胶囊外框底边对齐，前两项为“我的积分 / 组织中心”，退出账号使用中性色。帮助子菜单位于主菜单右侧并与其底边对齐；帮助触发行到子菜单之间使用真实命中桥和 `180ms` 菜单关闭延迟，横向移动不再意外收起。帮助项按“使用教程 / 反馈问题 / 快捷键”排列；第三项展开的约 `620px` 双栏快捷键卡片位于帮助子菜单下方，并以一级菜单为定位容器对齐其左边缘，不使用与菜单宽度耦合的反向偏移。项目名编辑态只使用 hover 同款浅色底框，不额外显示描边、下划线或阴影。项目选择器由 React host 传入当前账号授权项目投影，支持搜索、缩略图、当前项勾选和固定的新建项目入口；打开其他项目与新建项目意图都会先等待当前画布保存，再由宿主路由或现有 workspace action 执行，iframe 不持有 repository 或伪造项目。资产面板改为独立的“返回画布 / 资产库 / 空间切换”头部，上下间距由共享尺寸变量稳定保持约 `4px`。画布壳层覆盖集中在 `styles/canvas-chrome.css`，资产库独立样式位于 `styles/canvas-asset-library.css`；两者都不要与 `styles/app.css` 中的组框 / 临时选择面规则重新耦合。
+- 个人菜单最新视觉契约：竖条 → 一级菜单 → 帮助子菜单 → 快捷键卡片的三个实测沟槽为 `7px / 7px / 7px`；组织中心默认透明，仅在交互时显底；主题项位于账号设置前；快捷键箭头按“收起向下 / 展开向上”反馈状态。
+- 画布内资产库已按 `个人 / 组织 / 平台` 三空间和 `素材 / 主体` 两分栏重做，网格 / 列表、搜索、媒体筛选、预览和拖入画布均已接通。顶部控件高度按“分栏 > 搜索 > 目录命令行”收敛；搜索与文件夹行内编辑不显示额外黑框；“上传 / 操作”主按钮右缘与“素材”选中块右缘对齐，多选态使用 `list-checks` 批处理图标且不再叠加下拉箭头，未选条目时保持深色主按钮身份并降低整体强度来表达禁用，而不是切换成浅灰次级按钮。网格卡片固定约 `164px`，面板在 `380–780px` 间调整时按外宽约 `550px / 728px` 阈值从 `2 → 3 → 4` 列重排，不拉伸条目；右侧宽命中热区只显示居中的短浅色握柄，不再绘制贯穿面板的黑线。指针、键盘、ARIA 和 Agent 联动共用实际宽度边界，Agent 关闭后恢复资产库首选宽度；`≤480px` 全屏降级隐藏无效调整器。卡片待选态使用空复选框，选中后显示带勾复选框；右上三点菜单随当前列数在最后一列向左翻转。个人空间 Media 上传通过 host bridge 执行 checksum 约束的 upload intent，写入 ObjectStore，登记 WorkspaceMediaAsset + personal root placement，并幂等创建当前项目的 ProjectAssetReference。个人主体已改为单封面卡片和独立编辑工作区：新建标题为“新建主体”，编辑标题跟随名称，可填写名称 / 描述，从个人素材库或上传添加 Media，四类标签只筛选主体内素材。只有图片可设封面；预览区以纯文字“设为封面 / 当前封面”区分动作与状态，素材卡常显封面标记。左栏只让分类工具行以下的素材卡片区滚动，名称、描述与分类工具保持固定；资产库仍只让目录命令行以下的网格滚动。Entity create / list / get / update、幂等键、引用可见性与乐观版本已通过独立 repository、0012 migration 和严格 bridge 落地；持久 Entity 的移动、组织复制与删除仍未实现，这些操作会明确拒绝而不制造页面内成功。主体使用预览已有逐 Media 展开为独立画布节点的适配，正式 Node 级引用和完整持久化验收仍待补齐。公网 Vercel 尚未接入私有 Supabase Storage，不能把本地 filesystem adapter 描述为云端资产服务。
+- 账号分栏 bridge 使用显式能力协商：新宿主在 `host:init` 提供 `accountSections`，新 iframe 只有看到该能力才为积分入口附加 `section`；缺少 capability 的旧宿主继续收到原始 v1 消息并降级打开默认个人页。旧 iframe 发来的无 `section` 消息则由新宿主默认解释为 `profile`，不能在 v1 strict schema 上无协商扩字段。
+- 画布壳层 disclosure 已补齐键盘闭环：项目 / 画布 / 更多操作 / 个人入口同步 expanded 状态，键盘打开后进入首个可用项，Escape 分层关闭并回焦，画布改名结束回到对应行。资产面板和 Agent 同开时至少保留 `280px` 画布走廊，`1000px` 以下改为互斥；后续调整面板最小宽度时要一起更新联合约束和行为测试。
 - 开发服务器必须让 `/app/*` 回退到 `app-shell.html`，同时保留 `/index.html` 给旧画布 iframe；不要重新引入会吞掉 Vite 内部脚本或旧画布入口的宽泛回退。
-- 当前画布已实现生成节点首次成功后的图片 / 视频类型锁；入口使用统一模型选择图标，选择器内部仍保留具体模型图标。
+- 本地 Vite `serve` 支持在画布路由追加 `?layoutTune=1` 打开开发专用布局调节器；它只调节白名单几何并把临时值放在当前标签页的 `sessionStorage`，不写 CanvasDocument。项目条、资产库、工具条和 Agent 可通过选框标签独立移动并用四边手柄调整尺寸，移动值始终是相对正式基准的 X / Y 偏移。该工具通过 development-only HTML 插件注入，生产构建不得携带其 JS / CSS；评审后的参数仍需显式固化回正式布局变量与状态约束。
+- 当前生成节点在创建时即确定不可变的 `mediaKind`（`image / video`）；模型、任务快照与结果必须保持同类型。CanvasDocument v1 读取器仍兼容旧 `mode / lockedMode / generatedAsset.type`，但恢复后会归一为单一运行时类型，新快照不再写 `lockedMode`。入口使用统一模型选择图标，选择器内部仍保留具体模型图标。
 
 ## 下一开发切片
 
-迁移桥的三个收尾项已经完成：后台画布生成会显式触发保存，dirty / 导航会先刷新保存；`view` 的修改交互和加载失败画布已封锁并提供重试；CanvasDocument 使用真实字段 allow-list 和序列化 / 恢复行为测试；旧静态登录 / 主页双轨已经删除，画布导航统一回到 React 路由。
+2026-09-05 后续工作入口：用户准备先继续项目画布内的具体调整，按 `development-workflow.md` 第 1.2 / 4.1 节复用一个活动分支与完整路由开发预览。主体库仍按以下规则推进；不要求先完成主体库全设计、全量拆分 `app.js` 或迁移 React Flow 才能调整画布。下一个具体 UI 改动范围以用户在预览中的反馈为准。
 
-下一开发切片应立即回到用户可见前端，以一个可演示的完整故事为单位推进。优先顺序建议为：
+2026-09-05 工作区释放：已在复核干净状态、忽略文件与目录解析后移除 6 个纯代码 / 缓存 worktree，包括首页登录草稿、交互修复、连线、首页菜单、消息中心与节点参数历史目录；所有 `codex/archive/*` 分支及提交号保持不变。当前只保留主工作目录、承载 API 与 ObjectStore 的 `0707-wt-canvas-integration`、保存另一批素材的 `0707-wt-canvas-shell-redesign`。恢复历史代码从归档分支重新建立工作区，不依赖已删除目录。
 
-1. 资产中心的项目内入口、空状态和素材卡流程，并明确哪些只是原型数据。
-2. 节点内生成历史的可见交互，先使用前端模拟任务，不建立积分账本。
-3. 从主页创建意图 → 画布生成 → 结果进入项目资产的跨页演示闭环。
+主体使用交互现由 `canvas-entity-use-controller.js` 持有选择器 / 详情 UI 状态、timer / animation frame、焦点、背景隔离和监听器生命周期；入口只注入最小读取与提交能力，旧状态和事件路径已移除。选择器绑定打开时的 project / canvas / node，确认前重新验证可写与节点可用性；陈旧回调不能跨作用域恢复弹层或焦点。逐 Media 展开与内容写入仍复用既有 model 和 app 适配器，本轮没有把已有节点快照撤销迁移成字段命令。
+
+主体使用规则已确认：主体只组织与圈定素材，使用时展开为独立 Media 输入 / 连接，放入画布时拆成独立素材节点；后续编辑或删除主体不联动既有使用。底层 Media 的删除、权限、版本，以及模型容量与类型不兼容是另外的设计边界，不从该规则推导。详见 `product-expansion-plan.md` 第 4.2 节。
+
+2026-09-05 本机运行数据边界：日常代码入口收敛到根目录 `0707` 的本地 `main`；当前 `5175` API 仍由 `0707-wt-canvas-integration` 提供，使用该目录的 `.reelay-data/object-store`。`0707-wt-canvas-shell-redesign` 还保存另一批不重复的本机素材，两处都保留。前端主线可更新，但迁移 API 时必须显式指定并验证已有 ObjectStore，不直接从根目录启动空的默认存储，也不重新 seed。
+
+2026-09-05 产品方向澄清：项目是正式 Reelay 前端的产品行为预演版，已确认规则需可执行，后端可模拟；详见 `product-expansion-plan.md` 第 1 节。当前继续主体库设计与现有交互正确性修复，完整创作故事串联及首页 / 登录大规模重设计后置。手机号 / 邮箱注册和邀请码保留为后续能力方向，详细流程尚未确定；不要把参考图或其他 worktree 的登录草稿当作定稿需求。
+
+当前修复切片保留部分删除后的组及剩余成员，删除撤销恢复原组顺序和成员；视频提示词优化采用独立字段撤销，不再恢复任务启动时的整节点快照。组织积分发放 / 回收尚未实现状态变化，确认操作只反馈本次未执行，不再声称提交成功；后续模拟规则另行设计。
+
+2026-09-05 审查的 27 文件草稿已原样提交至 `codex/archive/home-login-draft-20260905`（`e5eec9e`），逐文件 SHA256 核对未改变内容；该工作区目录现已释放，草稿仍可从归档分支恢复。草稿没有手机号 / 邮箱注册、验证码或邀请码实现；首页 / 登录视觉可延期。创建项目的忙碌互锁、带项目归属的提示词交接、重命名失败保留输入是可单独复核的行为候选；部分画布视觉已在后续分支实现，不能整文件覆盖最新资产和壳层代码。这些候选尚未合入当前修复切片。
+
+迁移桥的三个收尾项已经完成：后台画布生成会显式触发保存，dirty / 导航会先刷新保存；尚无文档的画布先建立内存同步基线，只有主页意图或真实用户修改才首写 revision 1，不会因纯浏览生成空记录；`view` 的修改交互和加载失败画布已封锁并提供重试；CanvasDocument 使用真实字段 allow-list 和序列化 / 恢复行为测试；旧静态登录 / 主页双轨已经删除，画布导航统一回到 React 路由。
+
+iframe 侧文档保存已经从 `app.js` 提取为无 DOM 的持久化协调器，独占 baseline、dirty、debounce、单一 in-flight、revision、续写、重试与错误降级；行为测试覆盖空文档不首写、保存中继续修改、陈旧响应和非法消息。宿主用 iframe instance id 和 route scope 拒绝重复 ready 与旧 scope 保存回调；同 route 新 iframe 会等待旧同 scope 保存结算后再 hydrate 最新 revision，旧 epoch 的 dirty / saving / navigation 不会污染新实例，旧保存失败则先重新读取服务端权威文档。
+
+多画布内容已经由 `canvas-runtime-store.js` 统一持有：每个 CanvasRecord 是节点、组、连接、视口、层级和撤销栈的唯一权威，根 `state` 只保留供现有 renderer / 手势 adapter 使用的活动画布访问门面。`render()`、缩放和画布切换不再执行 CanvasRecord 与根状态之间的镜像复制；后台任务按 canvas id 直接定位目标记录，删除非活动画布也会显式触发保存。
+
+无 DOM 的 `canvas-command-executor.js` 已建立 touched collection draft、before conflict、normalizer scope、transition validator、逆命令、每画布隔离和 50 条混合 undo 上限。连接单条创建、批量创建和删除已统一通过原子命令提交，批量连接只写一条 undo；连接归一化已从 renderer 移到提交 / hydrate 边界。提交后保存 effect 抛错会作为 `effectError` 报告，不会把已经提交的内容伪报为失败。当前 app adapter 明确拒绝 nodes / groups 命令，防止在字段级契约建立前把整节点任务态或 UI 态带入撤销。
+
+当前先继续主体库设计与逐素材展开的行为核对，不启动 React Flow 迁移或完整创作故事。后续需要处理画布工程边界时，沿以下方向逐步推进：
+
+1. 在现有 CanvasCommand 上建立字段级 Node patch 与 Group membership invariant，先迁移媒体命名和离散参数，再迁移解组；不能使用整节点快照，不能修改运行时创建类型或恢复生成 / 提示词任务态。高频 pointer preview 仍保留在 session/adapter 层，pointerup 后续只提交最终字段事务。
+2. 把生成与提示词优化的异步 timer 提取为不依赖 DOM 的 task runner，完成事件只通过带 project / canvas / node / task scope 的命令写入。
+3. 资产下一步以已落地的 WorkspaceMediaAsset + personal placement + ProjectAssetReference + ObjectStore + personal Entity 为基线，把 Folder / organization placement、Entity 删除恢复，以及主体选定 Media 的独立引用 / 节点创建纳入明确应用边界，再接组织发布与审核。不把这些逻辑塞进 `CollaborationStore`、`app.js` 或 CanvasDocument；GenerationResult 只有显式保存后才幂等晋升为 WorkspaceMediaAsset。
 
 积分前端模拟需另开切片。开始前至少确认组织月度额度与结转规则、一次生成的预占 / 扣减 / 失败退款、成员与项目统计维度、管理员可见范围，以及演示月份和异常场景；没有这些口径前，不把当前 `3000 / 0` mock 扩成伪账本。
 
-CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画布的多画布 bundle，严格 allow-list 只包含节点、组、视口和模型参数。后续生成历史与 AssetReference 应建立独立实体，不继续向该 bundle 塞运行态。
+CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画布的多画布 bundle，v1 canonical allow-list 只包含节点、组、视口、节点 `mediaKind` 和模型参数，持久媒体 URL 必须通过安全校验。后续 GenerationTask、GenerationResult、Node 级资产引用与 CreditLedger 应建立独立实体，不继续向该 bundle 塞运行态；WorkspaceMediaAsset 二进制和 ProjectAssetReference 也不属于 CanvasDocument。
 
 暂不加入邀请、外部分享、实时光标、复杂权限和真实密码生命周期。当前公网地址
 只用于原型评审，不应扩写为生产可用承诺。
@@ -58,12 +90,15 @@ CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画
 git branch --show-current
 git status --short
 npm ci
-npm run db:up
-npm run db:migrate
+npm run db:setup
 npm run check
 ```
 
-空库首次需要显式设置 `ALLOW_DEMO_SEED=true` 后运行 `npm run db:seed`；服务启动不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
+`npm run db:setup` 是显式的本地开发初始化入口，依次执行 `db:up`、`db:migrate` 和幂等 `db:seed`；`db:up` 会等待 PostgreSQL 健康。脚本只在 seed 子进程中注入 `ALLOW_DEMO_SEED=true`，不会修改当前终端环境，也不会清空、重置或硬删除业务资产；子命令失败会保留非零退出码。它拒绝 production / preview 环境和非回环数据库地址，公网预览仍必须按 `docs/vercel-supabase-preview.md` 人工迁移与 seed，不能复用这个本地入口。
+
+该 seed 除账号和项目外，还会为 Hoo 写入 v3 演示夹具：共 9 张图片与 2 条本地 MP3；“雾森信使”引用 6 项，“曜石勘探体”引用 5 项，合计覆盖 `16:9`、`9:16`、方形 / `4:3` 和音频。旧版“绯雾调香师 / 曜金香氛核心”仅在完整旧 fixture 指纹匹配时原位校准，保留 Entity ID 与 placement；旧六图在无额外 Entity、项目或画布引用时只撤销个人 placement 和演示项目引用，底层资产 / blob 不硬删。用户编辑过的旧主体会 fail closed，不会追加成四个主体；并发编辑发生在上传与事务校准之间时，事务仍会二次校验并失败，已经完成的 canonical Media 可在解决冲突后由下一次 seed 幂等收敛。
+
+素材源文件随 Git 同步，但 PostgreSQL 元数据与 `.reelay-data/object-store` 都是本机状态，所以跨电脑执行 `git pull` 后仍须运行 `npm run db:setup`，才能重建相同的 PostgreSQL 元数据和本地 filesystem ObjectStore。公网 preview 因缺少持久 ObjectStore 会继续跳过这些本地媒体夹具。服务启动和依赖安装不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
 
 - 已安装依赖时不必重复执行 `npm ci`。
 - 开发中的定向检查与文档选读按 `docs/development-workflow.md` 执行。
@@ -73,6 +108,8 @@ npm run check
 
 - 不再向 `app.js` 增加新页面或账户 / repository 逻辑。
 - 模型条目和参数能力只进入 `data/model-catalog.js`。
+- 演示用量模板可以随模型目录进入 `data/model-catalog.js`，页面和 fixture 只能通过类型化目录读取，不能复制模型 ID、名称或成本表。
+- 服务端新增 Asset / Generation / Credit 入口时只注入所需 capability，并把 actor scope 放进 repository / use-case 方法；不能重新依赖完整 `CollaborationStore` 或只在 route 校验权限。
 - React、HTTP DTO、数据库 schema 和领域对象是不同边界，不应互相直接替代。
 - `LegacyCanvasHost` 只承载上下文、导航和迁移桥接，不复制权限、计费或 repository。
 - 清理旧代码与新增大功能分开提交；每个提交保持可运行、可回退。

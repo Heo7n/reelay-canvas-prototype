@@ -8,6 +8,9 @@ Before changing this prototype:
 
 Keep these boundaries:
 
+- Work from first principles. Treat a user-proposed solution as important input, not as proof that it is the best implementation; identify experience-bound assumptions, omitted boundaries, and more mature alternatives, and state the evidence when that judgment changes the solution.
+- Treat root-cause repair as a hard rule: replace the incorrect logic with the correct invariant or state transition instead of layering compensating patches, cleanup jobs, or special cases over it.
+- Make the smallest complete change that restores correctness. Do not opportunistically rewrite unrelated modules, and do not leave half-migrations, dual paths, or old and new implementations active together.
 - Model entries belong in `data/model-catalog.js`.
 - Do not describe planned pages as implemented.
 - Preserve the user-visible semantics of canvas gestures, selection, and theme parity; do not preserve an inaccessible event binding merely because the prototype used it.

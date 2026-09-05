@@ -9,8 +9,10 @@ const stage = document.querySelector("#canvasStage");
 const nodeLayer = document.querySelector("#nodeLayer");
 const connectionLayer = document.querySelector("#connectionLayer");
 const connectionPaths = document.querySelector("#connectionPaths");
+const batchConnectionPreviewPaths = document.querySelector("#batchConnectionPreviewPaths");
 const connectionPreview = document.querySelector("#connectionPreview");
 const connectionPreviewEndpoint = document.querySelector("#connectionPreviewEndpoint");
+const connectionTargetGlow = document.querySelector("#connectionTargetGlow");
 const connectionCreateMenu = document.querySelector("#connectionCreateMenu");
 const nodeCreateMenu = document.querySelector("#nodeCreateMenu");
 const canvasTools = document.querySelector("#canvasTools");
@@ -23,49 +25,84 @@ const zoomValueTip = document.querySelector("#zoomValueTip");
 const projectNameEls = document.querySelectorAll("[data-project-name]");
 const canvasNameEls = document.querySelectorAll("[data-canvas-name]");
 const projectMenu = document.querySelector("#projectMenu");
+const projectMenuSearch = document.querySelector("#projectMenuSearch");
+const projectMenuList = document.querySelector("#projectMenuList");
+const projectMenuEmpty = document.querySelector("#projectMenuEmpty");
 const canvasMenu = document.querySelector("#canvasMenu");
 const canvasMenuList = document.querySelector("#canvasMenuList");
 const canvasMoreMenu = document.querySelector("#canvasMoreMenu");
+const canvasHomeButtons = document.querySelectorAll("#canvasHomeBtn, [data-canvas-home-button]");
 const railLibraryBtn = document.querySelector("#railLibraryBtn");
 const railProfileBtn = document.querySelector("#railProfileBtn");
+const profileAnchor = document.querySelector(".profile-anchor");
 const shareProjectBtn = document.querySelector("#shareProjectBtn");
 const profileMenu = document.querySelector("#profileMenu");
+const profileHelpFlyout = profileMenu?.querySelector(".profile-help-flyout");
+const profileHelpTrigger = profileHelpFlyout?.querySelector(".profile-help-trigger");
+const profileShortcutTrigger = profileHelpFlyout?.querySelector("#profileShortcutTrigger");
+const profileShortcutSheet = profileHelpFlyout?.querySelector("#profileShortcutSheet");
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
 const assetLibraryGrid = document.querySelector("#assetLibraryGrid");
 const assetLibraryCount = document.querySelector("#assetLibraryCount");
 const assetLibrarySearchInput = document.querySelector("#assetLibrarySearchInput");
-const assetLibraryTabs = document.querySelector("#assetLibraryTabs");
-const assetLibraryModeTabs = document.querySelector("#assetLibraryModeTabs");
-const assetLibraryProjectName = document.querySelector("#assetLibraryProjectName");
-const assetLibraryGlobalBtn = document.querySelector("#assetLibraryGlobalBtn");
+const assetLibraryPlatformCommandAnchor = document.querySelector("#assetLibraryPlatformCommandAnchor");
+const assetLibrarySectionTabs = document.querySelector("#assetLibrarySectionTabs");
+const assetLibraryMediaTab = document.querySelector("#assetLibraryMediaTab");
+const assetLibraryEntityTab = document.querySelector("#assetLibraryEntityTab");
+const assetLibrarySpaceButton = document.querySelector("#assetLibrarySpaceButton");
+const assetLibrarySpaceLabel = document.querySelector("#assetLibrarySpaceLabel");
+const assetLibrarySpaceMenu = document.querySelector("#assetLibrarySpaceMenu");
+const assetLibraryDirectoryName = document.querySelector("#assetLibraryDirectoryName");
+const assetLibraryDirectoryButton = document.querySelector("#assetLibraryDirectoryButton");
+const assetLibraryDirectoryTreePopover = document.querySelector("#assetLibraryDirectoryTreePopover");
+const assetLibraryCreateFolderBtn = document.querySelector("#assetLibraryCreateFolderBtn");
+const assetLibraryCommandBar = document.querySelector("#assetLibraryCommandBar");
+const assetLibraryOverlayLayer = document.querySelector("#assetLibraryOverlayLayer");
+const assetLibraryUploadInput = document.querySelector("#assetLibraryUploadInput");
 const assetLibraryResizeHandle = document.querySelector("#assetLibraryResizeHandle");
+const entityUseDetailPortal = document.querySelector("#entityUseDetailPortal");
+const entityUsePickerPortal = document.querySelector("#entityUsePickerPortal");
+const assetLibraryPreviewDialog = document.querySelector("#assetLibraryPreviewDialog");
+const assetLibraryPreviewTitle = document.querySelector("#assetLibraryPreviewTitle");
+const assetLibraryPreviewKicker = document.querySelector("#assetLibraryPreviewKicker");
+const assetLibraryPreviewBody = document.querySelector("#assetLibraryPreviewBody");
+const assetLibraryPreviewMeta = document.querySelector("#assetLibraryPreviewMeta");
+const assetLibraryPreviewUse = document.querySelector("#assetLibraryPreviewUse");
+const canvasEntityEditorHost = document.querySelector("#canvasEntityEditorHost");
+const canvasEntityPickerHost = document.querySelector("#canvasEntityPickerHost");
+const canvasEntityEditorUploadInput = document.querySelector("#canvasEntityEditorUploadInput");
 const themeModeIcon = document.querySelector("#themeModeIcon");
 const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
-const avatarCreditBadge = document.querySelector("#avatarCreditBadge");
-const avatarCreditValue = document.querySelector("#avatarCreditValue");
+const profileCreditValue = document.querySelector("#profileCreditValue");
 const profileAvatar = document.querySelector("#profileAvatar");
 const profileName = document.querySelector("#profileName");
 const profileEmail = document.querySelector("#profileEmail");
-const profileOrganization = document.querySelector("#profileOrganization");
-const profileOrganizationName = document.querySelector("#profileOrganizationName");
 const profileOrganizationRole = document.querySelector("#profileOrganizationRole");
 const emptyState = document.querySelector("#emptyState");
 const emptyCreateMain = document.querySelector(".empty-create-main");
 const emptyCreateSecondary = document.querySelector(".empty-create-secondary");
 const localAssetInput = document.querySelector("#localAssetInput");
 const selectionBox = document.querySelector("#selectionBox");
+const groupResizeOverlay = document.querySelector("#groupResizeOverlay");
+const multiSelectionSurface = document.querySelector("#multiSelectionSurface");
+const multiSelectionChrome = document.querySelector("#multiSelectionChrome");
+const multiSelectionPort = document.querySelector("#multiSelectionPort");
 const selectionToolbar = document.querySelector("#selectionToolbar");
-let profileMenuCloseTimer = null;
+let projectMenuTrigger = null;
+let canvasMenuTrigger = null;
+let canvasMoreMenuTrigger = null;
 let themeFeedbackTimer = null;
-const selectionCount = document.querySelector("#selectionCount");
-const selectionSortMenu = document.querySelector("#selectionSortMenu");
+let selectionSurfaceRadiusWorld = 20;
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
+const selectionDownloadTrigger = document.querySelector(".selection-download-trigger");
 const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
 const agentPanel = document.querySelector("#agentPanel");
 const agentResizeHandle = document.querySelector("#agentResizeHandle");
+const agentTopResizeHandle = document.querySelector("#agentTopResizeHandle");
+const agentBottomResizeHandle = document.querySelector("#agentBottomResizeHandle");
 const agentCloseBtn = document.querySelector("#agentCloseBtn");
 const agentNewChatBtn = document.querySelector("#agentNewChatBtn");
 const agentHistoryBtn = document.querySelector("#agentHistoryBtn");
@@ -74,14 +111,23 @@ const agentHistoryList = document.querySelector("#agentHistoryList");
 const agentHistorySearch = document.querySelector("#agentHistorySearch");
 const agentConversationTitle = document.querySelector("#agentConversationTitle");
 const agentMessages = document.querySelector("#agentMessages");
+const agentComposer = document.querySelector("#agentComposer");
 const agentInput = document.querySelector("#agentInput");
 const agentSendButton = document.querySelector(".agent-send");
+const agentAddBtn = document.querySelector("#agentAddBtn");
+const agentPromptOptimizationBtn = document.querySelector("#agentPromptOptimizationBtn");
+const agentAdvancedBtn = document.querySelector("#agentAdvancedBtn");
+const agentAdvancedSettings = document.querySelector("#agentAdvancedSettings");
+const agentAutoLinkBtn = document.querySelector("#agentAutoLinkBtn");
+const agentModeBtn = document.querySelector("#agentModeBtn");
+const agentModeMenu = document.querySelector("#agentModeMenu");
 const agentModelBtn = document.querySelector("#agentModelBtn");
 const agentModelMenu = document.querySelector("#agentModelMenu");
-const undoToast = document.querySelector("#undoToast");
-const undoDeleteBtn = document.querySelector("#undoDeleteBtn");
+const agentParamSummary = document.querySelector("#agentParamSummary");
+const agentCreditValue = document.querySelector("#agentCreditValue");
 const canvasAccessStatus = document.querySelector("#canvasAccessStatus");
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
 const homeLaunchIntentKey = "reelay-home-launch-intent";
@@ -121,17 +167,20 @@ const {
   imageQualityMultiplier = {},
   videoQualityCost = {},
   simulationAssets = {},
-  officialLibraryAssets = [],
+  assetLibrarySeed = {},
   mediaToolDefinitions = {},
   mediaToolsByType = { image: [], video: [], audio: [] },
   defaultMediaToolPreferences = { image: { tools: [], showLabels: true }, video: { tools: [], showLabels: true }, audio: { tools: [], showLabels: true } },
+  generationWorkflows = { image: [], video: [] },
   agentConversations: seedAgentConversations = [{ id: "new", title: "新对话", messages: [] }],
   layoutRules = {},
   canvasScaleLimits = { min: 0.2, max: 2 },
   groupFrameRules = {},
-  assetCategoryFilters = [["material", "素材"]],
 } = prototypeConfig;
-const assetCategoryLabels = Object.fromEntries(assetCategoryFilters);
+const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
+if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
+const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
+if (!canvasPopoverPlacement) throw new Error("Canvas popover placement helper is unavailable.");
 const agentConversations = structuredClone(seedAgentConversations);
 
 function loadMediaToolPreferences() {
@@ -176,20 +225,12 @@ function loadThemeMode() {
 }
 
 const state = {
-  tx: 0,
-  ty: 0,
-  scale: 1,
-  nodes: [],
-  connections: [],
-  groups: [],
   selectedIds: new Set(),
   activeGroupId: null,
   activeId: null,
   activeConnectionId: null,
-  recentConnectionId: null,
-  recentConnectionTimer: 0,
+  connectionFeedbacks: new Map(),
   connectionDrop: null,
-  zCounter: 1,
   lastPreset: {
     mode: "image",
     model: firstModelId("image"),
@@ -197,27 +238,37 @@ const state = {
     resolution: "2K",
     quality: "480p",
     duration: "4s",
+    outputFormat: "",
     count: 1,
+    workflow: "",
+    omniReferenceTaskType: "",
+    audioEnabled: false,
   },
   action: null,
   pendingUploadNodeId: null,
   pendingCanvasUploadPoint: null,
   nodeCreatePoint: null,
   isSpaceDown: false,
-  undoStack: [],
   generationTasks: new Map(),
+  promptOptimizationTasks: new Map(),
   agentOpen: false,
-  agentWidth: 420,
+  agentWidth: 560,
+  agentTopInset: 0,
+  agentBottomInset: 0,
   zoomTipTimer: 0,
   projectId: crypto.randomUUID(),
   projectName: "Untitled",
-  canvases: [],
-  activeCanvasId: null,
+  projects: [],
+  projectSearch: "",
   canvasMoreTargetId: null,
   activeConversationId: "new",
-  agentModelId: "gpt-image-2",
-  agentModelIds: ["gpt-image-2"],
-  agentModelTab: "image",
+  agentComposerMode: "video",
+  agentAdvancedSettingsExpanded: false,
+  agentAutoLinkEnabled: true,
+  agentPromptOptimizationTask: null,
+  agentModelId: "seedance-2",
+  agentModelIds: ["seedance-2"],
+  agentModelTab: "video",
   agentModelAuto: false,
   account: {
     credits: 3000,
@@ -229,46 +280,86 @@ const state = {
     workspaceName: "组织空间",
     workspaceRole: "member",
   },
+  hostCapabilities: {
+    hostWritable: false,
+    accountSections: false,
+    projectSwitcher: false,
+    assetPersistence: false,
+    entityPersistence: false,
+  },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
-  libraryAssets: [],
-  personalLibraryAssets: [],
-  organizationLibraryAssets: [],
-  libraryView: "canvas",
+  librarySection: "media",
   librarySearch: "",
   libraryFilter: "all",
-  libraryScope: "project",
+  librarySpace: "personal",
+  libraryFolderId: null,
+  libraryDirectoryMenuOpen: false,
+  libraryDirectoryRootExpanded: true,
+  libraryExpandedFolderIds: new Set(),
   libraryTargetNodeId: null,
-  libraryCollapsedGroups: new Set(),
-  globalLibraryDisplay: "preview",
-  assetLibraryWidth: 440,
+  libraryDisplay: "grid",
+  librarySelectionMode: false,
+  librarySelectedIds: new Set(),
+  libraryMenuTarget: null,
+  libraryToolbarMenu: null,
+  libraryRenameTarget: null,
+  libraryMoveItems: [],
+  libraryMoveFolderId: null,
+  libraryPreviewTarget: null,
+  librarySearchByContext: {},
+  libraryFilterByContext: {},
+  assetLibraryPreferredWidth: 550,
+  assetLibraryWidth: 550,
   themeMode: loadThemeMode(),
   canvasPanel: null,
   overlaySyncTimer: null,
-};
-
-const canvasPersistence = {
-  initialized: false,
-  hydrating: false,
-  writable: false,
-  blocked: false,
-  revision: 0,
-  canvasId: null,
-  saveTimer: 0,
-  inFlight: null,
-  lastSavedSnapshot: "",
-  accessMode: window.parent === window ? "standalone" : "loading",
-  accessNoticeTimer: 0,
+  nodePopoverFrame: 0,
+  groupChromeFrame: 0,
 };
 
 const canvasDocumentCodec = window.REELAY_CANVAS_DOCUMENT_CODEC;
 if (!canvasDocumentCodec) throw new Error("Canvas document codec is unavailable.");
+const canvasRuntimeStoreFactory = window.REELAY_CANVAS_RUNTIME_STORE;
+if (!canvasRuntimeStoreFactory) throw new Error("Canvas runtime store is unavailable.");
+const canvasRuntimeStore = canvasRuntimeStoreFactory.createCanvasRuntimeStore({
+  onMutation: () => scheduleCanvasDocumentSave(0),
+});
+canvasRuntimeStore.attachStateFacade(state);
+const canvasPersistenceCoordinatorFactory = window.REELAY_CANVAS_PERSISTENCE_COORDINATOR;
+if (!canvasPersistenceCoordinatorFactory) throw new Error("Canvas persistence coordinator is unavailable.");
 const canvasConnections = window.REELAY_CANVAS_CONNECTIONS;
 if (!canvasConnections) throw new Error("Canvas connection helpers are unavailable.");
+const canvasCommandExecutorFactory = window.REELAY_CANVAS_COMMAND_EXECUTOR;
+if (!canvasCommandExecutorFactory) throw new Error("Canvas command executor is unavailable.");
+const canvasCommandExecutor = canvasCommandExecutorFactory.createCanvasCommandExecutor({
+  getCanvas: (canvasId) => canvasRuntimeStore.getCanvas(canvasId),
+  normalize(collection, records, context) {
+    if (collection !== "connections") return records;
+    return canvasConnections.normalizeConnections(records, context.canvas.nodes);
+  },
+  validateTransition({ command }) {
+    const unsupported = command.changes.find((change) => change.collection !== "connections");
+    return unsupported
+      ? {
+        code: "unsupported-content-command",
+        message: `Canvas command collection ${unsupported.collection} has no field-level transition contract yet.`,
+      }
+      : null;
+  },
+  undoLimit: 50,
+  onCommit: () => scheduleCanvasDocumentSave(),
+});
 const canvasConnectionInteraction = window.REELAY_CANVAS_CONNECTION_INTERACTION;
 if (!canvasConnectionInteraction) throw new Error("Canvas connection interaction helpers are unavailable.");
 const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
 if (!canvasNodeInteraction) throw new Error("Canvas node interaction helpers are unavailable.");
+const canvasNodePlacement = window.REELAY_CANVAS_NODE_PLACEMENT;
+if (!canvasNodePlacement) throw new Error("Canvas node placement helpers are unavailable.");
+const canvasNodeLayoutTransitionFactory = window.REELAY_CANVAS_NODE_LAYOUT_TRANSITION;
+if (!canvasNodeLayoutTransitionFactory) throw new Error("Canvas node layout transition helper is unavailable.");
+const canvasSpatialSelection = window.REELAY_CANVAS_SPATIAL_SELECTION;
+if (!canvasSpatialSelection) throw new Error("Canvas spatial selection helpers are unavailable.");
 const canvasNodePointerControllerFactory = window.REELAY_CANVAS_NODE_POINTER_CONTROLLER;
 if (!canvasNodePointerControllerFactory) throw new Error("Canvas node pointer controller is unavailable.");
 const canvasNodeDragControllerFactory = window.REELAY_CANVAS_NODE_DRAG_CONTROLLER;
@@ -279,16 +370,207 @@ const canvasPointerInteractionControllerFactory = window.REELAY_CANVAS_POINTER_I
 if (!canvasPointerInteractionControllerFactory) throw new Error("Canvas pointer interaction controller is unavailable.");
 const canvasPointerDispatchControllerFactory = window.REELAY_CANVAS_POINTER_DISPATCH_CONTROLLER;
 if (!canvasPointerDispatchControllerFactory) throw new Error("Canvas pointer dispatch controller is unavailable.");
+const canvasAgentPanelGeometry = window.REELAY_CANVAS_AGENT_PANEL_GEOMETRY;
+if (!canvasAgentPanelGeometry) throw new Error("Canvas Agent panel geometry is unavailable.");
 const canvasConnectionRendererFactory = window.REELAY_CANVAS_CONNECTION_RENDERER;
 if (!canvasConnectionRendererFactory) throw new Error("Canvas connection renderer is unavailable.");
+const canvasConnectionFeedbackControllerFactory = window.REELAY_CANVAS_CONNECTION_FEEDBACK_CONTROLLER;
+if (!canvasConnectionFeedbackControllerFactory) throw new Error("Canvas connection feedback controller is unavailable.");
+const canvasConnectionFeedbackMotion = window.REELAY_CANVAS_CONNECTION_FEEDBACK_MOTION;
+if (!canvasConnectionFeedbackMotion) throw new Error("Canvas connection feedback motion is unavailable.");
 const canvasLayerReconcilerFactory = window.REELAY_CANVAS_LAYER_RECONCILER;
 if (!canvasLayerReconcilerFactory) throw new Error("Canvas layer reconciler is unavailable.");
 const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
 if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
+const canvasAssetLibraryView = window.REELAY_CANVAS_ASSET_LIBRARY_VIEW;
+if (!canvasAssetLibraryView) throw new Error("Canvas asset library view is unavailable.");
+const runtimeAssetLibrarySeed = window.parent === window
+  ? assetLibrarySeed
+  : {
+      ...assetLibrarySeed,
+      folders: Array.from(assetLibrarySeed.folders || []).filter((folder) => folder?.space !== "personal"),
+      placements: Array.from(assetLibrarySeed.placements || []).filter((placement) => placement?.space !== "personal"),
+    };
+const assetLibraryStore = canvasAssetLibraryModel.createAssetLibraryStore(runtimeAssetLibrarySeed);
+const hostPersonalMediaIds = new Set();
 const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
 if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
+const canvasNodeLayoutTransition = canvasNodeLayoutTransitionFactory.createNodeLayoutTransitionController({
+  now: () => performance.now(),
+  requestFrame: (callback) => window.requestAnimationFrame(callback),
+  cancelFrame: (frameId) => window.cancelAnimationFrame(frameId),
+  shouldReduceMotion: () => reducedMotionQuery.matches,
+  onFrame: renderNodeLayoutTransitionFrame,
+  onFinish: renderNodeLayoutTransitionFrame,
+});
+let canvasAccessNoticeTimer = 0;
+const canvasInstanceId = crypto.randomUUID();
+const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
+  instanceId: canvasInstanceId,
+  serialize: serializeCanvasDocumentSnapshot,
+  hydrate: hydrateCanvasDocumentSnapshot,
+  makeRequestId: () => crypto.randomUUID(),
+  postMessage: (message) => window.parent.postMessage(message, window.location.origin),
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  isHosted: () => window.parent !== window,
+  getExpectedOrigin: () => window.location.origin,
+  getExpectedSource: () => window.parent,
+  onAccessChange: applyCanvasAccessMode,
+  onContext(context) {
+    state.projectId = String(context.projectId || state.projectId);
+    state.projectName = String(context.projectName || state.projectName);
+    state.hostCapabilities.hostWritable = context.writable === true;
+    state.hostCapabilities.accountSections = context.capabilities?.accountSections === true;
+    state.hostCapabilities.projectSwitcher = context.capabilities?.projectSwitcher === true;
+    state.hostCapabilities.assetPersistence = context.capabilities?.assetPersistence === true;
+    state.hostCapabilities.entityPersistence = context.capabilities?.entityPersistence === true;
+    state.projects = normalizeProjectOptions(context.projects);
+    state.projectSearch = "";
+    if (projectMenuSearch) projectMenuSearch.value = "";
+    syncHostedIdentity(context);
+    applyCanvasAccessMode("loading");
+    syncProjectNavigation();
+    renderProjectMenu();
+  },
+  onDocumentReady({ writable }) {
+    state.hostCapabilities.hostWritable = writable === true;
+    if (writable) {
+      consumeHomeLaunchIntent();
+    } else {
+      showActionToast("当前项目为只读，可浏览但不能修改");
+    }
+  },
+  onNotice(notice) {
+    const messages = {
+      "unsupported-document": "此画布数据版本暂不支持，已停止自动保存",
+      conflict: "画布已在其他窗口更新，请重新进入项目后继续",
+      forbidden: "当前项目为只读，可浏览但不能修改",
+      missing: "项目已删除或无法访问，当前画布已停止保存",
+      network: "画布暂时保存失败，正在等待重试",
+    };
+    showActionToast(messages[notice] || "画布状态已更新");
+  },
+});
+const canvasMediaAssetCoordinatorFactory = window.REELAY_CANVAS_MEDIA_ASSET_COORDINATOR;
+if (!canvasMediaAssetCoordinatorFactory) throw new Error("Canvas media asset coordinator is unavailable.");
+const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAssetCoordinator({
+  instanceId: canvasInstanceId,
+  makeRequestId: () => crypto.randomUUID(),
+  postMessage: (message) => window.parent.postMessage(message, window.location.origin),
+  checksumFile: async (file) => {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  },
+  uploadFile: async ({ url, method, headers, file }) => {
+    const response = await fetch(url, { method, headers, body: file, credentials: "include" });
+    if (!response.ok) throw new Error(`媒体上传失败（${response.status}）`);
+  },
+  getBaseUrl: () => window.location.href,
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  isHosted: () => window.parent !== window,
+  getExpectedOrigin: () => window.location.origin,
+  getExpectedSource: () => window.parent,
+});
+const canvasEntityAssetCoordinatorFactory = window.REELAY_CANVAS_ENTITY_ASSET_COORDINATOR;
+if (!canvasEntityAssetCoordinatorFactory) throw new Error("Canvas Entity asset coordinator is unavailable.");
+const canvasEntityAssets = canvasEntityAssetCoordinatorFactory.createCanvasEntityAssetCoordinator({
+  instanceId: canvasInstanceId,
+  makeRequestId: () => crypto.randomUUID(),
+  postMessage: (message) => window.parent.postMessage(message, window.location.origin),
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  isHosted: () => window.parent !== window,
+  getExpectedOrigin: () => window.location.origin,
+  getExpectedSource: () => window.parent,
+  onCatalog: registerHostWorkspaceAssetCatalog,
+});
+const canvasEntityEditorModel = window.REELAY_CANVAS_ENTITY_EDITOR_MODEL;
+const canvasEntityEditorView = window.REELAY_CANVAS_ENTITY_EDITOR_VIEW;
+const canvasEntityEditorControllerFactory = window.REELAY_CANVAS_ENTITY_EDITOR_CONTROLLER;
+if (!canvasEntityEditorModel || !canvasEntityEditorView || !canvasEntityEditorControllerFactory) {
+  throw new Error("Canvas Entity editor dependencies are unavailable.");
+}
+const canvasEntityUseModel = window.REELAY_CANVAS_ENTITY_USE_MODEL;
+const canvasEntityUseView = window.REELAY_CANVAS_ENTITY_USE_VIEW;
+const canvasEntityUseControllerFactory = window.REELAY_CANVAS_ENTITY_USE_CONTROLLER;
+if (!canvasEntityUseModel || !canvasEntityUseView || !canvasEntityUseControllerFactory) {
+  throw new Error("Canvas Entity use dependencies are unavailable.");
+}
+const canvasEntityUse = canvasEntityUseControllerFactory.createCanvasEntityUseController({
+  grid: assetLibraryGrid,
+  detailPortal: entityUseDetailPortal,
+  pickerPortal: entityUsePickerPortal,
+  background: appShell,
+  view: canvasEntityUseView,
+  getScope: () => ({ projectId: state.projectId, canvasId: state.activeCanvasId }),
+  getDetailContext: () => ({
+    space: state.librarySpace,
+    eligible: isAssetLibraryOpen() && state.librarySection === "entity"
+      && !state.librarySelectionMode && !state.libraryMenuTarget && !state.libraryRenameTarget,
+  }),
+  getDetailEntity: getEntityUseDetailPayload,
+  getPickerEntities: getEntityUsePickerEntities,
+  getAvoidRects: () => state.agentOpen && agentDock ? [agentDock.getBoundingClientRect()] : [],
+  isTargetAvailable: (nodeId) => {
+    const node = state.nodes.find((item) => item.id === nodeId);
+    return Boolean(node && node.kind === "generator" && !node.generating
+      && !node.promptOptimizing && canNodeUseEntityReferences(node));
+  },
+  isMutable: isCanvasMutationAllowed,
+  requireMutation: requireCanvasMutation,
+  getPickerTrigger: (nodeId) => nodeLayer.querySelector(`[data-id="${CSS.escape(nodeId)}"] .entity-drop`),
+  onAddEntities: addSelectedEntitiesToGenerator,
+  onAddToCanvas: (submission) => addEntityToCanvas(submission).length > 0,
+  refreshIcons,
+});
+let reopenAssetLibraryAfterEntityEditor = false;
+const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntityEditorController({
+  host: canvasEntityEditorHost,
+  pickerHost: canvasEntityPickerHost,
+  uploadInput: canvasEntityEditorUploadInput,
+  model: canvasEntityEditorModel,
+  view: canvasEntityEditorView,
+  getAvailableMedia: () => assetLibraryStore
+    .listItems({ space: "personal", kind: "media" })
+    .filter((media) => window.parent === window || hostPersonalMediaIds.has(media.id)),
+  persistFiles: persistEntityEditorFiles,
+  renameMedia: async ({ mediaId, displayName }) => {
+    if (window.parent === window) {
+      return assetLibraryStore.renameItem({
+        item: { kind: "media", id: mediaId },
+        name: displayName,
+        space: "personal",
+      });
+    }
+    if (!canPersistLibraryMedia()) throw new Error("当前项目尚未接入素材持久化");
+    const workspaceAsset = await canvasMediaAssets.renameMedia(mediaId, displayName);
+    const updated = assetLibraryStore.syncPersistedMedia(workspaceAssetToLibraryMedia(workspaceAsset));
+    renderAssetLibrary();
+    return updated;
+  },
+  saveEntity: saveEntityEditorDraft,
+  confirmDiscard: confirmEntityEditorDiscard,
+  onVisibilityChange: setEntityEditorOpen,
+  onSaved(entity) {
+    if (window.parent !== window) syncHostEntity(entity);
+    reopenAssetLibraryAfterEntityEditor = true;
+    state.librarySpace = "personal";
+    state.librarySection = "entity";
+    state.libraryFolderId = null;
+    state.librarySearch = "";
+    state.libraryFilter = "all";
+    showActionToast("主体已保存");
+  },
+  onError(error) {
+    showActionToast(error?.message || "主体保存失败");
+  },
+  refreshIcons,
+});
 const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectionRenderer({
   paths: connectionPaths,
+  batchPreviewPaths: batchConnectionPreviewPaths,
   preview: connectionPreview,
   previewEndpoint: connectionPreviewEndpoint,
   onSelect(connectionId) {
@@ -299,6 +581,16 @@ const canvasConnectionRenderer = canvasConnectionRendererFactory.createConnectio
   onRemove: removeConnection,
 });
 if (!canvasConnectionRenderer) throw new Error("Canvas connection renderer could not initialize.");
+const canvasConnectionFeedback = canvasConnectionFeedbackControllerFactory.createConnectionFeedbackController({
+  records: state.connectionFeedbacks,
+  now: () => performance.now(),
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  onChange: renderConnections,
+});
+reducedMotionQuery.addEventListener?.("change", (event) => {
+  if (event.matches) canvasConnectionFeedback.clear();
+});
 const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler({
   layer: nodeLayer,
   groups: {
@@ -322,11 +614,11 @@ const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler
 if (!canvasLayerReconciler) throw new Error("Canvas layer reconciler could not initialize.");
 
 function isCanvasMutationAllowed() {
-  return canvasPersistence.accessMode === "standalone" || canvasPersistence.accessMode === "editable";
+  return canvasPersistence.canMutate();
 }
 
 function syncCanvasAccessUi() {
-  const mode = canvasPersistence.accessMode;
+  const mode = canvasPersistence.getAccessMode();
   appShell?.setAttribute("data-canvas-access", mode);
   const locked = !isCanvasMutationAllowed();
   document.querySelectorAll("[data-canvas-mutation]").forEach((control) => {
@@ -341,7 +633,7 @@ function syncCanvasAccessUi() {
       delete control.dataset.accessDisabled;
     }
   });
-  document.querySelectorAll(".prompt-input").forEach((input) => {
+  nodeLayer.querySelectorAll("[data-node-prompt-input]").forEach((input) => {
     if (!(input instanceof HTMLTextAreaElement)) return;
     input.readOnly = locked;
     input.setAttribute("aria-readonly", String(locked));
@@ -350,7 +642,7 @@ function syncCanvasAccessUi() {
     const readonly = mode === "readonly";
     emptyCreateMain.textContent = readonly ? "画布暂无内容" : "双击画布";
     if (emptyCreateSecondary) {
-      emptyCreateSecondary.textContent = readonly ? "" : "自由生成节点";
+      emptyCreateSecondary.textContent = readonly ? "" : "开始自由创作";
     }
   }
   if (!canvasAccessStatus) return;
@@ -364,14 +656,13 @@ function syncCanvasAccessUi() {
   canvasAccessStatus.textContent = label || "";
 }
 
-function setCanvasAccessMode(mode) {
-  if (!["standalone", "loading", "editable", "readonly", "blocked"].includes(mode)) return;
-  canvasPersistence.accessMode = mode;
+function applyCanvasAccessMode(mode) {
   if (!isCanvasMutationAllowed()) {
     state.action = null;
     shell?.classList.remove("dragging");
   }
   syncCanvasAccessUi();
+  canvasEntityUse.refresh({ renderPicker: true });
 }
 
 function syncHostedIdentity(context) {
@@ -386,26 +677,24 @@ function syncHostedIdentity(context) {
 
   state.identity = { account, displayName, workspaceName, workspaceRole };
   railProfileBtn?.setAttribute("data-initial", initial);
-  railProfileBtn?.setAttribute("title", displayName);
+  railProfileBtn?.setAttribute("aria-label", `个人：${displayName}`);
   if (profileAvatar) profileAvatar.textContent = initial;
   if (profileName) profileName.textContent = displayName;
   if (profileEmail) profileEmail.textContent = account || "演示画布";
-  if (profileOrganizationName) profileOrganizationName.textContent = workspaceName;
   if (profileOrganizationRole) profileOrganizationRole.textContent = roleLabels[workspaceRole];
-  profileOrganization?.setAttribute("aria-label", `进入${workspaceName}组织管理界面`);
 }
 
 function requireCanvasMutation({ notify = true } = {}) {
   if (isCanvasMutationAllowed()) return true;
-  if (!notify || canvasPersistence.accessNoticeTimer) return false;
+  if (!notify || canvasAccessNoticeTimer) return false;
   const messages = {
     loading: "项目画布仍在加载，暂时不能编辑",
     readonly: "当前为只读项目，可浏览但不能修改",
     blocked: "画布当前不可编辑，请重新加载后继续",
   };
-  showActionToast(messages[canvasPersistence.accessMode] || "当前画布不可编辑");
-  canvasPersistence.accessNoticeTimer = window.setTimeout(() => {
-    canvasPersistence.accessNoticeTimer = 0;
+  showActionToast(messages[canvasPersistence.getAccessMode()] || "当前画布不可编辑");
+  canvasAccessNoticeTimer = window.setTimeout(() => {
+    canvasAccessNoticeTimer = 0;
   }, 1200);
   return false;
 }
@@ -414,29 +703,193 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function setAssetLibraryWidth(width) {
-  state.assetLibraryWidth = clamp(width, 380, Math.min(780, window.innerWidth - 96));
-  appShell?.style.setProperty("--asset-panel-width", `${Math.round(state.assetLibraryWidth)}px`);
+const panelWidthRules = Object.freeze({
+  edgeInset: 8,
+  assetMin: 380,
+  assetMax: 780,
+  agentMin: 340,
+  agentMax: 640,
+  canvasCorridor: 280,
+});
+
+const agentPanelHeightRules = Object.freeze({
+  minHeight: 420,
+  keyboardStep: 16,
+  coarseKeyboardStep: 64,
+});
+
+function isAssetLibraryOpen() {
+  return Boolean(assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden"));
+}
+
+function canShowAssetAndAgent() {
+  return window.innerWidth >= panelWidthRules.assetMin
+    + panelWidthRules.agentMin
+    + panelWidthRules.canvasCorridor
+    + panelWidthRules.edgeInset * 2;
+}
+
+function clampPanelWidth(width, minWidth, maxWidth) {
+  const safeMax = Math.max(0, maxWidth);
+  return clamp(width, Math.min(minWidth, safeMax), safeMax);
+}
+
+function getAssetLibraryWidthBounds() {
+  const viewportMax = Math.max(0, Math.min(panelWidthRules.assetMax, window.innerWidth - panelWidthRules.edgeInset * 2));
+  const opposingWidth = state.agentOpen ? state.agentWidth : 0;
+  const coupledMax = state.agentOpen && isAssetLibraryOpen()
+    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor - opposingWidth)
+    : viewportMax;
+  const max = Math.max(0, coupledMax);
+  return {
+    min: Math.min(panelWidthRules.assetMin, max),
+    max,
+  };
+}
+
+function syncAssetLibraryResizeSemantics(bounds = getAssetLibraryWidthBounds()) {
+  if (!assetLibraryResizeHandle) return;
+  const width = Math.round(state.assetLibraryWidth);
+  assetLibraryResizeHandle.setAttribute("aria-valuemin", String(Math.round(bounds.min)));
+  assetLibraryResizeHandle.setAttribute("aria-valuemax", String(Math.round(bounds.max)));
+  assetLibraryResizeHandle.setAttribute("aria-valuenow", String(width));
+  assetLibraryResizeHandle.setAttribute("aria-valuetext", `资产库宽度 ${width} 像素`);
+}
+
+function applyAssetLibraryWidth(width) {
+  state.assetLibraryWidth = width;
+  appShell?.style.setProperty("--asset-panel-width", `${Math.round(width)}px`);
+  syncAssetLibraryResizeSemantics();
+}
+
+function applyAgentWidth(width) {
+  state.agentWidth = width;
+  agentDock?.style.setProperty("--agent-width", `${width}px`);
+  appShell?.style.setProperty("--agent-width", `${width}px`);
+  syncAssetLibraryResizeSemantics();
+}
+
+function getAgentVerticalGeometry({
+  top = state.agentTopInset,
+  bottom = state.agentBottomInset,
+  preferredEdge = "top",
+} = {}) {
+  return canvasAgentPanelGeometry.normalizeInsets({
+    top,
+    bottom,
+    viewportHeight: window.innerHeight,
+    minHeight: agentPanelHeightRules.minHeight,
+    preferredEdge,
+  });
+}
+
+function syncAgentVerticalResizeSemantics(geometry = getAgentVerticalGeometry()) {
+  const availableInset = Math.max(0, window.innerHeight - agentPanelHeightRules.minHeight);
+  const topMax = Math.max(0, availableInset - geometry.bottom);
+  const bottomMax = Math.max(0, availableInset - geometry.top);
+  const syncHandle = (handle, edge, value, max) => {
+    if (!handle) return;
+    const roundedValue = Math.round(value);
+    handle.setAttribute("aria-valuemin", "0");
+    handle.setAttribute("aria-valuemax", String(Math.round(max)));
+    handle.setAttribute("aria-valuenow", String(roundedValue));
+    handle.setAttribute(
+      "aria-valuetext",
+      roundedValue === 0 ? `Agent ${edge}贴合屏幕` : `Agent ${edge}内缩 ${roundedValue} 像素`,
+    );
+  };
+  syncHandle(agentTopResizeHandle, "顶部", geometry.top, topMax);
+  syncHandle(agentBottomResizeHandle, "底部", geometry.bottom, bottomMax);
+}
+
+function applyAgentVerticalGeometry(geometry) {
+  state.agentTopInset = geometry.top;
+  state.agentBottomInset = geometry.bottom;
+  agentDock?.style.setProperty("--agent-top-inset", `${Math.round(geometry.top)}px`);
+  agentDock?.style.setProperty("--agent-bottom-inset", `${Math.round(geometry.bottom)}px`);
+  agentDock?.classList.toggle("is-inset-top", geometry.top > 0.5);
+  agentDock?.classList.toggle("is-inset-bottom", geometry.bottom > 0.5);
+  syncAgentVerticalResizeSemantics(geometry);
+  scheduleNodePopoverLayouts();
+}
+
+function setAgentTopInset(top) {
+  applyAgentVerticalGeometry(getAgentVerticalGeometry({ top, preferredEdge: "top" }));
+}
+
+function setAgentBottomInset(bottom) {
+  applyAgentVerticalGeometry(getAgentVerticalGeometry({ bottom, preferredEdge: "bottom" }));
+}
+
+function reconcileAgentVerticalInsets(preferredEdge = "top") {
+  applyAgentVerticalGeometry(getAgentVerticalGeometry({ preferredEdge }));
+}
+
+function reconcileDualPanelWidths(preferredPanel) {
+  if (!state.agentOpen || !isAssetLibraryOpen() || !canShowAssetAndAgent()) return;
+  const capacity = window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor;
+  let nextAssetWidth;
+  let nextAgentWidth;
+  if (preferredPanel === "asset") {
+    nextAssetWidth = clampPanelWidth(
+      state.assetLibraryPreferredWidth,
+      panelWidthRules.assetMin,
+      Math.min(panelWidthRules.assetMax, capacity - panelWidthRules.agentMin),
+    );
+    nextAgentWidth = clampPanelWidth(
+      state.agentWidth,
+      panelWidthRules.agentMin,
+      Math.min(panelWidthRules.agentMax, capacity - nextAssetWidth),
+    );
+  } else {
+    nextAgentWidth = clampPanelWidth(
+      state.agentWidth,
+      panelWidthRules.agentMin,
+      Math.min(panelWidthRules.agentMax, capacity - panelWidthRules.assetMin),
+    );
+    nextAssetWidth = clampPanelWidth(
+      state.assetLibraryPreferredWidth,
+      panelWidthRules.assetMin,
+      Math.min(panelWidthRules.assetMax, capacity - nextAgentWidth),
+    );
+  }
+  applyAgentWidth(nextAgentWidth);
+  applyAssetLibraryWidth(nextAssetWidth);
+}
+
+function setAssetLibraryWidth(width, { remember = true } = {}) {
+  const preferredWidth = clamp(width, panelWidthRules.assetMin, panelWidthRules.assetMax);
+  if (remember) state.assetLibraryPreferredWidth = preferredWidth;
+  const bounds = getAssetLibraryWidthBounds();
+  applyAssetLibraryWidth(clampPanelWidth(preferredWidth, bounds.min, bounds.max));
+  renderSelectionToolbar();
   renderMinimap();
+  scheduleNodePopoverLayouts();
+}
+
+function finishAssetLibraryResize() {
+  assetLibraryPanel?.classList.remove("resizing");
+  syncPromptPanelLayouts();
 }
 
 function firstModelId(type) {
-  return models.find((item) => item.type === type)?.id || models[0].id;
+  return models.find((item) => item.type === type)?.id || "";
 }
 
 function normalizeGeneratorMode(mode) {
   return mode === "image" || mode === "video" ? mode : null;
 }
 
-function getNodeLockedMode(node) {
-  if (!node || node.kind !== "generator") return null;
-  return normalizeGeneratorMode(node.lockedMode)
-    || normalizeGeneratorMode(node.generatedAsset?.type);
+function canUseModelForNode(node, model) {
+  return generatorModelPolicy.canUseModel(models, node, model);
 }
 
-function canUseModelForNode(node, model) {
-  const lockedMode = getNodeLockedMode(node);
-  return Boolean(model) && (!lockedMode || model.type === lockedMode);
+function getNodeGenerationMode(node) {
+  return generatorModelPolicy.getNodeModeContract(node);
+}
+
+function getCompatibleModelsForNode(node) {
+  return generatorModelPolicy.getCompatibleModels(models, node);
 }
 
 function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
@@ -455,32 +908,13 @@ function createCanvasRecord(name = `画布 ${state.canvases.length + 1}`) {
 }
 
 function getActiveCanvas() {
-  return state.canvases.find((canvas) => canvas.id === state.activeCanvasId) || state.canvases[0] || null;
+  return canvasRuntimeStore.getActiveCanvas();
 }
 
-function saveActiveCanvasState() {
-  const canvas = getActiveCanvas();
+function resetActiveCanvasSession(canvas) {
   if (!canvas) return;
-  canvas.nodes = state.nodes;
-  canvas.connections = state.connections;
-  canvas.groups = state.groups;
-  canvas.tx = state.tx;
-  canvas.ty = state.ty;
-  canvas.scale = state.scale;
-  canvas.zCounter = state.zCounter;
-  canvas.undoStack = state.undoStack;
-}
-
-function loadCanvasState(canvas) {
-  if (!canvas) return;
-  state.nodes = canvas.nodes;
-  state.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
-  state.groups = canvas.groups;
-  state.tx = canvas.tx;
-  state.ty = canvas.ty;
-  state.scale = canvas.scale;
-  state.zCounter = canvas.zCounter;
-  state.undoStack = canvas.undoStack || [];
+  clearRecentConnectionFeedback();
+  canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
   state.selectedIds = new Set();
   state.activeId = null;
   state.activeConnectionId = null;
@@ -498,6 +932,7 @@ function syncProjectNavigation() {
   const canvas = getActiveCanvas();
   projectNameEls.forEach((element) => {
     if (element.textContent !== state.projectName) element.textContent = state.projectName;
+    element.setAttribute("aria-label", `项目名称 ${state.projectName}，按 Enter 重命名`);
   });
   canvasNameEls.forEach((element) => {
     const nextName = canvas?.name || "画布 1";
@@ -506,23 +941,62 @@ function syncProjectNavigation() {
   document.title = `${state.projectName} · Reelay Canvas`;
 }
 
+function normalizeProjectOptions(projects) {
+  const normalized = Array.isArray(projects)
+    ? projects
+      .filter((project) => project && typeof project.id === "string" && typeof project.name === "string")
+      .map((project) => ({
+        id: project.id,
+        name: project.name.trim() || "未命名项目",
+        coverUrl: typeof project.coverUrl === "string" && project.coverUrl ? project.coverUrl : null,
+      }))
+    : [];
+  if (normalized.some((project) => project.id === state.projectId)) return normalized;
+  return [{ id: state.projectId, name: state.projectName, coverUrl: null }, ...normalized];
+}
+
+function getProjectMenuOptions() {
+  return state.projects.length
+    ? state.projects
+    : [{ id: state.projectId, name: state.projectName, coverUrl: null }];
+}
+
+function getProjectMenuSeed(projectId) {
+  return [...String(projectId)].reduce((total, character) => total + character.codePointAt(0), 0) % 4;
+}
+
+function renderProjectMenu() {
+  if (!projectMenuList) return;
+  const query = state.projectSearch.trim().toLocaleLowerCase("zh-CN");
+  const projects = getProjectMenuOptions().filter(
+    (project) => !query || project.name.toLocaleLowerCase("zh-CN").includes(query),
+  );
+  projectMenuList.innerHTML = projects
+    .map((project) => {
+      const active = project.id === state.projectId;
+      const thumbnail = project.coverUrl
+        ? `<img class="project-menu-thumbnail" src="${escapeHtml(project.coverUrl)}" alt="" />`
+        : `<span class="project-menu-thumbnail project-menu-thumbnail-placeholder" data-project-seed="${getProjectMenuSeed(project.id)}" aria-hidden="true"><i data-lucide="panels-top-left"></i></span>`;
+      return `
+        <button class="project-menu-option${active ? " active" : ""}" type="button" data-project-id="${escapeHtml(project.id)}"${active ? ' aria-current="page"' : ""}>
+          ${thumbnail}
+          <span class="project-menu-option-name" title="${escapeHtml(project.name)}">${escapeHtml(project.name)}</span>
+          <span class="project-menu-check" aria-hidden="true">${active ? '<i data-lucide="check"></i>' : ""}</span>
+        </button>
+      `;
+    })
+    .join("");
+  if (projectMenuEmpty) projectMenuEmpty.hidden = projects.length > 0;
+  refreshIcons();
+}
+
 function initializeCanvases() {
   const initialCanvas = createCanvasRecord("画布 1");
-  initialCanvas.nodes = state.nodes;
-  initialCanvas.connections = state.connections;
-  initialCanvas.groups = state.groups;
-  initialCanvas.tx = state.tx;
-  initialCanvas.ty = state.ty;
-  initialCanvas.scale = state.scale;
-  initialCanvas.zCounter = state.zCounter;
-  initialCanvas.undoStack = state.undoStack;
-  state.canvases = [initialCanvas];
-  state.activeCanvasId = initialCanvas.id;
+  canvasRuntimeStore.replaceCanvases([initialCanvas], initialCanvas.id);
   syncProjectNavigation();
 }
 
 function createCanvasDocumentSnapshot() {
-  saveActiveCanvasState();
   return canvasDocumentCodec.createSnapshot(state);
 }
 
@@ -534,36 +1008,41 @@ function hydrateCanvasDocumentSnapshot(content) {
   const restored = canvasDocumentCodec.restoreSnapshot(content, {
     minScale: canvasScaleLimits.min,
     maxScale: canvasScaleLimits.max,
-    promptInputHeight: layoutRules.largePromptMinHeight,
   });
   if (!restored) return false;
-  state.canvases = restored.canvases;
+  canvasRuntimeStore.replaceCanvases(restored.canvases, restored.activeCanvasId);
   state.canvases.forEach((canvas) => {
     canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
     canvas.nodes.forEach((node) => {
-      if (node.kind === "generator") normalizeNodeParameters(node);
+      if (node.kind !== "generator") return;
+      normalizeNodeParameters(node);
+      if (
+        node.generatedAsset?.type === "video"
+        && (!Number.isFinite(node.generatedAsset.duration) || node.generatedAsset.duration <= 0)
+      ) {
+        hydrateAssetMetadata(node.generatedAsset, node.id);
+      }
     });
   });
-  state.activeCanvasId = restored.activeCanvasId;
-  state.lastPreset = {
+  const hydratedPreset = {
     mode: restored.lastPreset.mode,
     model: restored.lastPreset.model || state.lastPreset.model,
     aspect: restored.lastPreset.aspect || state.lastPreset.aspect,
     resolution: restored.lastPreset.resolution || state.lastPreset.resolution,
     quality: restored.lastPreset.quality || state.lastPreset.quality,
     duration: restored.lastPreset.duration || state.lastPreset.duration,
+    outputFormat: restored.lastPreset.outputFormat || "",
     count: clamp(restored.lastPreset.count, 1, 4),
+    workflow: restored.lastPreset.workflow || state.lastPreset.workflow,
+    omniReferenceTaskType: restored.lastPreset.omniReferenceTaskType || "",
+    audioEnabled: restored.lastPreset.audioEnabled === true,
   };
-  state.libraryAssets = [];
-  state.libraryView = "canvas";
-  state.libraryScope = "project";
-  loadCanvasState(getActiveCanvas());
+  normalizeNodeParameters(Object.assign(hydratedPreset, { kind: "generator" }));
+  state.lastPreset = presetFrom(hydratedPreset);
+  state.libraryTargetNodeId = null;
+  clearAssetLibrarySelection();
+  resetActiveCanvasSession(getActiveCanvas());
   return true;
-}
-
-function postCanvasBridgeMessage(message) {
-  if (window.parent === window) return;
-  window.parent.postMessage(message, window.location.origin);
 }
 
 function requestHostNavigation(target) {
@@ -571,178 +1050,65 @@ function requestHostNavigation(target) {
     showActionToast("请从 Reelay 应用主页进入此画布");
     return;
   }
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:navigate",
-    protocolVersion: 1,
-    target,
-  });
+  canvasPersistence.post("canvas:navigate", { target });
 }
 
-function requestHostAccountSettings() {
+function requestHostProjectNavigation(projectId) {
+  if (projectId === state.projectId) return;
+  if (window.parent === window) {
+    showActionToast("请从 Reelay 应用主页进入此画布");
+    return;
+  }
+  if (!state.hostCapabilities.projectSwitcher) {
+    requestHostNavigation("projects");
+    return;
+  }
+  canvasPersistence.post("canvas:open-project", { projectId });
+}
+
+function requestHostProjectCreation() {
+  if (window.parent === window) {
+    showActionToast("请从 Reelay 应用主页创建项目");
+    return;
+  }
+  if (!state.hostCapabilities.projectSwitcher) {
+    requestHostNavigation("projects");
+    return;
+  }
+  canvasPersistence.post("canvas:create-project");
+}
+
+function requestHostAccountSettings(section = "profile") {
   if (window.parent === window) {
     showActionToast("请从 Reelay 应用主页进入账号设置");
     return;
   }
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:open-account",
-    protocolVersion: 1,
-  });
-}
-
-function postCanvasDirty(dirty) {
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:dirty",
-    protocolVersion: 1,
-    dirty,
-  });
+  const nextSection = section === "credits" ? "credits" : "profile";
+  const payload = nextSection === "credits" && state.hostCapabilities.accountSections
+    ? { section: "credits" }
+    : {};
+  canvasPersistence.post("canvas:open-account", payload);
 }
 
 function flushCanvasDocumentSave() {
-  window.clearTimeout(canvasPersistence.saveTimer);
-  canvasPersistence.saveTimer = 0;
-  if (
-    !canvasPersistence.initialized ||
-    canvasPersistence.hydrating ||
-    !canvasPersistence.writable ||
-    canvasPersistence.blocked ||
-    canvasPersistence.inFlight ||
-    !canvasPersistence.canvasId
-  ) return;
-  const serialized = serializeCanvasDocumentSnapshot();
-  if (serialized === canvasPersistence.lastSavedSnapshot) {
-    postCanvasDirty(false);
-    return;
-  }
-  const requestId = crypto.randomUUID();
-  canvasPersistence.inFlight = { requestId, serialized };
-  postCanvasDirty(true);
-  postCanvasBridgeMessage({
-    source: "reelay-legacy-canvas",
-    type: "canvas:save",
-    protocolVersion: 1,
-    requestId,
-    schemaVersion: 1,
-    expectedRevision: canvasPersistence.revision,
-    content: JSON.parse(serialized),
-  });
+  return canvasPersistence.flush();
 }
 
 function scheduleCanvasDocumentSave(delay = 800) {
-  if (!canvasPersistence.initialized || canvasPersistence.hydrating || !canvasPersistence.writable || canvasPersistence.blocked) return;
-  postCanvasDirty(true);
-  window.clearTimeout(canvasPersistence.saveTimer);
-  canvasPersistence.saveTimer = window.setTimeout(flushCanvasDocumentSave, delay);
-}
-
-function handleCanvasSaveResult(message) {
-  if (message.requestId !== canvasPersistence.inFlight?.requestId) return;
-  canvasPersistence.revision = message.document.revision;
-  canvasPersistence.lastSavedSnapshot = canvasPersistence.inFlight.serialized;
-  canvasPersistence.inFlight = null;
-  if (serializeCanvasDocumentSnapshot() === canvasPersistence.lastSavedSnapshot) {
-    postCanvasDirty(false);
-  } else {
-    scheduleCanvasDocumentSave(0);
-  }
-}
-
-function handleCanvasSaveError(message) {
-  if (message.requestId !== canvasPersistence.inFlight?.requestId) return;
-  canvasPersistence.inFlight = null;
-  if (message.code === "conflict") {
-    canvasPersistence.blocked = true;
-    setCanvasAccessMode("blocked");
-    showActionToast("画布已在其他窗口更新，请重新进入项目后继续");
-    return;
-  }
-  if (message.code === "forbidden") {
-    canvasPersistence.writable = false;
-    setCanvasAccessMode("readonly");
-    showActionToast("当前项目为只读，可浏览但不能修改");
-    return;
-  }
-  if (message.code === "missing") {
-    canvasPersistence.blocked = true;
-    setCanvasAccessMode("blocked");
-    showActionToast("项目已删除或无法访问，当前画布已停止保存");
-    return;
-  }
-  showActionToast("画布暂时保存失败，正在等待重试");
-  scheduleCanvasDocumentSave(3000);
+  return canvasPersistence.schedule(delay);
 }
 
 function handleHostBridgeMessage(event) {
-  if (window.parent === window || event.origin !== window.location.origin || event.source !== window.parent) return;
-  const message = event.data;
-  if (!message || typeof message !== "object" || message.source !== "reelay-shell") return;
-  if (message.type === "host:init" && message.context?.protocolVersion === 1) {
-    state.projectId = String(message.context.projectId || state.projectId);
-    state.projectName = String(message.context.projectName || state.projectName);
-    canvasPersistence.canvasId = String(message.context.canvasId || "main");
-    canvasPersistence.writable = message.context.writable === true;
-    syncHostedIdentity(message.context);
-    setCanvasAccessMode("loading");
-    syncProjectNavigation();
-    return;
-  }
-  if (message.type === "host:document" && message.protocolVersion === 1) {
-    canvasPersistence.hydrating = true;
-    canvasPersistence.writable = message.writable === true;
-    canvasPersistence.revision = message.document?.revision || 0;
-    const hydrated = message.document ? hydrateCanvasDocumentSnapshot(message.document.content) : true;
-    canvasPersistence.hydrating = false;
-    if (!hydrated) {
-      canvasPersistence.blocked = true;
-      setCanvasAccessMode("blocked");
-      showActionToast("此画布数据版本暂不支持，已停止自动保存");
-      return;
-    }
-    canvasPersistence.initialized = true;
-    setCanvasAccessMode(canvasPersistence.writable ? "editable" : "readonly");
-    if (canvasPersistence.writable) consumeHomeLaunchIntent();
-    const serializedSnapshot = serializeCanvasDocumentSnapshot();
-    if (!message.document && canvasPersistence.writable) {
-      canvasPersistence.lastSavedSnapshot = "";
-      postCanvasDirty(true);
-      flushCanvasDocumentSave();
-    } else {
-      canvasPersistence.lastSavedSnapshot = serializedSnapshot;
-      postCanvasDirty(false);
-    }
-    if (!canvasPersistence.writable) {
-      showActionToast("当前项目为只读，可浏览但不能修改");
-    }
-    return;
-  }
-  if (message.type === "host:flush" && message.protocolVersion === 1) {
-    flushCanvasDocumentSave();
-    return;
-  }
-  if (message.type === "host:save-result" && message.protocolVersion === 1) {
-    handleCanvasSaveResult(message);
-    return;
-  }
-  if (message.type === "host:save-error" && message.protocolVersion === 1) {
-    handleCanvasSaveError(message);
-  }
+  return canvasPersistence.handleHostMessage(event)
+    || canvasMediaAssets.handleHostMessage(event)
+    || canvasEntityAssets.handleHostMessage(event);
 }
 
 function screenToWorld(clientX, clientY) {
   const rect = shell.getBoundingClientRect();
   return {
-    x: (clientX - rect.left - state.tx) / state.scale,
-    y: (clientY - rect.top - state.ty) / state.scale,
-  };
-}
-
-function worldToScreen(x, y) {
-  const rect = shell.getBoundingClientRect();
-  return {
-    x: rect.left + state.tx + x * state.scale,
-    y: rect.top + state.ty + y * state.scale,
+    x: (clientX - rect.left + shell.scrollLeft - state.tx) / state.scale,
+    y: (clientY - rect.top + shell.scrollTop - state.ty) / state.scale,
   };
 }
 
@@ -783,30 +1149,76 @@ function showZoomValueTip() {
   }, 900);
 }
 
+function syncSelectionOverlayProjection(
+  portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale),
+) {
+  shell.style.setProperty("--multi-selection-port-scale", state.scale.toFixed(4));
+  shell.style.setProperty("--multi-selection-port-offset", `${portField.portOffset.toFixed(2)}px`);
+  shell.style.setProperty(
+    "--multi-selection-port-visual-size",
+    `${(portField.portMinOutside * 2).toFixed(2)}px`,
+  );
+  shell.style.setProperty(
+    "--multi-selection-surface-radius",
+    `${(selectionSurfaceRadiusWorld * state.scale).toFixed(2)}px`,
+  );
+}
+
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
   const inverseCanvasScale = (1 / state.scale).toFixed(4);
-  shell.style.setProperty("--connection-ui-scale", inverseCanvasScale);
-  shell.style.setProperty("--node-meta-ui-scale", inverseCanvasScale);
-  saveActiveCanvasState();
+  const nodeMetaScreenScale = clamp(Math.pow(state.scale, 0.08), 0.88, 1.06);
+  const nodeMetaScale = (nodeMetaScreenScale / state.scale).toFixed(4);
+  const portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale);
+  shell.style.setProperty("--connection-feedback-scale", inverseCanvasScale);
+  syncSelectionOverlayProjection(portField);
+  shell.style.setProperty("--node-meta-ui-scale", nodeMetaScale);
+  shell.style.setProperty("--group-ui-scale", nodeMetaScale);
+  shell.style.setProperty("--group-interaction-scale", inverseCanvasScale);
+  shell.style.setProperty(
+    "--port-zone-outward",
+    `${(portField.fieldOutwardRadius / state.scale).toFixed(2)}px`,
+  );
+  shell.style.setProperty(
+    "--port-zone-height",
+    `${((portField.fieldVerticalRadius * 2) / state.scale).toFixed(2)}px`,
+  );
+  scheduleGroupChromeLayout();
   updateCanvasGrid();
   syncPromptPanelLayouts();
   window.clearTimeout(state.overlaySyncTimer);
   state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
   syncZoomControl();
   renderConnections();
+  renderGroupResizeOverlay();
   renderSelectionToolbar();
   renderMinimap();
   scheduleCanvasDocumentSave();
 }
 
-function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id="${node.id}"]`)) {
+function syncNodeVisualLayout(
+  node,
+  element = nodeLayer.querySelector(`[data-id="${node.id}"]`),
+  presentation = getNodePresentation(node),
+) {
   if (!element) return;
-  const layout = getNodeLayout(node);
-  element.style.width = `${layout.nodeWidth}px`;
+  const { y, layout } = presentation;
+  const canonicalLayout = getNodeLayout(node);
+  const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
+  element.style.left = `${node.x}px`;
+  element.style.top = `${node.y}px`;
+  element.style.width = `${canonicalLayout.nodeWidth}px`;
+  element.style.height = `${canonicalLayout.nodeHeight}px`;
+  element.classList.toggle("node-layout-transitioning", isTransitioning);
+  const mediaFrame = element.querySelector(".media-frame");
+  if (mediaFrame) {
+    mediaFrame.style.width = `${layout.mediaWidth}px`;
+    mediaFrame.style.height = `${layout.mediaHeight}px`;
+    mediaFrame.style.transform = `translateY(${(y - node.y).toFixed(3)}px)`;
+  }
   const mediaToolbar = element.querySelector("[data-media-toolbar]");
-  if (mediaToolbar) {
-    mediaToolbar.style.setProperty("--toolbar-scale", layout.toolbarScale.toFixed(4));
+  if (mediaToolbar && !isTransitioning) {
+    mediaToolbar.style.setProperty("--toolbar-scale", canonicalLayout.toolbarScale.toFixed(4));
     mediaToolbar.style.setProperty("--toolbar-nudge", "0px");
     const toolbarRect = mediaToolbar.getBoundingClientRect();
     const nudge = toolbarRect.top < 8 ? (8 - toolbarRect.top) / state.scale : 0;
@@ -814,32 +1226,368 @@ function syncNodeVisualLayout(node, element = nodeLayer.querySelector(`[data-id=
   }
   const promptPanel = element.querySelector(".prompt-panel");
   if (!promptPanel) return;
-  promptPanel.style.width = `${layout.panelWidth}px`;
-  promptPanel.style.height = `${layout.panelHeight}px`;
-  promptPanel.style.setProperty("--prompt-scale", layout.promptScale.toFixed(4));
-  promptPanel.style.setProperty("--prompt-extra-height", `${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px`);
+  promptPanel.style.top = `${canonicalLayout.mediaHeight + layoutRules.panelGap}px`;
+  if (isTransitioning) return;
+  promptPanel.style.width = `${canonicalLayout.panelWidth}px`;
+  promptPanel.style.height = `${canonicalLayout.panelHeight}px`;
+  promptPanel.style.setProperty("--prompt-scale", canonicalLayout.promptScale.toFixed(4));
+  promptPanel.style.setProperty("--prompt-extra-height", `${(canonicalLayout.panelHeight * (canonicalLayout.promptScale - 1)).toFixed(2)}px`);
+  promptPanel.style.setProperty("--prompt-composer-height", `${canonicalLayout.composerHeight}px`);
+  promptPanel.style.setProperty("--prompt-advanced-height", `${canonicalLayout.advancedSettingsHeight}px`);
+  promptPanel.style.setProperty("--prompt-input-top", `${layoutRules.promptInputTop}px`);
+  promptPanel.style.setProperty("--prompt-input-bottom", `${layoutRules.promptInputBottom}px`);
+}
+
+function syncNodeAspectUi(node, element) {
+  if (node.kind !== "generator") return;
+  const aspectLabel = element.querySelector("[data-param-aspect]");
+  if (aspectLabel) aspectLabel.textContent = getCapabilityDisplayLabel(node, "aspect", node.aspect);
+  element.querySelectorAll('[data-action="aspect"]').forEach((button) => {
+    const active = button.dataset.value === node.aspect;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function renderNodeLayoutTransitionFrame(transitionIds = []) {
+  const activeIds = new Set(transitionIds);
+  for (const node of state.nodes) {
+    if (!activeIds.has(getNodeLayoutTransitionId(node))) continue;
+    const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+    if (element) syncNodeVisualLayout(node, element);
+  }
+  renderConnections();
+  renderSelectionToolbar();
+  renderMinimap();
+}
+
+function syncPromptPanelContentHeight(node, element) {
+  if (!node || node.kind !== "generator" || !node.expanded || !element) return false;
+  const promptInput = element.querySelector(".prompt-input");
+  if (!promptInput) return false;
+
+  const previousHeight = promptInput.style.height;
+  const previousBottom = promptInput.style.bottom;
+  const previousOverflow = promptInput.style.overflowY;
+  promptInput.style.height = "0px";
+  promptInput.style.bottom = "auto";
+  promptInput.style.overflowY = "hidden";
+  const contentHeight = promptInput.scrollHeight;
+  promptInput.style.height = previousHeight;
+  promptInput.style.bottom = previousBottom;
+  promptInput.style.overflowY = previousOverflow;
+
+  const nextHeight = clamp(
+    Math.ceil(layoutRules.promptInputTop + contentHeight + layoutRules.promptInputBottom),
+    layoutRules.compactPanelHeight,
+    layoutRules.normalPanelHeight,
+  );
+  const previousPanelHeight = Number(node.promptPanelHeight) || layoutRules.compactPanelHeight;
+  const availableInputHeight = nextHeight - layoutRules.promptInputTop - layoutRules.promptInputBottom;
+  promptInput.style.overflowY = contentHeight > availableInputHeight ? "auto" : "hidden";
+  if (nextHeight === previousPanelHeight) return false;
+
+  node.promptPanelHeight = nextHeight;
+  syncNodeVisualLayout(node, element);
+  renderSelectionToolbar();
+  renderMinimap();
+  scheduleGroupChromeLayout();
+  scheduleNodePopoverLayouts();
+  return true;
 }
 
 function syncPromptPanelLayouts() {
   for (const node of state.nodes) {
     syncNodeVisualLayout(node);
   }
+  scheduleNodePopoverLayouts();
 }
 
-function resizePromptTextarea(textarea, node) {
-  if (!textarea || !node.promptLarge) return;
-  textarea.style.height = "auto";
-  const nextHeight = clamp(
-    textarea.scrollHeight,
-    layoutRules.largePromptMinHeight,
-    layoutRules.largePromptMaxHeight,
+function getNodePopoverBoundary() {
+  const shellRect = shell.getBoundingClientRect();
+  const topRect = topBar?.getBoundingClientRect();
+  const libraryRect = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
+    ? assetLibraryPanel.getBoundingClientRect()
+    : null;
+  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
+  return {
+    left: Math.max(shellRect.left, libraryRect?.right || shellRect.left),
+    top: Math.max(shellRect.top, topRect?.bottom || shellRect.top),
+    right: Math.min(shellRect.right, agentRect?.left || shellRect.right),
+    bottom: shellRect.bottom,
+  };
+}
+
+function getNodePopoverPlacements(anchorAction) {
+  if (anchorAction === "material-panel") {
+    return ["left-start", "right-start", "top-start", "bottom-start"];
+  }
+  if (anchorAction === "model-panel") {
+    return ["top-start"];
+  }
+  if (anchorAction === "param-panel") {
+    return ["top-start"];
+  }
+  return ["bottom", "top", "bottom-start", "bottom-end", "top-start", "top-end"];
+}
+
+function getNodePopoverGap(anchorAction) {
+  if (anchorAction === "param-panel") return 8;
+  if (anchorAction === "model-panel") return 6;
+  return 8;
+}
+
+function syncNodePopoverLayout(element) {
+  const promptPanel = element?.querySelector(".prompt-panel");
+  const popover = promptPanel?.querySelector("[data-node-popover]");
+  if (!promptPanel || !popover) return;
+  if (popover.classList.contains("is-task-type-transitioning")) return;
+  const anchorAction = popover.dataset.anchorAction;
+  const anchor = promptPanel.querySelector(`[data-action="${anchorAction}"]`)
+    || promptPanel.querySelector(".control-bar");
+  if (!anchor) return;
+  const boundary = getNodePopoverBoundary();
+  const promptRect = promptPanel.getBoundingClientRect();
+  const anchorRect = anchor.getBoundingClientRect();
+  const compositeScale = promptPanel.offsetWidth > 0 ? promptRect.width / promptPanel.offsetWidth : 1;
+  if (!compositeScale) return;
+
+  popover.style.removeProperty("max-height");
+  popover.style.removeProperty("overflow-y");
+  const popoverWidth = popover.offsetWidth * compositeScale;
+  const popoverHeight = popover.offsetHeight * compositeScale;
+  if (!popoverWidth || !popoverHeight) return;
+  const placement = canvasPopoverPlacement.placeAnchoredPopover({
+    anchor: anchorRect,
+    floating: { width: popoverWidth, height: popoverHeight },
+    boundary,
+    placements: getNodePopoverPlacements(anchorAction),
+    gap: getNodePopoverGap(anchorAction),
+    padding: 12,
+  });
+  if (!placement) return;
+  popover.style.left = `${((placement.left - promptRect.left) / compositeScale).toFixed(2)}px`;
+  popover.style.top = `${((placement.top - promptRect.top) / compositeScale).toFixed(2)}px`;
+  popover.style.visibility = "visible";
+  popover.dataset.placement = placement.placement;
+}
+
+function syncAdvancedSettingTooltipLayout(trigger) {
+  const promptPanel = trigger?.closest(".prompt-panel");
+  const tooltip = trigger?.querySelector(".advanced-setting-tooltip");
+  if (!promptPanel || !tooltip) return;
+
+  const promptRect = promptPanel.getBoundingClientRect();
+  const triggerRect = trigger.getBoundingClientRect();
+  const compositeScale = promptPanel.offsetWidth > 0 ? promptRect.width / promptPanel.offsetWidth : 1;
+  if (!compositeScale) return;
+
+  const tooltipWidth = tooltip.offsetWidth * compositeScale;
+  const tooltipHeight = tooltip.offsetHeight * compositeScale;
+  if (!tooltipWidth || !tooltipHeight) return;
+
+  const placement = canvasPopoverPlacement.placeAnchoredPopover({
+    anchor: triggerRect,
+    floating: { width: tooltipWidth, height: tooltipHeight },
+    boundary: getNodePopoverBoundary(),
+    placements: ["top-start", "bottom-start"],
+    gap: 8,
+    padding: 12,
+  });
+  if (!placement) return;
+
+  tooltip.style.left = `${((placement.left - triggerRect.left) / compositeScale).toFixed(2)}px`;
+  tooltip.style.top = `${((placement.top - triggerRect.top) / compositeScale).toFixed(2)}px`;
+  tooltip.style.bottom = "auto";
+  tooltip.style.setProperty(
+    "--tooltip-arrow-left",
+    `${clamp((triggerRect.left + triggerRect.width / 2 - placement.left) / compositeScale, 12, tooltip.offsetWidth - 12).toFixed(2)}px`,
   );
-  node.promptInputHeight = nextHeight;
-  textarea.style.height = `${nextHeight}px`;
-  textarea.style.overflowY = textarea.scrollHeight > layoutRules.largePromptMaxHeight ? "auto" : "hidden";
-  syncNodeVisualLayout(node, textarea.closest(".canvas-node"));
-  renderSelectionToolbar();
-  renderMinimap();
+  tooltip.dataset.placement = placement.placement;
+}
+
+function syncVisibleAdvancedSettingTooltips() {
+  nodeLayer.querySelectorAll(
+    ".advanced-setting-info:hover, .advanced-setting-info:focus-visible, .advanced-setting-info:focus-within",
+  ).forEach(syncAdvancedSettingTooltipLayout);
+}
+
+function scheduleNodePopoverLayouts() {
+  cancelAnimationFrame(state.nodePopoverFrame);
+  state.nodePopoverFrame = requestAnimationFrame(() => {
+    state.nodePopoverFrame = 0;
+    nodeLayer.querySelectorAll(".canvas-node").forEach(syncNodePopoverLayout);
+    syncVisibleAdvancedSettingTooltips();
+  });
+}
+
+function getTaskTypeSelectionOffset(segmented, fallbackIndex) {
+  const transform = getComputedStyle(segmented, "::before").transform;
+  if (transform && transform !== "none") {
+    try {
+      const offset = new DOMMatrixReadOnly(transform).m41;
+      if (Number.isFinite(offset)) return offset;
+    } catch {
+      // Fall back to the semantic index if the browser returns an unsupported transform format.
+    }
+  }
+  const columns = Math.max(
+    1,
+    Number.parseInt(getComputedStyle(segmented).getPropertyValue("--option-columns"), 10) || 1,
+  );
+  return Math.max(0, fallbackIndex) * Math.max(0, segmented.clientWidth - 4) / columns;
+}
+
+function captureTaskTypeParameterTransition(node, nextTaskType) {
+  if (node?.panel !== "params") return null;
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  const values = Array.isArray(capability?.uiValues) ? capability.uiValues : [];
+  const fromIndex = values.indexOf(node.omniReferenceTaskType);
+  const toIndex = values.indexOf(nextTaskType);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return null;
+  const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+  const panel = element?.querySelector(".param-panel");
+  const currentDetails = panel?.querySelector(
+    ".parameter-task-details:not(.parameter-task-details-outgoing)",
+  );
+  const detailLayers = currentDetails ? [currentDetails] : [];
+  const segmented = panel?.querySelector(".omni-reference-task-type-segmented");
+  if (!panel) return null;
+
+  const restoreFocus = panel.contains(document.activeElement)
+    && document.activeElement?.matches?.('[data-action="omni-reference-task-type"]');
+  if (reducedMotionQuery.matches || !panel.offsetHeight || !detailLayers.length || !segmented) {
+    return { fromIndex, toIndex, restoreFocus, shouldAnimate: false };
+  }
+
+  const panelRect = panel.getBoundingClientRect();
+  const compositeScale = panel.offsetWidth > 0 ? panelRect.width / panel.offsetWidth : 1;
+  if (!compositeScale) {
+    return { fromIndex, toIndex, restoreFocus, shouldAnimate: false };
+  }
+
+  const outgoingDetails = detailLayers.map((details) => {
+    const detailsRect = details.getBoundingClientRect();
+    const clone = details.cloneNode(true);
+    clone.classList.add("parameter-task-details-outgoing");
+    clone.setAttribute("aria-hidden", "true");
+    clone.inert = true;
+    [clone, ...clone.querySelectorAll("[id]")]
+      .forEach((item) => item.removeAttribute("id"));
+    return {
+      element: clone,
+      top: (detailsRect.top - panelRect.top) / compositeScale - panel.clientTop,
+      left: (detailsRect.left - panelRect.left) / compositeScale - panel.clientLeft,
+      width: detailsRect.width / compositeScale,
+      opacity: getComputedStyle(details).opacity,
+    };
+  });
+
+  return {
+    fromHeight: panelRect.height / compositeScale,
+    fromLeft: panelRect.left,
+    fromBottom: panelRect.bottom,
+    fromSelectionOffset: getTaskTypeSelectionOffset(segmented, fromIndex),
+    fromIndex,
+    toIndex,
+    direction: Math.sign(toIndex - fromIndex) || 1,
+    restoreFocus,
+    shouldAnimate: true,
+    fromDetailsSignature: currentDetails.innerHTML,
+    outgoingDetails,
+  };
+}
+
+function animateTaskTypeParameterTransition(node, transition) {
+  if (!transition) return;
+  const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+  const panel = element?.querySelector(".param-panel");
+  const details = panel?.querySelector(
+    ".parameter-task-details:not(.parameter-task-details-outgoing)",
+  );
+  const segmented = panel?.querySelector(".omni-reference-task-type-segmented");
+  if (!element || !panel || !details || !segmented) return;
+
+  syncNodeVisualLayout(node, element);
+  syncNodePopoverLayout(element);
+  const buttons = [...segmented.querySelectorAll('[data-action="omni-reference-task-type"]')];
+  const targetButton = buttons[transition.toIndex];
+  if (transition.restoreFocus) targetButton?.focus({ preventScroll: true });
+  if (!transition.shouldAnimate || reducedMotionQuery.matches) return;
+
+  const targetHeight = panel.offsetHeight;
+  const targetRect = panel.getBoundingClientRect();
+  const compositeScale = panel.offsetWidth > 0 ? targetRect.width / panel.offsetWidth : 1;
+  if (!targetHeight || !compositeScale) return;
+
+  const detailsChanging = transition.fromDetailsSignature !== details.innerHTML;
+  const startTranslateX = (transition.fromLeft - targetRect.left) / compositeScale;
+  const startTranslateY = (transition.fromBottom - targetRect.bottom) / compositeScale
+    + targetHeight - transition.fromHeight;
+  const outgoingDetails = detailsChanging ? transition.outgoingDetails : [];
+  outgoingDetails.forEach((outgoing) => {
+    outgoing.element.style.top = `${outgoing.top}px`;
+    outgoing.element.style.left = `${outgoing.left}px`;
+    outgoing.element.style.width = `${outgoing.width}px`;
+    outgoing.element.style.setProperty("--task-type-outgoing-start-opacity", outgoing.opacity);
+    outgoing.element.style.setProperty(
+      "--task-type-exit-offset",
+      `${transition.direction * -5}px`,
+    );
+    panel.append(outgoing.element);
+  });
+
+  panel.classList.add("is-task-type-transitioning", "is-task-type-preparing");
+  if (detailsChanging) panel.classList.add("is-task-type-details-changing");
+  panel.style.height = `${transition.fromHeight}px`;
+  panel.style.transform = `translate(${startTranslateX}px, ${startTranslateY}px)`;
+  if (detailsChanging) {
+    details.style.setProperty("--task-type-enter-offset", `${transition.direction * 7}px`);
+  }
+  segmented.style.setProperty(
+    "--task-type-selection-offset",
+    `${transition.fromSelectionOffset}px`,
+  );
+  panel.getBoundingClientRect();
+
+  let finished = false;
+  let fallbackTimer = 0;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    window.clearTimeout(fallbackTimer);
+    panel.classList.remove(
+      "is-task-type-transitioning",
+      "is-task-type-preparing",
+      "is-task-type-entered",
+      "is-task-type-details-changing",
+    );
+    panel.style.removeProperty("height");
+    panel.style.removeProperty("transform");
+    details.style.removeProperty("--task-type-enter-offset");
+    segmented.style.removeProperty("--task-type-selection-offset");
+    outgoingDetails.forEach((outgoing) => outgoing.element.remove());
+    if (panel.isConnected) scheduleNodePopoverLayouts();
+  };
+  const onTransitionEnd = (event) => {
+    if (event.target !== panel || event.propertyName !== "height") return;
+    panel.removeEventListener("transitionend", onTransitionEnd);
+    finish();
+  };
+  panel.addEventListener("transitionend", onTransitionEnd);
+
+  requestAnimationFrame(() => {
+    if (!panel.isConnected) {
+      finish();
+      return;
+    }
+    panel.classList.remove("is-task-type-preparing");
+    panel.classList.add("is-task-type-entered");
+    panel.style.height = `${targetHeight}px`;
+    panel.style.transform = "translate(0, 0)";
+    segmented.style.removeProperty("--task-type-selection-offset");
+    fallbackTimer = window.setTimeout(finish, 360);
+  });
 }
 
 function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
@@ -857,10 +1605,10 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
 
 function getCanvasFitFrame() {
   const rect = shell.getBoundingClientRect();
-  const leftInset = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
-    ? assetLibraryPanel.getBoundingClientRect().width
-    : 0;
-  const rightInset = state.agentOpen ? state.agentWidth : 0;
+  const libraryRect = isAssetLibraryOpen() ? assetLibraryPanel?.getBoundingClientRect() : null;
+  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
+  const leftInset = Math.max(0, (libraryRect?.right || rect.left) - rect.left);
+  const rightInset = Math.max(0, rect.right - (agentRect?.left || rect.right));
   const padding = 72;
   return {
     leftInset,
@@ -984,8 +1732,6 @@ function centerCanvasOnWorld(worldX, worldY) {
 function nextZ() {
   const currentTop = Math.max(state.zCounter, ...state.nodes.map((node) => node.z || 0));
   state.zCounter = currentTop + 1;
-  const canvas = getActiveCanvas();
-  if (canvas) canvas.zCounter = state.zCounter;
   return state.zCounter;
 }
 
@@ -998,20 +1744,25 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     y,
     mode: generationMode,
     model: firstModelId(generationMode),
-    aspect: "16:9",
-    resolution: "2K",
-    quality: "480p",
-    duration: "4s",
+    aspect: "",
+    resolution: "",
+    quality: "",
+    duration: "",
+    outputFormat: "",
     count: 1,
+    workflow: "",
+    omniReferenceTaskType: "",
+    audioEnabled: generationMode === "video",
+    promptOptimizing: false,
+    autoLinkEnabled: true,
+    assetValidationEnabled: false,
     credits: 0,
     prompt: "",
     preview: false,
     generating: false,
     generatedAsset: null,
-    lockedMode: null,
     expanded: true,
-    promptLarge: false,
-    promptInputHeight: layoutRules.largePromptMinHeight,
+    advancedSettingsExpanded: false,
     mediaMenuOpen: false,
     panel: null,
     modelFilter: generationMode,
@@ -1040,7 +1791,11 @@ function defaultAssetNode(x, y, asset) {
 }
 
 function getModel(node) {
-  return models.find((item) => item.id === node.model) || models[0];
+  return generatorModelPolicy.resolveModel(models, node);
+}
+
+function canNodeUseEntityReferences(node) {
+  return generatorModelPolicy.canUseEntityReferences(models, node);
 }
 
 function getModelCapabilities(node) {
@@ -1049,30 +1804,175 @@ function getModelCapabilities(node) {
 
 function getCapabilityValues(node, key) {
   const capabilities = getModelCapabilities(node);
-  if (key === "durations" && capabilities.durationsByQuality?.[node.quality]) {
-    return capabilities.durationsByQuality[node.quality];
-  }
   return capabilities[key] || [];
+}
+
+function getCapabilityDisplayLabel(node, action, value) {
+  const labels = getModelCapabilities(node)[`${action}Labels`];
+  const label = labels && typeof labels === "object" ? labels[value] : null;
+  return typeof label === "string" && label ? label : String(value ?? "");
+}
+
+function getDurationCapability(node, quality = node?.quality) {
+  const capabilities = getModelCapabilities(node);
+  const candidate = capabilities.durationRangesByQuality?.[quality] || capabilities.durationRange;
+  if (!candidate || typeof candidate !== "object") return null;
+  const min = Math.max(1, Math.round(Number(candidate.min)));
+  const max = Math.max(min, Math.round(Number(candidate.max)));
+  const step = Math.max(1, Math.round(Number(candidate.step) || 1));
+  const rawMarks = Array.isArray(candidate.marks) ? candidate.marks : [min, max];
+  const marks = [...new Set(rawMarks
+    .map((value) => Math.round(Number(value)))
+    .filter((value) => Number.isFinite(value) && value >= min && value <= max))];
+  if (!marks.includes(min)) marks.unshift(min);
+  if (!marks.includes(max)) marks.push(max);
+  return { min, max, step, marks: marks.sort((a, b) => a - b) };
+}
+
+function getNormalizedDurationSeconds(node, value = node?.duration) {
+  const range = getDurationCapability(node);
+  if (!range) return null;
+  const defaultSeconds = Number.parseInt(getModel(node)?.defaults?.duration, 10);
+  const requested = Number.parseInt(value, 10);
+  const base = Number.isFinite(requested)
+    ? requested
+    : Number.isFinite(defaultSeconds) ? defaultSeconds : range.min;
+  const stepped = range.min + Math.round((base - range.min) / range.step) * range.step;
+  return clamp(stepped, range.min, range.max);
+}
+
+function getWorkflowDefinitions(node) {
+  const mode = getNodeGenerationMode(node) || "image";
+  const definitions = Array.isArray(generationWorkflows[mode]) ? generationWorkflows[mode] : [];
+  const supportedIds = getModelCapabilities(node).workflows;
+  if (!Array.isArray(supportedIds) || !supportedIds.length) return definitions;
+  return supportedIds
+    .map((workflowId) => definitions.find((workflow) => workflow.id === workflowId))
+    .filter(Boolean);
+}
+
+function getWorkflowDefinition(node) {
+  const workflows = getWorkflowDefinitions(node);
+  return workflows.find((workflow) => workflow.id === node.workflow) || workflows[0] || null;
+}
+
+function getOmniReferenceTaskTypeCapability(node) {
+  const capability = getModelCapabilities(node).omniReferenceTaskType;
+  return capability && typeof capability === "object" && Array.isArray(capability.values)
+    ? capability
+    : null;
+}
+
+function getOmniReferenceTaskTypeConstraint(node) {
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  if (!capability) return null;
+  const constraint = capability.constraints?.[node.omniReferenceTaskType];
+  return constraint && typeof constraint === "object" ? constraint : {};
+}
+
+function getOmniReferenceTaskTypeLabel(node, value = node?.omniReferenceTaskType) {
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  const label = capability?.labels?.[value];
+  return typeof label === "string" && label ? label : String(value ?? "");
+}
+
+function getReferenceVideoAssets(node) {
+  if (!node || node.kind !== "generator") return [];
+  const directAssets = (Array.isArray(node.assets) ? node.assets : [])
+    .map((asset) => ({ asset, sourceNodeId: null }));
+  const linkedAssets = getIncomingConnections(node.id)
+    .map((connection) => {
+      const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
+      return source ? { asset: getEditableMedia(source), sourceNodeId: source.id } : null;
+    })
+    .filter(Boolean);
+  return [...directAssets, ...linkedAssets].flatMap(({ asset, sourceNodeId }) => {
+    const url = typeof asset?.url === "string" ? asset.url.trim() : "";
+    if (asset?.type !== "video" || !url) return [];
+    const duration = Number(asset.duration);
+    return [{
+      assetId: typeof asset.id === "string" ? asset.id : null,
+      sourceNodeId,
+      url,
+      duration: Number.isFinite(duration) && duration > 0 ? duration : null,
+    }];
+  });
+}
+
+function getOmniReferenceTaskTypeIssue(node) {
+  const constraint = getOmniReferenceTaskTypeConstraint(node);
+  if (!constraint?.referenceVideoRequired) return "";
+  const label = getOmniReferenceTaskTypeLabel(node) || "当前任务";
+  const referenceVideos = getReferenceVideoAssets(node);
+  if (!referenceVideos.length) return `${label}需要至少添加一个参考视频`;
+
+  const durationRange = constraint.referenceVideoDurationRange;
+  if (!durationRange) return "";
+  const durations = referenceVideos.map((asset) => Number(asset.duration));
+  if (durations.some((duration) => !Number.isFinite(duration) || duration <= 0)) {
+    return "请等待参考视频时长读取完成";
+  }
+  if (durations.some((duration) => duration < durationRange.min || duration > durationRange.max)) {
+    return `${label}的参考视频时长须为 ${durationRange.min}–${durationRange.max} 秒`;
+  }
+  return "";
+}
+
+function getGenerationOutputDurationSeconds(node, referenceVideos) {
+  const taskConstraint = getOmniReferenceTaskTypeConstraint(node);
+  if (taskConstraint?.duration !== -1) return getNormalizedDurationSeconds(node);
+  const resolvedReferences = Array.isArray(referenceVideos)
+    ? referenceVideos
+    : getReferenceVideoAssets(node);
+  const durations = resolvedReferences.map((asset) => Number(asset.duration));
+  if (!durations.length || durations.some((duration) => !Number.isFinite(duration) || duration <= 0)) return null;
+  return Math.max(...durations);
 }
 
 function normalizeNodeParameters(node) {
   if (!node || node.kind !== "generator") return node;
-  const lockedMode = getNodeLockedMode(node);
-  const expectedMode = lockedMode || normalizeGeneratorMode(node.mode) || "image";
-  if (lockedMode) node.lockedMode = lockedMode;
-  let model = models.find((item) => item.id === node.model);
-  if (!model || model.type !== expectedMode) {
-    node.model = firstModelId(expectedMode);
-    model = getModel(node);
+  const legacyWorkflow = node.workflow;
+  const model = generatorModelPolicy.normalizeModelState(models, node);
+  const expectedMode = getNodeGenerationMode(node) || "image";
+  const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+  if (taskTypeCapability) {
+    const legacyTaskType = legacyWorkflow === "video-edit"
+      ? "edit"
+      : legacyWorkflow === "video-extend" ? "extend" : "";
+    const defaultTaskType = model?.defaults?.omniReferenceTaskType;
+    node.omniReferenceTaskType = taskTypeCapability.values.includes(legacyTaskType)
+      ? legacyTaskType
+      : taskTypeCapability.values.includes(node.omniReferenceTaskType)
+        ? node.omniReferenceTaskType
+        : taskTypeCapability.values.includes(defaultTaskType)
+          ? defaultTaskType
+          : taskTypeCapability.values[0] || "";
+  } else {
+    delete node.omniReferenceTaskType;
   }
-  node.mode = lockedMode || model.type;
+  const workflows = getWorkflowDefinitions(node);
+  if (!workflows.some((workflow) => workflow.id === node.workflow)) {
+    const defaultWorkflow = model?.defaults?.workflow;
+    node.workflow = workflows.some((workflow) => workflow.id === defaultWorkflow)
+      ? defaultWorkflow
+      : workflows[0]?.id || "";
+  }
+  const isVideoNode = expectedMode === "video";
+  node.audioEnabled = isVideoNode && node.audioEnabled !== false;
+  node.promptOptimizing = isVideoNode && node.promptOptimizing === true;
+  node.autoLinkEnabled = node.autoLinkEnabled !== false;
+  node.assetValidationEnabled = isVideoNode && node.assetValidationEnabled === true;
+  node.advancedSettingsExpanded = node.advancedSettingsExpanded === true;
 
   const fieldMap = {
     aspect: "aspects",
     resolution: "resolutions",
     quality: "qualities",
-    duration: "durations",
+    outputFormat: "outputFormats",
   };
+  if (node.aspect === "Auto" && getCapabilityValues(node, "aspects").includes("adaptive")) {
+    node.aspect = "adaptive";
+  }
   for (const [field, capabilityKey] of Object.entries(fieldMap)) {
     const values = getCapabilityValues(node, capabilityKey);
     if (!values.length) {
@@ -1080,10 +1980,19 @@ function normalizeNodeParameters(node) {
       continue;
     }
     if (!values.includes(node[field])) {
-      const defaultValue = model.defaults?.[field];
+      const defaultValue = model?.defaults?.[field];
       node[field] = values.includes(defaultValue) ? defaultValue : values[0];
     }
   }
+
+  const constrainedAspect = getOmniReferenceTaskTypeConstraint(node)?.aspect;
+  if (constrainedAspect && getCapabilityValues(node, "aspects").includes(constrainedAspect)) {
+    node.aspect = constrainedAspect;
+  }
+
+  const durationSeconds = getNormalizedDurationSeconds(node);
+  if (durationSeconds === null) delete node.duration;
+  else node.duration = `${durationSeconds}s`;
 
   const counts = getCapabilityValues(node, "counts");
   if (counts.length && !counts.includes(node.count)) {
@@ -1116,33 +2025,73 @@ function getCost(node) {
   const quality = qualities.includes(node.quality) ? node.quality : qualities[0];
   const baseCost = Number(videoQualityCost[quality]);
   if (!quality || !Number.isFinite(baseCost)) return null;
-  const durations = capabilities.durationsByQuality?.[quality] || capabilities.durations || [];
-  const duration = durations.includes(node.duration) ? node.duration : durations[0];
-  const seconds = Number.parseInt(duration, 10);
-  if (!duration || !Number.isFinite(seconds)) return null;
+  const seconds = getGenerationOutputDurationSeconds(node);
+  if (!Number.isFinite(seconds)) return null;
   const durationMultiplier = Math.ceil(seconds / 4);
   return baseCost * durationMultiplier * count;
 }
 
 function getGenerationAvailability(node) {
+  const taskTypeIssue = getOmniReferenceTaskTypeIssue(node);
   const cost = getCost(node);
   const hasValidPrice = Number.isFinite(cost) && cost > 0;
   const hasPrompt = Boolean(node.prompt.trim());
-  const canGenerate = hasPrompt && !node.generating && hasValidPrice;
+  const canGenerate = hasPrompt && !node.generating && !node.promptOptimizing && hasValidPrice && !taskTypeIssue;
   return {
     cost,
     hasValidPrice,
+    taskTypeIssue,
     canGenerate,
-    tooltip: canGenerate ? "生成" : !hasValidPrice ? "当前模型暂不可计价" : hasPrompt ? "生成中" : "请输入提示词",
+    tooltip: canGenerate
+      ? "生成"
+      : taskTypeIssue
+        ? taskTypeIssue
+        : !hasValidPrice
+        ? "当前模型暂不可计价"
+        : node.promptOptimizing
+          ? "正在优化提示词"
+          : hasPrompt
+            ? "生成中"
+            : "请输入提示词",
   };
 }
 
 function getParamLabel(node) {
-  if (node.mode === "video") {
-    return `${node.aspect} · ${node.quality} · ${node.duration}`;
+  const parts = getParamLabelParts(node);
+  return `${parts.beforeAspect}${parts.aspect}${parts.afterAspect}`;
+}
+
+function getParamLabelParts(node) {
+  if (getNodeGenerationMode(node) === "video") {
+    const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+    const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
+    const workflows = getWorkflowDefinitions(node);
+    const workflow = getWorkflowDefinition(node);
+    const modeLabel = taskTypeCapability
+      ? getOmniReferenceTaskTypeLabel(node)
+      : workflows.length > 1 ? workflow?.label : "";
+    const aspect = getCapabilityDisplayLabel(node, "aspect", node.aspect);
+    const quality = getCapabilityDisplayLabel(node, "quality", node.quality);
+    const duration = taskTypeConstraint?.duration === -1
+      ? "跟随原视频"
+      : node.duration;
+    return {
+      beforeAspect: modeLabel ? `${modeLabel} · ` : "",
+      aspect,
+      afterAspect: ` · ${quality}${taskTypeConstraint?.hideDuration ? "" : ` · ${duration}`}`,
+    };
   }
   const quality = getCapabilityValues(node, "qualities").length ? ` · ${node.quality}` : "";
-  return `${node.aspect} · ${node.resolution}${quality}`;
+  return {
+    beforeAspect: "",
+    aspect: node.aspect,
+    afterAspect: ` · ${node.resolution}${quality}`,
+  };
+}
+
+function getParamLabelMarkup(node) {
+  const parts = getParamLabelParts(node);
+  return `<span class="param-summary-before">${escapeHtml(parts.beforeAspect)}</span><span class="param-summary-aspect" data-param-aspect>${escapeHtml(parts.aspect)}</span><span class="param-summary-after">${escapeHtml(parts.afterAspect)}</span>`;
 }
 
 function aspectStringToRatio(aspect) {
@@ -1213,16 +2162,26 @@ function getNodeLayout(node) {
     };
   }
 
-  const panelWidth = clamp(mediaWidth + 72, layoutRules.normalPanelMinWidth, layoutRules.normalPanelMaxWidth);
-  const panelHeight = node.promptLarge
-    ? clamp(
-        (node.promptInputHeight || layoutRules.largePromptMinHeight) + 136,
-        layoutRules.largePanelMinHeight,
-        layoutRules.largePanelMaxHeight,
-      )
-    : layoutRules.normalPanelHeight;
-  const targetScreenWidth = clamp(mediaWidth * state.scale + 72, 500, 760);
-  const promptScale = clamp(targetScreenWidth / (panelWidth * state.scale), 0.5, 4);
+  const panelWidth = layoutRules.normalPanelWidth;
+  const composerHeight = clamp(
+    Number(node.promptPanelHeight) || layoutRules.compactPanelHeight,
+    layoutRules.compactPanelHeight,
+    layoutRules.normalPanelHeight,
+  );
+  const advancedSettingsHeight = node.advancedSettingsExpanded
+    ? layoutRules.advancedSettingsHeightByMode[getNodeGenerationMode(node)]
+    : 0;
+  const panelHeight = composerHeight + advancedSettingsHeight;
+  const viewportWidth = shell.clientWidth || window.innerWidth || layoutRules.promptTargetScreenWidth;
+  const targetScreenWidth = Math.min(
+    layoutRules.promptTargetScreenWidth,
+    Math.max(320, viewportWidth - layoutRules.promptScreenMargin),
+  );
+  const promptScale = clamp(
+    targetScreenWidth / (panelWidth * state.scale),
+    layoutRules.promptScaleMin,
+    layoutRules.promptScaleMax,
+  );
   const nodeWidth = Math.max(mediaWidth, panelWidth);
   const nodeHeight = mediaHeight + (node.expanded ? layoutRules.panelGap + panelHeight * promptScale : 0);
 
@@ -1231,6 +2190,8 @@ function getNodeLayout(node) {
     mediaHeight,
     panelWidth,
     panelHeight,
+    composerHeight,
+    advancedSettingsHeight,
     promptScale,
     toolbarScale,
     nodeWidth,
@@ -1238,19 +2199,111 @@ function getNodeLayout(node) {
   };
 }
 
-function getNodeBounds(node) {
+function getNodeLayoutTransitionId(node) {
+  return `${state.projectId}:${state.activeCanvasId}:${node.id}`;
+}
+
+function getNodePresentation(node) {
   const layout = getNodeLayout(node);
+  const transition = canvasNodeLayoutTransition.get(getNodeLayoutTransitionId(node));
+  if (!transition) return { x: node.x, y: node.y, layout };
+  return {
+    x: transition.x,
+    y: transition.y,
+    layout: {
+      ...layout,
+      nodeWidth: transition.nodeWidth,
+      nodeHeight: transition.nodeHeight,
+      mediaWidth: transition.mediaWidth,
+      mediaHeight: transition.mediaHeight,
+    },
+  };
+}
+
+function toNodeTransitionGeometry(presentation) {
+  return {
+    x: presentation.x,
+    y: presentation.y,
+    nodeWidth: presentation.layout.nodeWidth,
+    nodeHeight: presentation.layout.nodeHeight,
+    mediaWidth: presentation.layout.mediaWidth,
+    mediaHeight: presentation.layout.mediaHeight,
+  };
+}
+
+function applyNodeAspect(node, aspect) {
+  if (node.aspect === aspect) return false;
+  const from = getNodePresentation(node);
+  node.aspect = aspect;
+  normalizeNodeParameters(node);
+  const nextLayout = getNodeLayout(node);
+  const nextPosition = canvasNodePlacement.getBottomCenterAnchoredPosition({
+    position: { x: from.x, y: from.y },
+    currentLayout: from.layout,
+    nextLayout,
+  });
+  if (!nextPosition) return false;
+
+  node.x = nextPosition.x;
+  node.y = nextPosition.y;
+  canvasNodeLayoutTransition.start({
+    id: getNodeLayoutTransitionId(node),
+    from: toNodeTransitionGeometry(from),
+    to: toNodeTransitionGeometry({ x: node.x, y: node.y, layout: nextLayout }),
+  });
+  return true;
+}
+
+function getNodeBounds(node) {
+  const { x, y, layout } = getNodePresentation(node);
   const promptOverflow =
     node.kind === "generator" && node.expanded
       ? Math.max(0, (layout.panelWidth * layout.promptScale - layout.nodeWidth) / 2)
       : 0;
   return {
-    left: node.x - promptOverflow,
-    top: node.y,
-    right: node.x + layout.nodeWidth + promptOverflow,
-    bottom: node.y + layout.nodeHeight,
+    left: x - promptOverflow,
+    top: y,
+    right: x + layout.nodeWidth + promptOverflow,
+    bottom: y + layout.nodeHeight,
     width: layout.nodeWidth + promptOverflow * 2,
     height: layout.nodeHeight,
+  };
+}
+
+function getNodeVisualBounds(node) {
+  const { x, y, layout } = getNodePresentation(node);
+  const mediaLeft = x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  let left = mediaLeft;
+  let right = mediaLeft + layout.mediaWidth;
+  let bottom = y + layout.mediaHeight;
+  if (node.kind === "generator" && node.expanded) {
+    const promptWidth = layout.panelWidth * layout.promptScale;
+    const promptLeft = x + (layout.nodeWidth - promptWidth) / 2;
+    left = Math.min(left, promptLeft);
+    right = Math.max(right, promptLeft + promptWidth);
+    bottom += layoutRules.panelGap + layout.panelHeight * layout.promptScale;
+  }
+  return {
+    left,
+    top: y,
+    right,
+    bottom,
+    width: right - left,
+    height: bottom - y,
+  };
+}
+
+function getNodeMembershipBounds(node) {
+  const { x, y, layout } = getNodePresentation(node);
+  const left = x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  const top = y;
+  return {
+    left,
+    top,
+    right: left + layout.mediaWidth,
+    bottom: top + layout.mediaHeight,
+    width: layout.mediaWidth,
+    height: layout.mediaHeight,
   };
 }
 
@@ -1267,7 +2320,7 @@ function getNodesContentBounds(nodes) {
   if (!nodes.length) return null;
   const contentBounds = nodes.reduce(
     (bounds, node) => {
-      const nodeBounds = getNodeBounds(node);
+      const nodeBounds = getNodeMembershipBounds(node);
       return {
         left: Math.min(bounds.left, nodeBounds.left),
         top: Math.min(bounds.top, nodeBounds.top),
@@ -1500,7 +2553,11 @@ function presetFrom(node) {
     resolution: node.resolution,
     quality: node.quality,
     duration: node.duration,
+    outputFormat: node.outputFormat,
     count: node.count,
+    workflow: node.workflow,
+    omniReferenceTaskType: node.omniReferenceTaskType,
+    audioEnabled: node.audioEnabled,
   };
 }
 
@@ -1516,7 +2573,11 @@ function applyPreset(node, preset) {
   node.resolution = preset.resolution;
   node.quality = preset.quality;
   node.duration = preset.duration;
+  node.outputFormat = preset.outputFormat;
   node.count = preset.count;
+  node.workflow = preset.workflow;
+  node.omniReferenceTaskType = preset.omniReferenceTaskType;
+  node.audioEnabled = preset.audioEnabled;
   normalizeNodeParameters(node);
   node.modelFilter = node.mode;
 }
@@ -1583,6 +2644,7 @@ function collapseInactiveNodes(activeId) {
     if (node.id !== activeId) {
       node.expanded = false;
       node.panel = null;
+      node.advancedSettingsExpanded = false;
     }
   }
 }
@@ -1592,6 +2654,7 @@ function collapseAllGeneratorPanels() {
     if (node.kind !== "generator") continue;
     node.expanded = false;
     node.panel = null;
+    node.advancedSettingsExpanded = false;
   }
 }
 
@@ -1613,10 +2676,28 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function sanitizeRuntimeMediaUrl(value) {
+  const url = String(value ?? "").trim().slice(0, 2_048);
+  if (!url || /[\u0000-\u001f\u007f<>"'`]/.test(url)) return "";
+  const compact = url.replace(/[\u0000-\u0020]+/g, "");
+  const scheme = compact.match(/^([a-z][a-z\d+.-]*):/i)?.[1]?.toLowerCase();
+  if (scheme && !["http", "https", "blob"].includes(scheme)) {
+    const safeDataMedia = /^data:(?:image\/(?:avif|gif|jpe?g|png|webp)|video\/(?:mp4|ogg|webm)|audio\/(?:aac|mpeg|ogg|wav|webm))(?:;|,)/i;
+    if (!safeDataMedia.test(compact)) return "";
+  }
+  if (!scheme && !/^\/(?!\/)/.test(url) && !/^\.\.?\//.test(url)) return "";
+  return url;
+}
+
+function safeMediaAttributeUrl(value) {
+  return escapeHtml(sanitizeRuntimeMediaUrl(value));
+}
+
 const fallbackIconPaths = {
   "align-horizontal-space-around": '<path d="M4 18V6"/><path d="M20 18V6"/><path d="M8 12h8"/><path d="m14 9 3 3-3 3"/><path d="m10 9-3 3 3 3"/>',
   "align-vertical-space-around": '<path d="M6 4h12"/><path d="M6 20h12"/><path d="M12 8v8"/><path d="m9 14 3 3 3-3"/><path d="m9 10 3-3 3 3"/>',
   "archive": '<path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M4 4h16v3H4z"/><path d="M9 11h6"/>',
+  "arrow-right-from-line": '<path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/>',
   "arrow-up": '<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>',
   "audio-lines": '<path d="M4 10v4"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 8v8"/><path d="M20 10v4"/>',
   "audio-waveform": '<path d="M3 12h2"/><path d="M7 9v6"/><path d="M11 5v14"/><path d="M15 8v8"/><path d="M19 10v4"/><path d="M21 12h-1"/>',
@@ -1627,32 +2708,43 @@ const fallbackIconPaths = {
   "bot": '<path d="M12 8V4"/><path d="M8 4h8"/><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M9 17h6"/>',
   "box": '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
   "building-2": '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18"/><path d="M4 22h16"/><path d="M9 6h1"/><path d="M14 6h1"/><path d="M9 10h1"/><path d="M14 10h1"/><path d="M9 14h1"/><path d="M14 14h1"/>',
+  "calendar-days": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/>',
   "check": '<path d="m5 12 4 4 10-10"/>',
   "chevron-down": '<path d="m6 9 6 6 6-6"/>',
+  "chevron-left": '<path d="m15 18-6-6 6-6"/>',
   "chevron-right": '<path d="m9 6 6 6-6 6"/>',
   "circle": '<circle cx="12" cy="12" r="8"/>',
   "circle-dollar-sign": '<circle cx="12" cy="12" r="9"/><path d="M12 6v12"/><path d="M15.5 8.5c-.8-.6-1.8-1-3.1-1-1.7 0-3 .8-3 2.1 0 3 6.1 1.5 6.1 4.8 0 1.4-1.4 2.3-3.2 2.3-1.4 0-2.6-.4-3.6-1.2"/>',
   "circle-help": '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4"/><path d="M12 17h.01"/>',
+  "circle-play": '<circle cx="12" cy="12" r="10"/><path d="m10 8 6 4-6 4z"/>',
   "combine": '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/><path d="M13 17H9a2 2 0 0 1-2-2v-4"/>',
   "crop": '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/><path d="M14 14 20 8"/>',
   "download": '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
   "ellipsis": '<path d="M5 12h.01"/><path d="M12 12h.01"/><path d="M19 12h.01"/>',
+  "ellipsis-vertical": '<path d="M12 5h.01"/><path d="M12 12h.01"/><path d="M12 19h.01"/>',
   "eraser": '<path d="m7 21-4-4 9.5-9.5a3 3 0 0 1 4.2 0l1.8 1.8a3 3 0 0 1 0 4.2L11 21z"/><path d="m9 12 6 6"/><path d="M7 21h12"/>',
+  "eye": '<path d="M2.1 12s3.6-7 9.9-7 9.9 7 9.9 7-3.6 7-9.9 7-9.9-7-9.9-7"/><circle cx="12" cy="12" r="3"/>',
   "filter-x": '<path d="M4 5h16l-6 7v5l-4 2v-7z"/><path d="m16 16 4 4"/><path d="m20 16-4 4"/>',
   "focus": '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
   "folder": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/>',
+  "folder-input": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M12 9v7"/><path d="m9 13 3 3 3-3"/>',
   "folder-plus": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M12 10v6"/><path d="M9 13h6"/>',
   "folders": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1"/><path d="M5 10a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/>',
   "gauge": '<path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 14 16 9"/><path d="M5 20h14"/>',
   "grid-3x3": '<path d="M4 4h16v16H4z"/><path d="M4 9.3h16"/><path d="M4 14.7h16"/><path d="M9.3 4v16"/><path d="M14.7 4v16"/>',
+  "grid-2x2": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  "house": '<path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
   "image": '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-4 4-2-2-5 5"/>',
   "images": '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M3 17V7a4 4 0 0 1 4-4h10"/><path d="m19 15-4-4-3 3-1.5-1.5L7 16"/>',
   "keyboard": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01"/><path d="M11 10h.01"/><path d="M15 10h.01"/><path d="M7 14h10"/>',
   "layers-3": '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
   "layout-grid": '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
   "list": '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+  "list-checks": '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
+  "list-filter": '<path d="M3 6h18"/><path d="M6 12h12"/><path d="M10 18h4"/>',
   "log-out": '<path d="M10 17v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2"/><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/>',
   "map": '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
+  "message-square-plus": '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/><path d="M12 8v6"/><path d="M9 11h6"/>',
   "maximize-2": '<path d="M15 3h6v6"/><path d="m14 10 7-7"/><path d="M9 21H3v-6"/><path d="m10 14-7 7"/>',
   "minimize-2": '<path d="M4 14h6v6"/><path d="m10 14-7 7"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/>',
   "monitor": '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/>',
@@ -1662,8 +2754,10 @@ const fallbackIconPaths = {
   "mouse-pointer-2": '<path d="M4 4l7.1 17 2.5-7.4L21 11z"/>',
   "panel-left-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 9-3 3 3 3"/>',
   "panel-right-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="m8 9 3 3-3 3"/>',
+  "panels-top-left": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 9v12"/>',
   "paperclip": '<path d="m21 8.5-9.5 9.5a5 5 0 0 1-7.1-7.1l10-10a3.3 3.3 0 0 1 4.7 4.7L9.5 15a1.7 1.7 0 0 1-2.4-2.4L16 3.8"/>',
   "pause": '<path d="M8 5v14"/><path d="M16 5v14"/>',
+  "pencil": '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>',
   "pin": '<path d="M12 17v5"/><path d="M6 17h12"/><path d="m8 3 8 8"/><path d="M9 3h6l-1 5 4 4-3 3-4-4-5 1z"/>',
   "pin-off": '<path d="m2 2 20 20"/><path d="M12 17v5"/><path d="M6 17h12"/><path d="M9 3h6l-1 5 4 4-2 2"/><path d="M8 12l-2 .5 5-5"/>',
   "play": '<path d="m8 5 12 7-12 7z"/>',
@@ -1672,22 +2766,35 @@ const fallbackIconPaths = {
   "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
   "rotate-cw": '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
   "scan": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/>',
+  "scan-search": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="11" cy="11" r="3"/><path d="m14 14 3 3"/>',
   "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 8.6 19 19"/><path d="M8.6 15.4 19 5"/>',
   "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  "search-x": '<circle cx="10.5" cy="10.5" r="7"/><path d="m20 20-4.5-4.5"/><path d="m8 8 5 5"/><path d="m13 8-5 5"/>',
   "send-horizontal": '<path d="M3 12 21 4l-5 16-4-7z"/><path d="M12 13 21 4"/>',
   "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/>',
   "settings-2": '<path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/>',
   "share-2": '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4"/><path d="m8.6 13.5 6.8 4"/>',
+  "shield-check": '<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="m9 12 2 2 4-4"/>',
   "sliders-horizontal": '<path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/>',
   "sparkles": '<path d="m12 3 1.7 5.1L19 10l-5.3 1.9L12 17l-1.7-5.1L5 10l5.3-1.9z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/>',
+  "notepad-text-dashed": '<path d="M5 3h14v18H5z"/><path d="M9 3v3"/><path d="M15 3v3"/><path d="M8 10h8"/><path d="M8 14h5"/>',
   "square-plus": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/>',
+  "square": '<rect x="4" y="4" width="16" height="16" rx="2"/>',
+  "square-check-big": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 12 3 3 6-6"/>',
+  "copy-check": '<path d="m12 15 2 2 4-4"/><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
+  "timer": '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/>',
+  "type": '<path d="M4 5h16"/><path d="M10 5v14"/><path d="M14 5v14"/><path d="M8 19h8"/>',
   "trash-2": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
   "ungroup": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 4h3a3 3 0 0 1 3 3v3"/><path d="M10 20H7a3 3 0 0 1-3-3v-3"/>',
   "upload": '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14a2 2 0 0 0 2-2v-3"/><path d="M3 15v3a2 2 0 0 0 2 2"/>',
   "user-round": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  "user-round-plus": '<circle cx="10" cy="8" r="4"/><path d="M2 21a8 8 0 0 1 14-5"/><path d="M19 14v6"/><path d="M16 17h6"/>',
+  "users": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
   "users-round": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
   "video": '<path d="M15 10.5 21 7v10l-6-3.5z"/><rect x="3" y="6" width="12" height="12" rx="2"/>',
+  "volume-2": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 9a4 4 0 0 1 0 6"/><path d="M18 6a8 8 0 0 1 0 12"/>',
+  "volume-x": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m17 10 4 4"/><path d="m21 10-4 4"/>',
   "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
 
@@ -1701,6 +2808,7 @@ function createFallbackIcon(name, sourceIcon) {
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", sourceIcon?.getAttribute("aria-hidden") || "true");
   svg.classList.add("lucide", `lucide-${name}`);
+  sourceIcon?.classList?.forEach((className) => svg.classList.add(className));
   svg.dataset.fallbackIcon = name;
   svg.innerHTML = fallbackIconPaths[name] || fallbackIconPaths.circle;
   return svg;
@@ -1740,11 +2848,18 @@ function formatCredit(value) {
 }
 
 function syncCreditDisplay() {
-  const credits = formatCredit(state.account.credits);
-  if (avatarCreditBadge) {
-    avatarCreditBadge.setAttribute("aria-label", `可用积分 ${credits}`);
+  const credits = new Intl.NumberFormat("zh-CN").format(Math.max(0, Math.round(state.account.credits || 0)));
+  if (profileCreditValue) {
+    profileCreditValue.textContent = credits;
+    profileCreditValue.closest("[data-profile-action='credits']")
+      ?.setAttribute("aria-label", `查看我的积分，当前 ${credits}`);
   }
-  if (avatarCreditValue) avatarCreditValue.textContent = credits;
+  if (agentCreditValue) agentCreditValue.textContent = credits;
+  if (agentSendButton) {
+    const label = `发送；当前可用积分 ${credits}`;
+    agentSendButton.title = label;
+    agentSendButton.setAttribute("aria-label", label);
+  }
 }
 
 function hasEnoughCredits(cost) {
@@ -1862,7 +2977,7 @@ function getMediaSpec(node, asset = getActiveAsset(node)) {
   }
 
   if (!node.preview) return "";
-  if (node.mode === "video") return node.quality;
+  if (node.mode === "video") return getCapabilityDisplayLabel(node, "quality", node.quality);
   if (node.generatedAsset?.width && node.generatedAsset?.height) return formatMediaSize(node.generatedAsset.width, node.generatedAsset.height);
   const size = getGeneratedResolution(node);
   return formatMediaSize(size.width, size.height);
@@ -1913,16 +3028,36 @@ function cloneConnectionState(connection) {
   return { ...connection };
 }
 
+function executeConnectionCommand(type, changes, { recordUndo = true } = {}) {
+  const canvas = getActiveCanvas();
+  if (!canvas) {
+    return { ok: false, error: { code: "canvas-not-found", message: "Active canvas was not found." } };
+  }
+  const result = canvasCommandExecutor.execute({
+    id: crypto.randomUUID(),
+    type,
+    canvasId: canvas.id,
+    changes,
+  }, { recordUndo });
+  if (!result.ok) {
+    console.error("Canvas connection command was rejected.", result.error);
+    showActionToast("画布内容已变化，请重试连接操作");
+  } else if (result.effectError) {
+    console.error("Canvas connection command committed but its save effect failed.", result.effectError);
+  }
+  return result;
+}
+
 function getIncomingConnections(nodeId) {
   return state.connections.filter((connection) => connection.targetNodeId === nodeId);
 }
 
 function getConnectionPortPoint(node, side) {
-  const layout = getNodeLayout(node);
-  const mediaLeft = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  const { x, y, layout } = getNodePresentation(node);
+  const mediaLeft = x + (layout.nodeWidth - layout.mediaWidth) / 2;
   return {
     x: side === "input" ? mediaLeft : mediaLeft + layout.mediaWidth,
-    y: node.y + layout.mediaHeight / 2,
+    y: y + layout.mediaHeight / 2,
   };
 }
 
@@ -1969,9 +3104,18 @@ function syncConnectionContextClasses(context) {
   });
 }
 
+function resolveConnectionPoints(connection) {
+  const source = state.nodes.find((node) => node.id === connection.sourceNodeId);
+  const target = state.nodes.find((node) => node.id === connection.targetNodeId);
+  if (!source || !target) return null;
+  return {
+    source: getConnectionPortPoint(source, "output"),
+    target: getConnectionPortPoint(target, "input"),
+  };
+}
+
 function renderConnections() {
   if (!connectionPaths || !connectionPreview) return;
-  state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
 
   const context = getConnectionContext();
   const hasFocusedContext = Boolean(state.activeConnectionId || state.selectedIds.size);
@@ -1979,21 +3123,17 @@ function renderConnections() {
     connections: state.connections,
     activeConnectionId: state.activeConnectionId,
     relatedConnectionIds: context.relatedConnectionIds,
-    recentConnectionId: state.recentConnectionId,
+    connectionFeedbacks: state.connectionFeedbacks,
+    onFeedbackStart: (connectionId, token) => canvasConnectionFeedback.start(connectionId, token),
+    onFeedbackComplete: (connectionId, token) => canvasConnectionFeedback.complete(connectionId, token),
     hasFocusedContext,
     controlScale: clamp(1 / state.scale, 0.72, 2.4),
     getPath: canvasConnections.getBezierPath,
-    resolvePoints(connection) {
-      const source = state.nodes.find((node) => node.id === connection.sourceNodeId);
-      const target = state.nodes.find((node) => node.id === connection.targetNodeId);
-      if (!source || !target) return null;
-      return {
-        source: getConnectionPortPoint(source, "output"),
-        target: getConnectionPortPoint(target, "input"),
-      };
-    },
+    resolvePoints: resolveConnectionPoints,
   });
-  canvasConnectionRenderer.renderPreview(state.action, canvasConnections.getBezierPath);
+  const previewAction = state.action || state.connectionDrop?.previewAction || null;
+  canvasConnectionRenderer.renderPreview(previewAction, canvasConnections.getBezierPath);
+  shell.classList.toggle("connection-pending-create", Boolean(previewAction?.pendingCreate));
   syncConnectionContextClasses(context);
   shell.classList.toggle("connection-compact-detail", state.scale >= 0.34 && state.scale < 0.56);
   shell.classList.toggle("connection-low-detail", state.scale < 0.34);
@@ -2002,16 +3142,18 @@ function renderConnections() {
 function createConnection(
   sourceNodeId,
   targetNodeId,
-  { recordUndo = true, sourceRatio = 0.5, targetRatio = 0.5 } = {},
+  {
+    recordUndo = true,
+    sourceRatio = 0.5,
+    targetRatio = 0.5,
+    feedbackDirection = "forward",
+  } = {},
 ) {
   if (!requireCanvasMutation()) return null;
   const result = canvasConnections.canConnect(state.connections, state.nodes, sourceNodeId, targetNodeId);
   if (!result.ok) return null;
   const source = state.nodes.find((node) => node.id === sourceNodeId);
   if (!source || (source.kind !== "generator" && !getEditableMedia(source))) return null;
-  if (recordUndo) {
-    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
-  }
   const connection = {
     id: crypto.randomUUID(),
     sourceNodeId,
@@ -2022,26 +3164,85 @@ function createConnection(
     sourceRatio: clamp(sourceRatio, 0.08, 0.92),
     targetRatio: clamp(targetRatio, 0.08, 0.92),
   };
-  state.connections.push(connection);
-  state.activeConnectionId = connection.id;
-  state.recentConnectionId = connection.id;
-  window.clearTimeout(state.recentConnectionTimer);
-  state.recentConnectionTimer = window.setTimeout(() => {
-    if (state.recentConnectionId !== connection.id) return;
-    state.recentConnectionId = null;
-    renderConnections();
-  }, 220);
+  const commandResult = executeConnectionCommand("connection-create", [{
+    collection: "connections",
+    id: connection.id,
+    before: { record: null },
+    after: { record: connection, index: state.connections.length },
+  }], { recordUndo });
+  if (!commandResult.ok) return null;
+  setConnectionFeedback([connection], feedbackDirection);
   return connection;
+}
+
+function clearRecentConnectionFeedback(connectionIds = state.connectionFeedbacks) {
+  canvasConnectionFeedback.clear(connectionIds);
+}
+
+function setConnectionFeedback(connections, direction = "forward") {
+  if (reducedMotionQuery.matches) return [];
+  const cohortSize = connections.length;
+  const entries = connections.map((connection) => ({
+    id: connection.id,
+    direction,
+    profile: canvasConnectionFeedbackMotion.createFeedbackProfile({ cohortSize }),
+  }));
+  return canvasConnectionFeedback.add(entries);
+}
+
+function createConnectionsBatch(sourceNodeIds, targetNodeId) {
+  const plan = canvasConnections.planBatchConnections(
+    state.connections,
+    state.nodes,
+    sourceNodeIds,
+    targetNodeId,
+  );
+  const created = plan.validSourceIds
+    .map((sourceNodeId) => {
+      const source = state.nodes.find((node) => node.id === sourceNodeId);
+      if (!source || (source.kind !== "generator" && !getEditableMedia(source))) return null;
+      return {
+        id: crypto.randomUUID(),
+        sourceNodeId,
+        targetNodeId,
+        mediaType: getNodeMediaType(source),
+        sourcePortId: getConnectionPortId(sourceNodeId, "output"),
+        targetPortId: getConnectionPortId(targetNodeId, "input"),
+        sourceRatio: 0.5,
+        targetRatio: 0.5,
+      };
+    })
+    .filter(Boolean);
+  if (created.length) {
+    const startIndex = state.connections.length;
+    const commandResult = executeConnectionCommand(
+      "connections-create-batch",
+      created.map((connection, index) => ({
+        collection: "connections",
+        id: connection.id,
+        before: { record: null },
+        after: { record: connection, index: startIndex + index },
+      })),
+    );
+    if (!commandResult.ok) return { created: [], rejected: plan.rejected };
+    setConnectionFeedback(created);
+  }
+  return { created, rejected: plan.rejected };
 }
 
 function removeConnection(connectionId, { recordUndo = true } = {}) {
   if (!requireCanvasMutation()) return false;
-  const connection = state.connections.find((item) => item.id === connectionId);
-  if (!connection) return false;
-  if (recordUndo) {
-    pushUndoAction({ type: "connections", connections: state.connections.map(cloneConnectionState) });
-  }
-  state.connections = state.connections.filter((item) => item.id !== connectionId);
+  const connectionIndex = state.connections.findIndex((item) => item.id === connectionId);
+  if (connectionIndex === -1) return false;
+  const connection = state.connections[connectionIndex];
+  const commandResult = executeConnectionCommand("connection-remove", [{
+    collection: "connections",
+    id: connection.id,
+    before: { record: connection, index: connectionIndex },
+    after: { record: null },
+  }], { recordUndo });
+  if (!commandResult.ok) return false;
+  clearRecentConnectionFeedback([connectionId]);
   if (state.activeConnectionId === connectionId) state.activeConnectionId = null;
   render();
   return true;
@@ -2090,17 +3291,18 @@ function mediaEditToolbar(node, layout) {
 }
 
 function assetPreview(asset) {
-  if (!asset.url) {
+  const safeUrl = safeMediaAttributeUrl(asset.url);
+  if (!safeUrl) {
     if (asset.type === "video") return `<span class="asset-glyph">▣</span>`;
     if (asset.type === "audio") return `<span class="asset-glyph">♬</span>`;
     return `<span class="asset-glyph">▧</span>`;
   }
   if (asset.type === "image") {
-    return `<img src="${asset.url}" alt="" draggable="false" />`;
+    return `<img src="${safeUrl}" alt="" draggable="false" />`;
   }
   if (asset.type === "video") {
     return `
-      <video src="${asset.url}" muted playsinline preload="metadata" draggable="false"></video>
+      <video src="${safeUrl}" muted playsinline preload="metadata" draggable="false"></video>
       <span class="video-play">▶</span>
     `;
   }
@@ -2129,10 +3331,41 @@ function createAssetsFromFiles(files) {
     .filter(Boolean);
 }
 
+async function createPersistedAssetsFromFiles(files) {
+  if (window.parent === window) return createAssetsFromFiles(files);
+  if (!state.hostCapabilities.assetPersistence) {
+    showActionToast("当前项目尚未接入资产持久化，无法添加本地文件");
+    return [];
+  }
+  const accepted = Array.from(files || [])
+    .map((file) => ({ file, mediaKind: getAssetType(file) }))
+    .filter((entry) => entry.mediaKind);
+  if (!accepted.length) return [];
+  try {
+    return await Promise.all(accepted.map(async ({ file, mediaKind }) => {
+      const projectAsset = await canvasMediaAssets.persistFile(file, {
+        mediaKind,
+        displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
+        contentType: file.type || defaultUploadContentType(mediaKind),
+      });
+      return projectAssetToLibraryMedia(projectAsset);
+    }));
+  } catch (error) {
+    showActionToast(error?.message || "媒体上传失败");
+    return [];
+  }
+}
+
 function cloneAsset(asset, source = asset.source) {
+  const librarySourceId = asset.librarySourceId
+    || asset.workspaceAssetId
+    || asset.platformSourceId
+    || asset.sourceId
+    || asset.id;
   return {
     ...asset,
     id: crypto.randomUUID(),
+    ...(librarySourceId ? { librarySourceId } : {}),
     source,
   };
 }
@@ -2150,544 +3383,615 @@ function getCanvasLibraryAssets() {
   return [...unique.values()];
 }
 
-function getLibraryAssetsForScope(scope = state.libraryScope) {
-  if (scope === "canvas") return getCanvasLibraryAssets();
-  if (scope === "personal") return state.personalLibraryAssets;
-  if (scope === "official") return officialLibraryAssets;
-  if (scope === "organization") return state.organizationLibraryAssets;
-  return state.libraryAssets;
+const assetLibrarySpaceDetails = Object.freeze({
+  personal: { label: "个人空间", shortLabel: "个人" },
+  organization: { label: "组织空间", shortLabel: "组织" },
+  platform: { label: "平台空间", shortLabel: "平台" },
+});
+
+function getAssetLibraryContextKey(space = state.librarySpace, section = state.librarySection) {
+  return `${space}:${section}`;
 }
 
-function getActiveAssetLibraryScope() {
-  return state.libraryView === "global" ? state.libraryScope : "project";
+function rememberAssetLibraryContext() {
+  const key = getAssetLibraryContextKey();
+  state.librarySearchByContext[key] = state.librarySearch;
+  state.libraryFilterByContext[key] = state.librarySection === "media" ? state.libraryFilter : "all";
 }
 
-function ensureGlobalLibraryScope() {
-  state.libraryScope = canvasAssetLibraryModel.normalizeGlobalScope(state.libraryScope);
+function restoreAssetLibraryContext() {
+  const key = getAssetLibraryContextKey();
+  state.librarySearch = state.librarySearchByContext[key] || "";
+  state.libraryFilter = state.librarySection === "media"
+    ? state.libraryFilterByContext[key] || "all"
+    : "all";
 }
 
-function normalizeLibrarySearch(value = state.librarySearch) {
-  return canvasAssetLibraryModel.normalizeSearch(value);
+function clearAssetLibrarySelection({ keepMode = false } = {}) {
+  state.librarySelectedIds.clear();
+  if (!keepMode) state.librarySelectionMode = false;
+  state.libraryToolbarMenu = null;
+  state.libraryMenuTarget = null;
+  state.libraryMoveItems = [];
+  state.libraryMoveFolderId = null;
 }
 
-function assetMatchesLibrarySearch(asset, query = normalizeLibrarySearch()) {
-  return canvasAssetLibraryModel.matchesSearch([
-    getAssetDisplayName(asset),
-    asset.name,
-    assetTypeLabel(asset.type),
-    asset.source,
-    getAssetOriginLabel(asset),
-  ], query);
+function switchAssetLibraryContext({ space = state.librarySpace, section = state.librarySection } = {}) {
+  canvasEntityUse.closeDetail();
+  rememberAssetLibraryContext();
+  state.librarySpace = canvasAssetLibraryModel.normalizeSpace(space);
+  state.librarySection = state.librarySpace === "platform"
+    ? "media"
+    : section === "entity" ? "entity" : "media";
+  state.libraryFolderId = null;
+  state.libraryDirectoryMenuOpen = false;
+  state.libraryDirectoryRootExpanded = true;
+  state.libraryExpandedFolderIds.clear();
+  state.libraryRenameTarget = null;
+  clearAssetLibrarySelection();
+  restoreAssetLibraryContext();
+  renderAssetLibrary();
 }
 
-function createCanvasNodeLibraryItem(node, parentGroupId = null) {
-  const asset = getEditableMedia(node) || getActiveAsset(node);
-  const mediaType = asset?.type || node.mode || "image";
-  const model = node.kind === "generator" ? getModel(node) : null;
-  const fallbackTitle =
-    node.kind === "generator"
-      ? `${node.mode === "video" ? "视频生成" : "图片生成"}节点`
-      : `${assetTypeLabel(mediaType)}素材`;
-  return {
-    id: node.id,
-    kind: "node",
-    nodeKind: node.kind,
-    type: node.kind === "generator" ? "generator" : mediaType,
-    parentGroupId,
-    icon: node.kind === "generator" ? "sparkles" : mediaIconName(mediaType),
-    title: getMediaTitle(node, asset) || fallbackTitle,
-    subtitle: node.kind === "generator" ? model?.name || "生成节点" : assetTypeLabel(mediaType),
-    meta: node.kind === "generator" ? getParamLabel(node) : getMediaSpec(node, asset),
-    asset,
+function isAssetLibraryMutable() {
+  return canvasAssetLibraryModel.isMutableSpace(state.librarySpace)
+    && (window.parent === window || state.hostCapabilities.hostWritable);
+}
+
+function canPersistLibraryMedia() {
+  return window.parent === window || (
+    state.hostCapabilities.hostWritable
+    && state.hostCapabilities.assetPersistence
+  );
+}
+
+function canPersistLibraryEntities() {
+  return window.parent === window || (
+    state.hostCapabilities.hostWritable
+    && state.hostCapabilities.entityPersistence
+  );
+}
+
+function getAssetLibraryItemRef(id, kind = state.librarySection) {
+  return { kind: kind === "entity" ? "entity" : "media", id: String(id || "") };
+}
+
+function getSelectedAssetLibraryRefs() {
+  return [...state.librarySelectedIds].map((id) => getAssetLibraryItemRef(id));
+}
+
+function getAssetLibraryOriginLabel(asset) {
+  if (!asset) return "";
+  const sourceLabels = {
+    local: "本地上传",
+    upload: "本地上传",
+    generated: "生成结果",
+    "generation-result": "生成结果",
+    "team-shared": "团队共享",
+    platform: "平台内容",
+    library: "资产引用",
   };
+  return sourceLabels[asset.source] || assetLibrarySpaceDetails[state.librarySpace]?.label || "素材";
 }
 
-function getCanvasElementItems() {
-  return canvasAssetLibraryModel.buildCanvasElementItems({
-    nodes: state.nodes,
-    groups: state.groups,
-    collapsedGroupIds: state.libraryCollapsedGroups,
-    getGroupNodes,
-    getGroupBounds,
-    createNodeItem: createCanvasNodeLibraryItem,
-  });
+function getAssetLibraryFolder() {
+  if (!state.libraryFolderId) return null;
+  const folder = assetLibraryStore.getFolder(state.libraryFolderId);
+  return folder?.space === state.librarySpace && folder?.kind === state.librarySection ? folder : null;
 }
 
-function filterCanvasElementTree(items, query = normalizeLibrarySearch()) {
-  return canvasAssetLibraryModel.filterCanvasElementTree(items, {
-    filter: state.libraryFilter,
+function getAssetLibraryFolders() {
+  return assetLibraryStore.listFolders({ space: state.librarySpace, kind: state.librarySection });
+}
+
+function getAssetLibraryFolderPath(folderId = state.libraryFolderId) {
+  if (!folderId) return [];
+  try {
+    return assetLibraryStore.getFolderPath({
+      folderId,
+      space: state.librarySpace,
+      kind: state.librarySection,
+    });
+  } catch {
+    return [];
+  }
+}
+
+function ensureCurrentAssetLibraryPathExpanded() {
+  state.libraryDirectoryRootExpanded = true;
+  getAssetLibraryFolderPath().forEach((folder) => state.libraryExpandedFolderIds.add(folder.id));
+}
+
+function setAssetLibraryDirectoryMenuOpen(open) {
+  state.libraryDirectoryMenuOpen = Boolean(open);
+  if (state.libraryDirectoryMenuOpen) ensureCurrentAssetLibraryPathExpanded();
+}
+
+function selectAssetLibraryDirectory(folderId) {
+  const normalizedFolderId = folderId == null || folderId === "" ? null : String(folderId);
+  if (normalizedFolderId) {
+    const folder = assetLibraryStore.getFolder(normalizedFolderId);
+    if (!folder || folder.space !== state.librarySpace || folder.kind !== state.librarySection) return;
+  }
+  state.libraryFolderId = normalizedFolderId;
+  state.libraryDirectoryMenuOpen = false;
+  state.libraryRenameTarget = null;
+  clearAssetLibrarySelection();
+  renderAssetLibrary();
+}
+
+function getAssetLibraryFolderDescendantIds(folderId) {
+  if (!folderId) return [];
+  return getAssetLibraryFolders()
+    .filter((folder) => getAssetLibraryFolderPath(folder.id).some((ancestor) => ancestor.id === folderId))
+    .map((folder) => folder.id);
+}
+
+function getVisibleAssetLibraryContent() {
+  const kind = state.librarySection;
+  const query = state.librarySearch;
+  const mediaKind = kind === "media" ? state.libraryFilter : "all";
+  const flatPlatformResults = state.librarySpace === "platform";
+  const itemScope = {
+    space: state.librarySpace,
+    kind,
+    ...(flatPlatformResults ? {} : { folderId: state.libraryFolderId }),
+  };
+  const folders = flatPlatformResults ? [] : assetLibraryStore.listFolders({
+    space: state.librarySpace,
+    kind,
+    parentId: state.libraryFolderId,
     query,
   });
-}
-
-function countCanvasElementRows(items) {
-  return canvasAssetLibraryModel.countCanvasElementRows(items);
-}
-
-function getAssetCategory(asset) {
-  return canvasAssetLibraryModel.getAssetCategory(asset, { categoryLabels: assetCategoryLabels });
-}
-
-function countAssetsByCategory(assets) {
-  return canvasAssetLibraryModel.countAssetsByCategory(assets, assetCategoryFilters, {
-    categoryLabels: assetCategoryLabels,
+  const allItems = assetLibraryStore.listItems({
+    ...itemScope,
   });
-}
-
-function getPreferredAssetFilter(assets = []) {
-  return canvasAssetLibraryModel.getPreferredAssetFilter({
-    assets,
-    currentFilter: state.libraryFilter,
-    filters: assetCategoryFilters,
-    categoryLabels: assetCategoryLabels,
+  const items = assetLibraryStore.listItems({
+    ...itemScope,
+    query,
+    mediaKind,
   });
+  return { folders, allItems, items };
 }
 
-function renderAssetLibraryModeTabs({ canvasTotal, projectAssetTotal, scopeTotals, isGlobalView }) {
-  if (!assetLibraryModeTabs) return;
-  const tabs = isGlobalView
-    ? [
-        ["personal", "个人空间", scopeTotals.personal || 0, "user-round"],
-        ["organization", "组织空间", scopeTotals.organization || 0, "users-round"],
-        ["official", "官方空间", scopeTotals.official || 0, "badge-check"],
-      ]
-    : [
-        ["canvas", "画布", canvasTotal, "layers-3"],
-        ["assets", "资产", projectAssetTotal, "folder"],
-      ];
+function renderAssetLibrary() {
+  if (!assetLibraryGrid || !canvasAssetLibraryView) return;
+  const mutable = isAssetLibraryMutable();
+  const space = state.librarySpace;
+  const platform = space === "platform";
+  const section = state.librarySection;
+  const display = state.libraryDisplay;
+  const canCreateEntity = mutable && space === "personal" && section === "entity" && canPersistLibraryEntities();
+  const canUploadMedia = mutable && space === "personal" && section === "media" && canPersistLibraryMedia();
+  const canManageFolders = mutable;
+  if (!canManageFolders) state.libraryDirectoryMenuOpen = false;
+  const folder = getAssetLibraryFolder();
+  const folderPath = getAssetLibraryFolderPath();
+  const allFolders = getAssetLibraryFolders();
+  const { folders, allItems, items } = getVisibleAssetLibraryContent();
+  const selectedCount = state.librarySelectedIds.size;
+  const reviewableSelection = selectedCount === 0 || getSelectedAssetLibraryRefs().every((ref) => {
+    if (ref.kind !== "media") return true;
+    return assetLibraryStore.getMedia(ref)?.mediaKind !== "audio";
+  });
+  const menuKey = state.libraryMenuTarget
+    ? `${state.libraryMenuTarget.kind}:${state.libraryMenuTarget.id}`
+    : "";
+  const renameKey = state.libraryRenameTarget
+    ? `${state.libraryRenameTarget.kind}:${state.libraryRenameTarget.id}`
+    : "";
 
-  assetLibraryModeTabs.innerHTML = tabs
-    .map(([id, label, count, icon]) => {
-      const active = isGlobalView ? state.libraryScope === id : state.libraryView === id;
-      const attr = isGlobalView ? `data-library-scope="${id}"` : `data-library-view="${id}"`;
-      return `
-        <button class="${active ? "active" : ""}" type="button" ${attr}>
-          <i data-lucide="${icon}" aria-hidden="true"></i>
-          <span>${label}</span>
-          <small>${count}</small>
-        </button>
-      `;
-    })
+  assetLibraryPanel?.setAttribute("data-library-space", space);
+  assetLibraryPanel?.setAttribute("data-library-section", section);
+  assetLibraryPanel?.setAttribute("data-library-display", state.libraryDisplay);
+  assetLibraryPanel?.setAttribute("data-library-folder-capability", canManageFolders ? "true" : "false");
+  if (assetLibrarySpaceLabel) {
+    assetLibrarySpaceLabel.textContent = assetLibrarySpaceDetails[space]?.label || "个人空间";
+  }
+  assetLibrarySpaceMenu?.querySelectorAll("[data-library-space]").forEach((button) => {
+    button.setAttribute("aria-checked", button.dataset.librarySpace === space ? "true" : "false");
+  });
+  const platformResults = platform;
+  const assetLibraryDirectoryBar = assetLibraryDirectoryButton?.closest(".asset-library-directorybar");
+  if (assetLibraryCommandBar) {
+    const commandHost = platformResults ? assetLibraryPlatformCommandAnchor : assetLibraryDirectoryBar;
+    if (commandHost && assetLibraryCommandBar.parentElement !== commandHost) commandHost.append(assetLibraryCommandBar);
+  }
+  if (assetLibrarySectionTabs) {
+    assetLibrarySectionTabs.setAttribute("aria-label", platformResults ? "平台灵感搜索" : "资产类型");
+  }
+  if (assetLibraryMediaTab) assetLibraryMediaTab.textContent = platformResults ? "灵感搜索" : "素材";
+  if (assetLibraryEntityTab) {
+    assetLibraryEntityTab.hidden = platformResults;
+    assetLibraryEntityTab.disabled = platformResults;
+    assetLibraryEntityTab.setAttribute("aria-hidden", platformResults ? "true" : "false");
+    assetLibraryEntityTab.tabIndex = platformResults ? -1 : 0;
+  }
+  assetLibrarySectionTabs?.querySelectorAll("[data-library-section]").forEach((button) => {
+    const active = button.dataset.librarySection === section;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  assetLibrarySectionTabs?.classList.toggle("platform-inspiration", platform);
+  assetLibraryGrid.setAttribute(
+    "aria-labelledby",
+    section === "media" ? "assetLibraryMediaTab" : "assetLibraryEntityTab",
+  );
+  assetLibraryGrid.className = `asset-library-grid ${display === "list" ? "list-view" : "grid-view"}`;
+  if (assetLibrarySearchInput && assetLibrarySearchInput.value !== state.librarySearch) {
+    assetLibrarySearchInput.value = state.librarySearch;
+  }
+  if (assetLibrarySearchInput) assetLibrarySearchInput.placeholder = "搜索";
+  if (assetLibraryDirectoryName) {
+    assetLibraryDirectoryName.textContent = folder?.name || "默认目录";
+    assetLibraryDirectoryName.title = ["默认目录", ...folderPath.map((entry) => entry.name)].join(" / ");
+  }
+  if (assetLibraryDirectoryButton) {
+    assetLibraryDirectoryButton.disabled = !canManageFolders;
+    assetLibraryDirectoryButton.setAttribute("aria-disabled", canManageFolders ? "false" : "true");
+    assetLibraryDirectoryButton.setAttribute("aria-expanded", state.libraryDirectoryMenuOpen ? "true" : "false");
+  }
+  if (assetLibraryCreateFolderBtn) {
+    const currentLevel = folderPath.length + 1;
+    const atMaximumDepth = currentLevel >= canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS;
+    assetLibraryCreateFolderBtn.hidden = !canManageFolders;
+    assetLibraryCreateFolderBtn.disabled = !canManageFolders || atMaximumDepth;
+    assetLibraryCreateFolderBtn.setAttribute("aria-disabled", (!canManageFolders || atMaximumDepth) ? "true" : "false");
+    assetLibraryCreateFolderBtn.title = atMaximumDepth
+      ? `最多支持 ${canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS} 层目录`
+      : "在当前目录中新建文件夹";
+  }
+  if (assetLibraryDirectoryTreePopover) {
+    assetLibraryDirectoryTreePopover.classList.toggle("hidden", !state.libraryDirectoryMenuOpen);
+    assetLibraryDirectoryTreePopover.innerHTML = state.libraryDirectoryMenuOpen
+      ? canvasAssetLibraryView.renderDirectoryTree({
+          folders: allFolders,
+          currentFolderId: state.libraryFolderId,
+          expandedFolderIds: [...state.libraryExpandedFolderIds],
+          rootExpanded: state.libraryDirectoryRootExpanded,
+        })
+      : "";
+  }
+
+  if (assetLibraryCommandBar) {
+    assetLibraryCommandBar.innerHTML = canvasAssetLibraryView.renderCommandBar({
+      mutable,
+      space,
+      section,
+      canCreateEntity,
+      canUploadMedia,
+      allowedBatchActions: platformResults
+        ? ["add-canvas", "save-personal"]
+        : undefined,
+      canImportPlatformAssets: false,
+      selectionMode: state.librarySelectionMode,
+      selectedCount,
+      reviewableSelection,
+      filter: section === "media" ? state.libraryFilter : "all",
+      display: state.libraryDisplay,
+      menu: state.libraryToolbarMenu,
+    });
+  }
+
+  const folderMarkup = folders
+    .map((item) => canvasAssetLibraryView.renderFolderCard({
+      folder: item,
+      renaming: renameKey === `folder:${item.id}`,
+      menuOpen: menuKey === `folder:${item.id}`,
+      mutable: canManageFolders,
+      space,
+    }))
     .join("");
-}
-
-function syncGlobalLibraryButton(isGlobalView) {
-  if (!assetLibraryGlobalBtn) return;
-  assetLibraryGlobalBtn.classList.toggle("active", isGlobalView);
-  assetLibraryGlobalBtn.title = isGlobalView ? "返回项目资产库" : "全局资产库";
-  assetLibraryGlobalBtn.setAttribute("aria-label", isGlobalView ? "返回项目资产库" : "全局资产库");
-  assetLibraryGlobalBtn.innerHTML = `<i data-lucide="${isGlobalView ? "panel-left-close" : "book-open"}" aria-hidden="true"></i>`;
-}
-
-function renderLibraryFilterTabs() {
-  if (!assetLibraryTabs) return;
-  if (state.libraryView === "global") {
-    const displayMode = state.globalLibraryDisplay === "list" ? "list" : "preview";
-    assetLibraryTabs.innerHTML = `
-      <div class="global-display-toggle" role="group" aria-label="全局资产显示方式">
-        <button class="${displayMode === "preview" ? "active" : ""}" type="button" data-global-library-display="preview" title="预览">
-          <i data-lucide="layout-grid" aria-hidden="true"></i>
-        </button>
-        <button class="${displayMode === "list" ? "active" : ""}" type="button" data-global-library-display="list" title="列表">
-          <i data-lucide="list" aria-hidden="true"></i>
-        </button>
-      </div>
-    `;
-    return;
-  }
-
-  const filters =
-    state.libraryView === "canvas"
-      ? [
-          ["all", "全部"],
-          ["generator", "生成"],
-          ["image", "图片"],
-          ["video", "视频"],
-          ["audio", "音频"],
-          ["group", "组"],
-        ]
-      : assetCategoryFilters;
-
-  if (state.libraryView === "canvas" && !filters.some(([id]) => id === state.libraryFilter)) {
-    state.libraryFilter = "all";
-  }
-
-  if (state.libraryView !== "canvas") {
-    const scopeAssets = getLibraryAssetsForScope(getActiveAssetLibraryScope());
-    state.libraryFilter = getPreferredAssetFilter(scopeAssets);
-    const counts = countAssetsByCategory(scopeAssets);
-    assetLibraryTabs.innerHTML = `
-      <div class="asset-category-tabs">
-        ${filters
-          .map(
-            ([id, label]) => `
-              <button class="${state.libraryFilter === id ? "active" : ""}" type="button" data-library-filter="${id}">
-                <span>${label}</span>
-                <small>${counts[id] || 0}</small>
-              </button>
-            `,
-          )
-          .join("")}
-      </div>
-    `;
-    return;
-  }
-
-  const activeLabel = filters.find(([id]) => id === state.libraryFilter)?.[1] || "全部";
-  assetLibraryTabs.innerHTML = `
-    <button class="asset-filter-trigger" type="button" data-library-filter-toggle aria-expanded="false">
-      <span>${activeLabel}</span>
-      <i data-lucide="chevron-down" aria-hidden="true"></i>
-    </button>
-    <div class="asset-filter-menu hidden">
-      ${filters
-        .map(
-          ([id, label]) => `
-            <button class="${state.libraryFilter === id ? "active" : ""}" type="button" data-library-filter="${id}">
-              <span>${label}</span>
-              ${state.libraryFilter === id ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
-            </button>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function renderCanvasLibraryList(items, allItems) {
-  if (!items.length) {
-    const hasAny = Boolean(countCanvasElementRows(allItems));
-    return `
-      <div class="asset-library-empty">
-        <div>
-          <i data-lucide="${hasAny ? "filter-x" : "mouse-pointer-click"}" aria-hidden="true"></i>
-          <strong>${hasAny ? "没有匹配的画布元素" : "画布还没有元素"}</strong>
-          <span>${hasAny ? "调整搜索或筛选条件" : "双击画布添加节点，或拖入图片、视频、音频素材"}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  return items.map((item) => renderCanvasLibraryItem(item)).join("");
-}
-
-function renderCanvasLibraryItem(item) {
-  if (item.kind === "group") {
-    const selected = state.activeGroupId === item.id;
-    const collapsed = Boolean(item.collapsed);
-    return `
-      <div class="library-group-block ${collapsed ? "collapsed" : ""}">
-        <button class="library-list-item canvas-element-item group-row ${selected ? "active" : ""}" type="button" data-canvas-item="${item.id}" data-canvas-kind="group" title="定位到组">
-          <span class="library-group-caret" data-library-group-toggle="${item.id}">
-            <i data-lucide="chevron-down" aria-hidden="true"></i>
-          </span>
-          <span class="library-list-thumb group">
-            <i data-lucide="${item.icon}" aria-hidden="true"></i>
-          </span>
-          <span class="library-list-info">
-            <strong>${escapeHtml(item.title)}</strong>
-            <small>${escapeHtml(item.subtitle || "")}</small>
-          </span>
-          ${item.meta ? `<span class="library-list-meta">${escapeHtml(item.meta)}</span>` : ""}
-        </button>
-        ${
-          collapsed || !item.children?.length
-            ? ""
-            : `<div class="library-group-children">${item.children.map((child) => renderCanvasLibraryItem(child)).join("")}</div>`
-        }
-      </div>
-    `;
-  }
-
-  const thumb = item.asset
-    ? assetPreview(item.asset)
-    : `<span class="library-item-icon"><i data-lucide="${item.icon}" aria-hidden="true"></i></span>`;
-  const selected = state.selectedIds.has(item.id);
-  return `
-    <button class="library-list-item canvas-element-item child-row ${selected ? "active" : ""}" type="button" data-canvas-item="${item.id}" data-canvas-kind="node" title="定位到画布元素">
-      <span class="library-list-thumb ${item.asset ? item.asset.type : item.type}">${thumb}</span>
-      <span class="library-list-info">
-        <strong>${escapeHtml(item.title)}</strong>
-        <small>${escapeHtml(item.subtitle || "")}</small>
-      </span>
-      ${item.meta ? `<span class="library-list-meta">${escapeHtml(item.meta)}</span>` : ""}
-    </button>
-  `;
-}
-
-function renderAssetLibraryList(assets, allAssets, targetNode) {
-  if (!assets.length) {
-    const hasAny = Boolean(allAssets.length);
-    return `
-      <div class="asset-library-empty">
-        <div>
-          <i data-lucide="${hasAny ? "filter-x" : "images"}" aria-hidden="true"></i>
-          <strong>${hasAny ? "没有匹配的资产" : "这里还没有资产"}</strong>
-          <span>${hasAny ? "调整搜索或筛选条件" : state.libraryScope === "official" ? "官方库会逐步补充可复用素材" : "上传图片、视频或音频，随后可加入画布或生成节点"}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  return assets
-    .map(
-      (asset) => `
-        <article class="asset-card-item" data-library-asset="${asset.id}" tabindex="0" draggable="true" title="双击${targetNode ? "引用到生成节点" : "添加到画布"}">
-          <div class="asset-card-preview ${asset.type}">${assetPreview(asset)}</div>
-          <div class="asset-card-info">
-            <strong>${escapeHtml(getAssetDisplayName(asset))}</strong>
-            <small>${escapeHtml(assetCategoryLabels[getAssetCategory(asset)] || "素材")} · ${escapeHtml(getAssetOriginLabel(asset))}</small>
-          </div>
-          <button class="asset-card-add" type="button" data-library-add="${asset.id}" title="${targetNode ? "引用到生成节点" : "添加到画布"}" aria-label="${targetNode ? "引用到生成节点" : "添加到画布"}">
-            <i data-lucide="${targetNode ? "paperclip" : "plus"}" aria-hidden="true"></i>
-          </button>
-        </article>
-      `,
-    )
-    .join("");
-}
-
-function getGlobalLibraryScopeDetails() {
-  return {
-    personal: {
-      icon: "user-round",
-      title: "个人空间",
-      body: "跨项目保存自己的常用角色、参考图、声音与风格素材。",
-    },
-    organization: {
-      icon: "users-round",
-      title: "组织空间",
-      body: "团队共享的品牌资产、项目通用角色与制作标准素材。",
-    },
-    official: {
-      icon: "badge-check",
-      title: "官方空间",
-      body: "由 Reelay 提供的公共示例、官方素材包和后续工作流模板。",
-    },
-  };
-}
-
-function buildGlobalAssetFolders(allAssets = []) {
-  return canvasAssetLibraryModel.buildGlobalAssetFolders({ assets: allAssets, scope: state.libraryScope });
-}
-
-function folderMatchesLibrarySearch(folder, query) {
-  return canvasAssetLibraryModel.folderMatchesSearch(folder, query);
-}
-
-function renderGlobalFolderAsset(asset, targetNode, mode = "preview") {
-  const addTitle = targetNode ? "引用到生成节点" : "添加到画布";
-  return `
-    <article class="global-folder-file ${mode}" data-library-asset="${asset.id}" tabindex="0" draggable="true" title="双击${addTitle}">
-      <div class="global-folder-file-preview ${asset.type}">${assetPreview(asset)}</div>
-      <div class="global-folder-file-info">
-        <strong>${escapeHtml(getAssetDisplayName(asset))}</strong>
-        <small>${escapeHtml(assetTypeLabel(asset.type))} · ${escapeHtml(getAssetOriginLabel(asset))}</small>
-      </div>
-      <button class="asset-card-add global-add" type="button" data-library-add="${asset.id}" title="${addTitle}" aria-label="${addTitle}">
-        <i data-lucide="${targetNode ? "paperclip" : "plus"}" aria-hidden="true"></i>
-      </button>
-    </article>
-  `;
-}
-
-function renderGlobalFolderFiles(folder, targetNode, displayMode) {
-  const assets = folder.assets || [];
-  if (!assets.length) {
-    return `
-      <div class="global-folder-empty">
-        <i data-lucide="archive" aria-hidden="true"></i>
-        <span>这个文件夹暂时为空</span>
-      </div>
-    `;
-  }
-
-  if (displayMode === "list") {
-    return `
-      <div class="global-folder-files list">
-        ${assets.map((asset) => renderGlobalFolderAsset(asset, targetNode, "list")).join("")}
-      </div>
-    `;
-  }
-
-  return `
-    <div class="global-folder-files preview">
-      ${assets.map((asset) => renderGlobalFolderAsset(asset, targetNode, "preview")).join("")}
-    </div>
-  `;
-}
-
-function renderGlobalAssetLibrary(assets, allAssets, targetNode) {
-  const scopeDetails = getGlobalLibraryScopeDetails();
-  const scope = scopeDetails[state.libraryScope] || scopeDetails.personal;
-  const query = normalizeLibrarySearch();
-  const displayMode = state.globalLibraryDisplay === "list" ? "list" : "preview";
-  const folders = buildGlobalAssetFolders(allAssets)
-    .map((folder) => {
-      const matchesFolder = folderMatchesLibrarySearch(folder, query);
-      const folderAssets = query && !matchesFolder
-        ? folder.assets.filter((asset) => assets.some((visibleAsset) => visibleAsset.id === asset.id))
-        : folder.assets;
-      return { ...folder, assets: folderAssets, matchesFolder };
-    })
-    .filter((folder) => !query || folder.matchesFolder || folder.assets.length);
-
-  const folderCards = folders
-    .map(
-      (folder) => `
-        <article class="global-folder-card ${displayMode}">
-          <header class="global-folder-head">
-            <span class="global-folder-icon"><i data-lucide="${folder.icon}" aria-hidden="true"></i></span>
-            <div>
-              <strong>${escapeHtml(folder.title)}</strong>
-              <p>${escapeHtml(folder.body)}</p>
-            </div>
-            <small>${folder.assets.length} 项</small>
-          </header>
-          ${renderGlobalFolderFiles(folder, targetNode, displayMode)}
-        </article>
-      `,
-    )
-    .join("");
-
-  return `
-    <section class="global-library-space-card">
-      <div class="global-library-identity">
-        <span><i data-lucide="${scope.icon}" aria-hidden="true"></i></span>
-        <div>
-          <strong>${scope.title}</strong>
-          <p>${scope.body}</p>
-        </div>
-      </div>
-      <small>${allAssets.length} 项资产 · ${folders.length} 个文件夹</small>
-    </section>
-    <section class="global-folder-section ${displayMode}">
-      ${
-        folderCards ||
-        `<div class="global-library-empty">
-          <i data-lucide="archive" aria-hidden="true"></i>
-          <strong>${allAssets.length ? "没有匹配的文件夹" : "这个空间还没有资产"}</strong>
-          <span>${state.libraryScope === "official" ? "官方库会逐步补充可直接拖入画布的素材包。" : "后续从画布保存素材后，可在这里跨项目复用。"}</span>
-        </div>`
+  const itemMarkup = items
+    .map((item) => {
+      const itemKey = `${item.kind}:${item.id}`;
+      const common = {
+        selected: state.librarySelectedIds.has(item.id),
+        selectionMode: state.librarySelectionMode,
+        menuOpen: menuKey === itemKey,
+        renaming: renameKey === itemKey,
+        mutable,
+        space,
+      };
+      if (item.kind === "entity") {
+        const entityMedia = assetLibraryStore.getEntityMedia({ kind: "entity", id: item.id });
+        const coverMedia = item.coverMediaId
+          ? entityMedia.find((media) => media.id === item.coverMediaId)
+          : null;
+        const coverPreview = coverMedia && (coverMedia.mediaKind || coverMedia.type) === "image"
+          ? coverMedia
+          : entityMedia.find((media) => (media.mediaKind || media.type) === "image") || null;
+        return canvasAssetLibraryView.renderEntityCard({
+          ...common,
+          entity: item,
+          name: item.name || "未命名主体",
+          mediaPreviews: entityMedia.slice(0, 4),
+          coverPreview: entityMedia.find((media) => media.id === item.coverMediaId) || null,
+        });
       }
-    </section>
-  `;
-}
-function getAssetOriginLabel(asset) {
-  if (!asset) return "";
-  if (asset.source === "local") return "本地上传";
-  if (asset.source === "generated") return "生成结果";
-  if (asset.source === "official") return "官方公用库";
-  if (asset.source === "library") return "资产引用";
-  const scopeLabels = {
-    project: "项目素材",
-    personal: "个人资产",
-    organization: "组织空间",
-    official: "官方公用库",
-  };
-  return scopeLabels[getActiveAssetLibraryScope()] || "项目素材";
+      return canvasAssetLibraryView.renderMediaCard({
+        ...common,
+        media: item,
+        name: getAssetDisplayName(item),
+        meta: `${assetTypeLabel(item.mediaKind || item.type)} · ${getAssetLibraryOriginLabel(item)}`,
+      });
+    })
+    .join("");
+
+  assetLibraryGrid.innerHTML = folderMarkup + itemMarkup || canvasAssetLibraryView.renderEmptyState({
+    section,
+    space,
+    hasQuery: Boolean(state.librarySearch || (section === "media" && state.libraryFilter !== "all")),
+    mutable,
+    canCreateEntity,
+    canUploadMedia,
+  });
+
+  if (assetLibraryCount) {
+    if (platform) {
+      assetLibraryCount.textContent = `共 ${items.length} 个结果`;
+    } else {
+    const noun = section === "entity" ? "个主体" : "个素材";
+    const filtered = Boolean(state.librarySearch || (section === "media" && state.libraryFilter !== "all"));
+    assetLibraryCount.textContent = filtered
+      ? `显示 ${items.length} / 共 ${allItems.length} ${noun}`
+      : `共 ${allItems.length} ${noun}`;
+    }
+  }
+
+  if (assetLibraryOverlayLayer) {
+    const movingFolder = state.libraryMoveFolderId ? assetLibraryStore.getFolder(state.libraryMoveFolderId) : null;
+    assetLibraryOverlayLayer.innerHTML = state.libraryMoveItems.length || movingFolder
+      ? canvasAssetLibraryView.renderMovePopover({
+          folders: allFolders,
+          currentFolderId: movingFolder ? movingFolder.parentId : state.libraryFolderId,
+          excludedFolderIds: movingFolder ? getAssetLibraryFolderDescendantIds(movingFolder.id) : [],
+          mutable,
+          space,
+        })
+      : "";
+  }
+  refreshIcons();
+  if (state.libraryRenameTarget) {
+    window.requestAnimationFrame(() => {
+      const input = assetLibraryGrid.querySelector("[data-library-rename-input]");
+      input?.focus();
+      input?.select();
+    });
+  }
+  canvasEntityUse.refreshDetail();
 }
 
 function findLibraryAsset(assetId) {
-  const pools = [
-    state.libraryAssets,
-    state.personalLibraryAssets,
-    officialLibraryAssets,
-    state.organizationLibraryAssets,
-    getCanvasLibraryAssets(),
-  ];
-  return pools.flat().find((asset) => asset.id === assetId) || null;
+  return assetLibraryStore.getMedia({ kind: "media", id: assetId })
+    || getCanvasLibraryAssets().find((asset) => asset.id === assetId)
+    || null;
 }
 
-function registerLibraryAssets(assets, scope = state.libraryScope) {
-  const target =
-    scope === "personal"
-      ? state.personalLibraryAssets
-      : scope === "organization"
-        ? state.organizationLibraryAssets
-        : state.libraryAssets;
-  for (const asset of assets) {
-    if (!target.some((item) => item.id === asset.id)) {
-      target.push(asset);
-    }
+function registerLibraryAssets(assets, scope = state.librarySpace) {
+  const space = scope === "organization" ? "organization" : "personal";
+  for (const asset of assets || []) {
+    assetLibraryStore.registerMedia({ media: asset, space, folderId: null });
   }
   renderAssetLibrary();
 }
 
-function renderAssetLibrary() {
-  if (!assetLibraryGrid) return;
-  if (state.libraryView === "global") ensureGlobalLibraryScope();
-  const isCanvasView = state.libraryView === "canvas";
-  const isGlobalView = state.libraryView === "global";
-  const isProjectAssetView = state.libraryView === "assets";
-  const query = isProjectAssetView ? "" : normalizeLibrarySearch();
-  const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId && node.kind === "generator");
-  const canvasItems = getCanvasElementItems();
-  const visibleCanvasItems = filterCanvasElementTree(canvasItems, query);
-  const activeAssetScope = getActiveAssetLibraryScope();
-  const scopeAssets = getLibraryAssetsForScope(activeAssetScope);
-  if (isProjectAssetView) {
-    state.libraryFilter = getPreferredAssetFilter(scopeAssets);
-  }
-  const visibleAssets = scopeAssets.filter(
-    (asset) =>
-      (!isProjectAssetView || getAssetCategory(asset) === state.libraryFilter) &&
-      assetMatchesLibrarySearch(asset, query),
-  );
-  const canvasTotal = countCanvasElementRows(canvasItems);
-  const projectAssetTotal = getLibraryAssetsForScope("project").length;
-  const scopeTotals = {
-    personal: getLibraryAssetsForScope("personal").length,
-    organization: getLibraryAssetsForScope("organization").length,
-    official: getLibraryAssetsForScope("official").length,
-  };
+function findRegisteredLibraryMedia(asset) {
+  if (!asset) return null;
+  const sourceId = asset.librarySourceId || asset.id;
+  return assetLibraryStore.listAllMedia().find(
+    (item) => item.id === sourceId
+      || item.librarySourceId === sourceId
+      || (asset.url && item.url === asset.url),
+  ) || null;
+}
 
-  assetLibraryPanel?.setAttribute("data-library-mode", state.libraryView);
-  renderAssetLibraryModeTabs({ canvasTotal, projectAssetTotal, scopeTotals, isGlobalView });
-  syncGlobalLibraryButton(isGlobalView);
-  renderLibraryFilterTabs();
-  if (assetLibrarySearchInput && assetLibrarySearchInput.value !== state.librarySearch) {
-    assetLibrarySearchInput.value = state.librarySearch;
+function hasPersonalLibraryPlacement(media) {
+  return Boolean(
+    media && assetLibraryStore.hasPlacement({ kind: "media", id: media.id }, "personal"),
+  );
+}
+
+function getEntityUseDetailPayload(entityId, space) {
+  const entity = entityId
+    ? assetLibraryStore.getEntity({ kind: "entity", id: entityId })
+    : null;
+  if (!entity) return null;
+  if (!assetLibraryStore.hasPlacement({ kind: "entity", id: entity.id }, space)) return null;
+  const media = assetLibraryStore
+    .getEntityMedia({ kind: "entity", id: entity.id })
+    .filter((item) => assetLibraryStore.hasPlacement({ kind: "media", id: item.id }, space));
+  return { ...entity, media };
+}
+
+function getEntityUsePickerEntities() {
+  const entitiesById = new Map();
+  for (const space of ["personal", "organization"]) {
+    const entities = assetLibraryStore.listItems({ space, kind: "entity" });
+    for (const entity of entities) {
+      const existing = entitiesById.get(entity.id);
+      if (existing) {
+        if (!existing.spaces.includes(space)) existing.spaces.push(space);
+        continue;
+      }
+      const { kind: _kind, placement: _placement, ...record } = entity;
+      entitiesById.set(entity.id, {
+        ...record,
+        spaces: [space],
+        media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entity.id }),
+      });
+    }
   }
-  if (assetLibrarySearchInput) {
-    assetLibrarySearchInput.placeholder = isCanvasView ? "搜索画布" : isGlobalView ? "搜索全局资产" : "搜索资产";
-    assetLibrarySearchInput.closest(".asset-library-search")?.classList.toggle("hidden", isProjectAssetView);
+  return [...entitiesById.values()];
+}
+
+function createEntityUseMediaPlan(entityIds, existingMedia, selectedSpaces) {
+  const entities = entityIds
+    .map((entityId) => assetLibraryStore.getEntity({ kind: "entity", id: entityId }))
+    .filter(Boolean);
+  return canvasEntityUseModel.createEntityMediaPlan({
+    entities,
+    media: assetLibraryStore.listAllMedia(),
+    existingMedia,
+    isMediaVisible(media, entity) {
+      const space = selectedSpaces.get(entity.id) || "personal";
+      return assetLibraryStore.hasPlacement({ kind: "media", id: media.id }, space);
+    },
+  });
+}
+
+function addSelectedEntitiesToGenerator({ scope, nodeId, selections }) {
+  if (scope.projectId !== state.projectId || scope.canvasId !== state.activeCanvasId || !requireCanvasMutation()) return;
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node || node.kind !== "generator" || node.generating || node.promptOptimizing || !canNodeUseEntityReferences(node)) {
+    showActionToast("当前生成节点已不可用");
+    return;
   }
-  if (assetLibraryProjectName) assetLibraryProjectName.textContent = state.projectName || "Untitled";
-  if (assetLibraryCount) {
-    const visibleCount = isCanvasView ? countCanvasElementRows(visibleCanvasItems) : visibleAssets.length;
-    const totalCount = isCanvasView ? canvasTotal : scopeAssets.length;
-    const noun = isCanvasView ? "节点" : "项";
-    const hasQuery = !isProjectAssetView && Boolean(state.librarySearch);
-    const hasFilter = isCanvasView ? state.libraryFilter !== "all" : isProjectAssetView && visibleCount !== totalCount;
-    assetLibraryCount.textContent =
-      hasQuery || hasFilter
-        ? `${visibleCount} / ${totalCount} ${noun}`
-        : `共 ${totalCount} ${noun}`;
+  const entityIds = selections.map((selection) => selection.entityId);
+  const selectedSpaces = new Map(selections.map((selection) => [selection.entityId, selection.space]));
+  const plan = createEntityUseMediaPlan(entityIds, node.assets || [], selectedSpaces);
+  if (!plan.entries.length) {
+    showActionToast(plan.skipped.some((item) => item.reason === "existing")
+      ? "所选主体素材已在参考区"
+      : "所选主体没有可添加的素材");
+    return;
   }
-  assetLibraryGrid.className = `asset-library-grid ${
-    isCanvasView
-      ? "canvas-list"
-      : isGlobalView
-        ? `global-library-grid ${state.globalLibraryDisplay === "list" ? "global-list-view" : "global-preview-view"}`
-        : "asset-card-grid"
-  }`;
-  assetLibraryGrid.innerHTML = isCanvasView
-    ? renderCanvasLibraryList(visibleCanvasItems, canvasItems)
-    : isGlobalView
-      ? renderGlobalAssetLibrary(visibleAssets, scopeAssets, targetNode)
-      : renderAssetLibraryList(visibleAssets, scopeAssets, targetNode);
+  const before = cloneNodeState(node);
+  const additions = plan.entries.map((entry) => cloneAsset({
+    ...entry.media,
+    librarySourceId: entry.sourceMediaId || entry.mediaId,
+  }, "library"));
+  pushUndoAction({ type: "node-update", node: before });
+  node.assets.push(...additions);
+  node.activeAssetId = additions[0].id;
+  node.expanded = true;
+  node.panel = null;
+  additions.forEach((asset) => hydrateAssetMetadata(asset, node.id));
+  bringNodesToFront([node]);
+  setSelection([node.id], node.id);
+  render();
+  const skippedExisting = plan.skipped.filter((item) => item.reason === "existing" || item.reason === "duplicate").length;
+  showActionToast(skippedExisting
+    ? `已添加 ${additions.length} 个参考素材，跳过 ${skippedExisting} 个重复项`
+    : `已添加 ${additions.length} 个参考素材`);
+}
+
+function getAvailableCanvasPlacementViewport() {
+  const shellRect = shell.getBoundingClientRect();
+  let left = shellRect.left;
+  let right = shellRect.right;
+  if (isAssetLibraryOpen() && assetLibraryPanel) {
+    left = Math.max(left, assetLibraryPanel.getBoundingClientRect().right + 12);
+  }
+  if (state.agentOpen && agentDock) {
+    right = Math.min(right, agentDock.getBoundingClientRect().left - 12);
+  }
+  if (right - left < 280) {
+    left = shellRect.left;
+    right = shellRect.right;
+  }
+  const top = shellRect.top;
+  const bottom = shellRect.bottom;
+  const center = screenToWorld((left + right) / 2, (top + bottom) / 2);
+  return {
+    centerX: center.x,
+    centerY: center.y,
+    viewportWidth: Math.max(1, (right - left) / state.scale),
+    viewportHeight: Math.max(1, (bottom - top) / state.scale),
+  };
+}
+
+function addEntityToCanvas({ scope, entityId, space }) {
+  if (scope.projectId !== state.projectId || scope.canvasId !== state.activeCanvasId || !requireCanvasMutation()) return [];
+  const selectedSpaces = new Map([[entityId, space]]);
+  const plan = createEntityUseMediaPlan([entityId], getCanvasLibraryAssets(), selectedSpaces);
+  if (!plan.entries.length) {
+    showActionToast(plan.skipped.some((item) => item.reason === "existing")
+      ? "这个主体的素材已在画布中"
+      : "这个主体没有可添加的素材");
+    return [];
+  }
+  const createdNodes = plan.entries.map((entry) => {
+    const asset = cloneAsset({
+      ...entry.media,
+      librarySourceId: entry.sourceMediaId || entry.mediaId,
+    }, "library");
+    const node = defaultAssetNode(0, 0, asset);
+    hydrateAssetMetadata(asset, node.id);
+    return node;
+  });
+  const layoutEntries = plan.entries.map((entry, index) => {
+    const layout = getNodeLayout(createdNodes[index]);
+    return { ...entry, layoutWidth: layout.nodeWidth, layoutHeight: layout.nodeHeight };
+  });
+  const viewport = getAvailableCanvasPlacementViewport();
+  const layoutPlan = canvasEntityUseModel.createCenteredGridPlan(layoutEntries, {
+    ...viewport,
+    padding: 36 / state.scale,
+    gapX: 30 / state.scale,
+    gapY: 30 / state.scale,
+  });
+  layoutPlan.items.forEach((item, index) => {
+    createdNodes[index].x = item.x;
+    createdNodes[index].y = item.y;
+  });
+  collapseAllGeneratorPanels();
+  pushUndoAction({ type: "create", nodeIds: createdNodes.map((node) => node.id) });
+  state.nodes.push(...createdNodes);
+  bringNodesToFront(createdNodes);
+  setSelection(createdNodes.map((node) => node.id), createdNodes[0].id);
+  const createdBounds = getNodesContentBounds(createdNodes);
+  const shouldFitCreatedNodes = createdBounds && getBoundsFitScale(createdBounds) < state.scale;
+  render();
+  if (shouldFitCreatedNodes) applyFitBounds(createdBounds);
+  const skippedExisting = plan.skipped.filter((item) => item.reason === "existing" || item.reason === "duplicate").length;
+  showActionToast(skippedExisting
+    ? `已添加 ${createdNodes.length} 个素材，跳过 ${skippedExisting} 个重复项`
+    : `已添加 ${createdNodes.length} 个素材到画布`);
+  return createdNodes;
+}
+
+function openAssetLibraryPreview(id) {
+  const item = assetLibraryStore.getMedia({ kind: "media", id });
+  if (!item || !assetLibraryPreviewDialog || !assetLibraryPreviewBody) return;
+  state.libraryPreviewTarget = { kind: "media", id };
+  const name = getAssetDisplayName(item);
+  if (assetLibraryPreviewTitle) assetLibraryPreviewTitle.textContent = name;
+  if (assetLibraryPreviewKicker) {
+    assetLibraryPreviewKicker.textContent = `${assetTypeLabel(item.mediaKind || item.type)}预览`;
+  }
+  const url = safeMediaAttributeUrl(item.url);
+  if (item.mediaKind === "image" || item.type === "image") {
+    assetLibraryPreviewBody.innerHTML = url ? `<img src="${url}" alt="${escapeHtml(name)}" />` : assetPreview(item);
+  } else if (item.mediaKind === "video" || item.type === "video") {
+    assetLibraryPreviewBody.innerHTML = url ? `<video src="${url}" controls autoplay playsinline></video>` : assetPreview(item);
+  } else {
+    assetLibraryPreviewBody.innerHTML = url ? `<audio src="${url}" controls autoplay></audio>` : assetPreview(item);
+  }
+  if (assetLibraryPreviewMeta) {
+    assetLibraryPreviewMeta.textContent = `${assetTypeLabel(item.mediaKind || item.type)} · ${getAssetLibraryOriginLabel(item)}`;
+  }
+  if (assetLibraryPreviewUse) {
+    assetLibraryPreviewUse.hidden = false;
+    assetLibraryPreviewUse.querySelector("span").textContent = state.libraryTargetNodeId ? "引用到当前节点" : "添加到画布";
+  }
   refreshIcons();
+  if (!assetLibraryPreviewDialog.open) assetLibraryPreviewDialog.showModal();
+}
+
+function closeAssetLibraryPreview() {
+  state.libraryPreviewTarget = null;
+  assetLibraryPreviewDialog?.close?.();
+  if (assetLibraryPreviewBody) assetLibraryPreviewBody.innerHTML = "";
 }
 
 function focusWorldBounds(bounds) {
   if (!bounds) return;
   const rect = shell.getBoundingClientRect();
-  const leftInset =
-    assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
-      ? assetLibraryPanel.getBoundingClientRect().width
-      : 0;
-  const rightInset = state.agentOpen ? state.agentWidth : 0;
+  const libraryRect = isAssetLibraryOpen() ? assetLibraryPanel?.getBoundingClientRect() : null;
+  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
+  const leftInset = Math.max(0, (libraryRect?.right || rect.left) - rect.left);
+  const rightInset = Math.max(0, rect.right - (agentRect?.left || rect.right));
   const viewWidth = Math.max(260, rect.width - leftInset - rightInset);
   const centerX = (bounds.left + bounds.right) / 2;
   const centerY = (bounds.top + bounds.bottom) / 2;
@@ -2757,17 +4061,18 @@ function syncNarrowViewportIsolation({ focusPanel = false } = {}) {
 
   const mode = assetOpen ? "asset" : "agent";
   const targets = mode === "asset"
-    ? [topBar, leftRail, topActions, shell, agentDock, undoToast]
-    : [topBar, leftRail, topActions, shell, assetLibraryPanel, projectMenu, canvasMenu, canvasMoreMenu, undoToast];
+    ? [topBar, leftRail, topActions, shell, agentDock]
+    : [topBar, leftRail, topActions, shell, assetLibraryPanel, projectMenu, canvasMenu, canvasMoreMenu];
   setNarrowViewportInertTargets(targets);
   if (focusPanel) focusNarrowViewportPanel(mode);
 }
 
-function openAssetLibrary(targetNodeId = null) {
-  if (narrowViewportQuery.matches && state.agentOpen) setAgentOpen(false);
+function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
+  if (state.agentOpen && !canShowAssetAndAgent()) setAgentOpen(false);
   state.libraryTargetNodeId = targetNodeId;
   if (targetNodeId) {
-    state.libraryView = "assets";
+    state.librarySection = "media";
+    state.libraryFolderId = null;
   }
   assetLibraryPanel?.classList.remove("hidden");
   if (assetLibraryPanel) {
@@ -2775,25 +4080,45 @@ function openAssetLibrary(targetNodeId = null) {
     assetLibraryPanel.setAttribute("aria-hidden", "false");
   }
   appShell?.classList.add("asset-library-open");
+  if (leftRail) {
+    leftRail.inert = true;
+    leftRail.setAttribute("aria-hidden", "true");
+  }
+  setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
+  if (state.agentOpen) reconcileDualPanelWidths("asset");
   railLibraryBtn?.classList.add("active");
   railLibraryBtn?.setAttribute("aria-expanded", "true");
   closeProfileMenu();
   renderAssetLibrary();
+  scheduleNodePopoverLayouts();
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
+  if (focus && !narrowViewportQuery.matches) {
+    window.requestAnimationFrame(() => assetLibrarySearchInput?.focus());
+  }
 }
 
-function closeAssetLibrary() {
-  const shouldRestoreFocus = Boolean(assetLibraryPanel?.contains(document.activeElement));
+function closeAssetLibrary({ restoreFocus = true } = {}) {
+  const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
+  canvasEntityUse.closeDetail();
   state.libraryTargetNodeId = null;
+  state.libraryDirectoryMenuOpen = false;
+  state.libraryRenameTarget = null;
+  clearAssetLibrarySelection();
+  closeAssetLibraryPreview();
   assetLibraryPanel?.classList.add("hidden");
   if (assetLibraryPanel) {
     assetLibraryPanel.inert = true;
     assetLibraryPanel.setAttribute("aria-hidden", "true");
   }
   appShell?.classList.remove("asset-library-open");
+  if (leftRail) {
+    leftRail.inert = false;
+    leftRail.removeAttribute("aria-hidden");
+  }
   railLibraryBtn?.classList.remove("active");
   railLibraryBtn?.setAttribute("aria-expanded", "false");
   syncNarrowViewportIsolation();
+  scheduleNodePopoverLayouts();
   if (shouldRestoreFocus) railLibraryBtn?.focus();
 }
 
@@ -2844,46 +4169,71 @@ function useLibraryAsset(assetId, clientX, clientY) {
   addLibraryAssetToCanvas(sourceAsset, clientX, clientY);
 }
 
+function readAssetMetadata(asset) {
+  const safeUrl = sanitizeRuntimeMediaUrl(asset.url);
+  if (!safeUrl) return Promise.resolve({});
+  const mediaType = asset.type || asset.mediaKind;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId = 0;
+    const finish = (metadata = {}) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+      resolve(metadata);
+    };
+    timeoutId = window.setTimeout(() => finish(), 4000);
+
+    if (mediaType === "image") {
+      const image = new Image();
+      image.onload = () => finish(image.naturalWidth && image.naturalHeight
+        ? {
+            width: image.naturalWidth,
+            height: image.naturalHeight,
+            aspectRatio: image.naturalWidth / image.naturalHeight,
+          }
+        : {});
+      image.onerror = () => finish();
+      image.src = safeUrl;
+      return;
+    }
+
+    if (mediaType === "audio") {
+      const audio = document.createElement("audio");
+      audio.preload = "metadata";
+      audio.onloadedmetadata = () => finish(Number.isFinite(audio.duration) ? { duration: audio.duration } : {});
+      audio.onerror = () => finish();
+      audio.src = safeUrl;
+      return;
+    }
+
+    if (mediaType !== "video") {
+      finish();
+      return;
+    }
+
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => finish(video.videoWidth && video.videoHeight
+      ? {
+          width: video.videoWidth,
+          height: video.videoHeight,
+          duration: Number.isFinite(video.duration) ? video.duration : 0,
+          aspectRatio: video.videoWidth / video.videoHeight,
+        }
+      : {});
+    video.onerror = () => finish();
+    video.src = safeUrl;
+  });
+}
+
 function hydrateAssetMetadata(asset, nodeId) {
-  if (!asset.url) return;
-
-  if (asset.type === "image") {
-    const image = new Image();
-    image.onload = () => {
-      if (!image.naturalWidth || !image.naturalHeight) return;
-      asset.width = image.naturalWidth;
-      asset.height = image.naturalHeight;
-      asset.aspectRatio = image.naturalWidth / image.naturalHeight;
-      if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
-    };
-    image.src = asset.url;
-    return;
-  }
-
-  if (asset.type === "audio") {
-    const audio = document.createElement("audio");
-    audio.preload = "metadata";
-    audio.onloadedmetadata = () => {
-      asset.duration = audio.duration;
-      if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
-    };
-    audio.src = asset.url;
-    return;
-  }
-
-  if (asset.type !== "video") return;
-
-  const video = document.createElement("video");
-  video.preload = "metadata";
-  video.onloadedmetadata = () => {
-    if (!video.videoWidth || !video.videoHeight) return;
-    asset.width = video.videoWidth;
-    asset.height = video.videoHeight;
-    asset.duration = video.duration;
-    asset.aspectRatio = video.videoWidth / video.videoHeight;
+  readAssetMetadata(asset).then((metadata) => {
+    if (!Object.keys(metadata).length) return;
+    Object.assign(asset, metadata);
     if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
-  };
-  video.src = asset.url;
+  });
 }
 
 function audioWaveformBars(repeat = 1) {
@@ -2895,37 +4245,70 @@ function audioWaveformBars(repeat = 1) {
 }
 
 function createGenerationParameterSnapshot(node) {
-  return {
-    mode: node.mode,
+  const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+  const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
+  const requestAspect = taskTypeConstraint?.aspect || node.aspect;
+  const hasFixedDuration = Boolean(taskTypeConstraint && Object.hasOwn(taskTypeConstraint, "duration"));
+  const requestDuration = hasFixedDuration ? taskTypeConstraint.duration : node.duration;
+  const referenceVideos = getReferenceVideoAssets(node);
+  const outputDuration = getGenerationOutputDurationSeconds(node, referenceVideos);
+  const snapshot = {
+    mediaKind: getNodeGenerationMode(node),
     model: node.model,
     prompt: node.prompt,
-    aspect: node.aspect,
+    aspect: requestAspect,
     resolution: node.resolution,
     quality: node.quality,
-    duration: node.duration,
+    duration: requestDuration,
+    outputDuration,
+    outputFormat: node.outputFormat,
     count: node.count,
+    workflow: node.workflow,
+    audioEnabled: node.audioEnabled,
+    autoLinkEnabled: node.autoLinkEnabled,
+    assetValidationEnabled: node.assetValidationEnabled,
     assetIds: (node.assets || []).map((asset) => asset.id),
+    referenceVideos: referenceVideos.map(({ assetId, sourceNodeId, url, duration }) => ({
+      assetId,
+      sourceNodeId,
+      url,
+      duration,
+    })),
   };
+  if (taskTypeCapability) {
+    const parameter = taskTypeCapability.parameter || "omni_reference_task_type";
+    snapshot.omniReferenceTaskType = node.omniReferenceTaskType;
+    snapshot.providerParameters = {
+      [parameter]: node.omniReferenceTaskType,
+      ratio: requestAspect,
+      duration: hasFixedDuration ? taskTypeConstraint.duration : getNormalizedDurationSeconds(node),
+    };
+  }
+  return snapshot;
 }
 
-function createGeneratedAsset(node) {
-  const base = simulationAssets[node.mode] || simulationAssets.image;
+function createGeneratedAsset(parameterSnapshot) {
+  const mediaKind = normalizeGeneratorMode(parameterSnapshot.mediaKind) || "image";
+  const base = simulationAssets[mediaKind] || simulationAssets.image;
   const generated = {
     ...base,
     id: crypto.randomUUID(),
-    displayName: node.mode === "video" ? "Generated video" : "Generated image",
+    displayName: mediaKind === "video" ? "Generated video" : "Generated image",
   };
 
-  if (node.mode === "image") {
-    const size = getGeneratedResolution(node);
+  if (mediaKind === "image") {
+    const size = getGeneratedResolution(parameterSnapshot);
     generated.width = size.width;
     generated.height = size.height;
-    generated.aspectRatio = aspectStringToRatio(node.aspect);
-    generated.url = `https://picsum.photos/seed/${encodeURIComponent(node.id)}/${size.width}/${size.height}`;
+    generated.aspectRatio = aspectStringToRatio(parameterSnapshot.aspect);
+    generated.url = `https://picsum.photos/seed/${encodeURIComponent(parameterSnapshot.id)}/${size.width}/${size.height}`;
   }
 
-  if (node.mode === "video") {
-    generated.aspectRatio = aspectStringToRatio(node.aspect);
+  if (mediaKind === "video") {
+    generated.aspectRatio = aspectStringToRatio(parameterSnapshot.aspect);
+    if (Number.isFinite(parameterSnapshot.outputDuration) && parameterSnapshot.outputDuration > 0) {
+      generated.duration = parameterSnapshot.outputDuration;
+    }
   }
 
   return generated;
@@ -2987,14 +4370,16 @@ function assetMediaContent(asset) {
     `;
   }
 
-  if (asset.type === "image" && asset.url) {
-    return `<div class="media-content image"><img class="frame-media" src="${asset.url}" alt="" draggable="false" /></div>`;
+  const safeUrl = safeMediaAttributeUrl(asset.url);
+
+  if (asset.type === "image" && safeUrl) {
+    return `<div class="media-content image"><img class="frame-media" src="${safeUrl}" alt="" draggable="false" /></div>`;
   }
 
-  if (asset.type === "video" && asset.url) {
+  if (asset.type === "video" && safeUrl) {
     return `
       <div class="media-content video">
-        <video class="frame-media" src="${asset.url}" controls playsinline preload="metadata" draggable="false"></video>
+        <video class="frame-media" src="${safeUrl}" controls playsinline preload="metadata" draggable="false"></video>
       </div>
     `;
   }
@@ -3016,7 +4401,7 @@ function assetMediaContent(asset) {
             <span class="audio-progress-fill" data-audio-progress-fill></span>
           </div>
         </div>
-        ${asset.url ? `<audio class="frame-audio" src="${asset.url}" preload="metadata"></audio>` : ""}
+        ${safeUrl ? `<audio class="frame-audio" src="${safeUrl}" preload="metadata"></audio>` : ""}
       </div>
     `;
   }
@@ -3065,10 +4450,10 @@ function assetShelf(node) {
   return `<div class="asset-shelf">${linkedReferences}${assets}</div>`;
 }
 
-function addFilesToGeneratorNode(node, files) {
+async function addFilesToGeneratorNode(node, files) {
   if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
-  const accepted = createAssetsFromFiles(files);
+  const accepted = await createPersistedAssetsFromFiles(files);
   if (!accepted.length) return;
 
   registerLibraryAssets(accepted, "project");
@@ -3082,9 +4467,9 @@ function addFilesToGeneratorNode(node, files) {
   render();
 }
 
-function addMediaNodesFromFiles(files, clientX, clientY) {
+async function addMediaNodesFromFiles(files, clientX, clientY) {
   if (!requireCanvasMutation()) return [];
-  const accepted = createAssetsFromFiles(files);
+  const accepted = await createPersistedAssetsFromFiles(files);
   if (!accepted.length) return [];
 
   registerLibraryAssets(accepted, "project");
@@ -3152,10 +4537,17 @@ function hasDraggedLibraryAsset(event) {
   return Array.from(event.dataTransfer?.types || []).includes("application/x-reelay-asset");
 }
 
+function isCanvasDropTarget(target) {
+  return target instanceof Element && Boolean(target.closest("#canvasShell"));
+}
+
 function render() {
-  saveActiveCanvasState();
+  canvasEntityUse.refresh();
   syncGroups();
+  canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
+  shell.classList.toggle("group-editing", Boolean(state.activeGroupId));
+  renderGroupResizeOverlay();
   renderConnections();
   updateEmptyState();
   syncProjectNavigation();
@@ -3164,13 +4556,14 @@ function render() {
   renderAssetLibrary();
   refreshIcons();
   syncCanvasAccessUi();
+  scheduleGroupChromeLayout();
   requestAnimationFrame(syncPromptPanelLayouts);
   scheduleCanvasDocumentSave();
 }
 
 function getNodeRenderSignature(node) {
   const renderState = Object.fromEntries(
-    Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId"].includes(key)),
+    Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId", "aspect"].includes(key)),
   );
   renderState.mediaToolbarVisible = shouldShowMediaEditToolbar(node);
   renderState.linkedReferences = getIncomingConnections(node.id).map((connection) => {
@@ -3195,12 +4588,11 @@ function getGroupRenderSignature(group) {
 }
 
 function syncCanvasNodeElement(element, node) {
-  element.style.left = `${node.x}px`;
-  element.style.top = `${node.y}px`;
   element.style.zIndex = String(node.z);
   element.classList.toggle("selected", state.selectedIds.has(node.id));
   element.classList.toggle("grouped", Boolean(node.groupId));
   syncNodeVisualLayout(node, element);
+  syncNodeAspectUi(node, element);
 }
 
 function syncGroupFrameElement(element, group) {
@@ -3215,6 +4607,29 @@ function syncGroupFrameElement(element, group) {
     nodes.length ? Math.max(0, Math.min(...nodes.map((node) => node.z || 1)) - 1) : group.z || 1,
   );
   element.classList.toggle("selected", state.activeGroupId === group.id);
+}
+
+function scheduleGroupChromeLayout() {
+  window.cancelAnimationFrame(state.groupChromeFrame);
+  state.groupChromeFrame = window.requestAnimationFrame(() => {
+    state.groupChromeFrame = 0;
+    const frame = nodeLayer.querySelector(".group-frame.selected");
+    if (!frame) return;
+    const title = frame.querySelector(".group-title");
+    const toolbar = frame.querySelector(".group-toolbar");
+    if (!title || !toolbar) return;
+    frame.style.removeProperty("--group-toolbar-lift");
+    const titleRect = title.getBoundingClientRect();
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const overlap = titleRect.right + 6 > toolbarRect.left
+      && toolbarRect.right + 6 > titleRect.left;
+    if (!overlap) return;
+    const liftScreen = titleRect.height + 6;
+    frame.style.setProperty(
+      "--group-toolbar-lift",
+      `${(liftScreen / state.scale).toFixed(2)}px`,
+    );
+  });
 }
 
 function createGroupFrameElement(group) {
@@ -3255,22 +4670,20 @@ function createGroupFrameElement(group) {
         <i data-lucide="ungroup" aria-hidden="true"></i>
         <span class="toolbar-tip">解组</span>
       </button>
+      <button class="icon-toolbar-button" type="button" data-group-action="download" aria-label="下载组内素材">
+        <i data-lucide="download" aria-hidden="true"></i>
+        <span class="toolbar-tip">下载</span>
+      </button>
     </div>
-    <span class="group-resize-handle north" data-group-resize="n"></span>
-    <span class="group-resize-handle east" data-group-resize="e"></span>
-    <span class="group-resize-handle south" data-group-resize="s"></span>
-    <span class="group-resize-handle west" data-group-resize="w"></span>
-    <span class="group-resize-handle north-east" data-group-resize="ne"></span>
-    <span class="group-resize-handle south-east" data-group-resize="se"></span>
-    <span class="group-resize-handle south-west" data-group-resize="sw"></span>
-    <span class="group-resize-handle north-west" data-group-resize="nw"></span>
   `;
-  bindGroupFrameEvents(el, group);
+  bindGroupFrameEvents(el);
   return el;
 }
 
-function bindGroupFrameEvents(el, group) {
+function bindGroupFrameEvents(el) {
   el.addEventListener("pointerdown", (event) => {
+    const liveGroup = getGroupById(el.dataset.groupId);
+    if (!liveGroup) return;
     if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
       event.preventDefault();
       event.stopPropagation();
@@ -3281,27 +4694,16 @@ function bindGroupFrameEvents(el, group) {
     if (event.button !== 0) return;
     event.stopPropagation();
     if (event.target.closest("button, .toolbar-dropdown")) {
-      setActiveGroup(group.id);
+      setActiveGroup(liveGroup.id);
       return;
     }
     if (!isCanvasMutationAllowed()) {
-      setActiveGroup(group.id);
+      setActiveGroup(liveGroup.id);
       render();
       return;
     }
 
-    const resizeHandle = event.target.closest("[data-group-resize]");
-    if (resizeHandle) {
-      canvasGroupInteractionController.beginResize(
-        group,
-        event,
-        resizeHandle.dataset.groupResize,
-        shell,
-      );
-      return;
-    }
-
-    canvasGroupInteractionController.beginDrag(group, event, shell);
+    canvasGroupInteractionController.beginDrag(liveGroup, event, shell);
   });
 
   el.addEventListener("click", (event) => {
@@ -3331,12 +4733,53 @@ function bindGroupFrameEvents(el, group) {
     }
     if (action === "ungroup") {
       ungroup(activeGroup.id);
+      return;
+    }
+    if (action === "download") {
+      downloadNodesMedia(getGroupNodes(activeGroup));
     }
   });
 }
 
+function renderGroupResizeOverlay() {
+  if (!groupResizeOverlay) return;
+  const group = getGroupById(state.activeGroupId);
+  const bounds = getGroupBounds(group);
+  if (!group || !bounds || !isCanvasMutationAllowed()) {
+    groupResizeOverlay.classList.add("hidden");
+    delete groupResizeOverlay.dataset.groupId;
+    delete groupResizeOverlay.dataset.activeResize;
+    return;
+  }
+  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
+  if (!screenRect) {
+    groupResizeOverlay.classList.add("hidden");
+    return;
+  }
+  groupResizeOverlay.dataset.groupId = group.id;
+  groupResizeOverlay.style.left = `${screenRect.left}px`;
+  groupResizeOverlay.style.top = `${screenRect.top}px`;
+  groupResizeOverlay.style.width = `${screenRect.width}px`;
+  groupResizeOverlay.style.height = `${screenRect.height}px`;
+  groupResizeOverlay.classList.remove("hidden");
+  if (state.action?.type === "resize-group" && state.action.groupId === group.id) {
+    groupResizeOverlay.dataset.activeResize = state.action.handle;
+  } else {
+    delete groupResizeOverlay.dataset.activeResize;
+  }
+}
+
 function getSelectedNodes() {
   return state.nodes.filter((node) => state.selectedIds.has(node.id));
+}
+
+function getExactSelectionGroup(selectedNodes = getSelectedNodes()) {
+  return canvasSpatialSelection.getExactSelectionGroup(selectedNodes, state.groups);
+}
+
+function isSelectionFrameDragAction(action = state.action) {
+  return action?.interactionSource === "selection-frame"
+    && (action.type === "drag-candidate" || action.type === "drag-nodes");
 }
 
 function updateEmptyState() {
@@ -3344,42 +4787,96 @@ function updateEmptyState() {
   emptyState.classList.toggle("hidden", state.nodes.length > 0);
 }
 
-function getSelectionBounds() {
+function getSelectionVisualBounds() {
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return null;
-  return selectedNodes.reduce(
-    (bounds, node) => {
-      const nodeBounds = getNodeBounds(node);
+  const bounds = selectedNodes.reduce(
+    (result, node) => {
+      const nodeBounds = getNodeVisualBounds(node);
       return {
-        left: Math.min(bounds.left, nodeBounds.left),
-        top: Math.min(bounds.top, nodeBounds.top),
-        right: Math.max(bounds.right, nodeBounds.right),
-        bottom: Math.max(bounds.bottom, nodeBounds.bottom),
+        left: Math.min(result.left, nodeBounds.left),
+        top: Math.min(result.top, nodeBounds.top),
+        right: Math.max(result.right, nodeBounds.right),
+        bottom: Math.max(result.bottom, nodeBounds.bottom),
       };
     },
     { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
   );
+  return {
+    ...bounds,
+    width: bounds.right - bounds.left,
+    height: bounds.bottom - bounds.top,
+  };
 }
 
 function renderSelectionToolbar() {
-  if (!selectionToolbar) return;
-  const bounds = getSelectionBounds();
-  if (!bounds) {
+  if (!selectionToolbar || !multiSelectionSurface || !multiSelectionChrome) return;
+  const selectedNodes = getSelectedNodes();
+  const exactSelectionGroup = getExactSelectionGroup(selectedNodes);
+  const bounds = getSelectionVisualBounds();
+  const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
+  if (!screenRect) {
+    shell.classList.remove(
+      "multi-selection-active",
+      "selection-frame-hover",
+      "selection-frame-pressed",
+    );
+    multiSelectionSurface.classList.add("hidden");
+    multiSelectionChrome.classList.add("hidden");
+    multiSelectionChrome.classList.remove("is-connecting");
+    multiSelectionPort?.removeAttribute("style");
     selectionToolbar.classList.add("hidden");
-    selectionSortMenu?.classList.add("hidden");
-    selectionDownloadMenu?.classList.add("hidden");
+    setSelectionDownloadMenuOpen(false);
     return;
   }
 
-  if (selectionCount) selectionCount.textContent = `${getSelectedNodes().length} 个节点`;
-  const shellRect = shell.getBoundingClientRect();
-  const topLeft = worldToScreen(bounds.left, bounds.top);
-  const topRight = worldToScreen(bounds.right, bounds.top);
-  const toolbarX = (topLeft.x + topRight.x) / 2 - shellRect.left;
-  const toolbarY = topLeft.y - shellRect.top - 44;
-  selectionToolbar.style.left = `${toolbarX}px`;
-  selectionToolbar.style.top = `${Math.max(74, toolbarY)}px`;
+  shell.classList.add("multi-selection-active");
+  if (exactSelectionGroup) {
+    shell.classList.remove("selection-frame-hover", "selection-frame-pressed");
+  }
+
+  const isSelectionConnecting = state.action?.type === "connect"
+    && state.action.mode === "selection-output"
+    || state.connectionDrop?.kind === "selection";
+  [multiSelectionSurface, multiSelectionChrome].forEach((element) => {
+    element.style.left = `${screenRect.left}px`;
+    element.style.top = `${screenRect.top}px`;
+    element.style.width = `${screenRect.width}px`;
+    element.style.height = `${screenRect.height}px`;
+  });
+  multiSelectionChrome.classList.remove("hidden");
+  multiSelectionSurface.classList.toggle("hidden", Boolean(exactSelectionGroup));
+  multiSelectionChrome.classList.toggle("is-connecting", isSelectionConnecting);
+  if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
+  if (isSelectionConnecting) {
+    selectionToolbar.classList.add("hidden");
+    return;
+  }
+
+  selectionToolbar.classList.toggle(
+    "group-unavailable",
+    selectedNodes.some((node) => Boolean(node.groupId)),
+  );
   selectionToolbar.classList.remove("hidden");
+  const toolbarWidth = selectionToolbar.offsetWidth || 260;
+  const toolbarHeight = selectionToolbar.offsetHeight || 42;
+  const viewportPadding = 12;
+  const visibleLeft = Math.max(viewportPadding, screenRect.left);
+  const visibleRight = Math.min(shell.clientWidth - viewportPadding, screenRect.right);
+  const preferredCenter = visibleLeft <= visibleRight
+    ? (visibleLeft + visibleRight) / 2
+    : screenRect.centerX;
+  const toolbarX = clamp(
+    preferredCenter,
+    viewportPadding + toolbarWidth / 2,
+    shell.clientWidth - viewportPadding - toolbarWidth / 2,
+  );
+  const spaceAbove = screenRect.top - 12;
+  const toolbarY = spaceAbove - toolbarHeight >= 70
+    ? spaceAbove - toolbarHeight
+    : Math.min(shell.clientHeight - toolbarHeight - viewportPadding, screenRect.bottom + 12);
+  selectionToolbar.style.left = `${toolbarX}px`;
+  selectionToolbar.style.top = `${Math.max(70, toolbarY)}px`;
 }
 
 function createNodeElement(node) {
@@ -3411,9 +4908,23 @@ function createAssetNodeElement(node) {
   return el;
 }
 
+function entityEntryIconMarkup() {
+  return `
+    <span class="entity-entry-glyph" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/>
+        <circle cx="12" cy="9.25" r="2.1" fill="currentColor" stroke="none"/>
+        <path d="M8.4 16.4c.45-2.2 1.7-3.3 3.6-3.3s3.15 1.1 3.6 3.3"/>
+      </svg>
+    </span>
+  `;
+}
+
 function createGeneratorNodeElement(node) {
   const model = getModel(node);
   const layout = getNodeLayout(node);
+  const isVideoNode = getNodeGenerationMode(node) === "video";
+  const supportsEntityReferences = canNodeUseEntityReferences(node);
   const selected = state.selectedIds.has(node.id);
   const generationAvailability = getGenerationAvailability(node);
   const el = document.createElement("article");
@@ -3424,31 +4935,43 @@ function createGeneratorNodeElement(node) {
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
   const generationInputsDisabled = node.generating ? "disabled" : "";
+  const promptInputDisabled = node.generating || node.promptOptimizing ? "disabled" : "";
 
   const promptPanel = node.expanded
     ? `
-      <section class="prompt-panel ${node.promptLarge ? "large" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px;">
-        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" ${generationInputsDisabled}><span>+</span><span>素材</span></button>
-        <button class="expand-corner ${node.promptLarge ? "active" : ""}" data-action="toggle-large" type="button" title="${node.promptLarge ? "收起输入区" : "展开输入区"}">
-          <i data-lucide="${node.promptLarge ? "minimize-2" : "maximize-2"}" aria-hidden="true"></i>
-        </button>
+      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
+        ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
+        <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
-        <textarea class="prompt-input" style="${node.promptLarge ? `height: ${node.promptInputHeight}px;` : ""}" placeholder="描述你想生成的画面，也可以先添加参考素材" ${generationInputsDisabled}>${escapeHtml(node.prompt)}</textarea>
+        <textarea class="prompt-input" data-node-prompt-input placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
-          <button class="control-chip model-chip ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
-            <span class="chip-icon"><i data-lucide="box" aria-hidden="true"></i></span><span>${model.name}</span><span>⌃</span>
+          <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
+            ${modelIconMarkup(model, "model-chip-glyph")}
+            <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
           </button>
-          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>${getParamLabel(node)} ⌃</button>
+          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>
+            <span class="control-chip-label param-chip-label">${getParamLabelMarkup(node)}</span>
+            ${getNodeGenerationMode(node) === "video" ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
+          </button>
           <div class="control-spacer"></div>
-          <button class="control-chip count-chip" data-action="count" data-canvas-mutation type="button" ${generationInputsDisabled}>${node.count}x</button>
+          ${isVideoNode ? `
+            <button class="control-chip composer-tool-button prompt-optimization-button ${node.promptOptimizing ? "is-processing" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" title="${node.promptOptimizing ? "正在优化提示词" : node.prompt.trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="${node.promptOptimizing ? "正在优化提示词" : "提示词优化"}" aria-busy="${node.promptOptimizing}" ${node.generating || node.promptOptimizing || !node.prompt.trim() ? "disabled" : ""}>
+              <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
+              <span class="prompt-optimization-spinner" aria-hidden="true"></span>
+            </button>
+          ` : ""}
+          <button class="control-chip composer-tool-button advanced-settings-chip ${node.advancedSettingsExpanded ? "active" : ""}" data-action="advanced-settings-toggle" type="button" title="高级设置" aria-label="高级设置" aria-expanded="${node.advancedSettingsExpanded}" aria-controls="advanced-settings-${escapeHtml(node.id)}" ${generationInputsDisabled}>
+            <svg class="advanced-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h11M4 11.5h8M4 16.5h5"/><circle cx="17" cy="15.5" r="3.1"/><path d="M17 10.8v1.2M17 19v1.2M12.3 15.5h1.2M20.5 15.5h1.2M13.7 12.2l.85.85M19.45 17.95l.85.85M20.3 12.2l-.85.85M14.55 17.95l-.85.85"/></svg>
+          </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
-            <span class="credit-mark">▰ ${node.credits}</span>
-            <span class="send-arrow"><i data-lucide="arrow-up" aria-hidden="true"></i></span>
+            <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
+            <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.25 20.6V9.45L6.7 13q-.95.95-1.9 0l-.75-.75q-.95-.95 0-1.9l6.5-6.5q1.45-1.45 2.9 0l6.5 6.5q.95.95 0 1.9l-.75.75q-.95.95-1.9 0l-3.55-3.55V20.6q0 1.4-1.4 1.4h-.7q-1.4 0-1.4-1.4Z" /></svg></span>
           </button>
         </div>
         ${node.panel === "material" ? materialPanel() : ""}
         ${node.panel === "model" ? modelPanel(node) : ""}
         ${node.panel === "params" ? paramPanel(node) : ""}
+        ${node.advancedSettingsExpanded ? advancedSettingsPanel(node) : ""}
       </section>
     `
     : "";
@@ -3471,13 +4994,42 @@ function createGeneratorNodeElement(node) {
       return;
     }
     node.prompt = event.currentTarget.value;
+    syncPromptPanelContentHeight(node, el);
+    syncPromptOptimizationButton(el.querySelector(".prompt-optimization-button"), node);
     syncGenerateButton(el.querySelector(".generate-button"), node);
-    resizePromptTextarea(event.currentTarget, node);
     scheduleCanvasDocumentSave();
   });
-  if (node.promptLarge && promptInput) {
-    requestAnimationFrame(() => resizePromptTextarea(promptInput, node));
-  }
+
+  const durationRange = el.querySelector("[data-duration-range]");
+  const durationNumber = el.querySelector("[data-duration-number]");
+  durationRange?.addEventListener("input", (event) => {
+    const seconds = normalizeDurationControlSeconds(event.currentTarget, event.currentTarget.value);
+    syncDurationRangeControl(event.currentTarget, seconds);
+    if (durationNumber) durationNumber.value = String(seconds);
+  });
+  durationRange?.addEventListener("change", (event) => {
+    const seconds = normalizeDurationControlSeconds(event.currentTarget, event.currentTarget.value);
+    syncDurationRangeControl(event.currentTarget, seconds);
+    if (durationNumber) durationNumber.value = String(seconds);
+    handleAction(node, "duration", `${seconds}s`);
+  });
+  durationNumber?.addEventListener("input", (event) => {
+    if (!durationRange || event.currentTarget.value === "") return;
+    const seconds = normalizeDurationControlSeconds(durationRange, event.currentTarget.value);
+    syncDurationRangeControl(durationRange, seconds);
+  });
+  durationNumber?.addEventListener("change", (event) => {
+    if (!durationRange) return;
+    const seconds = normalizeDurationControlSeconds(durationRange, event.currentTarget.value);
+    event.currentTarget.value = String(seconds);
+    syncDurationRangeControl(durationRange, seconds);
+    handleAction(node, "duration", `${seconds}s`);
+  });
+  durationNumber?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.currentTarget.blur();
+  });
 
   el.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -3485,7 +5037,17 @@ function createGeneratorNodeElement(node) {
       handleAction(node, event.currentTarget.dataset.action, event.currentTarget.dataset.value);
     });
   });
+  el.querySelectorAll("[data-setting-info]").forEach((trigger) => {
+    trigger.addEventListener("pointerdown", (event) => event.stopPropagation());
+    trigger.addEventListener("click", (event) => event.stopPropagation());
+    trigger.addEventListener("pointerenter", () => requestAnimationFrame(() => syncAdvancedSettingTooltipLayout(trigger)));
+    trigger.addEventListener("focus", () => requestAnimationFrame(() => syncAdvancedSettingTooltipLayout(trigger)));
+  });
   bindModelPanelEvents(el, node);
+  requestAnimationFrame(() => {
+    const resized = syncPromptPanelContentHeight(node, el);
+    if (!resized) syncNodePopoverLayout(el);
+  });
 
   return el;
 }
@@ -3507,6 +5069,12 @@ function bindNodeEvents(el, node) {
       resetNodePortPosition(zone);
     });
     zone.addEventListener("pointerdown", (event) => {
+      if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
+        event.preventDefault();
+        event.stopPropagation();
+        beginPan(event);
+        return;
+      }
       positionNodePortAtPointer(zone, event.clientX, event.clientY);
       beginConnectionDrag(event, node.id, side);
     });
@@ -3547,9 +5115,10 @@ function getAssetDownloadExtension(asset) {
 }
 
 async function downloadAssetFile(asset, fileName = `${getAssetDisplayName(asset) || `reelay-${asset.type}`}.${getAssetDownloadExtension(asset)}`) {
-  if (!asset?.url) return false;
+  const safeUrl = sanitizeRuntimeMediaUrl(asset?.url);
+  if (!safeUrl) return false;
   try {
-    const response = await fetch(asset.url);
+    const response = await fetch(safeUrl);
     if (!response.ok) throw new Error("Download failed");
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
@@ -3560,7 +5129,7 @@ async function downloadAssetFile(asset, fileName = `${getAssetDisplayName(asset)
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   } catch {
     const anchor = document.createElement("a");
-    anchor.href = asset.url;
+    anchor.href = safeUrl;
     anchor.target = "_blank";
     anchor.rel = "noopener";
     anchor.click();
@@ -3572,23 +5141,25 @@ function addEditableMediaToLibrary(node) {
   const asset = getEditableMedia(node);
   if (!asset) return;
   const sourceId = asset.librarySourceId || asset.id;
-  const exists = state.libraryAssets.some(
-    (item) => item.id === sourceId || item.librarySourceId === sourceId,
-  );
-  if (exists) {
-    showActionToast("该媒体已在项目资产中");
+  const registered = findRegisteredLibraryMedia(asset);
+  if (hasPersonalLibraryPlacement(registered)) {
+    showActionToast("该媒体已在个人素材中");
+    return;
+  }
+  if (window.parent !== window && !asset.workspaceAssetId && !registered?.workspaceAssetId) {
+    showActionToast("该媒体尚未持久化，当前不能加入云端素材库");
     return;
   }
   registerLibraryAssets(
     [
-      {
+      registered || {
         ...cloneAsset(asset, "generated"),
         librarySourceId: sourceId,
       },
     ],
     "project",
   );
-  showActionToast("已加入项目资产");
+  showActionToast("已加入个人素材");
 }
 
 function enhanceEditableMedia(node) {
@@ -4014,7 +5585,7 @@ function bindAudioEvents(el) {
 
 function getGenerationTaskTarget(task) {
   if (!task || task.projectId !== state.projectId) return null;
-  const canvas = state.canvases.find((item) => item.id === task.canvasId);
+  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
   if (!canvas) return null;
   const node = canvas.nodes.find((item) => item.id === task.nodeId);
   return node ? { canvas, node } : null;
@@ -4041,13 +5612,125 @@ function cancelGenerationTasks(predicate, resetNodes = true) {
   }
 }
 
+function getPromptOptimizationTaskTarget(task) {
+  if (!task || task.projectId !== state.projectId) return null;
+  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
+  if (!canvas) return null;
+  const node = canvas.nodes.find((item) => item.id === task.nodeId);
+  return node ? { canvas, node } : null;
+}
+
+function buildOptimizedPrompt(prompt) {
+  const normalized = String(prompt || "")
+    .trim()
+    .replace(/[\t ]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n");
+  if (!normalized) return "";
+
+  const chineseGuidance = "镜头运动自然连贯，主体动作清晰，光影层次细腻，画面节奏流畅。";
+  const englishGuidance = "Keep the camera movement coherent, the subject action clear, and the lighting and pacing visually refined.";
+  const mostlyLatin = (normalized.match(/[A-Za-z]/g)?.length || 0) > (normalized.match(/[\u3400-\u9fff]/g)?.length || 0) * 2;
+  const guidance = mostlyLatin ? englishGuidance : chineseGuidance;
+  if (normalized.includes(guidance)) return normalized;
+  const separator = mostlyLatin || /[。！？.!?]$/.test(normalized) ? "\n" : "。\n";
+  return `${normalized}${separator}${guidance}`;
+}
+
+function pushCanvasUndoAction(canvas, action) {
+  if (!canvas || !action) return;
+  const undoStack = Array.isArray(canvas.undoStack) ? canvas.undoStack : [];
+  undoStack.push(action);
+  if (undoStack.length > 50) undoStack.shift();
+  canvas.undoStack = undoStack;
+}
+
+function cancelPromptOptimizationTask(taskId, resetNode = true) {
+  const task = state.promptOptimizationTasks.get(taskId);
+  if (!task) return;
+  window.clearTimeout(task.timeoutId);
+  if (resetNode) {
+    const target = getPromptOptimizationTaskTarget(task);
+    if (target?.node.promptOptimizing) target.node.promptOptimizing = false;
+  }
+  state.promptOptimizationTasks.delete(taskId);
+}
+
+function cancelPromptOptimizationTasks(predicate, resetNodes = true) {
+  for (const task of [...state.promptOptimizationTasks.values()]) {
+    if (predicate(task)) cancelPromptOptimizationTask(task.id, resetNodes);
+  }
+}
+
+function completePromptOptimization(taskId) {
+  const task = state.promptOptimizationTasks.get(taskId);
+  if (!task) return;
+  state.promptOptimizationTasks.delete(taskId);
+  const target = getPromptOptimizationTaskTarget(task);
+  if (!target) return;
+  const { canvas, node } = target;
+  if (node.kind !== "generator" || !node.promptOptimizing) return;
+
+  node.promptOptimizing = false;
+  if (node.prompt === task.sourcePrompt) {
+    const optimizedPrompt = buildOptimizedPrompt(task.sourcePrompt);
+    if (optimizedPrompt && optimizedPrompt !== node.prompt) {
+      node.prompt = optimizedPrompt;
+      pushCanvasUndoAction(canvas, {
+        type: "prompt-update",
+        nodeId: node.id,
+        before: task.sourcePrompt,
+        after: optimizedPrompt,
+      });
+    }
+  }
+
+  if (canvas.id === state.activeCanvasId) render();
+  scheduleCanvasDocumentSave();
+}
+
+function startPromptOptimization(node) {
+  if (!requireCanvasMutation()) return false;
+  if (
+    node?.kind !== "generator"
+    || getNodeGenerationMode(node) !== "video"
+    || node.generating
+    || node.promptOptimizing
+  ) return false;
+  const sourcePrompt = node.prompt;
+  if (!sourcePrompt.trim()) return false;
+  const canvas = getActiveCanvas();
+  if (!canvas || !canvas.nodes.includes(node)) return false;
+
+  const staleTask = [...state.promptOptimizationTasks.values()]
+    .find((task) => task.canvasId === canvas.id && task.nodeId === node.id);
+  if (staleTask) cancelPromptOptimizationTask(staleTask.id, false);
+
+  const task = {
+    id: crypto.randomUUID(),
+    projectId: state.projectId,
+    canvasId: canvas.id,
+    nodeId: node.id,
+    sourcePrompt,
+    timeoutId: 0,
+  };
+  node.promptOptimizing = true;
+  node.panel = null;
+  state.promptOptimizationTasks.set(task.id, task);
+  render();
+  task.timeoutId = window.setTimeout(() => completePromptOptimization(task.id), 900);
+  return true;
+}
+
 function commitGenerationUndoBoundary(canvas, nodeId) {
   if (!canvas || !nodeId) return;
   const nextUndoStack = (canvas.undoStack || []).filter(
-    (action) => !(action.type === "node-update" && action.node?.id === nodeId),
+    (action) => !(
+      (action.type === "node-update" && action.node?.id === nodeId)
+      || (action.type === "prompt-update" && action.nodeId === nodeId)
+    ),
   );
   canvas.undoStack = nextUndoStack;
-  if (canvas.id === state.activeCanvasId) state.undoStack = nextUndoStack;
 }
 
 function completeSimulatedGeneration(taskId) {
@@ -4060,9 +5743,14 @@ function completeSimulatedGeneration(taskId) {
   if (node.kind !== "generator" || node.generationTaskId !== task.id) return;
   node.generating = false;
   delete node.generationTaskId;
-  const outputMode = normalizeGeneratorMode(task.parameterSnapshot.mode);
-  const lockedMode = getNodeLockedMode(node);
-  if (!outputMode || (lockedMode && lockedMode !== outputMode)) {
+  const outputMode = normalizeGeneratorMode(task.parameterSnapshot.mediaKind);
+  const taskModel = models.find((model) => model.id === task.parameterSnapshot.model);
+  const nodeMode = getNodeGenerationMode(node);
+  if (
+    !outputMode
+    || outputMode !== nodeMode
+    || taskModel?.type !== outputMode
+  ) {
     if (canvas.id === state.activeCanvasId) {
       showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
       render();
@@ -4070,9 +5758,17 @@ function completeSimulatedGeneration(taskId) {
     scheduleCanvasDocumentSave();
     return;
   }
-  node.lockedMode = outputMode;
+  const generatedAsset = createGeneratedAsset({ id: node.id, ...task.parameterSnapshot });
+  if (generatedAsset.type !== outputMode) {
+    if (canvas.id === state.activeCanvasId) {
+      showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
+      render();
+    }
+    scheduleCanvasDocumentSave();
+    return;
+  }
   node.preview = true;
-  node.generatedAsset = createGeneratedAsset({ id: node.id, ...task.parameterSnapshot });
+  node.generatedAsset = generatedAsset;
   node.name = node.name || node.generatedAsset.displayName || defaultGeneratedName(node);
   commitGenerationUndoBoundary(canvas, node.id);
   if (canvas.id === state.activeCanvasId) render();
@@ -4087,15 +5783,38 @@ function syncGenerateButton(button, node) {
   button.dataset.tooltip = availability.tooltip;
 }
 
+function syncPromptOptimizationButton(button, node) {
+  if (!button || !node) return;
+  const hasPrompt = Boolean(node.prompt.trim());
+  const disabled = node.generating || node.promptOptimizing || !hasPrompt;
+  button.disabled = disabled;
+  button.title = node.promptOptimizing
+    ? "正在优化提示词"
+    : hasPrompt
+      ? "优化提示词"
+      : "输入提示词后优化";
+}
+
 function startSimulatedGeneration(node, options = {}) {
   if (!requireCanvasMutation()) return false;
   const { charge = true } = options;
-  if (node.generating) return false;
+  if (node.generating || node.promptOptimizing) return false;
   normalizeNodeParameters(node);
   if (!node.prompt.trim()) {
     showConfirmDialog({
       title: "缺少提示词",
       body: "请先填写提示词，再执行生成。",
+      confirmText: "知道了",
+      showCancel: false,
+    });
+    return false;
+  }
+
+  const taskTypeIssue = getOmniReferenceTaskTypeIssue(node);
+  if (taskTypeIssue) {
+    showConfirmDialog({
+      title: "任务参数不完整",
+      body: taskTypeIssue,
       confirmText: "知道了",
       showCancel: false,
     });
@@ -4152,119 +5871,46 @@ function startSimulatedGeneration(node, options = {}) {
 }
 
 function modelPanel(node) {
-  const types = [
-    { id: "image", label: "图片" },
-    { id: "video", label: "视频" },
-  ];
-  const lockedMode = getNodeLockedMode(node);
-  const visibleTypes = lockedMode
-    ? types.filter((type) => type.id === lockedMode)
-    : types;
-  const requestedType = lockedMode || node.modelFilter || node.mode;
-  const activeType = types.some((type) => type.id === requestedType)
-    ? requestedType
-    : node.mode === "video"
-      ? "video"
-      : "image";
-  const activeIndex = Math.max(0, types.findIndex((type) => type.id === activeType));
-  const sections = visibleTypes
-    .map((type) => {
-      const options = models
-        .filter((item) => item.type === type.id)
-        .map(
-          (item) => `
-            <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" data-canvas-mutation type="button">
-              <span class="model-icon">${item.icon}</span>
-              <span>
-                <span class="model-name">${item.name}</span>
-                <span class="model-desc">${item.desc}</span>
-              </span>
-              <span class="checkmark">${node.model === item.id ? "✓" : ""}</span>
-            </button>
-          `,
-        )
-        .join("");
-      return `
-        <section class="model-section" data-model-section="${type.id}">
-          <div class="model-section-title">${type.label}模型</div>
-          ${options}
-        </section>
-      `;
-    })
+  const mode = getNodeGenerationMode(node) || "image";
+  const options = getCompatibleModelsForNode(node)
+    .map(
+      (item) => `
+        <button class="model-option ${node.model === item.id ? "active" : ""}" data-action="model" data-value="${item.id}" data-canvas-mutation aria-pressed="${node.model === item.id ? "true" : "false"}" type="button">
+          ${modelIconMarkup(item, "model-icon")}
+          <span>
+            <span class="model-name">${escapeHtml(item.name)}</span>
+            <span class="model-desc">${escapeHtml(item.desc)}</span>
+          </span>
+          <i class="model-check" data-lucide="check" aria-hidden="true"></i>
+        </button>
+      `,
+    )
     .join("");
-
   return `
-    <div class="panel-popover model-panel">
-      <div class="panel-title">模型</div>
-      <div class="mode-tabs" style="--active-index: ${activeIndex}; --tab-count: ${types.length}">
-        <span class="mode-tab-indicator" aria-hidden="true"></span>
-        ${types
-          .map(
-            (type) => {
-              const disabled = Boolean(lockedMode && type.id !== lockedMode);
-              return `<button class="mode-tab ${activeType === type.id ? "active" : ""}" data-model-jump="${type.id}" type="button" ${disabled ? `disabled aria-disabled="true" title="此节点已锁定为${lockedMode === "image" ? "图片" : "视频"}生成"` : ""}>${type.label}</button>`;
-            },
-          )
-          .join("")}
-      </div>
-      ${lockedMode ? `<p class="model-mode-lock" role="status">已生成${lockedMode === "image" ? "图片" : "视频"}，此节点仅可继续使用${lockedMode === "image" ? "图片" : "视频"}模型</p>` : ""}
-      <div class="model-list">${sections}</div>
+    <div class="panel-popover model-panel" data-node-popover data-anchor-action="model-panel" aria-label="${mode === "video" ? "视频" : "图片"}模型">
+      <p class="model-mode-contract sr-only">当前为${mode === "video" ? "视频" : "图片"}节点，仅显示同类型模型</p>
+      <div class="model-list">${options || `<p class="model-list-empty">当前没有可用的${mode === "video" ? "视频" : "图片"}模型</p>`}</div>
     </div>
   `;
 }
 
+function modelIconMarkup(model, className) {
+  if (model?.iconSrc) {
+    const modeClass = model.iconMode === "mask" ? " model-brand-monochrome" : "";
+    const classes = `${className} model-brand-icon model-logo-${model.id}${modeClass}`;
+    return `<span class="${classes}" aria-hidden="true"><img src="${escapeHtml(model.iconSrc)}" alt="" /></span>`;
+  }
+  return `<span class="${className}" aria-hidden="true">${escapeHtml(model?.icon || "—")}</span>`;
+}
+
 function bindModelPanelEvents(element, node) {
-  const panel = element.querySelector(".model-panel");
-  const list = panel?.querySelector(".model-list");
-  const tabs = panel?.querySelector(".mode-tabs");
-  if (!panel || !list || !tabs) return;
-
-  const types = ["image", "video"];
-  const lockedMode = getNodeLockedMode(node);
-  const visibleTypes = lockedMode ? [lockedMode] : types;
-  const setActiveType = (type) => {
-    if (lockedMode && type !== lockedMode) return;
-    const index = Math.max(0, types.indexOf(type));
-    node.modelFilter = types[index];
-    tabs.style.setProperty("--active-index", String(index));
-    tabs.querySelectorAll("[data-model-jump]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.modelJump === node.modelFilter);
-    });
-  };
-
-  const jumpTo = (type, smooth = true) => {
-    const section = list.querySelector(`[data-model-section="${type}"]`);
-    if (!section) return;
-    setActiveType(type);
-    list.scrollTo({
-      top: Math.max(0, section.offsetTop - list.offsetTop - 8),
-      behavior: smooth ? "smooth" : "auto",
-    });
-  };
-
-  tabs.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-model-jump]");
-    if (!button || button.disabled) return;
-    event.stopPropagation();
-    jumpTo(button.dataset.modelJump);
-  });
-
-  list.addEventListener("scroll", () => {
-    const marker = list.scrollTop + Math.min(160, list.clientHeight * 0.48);
-    let visibleType = visibleTypes[0];
-    for (const type of visibleTypes) {
-      const section = list.querySelector(`[data-model-section="${type}"]`);
-      if (section && section.offsetTop - list.offsetTop <= marker) visibleType = type;
-    }
-    if (visibleType !== node.modelFilter) setActiveType(visibleType);
-  });
-
-  requestAnimationFrame(() => jumpTo(lockedMode || node.mode, false));
+  if (!element.querySelector(".model-panel")) return;
+  node.modelFilter = getNodeGenerationMode(node);
 }
 
 function materialPanel() {
   return `
-    <div class="material-panel">
+    <div class="material-panel" data-node-popover data-anchor-action="material-panel">
       <button class="material-option" data-action="material" data-value="local" data-canvas-mutation type="button">
         <span class="material-icon">↑</span><span>从本地上传</span>
       </button>
@@ -4280,22 +5926,180 @@ function materialPanel() {
 
 function paramPanel(node) {
   normalizeNodeParameters(node);
-  const sections = [
-    parameterSection(node, "比例", "aspect", getCapabilityValues(node, "aspects")),
-    node.mode === "video"
-      ? parameterSection(node, "画质", "quality", getCapabilityValues(node, "qualities"))
+  const mode = getNodeGenerationMode(node) || "image";
+  const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
+  const constrainedAspect = taskTypeConstraint?.aspect;
+  const aspectValues = constrainedAspect && getCapabilityValues(node, "aspects").includes(constrainedAspect)
+    ? [constrainedAspect]
+    : getCapabilityValues(node, "aspects");
+  const modeSections = [
+    mode === "video" ? omniReferenceTaskTypeParameterSection(node) : "",
+    mode === "video" ? workflowParameterSection(node) : "",
+  ];
+  const outputFormatSection = mode === "video" ? outputFormatParameterSection(node) : "";
+  const audioSection = mode === "video" ? `
+    <section class="parameter-group parameter-audio">
+      <div class="param-heading">音频</div>
+      <div class="segmented audio-segmented" style="--option-columns: 2">
+        <button class="${node.audioEnabled ? "active" : ""}" data-action="audio" data-value="on" data-canvas-mutation type="button">开启</button>
+        <button class="${node.audioEnabled ? "" : "active"}" data-action="audio" data-value="off" data-canvas-mutation type="button">关闭</button>
+      </div>
+    </section>
+  ` : "";
+  const detailSections = [
+    parameterSection(node, "比例", "aspect", aspectValues),
+    mode === "video"
+      ? parameterSection(node, "分辨率", "quality", getCapabilityValues(node, "qualities"))
       : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
-    node.mode === "image" && getCapabilityValues(node, "qualities").length
+    mode === "image" && getCapabilityValues(node, "qualities").length
       ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
       : "",
-    node.mode === "video"
-      ? parameterSection(node, "时长", "duration", getCapabilityValues(node, "durations"))
-      : "",
+    mode === "video" && !taskTypeConstraint?.hideDuration ? durationParameterSection(node) : "",
+    mode === "video" ? `
+      <div class="parameter-footer-grid ${outputFormatSection ? "has-output-format" : ""}">
+        ${audioSection}
+        ${outputFormatSection}
+      </div>
+    ` : "",
   ];
+  const taskType = taskTypeCapabilityValue(node);
   return `
-    <div class="panel-popover param-panel">
-      <div class="param-section">${sections.join("")}</div>
-    </div>
+    <section class="panel-popover param-panel ${taskTypeConstraint?.hideDuration ? "is-task-type-compact" : ""}" data-node-popover data-anchor-action="param-panel" data-omni-reference-task-type="${escapeHtml(taskType)}" aria-label="综合参数">
+      <div class="param-section">
+        ${modeSections.join("")}
+        <div class="parameter-task-details">${detailSections.join("")}</div>
+      </div>
+    </section>
+  `;
+}
+
+function taskTypeCapabilityValue(node) {
+  return getOmniReferenceTaskTypeCapability(node) ? node.omniReferenceTaskType || "" : "";
+}
+
+function omniReferenceTaskTypeParameterSection(node) {
+  const capability = getOmniReferenceTaskTypeCapability(node);
+  const values = Array.isArray(capability?.uiValues) ? capability.uiValues : [];
+  if (!values.length) return "";
+  const activeIndex = Math.max(0, values.indexOf(node.omniReferenceTaskType));
+  return `
+    <section class="parameter-group parameter-omni-reference-task-type">
+      <div class="param-heading">模式</div>
+      <div class="segmented omni-reference-task-type-segmented" style="--option-columns: ${values.length}; --task-type-selection-index: ${activeIndex}">
+        ${values.map((value) => `
+          <button class="${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" data-canvas-mutation type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function workflowParameterSection(node) {
+  const workflows = getWorkflowDefinitions(node);
+  if (workflows.length <= 1) return "";
+  return `
+    <section class="parameter-group parameter-workflow">
+      <div class="param-heading">模式</div>
+      <div class="segmented workflow-segmented" style="--option-columns: ${workflows.length}">
+        ${workflows.map((workflow) => `
+          <button class="${node.workflow === workflow.id ? "active" : ""}" data-action="workflow" data-value="${workflow.id}" data-canvas-mutation type="button">${escapeHtml(workflow.label)}</button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function durationParameterSection(node) {
+  const range = getDurationCapability(node);
+  const seconds = getNormalizedDurationSeconds(node);
+  if (!range || !Number.isFinite(seconds)) return "";
+  const progress = range.max > range.min
+    ? ((seconds - range.min) / (range.max - range.min)) * 100
+    : 100;
+  return `
+    <section class="parameter-group parameter-duration">
+      <div class="param-heading">时长</div>
+      <div class="duration-control-row">
+        <input class="duration-range-input" data-duration-range type="range" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" style="--duration-progress: ${progress}%" aria-label="时长（秒）" aria-valuemin="${range.min}" aria-valuetext="${seconds} 秒" />
+        <input class="duration-number-input" data-duration-number type="number" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" inputmode="numeric" aria-label="时长（秒）" />
+        <span class="duration-unit" aria-hidden="true">s</span>
+      </div>
+    </section>
+  `;
+}
+
+function outputFormatParameterSection(node) {
+  const values = getCapabilityValues(node, "outputFormats");
+  if (!values.length) return "";
+  return `
+    <section class="parameter-group parameter-output-format">
+      <div class="param-heading">输出格式</div>
+      <div class="segmented output-format-segmented" style="--option-columns: ${values.length}">
+        ${values.map((value) => `
+          <button class="${node.outputFormat === value ? "active" : ""}" data-action="output-format" data-value="${escapeHtml(value)}" data-canvas-mutation type="button" aria-pressed="${node.outputFormat === value}">${escapeHtml(getCapabilityDisplayLabel(node, "outputFormat", value))}</button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function normalizeDurationControlSeconds(input, value) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const step = Math.max(1, Number(input.step) || 1);
+  const requested = Number(value);
+  const fallback = Number(input.value);
+  const base = Number.isFinite(requested) ? requested : Number.isFinite(fallback) ? fallback : min;
+  return clamp(min + Math.round((base - min) / step) * step, min, max);
+}
+
+function syncDurationRangeControl(input, seconds) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const progress = max > min ? ((seconds - min) / (max - min)) * 100 : 100;
+  input.value = String(seconds);
+  input.style.setProperty("--duration-progress", `${progress}%`);
+  input.setAttribute("aria-valuetext", `${seconds} 秒`);
+}
+
+const advancedSettingHints = Object.freeze({
+  autoLink: "自动匹配参考素材名称，一键 AutoLink，省去手动@麻烦",
+  assetValidation: "开启后自动校验素材合规性，提升真人视频生成成功率；非真人生成可关闭，跳过检测节省耗时。",
+  schedule: "可定时设置生成任务，到点自动执行",
+});
+
+function advancedSettingInfo(node, key, label) {
+  const tooltipId = `advanced-setting-${key}-${node.id}`;
+  return `
+    <button class="advanced-setting-info" data-setting-info type="button" aria-label="${escapeHtml(label)}说明" aria-describedby="${escapeHtml(tooltipId)}">
+      <span aria-hidden="true">i</span>
+      <span class="advanced-setting-tooltip" id="${escapeHtml(tooltipId)}" role="tooltip">${escapeHtml(advancedSettingHints[key])}</span>
+    </button>
+  `;
+}
+
+function advancedSettingsPanel(node) {
+  const assetValidationSetting = getNodeGenerationMode(node) === "video"
+    ? `
+      <div class="advanced-setting-row">
+        <div class="advanced-setting-label"><span>自动校验素材</span>${advancedSettingInfo(node, "assetValidation", "自动校验素材")}</div>
+        <button class="advanced-setting-switch ${node.assetValidationEnabled ? "is-on" : ""}" data-action="asset-validation" data-canvas-mutation type="button" role="switch" aria-label="自动校验素材" aria-checked="${node.assetValidationEnabled}" ${node.generating ? "disabled" : ""}><span></span></button>
+      </div>
+    `
+    : "";
+  return `
+    <section class="advanced-settings" id="advanced-settings-${escapeHtml(node.id)}" aria-label="高级设置">
+      <div class="advanced-settings-title">高级设置</div>
+      <div class="advanced-setting-row">
+        <div class="advanced-setting-label"><span>智能引用 AutoLink</span>${advancedSettingInfo(node, "autoLink", "智能引用 AutoLink")}</div>
+        <button class="advanced-setting-switch ${node.autoLinkEnabled ? "is-on" : ""}" data-action="auto-link" data-canvas-mutation type="button" role="switch" aria-label="智能引用 AutoLink" aria-checked="${node.autoLinkEnabled}" ${node.generating ? "disabled" : ""}><span></span></button>
+      </div>
+      ${assetValidationSetting}
+      <div class="advanced-setting-row advanced-setting-schedule">
+        <div class="advanced-setting-label"><span>定时任务</span>${advancedSettingInfo(node, "schedule", "定时任务")}</div>
+        <button class="advanced-schedule-button" type="button" disabled aria-disabled="true" aria-label="定时任务暂未开放" title="定时任务暂未开放"><svg class="advanced-schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3.5v4M16.5 3.5v4M3.5 9.5h17M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></button>
+      </div>
+    </section>
   `;
 }
 
@@ -4314,10 +6118,20 @@ function parameterSection(node, label, action, values) {
 
 function paramButton(node, action, value) {
   const aspectIcon = action === "aspect" ? renderAspectIcon(value) : "";
-  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${value}" data-canvas-mutation type="button">${aspectIcon}<span>${value}</span></button>`;
+  const pressed = action === "aspect" ? ` aria-pressed="${node[action] === value}"` : "";
+  const displayLabel = getCapabilityDisplayLabel(node, action, value);
+  const constrainedAspect = action === "aspect" ? getOmniReferenceTaskTypeConstraint(node)?.aspect : "";
+  const disabled = Boolean(constrainedAspect && value !== constrainedAspect);
+  const disabledAttributes = disabled
+    ? ` disabled aria-disabled="true" title="当前任务类型仅支持 ${escapeHtml(getCapabilityDisplayLabel(node, "aspect", constrainedAspect))} 比例"`
+    : "";
+  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${escapeHtml(value)}" data-canvas-mutation type="button"${pressed}${disabledAttributes}>${aspectIcon}<span>${escapeHtml(displayLabel)}</span></button>`;
 }
 
 function renderAspectIcon(value) {
+  if (["auto", "adaptive"].includes(String(value).toLowerCase())) {
+    return `<svg class="aspect-option-icon aspect-option-icon-auto" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2H2v4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>`;
+  }
   const ratio = aspectStringToRatio(value);
   const width = ratio >= 1 ? 16 : Math.max(6, Math.round(16 * ratio));
   const height = ratio >= 1 ? Math.max(6, Math.round(16 / ratio)) : 16;
@@ -4325,6 +6139,7 @@ function renderAspectIcon(value) {
 }
 
 const generationLockedActions = new Set([
+  "entity-picker",
   "material-panel",
   "material",
   "remove-material",
@@ -4332,8 +6147,14 @@ const generationLockedActions = new Set([
   "focus-asset",
   "model-panel",
   "param-panel",
-  "count",
   "model",
+  "workflow",
+  "omni-reference-task-type",
+  "audio",
+  "output-format",
+  "prompt-optimization",
+  "auto-link",
+  "asset-validation",
   "aspect",
   "duration",
   "quality",
@@ -4341,6 +6162,9 @@ const generationLockedActions = new Set([
 ]);
 
 function handleAction(node, action, value) {
+  if (action !== "aspect" && action !== "omni-reference-task-type") {
+    canvasNodeLayoutTransition.finishAll();
+  }
   if (action === "focus-linked-source") {
     const connection = state.connections.find((item) => item.id === value);
     const source = connection && state.nodes.find((item) => item.id === connection.sourceNodeId);
@@ -4361,8 +6185,13 @@ function handleAction(node, action, value) {
     "material",
     "remove-material",
     "generate",
-    "count",
     "model",
+    "workflow",
+    "omni-reference-task-type",
+    "audio",
+    "output-format",
+    "auto-link",
+    "asset-validation",
     "aspect",
     "duration",
     "quality",
@@ -4370,17 +6199,35 @@ function handleAction(node, action, value) {
   ]);
   if (persistentActions.has(action) && !requireCanvasMutation()) return;
   if (node.generating && generationLockedActions.has(action)) return;
-  const undoableActions = new Set(["count", "model", "aspect", "duration", "quality", "resolution"]);
+  const undoableActions = new Set([
+    "model",
+    "workflow",
+    "omni-reference-task-type",
+    "audio",
+    "output-format",
+    "auto-link",
+    "asset-validation",
+    "aspect",
+    "duration",
+    "quality",
+    "resolution",
+  ]);
   const before = undoableActions.has(action) ? cloneNodeState(node) : null;
+  let taskTypeTransition = null;
 
   switch (action) {
-    case "toggle-large":
-      node.promptLarge = !node.promptLarge;
+    case "entity-picker":
+      if (!canNodeUseEntityReferences(node)) return;
+      node.expanded = true;
       node.panel = null;
-      break;
+      node.advancedSettingsExpanded = false;
+      render();
+      canvasEntityUse.openPicker(node.id);
+      return;
     case "material-panel":
       node.expanded = true;
       node.panel = node.panel === "material" ? null : "material";
+      if (node.panel) node.advancedSettingsExpanded = false;
       break;
     case "material":
       if (value === "local") {
@@ -4411,46 +6258,91 @@ function handleAction(node, action, value) {
       break;
     case "model-panel":
       node.expanded = true;
-      node.modelFilter = node.mode;
+      node.modelFilter = getNodeGenerationMode(node);
       node.panel = node.panel === "model" ? null : "model";
+      if (node.panel) node.advancedSettingsExpanded = false;
       break;
     case "param-panel":
       node.expanded = true;
       node.panel = node.panel === "params" ? null : "params";
+      if (node.panel) node.advancedSettingsExpanded = false;
+      break;
+    case "advanced-settings-toggle":
+      node.expanded = true;
+      node.advancedSettingsExpanded = !node.advancedSettingsExpanded;
+      if (node.advancedSettingsExpanded) node.panel = null;
       break;
     case "generate":
       if (!node.prompt.trim() || node.generating) return;
       startSimulatedGeneration(node);
       break;
-    case "count":
-      {
-        const counts = getCapabilityValues(node, "counts");
-        const currentIndex = counts.indexOf(node.count);
-        node.count = counts[(currentIndex + 1) % counts.length] || 1;
-      }
-      rememberPreset(node);
-      break;
     case "model": {
       const selected = models.find((item) => item.id === value);
       if (!selected) return;
       if (!canUseModelForNode(node, selected)) {
-        const lockedMode = getNodeLockedMode(node);
-        showActionToast(`此节点已锁定为${lockedMode === "video" ? "视频" : "图片"}生成，请新建节点切换类型`);
+        const mode = getNodeGenerationMode(node);
+        showActionToast(`当前为${mode === "video" ? "视频" : "图片"}节点，请新建${selected.type === "video" ? "视频" : "图片"}节点使用该模型`);
         return;
       }
       const previousDefaultName = defaultGeneratedName(node);
       node.model = selected.id;
-      node.mode = selected.type;
+      node.duration = selected.defaults?.duration || "";
       normalizeNodeParameters(node);
       if (node.preview && (!node.name || node.name === previousDefaultName)) {
         node.name = defaultGeneratedName(node);
       }
-      node.modelFilter = selected.type;
+      node.modelFilter = getNodeGenerationMode(node);
       node.panel = null;
       rememberPreset(node);
       break;
     }
+    case "workflow":
+      if (!getWorkflowDefinitions(node).some((workflow) => workflow.id === value)) return;
+      node.workflow = value;
+      node.panel = "params";
+      rememberPreset(node);
+      break;
+    case "omni-reference-task-type": {
+      const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
+      if (!taskTypeCapability?.uiValues?.includes(value)) return;
+      if (node.omniReferenceTaskType === value) return;
+      taskTypeTransition = captureTaskTypeParameterTransition(node, value);
+      node.omniReferenceTaskType = value;
+      const constrainedAspect = taskTypeCapability.constraints?.[value]?.aspect;
+      if (constrainedAspect && node.aspect !== constrainedAspect) {
+        applyNodeAspect(node, constrainedAspect);
+      } else {
+        normalizeNodeParameters(node);
+      }
+      node.panel = "params";
+      rememberPreset(node);
+      break;
+    }
+    case "audio":
+      if (getNodeGenerationMode(node) !== "video") return;
+      node.audioEnabled = value !== "off";
+      rememberPreset(node);
+      break;
+    case "output-format":
+      if (!getCapabilityValues(node, "outputFormats").includes(value)) return;
+      node.outputFormat = value;
+      rememberPreset(node);
+      break;
+    case "prompt-optimization":
+      if (getNodeGenerationMode(node) !== "video") return;
+      startPromptOptimization(node);
+      return;
+    case "auto-link":
+      node.autoLinkEnabled = !node.autoLinkEnabled;
+      break;
+    case "asset-validation":
+      if (getNodeGenerationMode(node) !== "video") return;
+      node.assetValidationEnabled = !node.assetValidationEnabled;
+      break;
     case "aspect":
+      applyNodeAspect(node, value);
+      rememberPreset(node);
+      break;
     case "duration":
     case "quality":
     case "resolution":
@@ -4466,12 +6358,21 @@ function handleAction(node, action, value) {
     pushUndoAction({ type: "node-update", node: before });
   }
   render();
+  if (taskTypeTransition) animateTaskTypeParameterTransition(node, taskTypeTransition);
 }
 
 function closeConnectionCreateMenu() {
   if (!connectionCreateMenu) return;
+  const hadPreview = Boolean(state.connectionDrop?.previewAction);
   connectionCreateMenu.classList.add("hidden");
+  connectionCreateMenu.querySelectorAll("[data-connection-create]")
+    .forEach((button) => button.classList.remove("is-preview"));
+  delete connectionCreateMenu.dataset.placement;
   state.connectionDrop = null;
+  if (hadPreview) {
+    renderConnections();
+    renderSelectionToolbar();
+  }
 }
 
 function closeNodeCreateMenu(options = {}) {
@@ -4514,20 +6415,74 @@ function setNodeCreatePreview(button) {
   });
 }
 
-function openConnectionCreateMenu(originNodeId, originSide, originRatio, clientX, clientY) {
+function setConnectionCreatePreview(button) {
+  if (!connectionCreateMenu) return;
+  connectionCreateMenu.querySelectorAll("[data-connection-create]").forEach((item) => {
+    item.classList.toggle("is-preview", item === button);
+  });
+}
+
+function showConnectionCreateMenu(drop, labelText) {
   if (!connectionCreateMenu) return;
   const shellRect = shell.getBoundingClientRect();
-  const menuWidth = 266;
-  const menuHeight = 104;
-  const left = clamp(clientX - shellRect.left + 14, 12, shellRect.width - menuWidth - 12);
-  const top = clamp(clientY - shellRect.top + 14, 72, shellRect.height - menuHeight - 12);
-  state.connectionDrop = { originNodeId, originSide, originRatio, clientX, clientY };
+  const viewportPadding = 12;
+  const viewportTop = 72;
+  const menuEdgeOverlap = 1;
   const label = connectionCreateMenu.querySelector(".connection-create-label");
-  if (label) label.textContent = originSide === "input" ? "创建上游节点" : "创建下游节点";
-  connectionCreateMenu.style.left = `${left}px`;
-  connectionCreateMenu.style.top = `${top}px`;
+  if (label) label.textContent = labelText;
+
+  connectionCreateMenu.style.visibility = "hidden";
   connectionCreateMenu.classList.remove("hidden");
+  const menuWidth = connectionCreateMenu.offsetWidth || 236;
+  const menuHeight = connectionCreateMenu.offsetHeight || 160;
+  const localX = drop.clientX - shellRect.left;
+  const localY = drop.clientY - shellRect.top;
+  const canPlaceBelow = localY + menuHeight <= shellRect.height - viewportPadding;
+  const canPlaceAbove = localY - menuHeight >= viewportTop;
+  const placement = canPlaceBelow || !canPlaceAbove ? "below" : "above";
+  const left = clamp(
+    localX - menuWidth / 2,
+    viewportPadding,
+    shellRect.width - menuWidth - viewportPadding,
+  );
+  const top = clamp(
+    placement === "below" ? localY : localY - menuHeight,
+    viewportTop,
+    shellRect.height - menuHeight - viewportPadding,
+  );
+  const anchorClientX = shellRect.left + clamp(localX, left + 12, left + menuWidth - 12);
+  const anchorClientY = shellRect.top + (
+    placement === "below"
+      ? top + menuEdgeOverlap
+      : top + menuHeight - menuEdgeOverlap
+  );
+  if (drop.previewAction) {
+    drop.previewAction.current = screenToWorld(anchorClientX, anchorClientY);
+  }
+  state.connectionDrop = drop;
+  connectionCreateMenu.style.left = `${left + shell.scrollLeft}px`;
+  connectionCreateMenu.style.top = `${top + shell.scrollTop}px`;
+  connectionCreateMenu.dataset.placement = placement;
+  connectionCreateMenu.style.removeProperty("visibility");
+  setConnectionCreatePreview(connectionCreateMenu.querySelector("[data-connection-create]"));
   refreshIcons();
+  renderConnections();
+  renderSelectionToolbar();
+  connectionCreateMenu.focus({ preventScroll: true });
+}
+
+function openConnectionCreateMenu(originNodeId, originSide, originRatio, clientX, clientY, previewAction = null) {
+  showConnectionCreateMenu(
+    { kind: "single", originNodeId, originSide, originRatio, clientX, clientY, previewAction },
+    originSide === "input" ? "创建上游节点" : "创建下游节点",
+  );
+}
+
+function openSelectionConnectionCreateMenu(originNodeIds, clientX, clientY, previewAction = null) {
+  showConnectionCreateMenu(
+    { kind: "selection", originNodeIds: [...originNodeIds], clientX, clientY, previewAction },
+    "创建共同下游节点",
+  );
 }
 
 function getConnectionPortDomEntry(zone) {
@@ -4559,6 +6514,15 @@ function getConnectionPortDomEntry(zone) {
         x: interactionSide === "left" ? frameRect.left : frameRect.right,
         y: frameRect.top + frameRect.height / 2,
       },
+      targetRect: {
+        left: frameRect.left,
+        right: frameRect.right,
+        top: frameRect.top,
+        bottom: frameRect.bottom,
+      },
+      targetInset: clamp(14 * state.scale, 8, 20),
+      targetPriority: Number(nodeElement.style.zIndex) || 0,
+      options: canvasConnectionInteraction.getScaledPortGeometry(state.scale),
     },
   };
 }
@@ -4605,8 +6569,51 @@ function resetNodePortPosition(zone) {
   port.style.removeProperty("--port-y");
 }
 
-function resetAllNodePortPositions() {
-  nodeLayer.querySelectorAll("[data-node-port-zone]").forEach(resetNodePortPosition);
+function hideConnectionTargetGlow() {
+  if (!connectionTargetGlow) return;
+  connectionTargetGlow.classList.remove("is-active");
+  delete connectionTargetGlow.dataset.targetPortId;
+}
+
+function showConnectionTargetGlow(entry) {
+  if (!connectionTargetGlow || !entry?.mediaFrame || !entry?.frameRect) return;
+  const targetChanged = connectionTargetGlow.dataset.targetPortId !== entry.id;
+  if (targetChanged) {
+    connectionTargetGlow.classList.remove("is-active");
+    connectionTargetGlow.dataset.targetPortId = entry.id;
+  }
+  const shellRect = shell.getBoundingClientRect();
+  const computed = window.getComputedStyle(entry.mediaFrame);
+  const worldRadius = Number.parseFloat(computed.borderTopLeftRadius) || 0;
+  const screenRadius = Math.max(4, worldRadius * state.scale);
+  const frameWidth = entry.frameRect.width;
+  const sweepWindow = clamp(
+    frameWidth * 0.28,
+    Math.min(78, frameWidth * 0.32),
+    Math.min(180, frameWidth * 0.36),
+  );
+  const sweepLayerWidth = frameWidth + 1.6;
+  const sweepBackgroundTravel = Math.max(1, sweepLayerWidth - sweepWindow);
+  const sweepRange = {
+    start: (-sweepWindow / sweepBackgroundTravel) * 100,
+    end: (sweepLayerWidth / sweepBackgroundTravel) * 100,
+  };
+  const sweepDuration = clamp(740 + frameWidth * 0.38, 820, 1020);
+  connectionTargetGlow.style.left = `${entry.frameRect.left - shellRect.left + shell.scrollLeft}px`;
+  connectionTargetGlow.style.top = `${entry.frameRect.top - shellRect.top + shell.scrollTop}px`;
+  connectionTargetGlow.style.width = `${entry.frameRect.width}px`;
+  connectionTargetGlow.style.height = `${entry.frameRect.height}px`;
+  connectionTargetGlow.style.setProperty("--connection-target-radius", `${screenRadius}px`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-window", `${sweepWindow}px`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-start", `${sweepRange.start}%`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-end", `${sweepRange.end}%`);
+  connectionTargetGlow.style.setProperty("--connection-target-sweep-duration", `${Math.round(sweepDuration)}ms`);
+  connectionTargetGlow.style.setProperty(
+    "--connection-target-scan-direction",
+    entry.interactionSide === "right" ? "-1" : "1",
+  );
+  if (targetChanged) void connectionTargetGlow.offsetWidth;
+  connectionTargetGlow.classList.add("is-active");
 }
 
 function clearConnectionTarget(action = state.action) {
@@ -4616,6 +6623,7 @@ function clearConnectionTarget(action = state.action) {
     targetEntry.port.classList.remove("is-valid-target");
     resetNodePortPosition(targetEntry.zone);
   }
+  hideConnectionTargetGlow();
   if (action?.type === "connect") action.targetPortId = null;
 }
 
@@ -4623,6 +6631,34 @@ function clearConnectionOrigin(action = state.action) {
   const originEntry = action?.portElements?.get(action.originPortId);
   originEntry?.nodeElement.classList.remove("connection-origin");
   originEntry?.port.classList.remove("is-drag-origin");
+}
+
+function syncConnectionCandidatePorts(action, visible) {
+  if (!action?.portElements || !action.validPortIds) return;
+  action.validPortIds.forEach((portId) => {
+    action.portElements.get(portId)?.port.classList.toggle("is-connectable-target", visible);
+  });
+}
+
+function clearConnectionProximity(action = state.action) {
+  const entry = action?.portElements?.get(action.nearPortId);
+  entry?.nodeElement.classList.remove("connection-near");
+  entry?.port.classList.remove("is-snap-near");
+  if (entry) resetNodePortPosition(entry.zone);
+  if (action?.type === "connect") action.nearPortId = null;
+}
+
+function markConnectionProximity(action, candidate) {
+  if (action.nearPortId && action.nearPortId !== candidate?.targetPortId) {
+    clearConnectionProximity(action);
+  }
+  if (!candidate || action.targetPortId) return;
+  const entry = action.portElements.get(candidate.targetPortId);
+  if (!entry) return;
+  action.nearPortId = candidate.targetPortId;
+  setConnectionPortScreenPoint(entry, candidate.point);
+  entry.nodeElement.classList.add("connection-near");
+  entry.port.classList.add("is-snap-near");
 }
 
 function markConnectionTarget(action, candidate) {
@@ -4634,38 +6670,101 @@ function markConnectionTarget(action, candidate) {
   if (!entry) return;
   action.targetPortId = candidate.targetPortId;
   setConnectionPortScreenPoint(entry, candidate.point);
+  showConnectionTargetGlow(entry);
   action.targetRatio = 0.5;
   entry.nodeElement.classList.add("connection-target");
   entry.port.classList.add("is-valid-target");
 }
 
-function findConnectionBodyTarget(action, clientX, clientY) {
-  if (action?.type !== "connect") return null;
-  const targetSide = action.originPort.side === "right" ? "left" : "right";
-  const frame = document.elementsFromPoint(clientX, clientY)
-    .map((element) => element instanceof Element ? element.closest(".media-frame") : null)
-    .find((element) => {
-      const nodeId = element?.closest(".canvas-node")?.dataset.id;
-      return nodeId && nodeId !== action.originNodeId;
-    });
-  const targetNodeId = frame?.closest(".canvas-node")?.dataset.id;
-  if (!targetNodeId) return null;
+function getSelectionConnectionOrigins() {
+  return getSelectedNodes()
+    .filter((node) => node.kind === "generator" || getEditableMedia(node))
+    .map((node) => ({
+      nodeId: node.id,
+      start: getConnectionPortPoint(node, "output"),
+    }));
+}
 
-  const port = action.portRegistry.find((entry) => (
-    entry.nodeId === targetNodeId
-    && entry.side === targetSide
-    && action.validPortIds.has(entry.id)
-  ));
-  if (!port) return null;
-  const direction = canvasConnectionInteraction.resolveConnectionDirection(action.originPort, port);
-  if (!direction) return null;
-  return {
-    targetPortId: port.id,
-    targetNodeId: port.nodeId,
-    point: port.restCenter,
-    distance: 0,
-    direction,
+function positionMultiSelectionPort(clientX, clientY) {
+  if (!multiSelectionChrome || !multiSelectionPort) return;
+  const frameRect = multiSelectionChrome.getBoundingClientRect();
+  multiSelectionPort.style.left = `${clientX - frameRect.left}px`;
+  multiSelectionPort.style.top = `${clientY - frameRect.top}px`;
+}
+
+function resetMultiSelectionPort() {
+  multiSelectionPort?.removeAttribute("style");
+}
+
+function beginSelectionConnectionDrag(event) {
+  if (event.button !== 0 || !requireCanvasMutation()) return;
+  const origins = getSelectionConnectionOrigins();
+  if (origins.length < 2 || origins.length !== state.selectedIds.size) return;
+  const frameRect = multiSelectionChrome?.getBoundingClientRect();
+  if (!frameRect) return;
+  const registry = buildConnectionPortRegistry();
+  const targetPlans = new Map();
+  registry.ports.forEach((port) => {
+    if (port.side !== "left") return;
+    const plan = canvasConnections.planBatchConnections(
+      state.connections,
+      state.nodes,
+      origins.map((origin) => origin.nodeId),
+      port.nodeId,
+    );
+    if (plan.validSourceIds.length === origins.length) targetPlans.set(port.id, {
+      targetNodeId: port.nodeId,
+      ...plan,
+    });
+  });
+  const anchor = {
+    x: frameRect.right,
+    y: frameRect.top + frameRect.height / 2,
   };
+  const originPort = canvasConnectionInteraction.buildPortRegistry([{
+    id: "selection:output",
+    nodeId: "__selection__",
+    side: "right",
+    anchor,
+    options: canvasConnectionInteraction.getScaledPortGeometry(state.scale),
+  }])[0];
+  if (!originPort) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  closeCanvasCreateMenus();
+  state.action = {
+    type: "connect",
+    mode: "selection-output",
+    pointerId: event.pointerId,
+    originNodeIds: origins.map((origin) => origin.nodeId),
+    origins,
+    originSide: "output",
+    originPortId: originPort.id,
+    originPort,
+    portRegistry: registry.ports,
+    portElements: registry.elements,
+    validPortIds: new Set(targetPlans.keys()),
+    targetPlans,
+    current: screenToWorld(event.clientX, event.clientY),
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    targetNodeId: null,
+    targetPortId: null,
+    nearPortId: null,
+    targetRatio: 0.5,
+  };
+  state.activeConnectionId = null;
+  shell.classList.add("connecting", "connecting-from-output", "connecting-selection");
+  syncConnectionCandidatePorts(state.action, true);
+  positionMultiSelectionPort(event.clientX, event.clientY);
+  renderSelectionToolbar();
+  try {
+    shell.setPointerCapture(event.pointerId);
+  } catch {
+    // Window listeners keep the drag alive when pointer capture is unavailable.
+  }
+  renderConnections();
 }
 
 function beginConnectionDrag(event, originNodeId, originSide = "output") {
@@ -4675,9 +6774,6 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   const canStartFromOutput = originSide === "output"
     && (origin?.kind === "generator" || getEditableMedia(origin));
   if (!origin || (!canStartFromInput && !canStartFromOutput)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  closeCanvasCreateMenus();
   const registry = buildConnectionPortRegistry();
   const originPortId = getConnectionPortId(originNodeId, originSide);
   const originPort = registry.ports.find((port) => port.id === originPortId);
@@ -4686,8 +6782,11 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   const originScreenPoint = canvasConnectionInteraction.clampPointerToPort(
     { x: event.clientX, y: event.clientY },
     originPort,
-    { requireActivation: false },
-  ) || originPort.restCenter;
+  );
+  if (!originScreenPoint) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeCanvasCreateMenus();
   setConnectionPortScreenPoint(originEntry, originScreenPoint);
   const originRatio = 0.5;
   const start = screenToWorld(originPort.anchor.x, originPort.anchor.y);
@@ -4720,6 +6819,7 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
     sourceNodeId: null,
     targetNodeId: null,
     targetPortId: null,
+    nearPortId: null,
     targetRatio: 0.5,
   };
   state.activeConnectionId = null;
@@ -4728,6 +6828,7 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   shell.classList.toggle("connecting-from-output", originSide === "output");
   originEntry.nodeElement.classList.add("connection-origin");
   originEntry.port.classList.add("is-drag-origin");
+  syncConnectionCandidatePorts(state.action, true);
   try {
     shell.setPointerCapture(event.pointerId);
   } catch {
@@ -4741,36 +6842,109 @@ function moveConnectionDrag(event) {
   if (action?.type !== "connect") return;
   event.preventDefault?.();
   action.current = screenToWorld(event.clientX, event.clientY);
-  const portCandidate = canvasConnectionInteraction.selectSnapCandidate({
-    pointer: { x: event.clientX, y: event.clientY },
+  const pointer = { x: event.clientX, y: event.clientY };
+  const canUsePort = (_direction, port) => action.validPortIds.has(port.id);
+  const bodyCandidate = canvasConnectionInteraction.selectNodeBodyCandidate({
+    pointer,
+    origin: action.originPort,
+    registry: action.portRegistry,
+    canConnect: canUsePort,
+  });
+  const portCandidate = bodyCandidate ? null : canvasConnectionInteraction.selectSnapCandidate({
+    pointer,
     origin: action.originPort,
     registry: action.portRegistry,
     previousTargetId: action.targetPortId,
-    canConnect: (_direction, port) => action.validPortIds.has(port.id),
+    canConnect: canUsePort,
   });
-  const candidate = portCandidate || findConnectionBodyTarget(action, event.clientX, event.clientY);
-  markConnectionTarget(action, candidate);
+  const candidate = bodyCandidate || portCandidate;
+  const proximityCandidate = candidate
+    ? null
+    : canvasConnectionInteraction.selectSnapProximity({
+        pointer,
+        origin: action.originPort,
+        registry: action.portRegistry,
+        canConnect: canUsePort,
+      });
+  if (candidate) {
+    clearConnectionProximity(action);
+    markConnectionTarget(action, candidate);
+  } else {
+    clearConnectionTarget(action);
+    markConnectionProximity(action, proximityCandidate);
+  }
+  if (action.mode === "selection-output") {
+    const targetPlan = candidate ? action.targetPlans.get(candidate.targetPortId) : null;
+    action.targetNodeId = targetPlan?.targetNodeId || null;
+    action.targetPlan = targetPlan || null;
+    if (candidate) {
+      const targetPort = action.portRegistry.find((port) => port.id === candidate.targetPortId);
+      if (targetPort) {
+        const targetPoint = candidate.connectionPoint || targetPort.anchor;
+        action.current = screenToWorld(targetPoint.x, targetPoint.y);
+        positionMultiSelectionPort(targetPoint.x, targetPoint.y);
+      }
+    } else {
+      positionMultiSelectionPort(event.clientX, event.clientY);
+    }
+    canvasConnectionRenderer.renderPreview(action, canvasConnections.getBezierPath);
+    return;
+  }
   action.sourceNodeId = candidate?.direction.sourceNodeId || null;
   action.targetNodeId = candidate?.direction.targetNodeId || null;
   if (candidate) {
     const targetPort = action.portRegistry.find((port) => port.id === candidate.targetPortId);
-    if (targetPort) action.current = screenToWorld(targetPort.anchor.x, targetPort.anchor.y);
+    if (targetPort) {
+      const targetPoint = candidate.connectionPoint || targetPort.anchor;
+      action.current = screenToWorld(targetPoint.x, targetPoint.y);
+    }
   }
   canvasConnectionRenderer.renderPreview(state.action, canvasConnections.getBezierPath);
 }
 
-function finishConnectionDrag(event) {
+function createPendingConnectionPreview(action, clientX, clientY) {
+  const current = screenToWorld(clientX, clientY);
+  if (action.mode === "selection-output") {
+    return {
+      type: "connect",
+      mode: "selection-output",
+      originSide: "output",
+      origins: action.origins.map((origin) => ({
+        nodeId: origin.nodeId,
+        start: { ...origin.start },
+      })),
+      current,
+      pendingCreate: true,
+      nearPortId: null,
+      targetPortId: null,
+    };
+  }
+  return {
+    type: "connect",
+    originSide: action.originSide,
+    start: { ...action.start },
+    current,
+    pendingCreate: true,
+    nearPortId: null,
+    targetPortId: null,
+  };
+}
+
+function finishConnectionDrag(event, options = {}) {
   const action = state.action;
   if (action?.type !== "connect") return;
   const moved = Math.hypot(
     event.clientX - action.startClientX,
     event.clientY - action.startClientY,
   ) >= 8;
+  clearConnectionProximity(action);
   clearConnectionTarget(action);
   clearConnectionOrigin(action);
+  syncConnectionCandidatePorts(action, false);
   shell.classList.remove("connecting");
-  shell.classList.remove("connecting-from-input", "connecting-from-output");
+  shell.classList.remove("connecting-from-input", "connecting-from-output", "connecting-selection");
   state.action = null;
+  resetMultiSelectionPort();
   action.portElements.forEach((entry) => resetNodePortPosition(entry.zone));
   try {
     shell.releasePointerCapture(event.pointerId);
@@ -4778,33 +6952,53 @@ function finishConnectionDrag(event) {
     // The browser may release capture before the window pointerup event.
   }
 
-  if (action.targetNodeId) {
+  if (!options.cancelled && action.mode === "selection-output" && action.targetNodeId) {
+    createConnectionsBatch(action.originNodeIds, action.targetNodeId);
+    render();
+    return;
+  }
+
+  if (!options.cancelled && action.targetNodeId) {
     const connection = createConnection(action.sourceNodeId, action.targetNodeId, {
       sourceRatio: action.originSide === "input" ? action.targetRatio : action.originRatio,
       targetRatio: action.originSide === "input" ? action.originRatio : action.targetRatio,
+      feedbackDirection: action.originSide === "input" ? "reverse" : "forward",
     });
     if (connection) {
-      const target = state.nodes.find((node) => node.id === action.targetNodeId);
-      if (target) {
-        target.expanded = true;
-        target.panel = null;
-        bringNodesToFront([target]);
-        setSelection([target.id], target.id, { keepConnection: true });
-      }
       render();
       return;
     }
   }
-  renderConnections();
-  if (moved && isConnectionDropSurface(document.elementFromPoint(event.clientX, event.clientY))) {
+  const shouldOpenCreateMenu = !options.cancelled
+    && moved
+    && isConnectionDropSurface(document.elementFromPoint(event.clientX, event.clientY));
+  if (shouldOpenCreateMenu) {
+    const previewAction = createPendingConnectionPreview(
+      action,
+      event.clientX,
+      event.clientY,
+    );
+    if (action.mode === "selection-output") {
+      openSelectionConnectionCreateMenu(
+        action.originNodeIds,
+        event.clientX,
+        event.clientY,
+        previewAction,
+      );
+      return;
+    }
     openConnectionCreateMenu(
       action.originNodeId,
       action.originSide,
       action.originRatio,
       event.clientX,
       event.clientY,
+      previewAction,
     );
+    return;
   }
+  renderConnections();
+  renderSelectionToolbar();
 }
 
 const canvasNodePointerController = canvasNodePointerControllerFactory.createCanvasNodePointerController({
@@ -4837,11 +7031,6 @@ const canvasNodePointerController = canvasNodePointerControllerFactory.createCan
   setMediaToolbarNodeId: (nodeId) => {
     state.mediaToolbarNodeId = nodeId;
   },
-  expandGenerator: (node) => {
-    node.expanded = true;
-    node.panel = null;
-    rememberPreset(node);
-  },
   promoteNodes: bringNodesToFront,
   setAction: (action) => {
     state.action = action;
@@ -4861,18 +7050,14 @@ function addNodeAt(clientX, clientY, mode = "image", options = {}) {
   const node = defaultGeneratorNode(0, 0, useLastPreset ? state.lastPreset.mode || mode : mode);
   if (useLastPreset) applyPreset(node, state.lastPreset);
   const layout = getNodeLayout(node);
-  const totalHeight = layout.mediaHeight + layoutRules.panelGap + layout.panelHeight;
-  const portOffset = 32;
-  if (options.anchor === "input") {
-    node.x = world.x - (layout.nodeWidth - layout.mediaWidth) / 2 + portOffset;
-    node.y = world.y - layout.mediaHeight / 2;
-  } else if (options.anchor === "output") {
-    node.x = world.x - (layout.nodeWidth - layout.mediaWidth) / 2 - layout.mediaWidth - portOffset;
-    node.y = world.y - layout.mediaHeight / 2;
-  } else {
-    node.x = world.x - layout.nodeWidth / 2;
-    node.y = world.y - totalHeight / 2;
-  }
+  const position = canvasNodePlacement.getNodePosition({
+    world,
+    layout,
+    anchor: options.anchor,
+  });
+  if (!position) return null;
+  node.x = position.x;
+  node.y = position.y;
   collapseAllGeneratorPanels();
   state.nodes.push(node);
   bringNodesToFront([node]);
@@ -4900,6 +7085,7 @@ function consumeHomeLaunchIntent() {
     // The node is already created; storage cleanup can safely fail.
   }
   render();
+  scheduleCanvasDocumentSave(0);
   return true;
 }
 
@@ -4914,6 +7100,7 @@ function cloneNodeState(node) {
 function cloneUndoNodeState(node) {
   const snapshot = cloneNodeState(node);
   snapshot.generating = false;
+  snapshot.promptOptimizing = false;
   delete snapshot.generationTaskId;
   return snapshot;
 }
@@ -4949,6 +7136,7 @@ function cloneCanvasContent(source) {
       delete node.groupId;
     }
     node.generating = false;
+    node.promptOptimizing = false;
     delete node.generationTaskId;
     node.panel = null;
     node.mediaMenuOpen = false;
@@ -4969,9 +7157,7 @@ function cloneCanvasContent(source) {
 }
 
 function pushUndoAction(action) {
-  if (!action) return;
-  state.undoStack.push(action);
-  if (state.undoStack.length > 50) state.undoStack.shift();
+  pushCanvasUndoAction(getActiveCanvas(), action);
 }
 
 function deleteSelectedNodes(confirmed = false) {
@@ -5007,30 +7193,40 @@ function deleteSelectedNodes(confirmed = false) {
     cancelGenerationTasks(
       (task) => task.canvasId === activeCanvas.id && selectedNodeIds.has(task.nodeId),
     );
+    cancelPromptOptimizationTasks(
+      (task) => task.canvasId === activeCanvas.id && selectedNodeIds.has(task.nodeId),
+    );
   }
 
   const deleted = state.nodes
     .map((node, index) => ({ node, index }))
     .filter((item) => state.selectedIds.has(item.node.id))
     .map((item) => ({ index: item.index, node: cloneNodeState(item.node) }));
-  const deletedGroups = state.groups
-    .filter((group) => group.nodeIds.some((id) => state.selectedIds.has(id)))
-    .map((group) => cloneGroupState(group));
+  const affectedGroups = state.groups
+    .map((group, index) => ({ group, index }))
+    .filter(({ group }) => group.nodeIds.some((id) => selectedNodeIds.has(id)))
+    .map(({ group, index }) => ({ index, group: cloneGroupState(group) }));
   const deletedConnections = state.connections
-    .filter((connection) => selectedNodeIds.has(connection.sourceNodeId) || selectedNodeIds.has(connection.targetNodeId))
-    .map(cloneConnectionState);
+    .map((connection, index) => ({ connection, index }))
+    .filter(({ connection }) => selectedNodeIds.has(connection.sourceNodeId) || selectedNodeIds.has(connection.targetNodeId))
+    .map(({ connection, index }) => ({ index, connection: cloneConnectionState(connection) }));
 
   if (!deleted.length) return;
-  pushUndoAction({ type: "delete", deleted, deletedGroups, deletedConnections });
+  pushUndoAction({ type: "delete", deleted, affectedGroups, deletedConnections });
   state.nodes = state.nodes.filter((node) => !state.selectedIds.has(node.id));
   state.connections = state.connections.filter(
     (connection) => !selectedNodeIds.has(connection.sourceNodeId) && !selectedNodeIds.has(connection.targetNodeId),
   );
-  state.groups = state.groups.filter((group) => !deletedGroups.some((item) => item.id === group.id));
+  clearRecentConnectionFeedback(deletedConnections.map(({ connection }) => connection.id));
+  const affectedGroupIds = new Set(affectedGroups.map(({ group }) => group.id));
+  state.groups = state.groups.flatMap((group) => {
+    if (!affectedGroupIds.has(group.id)) return [group];
+    const nodeIds = group.nodeIds.filter((id) => !selectedNodeIds.has(id));
+    return nodeIds.length ? [{ ...group, nodeIds }] : [];
+  });
   clearSelection();
   state.activeGroupId = null;
   render();
-  showUndoToast();
 }
 
 function restoreGroupSnapshot(groups) {
@@ -5051,15 +7247,61 @@ function restoreGroupSnapshot(groups) {
 
 function undoLastAction() {
   if (!requireCanvasMutation()) return;
+  canvasNodeLayoutTransition.finishAll();
+  const pendingAction = state.undoStack[state.undoStack.length - 1];
+  if (pendingAction?.kind === "canvas-command") {
+    const result = canvasCommandExecutor.undoLast(state.activeCanvasId);
+    if (!result.ok) {
+      console.error("Canvas command undo was rejected.", result.error);
+      showActionToast("画布内容已变化，无法安全撤销");
+      return;
+    }
+    if (result.effectError) {
+      console.error("Canvas command undo committed but its save effect failed.", result.effectError);
+    }
+    state.activeConnectionId = null;
+    clearRecentConnectionFeedback();
+    render();
+    return;
+  }
   const action = state.undoStack.pop();
   if (!action) return;
 
-  if (action.type === "node-update") {
-    const liveNode = state.nodes.find((node) => node.id === action.node.id);
+  if (action.type === "node-update" || action.type === "prompt-update") {
+    const nodeId = action.type === "prompt-update" ? action.nodeId : action.node.id;
+    const liveNode = state.nodes.find((node) => node.id === nodeId);
     if (liveNode?.generating) {
       state.undoStack.push(action);
       showActionToast("生成中的节点暂不能撤销参数");
       return;
+    }
+    if (liveNode?.promptOptimizing) {
+      state.undoStack.push(action);
+      showActionToast("提示词正在优化，完成后可撤销");
+      return;
+    }
+    if (action.type === "prompt-update" && liveNode && liveNode.prompt !== action.after) {
+      showActionToast("提示词已变化，已跳过这次优化撤销");
+      return;
+    }
+  }
+
+  if (action.type === "create") {
+    const createdNodeIds = new Set(Array.isArray(action.nodeIds) ? action.nodeIds : []);
+    if (createdNodeIds.size) {
+      const removedConnectionIds = state.connections
+        .filter((connection) => createdNodeIds.has(connection.sourceNodeId) || createdNodeIds.has(connection.targetNodeId))
+        .map((connection) => connection.id);
+      state.nodes = state.nodes.filter((node) => !createdNodeIds.has(node.id));
+      state.connections = state.connections.filter(
+        (connection) => !createdNodeIds.has(connection.sourceNodeId) && !createdNodeIds.has(connection.targetNodeId),
+      );
+      state.groups = state.groups
+        .map((group) => ({ ...group, nodeIds: group.nodeIds.filter((nodeId) => !createdNodeIds.has(nodeId)) }))
+        .filter((group) => group.nodeIds.length);
+      clearRecentConnectionFeedback(removedConnectionIds);
+      clearSelection();
+      state.activeGroupId = null;
     }
   }
 
@@ -5071,11 +7313,14 @@ function undoLastAction() {
     for (const item of action.deleted.slice().sort((a, b) => a.index - b.index)) {
       state.nodes.splice(Math.min(item.index, state.nodes.length), 0, cloneUndoNodeState(item.node));
     }
-    const restoredGroups = (action.deletedGroups || []).map((group) => cloneGroupState(group));
-    const restoredGroupIds = new Set(restoredGroups.map((group) => group.id));
+    const restoredGroupIds = new Set(action.affectedGroups.map(({ group }) => group.id));
     state.groups = state.groups.filter((group) => !restoredGroupIds.has(group.id));
-    state.groups.push(...restoredGroups);
-    state.connections.push(...(action.deletedConnections || []).map(cloneConnectionState));
+    for (const { group, index } of action.affectedGroups.slice().sort((a, b) => a.index - b.index)) {
+      state.groups.splice(Math.min(index, state.groups.length), 0, cloneGroupState(group));
+    }
+    for (const { connection, index } of action.deletedConnections.slice().sort((a, b) => a.index - b.index)) {
+      state.connections.splice(Math.min(index, state.connections.length), 0, cloneConnectionState(connection));
+    }
     state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
     setSelection(restored.map((node) => node.id), restored[0]?.id || null);
   }
@@ -5109,25 +7354,15 @@ function undoLastAction() {
     }
   }
 
-  hideUndoToast();
+  if (action.type === "prompt-update") {
+    const node = state.nodes.find((item) => item.id === action.nodeId);
+    if (node) {
+      node.prompt = action.before;
+      setSelection([node.id], node.id);
+    }
+  }
+
   render();
-}
-
-function showUndoToast(message = "已删除，可撤销") {
-  if (!undoToast) return;
-  const label = undoToast.querySelector("span");
-  if (label) label.textContent = message;
-  undoToast.classList.remove("hidden");
-  window.clearTimeout(showUndoToast.timeoutId);
-  showUndoToast.timeoutId = window.setTimeout(() => {
-    undoToast.classList.add("hidden");
-  }, 4200);
-}
-
-function hideUndoToast() {
-  if (!undoToast) return;
-  undoToast.classList.add("hidden");
-  window.clearTimeout(showUndoToast.timeoutId);
 }
 
 function canRestoreDialogFocus(element) {
@@ -5150,7 +7385,7 @@ function getDialogFocusFallback(previousFocus) {
   return [...document.querySelectorAll(selector)].find(canRestoreDialogFocus) || null;
 }
 
-function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, onConfirm }) {
+function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, onConfirm, onCancel }) {
   const existingLayer = document.querySelector(".confirm-layer");
   if (existingLayer) {
     if (typeof existingLayer.closeConfirmDialog === "function") {
@@ -5190,11 +7425,12 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
   document.body.appendChild(layer);
 
   let closed = false;
-  const close = (restoreFocus = true) => {
+  const close = (restoreFocus = true, confirmed = false) => {
     if (closed) return;
     closed = true;
     if (layer.open) layer.close();
     layer.remove();
+    if (!confirmed) onCancel?.();
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
         if (document.querySelector(".confirm-layer")) return;
@@ -5213,7 +7449,7 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
     if (event.target === layer) close();
   });
   layer.querySelector(".confirm-ok")?.addEventListener("click", () => {
-    close();
+    close(true, true);
     onConfirm?.();
   });
   layer.showModal();
@@ -5244,13 +7480,7 @@ function renderAgentHistory() {
 function renderAgentMessages(conversation = getConversation(state.activeConversationId)) {
   if (!agentMessages) return;
   if (!conversation.messages.length) {
-    agentMessages.innerHTML = `
-      <div class="agent-start-state">
-        <div class="agent-start-brand">Reelay 立画</div>
-        <div class="agent-start-title">开始创作</div>
-        <div class="agent-start-subtitle">描述你想要生成的内容</div>
-      </div>
-    `;
+    agentMessages.replaceChildren();
     return;
   }
 
@@ -5271,7 +7501,76 @@ function renderAgentMessages(conversation = getConversation(state.activeConversa
   agentMessages.scrollTop = agentMessages.scrollHeight;
 }
 
+const agentComposerModes = {
+  image: { label: "图片生成", icon: "image" },
+  video: { label: "视频生成", icon: "play-square" },
+  agent: { label: "Agent 托管", icon: "bot" },
+};
+
+function setAgentHistoryOpen(open, { focus = false } = {}) {
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) {
+    setAgentModeMenuOpen(false);
+    setAgentModelMenuOpen(false);
+  }
+  agentHistoryMenu?.classList.toggle("hidden", !shouldOpen);
+  agentHistoryBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen && focus) window.requestAnimationFrame(() => agentHistorySearch?.focus());
+}
+
+function setAgentModeMenuOpen(open, { focus = false } = {}) {
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) {
+    setAgentHistoryOpen(false);
+    setAgentModelMenuOpen(false);
+  }
+  agentModeMenu?.classList.toggle("hidden", !shouldOpen);
+  agentModeBtn?.classList.toggle("active", shouldOpen);
+  agentModeBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen && focus) {
+    window.requestAnimationFrame(() => agentModeMenu?.querySelector('[aria-checked="true"]')?.focus());
+  }
+}
+
+function setAgentModelMenuOpen(open, { focus = false } = {}) {
+  const shouldOpen = Boolean(open) && !agentModelBtn?.disabled;
+  if (shouldOpen) {
+    setAgentHistoryOpen(false);
+    setAgentModeMenuOpen(false);
+    renderAgentModelMenu();
+  }
+  agentModelMenu?.classList.toggle("hidden", !shouldOpen);
+  agentModelBtn?.classList.toggle("active", shouldOpen);
+  agentModelBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen && focus) {
+    window.requestAnimationFrame(() => agentModelMenu?.querySelector(".agent-model-option.active")?.focus());
+  }
+}
+
+function closeAgentPopovers() {
+  setAgentHistoryOpen(false);
+  setAgentModeMenuOpen(false);
+  setAgentModelMenuOpen(false);
+}
+
+function setAgentAdvancedOpen(open) {
+  const shouldOpen = Boolean(open);
+  state.agentAdvancedSettingsExpanded = shouldOpen;
+  agentAdvancedSettings?.classList.toggle("hidden", !shouldOpen);
+  agentAdvancedSettings?.setAttribute("aria-hidden", String(!shouldOpen));
+  agentAdvancedBtn?.classList.toggle("active", shouldOpen);
+  agentAdvancedBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  agentComposer?.classList.toggle("advanced-open", shouldOpen);
+}
+
+function setAgentAutoLinkEnabled(enabled) {
+  state.agentAutoLinkEnabled = Boolean(enabled);
+  agentAutoLinkBtn?.setAttribute("aria-checked", String(state.agentAutoLinkEnabled));
+  agentAutoLinkBtn?.classList.toggle("is-on", state.agentAutoLinkEnabled);
+}
+
 function setAgentConversation(id) {
+  cancelAgentPromptOptimization();
   const conversation = getConversation(id);
   state.activeConversationId = conversation.id;
   if (agentConversationTitle) {
@@ -5281,7 +7580,7 @@ function setAgentConversation(id) {
     item.classList.toggle("active", item.dataset.chatId === conversation.id);
   });
   renderAgentMessages(conversation);
-  agentHistoryMenu?.classList.add("hidden");
+  setAgentHistoryOpen(false);
 }
 
 function filterAgentHistory(keyword = "") {
@@ -5292,7 +7591,69 @@ function filterAgentHistory(keyword = "") {
   });
 }
 
+function syncAgentPromptOptimizationControl() {
+  const busy = Boolean(state.agentPromptOptimizationTask);
+  const hasPrompt = Boolean(agentInput?.value.trim());
+  if (agentPromptOptimizationBtn) {
+    agentPromptOptimizationBtn.disabled = busy || !hasPrompt;
+    agentPromptOptimizationBtn.classList.toggle("is-processing", busy);
+    agentPromptOptimizationBtn.setAttribute("aria-busy", String(busy));
+    agentPromptOptimizationBtn.setAttribute("aria-label", busy ? "正在优化提示词" : "提示词优化");
+    agentPromptOptimizationBtn.title = busy
+      ? "正在优化提示词"
+      : hasPrompt
+        ? "优化提示词"
+        : "输入提示词后优化";
+  }
+  if (agentInput) {
+    agentInput.readOnly = busy;
+    agentInput.setAttribute("aria-busy", String(busy));
+    agentInput.setAttribute("aria-readonly", String(busy));
+  }
+  if (agentSendButton) {
+    agentSendButton.disabled = busy;
+    agentSendButton.classList.toggle("disabled", busy);
+    agentSendButton.setAttribute("aria-disabled", String(busy));
+  }
+}
+
+function cancelAgentPromptOptimization() {
+  const task = state.agentPromptOptimizationTask;
+  if (task?.timeoutId) window.clearTimeout(task.timeoutId);
+  state.agentPromptOptimizationTask = null;
+  syncAgentPromptOptimizationControl();
+}
+
+function completeAgentPromptOptimization() {
+  const task = state.agentPromptOptimizationTask;
+  if (!task) return;
+  const optimizedPrompt = buildOptimizedPrompt(task.sourcePrompt);
+  state.agentPromptOptimizationTask = null;
+  if (agentInput && optimizedPrompt) agentInput.value = optimizedPrompt;
+  syncAgentPromptOptimizationControl();
+  if (agentInput) {
+    agentInput.focus();
+    agentInput.setSelectionRange(agentInput.value.length, agentInput.value.length);
+  }
+}
+
+function startAgentPromptOptimization() {
+  const sourcePrompt = agentInput?.value.trim();
+  if (!sourcePrompt || state.agentPromptOptimizationTask) return;
+  const task = {
+    conversationId: state.activeConversationId,
+    sourcePrompt,
+    timeoutId: 0,
+  };
+  state.agentPromptOptimizationTask = task;
+  syncAgentPromptOptimizationControl();
+  task.timeoutId = window.setTimeout(() => {
+    if (state.agentPromptOptimizationTask === task) completeAgentPromptOptimization();
+  }, 900);
+}
+
 function sendAgentMessage() {
+  if (state.agentPromptOptimizationTask) return;
   const content = agentInput?.value.trim();
   if (!content) return;
   const conversation = getConversation(state.activeConversationId);
@@ -5302,6 +7663,7 @@ function sendAgentMessage() {
     content: "我已收到。后续可以把这条需求拆成画布节点、素材输入和生成参数。",
   });
   agentInput.value = "";
+  syncAgentPromptOptimizationControl();
   renderAgentMessages(conversation);
 }
 
@@ -5317,16 +7679,110 @@ function getSelectedAgentModels() {
   return selectedIds.map((id) => models.find((model) => model.id === id)).filter(Boolean);
 }
 
+function getAgentComposerModel(mode = state.agentComposerMode) {
+  if (mode !== "image" && mode !== "video") return null;
+  const active = models.find((model) => model.id === state.agentModelId && model.type === mode);
+  if (active) return active;
+  const preferred = getSelectedAgentModels().find((model) => model.type === mode);
+  if (preferred) return preferred;
+  const fallbackId = mode === "video" ? "seedance-2" : "gpt-image-2";
+  return models.find((model) => model.id === fallbackId)
+    || models.find((model) => model.type === mode)
+    || null;
+}
+
+function getAgentComposerParameterParts(model) {
+  if (!model) {
+    return { beforeAspect: "自动规划模型与参数", aspect: "", afterAspect: "" };
+  }
+  const defaults = model.defaults || {};
+  if (model.type === "video") {
+    const workflow = generationWorkflows.video?.find((item) => item.id === defaults.workflow);
+    const after = [defaults.quality, defaults.duration].filter(Boolean).join(" · ");
+    return {
+      beforeAspect: workflow?.label ? `${workflow.label} · ` : "",
+      aspect: defaults.aspect || "自动",
+      afterAspect: after ? ` · ${after}` : "",
+    };
+  }
+  const after = [defaults.resolution, defaults.quality].filter(Boolean).join(" · ");
+  return {
+    beforeAspect: "",
+    aspect: defaults.aspect || "自动",
+    afterAspect: after ? ` · ${after}` : "",
+  };
+}
+
+function getAgentComposerParameterSummary(model) {
+  const parts = getAgentComposerParameterParts(model);
+  return `${parts.beforeAspect}${parts.aspect}${parts.afterAspect}`;
+}
+
+function getAgentComposerParameterMarkup(model) {
+  const parts = getAgentComposerParameterParts(model);
+  if (!parts.aspect) return `<span class="param-summary-before">${escapeHtml(parts.beforeAspect)}</span>`;
+  return `<span class="param-summary-before">${escapeHtml(parts.beforeAspect)}</span><span class="param-summary-aspect">${escapeHtml(parts.aspect)}</span><span class="param-summary-after">${escapeHtml(parts.afterAspect)}</span>`;
+}
+
+function syncAgentComposerControls() {
+  const mode = agentComposerModes[state.agentComposerMode] ? state.agentComposerMode : "video";
+  const definition = agentComposerModes[mode];
+  if (agentModeBtn) {
+    agentModeBtn.innerHTML = `<i data-agent-mode-icon data-lucide="${definition.icon}" aria-hidden="true"></i><span class="control-chip-label" data-agent-mode-label>${definition.label}</span>`;
+    agentModeBtn.title = `生成模式：${definition.label}`;
+    agentModeBtn.setAttribute("aria-label", `生成模式：${definition.label}`);
+  }
+  agentModeMenu?.querySelectorAll("[data-agent-mode]").forEach((button) => {
+    const active = button.dataset.agentMode === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-checked", String(active));
+  });
+  syncAgentModelButton();
+}
+
+function setAgentComposerMode(mode, { focusInput = false } = {}) {
+  const nextMode = agentComposerModes[mode] ? mode : "video";
+  state.agentComposerMode = nextMode;
+  if (nextMode === "image" || nextMode === "video") {
+    const model = getAgentComposerModel(nextMode);
+    if (model) {
+      state.agentModelId = model.id;
+      if (!getSelectedAgentModelIds().includes(model.id)) {
+        state.agentModelIds = [...getSelectedAgentModelIds(), model.id];
+      }
+    }
+    state.agentModelTab = nextMode;
+  }
+  setAgentModeMenuOpen(false);
+  syncAgentComposerControls();
+  if (focusInput) agentInput?.focus();
+}
+
 function syncAgentModelButton() {
-  if (!agentModelBtn) return;
   const selectedModels = getSelectedAgentModels();
   const names = selectedModels.map((model) => model.name);
-  const label =
+  const preferenceLabel =
     names.length > 2
       ? `已选模型：${names.slice(0, 2).join("、")} 等 ${names.length} 个`
       : `已选模型：${names.join("、") || "未选择"}`;
-  agentModelBtn.title = label;
-  agentModelBtn.setAttribute("aria-label", label);
+  const model = getAgentComposerModel();
+  const agentManaged = state.agentComposerMode === "agent";
+  if (agentModelBtn) {
+    agentModelBtn.disabled = agentManaged;
+    agentModelBtn.classList.toggle("agent-managed", agentManaged);
+    agentModelBtn.innerHTML = agentManaged
+      ? '<i data-lucide="bot" aria-hidden="true"></i><span class="agent-model-button-label control-chip-label">自动编排</span>'
+      : `${modelIconMarkup(model, "model-chip-glyph agent-composer-model-icon")}<span class="agent-model-button-label control-chip-label">${escapeHtml(model?.name || "选择模型")}</span>`;
+    const label = agentManaged ? "Agent 托管将自动编排模型" : `${preferenceLabel}；当前 ${model?.name || "未选择"}`;
+    agentModelBtn.title = label;
+    agentModelBtn.setAttribute("aria-label", label);
+  }
+  if (agentParamSummary) {
+    const summary = getAgentComposerParameterSummary(model);
+    agentParamSummary.innerHTML = `<span class="control-chip-label param-chip-label">${getAgentComposerParameterMarkup(model)}</span>${model?.type === "video" ? '<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="volume-2" aria-label="音频开启"></i>' : ""}`;
+    agentParamSummary.setAttribute("aria-label", `当前生成参数：${summary}`);
+  }
+  refreshIcons();
 }
 
 function renderAgentModelMenu() {
@@ -5339,7 +7795,7 @@ function renderAgentModelMenu() {
     const active = selectedIds.has(model.id);
     return `
       <button class="agent-model-option ${active ? "active" : ""}" type="button" data-agent-model="${model.id}" aria-pressed="${active}">
-        <span class="agent-model-provider">${escapeHtml(model.icon)}</span>
+        ${modelIconMarkup(model, "agent-model-provider")}
         <span class="agent-model-copy">
           <span class="agent-model-title">${escapeHtml(model.name)}</span>
           <span class="agent-model-detail">${escapeHtml(model.desc)}</span>
@@ -5390,14 +7846,24 @@ function toggleAgentModel(modelId) {
   const scrollTop = agentModelMenu?.querySelector(".agent-model-scroll")?.scrollTop || 0;
   const selectedIds = getSelectedAgentModelIds();
   const exists = selectedIds.includes(selected.id);
-  if (exists && selectedIds.length > 1) {
+  const isActiveGenerationType = selected.type === state.agentComposerMode;
+  const sameTypeCount = selectedIds
+    .map((id) => models.find((model) => model.id === id))
+    .filter((model) => model?.type === selected.type).length;
+  if (exists && selectedIds.length > 1 && (!isActiveGenerationType || sameTypeCount > 1)) {
     state.agentModelIds = selectedIds.filter((id) => id !== selected.id);
+    if (state.agentModelId === selected.id) {
+      state.agentModelId = state.agentModelIds
+        .map((id) => models.find((model) => model.id === id))
+        .find((model) => model?.type === state.agentComposerMode)?.id
+        || state.agentModelIds[0];
+    }
   } else if (!exists) {
     state.agentModelIds = [...selectedIds, selected.id];
+    if (isActiveGenerationType) state.agentModelId = selected.id;
   } else {
     state.agentModelIds = selectedIds;
   }
-  state.agentModelId = state.agentModelIds[0] || selected.id;
   syncAgentModelButton();
   renderAgentModelMenu();
   const nextScroll = agentModelMenu?.querySelector(".agent-model-scroll");
@@ -5462,6 +7928,12 @@ function applyTheme(mode = state.themeMode, options = {}) {
   }
   document.documentElement.dataset.theme = getResolvedTheme(nextMode);
   document.documentElement.dataset.themeMode = nextMode;
+  const configuredNodeRadius = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--node-media-radius"),
+  );
+  if (Number.isFinite(configuredNodeRadius)) selectionSurfaceRadiusWorld = configuredNodeRadius;
+  syncSelectionOverlayProjection();
+  renderSelectionToolbar();
   const themeLabels = {
     light: "浅色模式",
     dark: "深色模式",
@@ -5486,15 +7958,18 @@ function applyTheme(mode = state.themeMode, options = {}) {
 }
 
 function setAgentWidth(width) {
-  const maxWidth = Math.min(640, window.innerWidth);
-  const minWidth = Math.min(340, maxWidth);
-  state.agentWidth = clamp(width, minWidth, maxWidth);
-  agentDock?.style.setProperty("--agent-width", `${state.agentWidth}px`);
-  appShell?.style.setProperty("--agent-width", `${state.agentWidth}px`);
+  const opposingWidth = isAssetLibraryOpen() ? state.assetLibraryWidth : 0;
+  const viewportMax = Math.min(panelWidthRules.agentMax, window.innerWidth - panelWidthRules.edgeInset * 2);
+  const maxWidth = state.agentOpen && isAssetLibraryOpen()
+    ? Math.min(viewportMax, window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor - opposingWidth)
+    : viewportMax;
+  applyAgentWidth(clampPanelWidth(width, panelWidthRules.agentMin, maxWidth));
+  renderSelectionToolbar();
+  scheduleNodePopoverLayouts();
 }
 
 function setAgentOpen(open) {
-  if (open && narrowViewportQuery.matches && assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")) {
+  if (open && isAssetLibraryOpen() && !canShowAssetAndAgent()) {
     closeAssetLibrary();
   }
   state.agentOpen = open;
@@ -5504,6 +7979,12 @@ function setAgentOpen(open) {
   appShell?.classList.toggle("agent-open", open);
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
+  if (open && isAssetLibraryOpen()) reconcileDualPanelWidths("agent");
+  else if (!open && isAssetLibraryOpen()) {
+    setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
+  } else {
+    syncAssetLibraryResizeSemantics();
+  }
   if (agentPanel) {
     agentPanel.inert = !open;
     agentPanel.setAttribute("aria-hidden", String(!open));
@@ -5514,9 +7995,12 @@ function setAgentOpen(open) {
     agentLauncher.setAttribute("aria-expanded", String(open));
   }
   if (!open) {
-    agentHistoryMenu?.classList.add("hidden");
+    cancelAgentPromptOptimization();
+    closeAgentPopovers();
+    setAgentAdvancedOpen(false);
   }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
+  scheduleNodePopoverLayouts();
   if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => agentInput?.focus());
   if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
 }
@@ -5626,23 +8110,44 @@ function finishInlineRename(element, commit = true) {
 function commitProjectRename(nextName) {
   if (!requireCanvasMutation()) return;
   state.projectName = String(nextName || "Untitled").trim() || "Untitled";
+  state.projects = getProjectMenuOptions().map((project) => (
+    project.id === state.projectId ? { ...project, name: state.projectName } : project
+  ));
   syncProjectNavigation();
+  renderProjectMenu();
 }
 
-function commitCanvasRename(nextName) {
-  if (!requireCanvasMutation()) return;
-  const canvas = getActiveCanvas();
-  if (!canvas) return;
-  canvas.name = String(nextName || canvas.name || "画布 1").trim() || "画布 1";
+function commitCanvasRename(nextName, canvasId = state.activeCanvasId, { renderMenu = true } = {}) {
+  if (!requireCanvasMutation()) return false;
+  const canvas = canvasRuntimeStore.getCanvas(canvasId);
+  if (!canvas) return false;
+  const normalizedName = String(nextName || canvas.name || "画布 1").trim() || "画布 1";
+  if (normalizedName === canvas.name) {
+    syncProjectNavigation();
+    if (renderMenu) renderCanvasMenu();
+    return true;
+  }
+  canvas.name = normalizedName;
   syncProjectNavigation();
-  renderCanvasMenu();
+  if (renderMenu) renderCanvasMenu();
   scheduleCanvasDocumentSave();
+  return true;
 }
 
 function positionMenu(menu, anchor, options = {}) {
   if (!menu || !anchor) return;
   const rect = anchor.getBoundingClientRect();
   const width = options.width || menu.offsetWidth || 190;
+  if (options.placement === "right") {
+    const height = menu.offsetHeight || 60;
+    const left = clamp(rect.right + (options.gap ?? 8), 8, window.innerWidth - width - 8);
+    const top = clamp(rect.top, 8, window.innerHeight - height - 8);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.style.right = "auto";
+    menu.style.bottom = "auto";
+    return;
+  }
   const left = clamp(options.alignRight ? rect.right - width : rect.left, 8, window.innerWidth - width - 8);
   const top = clamp(rect.bottom + (options.gap ?? 8), 8, window.innerHeight - 60);
   menu.style.left = `${left}px`;
@@ -5651,10 +8156,61 @@ function positionMenu(menu, anchor, options = {}) {
   menu.style.bottom = "auto";
 }
 
-function closeProjectMenus() {
+function positionProjectMenu(anchor) {
+  if (!projectMenu || !anchor) return;
+  const surface = anchor.closest(".project-nav") || anchor;
+  const rect = surface.getBoundingClientRect();
+  const width = Math.min(360, Math.max(0, window.innerWidth - 16));
+  const left = clamp(rect.left, 8, window.innerWidth - width - 8);
+  const top = clamp(rect.bottom + 8, 8, window.innerHeight - 180);
+  projectMenu.style.width = `${width}px`;
+  projectMenu.style.maxHeight = `${Math.max(172, window.innerHeight - top - 8)}px`;
+  projectMenu.style.left = `${left}px`;
+  projectMenu.style.top = `${top}px`;
+  projectMenu.style.right = "auto";
+  projectMenu.style.bottom = "auto";
+}
+
+function setMenuTriggerExpanded(selector, activeTrigger = null) {
+  document.querySelectorAll(selector).forEach((trigger) => {
+    trigger.setAttribute("aria-expanded", String(trigger === activeTrigger));
+  });
+}
+
+function focusFirstMenuControl(menu) {
+  window.requestAnimationFrame(() => {
+    menu?.querySelector('[role="menuitem"]:not([disabled]), button:not([disabled]), input:not([disabled])')?.focus();
+  });
+}
+
+function closeCanvasMoreMenu({ returnFocus = false } = {}) {
+  const focusTarget = canvasMoreMenuTrigger;
+  canvasMoreMenu?.classList.add("hidden");
+  canvasMoreMenuTrigger?.setAttribute("aria-expanded", "false");
+  canvasMoreMenuTrigger = null;
+  if (returnFocus && canRestoreDialogFocus(focusTarget)) {
+    window.requestAnimationFrame(() => focusTarget.focus());
+  }
+}
+
+function closeProjectMenus({ returnFocus = false } = {}) {
+  const projectWasOpen = Boolean(projectMenu && !projectMenu.classList.contains("hidden"));
+  const canvasWasOpen = Boolean(canvasMenu && !canvasMenu.classList.contains("hidden"));
+  const focusTarget = projectWasOpen ? projectMenuTrigger : canvasWasOpen ? canvasMenuTrigger : null;
   projectMenu?.classList.add("hidden");
   canvasMenu?.classList.add("hidden");
-  canvasMoreMenu?.classList.add("hidden");
+  closeCanvasMoreMenu();
+  setMenuTriggerExpanded("[data-project-menu-button]");
+  setMenuTriggerExpanded("[data-canvas-menu-button]");
+  projectMenuTrigger = null;
+  canvasMenuTrigger = null;
+  if (projectWasOpen) {
+    state.projectSearch = "";
+    if (projectMenuSearch) projectMenuSearch.value = "";
+  }
+  if (returnFocus && canRestoreDialogFocus(focusTarget)) {
+    window.requestAnimationFrame(() => focusTarget.focus());
+  }
 }
 
 function renderCanvasMenu() {
@@ -5663,12 +8219,12 @@ function renderCanvasMenu() {
   canvasMenuList.innerHTML = state.canvases
     .map(
       (canvas) => `
-        <div class="canvas-menu-row ${canvas.id === activeId ? "active" : ""}" data-canvas-id="${canvas.id}">
-          <button class="canvas-menu-switch" type="button" data-canvas-switch="${canvas.id}">
-            <span>${escapeHtml(canvas.name)}</span>
+        <div class="canvas-menu-row ${canvas.id === activeId ? "active" : ""}" role="none" data-canvas-id="${canvas.id}">
+          <button class="canvas-menu-switch" type="button" role="menuitem" data-canvas-switch="${canvas.id}">
+            <span class="canvas-menu-name">${escapeHtml(canvas.name)}</span>
             ${canvas.id === activeId ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
           </button>
-          <button class="canvas-menu-more-button" type="button" data-canvas-more="${canvas.id}" title="画布操作" aria-label="画布操作">
+          <button class="canvas-menu-more-button" type="button" role="menuitem" data-canvas-more="${canvas.id}" title="画布操作" aria-label="画布操作" aria-controls="canvasMoreMenu" aria-expanded="false" aria-haspopup="menu">
             <i data-lucide="more-horizontal" aria-hidden="true"></i>
           </button>
         </div>
@@ -5678,51 +8234,120 @@ function renderCanvasMenu() {
   refreshIcons();
 }
 
-function openProjectMenu(anchor) {
+function openProjectMenu(anchor, { focusMenu = false } = {}) {
+  const wasOpen = projectMenuTrigger === anchor && !projectMenu?.classList.contains("hidden");
   closeCanvasPanel();
-  canvasMenu?.classList.add("hidden");
-  canvasMoreMenu?.classList.add("hidden");
-  projectMenu?.classList.toggle("hidden");
-  if (!projectMenu?.classList.contains("hidden")) {
-    positionMenu(projectMenu, anchor, { width: 190 });
+  if (wasOpen && focusMenu) {
+    focusFirstMenuControl(projectMenu);
+    return;
   }
+  closeProjectMenus();
+  if (wasOpen || !projectMenu) return;
+  renderProjectMenu();
+  projectMenuTrigger = anchor;
+  projectMenu.classList.remove("hidden");
+  setMenuTriggerExpanded("[data-project-menu-button]", anchor);
+  positionProjectMenu(anchor);
+  if (focusMenu) focusFirstMenuControl(projectMenu);
 }
 
-function openCanvasMenu(anchor) {
+function openCanvasMenu(anchor, { focusMenu = false } = {}) {
+  const wasOpen = canvasMenuTrigger === anchor && !canvasMenu?.classList.contains("hidden");
   closeCanvasPanel();
-  projectMenu?.classList.add("hidden");
-  canvasMoreMenu?.classList.add("hidden");
-  renderCanvasMenu();
-  canvasMenu?.classList.toggle("hidden");
-  if (!canvasMenu?.classList.contains("hidden")) {
-    positionMenu(canvasMenu, anchor, { width: 220 });
+  if (wasOpen && focusMenu) {
+    focusFirstMenuControl(canvasMenu);
+    return;
   }
+  closeProjectMenus();
+  if (wasOpen || !canvasMenu) return;
+  renderCanvasMenu();
+  canvasMenuTrigger = anchor;
+  canvasMenu.classList.remove("hidden");
+  setMenuTriggerExpanded("[data-canvas-menu-button]", anchor);
+  positionMenu(canvasMenu, anchor, anchor.closest(".left-rail")
+    ? { width: 220, placement: "right", gap: 10 }
+    : { width: 220 });
+  if (focusMenu) focusFirstMenuControl(canvasMenu);
+}
+
+function beginCanvasMenuRename(canvasId) {
+  if (!requireCanvasMutation()) return;
+  const canvas = canvasRuntimeStore.getCanvas(canvasId);
+  if (!canvas || !canvasMenuList) return;
+  closeCanvasMoreMenu();
+  renderCanvasMenu();
+  canvasMenu?.classList.remove("hidden");
+  const row = [...canvasMenuList.querySelectorAll("[data-canvas-id]")]
+    .find((element) => element.dataset.canvasId === canvasId);
+  const switchButton = row?.querySelector(".canvas-menu-switch");
+  if (!switchButton) return;
+  const nameInput = document.createElement("input");
+  nameInput.className = "canvas-menu-name editing";
+  nameInput.type = "text";
+  nameInput.value = canvas.name;
+  nameInput.setAttribute("aria-label", "重命名画布");
+  switchButton.replaceWith(nameInput);
+  nameInput.focus();
+  nameInput.select();
+
+  let finished = false;
+  const finish = (commit, { focusTarget = null } = {}) => {
+    if (finished) return;
+    finished = true;
+    const previousName = canvas.name;
+    const nextName = commit ? nameInput.value.trim() : previousName;
+    if (commit) {
+      commitCanvasRename(nextName || previousName, canvasId, { renderMenu: false });
+    }
+    const resolvedName = canvasRuntimeStore.getCanvas(canvasId)?.name || previousName;
+    const restoredName = switchButton.querySelector(".canvas-menu-name");
+    if (restoredName) restoredName.textContent = resolvedName;
+    if (nameInput.isConnected) nameInput.replaceWith(switchButton);
+    if (focusTarget?.isConnected) {
+      focusTarget.focus({ preventScroll: true });
+    }
+  };
+  nameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      finish(true, { focusTarget: switchButton });
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      finish(false, { focusTarget: switchButton });
+    } else if (event.key === "Tab") {
+      const controls = [...canvasMenu.querySelectorAll("button:not([disabled]), input:not([disabled])")];
+      const currentIndex = controls.indexOf(nameInput);
+      const nextIndex = currentIndex + (event.shiftKey ? -1 : 1);
+      const focusTarget = controls[nextIndex] || canvasMenuTrigger;
+      event.preventDefault();
+      event.stopPropagation();
+      finish(true, { focusTarget });
+    }
+  });
+  nameInput.addEventListener("blur", () => finish(true), { once: true });
 }
 
 function addCanvas() {
   if (!requireCanvasMutation()) return;
-  saveActiveCanvasState();
   const canvas = createCanvasRecord(`画布 ${state.canvases.length + 1}`);
-  state.canvases.push(canvas);
-  state.activeCanvasId = canvas.id;
-  loadCanvasState(canvas);
+  canvasRuntimeStore.addCanvas(canvas, { activate: true });
+  resetActiveCanvasSession(canvas);
   showActionToast("已添加画布");
 }
 
 function switchCanvas(canvasId) {
   if (canvasId === state.activeCanvasId) return;
-  const nextCanvas = state.canvases.find((canvas) => canvas.id === canvasId);
+  const nextCanvas = canvasRuntimeStore.activateCanvas(canvasId);
   if (!nextCanvas) return;
-  saveActiveCanvasState();
-  state.activeCanvasId = canvasId;
-  loadCanvasState(nextCanvas);
+  resetActiveCanvasSession(nextCanvas);
 }
 
 function duplicateCanvas(canvasId) {
   if (!requireCanvasMutation()) return;
-  const source = state.canvases.find((canvas) => canvas.id === canvasId);
+  const source = canvasRuntimeStore.getCanvas(canvasId);
   if (!source) return;
-  saveActiveCanvasState();
   const content = cloneCanvasContent(source);
   const duplicate = {
     id: crypto.randomUUID(),
@@ -5736,9 +8361,8 @@ function duplicateCanvas(canvasId) {
     zCounter: source.zCounter,
     undoStack: [],
   };
-  state.canvases.push(duplicate);
-  state.activeCanvasId = duplicate.id;
-  loadCanvasState(duplicate);
+  canvasRuntimeStore.addCanvas(duplicate, { activate: true });
+  resetActiveCanvasSession(duplicate);
   showActionToast("已复制画布");
 }
 
@@ -5756,13 +8380,12 @@ function deleteCanvas(canvasId) {
     confirmText: "删除",
     danger: true,
     onConfirm: () => {
-      const index = state.canvases.findIndex((item) => item.id === canvasId);
       cancelGenerationTasks((task) => task.canvasId === canvasId);
-      state.canvases.splice(index, 1);
-      if (state.activeCanvasId === canvasId) {
-        const nextCanvas = state.canvases[Math.max(0, index - 1)] || state.canvases[0];
-        state.activeCanvasId = nextCanvas.id;
-        loadCanvasState(nextCanvas);
+      cancelPromptOptimizationTasks((task) => task.canvasId === canvasId);
+      const removal = canvasRuntimeStore.removeCanvas(canvasId);
+      if (!removal) return;
+      if (removal.activeChanged) {
+        resetActiveCanvasSession(removal.activeCanvas);
       } else {
         renderCanvasMenu();
       }
@@ -5771,92 +8394,21 @@ function deleteCanvas(canvasId) {
   });
 }
 
-function getVisibleNameElement(kind) {
-  const elements = kind === "project" ? projectNameEls : canvasNameEls;
-  return [...elements].find((element) => element.offsetParent !== null) || elements[0] || null;
-}
-
-function resetPrototypeProject() {
-  if (!requireCanvasMutation()) return;
-  cancelGenerationTasks((task) => task.projectId === state.projectId);
-  state.projectId = crypto.randomUUID();
-  state.projectName = "Untitled";
-  state.nodes = [];
-  state.groups = [];
-  state.connections = [];
-  state.undoStack = [];
-  state.selectedIds = new Set();
-  state.activeId = null;
-  state.activeGroupId = null;
-  state.activeConnectionId = null;
-  state.mediaToolbarNodeId = null;
-  state.tx = 0;
-  state.ty = 0;
-  state.scale = 1;
-  state.zCounter = 1;
-  state.libraryAssets = [];
-  state.libraryView = "canvas";
-  state.libraryScope = "project";
-  state.libraryTargetNodeId = null;
-  state.librarySearch = "";
-  state.libraryFilter = "all";
-  state.libraryCollapsedGroups = new Set();
-  state.pendingUploadNodeId = null;
-  state.pendingCanvasUploadPoint = null;
-  state.nodeCreatePoint = null;
-  state.canvasMoreTargetId = null;
-  hideUndoToast();
-  initializeCanvases();
-  applyTransform();
-  render();
-}
-
 function handleProjectMenuAction(action) {
   closeProjectMenus();
-  if (action === "home") {
-    requestHostNavigation("home");
-    return;
-  }
-  if (action === "all") {
-    requestHostNavigation("projects");
-    return;
-  }
-  if (action === "create") {
-    showConfirmDialog({
-      title: "创建新项目",
-      body: "当前前端原型没有持久化保存。继续后会重置为一个新的空白项目。",
-      confirmText: "创建",
-      onConfirm: () => {
-        resetPrototypeProject();
-        showActionToast("已创建新项目");
-      },
-    });
-    return;
-  }
-  if (action === "delete") {
-    showConfirmDialog({
-      title: "删除项目",
-      body: "当前项目会在原型中被清空并回到初始状态。此操作当前不可撤销。",
-      confirmText: "删除",
-      danger: true,
-      onConfirm: () => {
-        resetPrototypeProject();
-        showActionToast("项目已删除");
-      },
-    });
-  }
+  if (action === "create") requestHostProjectCreation();
 }
 
 function handleCanvasMoreAction(action) {
   const canvasId = state.canvasMoreTargetId || state.activeCanvasId;
+  if (action === "rename") {
+    switchCanvas(canvasId);
+    requestAnimationFrame(() => beginCanvasMenuRename(canvasId));
+    return;
+  }
   closeProjectMenus();
   if (action === "open") {
     showActionToast("多窗口画布将在正式工作台中打开");
-    return;
-  }
-  if (action === "rename") {
-    switchCanvas(canvasId);
-    requestAnimationFrame(() => beginInlineRename(getVisibleNameElement("canvas")));
     return;
   }
   if (action === "duplicate") {
@@ -5872,6 +8424,10 @@ function groupSelectedNodes() {
   if (!requireCanvasMutation()) return;
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return;
+  if (selectedNodes.some((node) => Boolean(node.groupId))) {
+    showActionToast("组内节点不能再次打组，请先解组或选择未分组节点");
+    return;
+  }
   const groupId = crypto.randomUUID();
   const bounds = getDefaultGroupBounds(selectedNodes);
   if (!bounds) return;
@@ -5947,10 +8503,14 @@ function sortSelectedNodes(layout = "grid") {
   render();
 }
 
-function getSelectedMediaEntries() {
-  return getSelectedNodes()
+function getMediaEntriesForNodes(nodes) {
+  return nodes
     .map((node) => ({ node, asset: getEditableMedia(node) }))
     .filter((entry) => entry.asset);
+}
+
+function getSelectedMediaEntries() {
+  return getMediaEntriesForNodes(getSelectedNodes());
 }
 
 function sanitizeFileName(value) {
@@ -5962,6 +8522,7 @@ function sanitizeFileName(value) {
 }
 
 function addSelectedMediaToLibrary() {
+  if (!requireCanvasMutation()) return;
   const entries = getSelectedMediaEntries();
   if (!entries.length) {
     showActionToast("选中的节点还没有可保存素材");
@@ -5970,28 +8531,26 @@ function addSelectedMediaToLibrary() {
   const additions = [];
   for (const { asset } of entries) {
     const sourceId = asset.librarySourceId || asset.id;
-    const exists = state.libraryAssets.some(
-      (item) =>
-        item.id === sourceId ||
-        item.librarySourceId === sourceId ||
-        (asset.url && item.url === asset.url),
-    );
-    if (exists) continue;
-    additions.push({
+    const registered = findRegisteredLibraryMedia(asset);
+    if (hasPersonalLibraryPlacement(registered)) continue;
+    if (window.parent !== window && !asset.workspaceAssetId && !registered?.workspaceAssetId) continue;
+    const candidate = registered || {
       ...cloneAsset(asset, asset.source || "library"),
       librarySourceId: sourceId,
-    });
+    };
+    if (additions.some((item) => item.id === candidate.id || (item.url && item.url === candidate.url))) continue;
+    additions.push(candidate);
   }
   if (!additions.length) {
-    showActionToast("选中素材已在项目资产中");
+    showActionToast(window.parent !== window ? "选中素材尚未持久化或已在个人素材中" : "选中素材已在个人素材中");
     return;
   }
   registerLibraryAssets(additions, "project");
   showActionToast(`已保存 ${additions.length} 个素材`);
 }
 
-async function downloadSelectedMedia(packageMode = false) {
-  const entries = getSelectedMediaEntries().filter(({ asset }) => asset?.url);
+async function downloadNodesMedia(nodes, packageMode = false) {
+  const entries = getMediaEntriesForNodes(nodes).filter(({ asset }) => asset?.url);
   if (!entries.length) {
     showActionToast("选中的节点暂无可下载内容");
     return;
@@ -6001,6 +8560,10 @@ async function downloadSelectedMedia(packageMode = false) {
     await downloadAssetFile(asset, `${title}.${getAssetDownloadExtension(asset)}`);
   }
   showActionToast(packageMode ? "原型中以逐个文件模拟打包下载" : `已开始下载 ${entries.length} 个素材`);
+}
+
+async function downloadSelectedMedia(packageMode = false) {
+  return downloadNodesMedia(getSelectedNodes(), packageMode);
 }
 
 function arrangeGroup(group, layout = "grid") {
@@ -6063,10 +8626,19 @@ function requestRunGroup(group) {
     return;
   }
 
-  const generationCosts = generators.map((node) => {
-    normalizeNodeParameters(node);
-    return getCost(node);
-  });
+  generators.forEach((node) => normalizeNodeParameters(node));
+  const taskTypeIssues = generators.map((node) => getOmniReferenceTaskTypeIssue(node)).filter(Boolean);
+  if (taskTypeIssues.length) {
+    showConfirmDialog({
+      title: "组内任务参数不完整",
+      body: taskTypeIssues[0],
+      confirmText: "知道了",
+      showCancel: false,
+    });
+    return;
+  }
+
+  const generationCosts = generators.map((node) => getCost(node));
   if (generationCosts.some((cost) => !Number.isFinite(cost) || cost <= 0)) {
     showConfirmDialog({
       title: "组内存在不可用模型",
@@ -6110,6 +8682,36 @@ function isCanvasSurface(target) {
   return target === shell || target === stage || target === nodeLayer || target === connectionLayer;
 }
 
+function isSelectionFrameDragTarget(pointer) {
+  if (
+    !multiSelectionChrome
+    || multiSelectionChrome.classList.contains("hidden")
+    || state.selectedIds.size < 2
+    || getExactSelectionGroup()
+    || !isCanvasMutationAllowed()
+    || !isCanvasSurface(pointer?.target)
+    || state.action
+    || state.connectionDrop
+    || !Number.isFinite(pointer?.clientX)
+    || !Number.isFinite(pointer?.clientY)
+  ) return false;
+
+  const rect = multiSelectionChrome.getBoundingClientRect();
+  return pointer.clientX >= rect.left
+    && pointer.clientX <= rect.right
+    && pointer.clientY >= rect.top
+    && pointer.clientY <= rect.bottom;
+}
+
+function syncSelectionFramePointerFeedback(pointer) {
+  const pressed = isSelectionFrameDragAction();
+  shell.classList.toggle("selection-frame-pressed", pressed);
+  shell.classList.toggle(
+    "selection-frame-hover",
+    !pressed && isSelectionFrameDragTarget(pointer),
+  );
+}
+
 function isConnectionDropSurface(target) {
   if (!(target instanceof Element) || !shell.contains(target)) return false;
   return !target.closest(
@@ -6121,6 +8723,7 @@ function isConnectionDropSurface(target) {
       ".selection-toolbar",
       ".group-toolbar",
       ".canvas-controls",
+      ".canvas-tools",
       ".left-rail",
       ".top-bar",
       ".top-actions",
@@ -6163,7 +8766,8 @@ function shouldBypassCanvasWheel(target) {
         ".agent-history-menu",
         ".agent-model-menu",
         ".profile-menu",
-        ".profile-help-inline-panel",
+        ".profile-help-flyout-panel",
+        ".canvas-tools",
         ".canvas-tool-popover",
         ".toolbar-dropdown",
         ".selection-toolbar",
@@ -6197,6 +8801,21 @@ function beginPan(event) {
 
 function beginMarquee(event) {
   canvasPointerInteractionController.beginMarquee(event, shell);
+}
+
+function beginSelectionFrameDrag(event) {
+  const selectedNodes = getSelectedNodes();
+  if (selectedNodes.length < 2 || getExactSelectionGroup(selectedNodes)) return false;
+  const activeId = selectedNodes.some((node) => node.id === state.activeId)
+    ? state.activeId
+    : selectedNodes[0].id;
+  const result = canvasNodePointerController.handlePointerDown(event, activeId, {
+    interactionSource: "selection-frame",
+  });
+  if (result !== "drag-candidate" || !isSelectionFrameDragAction()) return false;
+  shell.classList.remove("selection-frame-hover");
+  shell.classList.add("selection-frame-pressed");
+  return true;
 }
 
 function beginMinimapDrag(event) {
@@ -6356,12 +8975,34 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
   moveMinimap: moveMinimapDrag,
   resizeAssetLibrary: setAssetLibraryWidth,
   resizeAgent: setAgentWidth,
+  resizeAgentTop: setAgentTopInset,
+  resizeAgentBottom: setAgentBottomInset,
   finishMarquee: (action) => canvasPointerInteractionController.finishMarquee(action),
-  finishNodeDrag: (action) => canvasNodeDragController.finish(action),
-  finishGroup: (action) => canvasGroupInteractionController.finish(action),
-  finishAssetLibraryResize: syncPromptPanelLayouts,
+  finishNodeDrag: (action, options) => canvasNodeDragController.finish(action, options),
+  finishNodeClick: (action, _pointer, options = {}) => {
+    if (options.cancelled) return;
+    const node = state.nodes.find((item) => item.id === action.activeId);
+    const canReveal = node && state.selectedIds.has(node.id) && state.selectedIds.size === 1;
+    state.mediaToolbarNodeId = canReveal && action.revealMediaToolbar ? node.id : null;
+    if (canReveal && action.revealGeneratorPanel) {
+      node.expanded = true;
+      node.panel = null;
+      rememberPreset(node);
+    }
+    render();
+  },
+  finishGroup: (action, options = {}) => {
+    if (!options.cancelled && action.type === "resize-group" && action.moved) {
+      reconcileGroupFrameMembership(action.groupId);
+    }
+    canvasGroupInteractionController.finish(action, options);
+  },
+  finishAssetLibraryResize,
   clearAction: () => {
     state.action = null;
+    if (groupResizeOverlay) delete groupResizeOverlay.dataset.activeResize;
+    agentDock?.classList.remove("resizing-vertical");
+    shell.classList.remove("selection-frame-pressed");
   },
   setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
   releasePointer: (target, pointer) => {
@@ -6372,6 +9013,8 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
     }
   },
   isCanvasSurface,
+  isSelectionFrameDragTarget,
+  beginSelectionFrameDrag,
   closeConnectionCreateMenu: closeCanvasCreateMenus,
   isSpaceDown: () => state.isSpaceDown,
   beginPan,
@@ -6384,7 +9027,7 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
 });
 
 function promoteDragCandidate(action, event) {
-  canvasNodeDragController.promote(action, event);
+  return canvasNodeDragController.promote(action, event);
 }
 
 function moveDraggedNodes(action, event) {
@@ -6392,7 +9035,7 @@ function moveDraggedNodes(action, event) {
 }
 
 function promoteGroupDrag(action, event) {
-  canvasGroupInteractionController.promoteDrag(action, event);
+  return canvasGroupInteractionController.promoteDrag(action, event);
 }
 
 function moveGroupNodes(action, event) {
@@ -6409,18 +9052,6 @@ function moveMarqueeSelection(action, event) {
 
 function resizeGroupFrame(action, event) {
   canvasGroupInteractionController.resize(action, event);
-}
-
-function rectContainsPoint(rect, point) {
-  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
-}
-
-function getNodeCenter(node) {
-  const bounds = getNodeBounds(node);
-  return {
-    x: bounds.left + bounds.width / 2,
-    y: bounds.top + bounds.height / 2,
-  };
 }
 
 function removeNodeFromGroup(node, groupId) {
@@ -6446,15 +9077,12 @@ function addNodeToGroup(node, groupId) {
 }
 
 function findGroupForNode(node) {
-  const center = getNodeCenter(node);
-  return state.groups
-    .map((group) => ({ group, bounds: getGroupBounds(group) }))
-    .filter((item) => item.bounds && rectContainsPoint(item.bounds, center))
-    .sort((a, b) => {
-      const areaA = a.bounds.width * a.bounds.height;
-      const areaB = b.bounds.width * b.bounds.height;
-      return areaA - areaB;
-    })[0]?.group || null;
+  const groupId = canvasSpatialSelection.resolveNodeGroup({
+    nodeBounds: getNodeMembershipBounds(node),
+    currentGroupId: node.groupId || null,
+    groups: state.groups.map((group) => ({ id: group.id, bounds: getGroupBounds(group) })),
+  });
+  return getGroupById(groupId);
 }
 
 function updateDraggedNodeGroupMembership(ids) {
@@ -6478,13 +9106,45 @@ function updateDraggedNodeGroupMembership(ids) {
   return changed;
 }
 
+function reconcileGroupFrameMembership(groupId) {
+  const group = getGroupById(groupId);
+  const bounds = getGroupBounds(group);
+  if (!group || !bounds) return false;
+  let changed = false;
+  for (const node of state.nodes) {
+    if (node.groupId && node.groupId !== groupId) continue;
+    const nextGroupId = canvasSpatialSelection.resolveNodeGroup({
+      nodeBounds: getNodeMembershipBounds(node),
+      currentGroupId: node.groupId || null,
+      groups: [{ id: groupId, bounds }],
+    });
+    if (nextGroupId === node.groupId) continue;
+    if (node.groupId === groupId) {
+      removeNodeFromGroup(node, groupId);
+      changed = true;
+    } else if (!node.groupId && nextGroupId === groupId) {
+      addNodeToGroup(node, groupId);
+      changed = true;
+    }
+  }
+  if (changed) syncGroups();
+  return changed;
+}
+
 function handlePointerMove(event) {
   canvasPointerDispatchController.handleMove(event);
+  syncSelectionFramePointerFeedback(event);
 }
 
 function finishPointerInteraction(event) {
   canvasPointerDispatchController.finish(event);
+  syncSelectionFramePointerFeedback(event);
 }
+
+shell.addEventListener("pointerdown", (event) => {
+  if (event.target instanceof Element && event.target.closest('[data-action="aspect"]')) return;
+  canvasNodeLayoutTransition.finishAll();
+}, true);
 
 shell.addEventListener("pointerdown", (event) => {
   canvasPointerDispatchController.handleSurfacePointerDown(event);
@@ -6576,6 +9236,45 @@ connectionCreateMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 
+connectionCreateMenu?.addEventListener("pointerover", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
+  if (button) setConnectionCreatePreview(button);
+});
+
+connectionCreateMenu?.addEventListener("pointerleave", () => {
+  setConnectionCreatePreview(connectionCreateMenu.querySelector("[data-connection-create]"));
+});
+
+connectionCreateMenu?.addEventListener("focusin", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
+  if (button) setConnectionCreatePreview(button);
+});
+
+connectionCreateMenu?.addEventListener("keydown", (event) => {
+  const buttons = [...connectionCreateMenu.querySelectorAll("[data-connection-create]")];
+  if (!buttons.length) return;
+  const currentIndex = buttons.findIndex((button) => button.classList.contains("is-preview"));
+  let nextIndex = currentIndex < 0 ? 0 : currentIndex;
+
+  if (event.key === "ArrowDown") nextIndex = (nextIndex + 1) % buttons.length;
+  else if (event.key === "ArrowUp") nextIndex = (nextIndex - 1 + buttons.length) % buttons.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = buttons.length - 1;
+  else if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    buttons[nextIndex].click();
+    return;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  setConnectionCreatePreview(buttons[nextIndex]);
+  buttons[nextIndex].focus({ preventScroll: true });
+});
+
 connectionCreateMenu?.addEventListener("click", (event) => {
   const button = event.target instanceof Element ? event.target.closest("[data-connection-create]") : null;
   const drop = state.connectionDrop;
@@ -6583,6 +9282,22 @@ connectionCreateMenu?.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopPropagation();
   const mode = button.dataset.connectionCreate === "video" ? "video" : "image";
+  if (drop.kind === "selection") {
+    const node = addNodeAt(drop.clientX, drop.clientY, mode, {
+      useLastPreset: false,
+      anchor: "input",
+    });
+    closeConnectionCreateMenu();
+    if (!node) return;
+    const result = createConnectionsBatch(drop.originNodeIds, node.id);
+    node.expanded = true;
+    setSelection([node.id], node.id, { keepConnection: true });
+    render();
+    if (result.rejected.length) {
+      showActionToast(`已连接 ${result.created.length} 个来源，跳过 ${result.rejected.length} 个无效连接`);
+    }
+    return;
+  }
   const originNodeId = drop.originNodeId;
   const node = addNodeAt(drop.clientX, drop.clientY, mode, {
     useLastPreset: false,
@@ -6594,11 +9309,13 @@ connectionCreateMenu?.addEventListener("click", (event) => {
     createConnection(node.id, originNodeId, {
       sourceRatio: 0.5,
       targetRatio: drop.originRatio,
+      feedbackDirection: "reverse",
     });
   } else {
     createConnection(originNodeId, node.id, {
       sourceRatio: drop.originRatio,
       targetRatio: 0.5,
+      feedbackDirection: "forward",
     });
   }
   node.expanded = true;
@@ -6641,9 +9358,38 @@ shell.addEventListener(
 
 window.addEventListener("keydown", (event) => {
   if (document.querySelector(".confirm-layer")) return;
+  if (canvasEntityUse.handleGlobalKeyDown(event)) return;
+  if (canvasEntityEditor.isOpen()) return;
   const target = event.target;
   const isTyping = target instanceof Element && target.closest("input, textarea, [contenteditable='true']");
   if (isTyping) return;
+  if (event.key === "Escape" && state.libraryDirectoryMenuOpen && isAssetLibraryOpen()) {
+    event.preventDefault();
+    setAssetLibraryDirectoryMenuOpen(false);
+    renderAssetLibrary();
+    assetLibraryDirectoryButton?.focus({ preventScroll: true });
+    return;
+  }
+  if (event.key === "Escape" && (state.libraryMoveItems.length || state.libraryMoveFolderId)) {
+    event.preventDefault();
+    state.libraryMoveItems = [];
+    state.libraryMoveFolderId = null;
+    renderAssetLibrary();
+    return;
+  }
+  if (event.key === "Escape" && (state.libraryToolbarMenu || state.libraryMenuTarget) && isAssetLibraryOpen()) {
+    event.preventDefault();
+    state.libraryToolbarMenu = null;
+    state.libraryMenuTarget = null;
+    renderAssetLibrary();
+    return;
+  }
+  if (event.key === "Escape" && state.librarySelectionMode && isAssetLibraryOpen()) {
+    event.preventDefault();
+    clearAssetLibrarySelection();
+    renderAssetLibrary();
+    return;
+  }
   if (event.key === "Escape" && !nodeCreateMenu?.classList.contains("hidden")) {
     event.preventDefault();
     closeNodeCreateMenu();
@@ -6653,6 +9399,21 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     closeConnectionCreateMenu();
     return;
+  }
+  if (event.key === "Escape" && !selectionDownloadMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    setSelectionDownloadMenuOpen(false);
+    selectionDownloadTrigger?.focus({ preventScroll: true });
+    return;
+  }
+  if (event.key === "Escape") {
+    const openNodePanel = state.nodes.find((node) => node.kind === "generator" && node.panel);
+    if (openNodePanel) {
+      event.preventDefault();
+      openNodePanel.panel = null;
+      render();
+      return;
+    }
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
@@ -6694,9 +9455,9 @@ localAssetInput.addEventListener("change", (event) => {
   const node = state.nodes.find((item) => item.id === state.pendingUploadNodeId);
   const canvasPoint = state.pendingCanvasUploadPoint;
   if (node) {
-    addFilesToGeneratorNode(node, files);
+    void addFilesToGeneratorNode(node, files);
   } else if (canvasPoint && files.length) {
-    addMediaNodesFromFiles(files, canvasPoint.clientX, canvasPoint.clientY);
+    void addMediaNodesFromFiles(files, canvasPoint.clientX, canvasPoint.clientY);
   }
   state.pendingUploadNodeId = null;
   state.pendingCanvasUploadPoint = null;
@@ -6705,6 +9466,11 @@ localAssetInput.addEventListener("change", (event) => {
 window.addEventListener("dragover", (event) => {
   if (!hasDraggedFiles(event) && !hasDraggedLibraryAsset(event)) return;
   event.preventDefault();
+  if (!isCanvasDropTarget(event.target)) {
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+    shell.classList.remove("file-dragging");
+    return;
+  }
   shell.classList.add("file-dragging");
 });
 
@@ -6714,6 +9480,12 @@ window.addEventListener("dragleave", (event) => {
 });
 
 window.addEventListener("drop", (event) => {
+  const hasSupportedPayload = hasDraggedFiles(event) || hasDraggedLibraryAsset(event);
+  if (hasSupportedPayload && !isCanvasDropTarget(event.target)) {
+    event.preventDefault();
+    shell.classList.remove("file-dragging");
+    return;
+  }
   const libraryAssetId = event.dataTransfer?.getData("application/x-reelay-asset");
   if (libraryAssetId) {
     event.preventDefault();
@@ -6735,16 +9507,601 @@ window.addEventListener("drop", (event) => {
 
   const targetNode = getNodeFromElement(event.target);
   if (targetNode?.kind === "generator") {
-    addFilesToGeneratorNode(targetNode, files);
+    void addFilesToGeneratorNode(targetNode, files);
     return;
   }
 
-  addMediaNodesFromFiles(files, event.clientX, event.clientY);
+  void addMediaNodesFromFiles(files, event.clientX, event.clientY);
 });
 
-railLibraryBtn?.addEventListener("click", () => {
-  if (assetLibraryPanel?.classList.contains("hidden")) {
+function setAssetLibrarySelectionMode(enabled) {
+  canvasEntityUse.closeDetail();
+  state.librarySelectionMode = Boolean(enabled);
+  state.librarySelectedIds.clear();
+  state.libraryToolbarMenu = null;
+  state.libraryMenuTarget = null;
+  state.libraryMoveItems = [];
+  state.libraryMoveFolderId = null;
+  renderAssetLibrary();
+}
+
+function toggleAssetLibrarySelection(id) {
+  if (!state.librarySelectionMode) return;
+  if (state.librarySelectedIds.has(id)) state.librarySelectedIds.delete(id);
+  else state.librarySelectedIds.add(id);
+  state.libraryToolbarMenu = null;
+  renderAssetLibrary();
+}
+
+function selectAllVisibleAssetLibraryItems() {
+  const { items } = getVisibleAssetLibraryContent();
+  const allSelected = items.length > 0 && items.every((item) => state.librarySelectedIds.has(item.id));
+  state.librarySelectedIds.clear();
+  if (!allSelected) items.forEach((item) => state.librarySelectedIds.add(item.id));
+  renderAssetLibrary();
+}
+
+function startAssetLibraryRename(kind, id) {
+  if (!isAssetLibraryMutable()) return;
+  if (kind === "entity" && !canPersistLibraryEntities()) return;
+  state.libraryRenameTarget = { kind, id };
+  state.libraryMenuTarget = null;
+  state.libraryToolbarMenu = null;
+  renderAssetLibrary();
+}
+
+async function finishAssetLibraryRename(input, { cancel = false } = {}) {
+  const target = state.libraryRenameTarget;
+  if (!target) return;
+  state.libraryRenameTarget = null;
+  if (cancel) {
+    renderAssetLibrary();
+    return;
+  }
+  const name = String(input?.value || "").trim();
+  if (!name) {
+    showActionToast("名称不能为空");
+    renderAssetLibrary();
+    return;
+  }
+  try {
+    if (target.kind === "folder") {
+      assetLibraryStore.renameFolder({ folderId: target.id, name, space: state.librarySpace });
+    } else if (target.kind === "entity" && window.parent !== window) {
+      const entity = assetLibraryStore.getEntity({ kind: "entity", id: target.id });
+      if (!entity || !Number.isInteger(entity.version) || !canPersistLibraryEntities()) {
+        throw new Error("当前主体尚未接入持久化重命名");
+      }
+      const updated = await canvasEntityAssets.updateEntity({
+        entityId: entity.id,
+        expectedVersion: entity.version,
+        name,
+        description: entity.description || "",
+        mediaRefs: entity.mediaRefs,
+        coverMediaId: entity.coverMediaId || null,
+      });
+      syncHostEntity(updated);
+    } else {
+      assetLibraryStore.renameItem({ item: getAssetLibraryItemRef(target.id, target.kind), name, space: state.librarySpace });
+    }
+  } catch (error) {
+    showActionToast(error?.message || "重命名失败");
+  }
+  renderAssetLibrary();
+}
+
+function createAssetLibraryFolder() {
+  if (!isAssetLibraryMutable()) return;
+  if (getAssetLibraryFolderPath().length + 1 >= canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS) {
+    showActionToast(`最多支持 ${canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS} 层目录`);
+    return;
+  }
+  const siblingNames = new Set(
+    assetLibraryStore.listFolders({
+      space: state.librarySpace,
+      kind: state.librarySection,
+      parentId: state.libraryFolderId,
+    }).map((folder) => canvasAssetLibraryModel.normalizeSearch(folder.name)),
+  );
+  let sequence = 1;
+  let name = "新建文件夹";
+  while (siblingNames.has(canvasAssetLibraryModel.normalizeSearch(name))) {
+    sequence += 1;
+    name = `新建文件夹 ${sequence}`;
+  }
+  try {
+    const folder = assetLibraryStore.createFolder({
+      id: crypto.randomUUID(),
+      name,
+      space: state.librarySpace,
+      kind: state.librarySection,
+      parentId: state.libraryFolderId,
+    });
+    if (state.libraryFolderId) state.libraryExpandedFolderIds.add(state.libraryFolderId);
+    else state.libraryDirectoryRootExpanded = true;
+    state.libraryDirectoryMenuOpen = false;
+    state.librarySearch = "";
+    state.librarySearchByContext[getAssetLibraryContextKey()] = "";
+    clearAssetLibrarySelection();
+    state.libraryRenameTarget = { kind: "folder", id: folder.id };
+  } catch (error) {
+    showActionToast(error?.message || "新建文件夹失败");
+  }
+  renderAssetLibrary();
+}
+
+function projectAssetToLibraryMedia(projectAsset) {
+  const contentUrl = new URL(projectAsset.contentUrl, window.location.href);
+  if (contentUrl.origin !== window.location.origin) throw new Error("资产内容地址不属于当前 Reelay 服务");
+  const url = sanitizeRuntimeMediaUrl(contentUrl.href);
+  if (!url) throw new Error("资产内容地址无效");
+  return {
+    id: projectAsset.assetId,
+    workspaceAssetId: projectAsset.assetId,
+    projectAssetReferenceId: projectAsset.referenceId,
+    librarySourceId: projectAsset.assetId,
+    assetVersion: projectAsset.assetVersion,
+    mediaKind: projectAsset.mediaKind,
+    type: projectAsset.mediaKind,
+    name: projectAsset.displayName,
+    displayName: projectAsset.displayName,
+    contentType: projectAsset.contentType,
+    byteSize: projectAsset.byteSize,
+    checksumSha256: projectAsset.checksumSha256,
+    url,
+    source: "workspace",
+  };
+}
+
+function workspaceAssetToLibraryMedia(workspaceAsset) {
+  const contentUrl = new URL(workspaceAsset.contentUrl, window.location.href);
+  if (contentUrl.origin !== window.location.origin) throw new Error("资产内容地址不属于当前 Reelay 服务");
+  const url = sanitizeRuntimeMediaUrl(contentUrl.href);
+  if (!url) throw new Error("资产内容地址无效");
+  return {
+    id: workspaceAsset.assetId,
+    workspaceAssetId: workspaceAsset.assetId,
+    librarySourceId: workspaceAsset.assetId,
+    assetVersion: workspaceAsset.assetVersion,
+    mediaKind: workspaceAsset.mediaKind,
+    type: workspaceAsset.mediaKind,
+    name: workspaceAsset.displayName,
+    displayName: workspaceAsset.displayName,
+    contentType: workspaceAsset.contentType,
+    byteSize: workspaceAsset.byteSize,
+    checksumSha256: workspaceAsset.checksumSha256,
+    url,
+    source: "workspace",
+  };
+}
+
+function registerHostWorkspaceAssetCatalog({ assets = [], entities = [] } = {}) {
+  try {
+    const media = assets.map(workspaceAssetToLibraryMedia);
+    media.forEach((asset) => {
+      assetLibraryStore.registerMedia({ media: asset, space: "personal", folderId: null });
+      hydrateAssetMetadata(asset, null);
+    });
+    assetLibraryStore.syncPersistedEntities({ entities });
+    hostPersonalMediaIds.clear();
+    media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+    renderAssetLibrary();
+  } catch (error) {
+    showActionToast(error?.message || "个人资产目录同步失败");
+  }
+}
+
+function syncHostEntity(entity) {
+  const result = assetLibraryStore.registerPersistedEntity({ entity });
+  renderAssetLibrary();
+  return result.entity;
+}
+
+async function persistEntityEditorFiles(files) {
+  const accepted = Array.from(files || [])
+    .map((file) => ({ file, mediaKind: getAssetType(file) }))
+    .filter((entry) => entry.mediaKind);
+  if (!accepted.length) throw new Error("请选择图片、视频或音频文件");
+  if (!canPersistLibraryMedia()) {
+    throw new Error("当前项目尚未接入素材持久化");
+  }
+  const media = window.parent === window
+    ? createAssetsFromFiles(accepted.map((entry) => entry.file)).map((asset) => ({
+        ...asset,
+        displayName: asset.name || asset.displayName,
+      }))
+    : await Promise.all(accepted.map(async ({ file, mediaKind }) => {
+        const workspaceAsset = await canvasMediaAssets.persistFile(file, {
+          target: "personal",
+          mediaKind,
+          displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
+          contentType: file.type || defaultUploadContentType(mediaKind),
+        });
+        return workspaceAssetToLibraryMedia(workspaceAsset);
+      }));
+  const registered = media.map((asset) => assetLibraryStore.registerMedia({
+    media: asset,
+    space: "personal",
+    folderId: null,
+  }).media);
+  registered.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+  registered.forEach((asset) => hydrateAssetMetadata(asset, null));
+  renderAssetLibrary();
+  return registered;
+}
+
+async function saveEntityEditorDraft(payload) {
+  if (window.parent !== window) {
+    if (!canPersistLibraryEntities()) {
+      throw new Error("当前项目尚未接入主体持久化");
+    }
+    return payload.mode === "edit"
+      ? canvasEntityAssets.updateEntity(payload)
+      : canvasEntityAssets.createEntity(payload);
+  }
+  if (payload.mode === "create") {
+    return assetLibraryStore.registerPersistedEntity({
+      entity: {
+        id: crypto.randomUUID(),
+        name: payload.name,
+        description: payload.description,
+        mediaRefs: payload.mediaRefs,
+        coverMediaId: payload.coverMediaId,
+        version: 1,
+      },
+    }).entity;
+  }
+  const updated = assetLibraryStore.updateEntity({
+    entityId: payload.entityId,
+    expectedVersion: payload.expectedVersion,
+    name: payload.name,
+    description: payload.description,
+    mediaRefs: payload.mediaRefs,
+    coverMediaId: payload.coverMediaId,
+  });
+  return updated?.entity || updated;
+}
+
+function confirmEntityEditorDiscard() {
+  return new Promise((resolve) => {
+    showConfirmDialog({
+      title: "放弃未保存的修改？",
+      body: "主体名称、描述和素材调整都不会保留。",
+      confirmText: "放弃修改",
+      danger: true,
+      onConfirm: () => resolve(true),
+      onCancel: () => resolve(false),
+    });
+  });
+}
+
+function setEntityEditorOpen(open) {
+  document.body.classList.toggle("entity-editor-open", open);
+  if (open) {
+    closeAssetLibrary();
+    setAgentOpen(false);
+    closeProfileMenu();
+    closeProjectMenus();
+    if (topBar) topBar.inert = true;
+    shell?.setAttribute("inert", "");
+    shell?.setAttribute("aria-hidden", "true");
+    if (leftRail) {
+      leftRail.inert = true;
+      leftRail.setAttribute("aria-hidden", "true");
+    }
+    if (topActions) {
+      topActions.inert = true;
+      topActions.setAttribute("aria-hidden", "true");
+    }
+    return;
+  }
+  if (topBar) topBar.inert = false;
+  shell?.removeAttribute("inert");
+  shell?.removeAttribute("aria-hidden");
+  if (topActions) {
+    topActions.inert = false;
+    topActions.removeAttribute("aria-hidden");
+  }
+  const shouldReopenLibrary = reopenAssetLibraryAfterEntityEditor;
+  reopenAssetLibraryAfterEntityEditor = false;
+  if (shouldReopenLibrary) {
+    state.librarySpace = "personal";
+    state.librarySection = "entity";
+    state.libraryFolderId = null;
     openAssetLibrary();
+  } else if (leftRail) {
+    leftRail.inert = false;
+    leftRail.removeAttribute("aria-hidden");
+  }
+}
+
+function openEntityEditorCreate() {
+  if (state.librarySpace !== "personal" || !isAssetLibraryMutable()) {
+    showActionToast("首个主体切片仅支持个人空间");
+    return;
+  }
+  if (!canPersistLibraryEntities()) {
+    showActionToast("当前项目尚未接入主体持久化");
+    return;
+  }
+  reopenAssetLibraryAfterEntityEditor = isAssetLibraryOpen();
+  canvasEntityEditor.open({
+    mode: "create",
+    media: [],
+    mutable: true,
+    canAddFromLibrary: true,
+    canUpload: canPersistLibraryMedia(),
+  });
+}
+
+function openEntityEditorEdit(entityId) {
+  const entity = assetLibraryStore.getEntity({ kind: "entity", id: entityId });
+  if (!entity) return;
+  const isPersonal = assetLibraryStore.hasPlacement({ kind: "entity", id: entityId }, "personal");
+  if (!isPersonal || state.librarySpace !== "personal") {
+    openAssetLibraryPreview("entity", entityId);
+    return;
+  }
+  if (!canPersistLibraryEntities()) {
+    openAssetLibraryPreview("entity", entityId);
+    return;
+  }
+  if (!Number.isInteger(entity.version)) {
+    openAssetLibraryPreview("entity", entityId);
+    showActionToast("示例主体仅供预览；新建主体可完整编辑");
+    return;
+  }
+  reopenAssetLibraryAfterEntityEditor = isAssetLibraryOpen();
+  canvasEntityEditor.open({
+    mode: "edit",
+    entity,
+    media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entityId }),
+    expectedVersion: entity.version,
+    mutable: true,
+    canAddFromLibrary: true,
+    canUpload: canPersistLibraryMedia(),
+  });
+}
+
+function defaultUploadContentType(mediaKind) {
+  if (mediaKind === "video") return "video/mp4";
+  if (mediaKind === "audio") return "audio/mpeg";
+  return "image/jpeg";
+}
+
+async function persistAssetLibraryFiles(files, { space = state.librarySpace, folderId = null } = {}) {
+  const accepted = Array.from(files || [])
+    .map((file) => ({ file, mediaKind: getAssetType(file) }))
+    .filter((entry) => entry.mediaKind);
+  if (!accepted.length) {
+    throw new Error("请选择图片、视频或音频文件");
+  }
+  if (!canPersistLibraryMedia()) {
+    showActionToast("当前项目尚未接入资产持久化");
+    return;
+  }
+  if (window.parent !== window && space !== "personal") {
+    throw new Error("首个持久化切片仅支持上传到个人空间");
+  }
+  showActionToast(`正在上传 ${accepted.length} 个素材…`);
+  const settled = window.parent === window
+    ? createAssetsFromFiles(accepted.map((entry) => entry.file)).map((asset) => ({
+        status: "fulfilled",
+        value: {
+          ...asset,
+          displayName: asset.name || asset.displayName,
+        },
+      }))
+    : await Promise.allSettled(accepted.map(async ({ file, mediaKind }) => {
+        const projectAsset = await canvasMediaAssets.persistFile(file, {
+          mediaKind,
+          displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
+          contentType: file.type || defaultUploadContentType(mediaKind),
+        });
+        return projectAssetToLibraryMedia(projectAsset);
+      }));
+  const uploaded = settled
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+  const failures = settled.filter((result) => result.status === "rejected");
+  const hydrated = await Promise.all(uploaded.map(async (asset) => ({
+    ...asset,
+    ...await readAssetMetadata(asset),
+  })));
+  const media = hydrated.map((asset) => assetLibraryStore.registerMedia({
+    media: asset,
+    space,
+    folderId,
+  }).media);
+  if (window.parent !== window && space === "personal") {
+    media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+  }
+  if (!media.length && failures.length) {
+    throw failures[0].reason instanceof Error ? failures[0].reason : new Error("素材上传失败");
+  }
+  return { media, failedCount: failures.length };
+}
+
+async function addFilesToAssetLibrary(files) {
+  if (!isAssetLibraryMutable() || state.librarySection !== "media") return;
+  try {
+    const { media, failedCount } = await persistAssetLibraryFiles(files, {
+      space: state.librarySpace,
+      folderId: state.libraryFolderId,
+    });
+    showActionToast(failedCount
+      ? `已上传 ${media.length} 个素材，${failedCount} 个失败`
+      : `已上传 ${media.length} 个素材`);
+  } catch (error) {
+    showActionToast(error?.message || "资产写入失败");
+  }
+  renderAssetLibrary();
+}
+
+function deleteAssetLibraryItems(items) {
+  if (!items.length) return;
+  const noun = state.librarySection === "entity" ? "主体" : "素材";
+  showConfirmDialog({
+    title: `删除${items.length > 1 ? ` ${items.length} 个` : ""}${noun}`,
+    body: state.librarySection === "entity"
+      ? "删除主体不会删除它引用的素材。"
+      : "仍被主体引用的素材不会被删除。",
+    confirmText: "删除",
+    danger: true,
+    onConfirm: () => {
+      try {
+        assetLibraryStore.removePlacements({ items, space: state.librarySpace });
+        clearAssetLibrarySelection();
+        showActionToast(`已删除 ${items.length} 个${noun}`);
+      } catch (error) {
+        showActionToast(error?.message || "删除失败");
+      }
+      renderAssetLibrary();
+    },
+  });
+}
+
+function addPlatformMediaToCanvas(items) {
+  const assets = items.map((item) => {
+    if (item.kind !== "media" || !assetLibraryStore.hasPlacement(item, "platform")) {
+      throw new Error("平台批量操作仅支持当前搜索结果中的素材");
+    }
+    const media = assetLibraryStore.getMedia(item);
+    if (!media) throw new Error(`平台素材已不可用：${item.id}`);
+    return media;
+  });
+  if (!requireCanvasMutation()) return 0;
+
+  const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId);
+  if (targetNode?.kind === "generator") {
+    assets.forEach((asset) => addAssetToGeneratorNode(targetNode, asset));
+  } else {
+    const rect = shell.getBoundingClientRect();
+    const columns = Math.max(1, Math.ceil(Math.sqrt(assets.length)));
+    const rows = Math.ceil(assets.length / columns);
+    assets.forEach((asset, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      addLibraryAssetToCanvas(
+        asset,
+        rect.left + rect.width / 2 + (column - (columns - 1) / 2) * 320,
+        rect.top + rect.height / 2 + (row - (rows - 1) / 2) * 240,
+      );
+    });
+  }
+  clearAssetLibrarySelection();
+  showActionToast(`已添加 ${assets.length} 个平台素材到画布`);
+  return assets.length;
+}
+
+function runAssetLibraryAction(action, items) {
+  if (!items.length) {
+    showActionToast("请先选择资产");
+    return;
+  }
+  if (state.librarySpace === "platform") {
+    state.libraryToolbarMenu = null;
+    state.libraryMenuTarget = null;
+    try {
+      if (action === "add-canvas") {
+        addPlatformMediaToCanvas(items);
+      } else if (action === "save-personal") {
+        showActionToast("保存平台素材到个人素材库尚未接入");
+      } else {
+        throw new Error("平台空间不支持此操作");
+      }
+    } catch (error) {
+      showActionToast(error?.message || "平台素材操作失败");
+    }
+    renderAssetLibrary();
+    return;
+  }
+  const includesPersistedEntity = window.parent !== window && items.some((item) => {
+    if (item.kind !== "entity") return false;
+    return Number.isInteger(assetLibraryStore.getEntity(item)?.version);
+  });
+  if (includesPersistedEntity && ["move", "share-organization", "delete"].includes(action)) {
+    showActionToast("主体的移动、共享与删除将在对应持久化切片接入；本次未执行");
+    return;
+  }
+  state.libraryToolbarMenu = null;
+  state.libraryMenuTarget = null;
+  try {
+    if (action === "review") {
+      assetLibraryStore.submitReview({ items, space: state.librarySpace, targetSpace: "platform" });
+      showActionToast(`已提交 ${items.length} 项 Seedance 合规审核`);
+      clearAssetLibrarySelection();
+    } else if (action === "move") {
+      state.libraryMoveFolderId = null;
+      state.libraryMoveItems = items;
+    } else if (action === "share-organization") {
+      assetLibraryStore.shareToOrganization({ items, fromSpace: state.librarySpace });
+      showActionToast(`已共享 ${items.length} 项到组织空间`);
+      clearAssetLibrarySelection();
+    } else if (action === "delete") {
+      deleteAssetLibraryItems(items);
+      return;
+    }
+  } catch (error) {
+    showActionToast(error?.message || "操作失败");
+  }
+  renderAssetLibrary();
+}
+
+function deleteAssetLibraryFolder(folderId) {
+  const folder = assetLibraryStore.getFolder(folderId);
+  if (!folder) return;
+  showConfirmDialog({
+    title: `删除文件夹“${folder.name}”`,
+    body: "该文件夹及其子目录中的资产会从当前空间移除；仍被主体引用的素材不会被误删。",
+    confirmText: "删除",
+    danger: true,
+    onConfirm: () => {
+      try {
+        const result = assetLibraryStore.removeFolder({ folderId, space: state.librarySpace });
+        state.libraryMenuTarget = null;
+        state.libraryMoveFolderId = null;
+        showActionToast(`已删除 ${result.folders.length} 个目录`);
+      } catch (error) {
+        showActionToast(error?.message || "删除文件夹失败");
+      }
+      renderAssetLibrary();
+    },
+  });
+}
+
+function runAssetLibraryFolderAction(action, folderId) {
+  const folder = assetLibraryStore.getFolder(folderId);
+  if (!folder || folder.space !== state.librarySpace || folder.kind !== state.librarySection) return;
+  state.libraryToolbarMenu = null;
+  state.libraryMenuTarget = null;
+  if (action === "rename") {
+    startAssetLibraryRename("folder", folderId);
+    return;
+  }
+  if (action === "move") {
+    state.libraryMoveItems = [];
+    state.libraryMoveFolderId = folderId;
+  } else if (action === "share-organization") {
+    try {
+      const result = assetLibraryStore.copyFolderToOrganization({
+        folderId,
+        fromSpace: state.librarySpace,
+      });
+      showActionToast(`已共享 ${result.folderCount} 个目录和 ${result.itemCount} 项资产到组织空间`);
+    } catch (error) {
+      showActionToast(error?.message || "共享文件夹失败");
+    }
+  } else if (action === "delete") {
+    deleteAssetLibraryFolder(folderId);
+    return;
+  }
+  renderAssetLibrary();
+}
+
+railLibraryBtn?.addEventListener("click", (event) => {
+  if (assetLibraryPanel?.classList.contains("hidden")) {
+    openAssetLibrary(null, { focus: event.detail === 0 });
   } else {
     closeAssetLibrary();
   }
@@ -6752,6 +10109,8 @@ railLibraryBtn?.addEventListener("click", () => {
 
 assetLibraryCloseBtn?.addEventListener("click", closeAssetLibrary);
 assetLibraryResizeHandle?.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
+  canvasEntityUse.closeDetail();
   event.preventDefault();
   event.stopPropagation();
   state.action = {
@@ -6761,192 +10120,459 @@ assetLibraryResizeHandle?.addEventListener("pointerdown", (event) => {
     startWidth: assetLibraryPanel?.getBoundingClientRect().width || state.assetLibraryWidth,
     captureTarget: assetLibraryResizeHandle,
   };
+  assetLibraryPanel?.classList.add("resizing");
   assetLibraryResizeHandle.setPointerCapture(event.pointerId);
+});
+assetLibraryResizeHandle?.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const bounds = getAssetLibraryWidthBounds();
+  const step = event.shiftKey ? 64 : 16;
+  if (event.key === "Home") setAssetLibraryWidth(bounds.min);
+  else if (event.key === "End") setAssetLibraryWidth(bounds.max);
+  else setAssetLibraryWidth(state.assetLibraryWidth + (event.key === "ArrowRight" ? step : -step));
 });
 assetLibraryPanel?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 assetLibrarySearchInput?.addEventListener("input", (event) => {
+  canvasEntityUse.closeDetail();
   state.librarySearch = event.currentTarget.value;
+  state.librarySearchByContext[getAssetLibraryContextKey()] = state.librarySearch;
+  state.librarySelectedIds.clear();
   renderAssetLibrary();
 });
 assetLibraryPanel?.addEventListener("click", (event) => {
-  if (event.target.closest("#assetLibraryGlobalBtn")) {
-    if (state.libraryView === "global") {
-      state.libraryView = "assets";
-    } else {
-      state.libraryView = "global";
-      ensureGlobalLibraryScope();
-    }
-    state.libraryFilter = "all";
+  if (event.target.closest("#assetLibrarySpaceButton")) {
+    const willOpen = assetLibrarySpaceMenu?.classList.contains("hidden");
+    assetLibrarySpaceMenu?.classList.toggle("hidden", !willOpen);
+    assetLibrarySpaceButton?.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    return;
+  }
+  const space = event.target.closest("#assetLibrarySpaceMenu [data-library-space]")?.dataset.librarySpace;
+  if (space) {
+    assetLibrarySpaceMenu?.classList.add("hidden");
+    assetLibrarySpaceButton?.setAttribute("aria-expanded", "false");
+    switchAssetLibraryContext({ space });
+    return;
+  }
+  const section = event.target.closest("#assetLibrarySectionTabs [data-library-section]")?.dataset.librarySection;
+  if (section) {
+    switchAssetLibraryContext({ section });
+    return;
+  }
+  if (event.target.closest("#assetLibraryDirectoryButton")) {
+    setAssetLibraryDirectoryMenuOpen(!state.libraryDirectoryMenuOpen);
+    state.libraryToolbarMenu = null;
+    state.libraryMenuTarget = null;
     renderAssetLibrary();
     return;
   }
-  const view = event.target.closest("[data-library-view]")?.dataset.libraryView;
-  if (view) {
-    state.libraryView = view === "assets" ? "assets" : "canvas";
-    state.libraryFilter = "all";
+  if (event.target.closest("[data-library-directory-root-toggle]")) {
+    state.libraryDirectoryRootExpanded = !state.libraryDirectoryRootExpanded;
     renderAssetLibrary();
     return;
   }
-  const scope = event.target.closest("[data-library-scope]")?.dataset.libraryScope;
-  if (scope) {
-    state.libraryView = "global";
-    state.libraryScope = scope;
-    state.libraryFilter = "all";
+  const directoryToggle = event.target.closest("[data-library-directory-toggle]");
+  if (directoryToggle) {
+    const folderId = directoryToggle.dataset.libraryDirectoryToggle;
+    if (state.libraryExpandedFolderIds.has(folderId)) state.libraryExpandedFolderIds.delete(folderId);
+    else state.libraryExpandedFolderIds.add(folderId);
     renderAssetLibrary();
     return;
   }
-  const display = event.target.closest("[data-global-library-display]")?.dataset.globalLibraryDisplay;
-  if (display) {
-    state.globalLibraryDisplay = display === "list" ? "list" : "preview";
-    renderAssetLibrary();
+  const directorySelect = event.target.closest("[data-library-directory-select]");
+  if (directorySelect) {
+    selectAssetLibraryDirectory(directorySelect.dataset.libraryDirectorySelect || null);
     return;
   }
-  const filterToggle = event.target.closest("[data-library-filter-toggle]");
-  if (filterToggle) {
-    const menu = assetLibraryTabs?.querySelector(".asset-filter-menu");
-    const willOpen = menu?.classList.contains("hidden");
-    menu?.classList.toggle("hidden", !willOpen);
-    filterToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  if (event.target.closest("[data-library-create-entity]")) {
+    openEntityEditorCreate();
+    return;
+  }
+  if (event.target.closest("[data-library-upload]")) {
+    assetLibraryUploadInput?.click();
+    return;
+  }
+  if (event.target.closest("[data-library-selection-toggle]")) {
+    setAssetLibrarySelectionMode(!state.librarySelectionMode);
+    return;
+  }
+  if (event.target.closest("[data-library-selection-cancel]")) {
+    setAssetLibrarySelectionMode(false);
+    return;
+  }
+  if (event.target.closest("[data-library-select-all]")) {
+    selectAllVisibleAssetLibraryItems();
+    return;
+  }
+  if (event.target.closest("[data-library-filter-toggle]")) {
+    state.libraryToolbarMenu = state.libraryToolbarMenu === "filter" ? null : "filter";
+    renderAssetLibrary();
     return;
   }
   const filter = event.target.closest("[data-library-filter]")?.dataset.libraryFilter;
   if (filter) {
-    state.libraryFilter = filter;
+    state.libraryFilter = ["all", "image", "video", "audio"].includes(filter) ? filter : "all";
+    state.libraryFilterByContext[getAssetLibraryContextKey()] = state.libraryFilter;
+    state.librarySelectedIds.clear();
+    state.libraryToolbarMenu = null;
     renderAssetLibrary();
     return;
   }
-  const groupToggle = event.target.closest("[data-library-group-toggle]")?.dataset.libraryGroupToggle;
-  if (groupToggle) {
-    if (state.libraryCollapsedGroups.has(groupToggle)) {
-      state.libraryCollapsedGroups.delete(groupToggle);
-    } else {
-      state.libraryCollapsedGroups.add(groupToggle);
+  if (event.target.closest("#assetLibraryCommandBar button[data-library-display]")) {
+    state.libraryDisplay = state.libraryDisplay === "grid" ? "list" : "grid";
+    state.libraryToolbarMenu = null;
+    renderAssetLibrary();
+    return;
+  }
+  if (event.target.closest("[data-library-clear-query], [data-library-clear-filter]")) {
+    state.librarySearch = "";
+    state.libraryFilter = "all";
+    state.librarySearchByContext[getAssetLibraryContextKey()] = "";
+    state.libraryFilterByContext[getAssetLibraryContextKey()] = "all";
+    state.librarySelectedIds.clear();
+    state.libraryToolbarMenu = null;
+    renderAssetLibrary();
+    return;
+  }
+  if (event.target.closest("[data-library-batch-toggle]")) {
+    if (state.librarySelectedIds.size === 0) {
+      state.libraryToolbarMenu = null;
+      renderAssetLibrary();
+      return;
     }
+    state.libraryToolbarMenu = state.libraryToolbarMenu === "batch" ? null : "batch";
     renderAssetLibrary();
     return;
   }
-  const assetId = event.target.closest("[data-library-add]")?.dataset.libraryAdd;
-  if (assetId) {
-    useLibraryAsset(assetId);
+  const batchAction = event.target.closest("[data-library-batch-action]")?.dataset.libraryBatchAction;
+  if (batchAction) {
+    runAssetLibraryAction(batchAction, getSelectedAssetLibraryRefs());
     return;
   }
-  const canvasItem = event.target.closest("[data-canvas-item]");
-  if (canvasItem) {
-    focusCanvasLibraryItem(canvasItem.dataset.canvasItem, canvasItem.dataset.canvasKind);
+  const moveTarget = event.target.closest("[data-library-move-target]");
+  if (moveTarget) {
+    const folderId = moveTarget.dataset.libraryMoveTarget || null;
+    try {
+      if (state.libraryMoveFolderId) {
+        assetLibraryStore.moveFolder({
+          folderId: state.libraryMoveFolderId,
+          parentId: folderId,
+          space: state.librarySpace,
+        });
+        if (folderId) state.libraryExpandedFolderIds.add(folderId);
+        else state.libraryDirectoryRootExpanded = true;
+        showActionToast("已移动文件夹");
+      } else {
+        assetLibraryStore.moveItems({ items: state.libraryMoveItems, space: state.librarySpace, folderId });
+        showActionToast("已移动资产");
+      }
+    } catch (error) {
+      showActionToast(error?.message || "移动失败");
+    }
+    state.libraryMoveItems = [];
+    state.libraryMoveFolderId = null;
+    clearAssetLibrarySelection();
+    renderAssetLibrary();
+    return;
+  }
+  if (event.target.closest("[data-library-move-close]")) {
+    state.libraryMoveItems = [];
+    state.libraryMoveFolderId = null;
+    renderAssetLibrary();
+    return;
+  }
+  const selection = event.target.closest("[data-library-select]")?.dataset.librarySelect;
+  if (selection) {
+    toggleAssetLibrarySelection(selection);
+    return;
+  }
+  const menuToggle = event.target.closest("[data-library-menu-toggle]");
+  if (menuToggle) {
+    canvasEntityUse.closeDetail();
+    const card = menuToggle.closest("[data-library-folder], [data-library-media], [data-library-entity]");
+    const kind = card?.hasAttribute("data-library-folder")
+      ? "folder"
+      : card?.hasAttribute("data-library-entity")
+        ? "entity"
+        : "media";
+    const id = card?.dataset.libraryFolder || card?.dataset.libraryEntity || card?.dataset.libraryMedia;
+    if (!id) return;
+    const currentKey = state.libraryMenuTarget ? `${state.libraryMenuTarget.kind}:${state.libraryMenuTarget.id}` : "";
+    state.libraryMenuTarget = currentKey === `${kind}:${id}` ? null : { kind, id };
+    state.libraryToolbarMenu = null;
+    renderAssetLibrary();
+    return;
+  }
+  const itemActionButton = event.target.closest("[data-library-menu-item]");
+  if (itemActionButton) {
+    canvasEntityUse.closeDetail();
+    const itemAction = itemActionButton.dataset.libraryMenuItem;
+    const card = itemActionButton.closest("[data-library-folder], [data-library-media], [data-library-entity]");
+    const kind = itemActionButton.dataset.libraryItemKind
+      || (card?.hasAttribute("data-library-folder") ? "folder" : card?.hasAttribute("data-library-entity") ? "entity" : "media");
+    const id = itemActionButton.dataset.libraryItemId
+      || card?.dataset.libraryFolder
+      || card?.dataset.libraryEntity
+      || card?.dataset.libraryMedia;
+    if (!id) return;
+    if (kind === "folder") runAssetLibraryFolderAction(itemAction, id);
+    else if (kind === "entity" && itemAction === "edit") openEntityEditorEdit(id);
+    else if (itemAction === "rename") startAssetLibraryRename(kind, id);
+    else runAssetLibraryAction(itemAction, [getAssetLibraryItemRef(id, kind)]);
+    return;
+  }
+  const listRowCard = state.libraryDisplay === "list"
+    && event.detail < 2
+    && !event.target.closest("button, input, textarea, select, a, [contenteditable='true'], [role='menu']")
+    ? event.target.closest(".asset-library-card")
+    : null;
+  const folderOpen = event.target.closest("[data-library-folder-open]");
+  const folderCard = folderOpen?.closest("[data-library-folder]")
+    || (listRowCard?.matches("[data-library-folder]") ? listRowCard : null);
+  if (folderCard) {
+    selectAssetLibraryDirectory(folderCard.dataset.libraryFolder);
+    return;
+  }
+  const previewButton = event.target.closest("[data-library-preview]");
+  const itemCard = previewButton?.closest("[data-library-media], [data-library-entity]")
+    || (listRowCard?.matches("[data-library-media], [data-library-entity]") ? listRowCard : null);
+  if (itemCard) {
+    const kind = itemCard.hasAttribute("data-library-entity") ? "entity" : "media";
+    const id = itemCard.dataset.libraryEntity || itemCard.dataset.libraryMedia;
+    if (state.librarySelectionMode) toggleAssetLibrarySelection(id);
+    else if (kind === "entity") openEntityEditorEdit(id);
+    else openAssetLibraryPreview(kind, id);
   }
 });
-assetLibraryGrid?.addEventListener("dblclick", (event) => {
-  if (event.target.closest("[data-library-add]")) return;
-  const assetId = event.target.closest("[data-library-asset]")?.dataset.libraryAsset;
-  if (assetId) useLibraryAsset(assetId);
+assetLibraryUploadInput?.addEventListener("change", (event) => {
+  void addFilesToAssetLibrary(event.currentTarget.files);
+  event.currentTarget.value = "";
+});
+assetLibraryCreateFolderBtn?.addEventListener("click", createAssetLibraryFolder);
+assetLibraryGrid?.addEventListener("focusout", (event) => {
+  if (event.target.matches("[data-library-rename-input]")) void finishAssetLibraryRename(event.target);
 });
 assetLibraryGrid?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  const canvasItem = event.target.closest("[data-canvas-item]");
-  if (canvasItem) {
-    event.preventDefault();
-    focusCanvasLibraryItem(canvasItem.dataset.canvasItem, canvasItem.dataset.canvasKind);
+  if (event.target.matches("[data-library-rename-input]")) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void finishAssetLibraryRename(event.target);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      void finishAssetLibraryRename(event.target, { cancel: true });
+    }
     return;
   }
-  const assetId = event.target.closest("[data-library-asset]")?.dataset.libraryAsset;
-  if (assetId) {
+  const renameTarget = event.target.closest("[data-library-rename]");
+  if (renameTarget && (event.key === "Enter" || event.key === "F2")) {
     event.preventDefault();
-    useLibraryAsset(assetId);
+    const folder = renameTarget.closest("[data-library-folder]");
+    if (folder) {
+      startAssetLibraryRename("folder", folder.dataset.libraryFolder);
+      return;
+    }
+    const card = renameTarget.closest("[data-library-media], [data-library-entity]");
+    if (card) {
+      const kind = card.hasAttribute("data-library-entity") ? "entity" : "media";
+      startAssetLibraryRename(kind, card.dataset.libraryEntity || card.dataset.libraryMedia);
+    }
+    return;
   }
 });
 assetLibraryGrid?.addEventListener("dragstart", (event) => {
-  const assetId = event.target.closest("[data-library-asset]")?.dataset.libraryAsset;
+  const assetId = event.target.closest("[data-library-media]")?.dataset.libraryMedia;
   if (!assetId || !event.dataTransfer) return;
   event.dataTransfer.effectAllowed = "copy";
   event.dataTransfer.setData("application/x-reelay-asset", assetId);
   event.dataTransfer.setData("text/plain", assetId);
 });
+assetLibraryPreviewDialog?.addEventListener("click", (event) => {
+  if (event.target === assetLibraryPreviewDialog || event.target.closest("[data-library-preview-close]")) {
+    closeAssetLibraryPreview();
+  }
+});
+assetLibraryPreviewDialog?.addEventListener("close", () => {
+  state.libraryPreviewTarget = null;
+  if (assetLibraryPreviewBody) assetLibraryPreviewBody.innerHTML = "";
+});
+assetLibraryPreviewUse?.addEventListener("click", () => {
+  if (state.libraryPreviewTarget?.kind !== "media") return;
+  useLibraryAsset(state.libraryPreviewTarget.id);
+  closeAssetLibraryPreview();
+});
 
 shareProjectBtn?.addEventListener("click", shareProject);
+canvasHomeButtons.forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    requestHostNavigation("home");
+  });
+});
 
-function clearProfileMenuCloseTimer() {
-  window.clearTimeout(profileMenuCloseTimer);
-  profileMenuCloseTimer = null;
+let profileHelpCloseTimer = null;
+let profileShortcutCloseTimer = null;
+
+function clearProfileHelpCloseTimer() {
+  if (profileHelpCloseTimer === null) return;
+  window.clearTimeout(profileHelpCloseTimer);
+  profileHelpCloseTimer = null;
+}
+
+function setProfileShortcutOpen(open) {
+  if (profileShortcutCloseTimer !== null) {
+    window.clearTimeout(profileShortcutCloseTimer);
+    profileShortcutCloseTimer = null;
+  }
+  profileShortcutTrigger?.setAttribute("aria-expanded", String(open));
+  profileShortcutSheet?.classList.toggle("open", open);
+}
+
+function scheduleProfileShortcutClose() {
+  if (profileShortcutCloseTimer !== null) window.clearTimeout(profileShortcutCloseTimer);
+  profileShortcutCloseTimer = window.setTimeout(() => {
+    profileShortcutCloseTimer = null;
+    const keepsShortcutOpen =
+      profileShortcutTrigger?.matches(":hover, :focus") ||
+      profileShortcutSheet?.matches(":hover") ||
+      profileShortcutSheet?.contains(document.activeElement);
+    if (!keepsShortcutOpen) setProfileShortcutOpen(false);
+  }, 180);
 }
 
 function setProfileHelpOpen(open) {
-  const helpInline = profileMenu?.querySelector(".profile-help-inline");
-  const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
-  helpInline?.classList.toggle("open", open);
-  helpTrigger?.setAttribute("aria-expanded", String(open));
+  if (open) clearProfileHelpCloseTimer();
+  profileHelpFlyout?.classList.toggle("open", open);
+  profileHelpTrigger?.setAttribute("aria-expanded", String(open));
+  if (!open) setProfileShortcutOpen(false);
+}
+
+function scheduleProfileHelpClose() {
+  clearProfileHelpCloseTimer();
+  profileHelpCloseTimer = window.setTimeout(() => {
+    profileHelpCloseTimer = null;
+    const helpPanel = profileHelpFlyout?.querySelector(".profile-help-flyout-panel");
+    const keepsHelpOpen =
+      profileHelpTrigger?.matches(":hover, :focus") ||
+      helpPanel?.matches(":hover") ||
+      profileShortcutSheet?.matches(":hover") ||
+      profileHelpFlyout?.contains(document.activeElement);
+    if (!keepsHelpOpen) setProfileHelpOpen(false);
+  }, 180);
 }
 
 function toggleProfileHelpOpen() {
-  const isOpen = profileMenu?.querySelector(".profile-help-inline")?.classList.contains("open");
+  const isOpen = profileHelpFlyout?.classList.contains("open");
   setProfileHelpOpen(!isOpen);
 }
 
-function keepProfileHelpOpenForPointer(event) {
-  const helpInline = profileMenu?.querySelector(".profile-help-inline.open");
-  const helpTrigger = helpInline?.querySelector(".profile-help-trigger");
-  if (!helpInline || !helpTrigger) return;
-  const triggerTop = helpTrigger.getBoundingClientRect().top;
-  if (event.clientY < triggerTop - 2) {
-    setProfileHelpOpen(false);
-  }
-}
-
-function openProfileMenu() {
-  clearProfileMenuCloseTimer();
+function openProfileMenu({ focusMenu = false } = {}) {
   profileMenu?.classList.remove("hidden");
   railProfileBtn?.classList.add("active");
+  railProfileBtn?.setAttribute("aria-expanded", "true");
+  if (focusMenu) focusFirstMenuControl(profileMenu);
 }
 
-function closeProfileMenu() {
-  clearProfileMenuCloseTimer();
+function closeProfileMenu({ returnFocus = false } = {}) {
   profileMenu?.classList.add("hidden");
   railProfileBtn?.classList.remove("active");
+  railProfileBtn?.setAttribute("aria-expanded", "false");
   setProfileHelpOpen(false);
-}
-
-function scheduleCloseProfileMenu() {
-  clearProfileMenuCloseTimer();
-  profileMenuCloseTimer = window.setTimeout(closeProfileMenu, 180);
+  if (returnFocus && canRestoreDialogFocus(railProfileBtn)) {
+    window.requestAnimationFrame(() => railProfileBtn.focus());
+  }
 }
 
 railProfileBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  openProfileMenu();
+  if (profileMenu?.classList.contains("hidden")) {
+    openProfileMenu({ focusMenu: event.detail === 0 });
+  } else {
+    closeProfileMenu();
+  }
 });
-
-railProfileBtn?.addEventListener("pointerenter", () => {
-  openProfileMenu();
-});
-
-railProfileBtn?.addEventListener("pointerleave", scheduleCloseProfileMenu);
 
 railProfileBtn?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
+  if (event.key === "Escape" && !profileMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProfileMenu({ returnFocus: true });
+    return;
+  }
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    openProfileMenu({ focusMenu: true });
+  }
+});
+
+profileMenu?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
   event.preventDefault();
   event.stopPropagation();
-  openProfileMenu();
+  closeProfileMenu({ returnFocus: true });
+});
+
+profileAnchor?.addEventListener("focusout", () => {
+  window.setTimeout(() => {
+    if (!profileAnchor.contains(document.activeElement)) closeProfileMenu();
+  }, 0);
 });
 
 profileMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 
-profileMenu?.addEventListener("pointerenter", clearProfileMenuCloseTimer);
-profileMenu?.addEventListener("pointerleave", scheduleCloseProfileMenu);
-profileMenu?.addEventListener("pointermove", keepProfileHelpOpenForPointer);
-
-profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("pointerenter", () => {
+profileHelpFlyout?.addEventListener("pointerenter", () => {
   setProfileHelpOpen(true);
 });
 
-profileMenu?.querySelector(".profile-help-trigger")?.addEventListener("keydown", (event) => {
+profileHelpFlyout?.addEventListener("pointerleave", () => {
+  scheduleProfileHelpClose();
+});
+
+profileHelpFlyout?.querySelector(".profile-help-flyout-panel")?.addEventListener("pointerenter", () => {
+  setProfileHelpOpen(true);
+});
+
+profileHelpFlyout?.addEventListener("focusout", () => {
+  window.setTimeout(() => {
+    if (!profileHelpFlyout.contains(document.activeElement)) setProfileHelpOpen(false);
+  }, 0);
+});
+
+profileHelpTrigger?.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
   event.stopPropagation();
   toggleProfileHelpOpen();
 });
+
+profileShortcutTrigger?.addEventListener("pointerenter", () => {
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutTrigger?.addEventListener("pointerleave", scheduleProfileShortcutClose);
+
+profileShortcutTrigger?.addEventListener("focus", () => {
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutTrigger?.addEventListener("blur", scheduleProfileShortcutClose);
+
+profileShortcutTrigger?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutSheet?.addEventListener("pointerenter", () => {
+  setProfileHelpOpen(true);
+  setProfileShortcutOpen(true);
+});
+
+profileShortcutSheet?.addEventListener("pointerleave", scheduleProfileShortcutClose);
 
 profileMenu?.addEventListener("click", (event) => {
   const helpTrigger = event.target.closest(".profile-help-trigger");
@@ -6964,11 +10590,18 @@ profileMenu?.addEventListener("click", (event) => {
     applyTheme(state.themeMode === "light" ? "dark" : "light", { flash: true });
     return;
   }
-  if (action === "account") {
+  if (action === "account" || action === "profile") {
     event.preventDefault();
     event.stopPropagation();
     closeProfileMenu();
-    requestHostAccountSettings();
+    requestHostAccountSettings("profile");
+    return;
+  }
+  if (action === "credits") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProfileMenu();
+    requestHostAccountSettings("credits");
     return;
   }
   if (action === "logout") {
@@ -6995,28 +10628,29 @@ profileMenu?.addEventListener("click", (event) => {
   }
 });
 
-function bindSelectionToolbarMenuPreview(selector, menu) {
-  const wrap = selectionToolbar?.querySelector(selector);
-  if (!wrap || !menu) return;
-  let closeTimer = null;
-  const open = () => {
-    window.clearTimeout(closeTimer);
-    menu.classList.remove("hidden");
-  };
-  const closeSoon = () => {
-    window.clearTimeout(closeTimer);
-    closeTimer = window.setTimeout(() => menu.classList.add("hidden"), 180);
-  };
-  wrap.addEventListener("pointerenter", open);
-  wrap.addEventListener("pointerleave", closeSoon);
-  menu.addEventListener("pointerenter", open);
-  menu.addEventListener("pointerleave", closeSoon);
+function setSelectionDownloadMenuOpen(open) {
+  const nextOpen = Boolean(open && selectionDownloadMenu && selectionDownloadTrigger);
+  selectionDownloadMenu?.classList.toggle("hidden", !nextOpen);
+  selectionDownloadTrigger?.setAttribute("aria-expanded", String(nextOpen));
+  selectionDownloadTrigger?.classList.toggle("active", nextOpen);
 }
 
-bindSelectionToolbarMenuPreview('[data-toolbar-menu="layout"]', selectionSortMenu);
-bindSelectionToolbarMenuPreview('[data-toolbar-menu="download"]', selectionDownloadMenu);
-
 selectionToolbar?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+
+groupResizeOverlay?.addEventListener("pointerdown", (event) => {
+  const handle = event.target.closest("[data-group-resize]");
+  const group = getGroupById(groupResizeOverlay.dataset.groupId);
+  if (!handle || !group || event.button !== 0 || !requireCanvasMutation()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  canvasGroupInteractionController.beginResize(group, event, handle.dataset.groupResize, shell);
+});
+
+multiSelectionPort?.addEventListener("pointerdown", beginSelectionConnectionDrag);
+multiSelectionPort?.addEventListener("click", (event) => {
+  event.preventDefault();
   event.stopPropagation();
 });
 
@@ -7024,18 +10658,18 @@ selectionToolbar?.addEventListener("click", (event) => {
   event.stopPropagation();
   const layout = event.target.closest("[data-sort-layout]")?.dataset.sortLayout;
   if (layout) {
-    selectionSortMenu?.classList.add("hidden");
     sortSelectedNodes(layout);
     return;
   }
   const downloadAction = event.target.closest("[data-download-action]")?.dataset.downloadAction;
   if (downloadAction) {
-    selectionDownloadMenu?.classList.add("hidden");
+    setSelectionDownloadMenuOpen(false);
     downloadSelectedMedia(downloadAction === "archive");
     return;
   }
   const action = event.target.closest("[data-selection-action]")?.dataset.selectionAction;
   if (action === "group") {
+    if (getSelectedNodes().some((node) => Boolean(node.groupId))) return;
     groupSelectedNodes();
     return;
   }
@@ -7047,13 +10681,8 @@ selectionToolbar?.addEventListener("click", (event) => {
     deleteSelectedNodes();
     return;
   }
-  if (action === "toggle-sort") {
-    selectionDownloadMenu?.classList.add("hidden");
-    selectionSortMenu?.classList.toggle("hidden");
-  }
   if (action === "toggle-download") {
-    selectionSortMenu?.classList.add("hidden");
-    selectionDownloadMenu?.classList.toggle("hidden");
+    setSelectionDownloadMenuOpen(selectionDownloadMenu?.classList.contains("hidden"));
   }
 });
 
@@ -7089,28 +10718,37 @@ zoomSlider?.addEventListener("input", (event) => {
   setCanvasZoom(nextValue);
 });
 
-undoDeleteBtn?.addEventListener("click", () => {
-  undoLastAction();
-});
-
 document.querySelectorAll("[data-project-menu-button]").forEach((button) => {
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    openProjectMenu(button);
+    openProjectMenu(button, { focusMenu: event.detail === 0 });
+  });
+  button.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openProjectMenu(button, { focusMenu: true });
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProjectMenus({ returnFocus: true });
+    }
   });
 });
 
 document.querySelectorAll("[data-canvas-menu-button]").forEach((button) => {
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (event.detail > 1) return;
-    openCanvasMenu(button);
+    openCanvasMenu(button, { focusMenu: event.detail === 0 });
   });
-  button.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    closeProjectMenus();
-    beginInlineRename(button.querySelector("[data-canvas-name]"));
+  button.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openCanvasMenu(button, { focusMenu: true });
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProjectMenus({ returnFocus: true });
+    }
   });
 });
 
@@ -7120,25 +10758,11 @@ projectNameEls.forEach((element) => {
     beginInlineRename(element);
   });
   element.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
+    if (element.contentEditable !== "true" && (event.key === "Enter" || event.key === "F2")) {
       event.preventDefault();
-      finishInlineRename(element, true);
+      beginInlineRename(element);
+      return;
     }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      finishInlineRename(element, false);
-    }
-  });
-  element.addEventListener("blur", () => finishInlineRename(element, true));
-});
-
-canvasNameEls.forEach((element) => {
-  element.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    beginInlineRename(element);
-  });
-  element.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       finishInlineRename(element, true);
@@ -7155,8 +10779,52 @@ canvasNameEls.forEach((element) => {
   menu?.addEventListener("pointerdown", (event) => event.stopPropagation());
 });
 
+projectMenu?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProjectMenus({ returnFocus: true });
+    return;
+  }
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  const controls = [
+    projectMenuSearch,
+    ...projectMenu.querySelectorAll(".project-menu-option, .project-menu-create"),
+  ].filter((control) => control && !control.disabled && control.getClientRects().length);
+  const currentIndex = controls.indexOf(document.activeElement);
+  if (currentIndex < 0) return;
+  event.preventDefault();
+  const direction = event.key === "ArrowDown" ? 1 : -1;
+  controls[(currentIndex + direction + controls.length) % controls.length]?.focus();
+});
+
+projectMenuSearch?.addEventListener("input", (event) => {
+  state.projectSearch = event.currentTarget.value;
+  renderProjectMenu();
+});
+
+canvasMenu?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.target.closest("input.canvas-menu-name.editing")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeProjectMenus({ returnFocus: true });
+});
+
+canvasMoreMenu?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeCanvasMoreMenu({ returnFocus: true });
+});
+
 projectMenu?.addEventListener("click", (event) => {
   event.stopPropagation();
+  const projectId = event.target.closest("[data-project-id]")?.dataset.projectId;
+  if (projectId) {
+    closeProjectMenus();
+    requestHostProjectNavigation(projectId);
+    return;
+  }
   const action = event.target.closest("[data-project-action]")?.dataset.projectAction;
   if (action) handleProjectMenuAction(action);
 });
@@ -7171,10 +10839,16 @@ canvasMenu?.addEventListener("click", (event) => {
   }
   const moreButton = event.target.closest("[data-canvas-more]");
   if (moreButton) {
+    const wasOpen = canvasMoreMenuTrigger === moreButton && !canvasMoreMenu?.classList.contains("hidden");
+    closeCanvasMoreMenu();
+    if (wasOpen) return;
     state.canvasMoreTargetId = moreButton.dataset.canvasMore;
+    canvasMoreMenuTrigger = moreButton;
+    moreButton.setAttribute("aria-expanded", "true");
     canvasMoreMenu?.classList.remove("hidden");
     if (!canvasMoreMenu?.classList.contains("hidden")) {
       positionMenu(canvasMoreMenu, moreButton, { width: 178, gap: 4 });
+      if (event.detail === 0) focusFirstMenuControl(canvasMoreMenu);
     }
     return;
   }
@@ -7207,11 +10881,7 @@ agentNewChatBtn?.addEventListener("click", () => {
 });
 agentHistoryBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  agentHistoryMenu?.classList.toggle("hidden");
-  agentModelMenu?.classList.add("hidden");
-  if (!agentHistoryMenu?.classList.contains("hidden")) {
-    agentHistorySearch?.focus();
-  }
+  setAgentHistoryOpen(agentHistoryMenu?.classList.contains("hidden"), { focus: true });
 });
 agentHistoryMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -7225,6 +10895,7 @@ agentHistorySearch?.addEventListener("input", (event) => {
   filterAgentHistory(event.currentTarget.value);
 });
 agentSendButton?.addEventListener("click", sendAgentMessage);
+agentInput?.addEventListener("input", syncAgentPromptOptimizationControl);
 agentInput?.addEventListener("keydown", (event) => {
   if (event.isComposing) return;
   if (event.key === "Enter" && !event.shiftKey) {
@@ -7232,11 +10903,32 @@ agentInput?.addEventListener("keydown", (event) => {
     sendAgentMessage();
   }
 });
+agentAddBtn?.addEventListener("click", () => {
+  showActionToast("附件能力将在 Agent 任务接入后开放");
+});
+agentPromptOptimizationBtn?.addEventListener("click", startAgentPromptOptimization);
+agentAdvancedBtn?.addEventListener("click", () => {
+  setAgentAdvancedOpen(!state.agentAdvancedSettingsExpanded);
+});
+agentAutoLinkBtn?.addEventListener("click", () => {
+  setAgentAutoLinkEnabled(!state.agentAutoLinkEnabled);
+});
+agentModeBtn?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setAgentModeMenuOpen(agentModeMenu?.classList.contains("hidden"), { focus: true });
+});
+agentModeMenu?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
+agentModeMenu?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const option = event.target.closest("[data-agent-mode]");
+  if (!option) return;
+  setAgentComposerMode(option.dataset.agentMode, { focusInput: true });
+});
 agentModelBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  agentHistoryMenu?.classList.add("hidden");
-  renderAgentModelMenu();
-  agentModelMenu?.classList.toggle("hidden");
+  setAgentModelMenuOpen(agentModelMenu?.classList.contains("hidden"), { focus: true });
 });
 agentModelMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -7258,7 +10950,38 @@ agentModelMenu?.addEventListener("change", (event) => {
   if (!autoInput) return;
   state.agentModelAuto = autoInput.checked;
 });
+agentPanel?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!agentHistoryMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentHistoryOpen(false);
+    agentHistoryBtn?.focus();
+    return;
+  }
+  if (!agentModeMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentModeMenuOpen(false);
+    agentModeBtn?.focus();
+    return;
+  }
+  if (!agentModelMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentModelMenuOpen(false);
+    agentModelBtn?.focus();
+    return;
+  }
+  if (state.agentAdvancedSettingsExpanded) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAgentAdvancedOpen(false);
+    agentAdvancedBtn?.focus();
+  }
+});
 agentResizeHandle?.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
   event.preventDefault();
   event.stopPropagation();
   state.action = {
@@ -7271,11 +10994,85 @@ agentResizeHandle?.addEventListener("pointerdown", (event) => {
   agentResizeHandle.setPointerCapture(event.pointerId);
 });
 
+function bindAgentHeightResizeHandle(handle, edge) {
+  if (!handle) return;
+  const isTop = edge === "top";
+  const setInset = isTop ? setAgentTopInset : setAgentBottomInset;
+  const getInset = () => isTop ? state.agentTopInset : state.agentBottomInset;
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    state.action = {
+      type: isTop ? "resize-agent-top" : "resize-agent-bottom",
+      pointerId: event.pointerId,
+      startClientY: event.clientY,
+      startInset: getInset(),
+      captureTarget: handle,
+    };
+    agentDock?.classList.add("resizing-vertical");
+    handle.setPointerCapture(event.pointerId);
+  });
+
+  handle.addEventListener("keydown", (event) => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Home") {
+      setInset(0);
+      return;
+    }
+    if (event.key === "End") {
+      setInset(Number(handle.getAttribute("aria-valuemax")) || 0);
+      return;
+    }
+    const step = event.shiftKey
+      ? agentPanelHeightRules.coarseKeyboardStep
+      : agentPanelHeightRules.keyboardStep;
+    const direction = isTop
+      ? (event.key === "ArrowDown" ? 1 : -1)
+      : (event.key === "ArrowUp" ? 1 : -1);
+    setInset(getInset() + direction * step);
+  });
+
+  handle.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setInset(0);
+  });
+}
+
+bindAgentHeightResizeHandle(agentTopResizeHandle, "top");
+bindAgentHeightResizeHandle(agentBottomResizeHandle, "bottom");
+
+document.addEventListener("focusin", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const projectOpen = Boolean(projectMenu && !projectMenu.classList.contains("hidden"));
+  const canvasOpen = Boolean(canvasMenu && !canvasMenu.classList.contains("hidden"));
+  if (projectOpen && !projectMenu.contains(target) && target !== projectMenuTrigger) {
+    closeProjectMenus();
+    return;
+  }
+  if (
+    canvasOpen
+    && !canvasMenu.contains(target)
+    && !canvasMoreMenu?.contains(target)
+    && target !== canvasMenuTrigger
+  ) {
+    closeProjectMenus();
+  }
+});
+
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
-  if (!target?.closest(".agent-actions, .agent-history-menu, .agent-model-wrap")) {
-    agentHistoryMenu?.classList.add("hidden");
-    agentModelMenu?.classList.add("hidden");
+  const eventPath = typeof event.composedPath === "function" ? event.composedPath() : [];
+  const pathMatches = (selector) => eventPath.some(
+    (entry) => entry instanceof Element && entry.matches(selector),
+  );
+  if (!target?.closest(".agent-actions, .agent-history-menu, .agent-mode-wrap, .agent-model-wrap")) {
+    closeAgentPopovers();
   }
   if (!target?.closest(".top-actions")) {
     closeProfileMenu();
@@ -7283,16 +11080,31 @@ document.addEventListener("click", (event) => {
   if (!target?.closest(".project-nav, .project-menu, .canvas-menu, .canvas-more-menu")) {
     closeProjectMenus();
   }
-  if (!target?.closest("#assetLibraryTabs")) {
-    assetLibraryTabs?.querySelector(".asset-filter-menu")?.classList.add("hidden");
-    assetLibraryTabs?.querySelector("[data-library-filter-toggle]")?.setAttribute("aria-expanded", "false");
+  if (!target?.closest(".asset-library-space-switcher")) {
+    assetLibrarySpaceMenu?.classList.add("hidden");
+    assetLibrarySpaceButton?.setAttribute("aria-expanded", "false");
   }
+  let shouldRenderLibrary = false;
+  if (!pathMatches(".asset-library-directory-shell") && state.libraryDirectoryMenuOpen) {
+    state.libraryDirectoryMenuOpen = false;
+    shouldRenderLibrary = true;
+  }
+  if (!pathMatches("#assetLibraryCommandBar, .asset-library-item-menu, [data-library-menu-toggle]")) {
+    shouldRenderLibrary ||= Boolean(state.libraryToolbarMenu || state.libraryMenuTarget);
+    state.libraryToolbarMenu = null;
+    state.libraryMenuTarget = null;
+  }
+  if (!pathMatches("#assetLibraryOverlayLayer, [data-library-menu-item='move'], [data-library-batch-action='move']")) {
+    shouldRenderLibrary ||= state.libraryMoveItems.length > 0 || Boolean(state.libraryMoveFolderId);
+    state.libraryMoveItems = [];
+    state.libraryMoveFolderId = null;
+  }
+  if (shouldRenderLibrary && isAssetLibraryOpen()) renderAssetLibrary();
   if (!target?.closest("#canvasTools")) {
     closeCanvasPanel();
   }
   if (!target?.closest("#selectionToolbar")) {
-    selectionSortMenu?.classList.add("hidden");
-    selectionDownloadMenu?.classList.add("hidden");
+    setSelectionDownloadMenuOpen(false);
   }
   if (!target?.closest(".group-frame")) {
     closeGroupLayoutMenus();
@@ -7305,21 +11117,25 @@ document.addEventListener("click", (event) => {
 });
 
 window.addEventListener("resize", () => {
-  setAssetLibraryWidth(state.assetLibraryWidth);
-  syncPromptPanelLayouts();
-  renderMinimap();
-  if (
-    narrowViewportQuery.matches &&
-    state.agentOpen &&
-    assetLibraryPanel &&
-    !assetLibraryPanel.classList.contains("hidden")
-  ) {
+  if (projectMenuTrigger && !projectMenu?.classList.contains("hidden")) {
+    positionProjectMenu(projectMenuTrigger);
+  }
+  if (state.agentOpen && isAssetLibraryOpen() && !canShowAssetAndAgent()) {
     if (agentDock?.contains(document.activeElement)) {
       closeAssetLibrary();
     } else {
       setAgentOpen(false);
     }
   }
+  if (state.agentOpen && isAssetLibraryOpen()) {
+    reconcileDualPanelWidths(assetLibraryPanel?.contains(document.activeElement) ? "asset" : "agent");
+  }
+  setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
+  setAgentWidth(state.agentWidth);
+  reconcileAgentVerticalInsets("top");
+  syncPromptPanelLayouts();
+  renderSelectionToolbar();
+  renderMinimap();
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
 });
 
@@ -7330,22 +11146,42 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushCanvasDocumentSave();
 });
 
-setAssetLibraryWidth(state.assetLibraryWidth);
+setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
 setAgentWidth(state.agentWidth);
+reconcileAgentVerticalInsets("top");
 setAgentOpen(false);
 renderAgentHistory();
 setAgentConversation(state.activeConversationId);
-syncAgentModelButton();
+setAgentAdvancedOpen(state.agentAdvancedSettingsExpanded);
+setAgentAutoLinkEnabled(state.agentAutoLinkEnabled);
+syncAgentComposerControls();
+syncAgentPromptOptimizationControl();
 syncCreditDisplay();
 applyTheme(state.themeMode);
 syncFaviconContrast();
-officialLibraryAssets.forEach((asset) => hydrateAssetMetadata(asset, null));
+assetLibraryStore.listAllMedia().forEach((asset) => hydrateAssetMetadata(asset, null));
 initializeCanvases();
 applyTransform();
 consumeHomeLaunchIntent();
 render();
-postCanvasBridgeMessage({
-  source: "reelay-legacy-canvas",
-  type: "canvas:ready",
-  protocolVersion: 1,
+window.REELAY_CANVAS_LAYOUT_TUNER_BOOTSTRAP?.({
+  getRuntimeValues: () => ({
+    assetWidth: state.assetLibraryWidth,
+    agentWidth: state.agentWidth,
+    agentTopInset: state.agentTopInset,
+    agentBottomInset: state.agentBottomInset,
+  }),
+  setRuntimeValue: (key, value) => {
+    if (key === "assetWidth") setAssetLibraryWidth(value);
+    else if (key === "agentWidth") setAgentWidth(value);
+    else if (key === "agentTopInset") setAgentTopInset(value);
+    else if (key === "agentBottomInset") setAgentBottomInset(value);
+    return {
+      assetWidth: state.assetLibraryWidth,
+      agentWidth: state.agentWidth,
+      agentTopInset: state.agentTopInset,
+      agentBottomInset: state.agentBottomInset,
+    }[key];
+  },
 });
+canvasPersistence.post("canvas:ready");

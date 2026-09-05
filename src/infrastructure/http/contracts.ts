@@ -115,6 +115,102 @@ export const CanvasDocumentResponseDtoSchema = z
   })
   .strict();
 
+export const MediaAssetKindDtoSchema = z.enum(["image", "video", "audio"]);
+
+export const PersonalMediaAssetDtoSchema = z.object({
+  id: IdentifierSchema,
+  workspaceId: IdentifierSchema,
+  mediaKind: MediaAssetKindDtoSchema,
+  displayName: z.string().trim().min(1).max(300),
+  objectVersion: z.number().int().positive(),
+  contentType: z.string().trim().min(1).max(120),
+  byteSize: z.number().int().positive().max(64 * 1024 * 1024),
+  checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
+  contentUrl: z.string().trim().min(1).max(2_048),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+}).strict();
+
+export const PersonalMediaAssetsResponseDtoSchema = z.object({
+  assets: z.array(PersonalMediaAssetDtoSchema).max(10_000),
+}).strict();
+
+export const WorkspaceEntityDtoSchema = z.object({
+  id: IdentifierSchema,
+  workspaceId: IdentifierSchema,
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(2_000),
+  mediaRefs: z.array(z.object({
+    assetId: IdentifierSchema,
+    order: z.number().int().nonnegative(),
+  }).strict()).min(1).max(100),
+  coverAssetId: IdentifierSchema.nullable(),
+  version: z.number().int().positive(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+}).strict().superRefine((entity, context) => {
+  const assetIds = new Set<string>();
+  entity.mediaRefs.forEach((reference, index) => {
+    if (assetIds.has(reference.assetId) || reference.order !== index) {
+      context.addIssue({ code: "custom", message: "Entity mediaRefs must be unique and contiguously ordered." });
+    }
+    assetIds.add(reference.assetId);
+  });
+  if (entity.coverAssetId && !assetIds.has(entity.coverAssetId)) {
+    context.addIssue({ code: "custom", message: "Entity coverAssetId must belong to mediaRefs." });
+  }
+});
+
+export const WorkspaceEntityResponseDtoSchema = z.object({
+  entity: WorkspaceEntityDtoSchema,
+}).strict();
+
+export const WorkspaceEntitiesResponseDtoSchema = z.object({
+  entities: z.array(WorkspaceEntityDtoSchema).max(10_000),
+}).strict();
+
+export const ProjectAssetDtoSchema = z.object({
+  referenceId: IdentifierSchema,
+  assetId: IdentifierSchema,
+  assetVersion: z.number().int().positive(),
+  mediaKind: MediaAssetKindDtoSchema,
+  displayName: z.string().trim().min(1).max(300),
+  contentType: z.string().trim().min(1).max(120),
+  byteSize: z.number().int().positive().max(64 * 1024 * 1024),
+  checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
+  contentUrl: z.string().trim().min(1).max(2_048),
+}).strict();
+
+export const MediaUploadIntentResponseDtoSchema = z.object({
+  uploadIntent: z.object({
+    id: IdentifierSchema,
+    expiresAt: z.string().datetime({ offset: true }),
+  }).strict(),
+  upload: z.object({
+    url: z.string().trim().min(1).max(4_096),
+    method: z.literal("PUT"),
+    headers: z.record(z.string(), z.string()),
+  }).strict(),
+}).strict();
+
+export const FinalizeMediaUploadResponseDtoSchema = z.object({
+  asset: z.object({
+    id: IdentifierSchema,
+    workspaceId: IdentifierSchema,
+    mediaKind: MediaAssetKindDtoSchema,
+    displayName: z.string().trim().min(1).max(300),
+    objectVersion: z.number().int().positive(),
+    contentType: z.string().trim().min(1).max(120),
+    byteSize: z.number().int().positive().max(64 * 1024 * 1024),
+    checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  }).strict(),
+}).strict();
+
+export const ProjectAssetResponseDtoSchema = z.object({ projectAsset: ProjectAssetDtoSchema }).strict();
+export const ProjectAssetsResponseDtoSchema = z.object({ projectAssets: z.array(ProjectAssetDtoSchema) }).strict();
+
 export const ErrorResponseDtoSchema = z
   .object({
     error: z
@@ -122,6 +218,7 @@ export const ErrorResponseDtoSchema = z
         code: z.string().trim().min(1).max(160),
         message: z.string().trim().min(1).max(500),
         currentRevision: z.number().int().nonnegative().optional(),
+        currentVersion: z.number().int().positive().optional(),
       })
       .strict(),
   })

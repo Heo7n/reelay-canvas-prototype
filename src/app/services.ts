@@ -1,5 +1,7 @@
 import type { AccountRepository } from "../application/account/AccountRepository";
 import type { CanvasDocumentRepository } from "../application/canvases/CanvasDocumentRepository";
+import type { EntityRepository } from "../application/assets/EntityRepository";
+import type { MediaAssetRepository } from "../application/assets/MediaAssetRepository";
 import type { OrganizationRepository } from "../application/organizations/OrganizationRepository";
 import type { ProjectRepository } from "../application/projects/ProjectRepository";
 import type { SessionGateway } from "../application/session/SessionGateway";
@@ -10,6 +12,8 @@ import { createHttpServices } from "../infrastructure/http/createHttpServices";
 export interface ApplicationServices {
   accountRepository: AccountRepository;
   canvasDocumentRepository: CanvasDocumentRepository;
+  entityRepository: EntityRepository;
+  mediaAssetRepository: MediaAssetRepository;
   organizationRepository: OrganizationRepository;
   projectRepository: ProjectRepository;
   sessionGateway: SessionGateway;

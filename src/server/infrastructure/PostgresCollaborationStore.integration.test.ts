@@ -4,7 +4,9 @@ import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { canonicalizeLegacyCanvasDocumentV1 } from "../../contracts/canvas-document-v1";
 import { buildServer } from "../app";
+import { CanvasDocumentProjectUnavailableError } from "../application/CanvasDocumentStore";
 import { DEFAULT_LOCAL_DATABASE_URL } from "../db/config";
 import { runMigrations } from "../db/migrate";
 import { seedDemoDatabase } from "../db/seed";
@@ -30,6 +32,25 @@ function getCookie(response: LightMyRequestResponse): string {
   const value = Array.isArray(header) ? header[0] : header;
   if (!value) throw new Error("Expected session cookie.");
   return value.split(";", 1)[0];
+}
+
+function canvasContent(
+  nodeIds: string[] = [],
+  viewport: { tx: number; ty: number; scale: number } = { tx: 0, ty: 0, scale: 1 },
+) {
+  const content = canonicalizeLegacyCanvasDocumentV1({
+    kind: "reelay-legacy-canvas",
+    version: 1,
+    activeCanvasId: "canvas-main",
+    canvases: [{
+      id: "canvas-main",
+      name: "Main canvas",
+      nodes: nodeIds.map((id) => ({ id, kind: "generator" })),
+      viewport,
+    }],
+  });
+  if (!content) throw new Error("Expected a canonical CanvasDocument v1 fixture.");
+  return content;
 }
 
 async function login(app: FastifyInstance, account: string): Promise<string> {
@@ -71,6 +92,10 @@ beforeAll(async () => {
       "0007_project_soft_delete.sql",
       "0008_account_contacts.sql",
       "0009_server_only_data_access.sql",
+      "0010_workspace_media_assets.sql",
+      "0011_asset_membership_lifecycle.sql",
+      "0012_workspace_entities.sql",
+      "0013_entity_personal_media_bindings.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);
@@ -91,6 +116,68 @@ afterAll(async () => {
 });
 
 describe("PostgreSQL collaboration persistence", () => {
+  it("enforces workspace and canvas actor scope when adapters are called directly", async () => {
+    const setupPool = createPool();
+    try {
+      await setupPool.query(
+        "INSERT INTO workspaces (id, kind, name) VALUES ($1, 'organization', $2)",
+        ["workspace-outside-actor-scope", "未加入的组织"],
+      );
+    } finally {
+      await setupPool.end();
+    }
+
+    const store = new PostgresCollaborationStore(createPool());
+    try {
+      await expect(store.createProject({
+        workspaceId: "workspace-outside-actor-scope",
+        createdByActorId: "actor-tianmaochao",
+        name: "不应创建",
+      })).rejects.toMatchObject({
+        name: "ProjectWorkspaceUnavailableError",
+        reason: "forbidden",
+      });
+
+      const project = await store.createProject({
+        workspaceId: "workspace-organization-reelay",
+        createdByActorId: "actor-tianmaochao",
+        name: "adapter scope test",
+      });
+      await store.saveCanvasDocument({
+        actorId: "actor-tianmaochao",
+        projectId: project.id,
+        canvasId: "main",
+        schemaVersion: 1,
+        expectedRevision: 0,
+        content: { nodes: [{ id: "authorized" }] },
+      });
+
+      await expect(store.getCanvasDocument({
+        actorId: "actor-tianmaochao",
+        projectId: project.id,
+        canvasId: "main",
+      })).resolves.toEqual(expect.objectContaining({ revision: 1 }));
+      await expect(store.getCanvasDocument({
+        actorId: "actor-chenxi",
+        projectId: project.id,
+        canvasId: "main",
+      })).rejects.toBeInstanceOf(CanvasDocumentProjectUnavailableError);
+
+      await expect(store.moveProjectToTrash(
+        "workspace-organization-reelay",
+        project.id,
+        "actor-tianmaochao",
+      )).resolves.toBe(true);
+      await expect(store.getCanvasDocument({
+        actorId: "actor-tianmaochao",
+        projectId: project.id,
+        canvasId: "main",
+      })).rejects.toBeInstanceOf(CanvasDocumentProjectUnavailableError);
+    } finally {
+      await store.close();
+    }
+  });
+
   it("reads organization members from memberships, users, and password identities", async () => {
     const app = await buildServer({ store: new PostgresCollaborationStore(createPool()) });
 
@@ -424,7 +511,7 @@ describe("PostgreSQL collaboration persistence", () => {
         payload: {
           schemaVersion: 1,
           expectedRevision: 0,
-          content: { viewport: { x: 3, y: 5, zoom: 1.25 }, nodes: [{ id: "persisted" }] },
+          content: canvasContent(["persisted"], { tx: 3, ty: 5, scale: 1.25 }),
         },
       });
       expect(created.statusCode).toBe(201);
@@ -442,7 +529,7 @@ describe("PostgreSQL collaboration persistence", () => {
           id: "persistence-test",
           schemaVersion: 1,
           revision: 1,
-          content: { viewport: { x: 3, y: 5, zoom: 1.25 }, nodes: [{ id: "persisted" }] },
+          content: canvasContent(["persisted"], { tx: 3, ty: 5, scale: 1.25 }),
         }),
       );
 
@@ -450,7 +537,7 @@ describe("PostgreSQL collaboration persistence", () => {
         method: "PUT",
         url,
         headers: { cookie: viewCookie },
-        payload: { schemaVersion: 1, expectedRevision: 1, content: { nodes: [] } },
+        payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent() },
       });
       expect(viewWrite.statusCode).toBe(403);
 
@@ -459,18 +546,18 @@ describe("PostgreSQL collaboration persistence", () => {
         method: "PUT",
         url,
         headers: { cookie: editorCookie },
-        payload: { schemaVersion: 2, expectedRevision: 1, content: { nodes: [{ id: "edited" }] } },
+        payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent(["edited"]) },
       });
       expect(edited.statusCode).toBe(200);
       expect(edited.json().document).toEqual(
-        expect.objectContaining({ schemaVersion: 2, revision: 2, content: { nodes: [{ id: "edited" }] } }),
+        expect.objectContaining({ schemaVersion: 1, revision: 2, content: canvasContent(["edited"]) }),
       );
 
       const stale = await appB.inject({
         method: "PUT",
         url,
         headers: { cookie: editorCookie },
-        payload: { schemaVersion: 2, expectedRevision: 1, content: { nodes: [] } },
+        payload: { schemaVersion: 1, expectedRevision: 1, content: canvasContent() },
       });
       expect(stale.statusCode).toBe(409);
       expect(stale.json().error.currentRevision).toBe(2);
@@ -488,9 +575,9 @@ describe("PostgreSQL collaboration persistence", () => {
           ["project-scifi-trailer", "persistence-test"],
         );
         expect(row.rows[0]).toEqual({
-          schema_version: 2,
+          schema_version: 1,
           revision: 2,
-          content: { nodes: [{ id: "edited" }] },
+          content: canvasContent(["edited"]),
           created_by_user_id: "actor-tianmaochao",
           updated_by_user_id: "actor-linjing",
         });
@@ -530,7 +617,7 @@ describe("PostgreSQL collaboration persistence", () => {
         method: "PUT",
         url: canvasUrl,
         headers: { cookie: ownerCookie },
-        payload: { schemaVersion: 1, expectedRevision: 0, content: { nodes: [{ id: "kept" }] } },
+        payload: { schemaVersion: 1, expectedRevision: 0, content: canvasContent(["kept"]) },
       });
       expect(canvas.statusCode).toBe(201);
 
@@ -585,7 +672,7 @@ describe("PostgreSQL collaboration persistence", () => {
           "SELECT revision, content FROM canvas_documents WHERE project_id = $1 AND canvas_id = 'main'",
           [projectId],
         );
-        expect(canvasAudit.rows[0]).toEqual({ revision: 1, content: { nodes: [{ id: "kept" }] } });
+        expect(canvasAudit.rows[0]).toEqual({ revision: 1, content: canvasContent(["kept"]) });
 
         await seedDemoDatabase(auditPool);
         const preservedDeletion = await auditPool.query(

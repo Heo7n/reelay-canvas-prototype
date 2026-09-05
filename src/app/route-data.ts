@@ -8,7 +8,7 @@ import type { SessionActor } from "../domain/identity/session";
 import type { ProjectSummary } from "../domain/project/project";
 import type { OrganizationMember, Workspace } from "../domain/workspace/workspace";
 import type { WorkspaceContext } from "../application/workspaces/WorkspaceContextGateway";
-import { HttpRequestError } from "../infrastructure/http/HttpApiClient";
+import { isApplicationError } from "../application/shared/ApplicationError";
 import { routePaths } from "./routes";
 import type { ApplicationServices } from "./services";
 
@@ -100,10 +100,10 @@ async function loadWorkspaceData(
   try {
     context = await services.workspaceContextGateway.load(workspaceId);
   } catch (error) {
-    if (error instanceof HttpRequestError && error.status === 401) {
+    if (isApplicationError(error, "authentication_required")) {
       throw loginRedirect(args.request);
     }
-    if (error instanceof HttpRequestError && (error.status === 403 || error.status === 404)) {
+    if (isApplicationError(error) && (error.code === "forbidden" || error.code === "not_found")) {
       const sessionContext = await getSessionContext(services);
       if (!sessionContext.actor) throw loginRedirect(args.request);
       const defaultWorkspace = selectDefaultWorkspace(sessionContext.workspaces);
@@ -159,7 +159,7 @@ export function createRouteHandlers(services: ApplicationServices) {
         const returnTo = new URL(request.url).searchParams.get("returnTo");
         return redirect(safeReturnTo(returnTo, workspaces, routePaths.workspaceHome(fallbackWorkspace.id)));
       } catch (error) {
-        if (error instanceof HttpRequestError && error.status === 401) {
+        if (isApplicationError(error, "authentication_required")) {
           return { error: error.message };
         }
         return { error: "暂时无法连接 Reelay 服务，请稍后重试。" };
@@ -179,8 +179,8 @@ export function createRouteHandlers(services: ApplicationServices) {
         await services.accountRepository.updateContacts({ contactEmail, contactPhone });
         return { ok: true, notice: "联系资料已保存。" };
       } catch (error) {
-        if (error instanceof HttpRequestError && error.status === 401) throw loginRedirect(request);
-        if (error instanceof HttpRequestError) return { error: error.message };
+        if (isApplicationError(error, "authentication_required")) throw loginRedirect(request);
+        if (isApplicationError(error)) return { error: error.message };
         return { error: "联系资料保存失败，请稍后重试。" };
       }
     },
@@ -203,10 +203,10 @@ export function createRouteHandlers(services: ApplicationServices) {
           members: await services.organizationRepository.listMembers(workspaceId),
         };
       } catch (error) {
-        if (error instanceof HttpRequestError && error.status === 401) {
+        if (isApplicationError(error, "authentication_required")) {
           throw loginRedirect(args.request);
         }
-        if (error instanceof HttpRequestError && (error.status === 403 || error.status === 404)) {
+        if (isApplicationError(error) && (error.code === "forbidden" || error.code === "not_found")) {
           const sessionContext = await getSessionContext(services);
           if (!sessionContext.actor) throw loginRedirect(args.request);
           const defaultWorkspace = selectDefaultWorkspace(sessionContext.workspaces);
@@ -254,8 +254,8 @@ export function createRouteHandlers(services: ApplicationServices) {
 
         return { error: "无法识别此项目操作。" };
       } catch (error) {
-        if (error instanceof HttpRequestError && error.status === 401) throw loginRedirect(request);
-        if (error instanceof HttpRequestError) return { error: error.message };
+        if (isApplicationError(error, "authentication_required")) throw loginRedirect(request);
+        if (isApplicationError(error)) return { error: error.message };
         return { error: "项目操作失败，请稍后重试。" };
       }
     },

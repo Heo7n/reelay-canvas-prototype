@@ -11,7 +11,7 @@ import type {
   UsageCompositionItem,
   UsageDimension,
   UsageRecord,
-} from "../organization-usage-data";
+} from "../../../features/usage";
 import styles from "./UsageSourceTable.module.css";
 
 type SourceDimension = Exclude<UsageDimension, "type">;

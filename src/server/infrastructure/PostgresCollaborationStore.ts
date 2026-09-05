@@ -5,9 +5,10 @@ import type { Pool, QueryResultRow } from "pg";
 import {
   CanvasDocumentProjectUnavailableError,
   CanvasDocumentRevisionConflictError,
+  type ReadCanvasDocumentInput,
   type SaveCanvasDocumentInput,
 } from "../application/CanvasDocumentStore";
-import type { CanvasDocument, CanvasId } from "../../domain/canvas/canvas-document";
+import type { CanvasDocument } from "../../domain/canvas/canvas-document";
 import type { ActorId, SessionActor } from "../../domain/identity/session";
 import type {
   ProjectAccessKind,
@@ -22,11 +23,12 @@ import type {
   WorkspaceId,
   WorkspaceKind,
 } from "../../domain/workspace/workspace";
-import type {
-  CollaborationStore,
-  CreateProjectInput,
-  UpdateProjectInput,
-} from "../application/CollaborationStore";
+import type { CollaborationStore } from "../application/CollaborationStore";
+import {
+  ProjectWorkspaceUnavailableError,
+  type CreateProjectInput,
+  type UpdateProjectInput,
+} from "../application/ProjectStore";
 import { verifyPassword } from "../db/passwords";
 
 interface CredentialRow extends QueryResultRow {
@@ -77,6 +79,15 @@ interface CanvasDocumentRow extends QueryResultRow {
 
 interface CanvasDocumentRevisionRow extends QueryResultRow {
   revision: number;
+}
+
+interface ScopedCanvasDocumentRow extends QueryResultRow {
+  authorized_project_id: string;
+  project_id: string | null;
+  canvas_id: string | null;
+  schema_version: number | null;
+  revision: number | null;
+  content: unknown;
 }
 
 function mapWorkspace(row: WorkspaceRow): Workspace {
@@ -390,6 +401,20 @@ export class PostgresCollaborationStore implements CollaborationStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      const membership = await client.query(
+        `SELECT 1
+         FROM workspaces AS workspace
+         JOIN memberships AS membership
+           ON membership.workspace_id = workspace.id
+          AND membership.user_id = $2
+         WHERE workspace.id = $1
+         FOR KEY SHARE OF workspace, membership`,
+        [input.workspaceId, input.createdByActorId],
+      );
+      if (membership.rowCount !== 1) {
+        const workspace = await client.query("SELECT 1 FROM workspaces WHERE id = $1", [input.workspaceId]);
+        throw new ProjectWorkspaceUnavailableError(workspace.rowCount === 1 ? "forbidden" : "not_found");
+      }
       const result = await client.query<ProjectRow>(
         `INSERT INTO projects (
            id,
@@ -509,14 +534,45 @@ export class PostgresCollaborationStore implements CollaborationStore {
     return result.rowCount === 1;
   }
 
-  async getCanvasDocument(projectId: ProjectId, canvasId: CanvasId): Promise<CanvasDocument | null> {
-    const result = await this.pool.query<CanvasDocumentRow>(
-      `SELECT project_id, canvas_id, schema_version, revision, content
-       FROM canvas_documents
-       WHERE project_id = $1 AND canvas_id = $2`,
-      [projectId, canvasId],
+  async getCanvasDocument(input: ReadCanvasDocumentInput): Promise<CanvasDocument | null> {
+    const result = await this.pool.query<ScopedCanvasDocumentRow>(
+      `SELECT
+         project.id AS authorized_project_id,
+         document.project_id,
+         document.canvas_id,
+         document.schema_version,
+         document.revision,
+         document.content
+       FROM projects AS project
+       JOIN project_memberships AS project_membership
+         ON project_membership.project_id = project.id
+        AND project_membership.user_id = $1
+       LEFT JOIN canvas_documents AS document
+         ON document.project_id = project.id
+        AND document.canvas_id = $3
+       WHERE project.id = $2
+         AND project.deleted_at IS NULL
+         AND (
+           (project.access_kind = 'private' AND project.created_by_user_id = $1)
+           OR project.access_kind = 'collaborative'
+         )`,
+      [input.actorId, input.projectId, input.canvasId],
     );
-    return result.rows[0] ? mapCanvasDocument(result.rows[0]) : null;
+    const row = result.rows[0];
+    if (!row) throw new CanvasDocumentProjectUnavailableError();
+    if (
+      row.project_id === null ||
+      row.canvas_id === null ||
+      row.schema_version === null ||
+      row.revision === null
+    ) return null;
+    return mapCanvasDocument({
+      project_id: row.project_id,
+      canvas_id: row.canvas_id,
+      schema_version: row.schema_version,
+      revision: row.revision,
+      content: row.content,
+    });
   }
 
   async saveCanvasDocument(input: SaveCanvasDocumentInput): Promise<CanvasDocument> {
@@ -532,6 +588,10 @@ export class PostgresCollaborationStore implements CollaborationStore {
          WHERE project.id = $1
            AND project.deleted_at IS NULL
            AND project_membership.role IN ('admin', 'edit')
+           AND (
+             (project.access_kind = 'private' AND project.created_by_user_id = $2)
+             OR project.access_kind = 'collaborative'
+           )
          FOR UPDATE OF project`,
         [input.projectId, input.actorId],
       );

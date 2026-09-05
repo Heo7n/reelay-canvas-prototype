@@ -789,6 +789,11 @@
   height: 14px;
   color: #65776f;
 }
+.creditBalanceLabel .creditSemanticIcon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
 .creditBalanceTotalContent > strong {
   color: var(--workspace-text);
   font-size: 38px;

@@ -5,22 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-  <link rel="stylesheet" href="./styles.css?v=20260819-fixed-screen-ui-12" />
-  <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260820-fixed-screen-ui-14" />
+    <link rel="stylesheet" href="./styles.css?v=20260904-video-params-79" />
+    <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
     <main class="app-shell">
       <header class="top-bar">
-        <div class="project-nav" data-project-nav="top">
-          <button class="project-logo-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单">
-            <img src="./assets/reelay-logo.png" alt="" />
-            <i data-lucide="chevron-down" aria-hidden="true"></i>
+        <div class="project-nav canvas-project-switcher" data-project-nav="top">
+          <button class="project-home-button" id="canvasHomeBtn" type="button" data-canvas-home-button title="返回主页" aria-label="返回主页">
+            <i class="project-home-icon" data-lucide="chevron-right" aria-hidden="true"></i>
           </button>
           <span class="project-nav-divider" aria-hidden="true"></span>
-          <span class="project-nav-name" data-project-name tabindex="0" title="双击重命名项目">Untitled</span>
-          <span class="project-nav-divider" aria-hidden="true"></span>
-          <button class="canvas-nav-button" type="button" data-canvas-menu-button title="画布菜单" aria-label="画布菜单">
-            <span data-canvas-name>画布 1</span>
+          <span class="project-nav-name" data-project-name tabindex="0" title="双击或按 Enter 重命名项目" aria-label="项目名称 Untitled，按 Enter 重命名">Untitled</span>
+          <button class="project-switch-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单" aria-controls="projectMenu" aria-expanded="false" aria-haspopup="dialog">
             <i data-lucide="chevron-down" aria-hidden="true"></i>
           </button>
         </div>
@@ -28,184 +25,303 @@
 
       <div class="canvas-access-status" id="canvasAccessStatus" role="status" aria-live="polite" hidden></div>
 
-      <aside class="left-rail" aria-label="资产">
-        <button class="rail-button asset-library-trigger" id="railLibraryBtn" type="button" aria-label="资产库" aria-expanded="false">
-          <i data-lucide="folders" aria-hidden="true"></i>
-          <span class="asset-lib-tooltip">资产库</span>
-        </button>
-      </aside>
+      <aside class="left-rail" aria-label="画布快捷操作">
+        <div class="left-rail-stack top-actions" id="topActions">
+          <span class="sr-only" data-canvas-name>画布 1</span>
+          <button class="rail-button canvas-switch-trigger" type="button" data-canvas-menu-button aria-label="切换画布" aria-controls="canvasMenu" aria-expanded="false" aria-haspopup="menu">
+            <i data-lucide="layers-3" aria-hidden="true"></i>
+            <span class="rail-button-tip">切换画布</span>
+          </button>
+          <button class="rail-button asset-library-trigger" id="railLibraryBtn" type="button" aria-label="资产库" aria-expanded="false">
+            <i data-lucide="folder" aria-hidden="true"></i>
+            <span class="asset-lib-tooltip rail-button-tip">资产库</span>
+          </button>
+          <button class="rail-button" id="shareProjectBtn" type="button" aria-label="分享项目">
+            <i data-lucide="share-2" aria-hidden="true"></i>
+            <span class="rail-button-tip">分享项目</span>
+          </button>
+          <div class="profile-anchor">
+            <button class="rail-button avatar-button" id="railProfileBtn" type="button" data-initial="R" aria-label="个人：Reelay 用户" aria-controls="profileMenu" aria-expanded="false"></button>
+            <span class="rail-button-tip profile-button-tip">个人</span>
 
-      <div class="top-actions" id="topActions">
-        <button class="share-button" id="shareProjectBtn" type="button" aria-label="分享项目">
-          <i data-lucide="share-2" aria-hidden="true"></i>
-          <span class="action-tip">分享</span>
-        </button>
-        <div class="profile-anchor">
-          <span class="avatar-credit-badge" id="avatarCreditBadge" aria-label="可用积分 3000">
-            <i data-lucide="sparkles" aria-hidden="true"></i>
-            <span id="avatarCreditValue">3000</span>
-          </span>
-          <button class="rail-button avatar-button" id="railProfileBtn" type="button" title="个人" data-initial="R"></button>
-
-          <div class="profile-menu hidden" id="profileMenu">
-            <div class="profile-card">
-              <div class="profile-avatar" id="profileAvatar">R</div>
-              <div class="profile-identity">
-                <div class="profile-name" id="profileName">Reelay 用户</div>
-                <div class="profile-email" id="profileEmail">演示画布</div>
-              </div>
-            </div>
-            <div class="profile-menu-list">
-              <button class="profile-menu-item profile-membership" id="profileOrganization" type="button" data-profile-action="organization" aria-label="进入组织管理界面">
-                <i data-lucide="building-2" aria-hidden="true"></i>
-                <span id="profileOrganizationName">组织空间</span>
-                <small id="profileOrganizationRole">成员</small>
-                <i data-lucide="chevron-right" aria-hidden="true"></i>
-              </button>
-              <button class="profile-menu-item" type="button" data-profile-action="account">
-                <i data-lucide="settings" aria-hidden="true"></i>
-                <span>账号设置</span>
-              </button>
-              <button class="profile-menu-item profile-appearance-item" type="button" data-profile-action="appearance" aria-label="切换外观">
-                <span class="theme-current-icon" id="themeModeIcon">
-                  <i data-lucide="moon" aria-hidden="true"></i>
-                </span>
-                <span id="themeCurrentLabel">深色模式</span>
-                <span class="theme-inline-switch" data-theme-inline-switch aria-hidden="true" style="--theme-index: 1">
-                  <span class="theme-inline-thumb" aria-hidden="true"></span>
-                  <span class="theme-feedback-icon theme-feedback-light" aria-hidden="true">
-                    <i data-lucide="sun" aria-hidden="true"></i>
-                  </span>
-                  <span class="theme-feedback-icon theme-feedback-dark" aria-hidden="true">
-                    <i data-lucide="moon" aria-hidden="true"></i>
-                  </span>
-                </span>
-              </button>
-              <div class="profile-help-inline">
-                <button class="profile-menu-item profile-help-trigger" type="button" aria-label="帮助中心" aria-expanded="false" aria-controls="profileHelpPanel">
-                  <i data-lucide="circle-help" aria-hidden="true"></i>
-                  <span>帮助中心</span>
-                  <i data-lucide="chevron-right" aria-hidden="true"></i>
-                </button>
-                <div class="profile-help-inline-panel" id="profileHelpPanel" aria-label="帮助中心">
-                  <button class="profile-help-link profile-help-shortcuts" type="button" data-help-action="shortcuts">
-                    <i data-lucide="keyboard" aria-hidden="true"></i>
-                    <span>快捷键</span>
-                  </button>
-                  <a class="profile-help-link" href="https://reelay.tech.jetsentv.com/manual" target="_blank" rel="noopener noreferrer">
-                    <i data-lucide="book-open-check" aria-hidden="true"></i>
-                    <span>使用教程</span>
-                  </a>
-                  <a class="profile-help-link" href="https://ycndvyll62ov.feishu.cn/share/base/form/shrcnCSKgzknYF8PZuoMdw8uLGd" target="_blank" rel="noopener noreferrer">
-                    <i data-lucide="send-horizontal" aria-hidden="true"></i>
-                    <span>反馈问题</span>
-                  </a>
-                  <div class="profile-shortcut-sheet" id="profileShortcutSheet" aria-label="快捷键说明">
-                    <div class="shortcut-list">
-                      <div class="shortcut-row"><span>空格 + 拖动</span><kbd>平移画布</kbd></div>
-                      <div class="shortcut-row"><span>鼠标滚轮</span><kbd>平移画布</kbd></div>
-                      <div class="shortcut-row"><span>Ctrl/Cmd + 滚轮</span><kbd>缩放</kbd></div>
-                      <div class="shortcut-row"><span>双击画布</span><kbd>添加节点</kbd></div>
-                      <div class="shortcut-row"><span>拖拽空白</span><kbd>框选</kbd></div>
-                      <div class="shortcut-row"><span>Alt + 拖动</span><kbd>复制节点</kbd></div>
-                      <div class="shortcut-row"><span>Delete</span><kbd>删除选中</kbd></div>
-                      <div class="shortcut-row"><span>Ctrl + Z</span><kbd>撤销上一步</kbd></div>
-                    </div>
-                  </div>
+            <div class="profile-menu hidden" id="profileMenu">
+              <div class="profile-card">
+                <div class="profile-avatar" id="profileAvatar">R</div>
+                <div>
+                  <div class="profile-name" id="profileName">Reelay 用户</div>
+                  <div class="profile-email" id="profileEmail">演示画布</div>
                 </div>
               </div>
-              <button class="profile-menu-item danger" type="button" data-profile-action="logout">
-                <i data-lucide="log-out" aria-hidden="true"></i>
-                <span>退出账号</span>
-              </button>
+              <div class="profile-menu-list">
+                <button class="profile-menu-item profile-credit-item" id="profileCreditsBtn" type="button" data-profile-action="credits" aria-label="查看我的积分，当前 3,000">
+                  <img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" />
+                  <span>我的积分</span>
+                  <strong class="profile-credit-value" id="profileCreditValue">3,000</strong>
+                  <i data-lucide="chevron-right" aria-hidden="true"></i>
+                </button>
+                <button class="profile-menu-item profile-membership" id="profileOrganization" type="button" data-profile-action="organization" aria-label="进入组织中心">
+                  <i data-lucide="building-2" aria-hidden="true"></i>
+                  <span>组织中心</span>
+                  <small id="profileOrganizationRole">成员</small>
+                  <i data-lucide="chevron-right" aria-hidden="true"></i>
+                </button>
+                <button class="profile-menu-item profile-appearance-item" type="button" data-profile-action="appearance" aria-label="切换外观">
+                  <span class="theme-current-icon" id="themeModeIcon">
+                    <i data-lucide="moon" aria-hidden="true"></i>
+                  </span>
+                  <span id="themeCurrentLabel">深色模式</span>
+                  <span class="theme-inline-switch" data-theme-inline-switch aria-hidden="true" style="--theme-index: 1">
+                    <span class="theme-inline-thumb" aria-hidden="true"></span>
+                    <span class="theme-feedback-icon theme-feedback-light" aria-hidden="true">
+                      <i data-lucide="sun" aria-hidden="true"></i>
+                    </span>
+                    <span class="theme-feedback-icon theme-feedback-dark" aria-hidden="true">
+                      <i data-lucide="moon" aria-hidden="true"></i>
+                    </span>
+                  </span>
+                </button>
+                <button class="profile-menu-item" type="button" data-profile-action="account">
+                  <i data-lucide="settings" aria-hidden="true"></i>
+                  <span>账号设置</span>
+                </button>
+                <div class="profile-help-flyout">
+                  <button class="profile-menu-item profile-help-trigger" id="profileHelpTrigger" type="button" aria-label="帮助中心" aria-expanded="false" aria-controls="profileHelpPanel">
+                    <i data-lucide="circle-help" aria-hidden="true"></i>
+                    <span>帮助中心</span>
+                    <i data-lucide="chevron-right" aria-hidden="true"></i>
+                  </button>
+                  <div class="profile-help-flyout-panel" id="profileHelpPanel" role="group" aria-labelledby="profileHelpTrigger">
+                    <a class="profile-help-link" href="https://reelay.tech.jetsentv.com/manual" target="_blank" rel="noopener noreferrer">
+                      <i data-lucide="book-open-check" aria-hidden="true"></i>
+                      <span>使用教程</span>
+                    </a>
+                    <a class="profile-help-link" href="https://ycndvyll62ov.feishu.cn/share/base/form/shrcnCSKgzknYF8PZuoMdw8uLGd" target="_blank" rel="noopener noreferrer">
+                      <i data-lucide="send-horizontal" aria-hidden="true"></i>
+                      <span>反馈问题</span>
+                    </a>
+                    <button class="profile-help-link profile-help-shortcuts" id="profileShortcutTrigger" type="button" aria-expanded="false" aria-controls="profileShortcutSheet">
+                      <i data-lucide="keyboard" aria-hidden="true"></i>
+                      <span>快捷键</span>
+                      <i data-lucide="chevron-down" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <div class="profile-shortcut-sheet" id="profileShortcutSheet" role="region" aria-label="快捷键">
+                      <div class="profile-shortcut-groups">
+                        <section class="profile-shortcut-group">
+                          <h3>画布操作</h3>
+                          <dl class="profile-shortcut-list">
+                            <div class="profile-shortcut-row">
+                              <dt>移动视图</dt>
+                              <dd><span class="profile-shortcut-key">中键拖动</span><span class="profile-shortcut-separator">/</span><span class="profile-shortcut-key">空格 + 拖动</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>缩放视图</dt>
+                              <dd><span class="profile-shortcut-key">Ctrl / Cmd + 滚轮</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>滚动平移</dt>
+                              <dd><span class="profile-shortcut-key">Shift + 滚轮</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>多选 / 框选</dt>
+                              <dd><span class="profile-shortcut-key">拖动空白</span><span class="profile-shortcut-separator">/</span><span class="profile-shortcut-key">Shift + 单击</span></dd>
+                            </div>
+                          </dl>
+                        </section>
+                        <section class="profile-shortcut-group">
+                          <h3>节点操作</h3>
+                          <dl class="profile-shortcut-list">
+                            <div class="profile-shortcut-row">
+                              <dt>添加节点</dt>
+                              <dd><span class="profile-shortcut-key">双击空白</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>删除节点</dt>
+                              <dd><span class="profile-shortcut-key">Delete</span><span class="profile-shortcut-separator">/</span><span class="profile-shortcut-key">Backspace</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>复制并拖动</dt>
+                              <dd><span class="profile-shortcut-key">Alt + 拖动</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>撤销上一步</dt>
+                              <dd><span class="profile-shortcut-key">Ctrl / Cmd + Z</span></dd>
+                            </div>
+                            <div class="profile-shortcut-row">
+                              <dt>关闭当前浮层</dt>
+                              <dd><span class="profile-shortcut-key">Esc</span></dd>
+                            </div>
+                          </dl>
+                        </section>
+                      </div>
+                  </div>
+                </div>
+                <button class="profile-menu-item" type="button" data-profile-action="logout">
+                  <i data-lucide="log-out" aria-hidden="true"></i>
+                  <span>退出账号</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </aside>
       <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库" aria-hidden="true" inert>
         <header class="asset-library-header">
-          <div class="project-nav" data-project-nav="asset">
-            <button class="project-logo-button" type="button" data-project-menu-button title="项目菜单" aria-label="项目菜单">
-              <img src="./assets/reelay-logo.png" alt="" />
-              <i data-lucide="chevron-down" aria-hidden="true"></i>
+          <div class="asset-library-heading">
+            <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="返回画布" aria-label="返回画布">
+              <i data-lucide="chevron-left" aria-hidden="true"></i>
             </button>
-            <span class="project-nav-divider" aria-hidden="true"></span>
-            <span class="project-nav-name" id="assetLibraryProjectName" data-project-name tabindex="0" title="双击重命名项目">Untitled</span>
-            <span class="project-nav-divider" aria-hidden="true"></span>
-            <button class="canvas-nav-button" type="button" data-canvas-menu-button title="画布菜单" aria-label="画布菜单">
-              <span data-canvas-name>画布 1</span>
-              <i data-lucide="chevron-down" aria-hidden="true"></i>
-            </button>
+            <h2>资产库</h2>
           </div>
-          <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起" aria-label="收起资产库">
-            <i data-lucide="panel-left-close" aria-hidden="true"></i>
-          </button>
+          <div class="asset-library-space-switcher">
+            <button class="asset-library-space-button" id="assetLibrarySpaceButton" type="button" aria-haspopup="menu" aria-controls="assetLibrarySpaceMenu" aria-expanded="false">
+              <span id="assetLibrarySpaceLabel">个人空间</span>
+              <i data-lucide="chevron-down" aria-hidden="true"></i>
+            </button>
+            <div class="asset-library-space-menu hidden" id="assetLibrarySpaceMenu" role="menu" aria-label="切换资产空间">
+              <button type="button" role="menuitemradio" data-library-space="personal" aria-checked="true">
+                <i data-lucide="user-round" aria-hidden="true"></i>
+                <span>个人空间</span>
+                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
+              </button>
+              <button type="button" role="menuitemradio" data-library-space="organization" aria-checked="false">
+                <i data-lucide="users-round" aria-hidden="true"></i>
+                <span>组织空间</span>
+                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
+              </button>
+              <button type="button" role="menuitemradio" data-library-space="platform" aria-checked="false">
+                <i data-lucide="badge-check" aria-hidden="true"></i>
+                <span>平台空间</span>
+                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
         </header>
-        <div class="asset-library-mode" role="tablist" aria-label="项目内容层级">
-          <div class="asset-library-local-tabs" id="assetLibraryModeTabs"></div>
-          <button class="asset-library-global-button" id="assetLibraryGlobalBtn" type="button" title="全局资产库" aria-label="全局资产库">
-            <i data-lucide="book-open" aria-hidden="true"></i>
-          </button>
+        <nav class="asset-library-section-tabs" id="assetLibrarySectionTabs" role="tablist" aria-label="资产类型">
+          <button class="active" id="assetLibraryMediaTab" type="button" role="tab" data-library-section="media" aria-selected="true" aria-controls="assetLibraryGrid">素材</button>
+          <button id="assetLibraryEntityTab" type="button" role="tab" data-library-section="entity" aria-selected="false" aria-controls="assetLibraryGrid">主体</button>
+        </nav>
+        <div class="asset-library-search-row">
+          <label class="asset-library-search" aria-label="搜索资产库">
+            <i data-lucide="search" aria-hidden="true"></i>
+            <input id="assetLibrarySearchInput" type="search" placeholder="搜索" autocomplete="off" />
+          </label>
+          <div class="asset-library-platform-command-anchor" id="assetLibraryPlatformCommandAnchor"></div>
         </div>
         <div class="asset-library-body">
           <section class="asset-library-content">
-            <div class="asset-library-listbar">
-              <label class="asset-library-search" aria-label="搜索资产库">
-                <i data-lucide="search" aria-hidden="true"></i>
-                <input id="assetLibrarySearchInput" type="search" placeholder="搜索" />
-              </label>
-              <div class="asset-library-tabs" id="assetLibraryTabs" role="listbox" aria-label="素材类型"></div>
+            <div class="asset-library-directorybar">
+              <div class="asset-library-directory-shell">
+                <div class="asset-library-directory">
+                  <button class="asset-library-directory-button" id="assetLibraryDirectoryButton" type="button" aria-haspopup="tree" aria-controls="assetLibraryDirectoryTreePopover" aria-expanded="false">
+                    <i data-lucide="chevron-down" aria-hidden="true"></i>
+                    <strong id="assetLibraryDirectoryName">默认目录</strong>
+                  </button>
+                  <span class="asset-library-directory-divider" aria-hidden="true"></span>
+                  <button class="asset-library-folder-create" id="assetLibraryCreateFolderBtn" type="button" title="在当前目录中新建文件夹" aria-label="在当前目录中新建文件夹">
+                    <i data-lucide="plus" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <div class="asset-library-directory-tree-popover hidden" id="assetLibraryDirectoryTreePopover"></div>
+              </div>
+              <div class="asset-library-command-slot" id="assetLibraryCommandBar"></div>
             </div>
-            <div class="asset-library-grid" id="assetLibraryGrid"></div>
-            <div class="asset-library-footer">
-              <span class="asset-library-count" id="assetLibraryCount">共 0 项</span>
-            </div>
+            <div class="asset-library-grid" id="assetLibraryGrid" role="tabpanel" aria-labelledby="assetLibraryMediaTab"></div>
           </section>
         </div>
-        <div class="asset-library-resize-handle" id="assetLibraryResizeHandle" role="separator" aria-orientation="vertical" title="调整资产库宽度"></div>
+        <footer class="asset-library-footer">
+          <span class="asset-library-count" id="assetLibraryCount">共 0 个素材</span>
+        </footer>
+        <div class="asset-library-overlay-layer" id="assetLibraryOverlayLayer"></div>
+        <input id="assetLibraryUploadInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
+        <div class="asset-library-resize-handle" id="assetLibraryResizeHandle" role="separator" aria-orientation="vertical" aria-label="调整资产库宽度" aria-valuemin="380" aria-valuemax="780" aria-valuenow="550" tabindex="0" title="调整资产库宽度"></div>
       </aside>
-      <div class="project-menu hidden" id="projectMenu">
-        <button type="button" data-project-action="home">回到主页</button>
-        <button type="button" data-project-action="all">全部项目</button>
-        <hr />
-        <button type="button" data-project-action="create" data-canvas-mutation>创建新项目</button>
-        <button class="danger" type="button" data-project-action="delete" data-canvas-mutation>删除项目</button>
+      <div id="canvasEntityEditorHost" hidden inert aria-hidden="true"></div>
+      <div id="canvasEntityPickerHost" hidden inert aria-hidden="true"></div>
+      <input id="canvasEntityEditorUploadInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
+      <dialog class="asset-library-preview-dialog" id="assetLibraryPreviewDialog" aria-labelledby="assetLibraryPreviewTitle">
+        <div class="asset-library-preview-shell">
+          <header>
+            <div>
+              <span class="asset-library-preview-kicker" id="assetLibraryPreviewKicker">素材预览</span>
+              <h2 id="assetLibraryPreviewTitle">素材</h2>
+            </div>
+            <button type="button" data-library-preview-close title="关闭预览" aria-label="关闭预览">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+          </header>
+          <div class="asset-library-preview-body" id="assetLibraryPreviewBody"></div>
+          <footer>
+            <span id="assetLibraryPreviewMeta"></span>
+            <button class="asset-library-preview-use" id="assetLibraryPreviewUse" type="button">
+              <i data-lucide="plus" aria-hidden="true"></i>
+              <span>添加到画布</span>
+            </button>
+          </footer>
+        </div>
+      </dialog>
+      <div class="project-menu hidden" id="projectMenu" role="dialog" aria-labelledby="projectMenuTitle">
+        <h2 class="sr-only" id="projectMenuTitle">切换项目</h2>
+        <label class="project-menu-search">
+          <i data-lucide="search" aria-hidden="true"></i>
+          <span class="sr-only">搜索项目</span>
+          <input id="projectMenuSearch" type="search" maxlength="80" placeholder="搜索项目" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="project-menu-list" id="projectMenuList" role="list" aria-label="可切换项目"></div>
+        <p class="project-menu-empty" id="projectMenuEmpty" hidden>没有找到匹配的项目</p>
+        <div class="project-menu-footer">
+          <button class="project-menu-create" type="button" data-project-action="create">
+            <i data-lucide="plus" aria-hidden="true"></i>
+            <span>新建项目</span>
+          </button>
+        </div>
       </div>
 
-      <div class="canvas-menu hidden" id="canvasMenu">
-        <div class="canvas-menu-title">
+      <div class="canvas-menu hidden" id="canvasMenu" role="menu" aria-label="内部画布菜单">
+        <div class="canvas-menu-title" role="none">
           <span>画布</span>
-          <button type="button" data-canvas-action="add" data-canvas-mutation title="添加画布" aria-label="添加画布">
+          <button type="button" role="menuitem" data-canvas-action="add" data-canvas-mutation title="添加画布" aria-label="添加画布">
             <i data-lucide="plus" aria-hidden="true"></i>
           </button>
         </div>
-        <div class="canvas-menu-list" id="canvasMenuList"></div>
+        <div class="canvas-menu-list" id="canvasMenuList" role="none"></div>
       </div>
 
-      <div class="canvas-more-menu hidden" id="canvasMoreMenu">
-        <button type="button" data-canvas-more-action="open">在新窗口打开</button>
-        <button type="button" data-canvas-more-action="rename" data-canvas-mutation>重命名画布</button>
-        <button type="button" data-canvas-more-action="duplicate" data-canvas-mutation>复制画布</button>
-        <button class="danger" type="button" data-canvas-more-action="delete" data-canvas-mutation>删除画布</button>
+      <div class="canvas-more-menu hidden" id="canvasMoreMenu" role="menu" aria-label="画布操作">
+        <button type="button" role="menuitem" data-canvas-more-action="open">在新窗口打开</button>
+        <button type="button" role="menuitem" data-canvas-more-action="rename" data-canvas-mutation>重命名画布</button>
+        <button type="button" role="menuitem" data-canvas-more-action="duplicate" data-canvas-mutation>复制画布</button>
+        <button class="danger" type="button" role="menuitem" data-canvas-more-action="delete" data-canvas-mutation>删除画布</button>
       </div>
 
       <section class="canvas-shell" id="canvasShell">
         <div class="canvas-grid" id="canvasGrid" aria-hidden="true"></div>
+        <div class="multi-selection-surface hidden" id="multiSelectionSurface" aria-hidden="true"></div>
         <div class="canvas-stage" id="canvasStage">
           <svg class="connection-layer" id="connectionLayer" aria-hidden="true">
             <g id="connectionPaths"></g>
+            <g id="batchConnectionPreviewPaths"></g>
             <path class="connection-preview hidden" id="connectionPreview"></path>
             <circle class="connection-preview-endpoint hidden" id="connectionPreviewEndpoint" r="4"></circle>
           </svg>
           <div class="node-layer" id="nodeLayer"></div>
         </div>
-        <div class="connection-create-menu hidden" id="connectionCreateMenu" role="menu" aria-label="创建下游节点">
+        <div class="connection-target-glow" id="connectionTargetGlow" aria-hidden="true"></div>
+        <div class="connection-create-menu hidden" id="connectionCreateMenu" role="menu" aria-label="创建下游节点" tabindex="-1">
           <span class="connection-create-label">创建下游节点</span>
           <button type="button" role="menuitem" data-connection-create="image" data-canvas-mutation>
-            <i data-lucide="image" aria-hidden="true"></i><span>图片生成</span>
+            <span class="node-create-icon"><i data-lucide="image" aria-hidden="true"></i></span>
+            <span class="node-create-copy">
+              <span class="node-create-title">图片</span>
+              <span class="node-create-description">添加图片生成节点</span>
+            </span>
           </button>
           <button type="button" role="menuitem" data-connection-create="video" data-canvas-mutation>
-            <i data-lucide="video" aria-hidden="true"></i><span>视频生成</span>
+            <span class="node-create-icon"><i data-lucide="square-play" aria-hidden="true"></i></span>
+            <span class="node-create-copy">
+              <span class="node-create-title">视频</span>
+              <span class="node-create-description">添加视频生成节点</span>
+            </span>
           </button>
         </div>
         <div class="node-create-menu hidden" id="nodeCreateMenu" role="menu" aria-label="添加节点" tabindex="-1">
@@ -232,46 +348,47 @@
           </button>
         </div>
         <div class="selection-box hidden" id="selectionBox"></div>
-        <div class="selection-toolbar hidden" id="selectionToolbar">
-          <span class="selection-toolbar-count" id="selectionCount">0 个节点</span>
-          <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button text-button" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
+        <div class="group-resize-overlay hidden" id="groupResizeOverlay" role="group" aria-label="组框缩放控制">
+          <button class="group-corner-handle north-east" type="button" data-group-resize="ne" aria-label="从右上角调整组框大小"></button>
+          <button class="group-corner-handle south-east" type="button" data-group-resize="se" aria-label="从右下角调整组框大小"></button>
+          <button class="group-corner-handle south-west" type="button" data-group-resize="sw" aria-label="从左下角调整组框大小"></button>
+          <button class="group-corner-handle north-west" type="button" data-group-resize="nw" aria-label="从左上角调整组框大小"></button>
+        </div>
+        <div class="multi-selection-chrome hidden" id="multiSelectionChrome">
+          <button
+            class="multi-selection-port"
+            id="multiSelectionPort"
+            type="button"
+            data-selection-connect-output
+            data-canvas-mutation
+            aria-label="连接所有选中节点到共同下游"
+          >
+            <span class="multi-selection-port-mark" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="selection-toolbar hidden" id="selectionToolbar" role="toolbar" aria-label="多选节点操作">
+          <button class="icon-toolbar-button text-button selection-toolbar-group" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
             <i data-lucide="combine" aria-hidden="true"></i>
             <span>打组</span>
             <span class="toolbar-tip">打组</span>
           </button>
-          <div class="toolbar-menu-wrap" data-toolbar-menu="layout">
-            <button class="icon-toolbar-button text-button" type="button" data-selection-action="toggle-sort" data-canvas-mutation aria-label="整理布局" aria-haspopup="menu">
-              <i data-lucide="layout-grid" aria-hidden="true"></i>
-              <span>整理布局</span>
-              <i data-lucide="chevron-down" aria-hidden="true"></i>
-              <span class="toolbar-tip">整理布局</span>
-            </button>
-            <div class="toolbar-dropdown hidden" id="selectionSortMenu" role="menu">
-              <button type="button" data-sort-layout="grid" data-canvas-mutation><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
-              <button type="button" data-sort-layout="horizontal" data-canvas-mutation><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
-              <button type="button" data-sort-layout="vertical" data-canvas-mutation><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
-            </div>
-          </div>
-          <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button" type="button" data-selection-action="add-library" data-canvas-mutation aria-label="批量保存到素材库">
+          <button class="icon-toolbar-button text-button" type="button" data-selection-action="add-library" data-canvas-mutation aria-label="保存到素材">
             <i data-lucide="folder-plus" aria-hidden="true"></i>
-            <span class="toolbar-tip">批量保存到素材库</span>
+            <span>保存到素材</span>
+            <span class="toolbar-tip">保存到项目素材</span>
           </button>
-          <div class="toolbar-menu-wrap" data-toolbar-menu="download">
-            <button class="icon-toolbar-button" type="button" data-selection-action="toggle-download" aria-label="下载" aria-haspopup="menu">
+          <div class="toolbar-menu-wrap selection-download-control" data-toolbar-menu="download">
+            <button class="icon-toolbar-button text-button selection-download-trigger" type="button" data-selection-action="toggle-download" aria-label="下载" aria-haspopup="menu" aria-expanded="false">
               <i data-lucide="download" aria-hidden="true"></i>
-              <span class="toolbar-tip">下载</span>
+              <span>下载</span>
+              <i class="selection-download-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
+              <span class="toolbar-tip">下载选项</span>
             </button>
             <div class="toolbar-dropdown hidden toolbar-dropdown-right" id="selectionDownloadMenu" role="menu">
               <button type="button" data-download-action="batch"><i data-lucide="download" aria-hidden="true"></i><span>批量下载</span></button>
               <button type="button" data-download-action="archive"><i data-lucide="archive" aria-hidden="true"></i><span>打包下载</span></button>
             </div>
           </div>
-          <button class="icon-toolbar-button danger" type="button" data-selection-action="delete" data-canvas-mutation aria-label="删除选中节点">
-            <i data-lucide="trash-2" aria-hidden="true"></i>
-            <span class="toolbar-tip">删除</span>
-          </button>
         </div>
         <div class="empty-state" id="emptyState">
           <div class="empty-create" aria-hidden="true">
@@ -281,7 +398,7 @@
               </span>
               <span class="empty-create-copy">
                 <span class="empty-create-main">双击画布</span>
-                <span class="empty-create-secondary">自由生成节点</span>
+                <span class="empty-create-secondary">开始自由创作</span>
               </span>
             </span>
           </div>
@@ -299,6 +416,10 @@
               <i data-lucide="scan" aria-hidden="true"></i>
               <span class="canvas-tool-tip">适应视图</span>
             </button>
+            <button class="canvas-tool-button canvas-tool-button-upcoming" type="button" data-canvas-tool="organize" aria-label="整理画布，即将支持" aria-disabled="true" disabled>
+              <i data-lucide="layout-grid" aria-hidden="true"></i>
+              <span class="canvas-tool-tip">整理画布 · 即将支持</span>
+            </button>
             <label class="canvas-zoom-control" aria-label="放大/缩小画布">
               <input id="zoomSlider" type="range" min="20" max="200" step="1" value="100" aria-label="放大/缩小画布，20% 到 200%" />
               <span class="canvas-zoom-value" id="zoomValueTip" aria-hidden="true">100%</span>
@@ -307,8 +428,8 @@
         </div>
       </section>
 
-      <aside class="agent-dock collapsed" id="agentDock" style="--agent-width: 420px">
-        <button class="agent-launcher" id="agentLauncher" type="button" aria-label="展开 Reelay Agent" aria-expanded="false">
+      <aside class="agent-dock collapsed" id="agentDock" style="--agent-width: 560px; --agent-top-inset: 0px; --agent-bottom-inset: 0px">
+        <button class="agent-launcher" id="agentLauncher" type="button" aria-label="展开 Reelay Agent" aria-controls="agentPanel" aria-expanded="false">
           <span class="agent-tooltip">Reelay Agent</span>
           <span class="agent-logo" aria-hidden="true">
             <img src="./assets/reelay-logo.png" alt="" />
@@ -317,24 +438,26 @@
 
         <section class="agent-panel" id="agentPanel" aria-label="Agent 对话栏" aria-hidden="true" inert>
           <div class="agent-resize-handle" id="agentResizeHandle" aria-hidden="true"></div>
+          <div class="agent-height-resize-handle agent-height-resize-handle-top" id="agentTopResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 顶部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 顶部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
+          <div class="agent-height-resize-handle agent-height-resize-handle-bottom" id="agentBottomResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 底部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 底部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
           <header class="agent-header">
             <div class="agent-title" id="agentConversationTitle">新对话</div>
             <div class="agent-actions">
               <div class="agent-new-group" aria-label="对话操作">
-                <button class="agent-icon-button new-chat-button" id="agentNewChatBtn" type="button" title="新建对话">
-                  <i data-lucide="square-plus" aria-hidden="true"></i>
+                <button class="agent-icon-button new-chat-button" id="agentNewChatBtn" type="button" title="新建对话" aria-label="新建对话">
+                  <i data-lucide="message-square-plus" aria-hidden="true"></i>
                 </button>
-                <button class="agent-icon-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话">
+                <button class="agent-icon-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话" aria-label="历史对话" aria-controls="agentHistoryMenu" aria-expanded="false">
                   <i data-lucide="chevron-down" aria-hidden="true"></i>
                 </button>
               </div>
-              <button class="agent-icon-button close-chat-button" id="agentCloseBtn" type="button" title="关闭聊天">
-                <i data-lucide="panel-right-close" aria-hidden="true"></i>
+              <button class="agent-icon-button close-chat-button" id="agentCloseBtn" type="button" title="收起 Reelay Agent" aria-label="收起 Reelay Agent">
+                <i data-lucide="arrow-right-from-line" aria-hidden="true"></i>
               </button>
             </div>
           </header>
 
-          <div class="agent-history-menu hidden" id="agentHistoryMenu">
+          <div class="agent-history-menu hidden" id="agentHistoryMenu" role="dialog" aria-label="历史对话">
             <div class="history-title">历史对话</div>
             <label class="history-search">
               <span aria-hidden="true">⌕</span>
@@ -346,53 +469,124 @@
 
           <div class="agent-messages" id="agentMessages"></div>
 
-          <div class="agent-composer">
-            <textarea id="agentInput" placeholder='Start with an idea, or type "@" to mention'></textarea>
-            <div class="agent-composer-bar">
-              <button class="agent-add-button" type="button" title="添加">
-                <i data-lucide="plus" aria-hidden="true"></i>
-              </button>
-              <button class="agent-mode" type="button" title="Agent 模式">
-                <i data-lucide="bot" aria-hidden="true"></i>
-                <span>Agent</span>
-                <i data-lucide="chevron-down" aria-hidden="true"></i>
-              </button>
-              <div class="agent-composer-spacer"></div>
-              <div class="agent-model-wrap">
-                <button class="agent-model-button" id="agentModelBtn" type="button" title="模型偏好" aria-label="模型偏好">
-                  <i data-lucide="box" aria-hidden="true"></i>
+          <div class="agent-composer prompt-composer-surface" id="agentComposer">
+            <section class="agent-advanced-settings hidden" id="agentAdvancedSettings" aria-label="高级设置" aria-hidden="true">
+              <div class="agent-advanced-title advanced-settings-title">高级设置</div>
+              <div class="agent-setting-row advanced-setting-row">
+                <div class="advanced-setting-label">
+                  <span>定时任务</span>
+                  <button class="agent-setting-info advanced-setting-info" type="button" aria-label="定时任务说明" title="定时任务将在任务系统接入后开放"><span aria-hidden="true">i</span></button>
+                </div>
+                <button class="agent-schedule-button advanced-schedule-button" id="agentScheduleBtn" type="button" aria-label="定时任务暂未开放" aria-disabled="true" disabled>
+                  <svg class="advanced-schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3.5v4M16.5 3.5v4M3.5 9.5h17M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>
                 </button>
-                <div class="agent-model-menu hidden" id="agentModelMenu"></div>
               </div>
-              <button class="agent-send" type="button" title="发送">
-                <i data-lucide="send-horizontal" aria-hidden="true"></i>
-              </button>
+              <div class="agent-setting-row advanced-setting-row">
+                <div class="advanced-setting-label">
+                  <span>智能引用 AutoLink</span>
+                  <button class="agent-setting-info advanced-setting-info" type="button" aria-label="智能引用说明" title="自动关联当前画布中与描述相关的内容"><span aria-hidden="true">i</span></button>
+                </div>
+                <button class="agent-setting-switch advanced-setting-switch is-on" id="agentAutoLinkBtn" type="button" role="switch" aria-label="智能引用 AutoLink" aria-checked="true">
+                  <span aria-hidden="true"></span>
+                </button>
+              </div>
+            </section>
+
+            <div class="agent-composer-stage prompt-composer-layout">
+              <textarea class="prompt-input" id="agentInput" aria-label="给 Reelay Agent 的消息" placeholder="描述你想生成的内容，或输入 @ 引用"></textarea>
+              <div class="agent-composer-topbar">
+                <button class="agent-add-button asset-drop" id="agentAddBtn" type="button" title="添加附件" aria-label="添加附件">
+                  <i data-lucide="plus" aria-hidden="true"></i>
+                </button>
+                <div class="agent-composer-top-actions">
+                  <button class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn" type="button" title="输入提示词后优化" aria-label="提示词优化" aria-busy="false" disabled>
+                    <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
+                    <span class="prompt-optimization-spinner" aria-hidden="true"></span>
+                  </button>
+                  <button class="agent-advanced-button control-chip composer-tool-button advanced-settings-chip" id="agentAdvancedBtn" type="button" title="高级设置" aria-label="高级设置" aria-controls="agentAdvancedSettings" aria-expanded="false">
+                    <svg class="advanced-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h11M4 11.5h8M4 16.5h5"/><circle cx="17" cy="15.5" r="3.1"/><path d="M17 10.8v1.2M17 19v1.2M12.3 15.5h1.2M20.5 15.5h1.2M13.7 12.2l.85.85M19.45 17.95l.85.85M20.3 12.2l-.85.85M14.55 17.95l-.85.85"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="agent-composer-bar control-bar">
+                <div class="agent-mode-wrap">
+                  <button class="agent-mode control-chip has-divider" id="agentModeBtn" type="button" title="生成模式" aria-label="生成模式：视频生成" aria-controls="agentModeMenu" aria-haspopup="menu" aria-expanded="false">
+                    <i data-agent-mode-icon data-lucide="play-square" aria-hidden="true"></i>
+                    <span class="control-chip-label" data-agent-mode-label>视频生成</span>
+                  </button>
+                  <div class="agent-mode-menu hidden" id="agentModeMenu" role="menu" aria-label="选择生成模式">
+                    <button type="button" role="menuitemradio" data-agent-mode="image" aria-checked="false">
+                      <i data-lucide="image" aria-hidden="true"></i><span>图片生成</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                    </button>
+                    <button class="active" type="button" role="menuitemradio" data-agent-mode="video" aria-checked="true">
+                      <i data-lucide="play-square" aria-hidden="true"></i><span>视频生成</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" role="menuitemradio" data-agent-mode="agent" aria-checked="false">
+                      <i data-lucide="bot" aria-hidden="true"></i><span>Agent 托管</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="agent-model-wrap">
+                  <button class="agent-model-button control-chip model-chip has-divider" id="agentModelBtn" type="button" title="模型偏好" aria-label="模型偏好" aria-controls="agentModelMenu" aria-haspopup="dialog" aria-expanded="false">
+                    <span class="agent-model-button-label control-chip-label">Seedance 2.0</span>
+                  </button>
+                  <div class="agent-model-menu hidden" id="agentModelMenu" role="dialog" aria-label="模型偏好"></div>
+                </div>
+                <div class="agent-param-summary control-chip param-chip" id="agentParamSummary" aria-label="当前生成参数">
+                  <span class="control-chip-label param-chip-label"><span class="param-summary-before">全能参考 · </span><span class="param-summary-aspect">16:9</span><span class="param-summary-after"> · 720p · 4s</span></span>
+                  <i data-lucide="volume-2" aria-hidden="true"></i>
+                </div>
+                <div class="agent-composer-spacer control-spacer"></div>
+                <button class="agent-send generate-button" type="button" title="发送；当前可用积分 3,000" aria-label="发送；当前可用积分 3,000">
+                  <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span id="agentCreditValue">3,000</span></span>
+                  <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.25 20.6V9.45L6.7 13q-.95.95-1.9 0l-.75-.75q-.95-.95 0-1.9l6.5-6.5q1.45-1.45 2.9 0l6.5 6.5q.95.95 0 1.9l-.75.75q-.95.95-1.9 0l-3.55-3.55V20.6q0 1.4-1.4 1.4h-.7q-1.4 0-1.4-1.4Z" /></svg></span>
+                </button>
+              </div>
             </div>
           </div>
         </section>
       </aside>
 
-      <div class="undo-toast hidden" id="undoToast">
-        <span>已删除，可撤销</span>
-        <button id="undoDeleteBtn" type="button">撤销</button>
-      </div>
     </main>
+    <div class="entity-use-detail-portal" id="entityUseDetailPortal" aria-hidden="true" inert hidden></div>
+    <div class="entity-use-picker-portal" id="entityUsePickerPortal" aria-hidden="true" inert hidden></div>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
-    <script src="./data/model-catalog.js?v=20260710-undo-feedback"></script>
-    <script src="./src/config/prototype-config.js?v=20260716-foundation-modularization"></script>
-    <script src="./src/legacy-canvas/canvas-connections.js?v=20260812-context-links-7"></script>
-    <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260812-context-links-2"></script>
-    <script src="./src/legacy-canvas/canvas-connection-renderer.js?v=20260818-progressive-split-1"></script>
+    <script src="./data/model-catalog.js?v=20260903-node-params-integration-73"></script>
+    <script src="./src/config/prototype-config.js?v=20260903-entity-fixtures-64"></script>
+    <script src="./src/legacy-canvas/canvas-connections.js?v=20260827-connection-confirm-46"></script>
+    <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260824-node-body-target-1"></script>
+    <script src="./src/legacy-canvas/canvas-connection-feedback-motion.js?v=20260827-connection-confirm-46"></script>
+    <script src="./src/legacy-canvas/canvas-connection-feedback-controller.js?v=20260827-connection-confirm-46"></script>
+    <script src="./src/legacy-canvas/canvas-connection-renderer.js?v=20260827-connection-confirm-46"></script>
     <script src="./src/legacy-canvas/canvas-layer-reconciler.js?v=20260818-progressive-split-2"></script>
+    <script src="./src/legacy-canvas/canvas-generator-model-policy.js?v=20260901-entity-use-43"></script>
+    <script src="./src/legacy-canvas/canvas-popover-placement.js?v=20260824-node-controls-2"></script>
+    <script src="./src/legacy-canvas/canvas-spatial-selection.js?v=20260831-exact-group-selection-42"></script>
     <script src="./src/legacy-canvas/canvas-node-interaction.js?v=20260818-progressive-split-3"></script>
-    <script src="./src/legacy-canvas/canvas-node-pointer-controller.js?v=20260818-progressive-split-4"></script>
-    <script src="./src/legacy-canvas/canvas-node-drag-controller.js?v=20260818-progressive-split-5"></script>
-    <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260818-progressive-split-6"></script>
+    <script src="./src/legacy-canvas/canvas-node-placement.js?v=20260827-aspect-layout-41"></script>
+    <script src="./src/legacy-canvas/canvas-node-layout-transition.js?v=20260827-aspect-layout-41"></script>
+    <script src="./src/legacy-canvas/canvas-node-pointer-controller.js?v=20260824-selection-frame-drag-33"></script>
+    <script src="./src/legacy-canvas/canvas-node-drag-controller.js?v=20260824-selection-frame-drag-33"></script>
+    <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260824-group-frame-24"></script>
     <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
-    <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260818-progressive-split-8"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260818-progressive-split-9"></script>
+    <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260903-agent-vertical-74"></script>
+    <script src="./src/legacy-canvas/canvas-agent-panel-geometry.js?v=20260903-agent-vertical-74"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260903-entity-preview-filename-70"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260901-platform-space-27"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-model.js?v=20260903-entity-preview-filename-70"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-view.js?v=20260903-entity-preview-filename-71"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-controller.js?v=20260903-entity-preview-filename-70"></script>
+    <script src="./src/legacy-canvas/canvas-entity-use-model.js?v=20260901-entity-use-43"></script>
+    <script src="./src/legacy-canvas/canvas-entity-use-view.js?v=20260903-entity-label-63"></script>
+    <script src="./src/legacy-canvas/canvas-entity-use-controller.js?v=20260905-entity-use-controller-1"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260819-progressive-split-10"></script>
-    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260812-context-links-5"></script>
-    <script src="./app.js?v=20260820-fixed-screen-ui-14"></script>
+    <script src="./src/legacy-canvas/canvas-runtime-store.js?v=20260826-canvas-runtime-store-38"></script>
+    <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260826-canvas-command-39"></script>
+    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260903-node-params-integration-73"></script>
+    <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
+    <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js?v=20260903-entity-preview-filename-70"></script>
+    <script src="./src/legacy-canvas/canvas-entity-asset-coordinator.js?v=20260901-platform-space-27"></script>
+    <script src="./app.js?v=20260905-entity-controller-78"></script>
   </body>
 </html>

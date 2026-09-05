@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from "react";
 
-import type { HeatmapDay } from "./organization-usage-data";
+import type { HeatmapDay } from "../../features/usage";
 import styles from "./usage/UsageActivityChart.module.css";
 
 export type UsageActivityMode = "calendar" | "weekly" | "cumulative";

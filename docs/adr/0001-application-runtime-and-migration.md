@@ -23,7 +23,7 @@ Reelay 已有登录样机、登录后主页、项目库页面状态和一套交�
 - 本地草稿和 Blob 使用 Dexie / IndexedDB；`localStorage` 继续只保存主题等设备偏好。
 - 新代码使用 Vitest、Testing Library 和 `fake-indexeddb`；现有 `node:test` 契约测试继续保留，直到被等价行为测试覆盖。
 - 端到端主链路稳定后再引入 Playwright，不在第一批脚手架中制造空测试。
-- 构建后图标使用 `lucide-react`；旧静态入口在迁移完成前继续使用本地固定 Lucide 运行时。
+- 构建后图标使用 `lucide-react`；旧静态画布在迁移完成前使用 `app.js` 内的最小图标路径子集，不加载外部 CDN 或完整 vendor runtime。
 
 当前不采用 Next.js、SSR、Redux、微前端、Turborepo 或完整 UI 组件库。核心产品是浏览器重交互工作台和画布，当前没有必须用 SSR 解决的 SEO 或服务端渲染需求；国内自托管也更适合同源 SPA 与独立 API 边界。
 
@@ -56,6 +56,8 @@ Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 
 `Asset`、`GenerationTask`、`GenerationResult` 和 `CreditLedger` 先定义不变量和标识关系；在真实生成接入前再确定完整 repository 方法和事务边界。禁止建立一个对所有对象通用的 CRUD repository。
 
+`GenerationNode` 在创建时持有非空且不可变的 `mediaKind`；`GenerationTask` 持有 actor / workspace / project / canvas / node scope 以及不可变的参数和计价快照；`GenerationResult` 是任务输出且默认不是 `Asset`；`Asset` 由 Workspace 所有，Project / Node 只通过 `AssetReference` 使用；`CreditLedger` 是 append-only 事实源，预占、结算、释放 / 退款按 task id 与 operation key 幂等。上述对象不得折叠进通用 CRUD repository 或 CanvasDocument 运行态。
+
 领域层不得依赖 React、DOM、IndexedDB、HTTP 或具体数据库。
 
 ### 旧画布迁移
@@ -72,7 +74,9 @@ Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 - 导航意图
 - dirty 状态
 
-桥接层只负责上下文、导航和迁移期间的文档消息转发；repository、会话和服务端授权仍留在 host / application 边界，计费不进入桥协议。旧画布只产生带 schemaVersion 的 allow-list 快照，不把全量运行内存当成领域对象。后续按数据与交互边界逐步替换画布内部模块，不按文件长度机械拆组件。
+桥接层只负责上下文、导航和迁移期间的文档消息转发；repository、会话和服务端授权仍留在 host / application 边界，计费不进入桥协议。同源 origin 与 source 校验之外，每次 iframe 页面实例还必须携带唯一 instance id，route scope 或实例已经变化的异步响应不得回写当前画布。旧画布只产生带 schemaVersion 的 allow-list 快照，不把全量运行内存当成领域对象。后续按数据与交互边界逐步替换画布内部模块，不按文件长度机械拆组件。
+
+画布内容迁移采用渐进式 CanvasCommand：命令核心无 DOM，只处理 CanvasRecord 的显式集合变更、before conflict、归一化、transition validation 和逆命令；UI selection、短暂高亮、render 与保存属于提交后 effect。首个落地边界只覆盖连接的单条创建、批量创建和删除，同时兼容现有 legacy undo 栈。节点、组和高频 pointer 操作只有在字段级契约、任务态隔离和 preview/commit 边界明确后才迁移，不能把整个 `app.js` 换一种封装后称为完成。
 
 ## 建议目录
 
@@ -146,10 +150,10 @@ src/
 
 以下答案仍会影响后续账号和部署范围，但不阻塞当前壳层与共享数据边界开发：
 
-1. 首期账号标识优先使用用户名、邮箱还是手机号。
+1. 手机号 / 邮箱注册与邀请码的具体流程：邀请码的用途、是否必填，登录方式、验证码及账号关联规则。能力方向已于 2026-09-05 确认，详细规则尚未定稿。
 2. 未来主要部署在公网云服务还是企业内网；具体云厂商和域名可以以后再定。
 
-首期“账户 + 密码”方式已经确认；具体使用用户名、邮箱还是手机号仍未确认。本地演示使用一组明确标注的固定账号、单组织 Membership 和项目 `admin/edit/view` 角色，但不得把它写成正式账号策略。不加入短信、外部分享、实时光标或具体云厂商绑定。
+当前已实现的演示仍采用“账户 + 密码”、固定账号、单组织 Membership 和项目 `admin/edit/view` 角色，不将其固化为正式账号策略。2026-09-05 用户确认后续需支持手机号 / 邮箱注册与邀请码；相关前端流程可在规则确认后模拟，暂不接入真实短信或邮件服务。首页与登录页的视觉草稿不代表这些流程已经确定；本切片不新增外部分享、实时光标或具体云厂商绑定。
 
 ## 重新评审条件
 

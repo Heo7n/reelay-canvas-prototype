@@ -1,18 +1,25 @@
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from "react-router-dom";
 import { AppShell } from "./AppShell";
-import { LegacyCanvasRoute } from "../pages/canvas/LegacyCanvasRoute";
-import { WorkspaceHomePage } from "../pages/home/WorkspaceHomePage";
-import { LoginPage } from "../pages/login/LoginPage";
-import { OrganizationCenterPage } from "../pages/organization/OrganizationCenterPage";
-import { OrganizationSectionRoute } from "../pages/organization/OrganizationSectionRoute";
-import { ProjectsPage } from "../pages/projects/ProjectsPage";
-import { NoWorkspacePage } from "../pages/system/NoWorkspacePage";
 import { RouteErrorPage } from "../pages/system/RouteErrorPage";
 import { RouteLoadingPage } from "../pages/system/RouteLoadingPage";
 import { createRouteHandlers } from "./route-data";
 import { routePaths } from "./routes";
 import { applicationServices, type ApplicationServices } from "./services";
 import { WORKSPACE_ROUTE_ID } from "./useWorkspaceRouteData";
+
+type OrganizationSection = "management" | "credits" | "usage";
+
+function lazyOrganizationSection(section: OrganizationSection): NonNullable<RouteObject["lazy"]> {
+  return async () => {
+    const { OrganizationSectionRoute } = await import("../pages/organization/OrganizationSectionRoute");
+
+    function OrganizationSectionComponent() {
+      return <OrganizationSectionRoute section={section} />;
+    }
+
+    return { Component: OrganizationSectionComponent };
+  };
+}
 
 export function createAppRouteObjects(services: ApplicationServices): RouteObject[] {
   const handlers = createRouteHandlers(services);
@@ -23,10 +30,25 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
       HydrateFallback: RouteLoadingPage,
       children: [
         { index: true, loader: handlers.rootLoader },
-        { path: "login", loader: handlers.loginLoader, action: handlers.loginAction, element: <LoginPage /> },
+        {
+          path: "login",
+          loader: handlers.loginLoader,
+          action: handlers.loginAction,
+          lazy: async () => {
+            const { LoginPage } = await import("../pages/login/LoginPage");
+            return { Component: LoginPage };
+          },
+        },
         { path: "account", action: handlers.accountAction },
         { path: "logout", action: handlers.logoutAction },
-        { path: "no-workspace", loader: handlers.noWorkspaceLoader, element: <NoWorkspacePage /> },
+        {
+          path: "no-workspace",
+          loader: handlers.noWorkspaceLoader,
+          lazy: async () => {
+            const { NoWorkspacePage } = await import("../pages/system/NoWorkspacePage");
+            return { Component: NoWorkspacePage };
+          },
+        },
         {
           id: WORKSPACE_ROUTE_ID,
           path: "w/:workspaceId",
@@ -37,20 +59,51 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
           ),
           element: <Outlet />,
           children: [
-            { index: true, action: handlers.workspaceAction, element: <WorkspaceHomePage /> },
-            { path: "projects", action: handlers.workspaceAction, element: <ProjectsPage /> },
+            {
+              index: true,
+              action: handlers.workspaceAction,
+              lazy: async () => {
+                const { WorkspaceHomePage } = await import("../pages/home/WorkspaceHomePage");
+                return { Component: WorkspaceHomePage };
+              },
+            },
+            {
+              path: "projects",
+              action: handlers.workspaceAction,
+              lazy: async () => {
+                const { ProjectsPage } = await import("../pages/projects/ProjectsPage");
+                return { Component: ProjectsPage };
+              },
+            },
             {
               path: "projects/:projectId/canvases/:canvasId",
-              element: <LegacyCanvasRoute canvasDocumentRepository={services.canvasDocumentRepository} />,
+              lazy: async () => {
+                const { LegacyCanvasRoute } = await import("../pages/canvas/LegacyCanvasRoute");
+
+                function LegacyCanvasComponent() {
+                  return (
+                    <LegacyCanvasRoute
+                      canvasDocumentRepository={services.canvasDocumentRepository}
+                      entityRepository={services.entityRepository}
+                      mediaAssetRepository={services.mediaAssetRepository}
+                    />
+                  );
+                }
+
+                return { Component: LegacyCanvasComponent };
+              },
             },
             {
               path: "organization",
               loader: handlers.organizationLoader,
-              element: <OrganizationCenterPage />,
+              lazy: async () => {
+                const { OrganizationCenterPage } = await import("../pages/organization/OrganizationCenterPage");
+                return { Component: OrganizationCenterPage };
+              },
               children: [
-                { index: true, element: <OrganizationSectionRoute section="management" /> },
-                { path: "credits", element: <OrganizationSectionRoute section="credits" /> },
-                { path: "usage", element: <OrganizationSectionRoute section="usage" /> },
+                { index: true, lazy: lazyOrganizationSection("management") },
+                { path: "credits", lazy: lazyOrganizationSection("credits") },
+                { path: "usage", lazy: lazyOrganizationSection("usage") },
               ],
             },
           ],

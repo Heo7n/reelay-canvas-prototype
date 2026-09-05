@@ -7,7 +7,7 @@ import {
   type UsageCompositionItem,
   type UsageDimension,
   type UsageRecord,
-} from "./organization-usage-data";
+} from "../../features/usage";
 import styles from "./OrganizationUsageSection.module.css";
 
 interface UsageDetailDrawerProps {

@@ -3,13 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-const codecSource = await readFile(
-  new URL("../src/legacy-canvas/canvas-document-codec.js", import.meta.url),
-  "utf8",
-);
+const [codecSource, connectionsSource] = await Promise.all([
+  readFile(new URL("../src/legacy-canvas/canvas-document-codec.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/legacy-canvas/canvas-connections.js", import.meta.url), "utf8"),
+]);
 const context = vm.createContext({});
 new vm.Script(codecSource, { filename: "canvas-document-codec.js" }).runInContext(context);
+new vm.Script(connectionsSource, { filename: "canvas-connections.js" }).runInContext(context);
 const codec = context.REELAY_CANVAS_DOCUMENT_CODEC;
+const connections = context.REELAY_CANVAS_CONNECTIONS;
 
 const sortedKeys = (value) => Object.keys(value).sort();
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -25,7 +27,12 @@ test("the canvas document codec persists only explicit content fields and restor
       resolution: "2K",
       quality: "high",
       duration: "4s",
+      outputFormat: "mov",
       count: 2,
+      workflow: "reference-image",
+      omniReferenceTaskType: "auto",
+      audioEnabled: false,
+      promptOptimization: true,
       credits: 999,
     },
     canvases: [
@@ -46,22 +53,30 @@ test("the canvas document codec persists only explicit content fields and restor
             y: 20,
             z: 3,
             groupId: "group-1",
-            mode: "image",
-            model: "gpt-image-2",
+            mode: "video",
+            model: "seedance-2.0",
             aspect: "16:9",
             resolution: "2K",
             quality: "high",
             duration: "4s",
+            outputFormat: "mov",
             count: 2,
+            workflow: "reference-image",
+            omniReferenceTaskType: "edit",
+            audioEnabled: true,
+            promptOptimization: true,
+            promptOptimizing: true,
+            autoLinkEnabled: false,
+            assetValidationEnabled: true,
             prompt: "一艘穿越星云的飞船",
             preview: true,
             name: "星云飞船",
             generatedAsset: {
               id: "result-1",
-              type: "image",
-              name: "result.png",
+              type: "video",
+              name: "result.mp4",
               displayName: "生成结果",
-              url: "https://example.test/result.png",
+              url: "https://example.test/result.mp4",
               width: 2048,
               height: 1152,
               duration: 0,
@@ -72,7 +87,6 @@ test("the canvas document codec persists only explicit content fields and restor
               enhanced: true,
               unknownAssetField: "must-not-persist",
             },
-            lockedMode: "image",
             assets: [
               {
                 id: "reference-1",
@@ -96,10 +110,13 @@ test("the canvas document codec persists only explicit content fields and restor
             generating: true,
             generationTaskId: "task-1",
             expanded: false,
+            advancedSettingsExpanded: true,
+            promptPanelHeight: 291,
             promptLarge: true,
             promptInputHeight: 999,
             mediaMenuOpen: true,
             panel: "model",
+            panelAnchor: "model-panel",
             modelFilter: "video",
             unknownNodeField: "must-not-persist",
           },
@@ -173,8 +190,9 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(sortedKeys(canvas), ["connections", "groups", "id", "name", "nodes", "viewport", "zCounter"]);
   assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
   assert.deepEqual(sortedKeys(generator), [
-    "activeAssetId", "aspect", "assets", "count", "duration", "generatedAsset", "groupId", "id", "kind",
-    "lockedMode", "mode", "model", "name", "preview", "prompt", "quality", "resolution", "x", "y", "z",
+    "activeAssetId", "aspect", "assetValidationEnabled", "assets", "audioEnabled", "autoLinkEnabled", "count", "duration", "generatedAsset", "groupId", "id", "kind",
+    "mediaKind", "model", "name", "omniReferenceTaskType", "outputFormat", "preview", "prompt", "quality", "resolution",
+    "workflow", "x", "y", "z",
   ]);
   assert.deepEqual(sortedKeys(assetNode), ["activeAssetId", "assets", "id", "kind", "mode", "x", "y", "z"]);
   assert.deepEqual(sortedKeys(generatedAsset), [
@@ -191,14 +209,15 @@ test("the canvas document codec persists only explicit content fields and restor
   }]);
   assert.deepEqual(sortedKeys(group), ["height", "id", "name", "nodeIds", "width", "x", "y", "z"]);
   assert.deepEqual(sortedKeys(snapshot.lastPreset), [
-    "aspect", "count", "duration", "mode", "model", "quality", "resolution",
+    "aspect", "audioEnabled", "count", "duration", "mode", "model", "omniReferenceTaskType", "outputFormat", "quality",
+    "resolution", "workflow",
   ]);
   assert.equal(referenceAsset.url, "");
   assert.deepEqual(plain(group.nodeIds), ["generator-1"]);
 
   for (const forbiddenKey of [
-    "credits", "generating", "generationTaskId", "promptLarge", "promptInputHeight", "mediaMenuOpen",
-    "panel", "modelFilter", "layoutMenuOpen", "unknownRootField", "unknownCanvasField", "unknownNodeField",
+    "credits", "generating", "generationTaskId", "promptOptimization", "promptOptimizing", "advancedSettingsExpanded", "promptPanelHeight", "promptLarge", "promptInputHeight", "mediaMenuOpen",
+    "panel", "panelAnchor", "modelFilter", "layoutMenuOpen", "unknownRootField", "unknownCanvasField", "unknownNodeField",
     "unknownAssetField", "unknownConnectionField", "unknownGroupField", "undoStack", "mediaType",
   ]) {
     assert.equal(JSON.stringify(snapshot).includes(`\"${forbiddenKey}\"`), false, forbiddenKey);
@@ -207,7 +226,6 @@ test("the canvas document codec persists only explicit content fields and restor
   const restored = codec.restoreSnapshot(plain(snapshot), {
     minScale: 0.2,
     maxScale: 2,
-    promptInputHeight: 144,
   });
   const restoredCanvas = restored.canvases[0];
   const restoredGenerator = restoredCanvas.nodes[0];
@@ -219,16 +237,29 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(restoredCanvas.scale, 1.25);
   assert.deepEqual(plain(restoredCanvas.undoStack), []);
   assert.equal(restoredGenerator.prompt, "一艘穿越星云的飞船");
-  assert.equal(restoredGenerator.model, "gpt-image-2");
+  assert.equal(restoredGenerator.mode, "video");
+  assert.equal(Object.hasOwn(restoredGenerator, "mediaKind"), false);
+  assert.equal(Object.hasOwn(restoredGenerator, "lockedMode"), false);
+  assert.equal(restoredGenerator.model, "seedance-2.0");
+  assert.equal(restoredGenerator.workflow, "reference-image");
+  assert.equal(restoredGenerator.omniReferenceTaskType, "edit");
+  assert.equal(restoredGenerator.outputFormat, "mov");
+  assert.equal(restoredGenerator.audioEnabled, true);
+  assert.equal(restoredGenerator.promptOptimizing, false);
+  assert.equal(Object.hasOwn(restoredGenerator, "promptOptimization"), false);
+  assert.equal(restoredGenerator.autoLinkEnabled, false);
+  assert.equal(restoredGenerator.assetValidationEnabled, true);
   assert.equal(restoredGenerator.generatedAsset.id, "result-1");
   assert.equal(restoredGenerator.generating, false);
   assert.equal(restoredGenerator.credits, 0);
   assert.equal(restoredGenerator.expanded, false);
-  assert.equal(restoredGenerator.promptLarge, false);
-  assert.equal(restoredGenerator.promptInputHeight, 144);
+  assert.equal(restoredGenerator.advancedSettingsExpanded, false);
+  assert.equal(Object.hasOwn(restoredGenerator, "promptLarge"), false);
+  assert.equal(Object.hasOwn(restoredGenerator, "promptInputHeight"), false);
   assert.equal(restoredGenerator.mediaMenuOpen, false);
   assert.equal(restoredGenerator.panel, null);
-  assert.equal(restoredGenerator.modelFilter, "image");
+  assert.equal(Object.hasOwn(restoredGenerator, "panelAnchor"), false);
+  assert.equal(restoredGenerator.modelFilter, "video");
   assert.equal(Object.hasOwn(restoredGenerator, "generationTaskId"), false);
   assert.equal(restoredAssetNode.expanded, false);
   assert.equal(restoredAssetNode.panel, null);
@@ -240,6 +271,47 @@ test("the canvas document codec persists only explicit content fields and restor
     createdAt: "2026-08-11T08:00:00.000Z",
   }]);
   assert.deepEqual(plain(restoredCanvas.groups[0].nodeIds), ["generator-1"]);
+  assert.equal(restored.lastPreset.workflow, "reference-image");
+  assert.equal(restored.lastPreset.omniReferenceTaskType, "auto");
+  assert.equal(restored.lastPreset.outputFormat, "mov");
+  assert.equal(restored.lastPreset.audioEnabled, false);
+  assert.equal(Object.hasOwn(restored.lastPreset, "promptOptimization"), false);
+});
+
+test("the optional omni reference task type is bounded and ignores non-string values", () => {
+  const longTaskType = `<script>alert("task-type")</script>${"x".repeat(100)}`;
+  const state = {
+    activeCanvasId: "canvas-task-type",
+    lastPreset: { mode: "video", omniReferenceTaskType: longTaskType },
+    canvases: [{
+      id: "canvas-task-type",
+      name: "任务类型",
+      nodes: [{
+        id: "generator-task-type",
+        kind: "generator",
+        mode: "video",
+        omniReferenceTaskType: longTaskType,
+      }],
+      groups: [],
+      viewport: { tx: 0, ty: 0, scale: 1 },
+      zCounter: 1,
+    }],
+  };
+
+  const snapshot = codec.createSnapshot(state);
+  const expectedTaskType = longTaskType.slice(0, 80);
+  assert.equal(snapshot.canvases[0].nodes[0].omniReferenceTaskType, expectedTaskType);
+  assert.equal(snapshot.lastPreset.omniReferenceTaskType, expectedTaskType);
+
+  const restored = codec.restoreSnapshot(plain(snapshot));
+  assert.equal(restored.canvases[0].nodes[0].omniReferenceTaskType, expectedTaskType);
+  assert.equal(restored.lastPreset.omniReferenceTaskType, expectedTaskType);
+
+  state.canvases[0].nodes[0].omniReferenceTaskType = { hostile: true };
+  state.lastPreset.omniReferenceTaskType = ["edit"];
+  const sanitized = codec.createSnapshot(state);
+  assert.equal(Object.hasOwn(sanitized.canvases[0].nodes[0], "omniReferenceTaskType"), false);
+  assert.equal(Object.hasOwn(sanitized.lastPreset, "omniReferenceTaskType"), false);
 });
 
 test("the codec rejects unknown versions and normalizes hostile or invalid content", () => {
@@ -322,6 +394,24 @@ test("the codec rejects unknown versions and normalizes hostile or invalid conte
   assert.equal(canvas.groups[0].z, 1);
 });
 
+test("persisted media URLs reject attribute injection and active-content schemes", () => {
+  const rejected = [
+    "javascript:alert(1)",
+    "data:image/svg+xml,<svg/>",
+    "blob:https://example.test/id",
+    "//evil.example/path",
+    'https://cdn.example/x" onerror="alert(1)',
+    "https://cdn.example/x' onclick='alert(1)",
+    "https://cdn.example/x\nmalformed",
+    "https://cdn.example/<svg>",
+  ];
+  for (const url of rejected) assert.equal(codec.sanitizeMediaUrl(url), "", url);
+
+  for (const url of ["https://cdn.example/a.png", "http://localhost:5173/a.mp4", "/assets/a.png", "./a.png", "../a.png"]) {
+    assert.equal(codec.sanitizeMediaUrl(url), url);
+  }
+});
+
 test("the codec restores legacy version-one canvases without a connections field", () => {
   const restored = codec.restoreSnapshot({
     kind: "reelay-legacy-canvas",
@@ -338,4 +428,68 @@ test("the codec restores legacy version-one canvases without a connections field
   });
 
   assert.deepEqual(plain(restored.canvases[0].connections), []);
+});
+
+test("legacy generator type aliases migrate once to mediaKind without entering runtime state", () => {
+  const legacyContent = {
+    kind: "reelay-legacy-canvas",
+    version: 1,
+    activeCanvasId: "legacy-canvas",
+    canvases: [{
+      id: "legacy-canvas",
+      name: "Legacy canvas",
+      nodes: [
+        {
+          id: "legacy-generator",
+          kind: "generator",
+          x: 0,
+          y: 0,
+          z: 1,
+          mode: "image",
+          lockedMode: "video",
+          model: "video-a",
+          generatedAsset: {
+            id: "legacy-result",
+            type: "video",
+            url: "https://example.test/result.mp4",
+          },
+        },
+        {
+          id: "target-generator",
+          kind: "generator",
+          x: 400,
+          y: 0,
+          z: 2,
+          mode: "image",
+          model: "image-a",
+        },
+      ],
+      connections: [{
+        id: "legacy-connection",
+        sourceNodeId: "legacy-generator",
+        targetNodeId: "target-generator",
+      }],
+      groups: [],
+      viewport: { tx: 0, ty: 0, scale: 1 },
+      zCounter: 1,
+    }],
+  };
+
+  const restored = codec.restoreSnapshot(legacyContent);
+  const runtimeNode = restored.canvases[0].nodes[0];
+  assert.equal(runtimeNode.mode, "video");
+  assert.equal(runtimeNode.generatedAsset.type, "video");
+  assert.equal(Object.hasOwn(runtimeNode, "lockedMode"), false);
+  assert.equal(Object.hasOwn(runtimeNode, "mediaKind"), false);
+  const runtimeConnections = connections.normalizeConnections(
+    restored.canvases[0].connections,
+    restored.canvases[0].nodes,
+  );
+  assert.equal(runtimeConnections[0].mediaType, "video");
+
+  const migrated = codec.createSnapshot(restored);
+  const persistedNode = migrated.canvases[0].nodes[0];
+  assert.equal(persistedNode.mediaKind, "video");
+  assert.equal(Object.hasOwn(persistedNode, "mode"), false);
+  assert.equal(Object.hasOwn(persistedNode, "lockedMode"), false);
 });
