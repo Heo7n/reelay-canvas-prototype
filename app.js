@@ -5882,8 +5882,10 @@ function completePromptOptimization(taskId) {
     if (optimizedPrompt && optimizedPrompt !== node.prompt) {
       node.prompt = optimizedPrompt;
       pushCanvasUndoAction(canvas, {
-        type: "node-update",
-        node: cloneUndoNodeState(task.beforeNode),
+        type: "prompt-update",
+        nodeId: node.id,
+        before: task.sourcePrompt,
+        after: optimizedPrompt,
       });
     }
   }
@@ -5900,8 +5902,8 @@ function startPromptOptimization(node) {
     || node.generating
     || node.promptOptimizing
   ) return false;
-  const sourcePrompt = node.prompt.trim();
-  if (!sourcePrompt) return false;
+  const sourcePrompt = node.prompt;
+  if (!sourcePrompt.trim()) return false;
   const canvas = getActiveCanvas();
   if (!canvas || !canvas.nodes.includes(node)) return false;
 
@@ -5909,19 +5911,14 @@ function startPromptOptimization(node) {
     .find((task) => task.canvasId === canvas.id && task.nodeId === node.id);
   if (staleTask) cancelPromptOptimizationTask(staleTask.id, false);
 
-  const beforeNode = cloneUndoNodeState(node);
-  beforeNode.panel = null;
-  beforeNode.promptOptimizing = false;
   const task = {
     id: crypto.randomUUID(),
     projectId: state.projectId,
     canvasId: canvas.id,
     nodeId: node.id,
     sourcePrompt,
-    beforeNode,
     timeoutId: 0,
   };
-  node.prompt = sourcePrompt;
   node.promptOptimizing = true;
   node.panel = null;
   state.promptOptimizationTasks.set(task.id, task);
@@ -5933,7 +5930,10 @@ function startPromptOptimization(node) {
 function commitGenerationUndoBoundary(canvas, nodeId) {
   if (!canvas || !nodeId) return;
   const nextUndoStack = (canvas.undoStack || []).filter(
-    (action) => !(action.type === "node-update" && action.node?.id === nodeId),
+    (action) => !(
+      (action.type === "node-update" && action.node?.id === nodeId)
+      || (action.type === "prompt-update" && action.nodeId === nodeId)
+    ),
   );
   canvas.undoStack = nextUndoStack;
 }
@@ -7407,21 +7407,28 @@ function deleteSelectedNodes(confirmed = false) {
     .map((node, index) => ({ node, index }))
     .filter((item) => state.selectedIds.has(item.node.id))
     .map((item) => ({ index: item.index, node: cloneNodeState(item.node) }));
-  const deletedGroups = state.groups
-    .filter((group) => group.nodeIds.some((id) => state.selectedIds.has(id)))
-    .map((group) => cloneGroupState(group));
+  const affectedGroups = state.groups
+    .map((group, index) => ({ group, index }))
+    .filter(({ group }) => group.nodeIds.some((id) => selectedNodeIds.has(id)))
+    .map(({ group, index }) => ({ index, group: cloneGroupState(group) }));
   const deletedConnections = state.connections
-    .filter((connection) => selectedNodeIds.has(connection.sourceNodeId) || selectedNodeIds.has(connection.targetNodeId))
-    .map(cloneConnectionState);
+    .map((connection, index) => ({ connection, index }))
+    .filter(({ connection }) => selectedNodeIds.has(connection.sourceNodeId) || selectedNodeIds.has(connection.targetNodeId))
+    .map(({ connection, index }) => ({ index, connection: cloneConnectionState(connection) }));
 
   if (!deleted.length) return;
-  pushUndoAction({ type: "delete", deleted, deletedGroups, deletedConnections });
+  pushUndoAction({ type: "delete", deleted, affectedGroups, deletedConnections });
   state.nodes = state.nodes.filter((node) => !state.selectedIds.has(node.id));
   state.connections = state.connections.filter(
     (connection) => !selectedNodeIds.has(connection.sourceNodeId) && !selectedNodeIds.has(connection.targetNodeId),
   );
-  clearRecentConnectionFeedback(deletedConnections.map((connection) => connection.id));
-  state.groups = state.groups.filter((group) => !deletedGroups.some((item) => item.id === group.id));
+  clearRecentConnectionFeedback(deletedConnections.map(({ connection }) => connection.id));
+  const affectedGroupIds = new Set(affectedGroups.map(({ group }) => group.id));
+  state.groups = state.groups.flatMap((group) => {
+    if (!affectedGroupIds.has(group.id)) return [group];
+    const nodeIds = group.nodeIds.filter((id) => !selectedNodeIds.has(id));
+    return nodeIds.length ? [{ ...group, nodeIds }] : [];
+  });
   clearSelection();
   state.activeGroupId = null;
   render();
@@ -7465,8 +7472,9 @@ function undoLastAction() {
   const action = state.undoStack.pop();
   if (!action) return;
 
-  if (action.type === "node-update") {
-    const liveNode = state.nodes.find((node) => node.id === action.node.id);
+  if (action.type === "node-update" || action.type === "prompt-update") {
+    const nodeId = action.type === "prompt-update" ? action.nodeId : action.node.id;
+    const liveNode = state.nodes.find((node) => node.id === nodeId);
     if (liveNode?.generating) {
       state.undoStack.push(action);
       showActionToast("生成中的节点暂不能撤销参数");
@@ -7475,6 +7483,10 @@ function undoLastAction() {
     if (liveNode?.promptOptimizing) {
       state.undoStack.push(action);
       showActionToast("提示词正在优化，完成后可撤销");
+      return;
+    }
+    if (action.type === "prompt-update" && liveNode && liveNode.prompt !== action.after) {
+      showActionToast("提示词已变化，已跳过这次优化撤销");
       return;
     }
   }
@@ -7506,11 +7518,14 @@ function undoLastAction() {
     for (const item of action.deleted.slice().sort((a, b) => a.index - b.index)) {
       state.nodes.splice(Math.min(item.index, state.nodes.length), 0, cloneUndoNodeState(item.node));
     }
-    const restoredGroups = (action.deletedGroups || []).map((group) => cloneGroupState(group));
-    const restoredGroupIds = new Set(restoredGroups.map((group) => group.id));
+    const restoredGroupIds = new Set(action.affectedGroups.map(({ group }) => group.id));
     state.groups = state.groups.filter((group) => !restoredGroupIds.has(group.id));
-    state.groups.push(...restoredGroups);
-    state.connections.push(...(action.deletedConnections || []).map(cloneConnectionState));
+    for (const { group, index } of action.affectedGroups.slice().sort((a, b) => a.index - b.index)) {
+      state.groups.splice(Math.min(index, state.groups.length), 0, cloneGroupState(group));
+    }
+    for (const { connection, index } of action.deletedConnections.slice().sort((a, b) => a.index - b.index)) {
+      state.connections.splice(Math.min(index, state.connections.length), 0, cloneConnectionState(connection));
+    }
     state.connections = canvasConnections.normalizeConnections(state.connections, state.nodes);
     setSelection(restored.map((node) => node.id), restored[0]?.id || null);
   }
@@ -7541,6 +7556,14 @@ function undoLastAction() {
     if (index !== -1) {
       state.nodes[index] = cloneUndoNodeState(action.node);
       setSelection([action.node.id], action.node.id);
+    }
+  }
+
+  if (action.type === "prompt-update") {
+    const node = state.nodes.find((item) => item.id === action.nodeId);
+    if (node) {
+      node.prompt = action.before;
+      setSelection([node.id], node.id);
     }
   }
 

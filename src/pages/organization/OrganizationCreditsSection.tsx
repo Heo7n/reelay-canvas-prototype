@@ -211,13 +211,13 @@ export function OrganizationCreditsSection({
           balance={adjustmentState.balance}
           availablePool={ORGANIZATION_CREDIT_SUMMARY.unallocated}
           onClose={() => setAdjustmentState(null)}
-          onGrant={(member, amount) => {
+          onGrant={() => {
             setAdjustmentState(null);
-            onNotice(`已为 ${member.displayName} 提交 ${amount.toLocaleString("zh-CN")} 积分发放。`);
+            onNotice("积分发放尚未开放，本次未执行。");
           }}
-          onReclaim={(member, amount) => {
+          onReclaim={() => {
             setAdjustmentState(null);
-            onNotice(`已为 ${member.displayName} 提交 ${amount.toLocaleString("zh-CN")} 积分回收。`);
+            onNotice("积分回收尚未开放，本次未执行。");
           }}
         />
       ) : null}
