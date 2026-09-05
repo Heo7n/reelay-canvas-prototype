@@ -328,23 +328,18 @@ const canvasPersistenceCoordinatorFactory = window.REELAY_CANVAS_PERSISTENCE_COO
 if (!canvasPersistenceCoordinatorFactory) throw new Error("Canvas persistence coordinator is unavailable.");
 const canvasConnections = window.REELAY_CANVAS_CONNECTIONS;
 if (!canvasConnections) throw new Error("Canvas connection helpers are unavailable.");
+const canvasContentCommands = window.REELAY_CANVAS_CONTENT_COMMANDS;
+if (!canvasContentCommands) throw new Error("Canvas content commands are unavailable.");
 const canvasCommandExecutorFactory = window.REELAY_CANVAS_COMMAND_EXECUTOR;
 if (!canvasCommandExecutorFactory) throw new Error("Canvas command executor is unavailable.");
 const canvasCommandExecutor = canvasCommandExecutorFactory.createCanvasCommandExecutor({
   getCanvas: (canvasId) => canvasRuntimeStore.getCanvas(canvasId),
+  projectRecord: canvasContentCommands.projectRecord,
   normalize(collection, records, context) {
     if (collection !== "connections") return records;
     return canvasConnections.normalizeConnections(records, context.canvas.nodes);
   },
-  validateTransition({ command }) {
-    const unsupported = command.changes.find((change) => change.collection !== "connections");
-    return unsupported
-      ? {
-        code: "unsupported-content-command",
-        message: `Canvas command collection ${unsupported.collection} has no field-level transition contract yet.`,
-      }
-      : null;
-  },
+  validateTransition: canvasContentCommands.validateTransition,
   undoLimit: 50,
   onCommit: () => scheduleCanvasDocumentSave(),
 });
@@ -1028,6 +1023,7 @@ function hydrateCanvasDocumentSnapshot(content) {
   canvasNodeTasks.cancelScope({}, "document-replaced");
   canvasRuntimeStore.replaceCanvases(restored.canvases, restored.activeCanvasId);
   state.canvases.forEach((canvas) => {
+    canvasContentCommands.normalizeGroupMembership(canvas.nodes, canvas.groups);
     canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
     canvas.nodes.forEach((node) => {
       if (node.kind !== "generator") return;
@@ -2247,7 +2243,7 @@ function toNodeTransitionGeometry(presentation) {
   };
 }
 
-function applyNodeAspect(node, aspect) {
+function applyNodeAspect(node, aspect, { animate = true } = {}) {
   if (node.aspect === aspect) return false;
   const from = getNodePresentation(node);
   node.aspect = aspect;
@@ -2262,7 +2258,7 @@ function applyNodeAspect(node, aspect) {
 
   node.x = nextPosition.x;
   node.y = nextPosition.y;
-  canvasNodeLayoutTransition.start({
+  if (animate) canvasNodeLayoutTransition.start({
     id: getNodeLayoutTransitionId(node),
     from: toNodeTransitionGeometry(from),
     to: toNodeTransitionGeometry({ x: node.x, y: node.y, layout: nextLayout }),
@@ -2371,23 +2367,25 @@ function getDefaultGroupBounds(nodes) {
 
 function normalizeGroupFrame(group) {
   if (!group) return null;
+  let { x, y, width, height } = group;
   if (
-    !Number.isFinite(group.x) ||
-    !Number.isFinite(group.y) ||
-    !Number.isFinite(group.width) ||
-    !Number.isFinite(group.height)
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
   ) {
     const fallback = getDefaultGroupBounds(getGroupNodes(group));
     if (!fallback) return null;
-    group.x = fallback.left;
-    group.y = fallback.top;
-    group.width = fallback.width;
-    group.height = fallback.height;
+    x = fallback.left;
+    y = fallback.top;
+    width = fallback.width;
+    height = fallback.height;
   }
-
-  group.width = Math.max(groupFrameRules.minWidth, group.width);
-  group.height = Math.max(groupFrameRules.minHeight, group.height);
-  return group;
+  return {
+    x, y,
+    width: Math.max(groupFrameRules.minWidth, width),
+    height: Math.max(groupFrameRules.minHeight, height),
+  };
 }
 
 function getGroupBounds(group) {
@@ -2401,26 +2399,6 @@ function getGroupBounds(group) {
     width: normalized.width,
     height: normalized.height,
   };
-}
-
-function syncGroups() {
-  state.groups = state.groups
-    .map((group) => ({
-      ...group,
-      nodeIds: group.nodeIds.filter((id) => {
-        const node = state.nodes.find((item) => item.id === id);
-        return node && node.groupId === group.id;
-      }),
-    }));
-  const validGroupIds = new Set(state.groups.map((group) => group.id));
-  for (const node of state.nodes) {
-    if (node.groupId && !validGroupIds.has(node.groupId)) {
-      delete node.groupId;
-    }
-  }
-  if (state.activeGroupId && !validGroupIds.has(state.activeGroupId)) {
-    state.activeGroupId = null;
-  }
 }
 
 function setActiveGroup(groupId) {
@@ -2614,9 +2592,9 @@ function cloneNode(source) {
     expanded: source.kind === "generator" ? source.expanded : false,
     panel: null,
     modelFilter: source.kind === "generator" ? source.mode : undefined,
-    groupId: undefined,
     z: nextZ(),
   };
+  delete clone.groupId;
   delete clone.generationTaskId;
   return clone;
 }
@@ -3873,12 +3851,12 @@ function addSelectedEntitiesToGenerator({ scope, nodeId, selections }) {
       : "所选主体没有可添加的素材");
     return;
   }
-  const before = cloneNodeState(node);
   const additions = plan.entries.map((entry) => cloneAsset({
     ...entry.media,
     librarySourceId: entry.sourceMediaId || entry.mediaId,
   }, "library"));
-  pushUndoAction({ type: "node-update", node: before });
+  pushUndoAction({ type: "node-assets-add", nodeId: node.id,
+    addedAssetIds: additions.map((asset) => asset.id), previousActiveAssetId: node.activeAssetId });
   node.assets.push(...additions);
   node.activeAssetId = additions[0].id;
   node.expanded = true;
@@ -4560,7 +4538,7 @@ function isCanvasDropTarget(target) {
 
 function render() {
   canvasEntityUse.refresh();
-  syncGroups();
+  if (state.activeGroupId && !getGroupById(state.activeGroupId)) state.activeGroupId = null;
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
   shell.classList.toggle("group-editing", Boolean(state.activeGroupId));
@@ -5365,20 +5343,19 @@ function selectElementText(element) {
 
 function renameMediaNode(node, value) {
   if (!requireCanvasMutation()) return;
-  const before = cloneNodeState(node);
+  if (!getActiveCanvas()?.nodes.includes(node) || node.generating) return;
   const cleaned = value.trim().replace(/\s+/g, " ");
   if (node.kind === "asset") {
     const asset = getActiveAsset(node);
     if (asset) {
-      asset.displayName = cleaned || getAssetDisplayName(asset);
+      const nextName = cleaned || getAssetDisplayName(asset);
+      if (nextName === asset.displayName) return;
+      pushUndoAction({ type: "asset-name-update", nodeId: node.id, assetId: asset.id,
+        before: asset.displayName, after: nextName });
+      asset.displayName = nextName;
     }
   } else if (node.preview) {
-    node.name = cleaned || defaultGeneratedName(node);
-  }
-
-  if (JSON.stringify(before) !== JSON.stringify(node)) {
-    before.panel = null;
-    pushUndoAction({ type: "node-update", node: before });
+    commitNodeFields(node, { id: node.id, name: cleaned || defaultGeneratedName(node) }, ["name"], "node-name");
   }
 }
 
@@ -5613,6 +5590,7 @@ function applyCanvasNodeTaskStart(task, node) {
     node.preview = false;
     node.generatedAsset = null;
     node.expanded = false;
+    canvasCommandExecutor.discardFieldHistory(task.canvasId, "nodes", node.id, ["name"]);
     node.name = "";
   } else {
     node.promptOptimizing = true;
@@ -5654,6 +5632,38 @@ function pushCanvasUndoAction(canvas, action) {
   undoStack.push(action);
   if (undoStack.length > 50) undoStack.shift();
   canvas.undoStack = undoStack;
+}
+
+function executeCanvasContentCommand(type, changes, { recordUndo = true } = {}) {
+  if (!requireCanvasMutation()) return { ok: false };
+  const canvas = getActiveCanvas();
+  if (!canvas) return { ok: false };
+  const effectiveChanges = changes.filter(Boolean);
+  if (!effectiveChanges.length) return { ok: true, changed: false };
+  const result = canvasCommandExecutor.execute({
+    id: crypto.randomUUID(), type, canvasId: canvas.id, changes: effectiveChanges,
+  }, { recordUndo });
+  if (!result.ok) {
+    console.error("Canvas content command was rejected.", result.error);
+    showActionToast("画布内容已变化，本次操作未执行");
+  } else if (result.effectError) {
+    console.error("Canvas content committed but its save effect failed.", result.effectError);
+  }
+  return result;
+}
+
+function commitNodeFields(node, next, fields, type) {
+  if (!getActiveCanvas()?.nodes.includes(node)) return { ok: false };
+  return executeCanvasContentCommand(type, [
+    canvasContentCommands.buildFieldChange("nodes", node, next, fields),
+  ]);
+}
+
+function commitCanvasGroups(nextGroups, { type = "group-membership", recordUndo = true, positions = [] } = {}) {
+  const changes = canvasContentCommands.buildGroupChanges(
+    { nodes: state.nodes, groups: state.groups }, nextGroups, { positions },
+  );
+  return executeCanvasContentCommand(type, changes, { recordUndo });
 }
 
 function completePromptOptimization(task, node) {
@@ -5704,8 +5714,10 @@ function commitGenerationUndoBoundary(canvas, nodeId) {
   if (!canvas || !nodeId) return;
   const nextUndoStack = (canvas.undoStack || []).filter(
     (action) => !(
-      (action.type === "node-update" && action.node?.id === nodeId)
-      || (action.type === "prompt-update" && action.nodeId === nodeId)
+      (action.type === "prompt-update" && action.nodeId === nodeId)
+      || (action.type === "node-assets-add" && action.nodeId === nodeId)
+      || (action.kind === "canvas-command" && ["node-parameters", "node-name"].includes(action.command.type)
+        && action.command.changes.some((change) => change.collection === "nodes" && change.id === nodeId))
     ),
   );
   canvas.undoStack = nextUndoStack;
@@ -6116,10 +6128,103 @@ const generationLockedActions = new Set([
   "resolution",
 ]);
 
-function handleAction(node, action, value) {
-  if (action !== "aspect" && action !== "omni-reference-task-type") {
-    canvasNodeLayoutTransition.finishAll();
+const generatorParameterActions = new Set([
+  "model", "workflow", "omni-reference-task-type", "audio", "output-format",
+  "auto-link", "asset-validation", "aspect", "duration", "quality", "resolution",
+]);
+const generatorParameterFields = [
+  "name", "model", "workflow", "omniReferenceTaskType", "audioEnabled", "outputFormat",
+  "autoLinkEnabled", "assetValidationEnabled", "aspect", "duration", "quality", "resolution", "count", "x", "y",
+];
+
+function handleGeneratorParameterAction(node, action, value) {
+  if (!requireCanvasMutation() || !getActiveCanvas()?.nodes.includes(node)) return;
+  if (node.generating) return;
+  // Compute content first. UI, presets and animation run only after a successful commit.
+  const draft = { ...node };
+  const from = getNodePresentation(node);
+  let aspectChanged = false;
+  let nextPanel = node.panel;
+  let taskTypeTransition = null;
+  switch (action) {
+    case "model": {
+      const selected = models.find((item) => item.id === value);
+      if (!selected) return;
+      if (!canUseModelForNode(node, selected)) {
+        const mode = getNodeGenerationMode(node);
+        showActionToast(`当前为${mode === "video" ? "视频" : "图片"}节点，请新建${selected.type === "video" ? "视频" : "图片"}节点使用该模型`);
+        return;
+      }
+      const previousDefaultName = defaultGeneratedName(node);
+      draft.model = selected.id;
+      draft.duration = selected.defaults?.duration || "";
+      normalizeNodeParameters(draft);
+      if (draft.preview && (!draft.name || draft.name === previousDefaultName)) draft.name = defaultGeneratedName(draft);
+      nextPanel = null;
+      break;
+    }
+    case "workflow":
+      if (!getWorkflowDefinitions(node).some((workflow) => workflow.id === value)) return;
+      draft.workflow = value;
+      nextPanel = "params";
+      break;
+    case "omni-reference-task-type": {
+      const capability = getOmniReferenceTaskTypeCapability(node);
+      if (!capability?.uiValues?.includes(value) || node.omniReferenceTaskType === value) return;
+      taskTypeTransition = captureTaskTypeParameterTransition(node, value);
+      draft.omniReferenceTaskType = value;
+      const constrainedAspect = capability.constraints?.[value]?.aspect;
+      if (constrainedAspect && draft.aspect !== constrainedAspect) {
+        aspectChanged = applyNodeAspect(draft, constrainedAspect, { animate: false });
+      } else normalizeNodeParameters(draft);
+      nextPanel = "params";
+      break;
+    }
+    case "audio":
+      if (getNodeGenerationMode(node) !== "video") return;
+      draft.audioEnabled = value !== "off";
+      break;
+    case "output-format":
+      if (!getCapabilityValues(node, "outputFormats").includes(value)) return;
+      draft.outputFormat = value;
+      break;
+    case "auto-link":
+      draft.autoLinkEnabled = !node.autoLinkEnabled;
+      break;
+    case "asset-validation":
+      if (getNodeGenerationMode(node) !== "video") return;
+      draft.assetValidationEnabled = !node.assetValidationEnabled;
+      break;
+    case "aspect":
+      if (!getCapabilityValues(node, "aspects").includes(value)) return;
+      aspectChanged = applyNodeAspect(draft, value, { animate: false });
+      break;
+    case "duration":
+    case "quality":
+    case "resolution":
+      draft[action] = value;
+      normalizeNodeParameters(draft);
+      break;
+    default:
+      return;
   }
+  const result = commitNodeFields(node, draft, generatorParameterFields, "node-parameters");
+  if (!result.ok) return;
+  node.panel = nextPanel;
+  if (action === "model") node.modelFilter = getNodeGenerationMode(node);
+  if (!["auto-link", "asset-validation"].includes(action)) rememberPreset(node);
+  if (aspectChanged) {
+    canvasNodeLayoutTransition.start({
+      id: getNodeLayoutTransitionId(node), from: toNodeTransitionGeometry(from),
+      to: toNodeTransitionGeometry({ x: node.x, y: node.y, layout: getNodeLayout(node) }),
+    });
+  }
+  render();
+  if (taskTypeTransition) animateTaskTypeParameterTransition(node, taskTypeTransition);
+}
+
+function handleAction(node, action, value) {
+  if (action !== "aspect" && action !== "omni-reference-task-type") canvasNodeLayoutTransition.finishAll();
   if (action === "focus-linked-source") {
     const connection = state.connections.find((item) => item.id === value);
     const source = connection && state.nodes.find((item) => item.id === connection.sourceNodeId);
@@ -6136,40 +6241,12 @@ function handleAction(node, action, value) {
     return;
   }
   if (node.kind !== "generator") return;
-  const persistentActions = new Set([
-    "material",
-    "remove-material",
-    "generate",
-    "model",
-    "workflow",
-    "omni-reference-task-type",
-    "audio",
-    "output-format",
-    "auto-link",
-    "asset-validation",
-    "aspect",
-    "duration",
-    "quality",
-    "resolution",
-  ]);
-  if (persistentActions.has(action) && !requireCanvasMutation()) return;
+  if (generatorParameterActions.has(action)) {
+    handleGeneratorParameterAction(node, action, value);
+    return;
+  }
+  if (["material", "remove-material", "generate"].includes(action) && !requireCanvasMutation()) return;
   if (node.generating && generationLockedActions.has(action)) return;
-  const undoableActions = new Set([
-    "model",
-    "workflow",
-    "omni-reference-task-type",
-    "audio",
-    "output-format",
-    "auto-link",
-    "asset-validation",
-    "aspect",
-    "duration",
-    "quality",
-    "resolution",
-  ]);
-  const before = undoableActions.has(action) ? cloneNodeState(node) : null;
-  let taskTypeTransition = null;
-
   switch (action) {
     case "entity-picker":
       if (!canNodeUseEntityReferences(node)) return;
@@ -6201,9 +6278,7 @@ function handleAction(node, action, value) {
       return;
     case "remove-material":
       node.assets = node.assets.filter((asset) => asset.id !== value);
-      if (node.activeAssetId === value) {
-        node.activeAssetId = node.assets[0]?.id || null;
-      }
+      if (node.activeAssetId === value) node.activeAssetId = node.assets[0]?.id || null;
       node.panel = null;
       break;
     case "focus-asset":
@@ -6231,89 +6306,14 @@ function handleAction(node, action, value) {
       if (!node.prompt.trim() || node.generating) return;
       startSimulatedGeneration(node);
       break;
-    case "model": {
-      const selected = models.find((item) => item.id === value);
-      if (!selected) return;
-      if (!canUseModelForNode(node, selected)) {
-        const mode = getNodeGenerationMode(node);
-        showActionToast(`当前为${mode === "video" ? "视频" : "图片"}节点，请新建${selected.type === "video" ? "视频" : "图片"}节点使用该模型`);
-        return;
-      }
-      const previousDefaultName = defaultGeneratedName(node);
-      node.model = selected.id;
-      node.duration = selected.defaults?.duration || "";
-      normalizeNodeParameters(node);
-      if (node.preview && (!node.name || node.name === previousDefaultName)) {
-        node.name = defaultGeneratedName(node);
-      }
-      node.modelFilter = getNodeGenerationMode(node);
-      node.panel = null;
-      rememberPreset(node);
-      break;
-    }
-    case "workflow":
-      if (!getWorkflowDefinitions(node).some((workflow) => workflow.id === value)) return;
-      node.workflow = value;
-      node.panel = "params";
-      rememberPreset(node);
-      break;
-    case "omni-reference-task-type": {
-      const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
-      if (!taskTypeCapability?.uiValues?.includes(value)) return;
-      if (node.omniReferenceTaskType === value) return;
-      taskTypeTransition = captureTaskTypeParameterTransition(node, value);
-      node.omniReferenceTaskType = value;
-      const constrainedAspect = taskTypeCapability.constraints?.[value]?.aspect;
-      if (constrainedAspect && node.aspect !== constrainedAspect) {
-        applyNodeAspect(node, constrainedAspect);
-      } else {
-        normalizeNodeParameters(node);
-      }
-      node.panel = "params";
-      rememberPreset(node);
-      break;
-    }
-    case "audio":
-      if (getNodeGenerationMode(node) !== "video") return;
-      node.audioEnabled = value !== "off";
-      rememberPreset(node);
-      break;
-    case "output-format":
-      if (!getCapabilityValues(node, "outputFormats").includes(value)) return;
-      node.outputFormat = value;
-      rememberPreset(node);
-      break;
     case "prompt-optimization":
       if (getNodeGenerationMode(node) !== "video") return;
       startPromptOptimization(node);
       return;
-    case "auto-link":
-      node.autoLinkEnabled = !node.autoLinkEnabled;
-      break;
-    case "asset-validation":
-      if (getNodeGenerationMode(node) !== "video") return;
-      node.assetValidationEnabled = !node.assetValidationEnabled;
-      break;
-    case "aspect":
-      applyNodeAspect(node, value);
-      rememberPreset(node);
-      break;
-    case "duration":
-    case "quality":
-    case "resolution":
-      node[action] = value;
-      normalizeNodeParameters(node);
-      rememberPreset(node);
-      break;
     default:
       return;
   }
-  if (before && JSON.stringify(before) !== JSON.stringify(node)) {
-    before.panel = null;
-    pushUndoAction({ type: "node-update", node: before });
-  }
   render();
-  if (taskTypeTransition) animateTaskTypeParameterTransition(node, taskTypeTransition);
 }
 
 function closeConnectionCreateMenu() {
@@ -7179,20 +7179,12 @@ function deleteSelectedNodes(confirmed = false) {
   render();
 }
 
-function restoreGroupSnapshot(groups) {
-  state.groups = (groups || []).map((group) => cloneGroupState(group));
-  const membership = new Map();
-  state.groups.forEach((group) => {
-    group.nodeIds.forEach((nodeId) => membership.set(nodeId, group.id));
-  });
-  state.nodes.forEach((node) => {
-    const groupId = membership.get(node.id);
-    if (groupId) {
-      node.groupId = groupId;
-    } else {
-      delete node.groupId;
-    }
-  });
+function restoreGroupSnapshot(groups, positions = []) {
+  const result = commitCanvasGroups(groups || [], { type: "restore-group-state", recordUndo: false, positions });
+  if (result.ok) {
+    state.groups.forEach((group) => canvasCommandExecutor.adoptRestoredRecord(state.activeCanvasId, "groups", group));
+  }
+  return result.ok;
 }
 
 function undoLastAction() {
@@ -7200,6 +7192,14 @@ function undoLastAction() {
   canvasNodeLayoutTransition.finishAll();
   const pendingAction = state.undoStack[state.undoStack.length - 1];
   if (pendingAction?.kind === "canvas-command") {
+    const lockedNode = pendingAction.command.changes.find((change) =>
+      change.collection === "nodes" && change.kind === "fields"
+      && Object.keys(change.after.fields).some((field) => !["x", "y", "z", "groupId"].includes(field))
+      && state.nodes.some((node) => node.id === change.id && (node.generating || node.promptOptimizing)));
+    if (lockedNode) {
+      showActionToast("节点任务进行中，完成后可撤销参数");
+      return;
+    }
     const result = canvasCommandExecutor.undoLast(state.activeCanvasId);
     if (!result.ok) {
       console.error("Canvas command undo was rejected.", result.error);
@@ -7217,9 +7217,8 @@ function undoLastAction() {
   const action = state.undoStack.pop();
   if (!action) return;
 
-  if (action.type === "node-update" || action.type === "prompt-update") {
-    const nodeId = action.type === "prompt-update" ? action.nodeId : action.node.id;
-    const liveNode = state.nodes.find((node) => node.id === nodeId);
+  if (["prompt-update", "node-assets-add", "asset-name-update"].includes(action.type)) {
+    const liveNode = state.nodes.find((node) => node.id === action.nodeId);
     if (liveNode?.generating) {
       state.undoStack.push(action);
       showActionToast("生成中的节点暂不能撤销参数");
@@ -7247,9 +7246,10 @@ function undoLastAction() {
       state.connections = state.connections.filter(
         (connection) => !createdNodeIds.has(connection.sourceNodeId) && !createdNodeIds.has(connection.targetNodeId),
       );
-      state.groups = state.groups
-        .map((group) => ({ ...group, nodeIds: group.nodeIds.filter((nodeId) => !createdNodeIds.has(nodeId)) }))
-        .filter((group) => group.nodeIds.length);
+      state.groups.forEach((group) => {
+        const remaining = group.nodeIds.filter((id) => !createdNodeIds.has(id));
+        if (remaining.length !== group.nodeIds.length) group.nodeIds = remaining;
+      });
       clearRecentConnectionFeedback(removedConnectionIds);
       clearSelection();
       state.activeGroupId = null;
@@ -7262,12 +7262,16 @@ function undoLastAction() {
       .sort((a, b) => a.index - b.index)
       .map((item) => cloneUndoNodeState(item.node));
     for (const item of action.deleted.slice().sort((a, b) => a.index - b.index)) {
-      state.nodes.splice(Math.min(item.index, state.nodes.length), 0, cloneUndoNodeState(item.node));
+      const restoredNode = cloneUndoNodeState(item.node);
+      state.nodes.splice(Math.min(item.index, state.nodes.length), 0, restoredNode);
+      canvasCommandExecutor.adoptRestoredRecord(state.activeCanvasId, "nodes", restoredNode);
     }
     const restoredGroupIds = new Set(action.affectedGroups.map(({ group }) => group.id));
     state.groups = state.groups.filter((group) => !restoredGroupIds.has(group.id));
     for (const { group, index } of action.affectedGroups.slice().sort((a, b) => a.index - b.index)) {
-      state.groups.splice(Math.min(index, state.groups.length), 0, cloneGroupState(group));
+      const restoredGroup = cloneGroupState(group);
+      state.groups.splice(Math.min(index, state.groups.length), 0, restoredGroup);
+      canvasCommandExecutor.adoptRestoredRecord(state.activeCanvasId, "groups", restoredGroup);
     }
     for (const { connection, index } of action.deletedConnections.slice().sort((a, b) => a.index - b.index)) {
       state.connections.splice(Math.min(index, state.connections.length), 0, cloneConnectionState(connection));
@@ -7282,26 +7286,40 @@ function undoLastAction() {
   }
 
   if (action.type === "move") {
-    action.positions.forEach((position) => {
-      const node = state.nodes.find((item) => item.id === position.id);
-      if (!node) return;
-      node.x = position.x;
-      node.y = position.y;
-    });
-    restoreGroupSnapshot(action.groups);
+    if (!restoreGroupSnapshot(action.groups, action.positions)) {
+      state.undoStack.push(action);
+      return;
+    }
     setSelection(action.positions.map((position) => position.id), action.positions[0]?.id || null);
   }
 
   if (action.type === "group-update") {
-    restoreGroupSnapshot(action.groups);
+    if (!restoreGroupSnapshot(action.groups)) {
+      state.undoStack.push(action);
+      return;
+    }
     setActiveGroup(action.activeGroupId || null);
   }
 
-  if (action.type === "node-update") {
-    const index = state.nodes.findIndex((node) => node.id === action.node.id);
-    if (index !== -1) {
-      state.nodes[index] = cloneUndoNodeState(action.node);
-      setSelection([action.node.id], action.node.id);
+  if (action.type === "node-assets-add") {
+    const node = state.nodes.find((item) => item.id === action.nodeId);
+    if (node) {
+      const additions = new Set(action.addedAssetIds);
+      node.assets = node.assets.filter((asset) => !additions.has(asset.id));
+      if (additions.has(node.activeAssetId)) {
+        node.activeAssetId = node.assets.some((asset) => asset.id === action.previousActiveAssetId)
+          ? action.previousActiveAssetId : node.assets[0]?.id || null;
+      }
+      setSelection([node.id], node.id);
+    }
+  }
+
+  if (action.type === "asset-name-update") {
+    const node = state.nodes.find((item) => item.id === action.nodeId);
+    const asset = node?.assets.find((item) => item.id === action.assetId);
+    if (asset?.displayName === action.after) {
+      if (action.before === undefined) delete asset.displayName;
+      else asset.displayName = action.before;
     }
   }
 
@@ -8381,11 +8399,8 @@ function groupSelectedNodes() {
   const groupId = crypto.randomUUID();
   const bounds = getDefaultGroupBounds(selectedNodes);
   if (!bounds) return;
-  state.groups = state.groups.filter((group) => !group.nodeIds.every((id) => state.selectedIds.has(id)));
-  selectedNodes.forEach((node) => {
-    node.groupId = groupId;
-  });
-  state.groups.push({
+  const z = Math.max(state.zCounter, ...state.nodes.map((node) => node.z || 0)) + 1;
+  const result = commitCanvasGroups([...state.groups, {
     id: groupId,
     name: "新建组",
     nodeIds: selectedNodes.map((node) => node.id),
@@ -8393,16 +8408,17 @@ function groupSelectedNodes() {
     y: bounds.top,
     width: bounds.width,
     height: bounds.height,
-    z: nextZ(),
-    layoutMenuOpen: false,
-  });
+    z,
+  }], { type: "group-create" });
+  if (!result.ok) return;
+  state.zCounter = z;
   setActiveGroup(groupId);
   render();
 }
 
 function arrangeNodes(nodes, layout = "grid") {
-  const ordered = nodes.slice().sort((a, b) => a.y - b.y || a.x - b.x);
-  if (ordered.length < 2) return;
+  const ordered = nodes.map((node) => ({ ...node })).sort((a, b) => a.y - b.y || a.x - b.x);
+  if (ordered.length < 2) return [];
 
   const bounds = ordered.reduce(
     (acc, node) => {
@@ -8442,14 +8458,25 @@ function arrangeNodes(nodes, layout = "grid") {
       item.node.y = bounds.top + Math.floor(index / columns) * cellHeight;
     });
   }
+  return ordered.map(({ id, x, y }) => ({ id, x, y }));
+}
+
+function commitNodeArrangement(nodes, layout) {
+  const positions = new Map(arrangeNodes(nodes, layout).map((position) => [position.id, position]));
+  const changes = nodes.map((node) => canvasContentCommands.buildFieldChange("nodes", node,
+    positions.get(node.id), ["x", "y"]));
+  const result = executeCanvasContentCommand("node-layout", changes);
+  // Clicking a node can raise its layer without changing its arranged position.
+  // Keep that interaction independent of layout undo preconditions.
+  if (result.ok) bringNodesToFront(nodes);
+  return result.ok;
 }
 
 function sortSelectedNodes(layout = "grid") {
   if (!requireCanvasMutation()) return;
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return;
-  arrangeNodes(selectedNodes, layout);
-  bringNodesToFront(selectedNodes);
+  if (!commitNodeArrangement(selectedNodes, layout)) return;
   render();
 }
 
@@ -8520,9 +8547,8 @@ function arrangeGroup(group, layout = "grid") {
   if (!requireCanvasMutation()) return;
   const groupNodes = getGroupNodes(group);
   if (groupNodes.length < 2) return;
+  if (!commitNodeArrangement(groupNodes, layout)) return;
   group.layoutMenuOpen = false;
-  arrangeNodes(groupNodes, layout);
-  bringNodesToFront(groupNodes);
   setActiveGroup(group.id);
   render();
 }
@@ -8531,13 +8557,9 @@ function ungroup(groupId) {
   if (!requireCanvasMutation()) return;
   const group = getGroupById(groupId);
   if (!group) return;
-  const groupsBefore = state.groups.map((item) => cloneGroupState(item));
-  for (const node of getGroupNodes(group)) {
-    if (node.groupId === groupId) delete node.groupId;
-  }
-  state.groups = state.groups.filter((item) => item.id !== groupId);
+  const result = commitCanvasGroups(state.groups.filter((item) => item.id !== groupId), { type: "group-remove" });
+  if (!result.ok) return;
   state.activeGroupId = null;
-  pushUndoAction({ type: "group-update", groups: groupsBefore, activeGroupId: groupId });
   render();
 }
 
@@ -8809,6 +8831,11 @@ const canvasNodeDragController = canvasNodeDragControllerFactory.createCanvasNod
   getNode: (nodeId) => state.nodes.find((node) => node.id === nodeId),
   cloneNode,
   addNodes: (nodes) => state.nodes.push(...nodes),
+  removeDuplicatedNodes: (ids, action) => {
+    const duplicates = new Set(ids);
+    state.nodes = state.nodes.filter((node) => !duplicates.has(node.id));
+    setSelection(action.sourceIds.filter((id) => state.nodes.some((node) => node.id === id)), action.sourceActiveId);
+  },
   selectNodes: setSelection,
   promoteNodes: bringNodesToFront,
   setAction: (action) => {
@@ -9004,26 +9031,18 @@ function resizeGroupFrame(action, event) {
   canvasGroupInteractionController.resize(action, event);
 }
 
-function removeNodeFromGroup(node, groupId) {
-  const group = getGroupById(groupId);
-  if (group) {
-    group.nodeIds = group.nodeIds.filter((id) => id !== node.id);
+function commitNodeGroupMembership(assignments) {
+  if (!assignments.size) return false;
+  const nextGroups = state.groups.map((group) => ({
+    ...group,
+    nodeIds: group.nodeIds.filter((id) => !assignments.has(id) || assignments.get(id) === group.id),
+  }));
+  for (const [nodeId, groupId] of assignments) {
+    const group = nextGroups.find((item) => item.id === groupId);
+    if (group && !group.nodeIds.includes(nodeId)) group.nodeIds.push(nodeId);
   }
-  if (node.groupId === groupId) {
-    delete node.groupId;
-  }
-}
-
-function addNodeToGroup(node, groupId) {
-  const group = getGroupById(groupId);
-  if (!group) return;
-  if (node.groupId && node.groupId !== groupId) {
-    removeNodeFromGroup(node, node.groupId);
-  }
-  node.groupId = groupId;
-  if (!group.nodeIds.includes(node.id)) {
-    group.nodeIds.push(node.id);
-  }
+  const result = commitCanvasGroups(nextGroups, { recordUndo: false });
+  return result.ok && result.changed !== false;
 }
 
 function findGroupForNode(node) {
@@ -9036,49 +9055,31 @@ function findGroupForNode(node) {
 }
 
 function updateDraggedNodeGroupMembership(ids) {
-  let changed = false;
+  const assignments = new Map();
   for (const id of ids) {
     const node = state.nodes.find((item) => item.id === id);
     if (!node) continue;
-    const targetGroup = findGroupForNode(node);
-    if (targetGroup?.id === node.groupId) continue;
-
-    if (node.groupId) {
-      removeNodeFromGroup(node, node.groupId);
-      changed = true;
-    }
-    if (targetGroup) {
-      addNodeToGroup(node, targetGroup.id);
-      changed = true;
-    }
+    const nextId = findGroupForNode(node)?.id || null;
+    if (nextId !== (node.groupId || null)) assignments.set(id, nextId);
   }
-  if (changed) syncGroups();
-  return changed;
+  return commitNodeGroupMembership(assignments);
 }
 
 function reconcileGroupFrameMembership(groupId) {
   const group = getGroupById(groupId);
   const bounds = getGroupBounds(group);
   if (!group || !bounds) return false;
-  let changed = false;
+  const assignments = new Map();
   for (const node of state.nodes) {
     if (node.groupId && node.groupId !== groupId) continue;
-    const nextGroupId = canvasSpatialSelection.resolveNodeGroup({
+    const nextId = canvasSpatialSelection.resolveNodeGroup({
       nodeBounds: getNodeMembershipBounds(node),
       currentGroupId: node.groupId || null,
       groups: [{ id: groupId, bounds }],
-    });
-    if (nextGroupId === node.groupId) continue;
-    if (node.groupId === groupId) {
-      removeNodeFromGroup(node, groupId);
-      changed = true;
-    } else if (!node.groupId && nextGroupId === groupId) {
-      addNodeToGroup(node, groupId);
-      changed = true;
-    }
+    }) || null;
+    if (nextId !== (node.groupId || null)) assignments.set(node.id, nextId);
   }
-  if (changed) syncGroups();
-  return changed;
+  return commitNodeGroupMembership(assignments);
 }
 
 function handlePointerMove(event) {

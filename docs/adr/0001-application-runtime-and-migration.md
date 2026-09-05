@@ -76,7 +76,7 @@ Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 
 桥接层只负责上下文、导航和迁移期间的文档消息转发；repository、会话和服务端授权仍留在 host / application 边界，计费不进入桥协议。同源 origin 与 source 校验之外，每次 iframe 页面实例还必须携带唯一 instance id，route scope 或实例已经变化的异步响应不得回写当前画布。旧画布只产生带 schemaVersion 的 allow-list 快照，不把全量运行内存当成领域对象。后续按数据与交互边界逐步替换画布内部模块，不按文件长度机械拆组件。
 
-画布内容迁移采用渐进式 CanvasCommand：命令核心无 DOM，只处理 CanvasRecord 的显式集合变更、before conflict、归一化、transition validation 和逆命令；UI selection、短暂高亮、render 与保存属于提交后 effect。首个落地边界只覆盖连接的单条创建、批量创建和删除，同时兼容现有 legacy undo 栈。节点、组和高频 pointer 操作只有在字段级契约、任务态隔离和 preview/commit 边界明确后才迁移，不能把整个 `app.js` 换一种封装后称为完成。
+画布内容迁移采用渐进式 CanvasCommand：命令核心无 DOM，只处理 CanvasRecord 的显式集合变更、before conflict、归一化、transition validation 和逆命令；UI selection、短暂高亮、render 与保存属于提交后 effect。连接的单条创建、批量创建和删除已接入；节点离散参数 / 生成媒体命名、建组 / 解组 / 成员结算和已有局部布局继续通过字段级契约迁移，兼容现有 legacy undo 栈。字段提交保留运行时对象身份，组成员关系在同一事务中验证；全节点 record 不允许进入命令。高频 pointer preview 和旧移动撤销仍在 session/adapter，节点结构与素材引用命令尚未统一，不能把整个 `app.js` 换一种封装后称为完成。
 
 ## 建议目录
 

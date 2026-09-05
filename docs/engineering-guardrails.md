@@ -68,7 +68,8 @@ Phase 0B 的 runtime、Workspace 路由和 legacy canvas 迁移边界记录在 `
 - 路由画布按 `projectId + canvasId` 保存 CanvasDocument，并用 revision 防止多窗口静默覆盖；尚无文档的画布加载只能建立内存同步基线，不能因纯浏览创建空记录，首次真实修改才写入 revision 1；legacy bundle 不得混入账号、积分、撤销栈、运行任务或素材 Blob。
 - iframe 保存状态只能由无 DOM 的持久化协调器独占；宿主与 iframe 必须同时校验 origin、source、协议版本、iframe instance 与 route scope。重复 ready、陈旧 requestId 和旧 scope 的异步保存完成不得重新 hydrate、推进 revision 或写入当前画布。同 route 出现新 iframe instance 时，必须隔离新旧 epoch 的 dirty / saving / navigation 计数，并等待旧同 scope 保存结算后再 hydrate 最新 revision；旧保存失败需要先重新读取服务端权威文档。
 - 每个内部 CanvasRecord 是节点、组、连接、视口、层级和撤销栈的唯一 runtime 权威；根 `state` 只能通过 runtime store 门面访问活动画布，`render()` 和画布切换不得用复制字段维持第二份工作集。增删、复制内部画布和后台写回即使不渲染当前画布，也必须显式触发文档保存。
-- CanvasCommand 必须先在 touched collection 的副本上完成 before conflict、归一化和 transition validation，再一次性替换 CanvasRecord 内容；失败不得写内容、撤销或保存 effect，effect 失败也不得把已经提交的内容伪报为命令失败。连接 renderer 只消费已归一化内容。节点字段命令建立前，executor 的应用适配器必须拒绝 nodes / groups 变更，不能用整节点快照把 `mode / mediaKind`、任务态和临时 UI 状态带进撤销。
+- CanvasCommand 必须先在 touched collection 的副本上完成 before conflict、归一化和 transition validation，再同步提交；字段提交只修改声明的字段，保留 live node / group 和未修改对象的身份。失败不得写内容、撤销或保存 effect，effect 失败也不得把已经提交的内容伪报为命令失败。节点命令仅接受 `canvas-content-commands.js` 的字段白名单；组只在创建 / 删除时使用 canonical record，更新使用字段事务。不能用整节点快照把 `mode / mediaKind`、任务态、素材对象或临时 UI 状态带进撤销。点击置顶的层级变化不作为局部布局撤销的冲突条件。
+- 组的 `nodeIds` 与节点 `groupId` 必须在同一内容事务中成立；兼容修复只在 hydrate 边界执行，render / bounds 读取不得修复成员或回写组框。高频 pointer preview 仍由手势 session 持有，取消恢复起始状态，完成一次手势只记录一次撤销。字段历史的对象身份检查只可在受控删除撤销恢复后显式衔接，不能在任意同 ID 替换或 hydrate 时重绑定。
 - 当前只开发桌面端；保留必要的窄屏防御规则，但不新增移动端页面、手势或独立状态分支。
 - 扫描旧入口、旧文案和不存在的 DOM id。
 - 跨画布生成任务不会停滞或写入错误画布。
