@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource, assetLibraryCss, entityEditorViewSource, entityEditorCss, entityUseModelSource, entityUseViewSource, entityUseCss] = await Promise.all([
+const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource, assetLibraryCss, entityEditorViewSource, entityEditorCss, entityUseModelSource, entityUseViewSource, entityUseCss, entityUseControllerSource] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
   readFile(new URL("styles/canvas-chrome.css", root), "utf8"),
@@ -18,6 +18,7 @@ const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, 
   readFile(new URL("src/legacy-canvas/canvas-entity-use-model.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-entity-use-view.js", root), "utf8"),
   readFile(new URL("styles/canvas-entity-use.css", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-use-controller.js", root), "utf8"),
 ]);
 
 function sourceBetween(source, startMarker, endMarker) {
@@ -913,6 +914,7 @@ test("model data, config and document codec load before the application", () => 
   const entityEditorViewIndex = html.indexOf("./src/legacy-canvas/canvas-entity-editor-view.js");
   const entityUseModelIndex = html.indexOf("./src/legacy-canvas/canvas-entity-use-model.js");
   const entityUseViewIndex = html.indexOf("./src/legacy-canvas/canvas-entity-use-view.js");
+  const entityUseControllerIndex = html.indexOf("./src/legacy-canvas/canvas-entity-use-controller.js");
   const appIndex = html.indexOf("./app.js");
   assert.ok(
     catalogIndex >= 0 &&
@@ -924,7 +926,8 @@ test("model data, config and document codec load before the application", () => 
     entityEditorModelIndex < entityEditorViewIndex &&
     entityEditorViewIndex < entityUseModelIndex &&
     entityUseModelIndex < entityUseViewIndex &&
-    entityUseViewIndex < runtimeStoreIndex &&
+    entityUseViewIndex < entityUseControllerIndex &&
+    entityUseControllerIndex < runtimeStoreIndex &&
     runtimeStoreIndex < commandExecutorIndex &&
     commandExecutorIndex < codecIndex &&
     codecIndex < persistenceIndex &&
@@ -1083,7 +1086,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
   assert.match(html, /styles\.css\?v=20260904-video-params-79/);
-  assert.match(html, /app\.js\?v=20260904-video-params-77/);
+  assert.match(html, /app\.js\?v=20260905-entity-controller-78/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1676,7 +1679,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260904-video-params-77/);
+  assert.match(html, /app\.js\?v=20260905-entity-controller-78/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
@@ -1696,11 +1699,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(entityUseModelSource, /function createCenteredGridPlan/);
   assert.match(entityUseViewSource, /data-entity-use-action="add-entities"/);
   assert.match(entityUseViewSource, /data-entity-use-add-canvas/);
-  assert.match(appSource, /function addEntityToCanvas\(entityId\)[\s\S]*?pushUndoAction\(\{ type: "create"/);
-  assert.match(appSource, /function openEntityUsePicker\(nodeId\)[\s\S]*?!canNodeUseEntityReferences\(node\)/);
-  assert.match(appSource, /function addSelectedEntitiesToGenerator\(\)[\s\S]*?const before = cloneNodeState\(node\)[\s\S]*?node\.assets\.push\(\.\.\.additions\)/);
-  assert.match(appSource, /entityUsePickerPortal\?\.addEventListener\("click"[\s\S]*?action === "toggle-entity"[\s\S]*?action === "add-entities"/);
-  assert.match(appSource, /entityUsePickerPortal\?\.addEventListener\("input"[\s\S]*?renderEntityUsePicker\(\{ focusSearch: true \}\)/);
+  assert.match(appSource, /function addEntityToCanvas\(\{ scope, entityId, space \}\)[\s\S]*?pushUndoAction\(\{ type: "create"/);
+  assert.match(appSource, /createCanvasEntityUseController\(\{[\s\S]*?onAddEntities: addSelectedEntitiesToGenerator/);
+  assert.match(appSource, /function addSelectedEntitiesToGenerator\(\{ scope, nodeId, selections \}\)[\s\S]*?scope\.projectId !== state\.projectId[\s\S]*?scope\.canvasId !== state\.activeCanvasId[\s\S]*?node\.assets\.push\(\.\.\.additions\)/);
+  assert.match(appSource, /canvasEntityUse\.handleGlobalKeyDown\(event\)/);
+  assert.match(appSource, /canvasEntityUse\.refresh\(\)/);
+  assert.doesNotMatch(appSource, /state\.entityUse|function (?:open|close|render)EntityUse|entityUse(?:Detail|Picker)Portal\?\.addEventListener/);
+  assert.doesNotMatch(entityUseControllerSource, /cloneNodeState|pushUndoAction|state\.nodes|node\.assets/);
+  assert.match(entityUseControllerSource, /root\.REELAY_CANVAS_ENTITY_USE_CONTROLLER/);
   assert.match(appSource, /case "entity-picker":[\s\S]*?if \(!canNodeUseEntityReferences\(node\)\) return/);
 
   assert.match(appSource, /closest\("#assetLibrarySpaceMenu \[data-library-space\]"\)/);

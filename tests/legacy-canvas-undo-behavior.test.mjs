@@ -46,7 +46,7 @@ function createHarness(t) {
   window.HTMLDialogElement.prototype.close = function () { this.open = false; };
   for (const { path, source } of scripts) {
     window.eval(source + (path === "./app.js"
-      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController };"
+      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasEntityUse };"
       : ""));
   }
   const { state, canvasRuntimeStore, canvasNodeDragController } = window.canvasTest;
@@ -291,4 +291,71 @@ test("successful generation remains a boundary for prompt undo without removing 
   assert.equal(node.prompt, optimized);
   assert.equal(node.generatedAsset, result);
   assert.deepEqual({ x: node.x, y: node.y }, { x: 10, y: 20 });
+});
+
+test("Entity picker expands independent references in one undo and repeated use skips existing media", (t) => {
+  const h = createHarness(t);
+  const target = h.node("entity-target", { model: "seedance-2", assets: [] });
+  const first = h.canvas("one", [target]);
+  h.install(first);
+  const entity = h.window.getEntityUsePickerEntities().find((entry) => entry.spaces.includes("personal") && entry.media.length);
+  assert.ok(entity, "expected a usable personal Entity fixture");
+  const { canvasEntityUse } = h.window.canvasTest;
+  const picker = h.window.document.querySelector("#entityUsePickerPortal");
+  function confirmEntity() {
+    assert.equal(canvasEntityUse.openPicker(target.id), true);
+    picker.querySelector(`[data-entity-use-toggle="${entity.id}"]`).click();
+    picker.querySelector('[data-entity-use-action="add-entities"]').click();
+  }
+  confirmEntity();
+  assert.equal(first.undoStack.length, 1);
+  assert.equal(picker.hidden, true);
+  assert.ok(target.assets.length > 0);
+  const expanded = plain(target.assets);
+  assert.ok(target.assets.every((asset) => !entity.media.some((media) => media.id === asset.id)), "references receive independent legacy asset ids");
+  confirmEntity();
+  assert.deepEqual(plain(target.assets), expanded);
+  assert.equal(first.undoStack.length, 1, "a duplicate-only confirmation must not add an undo entry");
+  h.window.undoLastAction();
+  assert.equal(first.nodes[0].assets.length, 0);
+  assert.equal(first.undoStack.length, 0);
+});
+
+test("Entity-use content adapters reject another project or canvas even when target node ids match", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("one", [h.node("same-id", { model: "seedance-2", assets: [] })]);
+  const second = h.canvas("two", [h.node("same-id", { model: "seedance-2", assets: [] })]);
+  h.install(first, second);
+  const entity = h.window.getEntityUsePickerEntities().find((entry) => entry.spaces.includes("personal") && entry.media.length);
+  const submission = {
+    scope: { projectId: h.state.projectId, canvasId: first.id }, nodeId: "same-id",
+    selections: [{ entityId: entity.id, space: "personal" }],
+  };
+  h.window.switchCanvas(second.id);
+  h.window.addSelectedEntitiesToGenerator(submission);
+  const created = h.window.addEntityToCanvas({ scope: submission.scope, entityId: entity.id, space: "personal" });
+  assert.equal(created.length, 0);
+  assert.equal(second.nodes[0].assets.length, 0);
+  assert.equal(second.undoStack.length, 0);
+  h.window.switchCanvas(first.id);
+  h.state.projectId = "another-project";
+  h.window.addSelectedEntitiesToGenerator(submission);
+  assert.equal(first.nodes[0].assets.length, 0);
+  assert.equal(first.undoStack.length, 0);
+});
+
+test("Entity canvas consumption creates separate media nodes and undoes the complete expansion once", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("one");
+  h.install(first);
+  const entity = h.window.getEntityUsePickerEntities().find((entry) => entry.spaces.includes("personal") && entry.media.length);
+  const scope = { projectId: h.state.projectId, canvasId: first.id };
+  const created = h.window.addEntityToCanvas({ scope, entityId: entity.id, space: "personal" });
+  assert.ok(created.length > 1);
+  assert.equal(first.nodes.length, created.length);
+  assert.equal(first.undoStack.length, 1);
+  assert.ok(created.every((node) => node.kind === "asset"));
+  h.window.undoLastAction();
+  assert.equal(first.nodes.length, 0);
+  assert.equal(first.undoStack.length, 0);
 });

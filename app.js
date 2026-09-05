@@ -130,7 +130,6 @@ const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
-const entityUsePickerBackgroundInertState = new Map();
 const homeLaunchIntentKey = "reelay-home-launch-intent";
 
 function syncFaviconContrast() {
@@ -308,20 +307,6 @@ const state = {
   libraryMoveItems: [],
   libraryMoveFolderId: null,
   libraryPreviewTarget: null,
-  entityUseDetailId: null,
-  entityUseDetailPinned: false,
-  entityUseDetailAnchorId: null,
-  entityUseDetailOpenTimer: 0,
-  entityUseDetailCloseTimer: 0,
-  entityUsePickerTargetNodeId: null,
-  entityUsePickerSpace: "personal",
-  entityUsePickerQuery: "",
-  entityUsePickerSelectedIds: new Set(),
-  entityUsePickerSelectedSpaces: new Map(),
-  entityUsePickerComposing: false,
-  entityUsePickerSelectionStart: null,
-  entityUsePickerSelectionEnd: null,
-  entityUsePickerReturnFocus: null,
   librarySearchByContext: {},
   libraryFilterByContext: {},
   assetLibraryPreferredWidth: 550,
@@ -509,9 +494,37 @@ if (!canvasEntityEditorModel || !canvasEntityEditorView || !canvasEntityEditorCo
 }
 const canvasEntityUseModel = window.REELAY_CANVAS_ENTITY_USE_MODEL;
 const canvasEntityUseView = window.REELAY_CANVAS_ENTITY_USE_VIEW;
-if (!canvasEntityUseModel || !canvasEntityUseView) {
+const canvasEntityUseControllerFactory = window.REELAY_CANVAS_ENTITY_USE_CONTROLLER;
+if (!canvasEntityUseModel || !canvasEntityUseView || !canvasEntityUseControllerFactory) {
   throw new Error("Canvas Entity use dependencies are unavailable.");
 }
+const canvasEntityUse = canvasEntityUseControllerFactory.createCanvasEntityUseController({
+  grid: assetLibraryGrid,
+  detailPortal: entityUseDetailPortal,
+  pickerPortal: entityUsePickerPortal,
+  background: appShell,
+  view: canvasEntityUseView,
+  getScope: () => ({ projectId: state.projectId, canvasId: state.activeCanvasId }),
+  getDetailContext: () => ({
+    space: state.librarySpace,
+    eligible: isAssetLibraryOpen() && state.librarySection === "entity"
+      && !state.librarySelectionMode && !state.libraryMenuTarget && !state.libraryRenameTarget,
+  }),
+  getDetailEntity: getEntityUseDetailPayload,
+  getPickerEntities: getEntityUsePickerEntities,
+  getAvoidRects: () => state.agentOpen && agentDock ? [agentDock.getBoundingClientRect()] : [],
+  isTargetAvailable: (nodeId) => {
+    const node = state.nodes.find((item) => item.id === nodeId);
+    return Boolean(node && node.kind === "generator" && !node.generating
+      && !node.promptOptimizing && canNodeUseEntityReferences(node));
+  },
+  isMutable: isCanvasMutationAllowed,
+  requireMutation: requireCanvasMutation,
+  getPickerTrigger: (nodeId) => nodeLayer.querySelector(`[data-id="${CSS.escape(nodeId)}"] .entity-drop`),
+  onAddEntities: addSelectedEntitiesToGenerator,
+  onAddToCanvas: (submission) => addEntityToCanvas(submission).length > 0,
+  refreshIcons,
+});
 let reopenAssetLibraryAfterEntityEditor = false;
 const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntityEditorController({
   host: canvasEntityEditorHost,
@@ -649,8 +662,7 @@ function applyCanvasAccessMode(mode) {
     shell?.classList.remove("dragging");
   }
   syncCanvasAccessUi();
-  if (state.entityUsePickerTargetNodeId) renderEntityUsePicker();
-  if (state.entityUseDetailId) renderEntityUseDetail();
+  canvasEntityUse.refresh({ renderPicker: true });
 }
 
 function syncHostedIdentity(context) {
@@ -3405,7 +3417,7 @@ function clearAssetLibrarySelection({ keepMode = false } = {}) {
 }
 
 function switchAssetLibraryContext({ space = state.librarySpace, section = state.librarySection } = {}) {
-  closeEntityUseDetail();
+  canvasEntityUse.closeDetail();
   rememberAssetLibraryContext();
   state.librarySpace = canvasAssetLibraryModel.normalizeSpace(space);
   state.librarySection = state.librarySpace === "platform"
@@ -3747,14 +3759,7 @@ function renderAssetLibrary() {
       input?.select();
     });
   }
-  if (state.entityUseDetailId) {
-    const entityStillVisible = section === "entity"
-      && !state.librarySelectionMode
-      && !state.libraryMenuTarget
-      && items.some((item) => item.kind === "entity" && item.id === state.entityUseDetailId);
-    if (!entityStillVisible) closeEntityUseDetail();
-    else window.requestAnimationFrame(() => renderEntityUseDetail());
-  }
+  canvasEntityUse.refreshDetail();
 }
 
 function findLibraryAsset(assetId) {
@@ -3787,119 +3792,16 @@ function hasPersonalLibraryPlacement(media) {
   );
 }
 
-function getAssetLibraryEntityCard(entityId = state.entityUseDetailAnchorId || state.entityUseDetailId) {
-  if (!entityId || !assetLibraryGrid) return null;
-  return [...assetLibraryGrid.querySelectorAll("[data-library-entity]")]
-    .find((element) => element.dataset.libraryEntity === entityId) || null;
-}
-
-function clearEntityUseDetailTimers() {
-  if (state.entityUseDetailOpenTimer) window.clearTimeout(state.entityUseDetailOpenTimer);
-  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
-  state.entityUseDetailOpenTimer = 0;
-  state.entityUseDetailCloseTimer = 0;
-}
-
-function getEntityUseDetailPayload(entityId = state.entityUseDetailId) {
+function getEntityUseDetailPayload(entityId, space) {
   const entity = entityId
     ? assetLibraryStore.getEntity({ kind: "entity", id: entityId })
     : null;
   if (!entity) return null;
-  const space = state.librarySpace;
   if (!assetLibraryStore.hasPlacement({ kind: "entity", id: entity.id }, space)) return null;
   const media = assetLibraryStore
     .getEntityMedia({ kind: "entity", id: entity.id })
     .filter((item) => assetLibraryStore.hasPlacement({ kind: "media", id: item.id }, space));
   return { ...entity, media };
-}
-
-function getEntityUseDetailPlacement(anchor) {
-  const anchorRect = anchor.getBoundingClientRect();
-  const avoidRects = [];
-  if (state.agentOpen && agentDock) avoidRects.push(agentDock.getBoundingClientRect());
-  return canvasEntityUseView.computeDetailPlacement({
-    viewportRect: { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
-    anchorRect,
-    sourceRect: anchorRect,
-    avoidRects,
-    panelWidth: 340,
-    panelHeight: 454,
-    gap: 10,
-    margin: 12,
-  });
-}
-
-function renderEntityUseDetail() {
-  if (!entityUseDetailPortal || !state.entityUseDetailId) return;
-  const anchor = getAssetLibraryEntityCard();
-  const entity = getEntityUseDetailPayload();
-  const eligible = isAssetLibraryOpen()
-    && state.librarySection === "entity"
-    && !state.librarySelectionMode
-    && !state.libraryMenuTarget
-    && !state.libraryRenameTarget
-    && anchor
-    && entity;
-  if (!eligible) {
-    closeEntityUseDetail();
-    return;
-  }
-  const placement = getEntityUseDetailPlacement(anchor);
-  entityUseDetailPortal.innerHTML = canvasEntityUseView.renderEntityDetail({
-    entity,
-    media: entity.media,
-    pinned: state.entityUseDetailPinned,
-    placement,
-    canAdd: isCanvasMutationAllowed(),
-  });
-  canvasEntityUseView.syncEntityDetailPortal(entityUseDetailPortal, {
-    visible: true,
-    pinned: state.entityUseDetailPinned,
-    placement,
-  });
-  refreshIcons();
-}
-
-function openEntityUseDetail(entityId, { pinned = false, delay = 0 } = {}) {
-  if (!entityId || state.librarySelectionMode || state.libraryMenuTarget || state.libraryRenameTarget) return;
-  if (!isAssetLibraryOpen() || state.librarySection !== "entity") return;
-  if (state.entityUseDetailPinned && !pinned) return;
-  clearEntityUseDetailTimers();
-  const open = () => {
-    state.entityUseDetailOpenTimer = 0;
-    state.entityUseDetailId = entityId;
-    state.entityUseDetailAnchorId = entityId;
-    state.entityUseDetailPinned = Boolean(pinned);
-    renderEntityUseDetail();
-  };
-  if (delay > 0) state.entityUseDetailOpenTimer = window.setTimeout(open, delay);
-  else open();
-}
-
-function scheduleEntityUseDetailClose(delay = 170) {
-  if (state.entityUseDetailOpenTimer) window.clearTimeout(state.entityUseDetailOpenTimer);
-  state.entityUseDetailOpenTimer = 0;
-  if (state.entityUseDetailPinned) return;
-  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
-  state.entityUseDetailCloseTimer = window.setTimeout(() => {
-    state.entityUseDetailCloseTimer = 0;
-    if (!state.entityUseDetailPinned) closeEntityUseDetail();
-  }, delay);
-}
-
-function closeEntityUseDetail({ restoreFocus = false } = {}) {
-  const entityId = state.entityUseDetailAnchorId || state.entityUseDetailId;
-  clearEntityUseDetailTimers();
-  state.entityUseDetailId = null;
-  state.entityUseDetailAnchorId = null;
-  state.entityUseDetailPinned = false;
-  if (entityUseDetailPortal) {
-    canvasEntityUseView.syncEntityDetailPortal(entityUseDetailPortal, { visible: false });
-    entityUseDetailPortal.innerHTML = "";
-  }
-  if (restoreFocus && entityId) {
-    window.requestAnimationFrame(() => getAssetLibraryEntityCard(entityId)?.querySelector(".asset-library-card-preview")?.focus({ preventScroll: true }));
-  }
 }
 
 function getEntityUsePickerEntities() {
@@ -3923,104 +3825,6 @@ function getEntityUsePickerEntities() {
   return [...entitiesById.values()];
 }
 
-function setEntityUsePickerBackgroundIsolation(active) {
-  if (!appShell) return;
-  if (active) {
-    if (entityUsePickerBackgroundInertState.has(appShell)) return;
-    entityUsePickerBackgroundInertState.set(appShell, {
-      inert: appShell.inert,
-      ariaHidden: appShell.getAttribute("aria-hidden"),
-    });
-    appShell.inert = true;
-    appShell.setAttribute("aria-hidden", "true");
-    return;
-  }
-  for (const [element, previous] of entityUsePickerBackgroundInertState) {
-    element.inert = previous.inert;
-    if (previous.ariaHidden == null) element.removeAttribute("aria-hidden");
-    else element.setAttribute("aria-hidden", previous.ariaHidden);
-  }
-  entityUsePickerBackgroundInertState.clear();
-}
-
-function renderEntityUsePicker({ focusSearch = false } = {}) {
-  if (!entityUsePickerPortal || !state.entityUsePickerTargetNodeId) return;
-  const node = state.nodes.find((item) => item.id === state.entityUsePickerTargetNodeId);
-  if (!node || node.kind !== "generator" || !canNodeUseEntityReferences(node)) {
-    closeEntityUsePicker({ restoreFocus: false });
-    return;
-  }
-  const canAdd = isCanvasMutationAllowed() && !node.generating;
-  entityUsePickerPortal.innerHTML = canvasEntityUseView.renderEntityPicker({
-    entities: getEntityUsePickerEntities(),
-    space: state.entityUsePickerSpace,
-    query: state.entityUsePickerQuery,
-    selectedIds: state.entityUsePickerSelectedIds,
-    canAdd,
-  });
-  canvasEntityUseView.syncEntityPickerPortal(entityUsePickerPortal, { visible: true });
-  refreshIcons();
-  if (focusSearch) {
-    window.requestAnimationFrame(() => {
-      const input = entityUsePickerPortal.querySelector("[data-entity-use-search]");
-      if (!(input instanceof HTMLInputElement)) return;
-      input.focus({ preventScroll: true });
-      const valueLength = input.value.length;
-      const start = Number.isInteger(state.entityUsePickerSelectionStart)
-        ? Math.min(state.entityUsePickerSelectionStart, valueLength)
-        : valueLength;
-      const end = Number.isInteger(state.entityUsePickerSelectionEnd)
-        ? Math.min(state.entityUsePickerSelectionEnd, valueLength)
-        : start;
-      input.setSelectionRange(start, end);
-    });
-  }
-}
-
-function openEntityUsePicker(nodeId) {
-  if (!requireCanvasMutation()) return;
-  const node = state.nodes.find((item) => item.id === nodeId);
-  if (!node || node.kind !== "generator" || node.generating || !canNodeUseEntityReferences(node)) return;
-  closeEntityUseDetail();
-  state.entityUsePickerTargetNodeId = node.id;
-  state.entityUsePickerSpace = "personal";
-  state.entityUsePickerQuery = "";
-  state.entityUsePickerSelectedIds.clear();
-  state.entityUsePickerSelectedSpaces.clear();
-  state.entityUsePickerComposing = false;
-  state.entityUsePickerSelectionStart = 0;
-  state.entityUsePickerSelectionEnd = 0;
-  state.entityUsePickerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  setEntityUsePickerBackgroundIsolation(true);
-  renderEntityUsePicker({ focusSearch: true });
-}
-
-function closeEntityUsePicker({ restoreFocus = true } = {}) {
-  const nodeId = state.entityUsePickerTargetNodeId;
-  const previousFocus = state.entityUsePickerReturnFocus;
-  state.entityUsePickerTargetNodeId = null;
-  state.entityUsePickerQuery = "";
-  state.entityUsePickerSelectedIds.clear();
-  state.entityUsePickerSelectedSpaces.clear();
-  state.entityUsePickerComposing = false;
-  state.entityUsePickerSelectionStart = null;
-  state.entityUsePickerSelectionEnd = null;
-  state.entityUsePickerReturnFocus = null;
-  if (entityUsePickerPortal) {
-    canvasEntityUseView.syncEntityPickerPortal(entityUsePickerPortal, { visible: false });
-    entityUsePickerPortal.innerHTML = "";
-  }
-  setEntityUsePickerBackgroundIsolation(false);
-  if (!restoreFocus) return;
-  window.requestAnimationFrame(() => {
-    const currentTrigger = nodeId
-      ? nodeLayer.querySelector(`[data-id="${CSS.escape(nodeId)}"] .entity-drop`)
-      : null;
-    if (currentTrigger instanceof HTMLElement) currentTrigger.focus({ preventScroll: true });
-    else if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
-  });
-}
-
 function createEntityUseMediaPlan(entityIds, existingMedia, selectedSpaces) {
   const entities = entityIds
     .map((entityId) => assetLibraryStore.getEntity({ kind: "entity", id: entityId }))
@@ -4036,18 +3840,17 @@ function createEntityUseMediaPlan(entityIds, existingMedia, selectedSpaces) {
   });
 }
 
-function addSelectedEntitiesToGenerator() {
-  if (!requireCanvasMutation()) return;
-  const node = state.nodes.find((item) => item.id === state.entityUsePickerTargetNodeId);
-  if (!node || node.kind !== "generator" || node.generating || !canNodeUseEntityReferences(node)) {
-    closeEntityUsePicker({ restoreFocus: false });
+function addSelectedEntitiesToGenerator({ scope, nodeId, selections }) {
+  if (scope.projectId !== state.projectId || scope.canvasId !== state.activeCanvasId || !requireCanvasMutation()) return;
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node || node.kind !== "generator" || node.generating || node.promptOptimizing || !canNodeUseEntityReferences(node)) {
     showActionToast("当前生成节点已不可用");
     return;
   }
-  const entityIds = [...state.entityUsePickerSelectedIds];
-  const plan = createEntityUseMediaPlan(entityIds, node.assets || [], state.entityUsePickerSelectedSpaces);
+  const entityIds = selections.map((selection) => selection.entityId);
+  const selectedSpaces = new Map(selections.map((selection) => [selection.entityId, selection.space]));
+  const plan = createEntityUseMediaPlan(entityIds, node.assets || [], selectedSpaces);
   if (!plan.entries.length) {
-    closeEntityUsePicker();
     showActionToast(plan.skipped.some((item) => item.reason === "existing")
       ? "所选主体素材已在参考区"
       : "所选主体没有可添加的素材");
@@ -4066,9 +3869,7 @@ function addSelectedEntitiesToGenerator() {
   additions.forEach((asset) => hydrateAssetMetadata(asset, node.id));
   bringNodesToFront([node]);
   setSelection([node.id], node.id);
-  closeEntityUsePicker({ restoreFocus: false });
   render();
-  window.requestAnimationFrame(() => nodeLayer.querySelector(`[data-id="${CSS.escape(node.id)}"] .entity-drop`)?.focus({ preventScroll: true }));
   const skippedExisting = plan.skipped.filter((item) => item.reason === "existing" || item.reason === "duplicate").length;
   showActionToast(skippedExisting
     ? `已添加 ${additions.length} 个参考素材，跳过 ${skippedExisting} 个重复项`
@@ -4100,9 +3901,9 @@ function getAvailableCanvasPlacementViewport() {
   };
 }
 
-function addEntityToCanvas(entityId) {
-  if (!requireCanvasMutation()) return [];
-  const selectedSpaces = new Map([[entityId, state.librarySpace]]);
+function addEntityToCanvas({ scope, entityId, space }) {
+  if (scope.projectId !== state.projectId || scope.canvasId !== state.activeCanvasId || !requireCanvasMutation()) return [];
+  const selectedSpaces = new Map([[entityId, space]]);
   const plan = createEntityUseMediaPlan([entityId], getCanvasLibraryAssets(), selectedSpaces);
   if (!plan.entries.length) {
     showActionToast(plan.skipped.some((item) => item.reason === "existing")
@@ -4139,7 +3940,6 @@ function addEntityToCanvas(entityId) {
   state.nodes.push(...createdNodes);
   bringNodesToFront(createdNodes);
   setSelection(createdNodes.map((node) => node.id), createdNodes[0].id);
-  closeEntityUseDetail();
   const createdBounds = getNodesContentBounds(createdNodes);
   const shouldFitCreatedNodes = createdBounds && getBoundsFitScale(createdBounds) < state.scale;
   render();
@@ -4299,7 +4099,7 @@ function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
 
 function closeAssetLibrary({ restoreFocus = true } = {}) {
   const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
-  closeEntityUseDetail();
+  canvasEntityUse.closeDetail();
   state.libraryTargetNodeId = null;
   state.libraryDirectoryMenuOpen = false;
   state.libraryRenameTarget = null;
@@ -4742,12 +4542,7 @@ function isCanvasDropTarget(target) {
 }
 
 function render() {
-  if (state.entityUsePickerTargetNodeId) {
-    const pickerTarget = state.nodes.find((node) => node.id === state.entityUsePickerTargetNodeId);
-    if (!pickerTarget || pickerTarget.kind !== "generator" || pickerTarget.generating || !canNodeUseEntityReferences(pickerTarget)) {
-      closeEntityUsePicker({ restoreFocus: false });
-    }
-  }
+  canvasEntityUse.refresh();
   syncGroups();
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
@@ -6427,7 +6222,7 @@ function handleAction(node, action, value) {
       node.panel = null;
       node.advancedSettingsExpanded = false;
       render();
-      openEntityUsePicker(node.id);
+      canvasEntityUse.openPicker(node.id);
       return;
     case "material-panel":
       node.expanded = true;
@@ -9563,18 +9358,7 @@ shell.addEventListener(
 
 window.addEventListener("keydown", (event) => {
   if (document.querySelector(".confirm-layer")) return;
-  if (state.entityUsePickerTargetNodeId) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeEntityUsePicker();
-    }
-    return;
-  }
-  if (event.key === "Escape" && state.entityUseDetailPinned) {
-    event.preventDefault();
-    closeEntityUseDetail({ restoreFocus: true });
-    return;
-  }
+  if (canvasEntityUse.handleGlobalKeyDown(event)) return;
   if (canvasEntityEditor.isOpen()) return;
   const target = event.target;
   const isTyping = target instanceof Element && target.closest("input, textarea, [contenteditable='true']");
@@ -9731,7 +9515,7 @@ window.addEventListener("drop", (event) => {
 });
 
 function setAssetLibrarySelectionMode(enabled) {
-  closeEntityUseDetail();
+  canvasEntityUse.closeDetail();
   state.librarySelectionMode = Boolean(enabled);
   state.librarySelectedIds.clear();
   state.libraryToolbarMenu = null;
@@ -10326,7 +10110,7 @@ railLibraryBtn?.addEventListener("click", (event) => {
 assetLibraryCloseBtn?.addEventListener("click", closeAssetLibrary);
 assetLibraryResizeHandle?.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) return;
-  closeEntityUseDetail();
+  canvasEntityUse.closeDetail();
   event.preventDefault();
   event.stopPropagation();
   state.action = {
@@ -10351,142 +10135,8 @@ assetLibraryResizeHandle?.addEventListener("keydown", (event) => {
 assetLibraryPanel?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
-assetLibraryGrid?.addEventListener("pointerover", (event) => {
-  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
-  if (!card || (event.relatedTarget instanceof Node && card.contains(event.relatedTarget))) return;
-  openEntityUseDetail(card.dataset.libraryEntity, { delay: 130 });
-});
-assetLibraryGrid?.addEventListener("pointerout", (event) => {
-  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
-  if (!card || (event.relatedTarget instanceof Node && card.contains(event.relatedTarget))) return;
-  if (event.relatedTarget instanceof Node && entityUseDetailPortal?.contains(event.relatedTarget)) return;
-  scheduleEntityUseDetailClose();
-});
-assetLibraryGrid?.addEventListener("focusin", (event) => {
-  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
-  if (card) openEntityUseDetail(card.dataset.libraryEntity);
-});
-assetLibraryGrid?.addEventListener("focusout", (event) => {
-  const card = event.target instanceof Element ? event.target.closest("[data-library-entity]") : null;
-  if (!card) return;
-  if (event.relatedTarget instanceof Node && (card.contains(event.relatedTarget) || entityUseDetailPortal?.contains(event.relatedTarget))) return;
-  scheduleEntityUseDetailClose();
-});
-assetLibraryGrid?.addEventListener("scroll", () => {
-  if (!state.entityUseDetailId) return;
-  if (state.entityUseDetailPinned) renderEntityUseDetail();
-  else closeEntityUseDetail();
-}, { passive: true });
-entityUseDetailPortal?.addEventListener("pointerenter", () => {
-  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
-  state.entityUseDetailCloseTimer = 0;
-});
-entityUseDetailPortal?.addEventListener("pointerleave", () => scheduleEntityUseDetailClose());
-entityUseDetailPortal?.addEventListener("focusin", () => {
-  if (state.entityUseDetailCloseTimer) window.clearTimeout(state.entityUseDetailCloseTimer);
-  state.entityUseDetailCloseTimer = 0;
-});
-entityUseDetailPortal?.addEventListener("focusout", (event) => {
-  if (!(event.relatedTarget instanceof Node) || !entityUseDetailPortal.contains(event.relatedTarget)) scheduleEntityUseDetailClose();
-});
-entityUseDetailPortal?.addEventListener("pointerdown", (event) => event.stopPropagation());
-entityUseDetailPortal?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  if (event.target.closest("[data-entity-use-detail-close]")) {
-    closeEntityUseDetail({ restoreFocus: true });
-    return;
-  }
-  const addButton = event.target.closest("[data-entity-use-add-canvas]");
-  if (addButton) addEntityToCanvas(addButton.dataset.entityUseAddCanvas);
-});
-entityUseDetailPortal?.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  event.preventDefault();
-  event.stopPropagation();
-  closeEntityUseDetail({ restoreFocus: true });
-});
-entityUsePickerPortal?.addEventListener("pointerdown", (event) => event.stopPropagation());
-entityUsePickerPortal?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  if (event.target.matches("[data-entity-use-picker-backdrop]")) {
-    closeEntityUsePicker();
-    return;
-  }
-  const action = event.target.closest("[data-entity-use-action]")?.dataset.entityUseAction;
-  if (!action) return;
-  if (action === "close-picker" || action === "cancel-picker") {
-    closeEntityUsePicker();
-    return;
-  }
-  if (action === "change-space") {
-    const space = event.target.closest("[data-entity-use-space]")?.dataset.entityUseSpace;
-    state.entityUsePickerSpace = space === "organization" ? "organization" : "personal";
-    renderEntityUsePicker();
-    return;
-  }
-  if (action === "clear-search") {
-    state.entityUsePickerQuery = "";
-    state.entityUsePickerSelectionStart = 0;
-    state.entityUsePickerSelectionEnd = 0;
-    renderEntityUsePicker({ focusSearch: true });
-    return;
-  }
-  if (action === "toggle-entity") {
-    const entityId = event.target.closest("[data-entity-use-toggle]")?.dataset.entityUseToggle;
-    if (!entityId) return;
-    if (state.entityUsePickerSelectedIds.has(entityId)) {
-      state.entityUsePickerSelectedIds.delete(entityId);
-      state.entityUsePickerSelectedSpaces.delete(entityId);
-    } else {
-      state.entityUsePickerSelectedIds.add(entityId);
-      state.entityUsePickerSelectedSpaces.set(entityId, state.entityUsePickerSpace);
-    }
-    renderEntityUsePicker();
-    return;
-  }
-  if (action === "add-entities") addSelectedEntitiesToGenerator();
-});
-entityUsePickerPortal?.addEventListener("input", (event) => {
-  if (!event.target.matches("[data-entity-use-search]")) return;
-  state.entityUsePickerQuery = event.target.value;
-  state.entityUsePickerSelectionStart = event.target.selectionStart;
-  state.entityUsePickerSelectionEnd = event.target.selectionEnd;
-  if (!event.isComposing && !state.entityUsePickerComposing) renderEntityUsePicker({ focusSearch: true });
-});
-entityUsePickerPortal?.addEventListener("compositionstart", (event) => {
-  if (event.target.matches("[data-entity-use-search]")) state.entityUsePickerComposing = true;
-});
-entityUsePickerPortal?.addEventListener("compositionend", (event) => {
-  if (!event.target.matches("[data-entity-use-search]")) return;
-  state.entityUsePickerComposing = false;
-  state.entityUsePickerQuery = event.target.value;
-  state.entityUsePickerSelectionStart = event.target.selectionStart;
-  state.entityUsePickerSelectionEnd = event.target.selectionEnd;
-  renderEntityUsePicker({ focusSearch: true });
-});
-entityUsePickerPortal?.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    event.stopPropagation();
-    closeEntityUsePicker();
-    return;
-  }
-  if (event.key !== "Tab") return;
-  const focusable = [...entityUsePickerPortal.querySelectorAll("button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])")]
-    .filter((element) => element.getClientRects().length);
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable.at(-1);
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-});
 assetLibrarySearchInput?.addEventListener("input", (event) => {
-  closeEntityUseDetail();
+  canvasEntityUse.closeDetail();
   state.librarySearch = event.currentTarget.value;
   state.librarySearchByContext[getAssetLibraryContextKey()] = state.librarySearch;
   state.librarySelectedIds.clear();
@@ -10640,7 +10290,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
   }
   const menuToggle = event.target.closest("[data-library-menu-toggle]");
   if (menuToggle) {
-    closeEntityUseDetail();
+    canvasEntityUse.closeDetail();
     const card = menuToggle.closest("[data-library-folder], [data-library-media], [data-library-entity]");
     const kind = card?.hasAttribute("data-library-folder")
       ? "folder"
@@ -10657,7 +10307,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
   }
   const itemActionButton = event.target.closest("[data-library-menu-item]");
   if (itemActionButton) {
-    closeEntityUseDetail();
+    canvasEntityUse.closeDetail();
     const itemAction = itemActionButton.dataset.libraryMenuItem;
     const card = itemActionButton.closest("[data-library-folder], [data-library-media], [data-library-entity]");
     const kind = itemActionButton.dataset.libraryItemKind
