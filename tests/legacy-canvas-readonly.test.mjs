@@ -4,7 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
-const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
+const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
   readFile(new URL("src/config/prototype-config.js", root), "utf8"),
@@ -37,6 +37,7 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("src/legacy-canvas/canvas-media-toolbar-view.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-runtime-store.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-task-runner.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-content-commands.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-command-executor.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-document-codec.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-persistence-coordinator.js", root), "utf8"),
@@ -45,12 +46,13 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
-test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", () => {
+test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", (t) => {
   const dom = new JSDOM(html, {
     url: "http://reelay.test/index.html",
     runScripts: "outside-only",
     pretendToBeVisual: true,
   });
+  t.after(() => dom.window.close());
   const { window } = dom;
   const postedMessages = [];
   const hostWindow = { postMessage(message) { postedMessages.push(message); } };
@@ -102,6 +104,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(mediaToolbarView);
   window.eval(runtimeStore);
   window.eval(nodeTaskRunner);
+  window.eval(contentCommands);
   window.eval(commandExecutor);
   window.eval(codec);
   window.eval(persistenceCoordinator);

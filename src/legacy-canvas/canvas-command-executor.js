@@ -5,6 +5,8 @@
   const COLLECTION_SET = new Set(COLLECTIONS);
   const UNDO_KIND = "canvas-command";
   const DEFAULT_UNDO_LIMIT = 50;
+  const RESERVED_FIELDS = new Set(["id", "__proto__", "prototype", "constructor"]);
+  const hasOwn = (record, key) => Object.prototype.hasOwnProperty.call(record, key);
 
   function isRecord(value) {
     return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -87,6 +89,24 @@
     return null;
   }
 
+  function validateFields(snapshot) {
+    if (!isRecord(snapshot) || !isRecord(snapshot.fields) || Object.keys(snapshot).length !== 1) {
+      return "Field snapshots must contain only a fields object.";
+    }
+    const fields = Object.keys(snapshot.fields);
+    if (!fields.length) return "Field snapshots must not be empty.";
+    for (const field of fields) {
+      if (!field || RESERVED_FIELDS.has(field)) return `Field ${field} cannot be changed.`;
+      const entry = snapshot.fields[field];
+      if (!isRecord(entry) || typeof entry.present !== "boolean"
+        || (entry.present ? !hasOwn(entry, "value") : hasOwn(entry, "value"))
+        || Object.keys(entry).some((key) => key !== "present" && key !== "value")) {
+        return `Field ${field} requires { present: true, value } or { present: false }.`;
+      }
+    }
+    return null;
+  }
+
   function createCanvasCommandExecutor(options = {}) {
     if (typeof options.getCanvas !== "function") {
       throw new TypeError("Canvas command executor requires getCanvas(canvasId).");
@@ -96,6 +116,9 @@
     const clone = typeof options.clone === "function" ? options.clone : clonePlain;
     const equal = typeof options.equal === "function" ? options.equal : equalPlain;
     const normalize = typeof options.normalize === "function" ? options.normalize : identityNormalize;
+    const projectRecord = typeof options.projectRecord === "function" ? options.projectRecord : (_collection, record) => record;
+    // Identity belongs to the runtime, never to serialized commands or undo snapshots.
+    const undoIdentities = new WeakMap();
     const validateTransition = typeof options.validateTransition === "function"
       ? options.validateTransition
       : () => null;
@@ -104,6 +127,7 @@
       : DEFAULT_UNDO_LIMIT;
 
     function cloneSnapshot(snapshot) {
+      if (snapshot.fields) return { fields: clone(snapshot.fields) };
       const output = { record: snapshot.record === null ? null : clone(snapshot.record) };
       if (snapshot.index !== undefined) output.index = snapshot.index;
       return output;
@@ -139,6 +163,19 @@
         }
         seen.add(key);
 
+        if (candidate.kind === "fields") {
+          const fieldError = validateFields(candidate.before) || validateFields(candidate.after);
+          if (fieldError) return failure("invalid-change", fieldError);
+          if (!equal(Object.keys(candidate.before.fields).sort(), Object.keys(candidate.after.fields).sort())) {
+            return failure("invalid-change", "Before and after field names must match.");
+          }
+          changes.push({ collection, id: changeId, kind: "fields", before: cloneSnapshot(candidate.before), after: cloneSnapshot(candidate.after) });
+          continue;
+        }
+        if (candidate.kind !== undefined && candidate.kind !== "record") {
+          return failure("invalid-change", `Unsupported change kind ${candidate.kind}.`);
+        }
+
         const beforeError = validateSnapshot(candidate.before, "before", changeId);
         if (beforeError) return failure("invalid-change", beforeError);
         const afterError = validateSnapshot(candidate.after, "after", changeId);
@@ -165,6 +202,16 @@
       for (const change of command.changes) {
         const records = originals[change.collection];
         const actualIndex = findRecordIndex(records, change.id);
+        if (change.kind === "fields") {
+          if (actualIndex === -1) return failure("before-conflict", `${change.collection}/${change.id} is missing.`);
+          const record = records[actualIndex];
+          for (const [field, entry] of Object.entries(change.before.fields)) {
+            if (hasOwn(record, field) !== entry.present || (entry.present && !equal(record[field], entry.value))) {
+              return failure("before-conflict", `${change.collection}/${change.id}.${field} no longer matches its before value.`);
+            }
+          }
+          continue;
+        }
         if (change.before.record === null) {
           if (actualIndex !== -1) {
             return failure("before-conflict", `${change.collection}/${change.id} must be absent before insert.`);
@@ -177,7 +224,7 @@
         if (change.before.index !== undefined && change.before.index !== actualIndex) {
           return failure("before-conflict", `${change.collection}/${change.id} moved before execution.`);
         }
-        if (!equal(records[actualIndex], change.before.record)) {
+        if (!equal(projectRecord(change.collection, records[actualIndex]), change.before.record)) {
           return failure("before-conflict", `${change.collection}/${change.id} no longer matches its before record.`);
         }
       }
@@ -193,6 +240,14 @@
       for (const change of command.changes) {
         const records = drafts[change.collection];
         const currentIndex = findRecordIndex(records, change.id);
+        if (change.kind === "fields") {
+          const record = records[currentIndex];
+          for (const [field, entry] of Object.entries(change.after.fields)) {
+            if (entry.present) record[field] = clone(entry.value);
+            else delete record[field];
+          }
+          continue;
+        }
         if (change.after.record === null) {
           if (currentIndex === -1) {
             return failure("apply-conflict", `${change.collection}/${change.id} disappeared during execution.`);
@@ -212,7 +267,23 @@
       return null;
     }
 
-    function validateNormalizedScope(command, originals, drafts) {
+    function validateNormalizedScope(command, originals, drafts, fieldPositions) {
+      for (const change of command.changes.filter((item) => item.kind === "fields")) {
+        const records = originals[change.collection];
+        const originalIndex = findRecordIndex(records, change.id);
+        const finalIndex = findRecordIndex(drafts[change.collection], change.id);
+        if (fieldPositions.get(change) !== finalIndex) {
+          return failure("normalize-scope", "A field patch cannot move a record.");
+        }
+        const expected = clone(records[originalIndex]);
+        for (const [field, entry] of Object.entries(change.after.fields)) {
+          if (entry.present) expected[field] = clone(entry.value);
+          else delete expected[field];
+        }
+        if (!equal(expected, drafts[change.collection][finalIndex])) {
+          return failure("normalize-scope", `Normalizer changed fields outside ${change.collection}/${change.id}'s patch.`);
+        }
+      }
       for (const collection of Object.keys(drafts)) {
         const explicitIds = new Set(
           command.changes.filter((change) => change.collection === collection).map((change) => change.id),
@@ -237,6 +308,10 @@
     function validatePostconditions(command, drafts) {
       for (const change of command.changes) {
         const finalIndex = findRecordIndex(drafts[change.collection], change.id);
+        if (change.kind === "fields") {
+          if (finalIndex === -1) return failure("after-conflict", `${change.collection}/${change.id} was rejected during normalization.`);
+          continue;
+        }
         if (change.after.record === null && finalIndex !== -1) {
           return failure(
             "after-conflict",
@@ -259,6 +334,7 @@
         type: command.type,
         canvasId: command.canvasId,
         changes: command.changes.map((change) => {
+          if (change.kind === "fields") return clone(change);
           const originalIndex = findRecordIndex(originals[change.collection], change.id);
           const finalIndex = findRecordIndex(drafts[change.collection], change.id);
           return {
@@ -266,10 +342,10 @@
             id: change.id,
             before: originalIndex === -1
               ? { record: null }
-              : { record: clone(originals[change.collection][originalIndex]), index: originalIndex },
+              : { record: clone(projectRecord(change.collection, originals[change.collection][originalIndex])), index: originalIndex },
             after: finalIndex === -1
               ? { record: null }
-              : { record: clone(drafts[change.collection][finalIndex]), index: finalIndex },
+              : { record: clone(projectRecord(change.collection, drafts[change.collection][finalIndex])), index: finalIndex },
           };
         }),
       };
@@ -286,6 +362,11 @@
           before: cloneSnapshot(change.after),
           after: cloneSnapshot(change.before),
         };
+        if (change.kind === "fields") {
+          inverse.kind = "fields";
+          replacements.push(inverse);
+          continue;
+        }
         if (inverse.after.record === null) removals.push(inverse);
         else if (inverse.before.record === null) insertions.push(inverse);
         else replacements.push(inverse);
@@ -308,8 +389,53 @@
       };
     }
 
+    function prepareWrite(target, field, entry) {
+      const descriptor = Object.getOwnPropertyDescriptor(target, field);
+      if (descriptor && (!hasOwn(descriptor, "value") || (entry.present ? !descriptor.writable : !descriptor.configurable))) {
+        throw new TypeError(`Canvas field ${field} is not writable.`);
+      }
+      if (!descriptor && entry.present && !Object.isExtensible(target)) {
+        throw new TypeError(`Canvas record cannot add ${field}.`);
+      }
+      const nextDescriptor = entry.present
+        ? (descriptor ? { ...descriptor, value: entry.value } : { value: entry.value, writable: true, enumerable: true, configurable: true })
+        : null;
+      return { target, field, descriptor: nextDescriptor };
+    }
+
+    function prepareCommit(canvas, command, drafts, nextUndoStack) {
+      const writes = [];
+      const identities = [];
+      for (const collection of Object.keys(drafts)) {
+        const changes = new Map(command.changes.filter((change) => change.collection === collection).map((change) => [change.id, change]));
+        const liveRecords = new Map(canvas[collection].map((record) => [normalizeText(record.id), record]));
+        const nextRecords = drafts[collection].map((draft) => {
+          const id = normalizeText(draft.id);
+          const change = changes.get(id);
+          const live = liveRecords.get(id);
+          if (!change) return live;
+          if (change.kind !== "fields") return draft;
+          identities.push({ collection, id, record: live });
+          for (const [field, entry] of Object.entries(change.after.fields)) {
+            writes.push(prepareWrite(live, field, entry.present ? { present: true, value: draft[field] } : entry));
+          }
+          return live;
+        });
+        if (nextRecords.length !== canvas[collection].length || nextRecords.some((record, index) => record !== canvas[collection][index])) {
+          writes.push(prepareWrite(canvas, collection, { present: true, value: nextRecords }));
+        }
+      }
+      writes.push(prepareWrite(canvas, "undoStack", { present: true, value: nextUndoStack }));
+      return { writes, identities };
+    }
+
     function applyCommand(commandCandidate, settings = {}) {
-      const validation = validateCommand(commandCandidate);
+      let validation;
+      try {
+        validation = validateCommand(commandCandidate);
+      } catch (error) {
+        return failure("invalid-command", typeof error?.message === "string" ? error.message : String(error));
+      }
       if (!validation.ok) return validation;
       const command = validation.command;
       const canvas = getCanvas(command.canvasId);
@@ -333,6 +459,8 @@
         if (preconditionFailure) return preconditionFailure;
         const applyFailure = applyRawChanges(command, drafts);
         if (applyFailure) return applyFailure;
+        const fieldPositions = new Map(command.changes.filter((change) => change.kind === "fields")
+          .map((change) => [change, findRecordIndex(drafts[change.collection], change.id)]));
 
         const safeCanvasView = {};
         for (const collection of COLLECTIONS) {
@@ -355,7 +483,7 @@
 
         const postconditionFailure = validatePostconditions(command, drafts);
         if (postconditionFailure) return postconditionFailure;
-        const scopeFailure = validateNormalizedScope(command, originals, drafts);
+        const scopeFailure = validateNormalizedScope(command, originals, drafts, fieldPositions);
         if (scopeFailure) return scopeFailure;
 
         const transitionFailure = validateTransition({
@@ -388,6 +516,10 @@
           }
         }
 
+        // Everything that can fail (including descriptor checks and cloning) finishes
+        // before the first live write. Patches never replace an existing node object.
+        const commit = prepareCommit(canvas, appliedCommand, drafts, nextUndoStack);
+
         const result = Object.freeze({
           ok: true,
           canvasId: command.canvasId,
@@ -395,8 +527,19 @@
           undoEntry: undoEntry ? clone(undoEntry) : null,
           source: settings.source || "execute",
         });
-        for (const collection of touchedCollections) canvas[collection] = drafts[collection];
-        canvas.undoStack = nextUndoStack;
+        for (const write of commit.writes) {
+          if (write.descriptor) Object.defineProperty(write.target, write.field, write.descriptor);
+          else delete write.target[write.field];
+        }
+        if (undoEntry) undoIdentities.set(undoEntry, commit.identities);
+        if (settings.source === "undo") {
+          for (const change of appliedCommand.changes) {
+            if (change.kind !== "fields" && change.before.record === null && change.after.record !== null) {
+              const restored = canvas[change.collection].find((record) => normalizeText(record.id) === change.id);
+              adoptRestoredRecord(command.canvasId, change.collection, restored);
+            }
+          }
+        }
         try {
           onCommit(result);
           return result;
@@ -432,6 +575,12 @@
       if (entry.kind !== UNDO_KIND || !entry.inverse) {
         return failure("undo-unsupported", `Canvas ${canvasId} has a non-command undo entry on top.`);
       }
+      for (const identity of undoIdentities.get(entry) || []) {
+        const current = canvas[identity.collection]?.find((record) => normalizeText(record.id) === identity.id);
+        if (current !== identity.record) {
+          return failure("before-conflict", `${identity.collection}/${identity.id} was replaced since this command.`);
+        }
+      }
       return applyCommand(entry.inverse, {
         recordUndo: false,
         source: "undo",
@@ -439,7 +588,54 @@
       });
     }
 
-    return Object.freeze({ execute, undoLast });
+    function adoptRestoredRecord(canvasId, collection, record) {
+      const canvas = getCanvas(canvasId);
+      if (!canvas || !COLLECTION_SET.has(collection) || !record
+        || !canvas[collection]?.includes(record)) return false;
+      for (const entry of Array.isArray(canvas.undoStack) ? canvas.undoStack : []) {
+        for (const identity of undoIdentities.get(entry) || []) {
+          if (identity.collection === collection && identity.id === normalizeText(record.id)) identity.record = record;
+        }
+      }
+      return true;
+    }
+
+    // A lifecycle transition may deliberately replace content outside undo (for
+    // example a new generation discards the previous result's display name).
+    // Retire only those fields, retaining the other fields and runtime guards.
+    function discardFieldHistory(canvasId, collection, recordId, fields) {
+      const canvas = getCanvas(canvasId);
+      if (!canvas || !COLLECTION_SET.has(collection) || !Array.isArray(fields)) return false;
+      const discarded = new Set(fields);
+      const nextStack = [];
+      for (const entry of Array.isArray(canvas.undoStack) ? canvas.undoStack : []) {
+        if (entry.kind !== UNDO_KIND || !entry.command.changes.some((change) =>
+          change.kind === "fields" && change.collection === collection && change.id === recordId
+          && Object.keys(change.before.fields).some((field) => discarded.has(field)))) {
+          nextStack.push(entry);
+          continue;
+        }
+        const command = clone(entry.command);
+        command.changes = command.changes.filter((change) => {
+          if (change.kind !== "fields" || change.collection !== collection || change.id !== recordId) return true;
+          for (const field of discarded) {
+            delete change.before.fields[field];
+            delete change.after.fields[field];
+          }
+          return Object.keys(change.before.fields).length > 0;
+        });
+        if (!command.changes.length) continue;
+        const nextEntry = createUndoEntry(command);
+        const identities = (undoIdentities.get(entry) || []).filter((identity) => command.changes.some((change) =>
+          change.collection === identity.collection && change.id === identity.id));
+        undoIdentities.set(nextEntry, identities);
+        nextStack.push(nextEntry);
+      }
+      canvas.undoStack = nextStack;
+      return true;
+    }
+
+    return Object.freeze({ execute, undoLast, adoptRestoredRecord, discardFieldHistory });
   }
 
   root.REELAY_CANVAS_COMMAND_EXECUTOR = Object.freeze({

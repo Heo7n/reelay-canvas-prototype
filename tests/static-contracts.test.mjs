@@ -69,7 +69,7 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(appSource, /modelIconMarkup\(model, "agent-model-provider"\)/);
   assert.match(appSource, /"box":\s*'<path/);
   assert.match(appSource, /commitGenerationUndoBoundary\(canvas, node\.id\)/);
-  assert.match(appSource, /action\.type === "node-update" && action\.node\?\.id === nodeId/);
+  assert.doesNotMatch(appSource, /"node-update"/);
   assert.match(appCss, /\.model-mode-contract/);
 });
 
@@ -311,7 +311,7 @@ test("Seedance 2.5 task type switches keep identical details still during the an
     'case "omni-reference-task-type":',
     'case "audio":',
   );
-  assert.match(taskTypeActionSource, /captureTaskTypeParameterTransition\(node, value\)[\s\S]*?node\.omniReferenceTaskType = value/);
+  assert.match(taskTypeActionSource, /captureTaskTypeParameterTransition\(node, value\)[\s\S]*?draft\.omniReferenceTaskType = value/);
   assert.match(appSource, /render\(\);[\s\S]*?if \(taskTypeTransition\) animateTaskTypeParameterTransition\(node, taskTypeTransition\)/);
 
   assert.match(appCss, /\.param-panel\.is-task-type-transitioning\s*\{[\s\S]*?transform-origin:\s*left bottom[\s\S]*?height 240ms[\s\S]*?transform 240ms/);
@@ -478,6 +478,7 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
     "function requestHostNavigation(target)",
   );
   const hydrateCanvasDocumentSnapshot = Function(
+    "canvasContentCommands",
     "canvasNodeTasks",
     "canvasDocumentCodec",
     "canvasScaleLimits",
@@ -492,6 +493,7 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
     "clearAssetLibrarySelection",
     `${hydrateSource}; return hydrateCanvasDocumentSnapshot;`,
   )(
+    { normalizeGroupMembership: () => undefined },
     { cancelScope: () => 0 },
     { restoreSnapshot: () => restored },
     { min: 0.2, max: 2 },
@@ -523,49 +525,20 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
   assert.equal(hydrationState.lastPreset.omniReferenceTaskType, "extend");
 });
 
-test("task type changes participate in generation locks, persistence, and undo", () => {
-  const lockedActionsSource = sourceBetween(
-    appSource,
-    "const generationLockedActions = new Set([",
-    "function handleAction(node, action, value)",
-  );
-  const handleActionSource = sourceBetween(
-    appSource,
-    "function handleAction(node, action, value)",
-    "function closeConnectionCreateMenu()",
-  );
-  const persistentActionsSource = sourceBetween(
-    handleActionSource,
-    "const persistentActions = new Set([",
-    "if (persistentActions.has(action)",
-  );
-  const undoableActionsSource = sourceBetween(
-    handleActionSource,
-    "const undoableActions = new Set([",
-    "const before = undoableActions.has(action)",
-  );
-  const taskTypeActionSource = sourceBetween(
-    handleActionSource,
-    'case "omni-reference-task-type":',
-    'case "audio":',
-  );
-  const outputFormatActionSource = sourceBetween(
-    handleActionSource,
-    'case "output-format":',
-    'case "prompt-optimization":',
-  );
-
-  for (const actionSetSource of [lockedActionsSource, persistentActionsSource, undoableActionsSource]) {
-    assert.match(actionSetSource, /"omni-reference-task-type"/);
-    assert.match(actionSetSource, /"output-format"/);
-  }
-  assert.match(taskTypeActionSource, /taskTypeCapability\?\.uiValues\?\.includes\(value\)/);
-  assert.match(taskTypeActionSource, /node\.omniReferenceTaskType = value/);
-  assert.match(taskTypeActionSource, /applyNodeAspect\(node, constrainedAspect\)/);
-  assert.match(taskTypeActionSource, /rememberPreset\(node\)/);
-  assert.match(outputFormatActionSource, /getCapabilityValues\(node, "outputFormats"\)\.includes\(value\)/);
-  assert.match(outputFormatActionSource, /node\.outputFormat = value/);
-  assert.match(outputFormatActionSource, /rememberPreset\(node\)/);
+test("task type changes participate in generation locks, persistence, and field undo", () => {
+  const actionSet = sourceBetween(appSource, "const generatorParameterActions = new Set([", "const generatorParameterFields");
+  const parameterSource = sourceBetween(appSource, "function handleGeneratorParameterAction", "function handleAction");
+  assert.match(actionSet, /"omni-reference-task-type"/);
+  assert.match(actionSet, /"output-format"/);
+  assert.match(parameterSource, /requireCanvasMutation\(\)/);
+  assert.match(parameterSource, /node\.generating/);
+  assert.match(parameterSource, /capability\?\.uiValues\?\.includes\(value\)/);
+  assert.match(parameterSource, /draft\.omniReferenceTaskType = value/);
+  assert.match(parameterSource, /applyNodeAspect\(draft, constrainedAspect, \{ animate: false \}\)/);
+  assert.match(parameterSource, /getCapabilityValues\(node, "outputFormats"\)\.includes\(value\)/);
+  assert.match(parameterSource, /draft\.outputFormat = value/);
+  assert.match(parameterSource, /commitNodeFields\(node, draft, generatorParameterFields, "node-parameters"\)/);
+  assert.match(parameterSource, /if \(!result\.ok\) return;[\s\S]*?rememberPreset\(node\)/);
   assert.match(appSource, /function createGenerationParameterSnapshot\(node\)[\s\S]*?outputFormat:\s*node\.outputFormat/);
 });
 
@@ -906,7 +879,7 @@ test("connection mutations commit through the bounded atomic command boundary", 
   assert.match(appSource, /REELAY_CANVAS_COMMAND_EXECUTOR/);
   assert.match(
     appSource,
-    /createCanvasCommandExecutor\(\{[\s\S]*?validateTransition\(\{ command \}\)[\s\S]*?undoLimit:\s*50/,
+    /createCanvasCommandExecutor\(\{[\s\S]*?validateTransition: canvasContentCommands\.validateTransition[\s\S]*?undoLimit:\s*50/,
   );
   assert.match(
     appSource,
@@ -1035,7 +1008,7 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
   assert.match(html, /styles\.css\?v=20260904-video-params-79/);
-  assert.match(html, /app\.js\?v=20260905-node-task-runner-1/);
+  assert.match(html, /app\.js\?v=20260905-content-commands-1/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1240,7 +1213,7 @@ test("prompt workspace keeps the reference width while content drives height and
   assert.match(appCss, /\.duration-range-input::\-webkit-slider-thumb\s*\{[\s\S]*?width:\s*10px[\s\S]*?border-radius:\s*50%/);
   assert.match(appSource, /function outputFormatParameterSection\(node\)[\s\S]*?getCapabilityValues\(node, "outputFormats"\)[\s\S]*?data-action="output-format"/);
   assert.match(appCss, /\.parameter-footer-grid\.has-output-format\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(appSource, /node\.model = selected\.id;[\s\S]*?node\.duration = selected\.defaults\?\.duration \|\| "";[\s\S]*?normalizeNodeParameters\(node\)/);
+  assert.match(appSource, /draft\.model = selected\.id;[\s\S]*?draft\.duration = selected\.defaults\?\.duration \|\| "";[\s\S]*?normalizeNodeParameters\(draft\)/);
   assert.doesNotMatch(appCss, /\.duration-scale(?:\b|-)/);
   assert.doesNotMatch(appSource, /data-duration-offset|data-duration-values/);
   assert.match(appSource, /parameterSection\(node, "分辨率", "quality"/);
@@ -1284,7 +1257,7 @@ test("aspect changes preserve node identity and isolate the prompt workspace fro
   );
   assert.match(
     appSource,
-    /function applyNodeAspect\(node, aspect\)[\s\S]*?getBottomCenterAnchoredPosition[\s\S]*?canvasNodeLayoutTransition\.start/,
+    /function applyNodeAspect\(node, aspect,[\s\S]*?getBottomCenterAnchoredPosition[\s\S]*?canvasNodeLayoutTransition\.start/,
   );
   assert.match(
     appSource,
@@ -1628,7 +1601,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260905-node-task-runner-1/);
+  assert.match(html, /app\.js\?v=20260905-content-commands-1/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);

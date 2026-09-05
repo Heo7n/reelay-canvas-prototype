@@ -32,11 +32,13 @@
 
 ## 下一开发切片
 
-2026-09-05 后续工作入口：用户准备先继续项目画布内的具体调整，按 `development-workflow.md` 第 1.2 / 4.1 节复用一个活动分支与完整路由开发预览。主体库仍按以下规则推进；不要求先完成主体库全设计、全量拆分 `app.js` 或迁移 React Flow 才能调整画布。下一个具体 UI 改动范围以用户在预览中的反馈为准。
+2026-09-05 当前切片：节点 / 分组基础治理已接入离散参数、生成媒体命名、建组 / 解组 / 成员结算和已有局部布局；下方记录实际边界。按 `development-workflow.md` 第 1.2 / 4.1 节复用活动分支与完整路由预览，不把全量拆分 `app.js` 或迁移 React Flow 当作继续主体库设计的前置条件。下一产品入口优先复核主体库与节点配合，具体范围仍结合用户当次反馈决定。
+
+后续目标与阶段入口统一见 [产品扩展规划第 8.1 节](product-expansion-plan.md#81-当前滚动路线2026-09-05)：主体与节点、Agent 模拟生成、项目生成历史、整理、消息与必要配置，以及分享权限 / 申请加入和最终真实双浏览器同时编辑均已确认；顺序是可重审的建议，详细规则仍按阶段决定。新切片开始时主动提醒该阶段目标与待定边界，完成时更新实际范围和下一入口，不依赖用户记住本次讨论。通知不是审批真相；历史独立于画布展示；后台区分共享服务、组织管理、最小运营页与开发演练控制，当前不要求完整独立后台网站。
 
 2026-09-05 工作区释放：已在复核干净状态、忽略文件与目录解析后移除 6 个纯代码 / 缓存 worktree，包括首页登录草稿、交互修复、连线、首页菜单、消息中心与节点参数历史目录；所有 `codex/archive/*` 分支及提交号保持不变。当前只保留主工作目录、承载 API 与 ObjectStore 的 `0707-wt-canvas-integration`、保存另一批素材的 `0707-wt-canvas-shell-redesign`。恢复历史代码从归档分支重新建立工作区，不依赖已删除目录。
 
-主体使用交互现由 `canvas-entity-use-controller.js` 持有选择器 / 详情 UI 状态、timer / animation frame、焦点、背景隔离和监听器生命周期；入口只注入最小读取与提交能力，旧状态和事件路径已移除。选择器绑定打开时的 project / canvas / node，确认前重新验证可写与节点可用性；陈旧回调不能跨作用域恢复弹层或焦点。逐 Media 展开与内容写入仍复用既有 model 和 app 适配器，本轮没有把已有节点快照撤销迁移成字段命令。
+主体使用交互现由 `canvas-entity-use-controller.js` 持有选择器 / 详情 UI 状态、timer / animation frame、焦点、背景隔离和监听器生命周期；入口只注入最小读取与提交能力，旧状态和事件路径已移除。选择器绑定打开时的 project / canvas / node，确认前重新验证可写与节点可用性；陈旧回调不能跨作用域恢复弹层或焦点。逐 Media 展开与内容写入仍复用既有 model 和 app 适配器；向生成节点追加主体素材的撤销改为仅移除本次新增引用 ID，保留已有素材元数据、节点身份及无关字段，不再恢复整节点快照。它仍是 legacy 增量 action，正式稳定引用命令尚未完成。
 
 节点生成与提示词优化现由无 DOM 的 `canvas-node-task-runner.js` 独占运行记录、timer、取消与完成归属，已移除根 `state` 中的两套任务 Map。runner 保留启动输入快照和实际节点身份，完成前验证 project / canvas / node / task，拒绝重复启动与陈旧回调；`app.js` 继续负责输入验证、原有模拟扣费、字段提交、撤销和保存。普通切画布允许原画布后台完成，删除（含撤销创建）、hydrate、宿主上下文替换和访问失效会取消任务。Alt 复制正在优化的节点已修复为可编辑的空闲副本。生成耗时仍为 900–1600ms、提示词优化为 900ms，刷新积分仍为 `3000 / 0`，没有新增退款或持久任务规则。此次没有改动样式、节点模板、拖动、选择和连线手势。
 
@@ -44,7 +46,7 @@
 
 2026-09-05 本机运行数据边界：日常代码入口收敛到根目录 `0707` 的本地 `main`；当前 `5175` API 仍由 `0707-wt-canvas-integration` 提供，使用该目录的 `.reelay-data/object-store`。`0707-wt-canvas-shell-redesign` 还保存另一批不重复的本机素材，两处都保留。前端主线可更新，但迁移 API 时必须显式指定并验证已有 ObjectStore，不直接从根目录启动空的默认存储，也不重新 seed。
 
-2026-09-05 产品方向澄清：项目是正式 Reelay 前端的产品行为预演版，已确认规则需可执行，后端可模拟；详见 `product-expansion-plan.md` 第 1 节。当前继续主体库设计与现有交互正确性修复，完整创作故事串联及首页 / 登录大规模重设计后置。手机号 / 邮箱注册和邀请码保留为后续能力方向，详细流程尚未确定；不要把参考图或其他 worktree 的登录草稿当作定稿需求。
+2026-09-05 产品方向澄清：项目是正式 Reelay 前端的产品行为预演版，已确认规则需可执行，后端可模拟；后续范围与滚动路线已补入 `product-expansion-plan.md` 第 1 / 8.1 节。首页 / 登录大规模重设计仍后置。手机号 / 邮箱注册和邀请码保留为后续能力方向，详细流程尚未确定；不要把参考图或其他 worktree 的登录草稿当作定稿需求。
 
 当前修复切片保留部分删除后的组及剩余成员，删除撤销恢复原组顺序和成员；视频提示词优化采用独立字段撤销，不再恢复任务启动时的整节点快照。组织积分发放 / 回收尚未实现状态变化，确认操作只反馈本次未执行，不再声称提交成功；后续模拟规则另行设计。
 
@@ -56,22 +58,25 @@ iframe 侧文档保存已经从 `app.js` 提取为无 DOM 的持久化协调器�
 
 多画布内容已经由 `canvas-runtime-store.js` 统一持有：每个 CanvasRecord 是节点、组、连接、视口、层级和撤销栈的唯一权威，根 `state` 只保留供现有 renderer / 手势 adapter 使用的活动画布访问门面。`render()`、缩放和画布切换不再执行 CanvasRecord 与根状态之间的镜像复制；后台任务按 canvas id 直接定位目标记录，删除非活动画布也会显式触发保存。
 
-无 DOM 的 `canvas-command-executor.js` 已建立 touched collection draft、before conflict、normalizer scope、transition validator、逆命令、每画布隔离和 50 条混合 undo 上限。连接单条创建、批量创建和删除已统一通过原子命令提交，批量连接只写一条 undo；连接归一化已从 renderer 移到提交 / hydrate 边界。提交后保存 effect 抛错会作为 `effectError` 报告，不会把已经提交的内容伪报为失败。当前 app adapter 明确拒绝 nodes / groups 命令，防止在字段级契约建立前把整节点任务态或 UI 态带入撤销。
+无 DOM 的 `canvas-command-executor.js` 已建立 touched collection draft、before conflict、normalizer scope、transition validator、逆命令、每画布隔离和 50 条混合 undo 上限。连接单条创建、批量创建和删除已统一通过原子命令提交，批量连接只写一条 undo；连接归一化已从 renderer 移到提交 / hydrate 边界。提交后保存 effect 抛错会作为 `effectError` 报告，不会把已经提交的内容伪报为失败。`canvas-content-commands.js` 新增字段白名单、组事务规划和双向成员验证；节点字段提交与撤销保留 live 对象身份，组只有创建 / 删除使用 canonical record。参数和生成媒体命名已接入字段命令；素材节点命名只撤回目标素材的 displayName。组成员归一化只在 hydrate 执行，render / bounds 不再隐式修复内容。
 
-当前先继续主体库设计与逐素材展开的行为核对，不启动 React Flow 迁移或完整创作故事。后续需要处理画布工程边界时，沿以下方向逐步推进：
+建组、解组与已有组 / 多选布局各记录一次撤销，布局只回退坐标，不被随后点击置顶的 z 变化阻塞。拖动 / 组框缩放仍用原 session 预览和 legacy move / group-update 撤销，在完成时通过组事务结算成员；取消恢复起始状态。Alt 拖动复制完成登记一条 create 撤销，取消移除副本并恢复原选择；撤销创建不会删除原有空组。受控删除恢复使用 executor 的 adoptRestoredRecord 衔接原字段历史，任意同 ID 替换仍拒绝旧撤销。新一轮生成清除旧结果名时显式退休 name 字段历史，保留同条模型等参数；生成成功继续清理该节点先前的参数 / 名称 / 优化 / 主体追加历史，保留布局与组 / 移动历史。
 
-1. 在现有 CanvasCommand 上建立字段级 Node patch 与 Group membership invariant，先迁移媒体命名和离散参数，再迁移解组；不能使用整节点快照，不能修改运行时创建类型或恢复生成 / 提示词任务态。高频 pointer preview 仍保留在 session/adapter 层，pointerup 后续只提交最终字段事务。
+本批本地验收：`npm run check` 的 588 项测试、`npm run build` 和 `git diff --check` 通过；其中真实 app 撤销集成覆盖 50 项。隔离浏览器检查了深浅主题、比例 / 任务模式与撤销、建组 / 解组 / 局部布局、生成期间移动另一节点、媒体改名，以及一次 24 积分扣减和刷新恢复 3000；控制台无 error / warn。完整路由预览仍使用 5173，API / ObjectStore 保持原位置。2026-09-05 11:29 再次核验 Vercel 未连接 Git，生产部署与公网别名未变，本批不部署。
+
+后续工程按以下边界随产品切片推进；待定规则按扩展规划第 8.1 节主动复核，不启动未经评估的整体画布迁移：
+
+1. 字段级 Node patch 与 Group membership invariant 已建立；后续按功能需要迁移节点结构、素材引用与其余内容修改。不能使用整节点快照，不能修改运行时创建类型或恢复生成 / 提示词任务态。高频 pointer preview 继续保留在 session/adapter 层，完整 pointerup 坐标字段命令仍待后续迁移。
 2. 任务 runner 已完成；后续节点字段命令成熟后，再把当前 app 中显式的完成写入适配到字段命令，继续保留任务作用域验证、提示词字段撤销和生成成功时的撤销边界。Agent 对话任务尚不在该 runner 的范围内。
 3. 资产下一步以已落地的 WorkspaceMediaAsset + personal placement + ProjectAssetReference + ObjectStore + personal Entity 为基线，把 Folder / organization placement、Entity 删除恢复，以及主体选定 Media 的独立引用 / 节点创建纳入明确应用边界，再接组织发布与审核。不把这些逻辑塞进 `CollaborationStore`、`app.js` 或 CanvasDocument；GenerationResult 只有显式保存后才幂等晋升为 WorkspaceMediaAsset。
 
-节点创建撤销尚未统一：当前 `create` action 用于主体展开等入口，普通双击新建和 Alt 复制还未登记创建撤销。本轮补齐的是既有 `create` 撤销分支的任务取消，不应描述为已经实现所有节点创建的撤销；后续迁移节点命令时需一并明确覆盖范围。
+节点创建撤销尚未统一：当前 `create` action 用于主体展开和 Alt 拖动复制，普通双击新建仍未登记创建撤销；不能描述为已实现所有节点创建的撤销。整画布自动整理仍是禁用占位，已支持的是组 / 选中节点的既有排列入口。
 
 积分前端模拟需另开切片。开始前至少确认组织月度额度与结转规则、一次生成的预占 / 扣减 / 失败退款、成员与项目统计维度、管理员可见范围，以及演示月份和异常场景；没有这些口径前，不把当前 `3000 / 0` mock 扩成伪账本。
 
 CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画布的多画布 bundle，v1 canonical allow-list 只包含节点、组、视口、节点 `mediaKind` 和模型参数，持久媒体 URL 必须通过安全校验。后续 GenerationTask、GenerationResult、Node 级资产引用与 CreditLedger 应建立独立实体，不继续向该 bundle 塞运行态；WorkspaceMediaAsset 二进制和 ProjectAssetReference 也不属于 CanvasDocument。
 
-暂不加入邀请、外部分享、实时光标、复杂权限和真实密码生命周期。当前公网地址
-只用于原型评审，不应扩写为生产可用承诺。
+本轮节点 / 分组治理不实现分享、申请、实时协作或真实密码生命周期。分享申请与真实双浏览器同时编辑已进入后续确认目标，不能沿用旧“暂不加入”表述将其永久排除；具体规则与阶段验收见扩展规划第 4.6 / 8.1 节。当前公网地址只用于原型评审，不应扩写为生产可用承诺。
 
 固定演示账号统一使用密码 `reelay-demo`：
 

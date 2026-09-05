@@ -3,6 +3,7 @@
 
   function createCanvasNodeDragController(options) {
     const interaction = options.interaction;
+    const finishedActions = new WeakSet();
 
     function move(action, pointer) {
       const drag = interaction.getDraggedPositions(action, pointer, options.getScale());
@@ -42,6 +43,8 @@
         pointerId: action.pointerId,
         ids: draggedNodes.map((node) => node.id),
         activeId,
+        sourceIds: sourceNodes.map((node) => node.id),
+        sourceActiveId: sourceNodes[activeIndex]?.id || null,
         startClientX: action.startClientX,
         startClientY: action.startClientY,
         origins,
@@ -58,13 +61,18 @@
     }
 
     function finish(action, finishOptions = {}) {
+      if (finishedActions.has(action)) return;
+      finishedActions.add(action);
       if (finishOptions.cancelled) {
-        (action.origins || []).forEach(options.applyNodePosition);
+        if (action.isDuplicate) options.removeDuplicatedNodes(action.ids.slice(), action);
+        else (action.origins || []).forEach(options.applyNodePosition);
         if (finishOptions.render !== false) options.render();
         return;
       }
       options.updateGroupMembership(action.ids);
-      if (action.moved && !action.isDuplicate) {
+      if (action.isDuplicate) {
+        options.pushUndoAction({ type: "create", nodeIds: action.ids.slice() });
+      } else if (action.moved) {
         options.pushUndoAction({
           type: "move",
           positions: action.origins,
