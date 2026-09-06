@@ -311,7 +311,6 @@ const state = {
   assetLibraryWidth: 550,
   themeMode: loadThemeMode(),
   canvasPanel: null,
-  overlaySyncTimer: null,
   nodePopoverFrame: 0,
   groupChromeFrame: 0,
 };
@@ -349,6 +348,8 @@ const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
 if (!canvasNodeInteraction) throw new Error("Canvas node interaction helpers are unavailable.");
 const canvasNodePlacement = window.REELAY_CANVAS_NODE_PLACEMENT;
 if (!canvasNodePlacement) throw new Error("Canvas node placement helpers are unavailable.");
+const canvasNodeEditorLayout = window.REELAY_CANVAS_NODE_EDITOR_LAYOUT;
+if (!canvasNodeEditorLayout) throw new Error("Canvas node editor layout helpers are unavailable.");
 const canvasNodeLayoutTransitionFactory = window.REELAY_CANVAS_NODE_LAYOUT_TRANSITION;
 if (!canvasNodeLayoutTransitionFactory) throw new Error("Canvas node layout transition helper is unavailable.");
 const canvasSpatialSelection = window.REELAY_CANVAS_SPATIAL_SELECTION;
@@ -373,6 +374,8 @@ const canvasConnectionFeedbackMotion = window.REELAY_CANVAS_CONNECTION_FEEDBACK_
 if (!canvasConnectionFeedbackMotion) throw new Error("Canvas connection feedback motion is unavailable.");
 const canvasLayerReconcilerFactory = window.REELAY_CANVAS_LAYER_RECONCILER;
 if (!canvasLayerReconcilerFactory) throw new Error("Canvas layer reconciler is unavailable.");
+const canvasNodePromptView = window.REELAY_CANVAS_NODE_PROMPT_VIEW;
+if (!canvasNodePromptView) throw new Error("Canvas node prompt view is unavailable.");
 const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
 if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
 const canvasAssetLibraryView = window.REELAY_CANVAS_ASSET_LIBRARY_VIEW;
@@ -611,6 +614,11 @@ const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler
     getId: (node) => node.id,
     getSignature: getNodeRenderSignature,
     createElement: createNodeElement,
+    updateElement(element, node) {
+      if (node.kind !== "generator") return false;
+      createGeneratorNodeElement(node, element);
+      return true;
+    },
     syncElement: syncCanvasNodeElement,
     prepareItem(node) {
       if (node.kind !== "generator") return;
@@ -872,6 +880,7 @@ function setAssetLibraryWidth(width, { remember = true } = {}) {
   if (remember) state.assetLibraryPreferredWidth = preferredWidth;
   const bounds = getAssetLibraryWidthBounds();
   applyAssetLibraryWidth(clampPanelWidth(preferredWidth, bounds.min, bounds.max));
+  syncPromptPanelLayouts();
   renderSelectionToolbar();
   renderMinimap();
   scheduleNodePopoverLayouts();
@@ -1179,7 +1188,7 @@ function syncSelectionOverlayProjection(
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
   const inverseCanvasScale = (1 / state.scale).toFixed(4);
-  const nodeMetaScreenScale = clamp(Math.pow(state.scale, 0.08), 0.88, 1.06);
+  const nodeMetaScreenScale = clamp(state.scale, 0.85, 1.8);
   const nodeMetaScale = (nodeMetaScreenScale / state.scale).toFixed(4);
   const portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale);
   shell.style.setProperty("--connection-feedback-scale", inverseCanvasScale);
@@ -1198,8 +1207,6 @@ function applyTransform() {
   scheduleGroupChromeLayout();
   updateCanvasGrid();
   syncPromptPanelLayouts();
-  window.clearTimeout(state.overlaySyncTimer);
-  state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
   syncZoomControl();
   renderConnections();
   renderGroupResizeOverlay();
@@ -1224,12 +1231,13 @@ function syncNodeVisualLayout(
   element.classList.toggle("node-layout-transitioning", isTransitioning);
   const mediaFrame = element.querySelector(".media-frame");
   if (mediaFrame) {
+    mediaFrame.classList.toggle("is-distant", layout.mediaWidth * state.scale < 250);
     mediaFrame.style.width = `${layout.mediaWidth}px`;
     mediaFrame.style.height = `${layout.mediaHeight}px`;
     mediaFrame.style.transform = `translateY(${(y - node.y).toFixed(3)}px)`;
   }
   const mediaToolbar = element.querySelector("[data-media-toolbar]");
-  if (mediaToolbar && !isTransitioning) {
+  if (mediaToolbar) {
     mediaToolbar.style.setProperty("--toolbar-scale", canonicalLayout.toolbarScale.toFixed(4));
     mediaToolbar.style.setProperty("--toolbar-nudge", "0px");
     const toolbarRect = mediaToolbar.getBoundingClientRect();
@@ -1238,11 +1246,10 @@ function syncNodeVisualLayout(
   }
   const promptPanel = element.querySelector(".prompt-panel");
   if (!promptPanel) return;
-  promptPanel.style.top = `${canonicalLayout.mediaHeight + layoutRules.panelGap}px`;
-  if (isTransitioning) return;
+  promptPanel.style.top = `${canonicalLayout.mediaHeight + canonicalLayout.panelGap}px`;
   promptPanel.style.width = `${canonicalLayout.panelWidth}px`;
   promptPanel.style.height = `${canonicalLayout.panelHeight}px`;
-  promptPanel.style.setProperty("--prompt-scale", canonicalLayout.promptScale.toFixed(4));
+  promptPanel.style.setProperty("--prompt-scale", String(canonicalLayout.promptScale));
   promptPanel.style.setProperty("--prompt-extra-height", `${(canonicalLayout.panelHeight * (canonicalLayout.promptScale - 1)).toFixed(2)}px`);
   promptPanel.style.setProperty("--prompt-composer-height", `${canonicalLayout.composerHeight}px`);
   promptPanel.style.setProperty("--prompt-advanced-height", `${canonicalLayout.advancedSettingsHeight}px`);
@@ -1254,6 +1261,12 @@ function syncNodeAspectUi(node, element) {
   if (node.kind !== "generator") return;
   const aspectLabel = element.querySelector("[data-param-aspect]");
   if (aspectLabel) aspectLabel.textContent = getCapabilityDisplayLabel(node, "aspect", node.aspect);
+  const parameterTrigger = element.querySelector('[data-action="param-panel"]');
+  if (parameterTrigger) {
+    const summary = Object.values(getParamLabelParts(node)).join("");
+    parameterTrigger.setAttribute("aria-label", summary);
+    parameterTrigger.title = summary;
+  }
   element.querySelectorAll('[data-action="aspect"]').forEach((button) => {
     const active = button.dataset.value === node.aspect;
     button.classList.toggle("active", active);
@@ -1278,16 +1291,7 @@ function syncPromptPanelContentHeight(node, element) {
   const promptInput = element.querySelector(".prompt-input");
   if (!promptInput) return false;
 
-  const previousHeight = promptInput.style.height;
-  const previousBottom = promptInput.style.bottom;
-  const previousOverflow = promptInput.style.overflowY;
-  promptInput.style.height = "0px";
-  promptInput.style.bottom = "auto";
-  promptInput.style.overflowY = "hidden";
-  const contentHeight = promptInput.scrollHeight;
-  promptInput.style.height = previousHeight;
-  promptInput.style.bottom = previousBottom;
-  promptInput.style.overflowY = previousOverflow;
+  const contentHeight = canvasNodePromptView.measureContentHeight(promptInput);
 
   const nextHeight = clamp(
     Math.ceil(layoutRules.promptInputTop + contentHeight + layoutRules.promptInputBottom),
@@ -1310,7 +1314,11 @@ function syncPromptPanelContentHeight(node, element) {
 
 function syncPromptPanelLayouts() {
   for (const node of state.nodes) {
-    syncNodeVisualLayout(node);
+    const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+    const panel = element?.querySelector(".prompt-panel");
+    const previousWidth = panel?.style.width;
+    syncNodeVisualLayout(node, element);
+    if (panel && previousWidth !== panel.style.width) syncPromptPanelContentHeight(node, element);
   }
   scheduleNodePopoverLayouts();
 }
@@ -1318,14 +1326,16 @@ function syncPromptPanelLayouts() {
 function getNodePopoverBoundary() {
   const shellRect = shell.getBoundingClientRect();
   const topRect = topBar?.getBoundingClientRect();
-  const libraryRect = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
-    ? assetLibraryPanel.getBoundingClientRect()
+  // These panels are fixed to the viewport. Their entrance transforms must
+  // not temporarily give the editor space that the final layout occupies.
+  const libraryRight = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
+    ? assetLibraryPanel.offsetLeft + assetLibraryPanel.offsetWidth
     : null;
-  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
+  const agentLeft = state.agentOpen ? agentDock?.offsetLeft : null;
   return {
-    left: Math.max(shellRect.left, libraryRect?.right || shellRect.left),
+    left: Math.max(shellRect.left, libraryRight ?? shellRect.left),
     top: Math.max(shellRect.top, topRect?.bottom || shellRect.top),
-    right: Math.min(shellRect.right, agentRect?.left || shellRect.right),
+    right: Math.min(shellRect.right, agentLeft ?? shellRect.right),
     bottom: shellRect.bottom,
   };
 }
@@ -1364,8 +1374,9 @@ function syncNodePopoverLayout(element) {
   const compositeScale = promptPanel.offsetWidth > 0 ? promptRect.width / promptPanel.offsetWidth : 1;
   if (!compositeScale) return;
 
-  popover.style.removeProperty("max-height");
-  popover.style.removeProperty("overflow-y");
+  popover.style.maxWidth = `${Math.max(1, boundary.right - boundary.left - 24) / compositeScale}px`;
+  popover.style.maxHeight = `${Math.max(1, boundary.bottom - boundary.top - 24) / compositeScale}px`;
+  popover.style.overflowY = "auto";
   const popoverWidth = popover.offsetWidth * compositeScale;
   const popoverHeight = popover.offsetHeight * compositeScale;
   if (!popoverWidth || !popoverHeight) return;
@@ -2169,7 +2180,14 @@ function getNodeLayout(node) {
     };
   }
 
-  const panelWidth = layoutRules.normalPanelWidth;
+  const boundary = getNodePopoverBoundary();
+  const availableWidth = boundary.right - boundary.left;
+  const { panelWidth, promptScale, panelGap } = canvasNodeEditorLayout.getEditorLayout({
+    scale: state.scale,
+    availableWidth,
+    mode: getNodeGenerationMode(node),
+    rules: layoutRules,
+  });
   const composerHeight = clamp(
     Number(node.promptPanelHeight) || layoutRules.compactPanelHeight,
     layoutRules.compactPanelHeight,
@@ -2179,18 +2197,8 @@ function getNodeLayout(node) {
     ? layoutRules.advancedSettingsHeightByMode[getNodeGenerationMode(node)]
     : 0;
   const panelHeight = composerHeight + advancedSettingsHeight;
-  const viewportWidth = shell.clientWidth || window.innerWidth || layoutRules.promptTargetScreenWidth;
-  const targetScreenWidth = Math.min(
-    layoutRules.promptTargetScreenWidth,
-    Math.max(320, viewportWidth - layoutRules.promptScreenMargin),
-  );
-  const promptScale = clamp(
-    targetScreenWidth / (panelWidth * state.scale),
-    layoutRules.promptScaleMin,
-    layoutRules.promptScaleMax,
-  );
-  const nodeWidth = Math.max(mediaWidth, panelWidth);
-  const nodeHeight = mediaHeight + (node.expanded ? layoutRules.panelGap + panelHeight * promptScale : 0);
+  const nodeWidth = Math.max(mediaWidth, layoutRules.generatorAnchorWidth);
+  const nodeHeight = mediaHeight + (node.expanded ? panelGap + panelHeight * promptScale : 0);
 
   return {
     mediaWidth,
@@ -2200,6 +2208,7 @@ function getNodeLayout(node) {
     composerHeight,
     advancedSettingsHeight,
     promptScale,
+    panelGap,
     toolbarScale,
     nodeWidth,
     nodeHeight,
@@ -2262,19 +2271,7 @@ function applyNodeAspect(node, aspect, { animate = true } = {}) {
 }
 
 function getNodeBounds(node) {
-  const { x, y, layout } = getNodePresentation(node);
-  const promptOverflow =
-    node.kind === "generator" && node.expanded
-      ? Math.max(0, (layout.panelWidth * layout.promptScale - layout.nodeWidth) / 2)
-      : 0;
-  return {
-    left: x - promptOverflow,
-    top: y,
-    right: x + layout.nodeWidth + promptOverflow,
-    bottom: y + layout.nodeHeight,
-    width: layout.nodeWidth + promptOverflow * 2,
-    height: layout.nodeHeight,
-  };
+  return getNodeVisualBounds(node);
 }
 
 function getNodeVisualBounds(node) {
@@ -2288,7 +2285,7 @@ function getNodeVisualBounds(node) {
     const promptLeft = x + (layout.nodeWidth - promptWidth) / 2;
     left = Math.min(left, promptLeft);
     right = Math.max(right, promptLeft + promptWidth);
-    bottom += layoutRules.panelGap + layout.panelHeight * layout.promptScale;
+    bottom += layout.panelGap + layout.panelHeight * layout.promptScale;
   }
   return {
     left,
@@ -4045,7 +4042,7 @@ function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
   railLibraryBtn?.setAttribute("aria-expanded", "true");
   closeProfileMenu();
   renderAssetLibrary();
-  scheduleNodePopoverLayouts();
+  syncPromptPanelLayouts();
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
   if (focus && !narrowViewportQuery.matches) {
     window.requestAnimationFrame(() => assetLibrarySearchInput?.focus());
@@ -4073,7 +4070,7 @@ function closeAssetLibrary({ restoreFocus = true } = {}) {
   railLibraryBtn?.classList.remove("active");
   railLibraryBtn?.setAttribute("aria-expanded", "false");
   syncNarrowViewportIsolation();
-  scheduleNodePopoverLayouts();
+  syncPromptPanelLayouts();
   if (shouldRestoreFocus) railLibraryBtn?.focus();
 }
 
@@ -4875,14 +4872,14 @@ function entityEntryIconMarkup() {
   `;
 }
 
-function createGeneratorNodeElement(node) {
+function createGeneratorNodeElement(node, existingElement = null) {
   const model = getModel(node);
   const layout = getNodeLayout(node);
   const isVideoNode = getNodeGenerationMode(node) === "video";
   const supportsEntityReferences = canNodeUseEntityReferences(node);
   const selected = state.selectedIds.has(node.id);
   const generationAvailability = getGenerationAvailability(node);
-  const el = document.createElement("article");
+  const el = existingElement || document.createElement("article");
   el.className = `canvas-node generator-node ${node.mode}-mode ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
   el.style.left = `${node.x}px`;
   el.style.top = `${node.y}px`;
@@ -4891,20 +4888,22 @@ function createGeneratorNodeElement(node) {
   el.dataset.id = node.id;
   const generationInputsDisabled = node.generating ? "disabled" : "";
   const promptInputDisabled = node.generating || node.promptOptimizing ? "disabled" : "";
+  const editorOpening = node.expanded
+    && !nodeLayer.querySelector(`[data-id="${node.id}"] .prompt-panel`);
 
   const promptPanel = node.expanded
     ? `
-      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
+      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${editorOpening ? "editor-opening" : ""} ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
         ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
         <textarea class="prompt-input" data-node-prompt-input placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
-          <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
+          <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" aria-label="${escapeHtml(model?.name || "暂无可用模型")}" title="${escapeHtml(model?.name || "暂无可用模型")}" ${generationInputsDisabled}>
             ${modelIconMarkup(model, "model-chip-glyph")}
             <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
           </button>
-          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>
+          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" aria-label="${escapeHtml(Object.values(getParamLabelParts(node)).join(""))}" title="${escapeHtml(Object.values(getParamLabelParts(node)).join(""))}" ${generationInputsDisabled}>
             <span class="control-chip-label param-chip-label">${getParamLabelMarkup(node)}</span>
             ${getNodeGenerationMode(node) === "video" ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
           </button>
@@ -4931,7 +4930,7 @@ function createGeneratorNodeElement(node) {
     `
     : "";
 
-  el.innerHTML = `
+  const { retainedInput, retainedMedia } = canvasNodePromptView.renderContents(el, `
     <section class="media-frame generator-frame ${node.preview ? "has-preview" : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
@@ -4939,11 +4938,17 @@ function createGeneratorNodeElement(node) {
       ${nodePortMarkup(node)}
     </section>
     ${promptPanel}
-  `;
+  `);
 
-  bindNodeEvents(el, node);
+  bindNodeEvents(el, node, { bindRoot: !existingElement, bindMedia: !retainedMedia });
   const promptInput = el.querySelector(".prompt-input");
-  promptInput?.addEventListener("input", (event) => {
+  if (!retainedInput) promptInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.isComposing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.blur();
+  });
+  if (!retainedInput) promptInput?.addEventListener("input", (event) => {
     if (!requireCanvasMutation()) {
       event.currentTarget.value = node.prompt;
       return;
@@ -5000,6 +5005,7 @@ function createGeneratorNodeElement(node) {
   });
   bindModelPanelEvents(el, node);
   requestAnimationFrame(() => {
+    if (!el.isConnected) return;
     const resized = syncPromptPanelContentHeight(node, el);
     if (!resized) syncNodePopoverLayout(el);
   });
@@ -5007,9 +5013,12 @@ function createGeneratorNodeElement(node) {
   return el;
 }
 
-function bindNodeEvents(el, node) {
-  el.addEventListener("pointerdown", (event) => handleNodePointerDown(event, node.id));
-  el.addEventListener("dragstart", (event) => event.preventDefault());
+function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
+  if (bindRoot) {
+    el.addEventListener("pointerdown", (event) => handleNodePointerDown(event, node.id));
+    el.addEventListener("dragstart", (event) => event.preventDefault());
+  }
+  if (!bindMedia) return;
   bindMediaTitleEvents(el, node);
   bindAudioEvents(el);
   bindMediaToolbarEvents(el, node);
@@ -7888,6 +7897,7 @@ function setAgentWidth(width) {
     ? Math.min(viewportMax, window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor - opposingWidth)
     : viewportMax;
   applyAgentWidth(clampPanelWidth(width, panelWidthRules.agentMin, maxWidth));
+  syncPromptPanelLayouts();
   renderSelectionToolbar();
   scheduleNodePopoverLayouts();
 }
@@ -7924,7 +7934,7 @@ function setAgentOpen(open) {
     setAgentAdvancedOpen(false);
   }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
-  scheduleNodePopoverLayouts();
+  syncPromptPanelLayouts();
   if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => agentInput?.focus());
   if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
 }
@@ -8386,30 +8396,33 @@ function arrangeNodes(nodes, layout = "grid") {
     { left: Infinity, top: Infinity },
   );
   const gap = 28;
-  const layouts = ordered.map((node) => ({ node, layout: getNodeLayout(node) }));
+  const layouts = ordered.map((node) => {
+    const visual = getNodeVisualBounds(node);
+    return { node, visual, insetX: visual.left - node.x };
+  });
 
   if (layout === "horizontal") {
     let cursorX = bounds.left;
     const top = bounds.top;
     for (const item of layouts) {
-      item.node.x = cursorX;
+      item.node.x = cursorX - item.insetX;
       item.node.y = top;
-      cursorX += item.layout.nodeWidth + gap;
+      cursorX += item.visual.width + gap;
     }
   } else if (layout === "vertical") {
     const left = bounds.left;
     let cursorY = bounds.top;
     for (const item of layouts) {
-      item.node.x = left;
+      item.node.x = left - item.insetX;
       item.node.y = cursorY;
-      cursorY += item.layout.nodeHeight + gap;
+      cursorY += item.visual.height + gap;
     }
   } else {
     const columns = Math.ceil(Math.sqrt(layouts.length));
-    const cellWidth = Math.max(...layouts.map((item) => item.layout.nodeWidth)) + gap;
-    const cellHeight = Math.max(...layouts.map((item) => item.layout.nodeHeight)) + gap;
+    const cellWidth = Math.max(...layouts.map((item) => item.visual.width)) + gap;
+    const cellHeight = Math.max(...layouts.map((item) => item.visual.height)) + gap;
     layouts.forEach((item, index) => {
-      item.node.x = bounds.left + (index % columns) * cellWidth;
+      item.node.x = bounds.left + (index % columns) * cellWidth - item.insetX;
       item.node.y = bounds.top + Math.floor(index / columns) * cellHeight;
     });
   }
@@ -8669,8 +8682,18 @@ function isConnectionDropSurface(target) {
   );
 }
 
-function shouldBypassCanvasWheel(target) {
+function shouldBypassCanvasWheel(target, { zooming = false } = {}) {
   if (!(target instanceof Element)) return false;
+  if (target.closest(".generator-node .prompt-panel")) {
+    // Menus and reference strips keep their own scrolling. The editor surface
+    // belongs to canvas navigation until the user actually focuses its text.
+    if (target.closest("[data-wheel-scope='local'], .panel-popover, .material-panel, .asset-shelf")) return true;
+    const prompt = target.closest("[data-node-prompt-input]");
+    if (prompt) {
+      return !zooming && prompt === document.activeElement && prompt.scrollHeight > prompt.clientHeight + 1;
+    }
+    return Boolean(target.closest("button, input, textarea, select, [contenteditable='true'], [role='slider']"));
+  }
   return Boolean(
     target.closest(
       [
@@ -8684,7 +8707,6 @@ function shouldBypassCanvasWheel(target) {
         ".top-actions",
         ".left-rail",
         ".agent-dock",
-        ".prompt-panel",
         ".asset-shelf",
         ".media-edit-toolbar",
         ".media-tool-menu",
@@ -9240,7 +9262,10 @@ window.addEventListener(
 shell.addEventListener(
   "wheel",
   (event) => {
-    const shouldBypass = shouldBypassCanvasWheel(event.target);
+    const shouldBypass = shouldBypassCanvasWheel(event.target, { zooming: event.ctrlKey || event.metaKey });
+    if (!shouldBypass && document.activeElement?.matches("[data-node-prompt-input]")) {
+      document.activeElement.blur();
+    }
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
       if (shouldBypass) return;

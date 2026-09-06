@@ -118,6 +118,196 @@ function createHarness(t) {
   return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, timers, scheduledTask };
 }
 
+test("node controls preserve the live prompt editor and media across content renders", (t) => {
+  const h = createHarness(t);
+  const node = h.node("reading-position", { expanded: true });
+  h.install(h.canvas("reading", [node]));
+  const element = h.window.document.querySelector('[data-id="reading-position"]');
+  const panel = element.querySelector(".prompt-panel");
+  const input = element.querySelector("[data-node-prompt-input]");
+  const media = element.querySelector(".media-frame");
+  const prompt = "镜头缓慢推进，保持玻璃材质与光影连续。".repeat(120);
+  input.value = prompt;
+  input.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  input.setSelectionRange(12, 26, "backward");
+  input.scrollTop = 640;
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    element.querySelector('[data-action="advanced-settings-toggle"]').click();
+    assert.equal(node.advancedSettingsExpanded, iteration % 2 === 0, "one click toggles once");
+    assert.equal(h.window.document.querySelector('[data-id="reading-position"]'), element);
+    assert.equal(element.querySelector(".prompt-panel"), panel);
+    assert.equal(element.querySelector("[data-node-prompt-input]"), input);
+    assert.equal(element.querySelector(".media-frame"), media);
+    assert.equal(input.scrollTop, 640);
+    assert.equal(input.value, prompt);
+    assert.deepEqual([input.selectionStart, input.selectionEnd, input.selectionDirection], [12, 26, "backward"]);
+  }
+  input.focus();
+  h.window.render();
+  assert.equal(h.window.document.activeElement, input, "unrelated redraw does not leave text editing");
+  element.querySelector('[data-action="advanced-settings-toggle"]').click();
+  const beforeAutoLink = node.autoLinkEnabled;
+  element.querySelector('[data-action="auto-link"]').click();
+  assert.equal(node.autoLinkEnabled, !beforeAutoLink);
+  assert.equal(input.scrollTop, 640);
+  h.window.handleAction(node, "param-panel");
+  assert.equal(element.querySelector("[data-node-prompt-input]"), input);
+  const range = element.querySelector("[data-duration-range]");
+  const number = element.querySelector("[data-duration-number]");
+  range.value = "12";
+  range.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(number.value, "12");
+  range.dispatchEvent(new h.window.Event("change", { bubbles: true }));
+  assert.equal(node.duration, "12s");
+  assert.equal(element.querySelector("[data-node-prompt-input]"), input);
+  input.value += "继续编辑";
+  input.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(node.prompt, input.value, "retained listener still edits the live node");
+  node.prompt = "外部更新后的提示词";
+  h.window.render();
+  assert.equal(input.value, node.prompt);
+  input.focus();
+  input.dispatchEvent(new h.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.notEqual(h.window.document.activeElement, input);
+  assert.equal(node.expanded, true);
+
+  const replacement = h.node(node.id, { expanded: true, prompt: node.prompt });
+  h.install(h.canvas("another-reading", [replacement]));
+  const replacementInput = h.window.document.querySelector("[data-node-prompt-input]");
+  assert.notEqual(replacementInput, input, "same ID in another canvas has its own editor");
+  replacementInput.value = "只属于新画布";
+  replacementInput.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(replacement.prompt, "只属于新画布");
+  assert.equal(node.prompt, "外部更新后的提示词");
+});
+
+test("prompt scrolling follows editing focus instead of interrupting canvas navigation on hover", (t) => {
+  const h = createHarness(t);
+  const node = h.node("scroll-editor", { expanded: true });
+  h.install(h.canvas("scrolling", [node]));
+  const input = h.window.document.querySelector("[data-node-prompt-input]");
+  const panel = input.closest(".prompt-panel");
+  const shell = h.window.document.querySelector("#canvasShell");
+  const originalPrompt = node.prompt;
+  Object.defineProperties(input, {
+    clientHeight: { configurable: true, value: 100 },
+    scrollHeight: { configurable: true, value: 800 },
+  });
+  const viewport = () => ({ tx: h.state.tx, ty: h.state.ty, scale: h.state.scale });
+  function wheel(target, options = {}) {
+    const event = new h.window.WheelEvent("wheel", {
+      bubbles: true, cancelable: true, deltaY: 40, clientX: 200, clientY: 200, ...options,
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  const beforeHover = viewport();
+  assert.equal(wheel(input).defaultPrevented, true);
+  assert.equal(h.state.ty, beforeHover.ty - 40);
+  assert.notEqual(h.window.document.activeElement, input);
+  const beforePadding = viewport();
+  wheel(panel, { shiftKey: true });
+  assert.equal(h.state.tx, beforePadding.tx - 40);
+  assert.equal(h.state.ty, beforePadding.ty);
+
+  // Native focus also covers Tab entry; no separate mouse-only editing flag.
+  input.focus();
+  const editingViewport = viewport();
+  for (const scrollTop of [0, 300, 700]) {
+    input.scrollTop = scrollTop;
+    assert.equal(wheel(input).defaultPrevented, false);
+    assert.deepEqual(viewport(), editingViewport);
+  }
+  input.dispatchEvent(new h.window.KeyboardEvent("keydown", {
+    key: "Escape", isComposing: true, bubbles: true, cancelable: true,
+  }));
+  assert.equal(h.window.document.activeElement, input);
+  const escape = new h.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  input.dispatchEvent(escape);
+  assert.equal(escape.defaultPrevented, true);
+  assert.notEqual(h.window.document.activeElement, input);
+  assert.equal(node.expanded, true);
+  assert.equal(node.prompt, originalPrompt);
+  wheel(input);
+  assert.equal(h.state.ty, editingViewport.ty - 40);
+
+  input.focus();
+  wheel(shell);
+  assert.notEqual(h.window.document.activeElement, input);
+  const resumed = viewport();
+  wheel(input);
+  assert.equal(h.state.ty, resumed.ty - 40);
+
+  for (const modifier of ["ctrlKey", "metaKey"]) {
+    input.focus();
+    const beforeZoom = h.state.scale;
+    assert.equal(wheel(input, { [modifier]: true, deltaY: -80 }).defaultPrevented, true);
+    assert.ok(h.state.scale > beforeZoom);
+    assert.notEqual(h.window.document.activeElement, input);
+  }
+  Object.defineProperty(input, "scrollHeight", { configurable: true, value: 100 });
+  input.focus();
+  const shortPromptViewport = viewport();
+  assert.equal(wheel(input).defaultPrevented, true);
+  assert.equal(h.state.ty, shortPromptViewport.ty - 40);
+  assert.notEqual(h.window.document.activeElement, input);
+});
+
+test("node editor controls and nested parameter menus keep local wheel ownership", (t) => {
+  const h = createHarness(t);
+  const node = h.node("scroll-controls", { expanded: true });
+  h.install(h.canvas("scrolling", [node]));
+  for (const action of ["model-panel", "param-panel", "material-panel"]) {
+    h.window.handleAction(node, action);
+    const panel = h.window.document.querySelector(".prompt-panel");
+    const popover = panel.querySelector(".panel-popover, .material-panel");
+    assert.ok(popover, action);
+    const targets = [popover, ...panel.querySelectorAll("button, input, [role='slider']")];
+    for (const target of targets) {
+      for (const ctrlKey of [false, true]) {
+        const before = { tx: h.state.tx, ty: h.state.ty, scale: h.state.scale };
+        const event = new h.window.WheelEvent("wheel", {
+          bubbles: true, cancelable: true, deltaY: 80, ctrlKey,
+        });
+        target.dispatchEvent(event);
+        assert.deepEqual({ tx: h.state.tx, ty: h.state.ty, scale: h.state.scale }, before);
+        assert.equal(event.defaultPrevented, ctrlKey);
+      }
+    }
+  }
+});
+
+test("editor scaling preserves saved media anchors and repeated arrangements do not drift", (t) => {
+  const h = createHarness(t);
+  const first = h.node("editor-a", { x: 100, y: 100, aspect: "9:16", expanded: true });
+  const second = h.node("editor-b", { x: 1200, y: 100, aspect: "16:9" });
+  h.install(h.canvas("editor-layout", [first, second]));
+  const original = h.window.getNodeMembershipBounds(first);
+  for (const scale of [0.2, 0.5, 0.75, 1, 1.5, 2]) {
+    h.state.scale = scale;
+    const layout = h.window.getNodeLayout(first);
+    const media = h.window.getNodeMembershipBounds(first);
+    assert.equal(media.left, original.left);
+    assert.equal(media.bottom, original.bottom);
+    assert.equal(layout.promptScale * scale, 1);
+    assert.equal(layout.panelGap * scale, 12 * Math.max(scale, 1));
+    assert.deepEqual(plain(h.window.getNodeBounds(first)), plain(h.window.getNodeVisualBounds(first)));
+    for (const direction of ["horizontal", "vertical", "grid"]) {
+      const positions = h.window.arrangeNodes([first, second], direction);
+      for (const position of positions) Object.assign(h.state.nodes.find((node) => node.id === position.id), position);
+      const repeated = h.window.arrangeNodes([first, second], direction);
+      repeated.forEach((position, index) => {
+        assert.equal(position.id, positions[index].id);
+        assert.ok(Math.abs(position.x - positions[index].x) < 1e-7);
+        assert.ok(Math.abs(position.y - positions[index].y) < 1e-7);
+      });
+    }
+    Object.assign(first, { x: 100, y: 100 });
+    Object.assign(second, { x: 1200, y: 100 });
+  }
+});
+
 function group(id, nodeIds, overrides = {}) {
   return { id, nodeIds, name: id, x: 0, y: 0, width: 1200, height: 900, z: 1, layoutMenuOpen: false, ...overrides };
 }

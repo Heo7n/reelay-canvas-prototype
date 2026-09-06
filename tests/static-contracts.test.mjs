@@ -331,10 +331,11 @@ test("incremental aspect updates keep canonical adaptive displayed as Auto", () 
   );
   const syncNodeAspectUi = Function(
     "getCapabilityDisplayLabel",
+    "getParamLabelParts",
     `${syncAspectSource}; return syncNodeAspectUi;`,
   )((node, action, value) => (
     action === "aspect" && value === "adaptive" ? "Auto" : String(value)
-  ));
+  ), () => ({ beforeAspect: "", aspect: "Auto", afterAspect: " · 480P" }));
   const aspectLabel = { textContent: "" };
   const aspectButton = {
     dataset: { value: "adaptive" },
@@ -342,12 +343,15 @@ test("incremental aspect updates keep canonical adaptive displayed as Auto", () 
     setAttribute() {},
   };
 
+  const parameterTrigger = { setAttribute(name, value) { this[name] = value; } };
   syncNodeAspectUi({ kind: "generator", aspect: "adaptive" }, {
-    querySelector: () => aspectLabel,
+    querySelector: (selector) => selector === "[data-param-aspect]" ? aspectLabel : parameterTrigger,
     querySelectorAll: () => [aspectButton],
   });
 
   assert.equal(aspectLabel.textContent, "Auto");
+  assert.equal(parameterTrigger["aria-label"], "Auto · 480P");
+  assert.equal(parameterTrigger.title, "Auto · 480P");
 });
 
 test("Seedance task type normalization migrates legacy workflows and enforces aspect constraints", () => {
@@ -1007,8 +1011,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260904-video-params-79/);
-  assert.match(html, /app\.js\?v=20260905-content-commands-1/);
+  assert.match(html, /styles\.css\?v=20260907-prompt-retention-1/);
+  assert.match(html, /app\.js\?v=20260907-prompt-retention-1/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1067,7 +1071,7 @@ test("node selection and connection relationships use one restrained neutral hie
   assert.match(appCss, /--relation-stroke:\s*rgba\(/);
   assert.match(appCss, /--relation-stroke-strong:\s*rgba\(/);
   assert.match(appCss, /--relation-stroke-ready:\s*rgba\(/);
-  assert.match(appCss, /\.canvas-node\.selected \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--selection-stroke\)[\s\S]*?box-shadow:\s*var\(--node-media-shadow\)/);
+  assert.match(appCss, /\.canvas-node\.selected \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-selected-border\)[\s\S]*?box-shadow:\s*var\(--node-media-shadow\)/);
   assert.match(appCss, /\.app-shell \.canvas-shell\.multi-selection-active \.canvas-node\.selected \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)[\s\S]*?box-shadow:\s*var\(--node-media-shadow\)/);
   assert.match(appCss, /\.asset-node\.image-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
   assert.match(appCss, /\.asset-node\.video-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
@@ -1085,7 +1089,7 @@ test("node selection and connection relationships use one restrained neutral hie
 });
 
 test("media metadata uses bounded screen compensation and stays above the frame", () => {
-  assert.match(appSource, /clamp\(Math\.pow\(state\.scale,\s*0\.08\),\s*0\.88,\s*1\.06\)/);
+  assert.match(appSource, /clamp\(state\.scale,\s*0\.85,\s*1\.8\)/);
   assert.match(appCss, /\.media-meta\s*\{[\s\S]*?bottom:\s*calc\(100% \+ 2px \+ 5px \* var\(--node-meta-ui-scale/);
   assert.match(appCss, /\.media-meta\s*\{[\s\S]*?height:\s*calc\(18px \* var\(--node-meta-ui-scale/);
   assert.doesNotMatch(appCss, /top:\s*calc\(-27px \* var\(--node-meta-ui-scale/);
@@ -1140,13 +1144,15 @@ test("node typography follows a shared title, body, control, label, and caption 
   assert.match(appCss, /\.control-chip\s*\{[\s\S]*?font-size:\s*var\(--node-font-control\)/);
 });
 
-test("prompt workspace keeps the reference width while content drives height and controls", () => {
-  assert.match(appSource, /const panelWidth = layoutRules\.normalPanelWidth/);
+test("prompt workspace adapts screen width while preserving world anchors and content height", () => {
+  assert.match(appSource, /canvasNodeEditorLayout\.getEditorLayout/);
+  assert.match(appSource, /const nodeWidth = Math\.max\(mediaWidth, layoutRules\.generatorAnchorWidth\)/);
   assert.match(appSource, /Number\(node\.promptPanelHeight\) \|\| layoutRules\.compactPanelHeight/);
   assert.match(appSource, /const advancedSettingsHeight = node\.advancedSettingsExpanded[\s\S]*?layoutRules\.advancedSettingsHeightByMode\[getNodeGenerationMode\(node\)\]/);
   assert.match(appSource, /function syncPromptPanelContentHeight\(node, element\)/);
   assert.match(appCss, /\.prompt-composer-surface\s*\{[\s\S]*?border-radius:\s*12px[\s\S]*?background:\s*var\(--node-panel-bg\)[\s\S]*?box-shadow:\s*var\(--node-panel-shadow\)/);
-  assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?width:\s*705px[\s\S]*?height:\s*291px/);
+  assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?width:\s*800px[\s\S]*?height:\s*248px/);
+  assert.doesNotMatch(sourceBetween(appCss, "\n.prompt-panel {", ".prompt-panel.editor-opening"), /transition:\s*transform/);
   assert.match(appCss, /\.asset-drop\s*\{[\s\S]*?top:\s*11px[\s\S]*?left:\s*13px[\s\S]*?width:\s*46px[\s\S]*?height:\s*46px/);
   assert.match(appCss, /\.prompt-input\s*\{[\s\S]*?top:\s*var\(--prompt-input-top, 73px\)[\s\S]*?bottom:\s*calc\(var\(--prompt-input-bottom, 51px\) \+ var\(--prompt-advanced-height, 0px\)\)/);
   assert.match(appCss, /\.control-bar\s*\{[\s\S]*?left:\s*12px[\s\S]*?right:\s*9px[\s\S]*?bottom:\s*calc\(6px \+ var\(--prompt-advanced-height, 0px\)\)/);
@@ -1263,7 +1269,7 @@ test("aspect changes preserve node identity and isolate the prompt workspace fro
     appSource,
     /function syncNodeVisualLayout[\s\S]*?element\.style\.top = `\$\{node\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY/,
   );
-  assert.match(appSource, /promptPanel\.style\.top = `\$\{canonicalLayout\.mediaHeight \+ layoutRules\.panelGap\}px`[\s\S]*?if \(isTransitioning\) return/);
+  assert.match(appSource, /promptPanel\.style\.top = `\$\{canonicalLayout\.mediaHeight \+ canonicalLayout\.panelGap\}px`/);
   assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?left:\s*50%[\s\S]*?translate:\s*-50% 0/);
   assert.match(appSource, /class="control-chip-label param-chip-label"[\s\S]*?getParamLabelMarkup\(node\)/);
   assert.match(appCss, /\.param-summary-aspect\s*\{[\s\S]*?flex:\s*0 0 4ch[\s\S]*?font-variant-numeric:\s*tabular-nums/);
@@ -1504,7 +1510,7 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps compact left zones and an independently sized Agent dock", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260904-video-params-79/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260907-prompt-retention-1/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260903-ui-rhythm-78/);
   assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260903-ui-rhythm-78/);
   assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260903-ui-rhythm-78/);
@@ -1594,14 +1600,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260904-video-params-79/);
-  assert.match(html, /prototype-config\.js\?v=20260903-entity-fixtures-64/);
+  assert.match(html, /styles\.css\?v=20260907-prompt-retention-1/);
+  assert.match(html, /prototype-config\.js\?v=20260907-prompt-retention-1/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260903-entity-preview-filename-70/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260905-content-commands-1/);
+  assert.match(html, /app\.js\?v=20260907-prompt-retention-1/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);

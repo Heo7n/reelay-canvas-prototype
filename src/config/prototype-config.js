@@ -393,20 +393,20 @@
     maxHeight: 520,
     minMediaWidth: 300,
     minMediaHeight: 220,
-    normalPanelWidth: 705,
-    normalPanelHeight: 291,
-    compactPanelHeight: 260,
+    // Existing documents store x relative to this world-space container.
+    // Editor density must never move the media anchor of a saved node.
+    generatorAnchorWidth: 705,
+    normalPanelHeight: 320,
+    compactPanelHeight: 248,
     advancedSettingsHeightByMode: {
       image: 118,
       video: 154,
     },
-    promptInputTop: 73,
-    promptInputBottom: 51,
-    promptTargetScreenWidth: 705,
-    promptScreenMargin: 20,
-    promptScaleMin: 0.5,
-    promptScaleMax: 5,
-    panelGap: 14,
+    promptInputTop: 76,
+    promptInputBottom: 60,
+    promptScreenWidthByMode: { image: 850, video: 800 },
+    promptScreenMargin: 24,
+    panelGap: 12,
   };
 
   const canvasScaleLimits = {

@@ -151,19 +151,17 @@ test("default media toolbar preferences only pin available tools", () => {
   }
 });
 
-test("prompt panels preserve the 705 wide design geometry with bounded content growth", () => {
-  assert.equal(config.layoutRules.normalPanelWidth, 705);
-  assert.equal(config.layoutRules.normalPanelHeight, 291);
-  assert.equal(config.layoutRules.compactPanelHeight, 260);
+test("prompt panels keep a fixed screen width per media type without moving saved media anchors", () => {
+  assert.equal(config.layoutRules.generatorAnchorWidth, 705);
+  assert.equal(config.layoutRules.normalPanelHeight, 320);
+  assert.equal(config.layoutRules.compactPanelHeight, 248);
   assert.equal(config.layoutRules.advancedSettingsHeightByMode.image, 118);
   assert.equal(config.layoutRules.advancedSettingsHeightByMode.video, 154);
-  assert.equal(config.layoutRules.promptInputTop, 73);
-  assert.equal(config.layoutRules.promptInputBottom, 51);
-  assert.equal(config.layoutRules.promptTargetScreenWidth, 705);
-  assert.equal(config.layoutRules.promptScreenMargin, 20);
-  assert.equal(config.layoutRules.promptScaleMin, 0.5);
-  assert.equal(config.layoutRules.promptScaleMax, 5);
-  assert.equal(config.layoutRules.panelGap, 14);
+  assert.equal(config.layoutRules.promptInputTop, 76);
+  assert.equal(config.layoutRules.promptInputBottom, 60);
+  assert.deepEqual({ ...config.layoutRules.promptScreenWidthByMode }, { image: 850, video: 800 });
+  assert.equal(config.layoutRules.promptScreenMargin, 24);
+  assert.equal(config.layoutRules.panelGap, 12);
 });
 
 test("video models expose their own second-level duration ranges and workflows", () => {

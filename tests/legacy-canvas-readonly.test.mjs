@@ -46,6 +46,11 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
+const [nodeEditorLayout, nodePromptView] = await Promise.all([
+  readFile(new URL("src/legacy-canvas/canvas-node-editor-layout.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-node-prompt-view.js", root), "utf8"),
+]);
+
 test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", (t) => {
   const dom = new JSDOM(html, {
     url: "http://reelay.test/index.html",
@@ -86,6 +91,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(spatialSelection);
   window.eval(nodeInteraction);
   window.eval(nodePlacement);
+  window.eval(nodeEditorLayout);
+  window.eval(nodePromptView);
   window.eval(nodeLayoutTransition);
   window.eval(nodePointerController);
   window.eval(nodeDragController);
@@ -615,7 +622,6 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(stage.style.transform, scaleBeforeControlWheel);
 
   for (const className of [
-    "prompt-panel",
     "panel-popover",
     "material-panel",
     "media-edit-toolbar",

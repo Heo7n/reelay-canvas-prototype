@@ -43,13 +43,13 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 .generator-node .entity-drop,
 .generator-node .asset-drop {
   position: absolute;
-  top: 11px;
+  top: 16px;
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 14px;
   outline: 0;
   background: var(--node-chip-bg);
   color: var(--node-chip-text);
@@ -61,27 +61,38 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 }
 
 .generator-node .entity-drop {
-  left: 13px;
+  left: 16px;
 }
 
 .generator-node .asset-drop {
-  left: 13px;
+  left: 16px;
 }
 
 .generator-node .asset-shelf {
-  left: 67px;
+  left: 84px;
 }
 
 .generator-node .prompt-panel.has-entity-entry .entity-drop {
-  left: 13px;
+  left: 16px;
 }
 
 .generator-node .prompt-panel.has-entity-entry .asset-drop {
-  left: 67px;
+  left: 84px;
 }
 
 .generator-node .prompt-panel.has-entity-entry .asset-shelf {
-  left: 121px;
+  left: 148px;
+}
+
+.generator-node .prompt-panel.has-entity-entry .entity-drop::after {
+  position: absolute;
+  left: 58px;
+  top: 12px;
+  width: 1px;
+  height: 24px;
+  background: var(--node-panel-line);
+  content: "";
+  pointer-events: none;
 }
 
 .generator-node .entity-drop:hover,
@@ -102,8 +113,8 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 
 .generator-node .entity-drop > svg,
 .generator-node .asset-drop > svg {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   stroke-width: 1.45;
 }
 

@@ -31,12 +31,12 @@ test("registers a frozen Entity consumption view and portal synchronization API"
 
 test("generator Entity entry expands the chip rail only for supported prompt panels", () => {
   assert.match(entityUseCss, /\.generator-node \.entity-drop,\s*\.generator-node \.asset-drop \{/);
-  assert.match(entityUseCss, /\.generator-node \.entity-drop \{\s*left: 13px;/);
-  assert.match(entityUseCss, /\.generator-node \.asset-drop \{\s*left: 13px;/);
-  assert.match(entityUseCss, /\.generator-node \.asset-shelf \{\s*left: 67px;/);
-  assert.match(entityUseCss, /\.generator-node \.prompt-panel\.has-entity-entry \.entity-drop \{\s*left: 13px;/);
-  assert.match(entityUseCss, /\.generator-node \.prompt-panel\.has-entity-entry \.asset-drop \{\s*left: 67px;/);
-  assert.match(entityUseCss, /\.generator-node \.prompt-panel\.has-entity-entry \.asset-shelf \{\s*left: 121px;/);
+  assert.match(entityUseCss, /\.generator-node \.entity-drop \{\s*left: 16px;/);
+  assert.match(entityUseCss, /\.generator-node \.asset-drop \{\s*left: 16px;/);
+  assert.match(entityUseCss, /\.generator-node \.asset-shelf \{\s*left: 84px;/);
+  assert.match(entityUseCss, /\.generator-node \.prompt-panel\.has-entity-entry \.entity-drop \{\s*left: 16px;/);
+  assert.match(entityUseCss, /\.generator-node \.prompt-panel\.has-entity-entry \.asset-drop \{\s*left: 84px;/);
+  assert.match(entityUseCss, /\.generator-node \.prompt-panel\.has-entity-entry \.asset-shelf \{\s*left: 148px;/);
   assert.match(entityUseCss, /\.generator-node \.entity-entry-glyph \{[^}]*width: 24px;[^}]*height: 24px;/);
   assert.match(entityUseCss, /\.generator-node \.entity-drop:focus-visible,\s*\.generator-node \.asset-drop:focus-visible/);
 });
