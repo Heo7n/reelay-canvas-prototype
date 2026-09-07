@@ -9,6 +9,7 @@ import { routePaths } from "../../app/routes";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { useTheme } from "../../shared/theme/theme";
 import { Brand } from "../../shared/ui/Brand";
+import { preloadFirstLoginImage } from "../login/login-media";
 import { CapabilityStrip } from "./CapabilityStrip";
 import { CreationComposer } from "./CreationComposer";
 import { HeroCarousel } from "./HeroCarousel";
@@ -43,6 +44,12 @@ export function PublicEntryPage() {
   const { notice, showNotice } = useTransientNotice();
 
   useEffect(() => {
+    preloadFirstLoginImage();
+    document.addEventListener("visibilitychange", preloadFirstLoginImage);
+    return () => document.removeEventListener("visibilitychange", preloadFirstLoginImage);
+  }, []);
+
+  useEffect(() => {
     if (!loginOpen) {
       clearGuestCreationDraft();
       if (wasOpen.current) (returnFocus.current ?? loginButton.current)?.focus({ preventScroll: true });
@@ -51,6 +58,7 @@ export function PublicEntryPage() {
   }, [loginOpen]);
 
   function openLogin(): void {
+    preloadFirstLoginImage();
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // Another tab may already have established the shared cookie; the loader
     // can redirect straight to the workspace without ever showing the form.

@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { WorkspaceMediaAsset, ProjectAsset } from "../../domain/asset/workspace-media-asset";
 import type { SessionActor } from "../../domain/identity/session";
 import type { ObjectStore, StoredObjectMetadata } from "../application/ObjectStore";
+import { ImagePreviewService, ImagePreviewUnsupportedError, ImagePreviewUnavailableError } from "../infrastructure/ImagePreviewService";
 import type { ProjectAccessReader } from "../application/ProjectStore";
 import {
   ProjectAssetUnavailableError,
@@ -20,6 +21,7 @@ import {
 } from "../application/WorkspaceMediaAssetStore";
 import {
   AssetUploadParamsSchema,
+  AssetContentQuerySchema,
   CreateAssetUploadIntentBodySchema,
   PersonalAssetQuerySchema,
   ProjectAssetContentParamsSchema,
@@ -196,10 +198,50 @@ function uploadConflict(reply: FastifyReply, error: AssetUploadConflictError) {
   });
 }
 
+// Both callers have already checked the session and the asset's current visibility.
+// A cached thumbnail may be reused only after that same authorization succeeds.
+async function sendAssetContent(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  objectStore: ObjectStore,
+  previews: ImagePreviewService,
+  asset: WorkspaceMediaAsset,
+) {
+  const query = AssetContentQuerySchema.safeParse(request.query);
+  if (!query.success) return reply.code(400).send({ error: { code: "invalid_request", message: "素材预览参数无效。" } });
+  if (!query.data.preview) return sendStoredObject(request, reply, objectStore, asset.objectKey);
+  if (asset.mediaKind !== "image") {
+    return reply.code(415).send({ error: { code: "preview_unsupported", message: "此素材不支持图片缩略预览。" } });
+  }
+  const etag = previews.etag(asset);
+  const unchanged = request.headers["if-none-match"]?.split(",").some((value) => {
+    const token = value.trim();
+    return token === "*" || token.replace(/^W\//, "") === etag.replace(/^W\//, "");
+  });
+  reply.header("Cache-Control", "private, no-cache").header("Vary", "Cookie").header("ETag", etag);
+  if (unchanged) return reply.code(304).send();
+  try {
+    const preview = await previews.getPreview(asset);
+    return reply
+      .type("image/webp")
+      .header("Content-Length", String(preview.body.byteLength))
+      .header("X-Content-Type-Options", "nosniff")
+      .send(Buffer.from(preview.body));
+  } catch (error) {
+    reply.header("Cache-Control", "private, no-store").removeHeader("ETag");
+    if (error instanceof ImagePreviewUnsupportedError) {
+      return reply.code(422).send({ error: { code: "preview_unsupported", message: "此图片暂时无法生成缩略预览，仍可查看原文件。" } });
+    }
+    if (error instanceof ImagePreviewUnavailableError) return unavailableObject(reply);
+    throw error;
+  }
+}
+
 export async function registerAssetRoutes(
   app: FastifyInstance,
   dependencies: AssetRouteDependencies,
 ): Promise<void> {
+  const previews = new ImagePreviewService(dependencies.objectStore);
   const maxUploadBytes = dependencies.maxUploadBytes ?? MAX_UPLOAD_BYTES;
   if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes <= 0 || maxUploadBytes > MAX_UPLOAD_BYTES) {
     throw new Error("Asset upload byte limit is invalid.");
@@ -425,7 +467,7 @@ export async function registerAssetRoutes(
         assetId: params.data.assetId,
       });
       if (!asset) return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
-      return sendStoredObject(request, reply, dependencies.objectStore, asset.objectKey);
+      return sendAssetContent(request, reply, dependencies.objectStore, previews, asset);
     } catch (error) {
       if (error instanceof AssetWorkspaceUnavailableError) {
         return reply.code(404).send({ error: { code: "workspace_not_found", message: "工作空间不存在。" } });
@@ -498,7 +540,7 @@ export async function registerAssetRoutes(
           referenceId: params.data.referenceId,
         });
         if (!projectAsset) return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
-        return sendStoredObject(request, reply, dependencies.objectStore, projectAsset.asset.objectKey);
+        return sendAssetContent(request, reply, dependencies.objectStore, previews, projectAsset.asset);
       } catch (error) {
         if (error instanceof ProjectAssetUnavailableError) {
           return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });

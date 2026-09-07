@@ -1,39 +1,12 @@
 import { useEffect, useState } from "react";
 
-import brandImage from "../../../assets/login/brand-light.webp";
-import storyImage from "../../../assets/login/coastal-story.webp";
-import worldImage from "../../../assets/login/observatory-world.webp";
+import { firstLoginImagePlaceholder, loginSlides as slides } from "./login-media";
 import styles from "./LoginMediaCarousel.module.css";
 
-const slides = [
-  {
-    image: worldImage,
-    position: "50% center",
-    alt: "嵌入海岸岩壁的圆环建筑，框住远处的海面与晨雾",
-    category: "想象世界",
-    title: "为想象，打开新的场景。",
-    description: "让光影、空间与细节，共同构建一个世界。",
-  },
-  {
-    image: brandImage,
-    position: "50% center",
-    alt: "象牙白薄片在深色空间舒展，柔和光线从折面之间透出",
-    category: "灵感展开",
-    title: "让灵感，展开新的可能。",
-    description: "从一瞬灵感出发，探索画面里的更多可能。",
-  },
-  {
-    image: storyImage,
-    position: "50% center",
-    alt: "海岸晨光中，穿橄榄色外套的短发女性望向远处",
-    category: "角色叙事",
-    title: "让角色，走进你的故事。",
-    description: "从人物设定出发，延展故事里的每一幕。",
-  },
-] as const;
-
 export function LoginMediaCarousel() {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [{ activeIndex, previousIndex }, setPresentation] = useState({ activeIndex: 0, previousIndex: -1 });
+  const [mediaStatus, setMediaStatus] = useState<Array<"loading" | "ready" | "failed">>(() => slides.map(() => "loading"));
+  const [request, setRequest] = useState<{ index: number; automatic: boolean } | null>(null);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [environmentAllowsPlayback, setEnvironmentAllowsPlayback] = useState(false);
@@ -58,12 +31,40 @@ export function LoginMediaCarousel() {
   }, []);
 
   const playing = environmentAllowsPlayback && !focused && !hovered;
+  const nextIndex = slides.map((_, offset) => (activeIndex + offset + 1) % slides.length)
+    .find((index) => index !== activeIndex && mediaStatus[index] !== "failed");
+  const activeLoaded = mediaStatus[activeIndex] !== "loading";
 
   useEffect(() => {
-    if (!playing) return;
-    const timer = window.setTimeout(() => setActiveIndex((index) => (index + 1) % slides.length), 4_500);
+    if (!playing || !activeLoaded || request || nextIndex === undefined) return;
+    const timer = window.setTimeout(() => setRequest({ index: nextIndex, automatic: true }), 4_500);
     return () => window.clearTimeout(timer);
-  }, [activeIndex, playing]);
+  }, [activeIndex, activeLoaded, nextIndex, playing, request]);
+
+  useEffect(() => {
+    if (!request) return;
+    if ((request.automatic && !playing) || mediaStatus[request.index] === "failed") {
+      setRequest(null);
+    } else if (mediaStatus[request.index] === "ready") {
+      setPresentation((current) => current.activeIndex === request.index ? current : {
+        activeIndex: request.index, previousIndex: current.activeIndex,
+      });
+      setRequest(null);
+    }
+  }, [mediaStatus, playing, request]);
+
+  function updateMediaStatus(index: number, status: "ready" | "failed"): void {
+    setMediaStatus((current) => current.map((value, position) => position === index ? status : value));
+  }
+
+  async function revealDecodedImage(image: HTMLImageElement, index: number): Promise<void> {
+    try {
+      await image.decode?.();
+      if (image.isConnected) updateMediaStatus(index, "ready");
+    } catch {
+      if (image.isConnected) updateMediaStatus(index, "failed");
+    }
+  }
 
   return (
     <section
@@ -81,13 +82,19 @@ export function LoginMediaCarousel() {
         {slides.map((slide, index) => (
           <div
             key={slide.category}
-            className={`${styles.slide} ${index === activeIndex ? styles.active : ""}`}
+            className={`${styles.slide} ${index === activeIndex ? styles.active : ""} ${index === previousIndex ? styles.previous : ""}`}
             aria-hidden={index !== activeIndex}
             role="group"
             aria-roledescription="展示图"
             aria-label={`${index + 1} / ${slides.length}`}
           >
-            <img src={slide.image} alt={slide.alt} style={{ objectPosition: slide.position }} />
+            {index === 0 ? <div className={styles.placeholder} aria-hidden="true"
+              style={{ backgroundImage: `url("${firstLoginImagePlaceholder}")`, backgroundPosition: slide.position }} /> : null}
+            <img src={slide.image} alt={slide.alt} style={{ objectPosition: slide.position }}
+              className={mediaStatus[index] === "ready" ? styles.imageReady : undefined}
+              fetchPriority={index === 0 ? "high" : "low"} decoding="async"
+              onLoad={(event) => { void revealDecodedImage(event.currentTarget, index); }}
+              onError={() => updateMediaStatus(index, "failed")} />
             <div className={styles.shade} aria-hidden="true" />
             <div className={styles.copy}>
               <p className={styles.category}>{slide.category}</p>
@@ -106,7 +113,7 @@ export function LoginMediaCarousel() {
               type="button"
               aria-label={`显示${slide.category}`}
               aria-current={activeIndex === index ? "true" : undefined}
-              onClick={() => setActiveIndex(index)}
+              onClick={() => setRequest({ index, automatic: false })}
             >
               <span aria-hidden="true" />
             </button>

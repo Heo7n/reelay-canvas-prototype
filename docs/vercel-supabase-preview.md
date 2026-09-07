@@ -5,7 +5,9 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 
 公开地址：<https://reelay-canvas-prototype.vercel.app>
 
-2026-09-07 公网 Supabase 项目 `yacgzkkttwtyxkfxiwyn` 已从 `0009` 补迁移至 `0013`，私有桶 `reelay-assets`、Production Storage 环境变量与三主体 12 图的数据迁移已完成。本次部署已 promote 到正式主域名，CLI 核验指向 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X` 且 Ready；切换后的主域 HTTP 与浏览器复验均已通过，Hoo 可在既有项目的个人主体页看到玄翎、幽影、白汐。
+2026-09-07 公网 Supabase 项目 `yacgzkkttwtyxkfxiwyn` 已从 `0009` 补迁移至 `0013`，私有桶 `reelay-assets`、Production Storage 环境变量与三主体 12 图的数据迁移已完成。下文部署 ID 保留首次资产发布的历史证据；后续登录与导航加载发布见 [PR #18](https://github.com/Heo7n/reelay-canvas-prototype/pull/18)，更新发布以对应 PR 的构建源、部署 ID、promotion 与主域验收记录为准。
+
+图片列表通过已有内容接口的固定 `?preview=library` 获取最长边 512px、质量 76 的 WebP，原图 URL 和数据库记录不变。派生对象以原图 key、checksum 与固定转换版本确定身份，持久保存于同一私有桶；旋转修正、首帧和元数据清除由 sharp 执行，输入最多 64MP，每服务实例最多同时生成两张。响应 `private, no-cache`，ETag 的 304 也必须先通过当前个人 / 项目权限检查；失败不缓存。现有 12 图本地实测从原图共 24,465,474 字节降至缩略图 298,966 字节（减少 98.78%）；大图、下载、画布消费继续读取原图。首次生成需要读取原图，后续发布验收可通过授权接口预备现有缩略图；不执行数据迁移或 seed。
 
 本次用户已要求推送、合并、同步公网版本，并让公网个人库能看到本机三主体与 12 张原图；此前“只同步代码、暂不部署”的限制不再代表本次范围。私有 Supabase ObjectStore、Vercel 资产 / 主体 API 接线和后续标准夹具入口已具备代码实现。迁移、存储、数据写入与部署结果分别记录，不能由代码提交推断公网页面已可使用。
 
@@ -82,7 +84,7 @@ Root 2021 CA 校验 TLS，不在运行时关闭证书验证。
 
 ## 2026-09-07 部署与验收
 
-正式部署为 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X`，构建源代码 `28580275b042890bcb4c634adde46fb718259643`，部署专属地址为 <https://reelay-canvas-prototype-dyfzxyrf9-heos-projects-560eccff.vercel.app>。`apiPath` 内部 query 参数误入业务严格校验的问题已修复。对应代码的 `npm run check` 共 716 项通过，CI `quality / postgres` 通过。
+首次资产正式部署为 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X`，构建源代码 `28580275b042890bcb4c634adde46fb718259643`，部署专属地址为 <https://reelay-canvas-prototype-dyfzxyrf9-heos-projects-560eccff.vercel.app>。`apiPath` 内部 query 参数误入业务严格校验的问题已修复。对应代码的 `npm run check` 共 716 项通过，CI `quality / postgres` 通过。
 
 [PR #15](https://github.com/Heo7n/reelay-canvas-prototype/pull/15) 已合并为 `df5839a`；修复 [PR #16](https://github.com/Heo7n/reelay-canvas-prototype/pull/16) 已合入 `main`，合并提交为 `5ee4efc237b1f50eb789ac0dc231177b25d944b6`。构建源 `2858027` 与主线合并提交分别记录，不将 merge SHA 当作构建源 SHA。`vercel promote dpl_6qMnyrE8Wihk4eryUySZvL6idE6X` 已成功，CLI inspect 正式主域名 <https://reelay-canvas-prototype.vercel.app> 解析到同一部署，状态为 Ready；切换后的 HTTP / UI 复验通过。
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { JSDOM } from "jsdom";
 
 const source = await readFile(
   new URL("../src/legacy-canvas/canvas-entity-editor-view.js", import.meta.url),
@@ -32,6 +33,18 @@ const media = [
     url: "https://cdn.example/voice.mp3",
   },
 ];
+
+test("editor cards use thumbnails while its large image preview keeps original detail", () => {
+  const dom = new JSDOM(view.renderEntityEditor({
+    media: [{ ...media[0], thumbnailUrl: "https://cdn.example/portrait-preview.webp" }],
+    selectedMediaId: "portrait",
+  }));
+  const doc = dom.window.document;
+  assert.equal(doc.querySelector('[data-entity-editor-media="portrait"] img').src,
+    "https://cdn.example/portrait-preview.webp");
+  assert.equal(doc.querySelector('[data-entity-editor-preview="portrait"] img').src, media[0].url);
+  dom.window.close();
+});
 
 test("registers a frozen pure Entity editor and Media picker API", () => {
   assert.ok(Object.isFrozen(view));

@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe("LoginDialog", () => {
-  it("gives native opening focus to the account so the media carousel starts automatically", () => {
+  it("gives native opening focus to the account so the media carousel starts automatically", async () => {
     vi.useFakeTimers();
     vi.spyOn(document, "hidden", "get").mockReturnValue(false);
     const router = createMemoryRouter([{ path: "/", element: <LoginDialog action="/" onClose={vi.fn()} /> }]);
@@ -38,6 +38,9 @@ describe("LoginDialog", () => {
 
     expect(screen.getByLabelText("账号")).toHaveAttribute("autofocus");
     expect(screen.getByLabelText("账号")).toHaveFocus();
+    await act(async () => {
+      document.querySelectorAll("dialog img").forEach((image) => fireEvent.load(image));
+    });
     act(() => vi.advanceTimersByTime(4_500));
     expect(screen.getByRole("button", { name: "显示灵感展开" })).toHaveAttribute("aria-current", "true");
   });

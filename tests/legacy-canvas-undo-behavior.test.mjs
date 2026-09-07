@@ -157,6 +157,10 @@ test("closed library catalog registration loads no media; using an asset hydrate
   h.window.openAssetLibrary();
   assert.equal(h.window.document.querySelectorAll("#assetLibraryGrid img").length, 12,
     "opening the library mounts its visible image previews");
+  for (const image of h.window.document.querySelectorAll("#assetLibraryGrid img")) {
+    assert.equal(new URL(image.src).searchParams.get("preview"), "library",
+      "library cards request the small authorized derivative rather than the original");
+  }
   assert.equal(h.metadataImages.length, 0, "visible previews do not start a second full-library metadata scan");
 
   h.window.useLibraryAsset(assets[3].assetId, 600, 400);
@@ -167,6 +171,8 @@ test("closed library catalog registration loads no media; using an asset hydrate
   h.metadataImages[0].onload();
   await Promise.resolve();
   const placed = h.state.nodes[0].assets[0];
+  assert.equal(placed.url, `http://reelay.test${assets[3].contentUrl}`,
+    "placing and downloading retain the original file");
   assert.equal(placed.width, 900);
   assert.equal(placed.height, 1600);
   assert.equal(placed.aspectRatio, 900 / 1600);
