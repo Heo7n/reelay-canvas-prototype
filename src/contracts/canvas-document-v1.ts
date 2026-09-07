@@ -39,7 +39,6 @@ export interface LegacyCanvasNodeV1 {
   workflow?: string;
   omniReferenceTaskType?: string;
   audioEnabled?: boolean;
-  autoLinkEnabled?: boolean;
   assetValidationEnabled?: boolean;
   prompt?: string;
   preview?: boolean;
@@ -231,8 +230,7 @@ function serializeNode(value: unknown): LegacyCanvasNodeV1 | null {
     node.omniReferenceTaskType = boundedString(candidate.omniReferenceTaskType, "", 80);
   }
   node.audioEnabled = candidate.audioEnabled === true;
-  node.autoLinkEnabled = candidate.autoLinkEnabled !== false;
-  node.assetValidationEnabled = mediaKind === "video" && candidate.assetValidationEnabled === true;
+  node.assetValidationEnabled = candidate.assetValidationEnabled === true;
   node.prompt = boundedString(candidate.prompt, "", 20_000);
   node.preview = candidate.preview === true;
   node.name = boundedString(candidate.name, "", 300);

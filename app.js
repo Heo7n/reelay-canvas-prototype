@@ -104,11 +104,10 @@ const agentResizeHandle = document.querySelector("#agentResizeHandle");
 const agentTopResizeHandle = document.querySelector("#agentTopResizeHandle");
 const agentBottomResizeHandle = document.querySelector("#agentBottomResizeHandle");
 const agentCloseBtn = document.querySelector("#agentCloseBtn");
-const agentNewChatBtn = document.querySelector("#agentNewChatBtn");
 const agentHistoryBtn = document.querySelector("#agentHistoryBtn");
 const agentHistoryMenu = document.querySelector("#agentHistoryMenu");
 const agentHistoryList = document.querySelector("#agentHistoryList");
-const agentHistorySearch = document.querySelector("#agentHistorySearch");
+const agentHistoryNewChatBtn = document.querySelector("#agentHistoryNewChatBtn");
 const agentConversationTitle = document.querySelector("#agentConversationTitle");
 const agentMessages = document.querySelector("#agentMessages");
 const agentComposer = document.querySelector("#agentComposer");
@@ -118,7 +117,7 @@ const agentAddBtn = document.querySelector("#agentAddBtn");
 const agentPromptOptimizationBtn = document.querySelector("#agentPromptOptimizationBtn");
 const agentAdvancedBtn = document.querySelector("#agentAdvancedBtn");
 const agentAdvancedSettings = document.querySelector("#agentAdvancedSettings");
-const agentAutoLinkBtn = document.querySelector("#agentAutoLinkBtn");
+const agentAssetValidationBtn = document.querySelector("#agentAssetValidationBtn");
 const agentModeBtn = document.querySelector("#agentModeBtn");
 const agentModeMenu = document.querySelector("#agentModeMenu");
 const agentModelBtn = document.querySelector("#agentModelBtn");
@@ -170,7 +169,7 @@ const {
   assetLibrarySeed = {},
   mediaToolDefinitions = {},
   mediaToolsByType = { image: [], video: [], audio: [] },
-  defaultMediaToolPreferences = { image: { tools: [], showLabels: true }, video: { tools: [], showLabels: true }, audio: { tools: [], showLabels: true } },
+  defaultMediaToolPreferences = { image: { tools: [], showLabels: false }, video: { tools: [], showLabels: false }, audio: { tools: [], showLabels: false } },
   generationWorkflows = { image: [], video: [] },
   agentConversations: seedAgentConversations = [{ id: "new", title: "新对话", messages: [] }],
   layoutRules = {},
@@ -181,7 +180,6 @@ const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
 if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
 const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
 if (!canvasPopoverPlacement) throw new Error("Canvas popover placement helper is unavailable.");
-const agentConversations = structuredClone(seedAgentConversations);
 
 function loadMediaToolPreferences() {
   try {
@@ -197,7 +195,7 @@ function loadMediaToolPreferences() {
             type,
             {
               tools: validTools.length ? validTools : fallback.tools,
-              showLabels: candidate?.showLabels !== false,
+              showLabels: typeof candidate?.showLabels === "boolean" ? candidate.showLabels : fallback.showLabels,
             },
           ];
         }),
@@ -259,15 +257,9 @@ const state = {
   projects: [],
   projectSearch: "",
   canvasMoreTargetId: null,
-  activeConversationId: "new",
-  agentComposerMode: "video",
   agentAdvancedSettingsExpanded: false,
-  agentAutoLinkEnabled: true,
+  agentAssetValidationEnabled: false,
   agentPromptOptimizationTask: null,
-  agentModelId: "seedance-2",
-  agentModelIds: ["seedance-2"],
-  agentModelTab: "video",
-  agentModelAuto: false,
   account: {
     credits: 3000,
     consumedCredits: 0,
@@ -311,7 +303,6 @@ const state = {
   assetLibraryWidth: 550,
   themeMode: loadThemeMode(),
   canvasPanel: null,
-  overlaySyncTimer: null,
   nodePopoverFrame: 0,
   groupChromeFrame: 0,
 };
@@ -349,6 +340,8 @@ const canvasNodeInteraction = window.REELAY_CANVAS_NODE_INTERACTION;
 if (!canvasNodeInteraction) throw new Error("Canvas node interaction helpers are unavailable.");
 const canvasNodePlacement = window.REELAY_CANVAS_NODE_PLACEMENT;
 if (!canvasNodePlacement) throw new Error("Canvas node placement helpers are unavailable.");
+const canvasNodeEditorLayout = window.REELAY_CANVAS_NODE_EDITOR_LAYOUT;
+if (!canvasNodeEditorLayout) throw new Error("Canvas node editor layout helpers are unavailable.");
 const canvasNodeLayoutTransitionFactory = window.REELAY_CANVAS_NODE_LAYOUT_TRANSITION;
 if (!canvasNodeLayoutTransitionFactory) throw new Error("Canvas node layout transition helper is unavailable.");
 const canvasSpatialSelection = window.REELAY_CANVAS_SPATIAL_SELECTION;
@@ -373,6 +366,8 @@ const canvasConnectionFeedbackMotion = window.REELAY_CANVAS_CONNECTION_FEEDBACK_
 if (!canvasConnectionFeedbackMotion) throw new Error("Canvas connection feedback motion is unavailable.");
 const canvasLayerReconcilerFactory = window.REELAY_CANVAS_LAYER_RECONCILER;
 if (!canvasLayerReconcilerFactory) throw new Error("Canvas layer reconciler is unavailable.");
+const canvasNodePromptView = window.REELAY_CANVAS_NODE_PROMPT_VIEW;
+if (!canvasNodePromptView) throw new Error("Canvas node prompt view is unavailable.");
 const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
 if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
 const canvasAssetLibraryView = window.REELAY_CANVAS_ASSET_LIBRARY_VIEW;
@@ -611,6 +606,11 @@ const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler
     getId: (node) => node.id,
     getSignature: getNodeRenderSignature,
     createElement: createNodeElement,
+    updateElement(element, node) {
+      if (node.kind !== "generator") return false;
+      createGeneratorNodeElement(node, element);
+      return true;
+    },
     syncElement: syncCanvasNodeElement,
     prepareItem(node) {
       if (node.kind !== "generator") return;
@@ -872,6 +872,7 @@ function setAssetLibraryWidth(width, { remember = true } = {}) {
   if (remember) state.assetLibraryPreferredWidth = preferredWidth;
   const bounds = getAssetLibraryWidthBounds();
   applyAssetLibraryWidth(clampPanelWidth(preferredWidth, bounds.min, bounds.max));
+  syncPromptPanelLayouts();
   renderSelectionToolbar();
   renderMinimap();
   scheduleNodePopoverLayouts();
@@ -942,6 +943,7 @@ function syncProjectNavigation() {
   const canvas = getActiveCanvas();
   projectNameEls.forEach((element) => {
     if (element.textContent !== state.projectName) element.textContent = state.projectName;
+    element.title = `${state.projectName} · 双击或按 Enter 重命名项目`;
     element.setAttribute("aria-label", `项目名称 ${state.projectName}，按 Enter 重命名`);
   });
   canvasNameEls.forEach((element) => {
@@ -1179,13 +1181,12 @@ function syncSelectionOverlayProjection(
 function applyTransform() {
   stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
   const inverseCanvasScale = (1 / state.scale).toFixed(4);
-  const nodeMetaScreenScale = clamp(Math.pow(state.scale, 0.08), 0.88, 1.06);
-  const nodeMetaScale = (nodeMetaScreenScale / state.scale).toFixed(4);
+  const groupScreenScale = clamp(Math.pow(state.scale, 0.08), 0.88, 1.06);
+  const groupUiScale = (groupScreenScale / state.scale).toFixed(4);
   const portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale);
   shell.style.setProperty("--connection-feedback-scale", inverseCanvasScale);
   syncSelectionOverlayProjection(portField);
-  shell.style.setProperty("--node-meta-ui-scale", nodeMetaScale);
-  shell.style.setProperty("--group-ui-scale", nodeMetaScale);
+  shell.style.setProperty("--group-ui-scale", groupUiScale);
   shell.style.setProperty("--group-interaction-scale", inverseCanvasScale);
   shell.style.setProperty(
     "--port-zone-outward",
@@ -1198,8 +1199,6 @@ function applyTransform() {
   scheduleGroupChromeLayout();
   updateCanvasGrid();
   syncPromptPanelLayouts();
-  window.clearTimeout(state.overlaySyncTimer);
-  state.overlaySyncTimer = window.setTimeout(syncPromptPanelLayouts, 100);
   syncZoomControl();
   renderConnections();
   renderGroupResizeOverlay();
@@ -1229,20 +1228,15 @@ function syncNodeVisualLayout(
     mediaFrame.style.transform = `translateY(${(y - node.y).toFixed(3)}px)`;
   }
   const mediaToolbar = element.querySelector("[data-media-toolbar]");
-  if (mediaToolbar && !isTransitioning) {
+  if (mediaToolbar) {
     mediaToolbar.style.setProperty("--toolbar-scale", canonicalLayout.toolbarScale.toFixed(4));
-    mediaToolbar.style.setProperty("--toolbar-nudge", "0px");
-    const toolbarRect = mediaToolbar.getBoundingClientRect();
-    const nudge = toolbarRect.top < 8 ? (8 - toolbarRect.top) / state.scale : 0;
-    mediaToolbar.style.setProperty("--toolbar-nudge", `${nudge.toFixed(2)}px`);
   }
   const promptPanel = element.querySelector(".prompt-panel");
   if (!promptPanel) return;
-  promptPanel.style.top = `${canonicalLayout.mediaHeight + layoutRules.panelGap}px`;
-  if (isTransitioning) return;
+  promptPanel.style.top = `${canonicalLayout.mediaHeight + canonicalLayout.panelGap}px`;
   promptPanel.style.width = `${canonicalLayout.panelWidth}px`;
   promptPanel.style.height = `${canonicalLayout.panelHeight}px`;
-  promptPanel.style.setProperty("--prompt-scale", canonicalLayout.promptScale.toFixed(4));
+  promptPanel.style.setProperty("--prompt-scale", String(canonicalLayout.promptScale));
   promptPanel.style.setProperty("--prompt-extra-height", `${(canonicalLayout.panelHeight * (canonicalLayout.promptScale - 1)).toFixed(2)}px`);
   promptPanel.style.setProperty("--prompt-composer-height", `${canonicalLayout.composerHeight}px`);
   promptPanel.style.setProperty("--prompt-advanced-height", `${canonicalLayout.advancedSettingsHeight}px`);
@@ -1254,6 +1248,12 @@ function syncNodeAspectUi(node, element) {
   if (node.kind !== "generator") return;
   const aspectLabel = element.querySelector("[data-param-aspect]");
   if (aspectLabel) aspectLabel.textContent = getCapabilityDisplayLabel(node, "aspect", node.aspect);
+  const parameterTrigger = element.querySelector('[data-action="param-panel"]');
+  if (parameterTrigger) {
+    const summary = Object.values(getParamLabelParts(node)).join("");
+    parameterTrigger.setAttribute("aria-label", summary);
+    parameterTrigger.title = summary;
+  }
   element.querySelectorAll('[data-action="aspect"]').forEach((button) => {
     const active = button.dataset.value === node.aspect;
     button.classList.toggle("active", active);
@@ -1278,16 +1278,7 @@ function syncPromptPanelContentHeight(node, element) {
   const promptInput = element.querySelector(".prompt-input");
   if (!promptInput) return false;
 
-  const previousHeight = promptInput.style.height;
-  const previousBottom = promptInput.style.bottom;
-  const previousOverflow = promptInput.style.overflowY;
-  promptInput.style.height = "0px";
-  promptInput.style.bottom = "auto";
-  promptInput.style.overflowY = "hidden";
-  const contentHeight = promptInput.scrollHeight;
-  promptInput.style.height = previousHeight;
-  promptInput.style.bottom = previousBottom;
-  promptInput.style.overflowY = previousOverflow;
+  const contentHeight = canvasNodePromptView.measureContentHeight(promptInput);
 
   const nextHeight = clamp(
     Math.ceil(layoutRules.promptInputTop + contentHeight + layoutRules.promptInputBottom),
@@ -1310,7 +1301,11 @@ function syncPromptPanelContentHeight(node, element) {
 
 function syncPromptPanelLayouts() {
   for (const node of state.nodes) {
-    syncNodeVisualLayout(node);
+    const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+    const panel = element?.querySelector(".prompt-panel");
+    const previousWidth = panel?.style.width;
+    syncNodeVisualLayout(node, element);
+    if (panel && previousWidth !== panel.style.width) syncPromptPanelContentHeight(node, element);
   }
   scheduleNodePopoverLayouts();
 }
@@ -1318,14 +1313,16 @@ function syncPromptPanelLayouts() {
 function getNodePopoverBoundary() {
   const shellRect = shell.getBoundingClientRect();
   const topRect = topBar?.getBoundingClientRect();
-  const libraryRect = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
-    ? assetLibraryPanel.getBoundingClientRect()
+  // These panels are fixed to the viewport. Their entrance transforms must
+  // not temporarily give the editor space that the final layout occupies.
+  const libraryRight = assetLibraryPanel && !assetLibraryPanel.classList.contains("hidden")
+    ? assetLibraryPanel.offsetLeft + assetLibraryPanel.offsetWidth
     : null;
-  const agentRect = state.agentOpen ? agentPanel?.getBoundingClientRect() : null;
+  const agentLeft = state.agentOpen ? agentDock?.offsetLeft : null;
   return {
-    left: Math.max(shellRect.left, libraryRect?.right || shellRect.left),
+    left: Math.max(shellRect.left, libraryRight ?? shellRect.left),
     top: Math.max(shellRect.top, topRect?.bottom || shellRect.top),
-    right: Math.min(shellRect.right, agentRect?.left || shellRect.right),
+    right: Math.min(shellRect.right, agentLeft ?? shellRect.right),
     bottom: shellRect.bottom,
   };
 }
@@ -1364,8 +1361,9 @@ function syncNodePopoverLayout(element) {
   const compositeScale = promptPanel.offsetWidth > 0 ? promptRect.width / promptPanel.offsetWidth : 1;
   if (!compositeScale) return;
 
-  popover.style.removeProperty("max-height");
-  popover.style.removeProperty("overflow-y");
+  popover.style.maxWidth = `${Math.max(1, boundary.right - boundary.left - 24) / compositeScale}px`;
+  popover.style.maxHeight = `${Math.max(1, boundary.bottom - boundary.top - 24) / compositeScale}px`;
+  popover.style.overflowY = "auto";
   const popoverWidth = popover.offsetWidth * compositeScale;
   const popoverHeight = popover.offsetHeight * compositeScale;
   if (!popoverWidth || !popoverHeight) return;
@@ -1766,7 +1764,6 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     omniReferenceTaskType: "",
     audioEnabled: generationMode === "video",
     promptOptimizing: false,
-    autoLinkEnabled: true,
     assetValidationEnabled: false,
     credits: 0,
     prompt: "",
@@ -1972,8 +1969,7 @@ function normalizeNodeParameters(node) {
   const isVideoNode = expectedMode === "video";
   node.audioEnabled = isVideoNode && node.audioEnabled !== false;
   node.promptOptimizing = isVideoNode && node.promptOptimizing === true;
-  node.autoLinkEnabled = node.autoLinkEnabled !== false;
-  node.assetValidationEnabled = isVideoNode && node.assetValidationEnabled === true;
+  node.assetValidationEnabled = node.assetValidationEnabled === true;
   node.advancedSettingsExpanded = node.advancedSettingsExpanded === true;
 
   const fieldMap = {
@@ -2155,7 +2151,7 @@ function getMediaSize(ratio) {
 function getNodeLayout(node) {
   const ratio = getMediaRatio(node);
   const { mediaWidth, mediaHeight } = getMediaSize(ratio);
-  const toolbarScale = clamp(1 / state.scale, 0.5, 4);
+  const toolbarScale = 1 / state.scale;
 
   if (node.kind === "asset") {
     return {
@@ -2169,7 +2165,14 @@ function getNodeLayout(node) {
     };
   }
 
-  const panelWidth = layoutRules.normalPanelWidth;
+  const boundary = getNodePopoverBoundary();
+  const availableWidth = boundary.right - boundary.left;
+  const { panelWidth, promptScale, panelGap } = canvasNodeEditorLayout.getEditorLayout({
+    scale: state.scale,
+    availableWidth,
+    mode: getNodeGenerationMode(node),
+    rules: layoutRules,
+  });
   const composerHeight = clamp(
     Number(node.promptPanelHeight) || layoutRules.compactPanelHeight,
     layoutRules.compactPanelHeight,
@@ -2179,18 +2182,8 @@ function getNodeLayout(node) {
     ? layoutRules.advancedSettingsHeightByMode[getNodeGenerationMode(node)]
     : 0;
   const panelHeight = composerHeight + advancedSettingsHeight;
-  const viewportWidth = shell.clientWidth || window.innerWidth || layoutRules.promptTargetScreenWidth;
-  const targetScreenWidth = Math.min(
-    layoutRules.promptTargetScreenWidth,
-    Math.max(320, viewportWidth - layoutRules.promptScreenMargin),
-  );
-  const promptScale = clamp(
-    targetScreenWidth / (panelWidth * state.scale),
-    layoutRules.promptScaleMin,
-    layoutRules.promptScaleMax,
-  );
-  const nodeWidth = Math.max(mediaWidth, panelWidth);
-  const nodeHeight = mediaHeight + (node.expanded ? layoutRules.panelGap + panelHeight * promptScale : 0);
+  const nodeWidth = Math.max(mediaWidth, layoutRules.generatorAnchorWidth);
+  const nodeHeight = mediaHeight + (node.expanded ? panelGap + panelHeight * promptScale : 0);
 
   return {
     mediaWidth,
@@ -2200,6 +2193,7 @@ function getNodeLayout(node) {
     composerHeight,
     advancedSettingsHeight,
     promptScale,
+    panelGap,
     toolbarScale,
     nodeWidth,
     nodeHeight,
@@ -2262,19 +2256,7 @@ function applyNodeAspect(node, aspect, { animate = true } = {}) {
 }
 
 function getNodeBounds(node) {
-  const { x, y, layout } = getNodePresentation(node);
-  const promptOverflow =
-    node.kind === "generator" && node.expanded
-      ? Math.max(0, (layout.panelWidth * layout.promptScale - layout.nodeWidth) / 2)
-      : 0;
-  return {
-    left: x - promptOverflow,
-    top: y,
-    right: x + layout.nodeWidth + promptOverflow,
-    bottom: y + layout.nodeHeight,
-    width: layout.nodeWidth + promptOverflow * 2,
-    height: layout.nodeHeight,
-  };
+  return getNodeVisualBounds(node);
 }
 
 function getNodeVisualBounds(node) {
@@ -2288,7 +2270,7 @@ function getNodeVisualBounds(node) {
     const promptLeft = x + (layout.nodeWidth - promptWidth) / 2;
     left = Math.min(left, promptLeft);
     right = Math.max(right, promptLeft + promptWidth);
-    bottom += layoutRules.panelGap + layout.panelHeight * layout.promptScale;
+    bottom += layout.panelGap + layout.panelHeight * layout.promptScale;
   }
   return {
     left,
@@ -2683,6 +2665,11 @@ function safeMediaAttributeUrl(value) {
   return escapeHtml(sanitizeRuntimeMediaUrl(value));
 }
 
+// sparkles / workflow / layers-2 use official Lucide SVG paths (ISC).
+// Source: https://github.com/lucide-icons/lucide/tree/main/icons
+// License: assets/icons/LUCIDE-LICENSE.txt
+// Media toolbar SVGs use Lucide 1.25.0 (ISC); badge-hd and scan alias hd and scan-line.
+// Source license: assets/icons/LUCIDE-LICENSE.txt.
 const fallbackIconPaths = {
   "align-horizontal-space-around": '<path d="M4 18V6"/><path d="M20 18V6"/><path d="M8 12h8"/><path d="m14 9 3 3-3 3"/><path d="m10 9-3 3 3 3"/>',
   "align-vertical-space-around": '<path d="M6 4h12"/><path d="M6 20h12"/><path d="M12 8v8"/><path d="m9 14 3 3 3-3"/><path d="m9 10 3-3 3 3"/>',
@@ -2692,7 +2679,7 @@ const fallbackIconPaths = {
   "audio-lines": '<path d="M4 10v4"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 8v8"/><path d="M20 10v4"/>',
   "audio-waveform": '<path d="M3 12h2"/><path d="M7 9v6"/><path d="M11 5v14"/><path d="M15 8v8"/><path d="M19 10v4"/><path d="M21 12h-1"/>',
   "badge-check": '<path d="M12 3 14.1 5.1 17 4.4 17.8 7.2 20.6 8 19.9 10.9 22 13 19.9 15.1 20.6 18 17.8 18.8 17 21.6 14.1 20.9 12 23 9.9 20.9 7 21.6 6.2 18.8 3.4 18 4.1 15.1 2 13 4.1 10.9 3.4 8 6.2 7.2 7 4.4 9.9 5.1z"/><path d="m8.5 12.5 2.3 2.3 4.9-5"/>',
-  "badge-hd": '<path d="M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><path d="M7 10v4"/><path d="M10 10v4"/><path d="M7 12h3"/><path d="M14 10v4h2.2a2 2 0 0 0 0-4z"/>',
+  "badge-hd": '<path d="M10 12H6"/><path d="M10 15V9"/><path d="M14 14.5a.5.5 0 0 0 .5.5h1a2.5 2.5 0 0 0 2.5-2.5v-1A2.5 2.5 0 0 0 15.5 9h-1a.5.5 0 0 0-.5.5z"/><path d="M6 15V9"/><rect x="2" y="5" width="20" height="14" rx="2"/>',
   "book-open": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v15h-3a5 5 0 0 0-5 3z"/><path d="M12 6.5V22"/>',
   "book-open-check": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v8"/><path d="M12 6.5V22"/><path d="m15 18 2 2 4-5"/>',
   "bot": '<path d="M12 8V4"/><path d="M8 4h8"/><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M9 17h6"/>',
@@ -2708,9 +2695,9 @@ const fallbackIconPaths = {
   "circle-help": '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4"/><path d="M12 17h.01"/>',
   "circle-play": '<circle cx="12" cy="12" r="10"/><path d="m10 8 6 4-6 4z"/>',
   "combine": '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/><path d="M13 17H9a2 2 0 0 1-2-2v-4"/>',
-  "crop": '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/><path d="M14 14 20 8"/>',
-  "download": '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
-  "ellipsis": '<path d="M5 12h.01"/><path d="M12 12h.01"/><path d="M19 12h.01"/>',
+  "crop": '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',
+  "download": '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  "ellipsis": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
   "ellipsis-vertical": '<path d="M12 5h.01"/><path d="M12 12h.01"/><path d="M12 19h.01"/>',
   "eraser": '<path d="m7 21-4-4 9.5-9.5a3 3 0 0 1 4.2 0l1.8 1.8a3 3 0 0 1 0 4.2L11 21z"/><path d="m9 12 6 6"/><path d="M7 21h12"/>',
   "eye": '<path d="M2.1 12s3.6-7 9.9-7 9.9 7 9.9 7-3.6 7-9.9 7-9.9-7-9.9-7"/><circle cx="12" cy="12" r="3"/>',
@@ -2718,7 +2705,7 @@ const fallbackIconPaths = {
   "focus": '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
   "folder": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/>',
   "folder-input": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M12 9v7"/><path d="m9 13 3 3 3-3"/>',
-  "folder-plus": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M12 10v6"/><path d="M9 13h6"/>',
+  "folder-plus": '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   "folders": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1"/><path d="M5 10a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/>',
   "gauge": '<path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 14 16 9"/><path d="M5 20h14"/>',
   "grid-3x3": '<path d="M4 4h16v16H4z"/><path d="M4 9.3h16"/><path d="M4 14.7h16"/><path d="M9.3 4v16"/><path d="M14.7 4v16"/>',
@@ -2727,6 +2714,7 @@ const fallbackIconPaths = {
   "image": '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-4 4-2-2-5 5"/>',
   "images": '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M3 17V7a4 4 0 0 1 4-4h10"/><path d="m19 15-4-4-3 3-1.5-1.5L7 16"/>',
   "keyboard": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01"/><path d="M11 10h.01"/><path d="M15 10h.01"/><path d="M7 14h10"/>',
+  "layers-2": '<path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74z"/><path d="m20 14.285 1.5.845a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74l1.5-.845"/>',
   "layers-3": '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
   "layout-grid": '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
   "list": '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
@@ -2755,7 +2743,7 @@ const fallbackIconPaths = {
   "square-play": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
   "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
   "rotate-cw": '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
-  "scan": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/>',
+  "scan": '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
   "scan-search": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="11" cy="11" r="3"/><path d="m14 14 3 3"/>',
   "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 8.6 19 19"/><path d="M8.6 15.4 19 5"/>',
   "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -2766,7 +2754,7 @@ const fallbackIconPaths = {
   "share-2": '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4"/><path d="m8.6 13.5 6.8 4"/>',
   "shield-check": '<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="m9 12 2 2 4-4"/>',
   "sliders-horizontal": '<path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/>',
-  "sparkles": '<path d="m12 3 1.7 5.1L19 10l-5.3 1.9L12 17l-1.7-5.1L5 10l5.3-1.9z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/>',
+  "sparkles": '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/>',
   "notepad-text-dashed": '<path d="M5 3h14v18H5z"/><path d="M9 3v3"/><path d="M15 3v3"/><path d="M8 10h8"/><path d="M8 14h5"/>',
   "square-plus": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/>',
   "square": '<rect x="4" y="4" width="16" height="16" rx="2"/>',
@@ -2785,6 +2773,7 @@ const fallbackIconPaths = {
   "video": '<path d="M15 10.5 21 7v10l-6-3.5z"/><rect x="3" y="6" width="12" height="12" rx="2"/>',
   "volume-2": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 9a4 4 0 0 1 0 6"/><path d="M18 6a8 8 0 0 1 0 12"/>',
   "volume-x": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m17 10 4 4"/><path d="m21 10-4 4"/>',
+  "workflow": '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
   "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
 
@@ -2998,7 +2987,7 @@ function mediaMeta(node) {
     <div class="media-meta ${typeLabel ? "generator-type-meta" : ""}">
       ${
         displayTitle
-          ? `<div class="media-title" data-title-shell="true" role="button" tabindex="0" title="双击重命名">
+          ? `<div class="media-title" data-title-shell="true" role="button" tabindex="0" title="${escapeHtml([displayTitle, spec, "双击重命名"].filter(Boolean).join(" · "))}">
               <i data-lucide="${mediaIconName(type)}" aria-hidden="true"></i>
               <span class="media-name" data-media-title="true">${escapeHtml(displayTitle)}</span>
             </div>`
@@ -4045,7 +4034,7 @@ function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
   railLibraryBtn?.setAttribute("aria-expanded", "true");
   closeProfileMenu();
   renderAssetLibrary();
-  scheduleNodePopoverLayouts();
+  syncPromptPanelLayouts();
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
   if (focus && !narrowViewportQuery.matches) {
     window.requestAnimationFrame(() => assetLibrarySearchInput?.focus());
@@ -4073,7 +4062,7 @@ function closeAssetLibrary({ restoreFocus = true } = {}) {
   railLibraryBtn?.classList.remove("active");
   railLibraryBtn?.setAttribute("aria-expanded", "false");
   syncNarrowViewportIsolation();
-  scheduleNodePopoverLayouts();
+  syncPromptPanelLayouts();
   if (shouldRestoreFocus) railLibraryBtn?.focus();
 }
 
@@ -4220,7 +4209,6 @@ function createGenerationParameterSnapshot(node) {
     count: node.count,
     workflow: node.workflow,
     audioEnabled: node.audioEnabled,
-    autoLinkEnabled: node.autoLinkEnabled,
     assetValidationEnabled: node.assetValidationEnabled,
     assetIds: (node.assets || []).map((asset) => asset.id),
     referenceVideos: referenceVideos.map(({ assetId, sourceNodeId, url, duration }) => ({
@@ -4875,14 +4863,14 @@ function entityEntryIconMarkup() {
   `;
 }
 
-function createGeneratorNodeElement(node) {
+function createGeneratorNodeElement(node, existingElement = null) {
   const model = getModel(node);
   const layout = getNodeLayout(node);
   const isVideoNode = getNodeGenerationMode(node) === "video";
   const supportsEntityReferences = canNodeUseEntityReferences(node);
   const selected = state.selectedIds.has(node.id);
   const generationAvailability = getGenerationAvailability(node);
-  const el = document.createElement("article");
+  const el = existingElement || document.createElement("article");
   el.className = `canvas-node generator-node ${node.mode}-mode ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
   el.style.left = `${node.x}px`;
   el.style.top = `${node.y}px`;
@@ -4891,20 +4879,22 @@ function createGeneratorNodeElement(node) {
   el.dataset.id = node.id;
   const generationInputsDisabled = node.generating ? "disabled" : "";
   const promptInputDisabled = node.generating || node.promptOptimizing ? "disabled" : "";
+  const editorOpening = node.expanded
+    && !nodeLayer.querySelector(`[data-id="${node.id}"] .prompt-panel`);
 
   const promptPanel = node.expanded
     ? `
-      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
+      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${editorOpening ? "editor-opening" : ""} ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
         ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
         <textarea class="prompt-input" data-node-prompt-input placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
-          <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" ${generationInputsDisabled}>
+          <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" aria-label="${escapeHtml(model?.name || "暂无可用模型")}" title="${escapeHtml(model?.name || "暂无可用模型")}" ${generationInputsDisabled}>
             ${modelIconMarkup(model, "model-chip-glyph")}
             <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
           </button>
-          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" ${generationInputsDisabled}>
+          <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" aria-label="${escapeHtml(Object.values(getParamLabelParts(node)).join(""))}" title="${escapeHtml(Object.values(getParamLabelParts(node)).join(""))}" ${generationInputsDisabled}>
             <span class="control-chip-label param-chip-label">${getParamLabelMarkup(node)}</span>
             ${getNodeGenerationMode(node) === "video" ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
           </button>
@@ -4931,7 +4921,7 @@ function createGeneratorNodeElement(node) {
     `
     : "";
 
-  el.innerHTML = `
+  const { retainedInput, retainedMedia } = canvasNodePromptView.renderContents(el, `
     <section class="media-frame generator-frame ${node.preview ? "has-preview" : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
@@ -4939,11 +4929,17 @@ function createGeneratorNodeElement(node) {
       ${nodePortMarkup(node)}
     </section>
     ${promptPanel}
-  `;
+  `);
 
-  bindNodeEvents(el, node);
+  bindNodeEvents(el, node, { bindRoot: !existingElement, bindMedia: !retainedMedia });
   const promptInput = el.querySelector(".prompt-input");
-  promptInput?.addEventListener("input", (event) => {
+  if (!retainedInput) promptInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.isComposing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.blur();
+  });
+  if (!retainedInput) promptInput?.addEventListener("input", (event) => {
     if (!requireCanvasMutation()) {
       event.currentTarget.value = node.prompt;
       return;
@@ -5000,6 +4996,7 @@ function createGeneratorNodeElement(node) {
   });
   bindModelPanelEvents(el, node);
   requestAnimationFrame(() => {
+    if (!el.isConnected) return;
     const resized = syncPromptPanelContentHeight(node, el);
     if (!resized) syncNodePopoverLayout(el);
   });
@@ -5007,9 +5004,12 @@ function createGeneratorNodeElement(node) {
   return el;
 }
 
-function bindNodeEvents(el, node) {
-  el.addEventListener("pointerdown", (event) => handleNodePointerDown(event, node.id));
-  el.addEventListener("dragstart", (event) => event.preventDefault());
+function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
+  if (bindRoot) {
+    el.addEventListener("pointerdown", (event) => handleNodePointerDown(event, node.id));
+    el.addEventListener("dragstart", (event) => event.preventDefault());
+  }
+  if (!bindMedia) return;
   bindMediaTitleEvents(el, node);
   bindAudioEvents(el);
   bindMediaToolbarEvents(el, node);
@@ -5168,19 +5168,12 @@ function showMediaToolbarSettings(node) {
             <i data-lucide="x" aria-hidden="true"></i>
           </button>
         </header>
-        <div class="media-customize-preview">
-          ${orderedSelection
-            .map(
-              (tool) => `
-                <span>
-                  <i data-lucide="${mediaToolDefinitions[tool].icon}" aria-hidden="true"></i>
-                  ${showLabels ? `<b>${getMediaToolLabel(tool, type)}</b>` : ""}
-                </span>
-              `,
-            )
-            .join("")}
-          <span><i data-lucide="ellipsis" aria-hidden="true"></i></span>
-          <span><i data-lucide="download" aria-hidden="true"></i></span>
+        <div class="media-customize-preview" aria-hidden="true" inert>
+          ${canvasMediaToolbarView.renderMediaToolbar({
+            visible: true,
+            showLabels,
+            pinnedTools: orderedSelection.map((tool) => getMediaToolPresentation(tool, type)).filter(Boolean),
+          })}
         </div>
         <div class="media-customize-options">
           ${mediaToolsByType[type]
@@ -5335,6 +5328,7 @@ function bindMediaTitleEvents(el, node) {
     }
     title.contentEditable = "false";
     title.classList.remove("editing");
+    titleShell.title = [getMediaTitle(node), getMediaSpec(node), "双击重命名"].filter(Boolean).join(" · ");
     title.blur();
   };
 
@@ -5851,7 +5845,7 @@ function materialPanel() {
   `;
 }
 
-function paramPanel(node) {
+function paramPanel(node, { canvas = true } = {}) {
   normalizeNodeParameters(node);
   const mode = getNodeGenerationMode(node) || "image";
   const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
@@ -5860,26 +5854,26 @@ function paramPanel(node) {
     ? [constrainedAspect]
     : getCapabilityValues(node, "aspects");
   const modeSections = [
-    mode === "video" ? omniReferenceTaskTypeParameterSection(node) : "",
-    mode === "video" ? workflowParameterSection(node) : "",
+    mode === "video" ? omniReferenceTaskTypeParameterSection(node, canvas) : "",
+    mode === "video" ? workflowParameterSection(node, canvas) : "",
   ];
-  const outputFormatSection = mode === "video" ? outputFormatParameterSection(node) : "";
+  const outputFormatSection = mode === "video" ? outputFormatParameterSection(node, canvas) : "";
   const audioSection = mode === "video" ? `
     <section class="parameter-group parameter-audio">
       <div class="param-heading">音频</div>
       <div class="segmented audio-segmented" style="--option-columns: 2">
-        <button class="${node.audioEnabled ? "active" : ""}" data-action="audio" data-value="on" data-canvas-mutation type="button">开启</button>
-        <button class="${node.audioEnabled ? "" : "active"}" data-action="audio" data-value="off" data-canvas-mutation type="button">关闭</button>
+        <button class="${node.audioEnabled ? "active" : ""}" data-action="audio" data-value="on" ${canvas ? "data-canvas-mutation" : ""} type="button">开启</button>
+        <button class="${node.audioEnabled ? "" : "active"}" data-action="audio" data-value="off" ${canvas ? "data-canvas-mutation" : ""} type="button">关闭</button>
       </div>
     </section>
   ` : "";
   const detailSections = [
-    parameterSection(node, "比例", "aspect", aspectValues),
+    parameterSection(node, "比例", "aspect", aspectValues, canvas),
     mode === "video"
-      ? parameterSection(node, "分辨率", "quality", getCapabilityValues(node, "qualities"))
-      : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions")),
+      ? parameterSection(node, "分辨率", "quality", getCapabilityValues(node, "qualities"), canvas)
+      : parameterSection(node, "分辨率", "resolution", getCapabilityValues(node, "resolutions"), canvas),
     mode === "image" && getCapabilityValues(node, "qualities").length
-      ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"))
+      ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"), canvas)
       : "",
     mode === "video" && !taskTypeConstraint?.hideDuration ? durationParameterSection(node) : "",
     mode === "video" ? `
@@ -5891,7 +5885,7 @@ function paramPanel(node) {
   ];
   const taskType = taskTypeCapabilityValue(node);
   return `
-    <section class="panel-popover param-panel ${taskTypeConstraint?.hideDuration ? "is-task-type-compact" : ""}" data-node-popover data-anchor-action="param-panel" data-omni-reference-task-type="${escapeHtml(taskType)}" aria-label="综合参数">
+    <section class="panel-popover param-panel ${taskTypeConstraint?.hideDuration ? "is-task-type-compact" : ""}" ${canvas ? 'data-node-popover data-anchor-action="param-panel"' : ""} data-omni-reference-task-type="${escapeHtml(taskType)}" aria-label="综合参数">
       <div class="param-section">
         ${modeSections.join("")}
         <div class="parameter-task-details">${detailSections.join("")}</div>
@@ -5904,7 +5898,7 @@ function taskTypeCapabilityValue(node) {
   return getOmniReferenceTaskTypeCapability(node) ? node.omniReferenceTaskType || "" : "";
 }
 
-function omniReferenceTaskTypeParameterSection(node) {
+function omniReferenceTaskTypeParameterSection(node, canvas = true) {
   const capability = getOmniReferenceTaskTypeCapability(node);
   const values = Array.isArray(capability?.uiValues) ? capability.uiValues : [];
   if (!values.length) return "";
@@ -5914,14 +5908,14 @@ function omniReferenceTaskTypeParameterSection(node) {
       <div class="param-heading">模式</div>
       <div class="segmented omni-reference-task-type-segmented" style="--option-columns: ${values.length}; --task-type-selection-index: ${activeIndex}">
         ${values.map((value) => `
-          <button class="${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" data-canvas-mutation type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
+          <button class="${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" ${canvas ? "data-canvas-mutation" : ""} type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
         `).join("")}
       </div>
     </section>
   `;
 }
 
-function workflowParameterSection(node) {
+function workflowParameterSection(node, canvas = true) {
   const workflows = getWorkflowDefinitions(node);
   if (workflows.length <= 1) return "";
   return `
@@ -5929,7 +5923,7 @@ function workflowParameterSection(node) {
       <div class="param-heading">模式</div>
       <div class="segmented workflow-segmented" style="--option-columns: ${workflows.length}">
         ${workflows.map((workflow) => `
-          <button class="${node.workflow === workflow.id ? "active" : ""}" data-action="workflow" data-value="${workflow.id}" data-canvas-mutation type="button">${escapeHtml(workflow.label)}</button>
+          <button class="${node.workflow === workflow.id ? "active" : ""}" data-action="workflow" data-value="${workflow.id}" ${canvas ? "data-canvas-mutation" : ""} type="button">${escapeHtml(workflow.label)}</button>
         `).join("")}
       </div>
     </section>
@@ -5955,7 +5949,7 @@ function durationParameterSection(node) {
   `;
 }
 
-function outputFormatParameterSection(node) {
+function outputFormatParameterSection(node, canvas = true) {
   const values = getCapabilityValues(node, "outputFormats");
   if (!values.length) return "";
   return `
@@ -5963,7 +5957,7 @@ function outputFormatParameterSection(node) {
       <div class="param-heading">输出格式</div>
       <div class="segmented output-format-segmented" style="--option-columns: ${values.length}">
         ${values.map((value) => `
-          <button class="${node.outputFormat === value ? "active" : ""}" data-action="output-format" data-value="${escapeHtml(value)}" data-canvas-mutation type="button" aria-pressed="${node.outputFormat === value}">${escapeHtml(getCapabilityDisplayLabel(node, "outputFormat", value))}</button>
+          <button class="${node.outputFormat === value ? "active" : ""}" data-action="output-format" data-value="${escapeHtml(value)}" ${canvas ? "data-canvas-mutation" : ""} type="button" aria-pressed="${node.outputFormat === value}">${escapeHtml(getCapabilityDisplayLabel(node, "outputFormat", value))}</button>
         `).join("")}
       </div>
     </section>
@@ -5990,8 +5984,7 @@ function syncDurationRangeControl(input, seconds) {
 }
 
 const advancedSettingHints = Object.freeze({
-  autoLink: "自动匹配参考素材名称，一键 AutoLink，省去手动@麻烦",
-  assetValidation: "开启后自动校验素材合规性，提升真人视频生成成功率；非真人生成可关闭，跳过检测节省耗时。",
+  assetValidation: "自动提交尚未审核的图片与视频素材",
   schedule: "可定时设置生成任务，到点自动执行",
 });
 
@@ -6006,22 +5999,13 @@ function advancedSettingInfo(node, key, label) {
 }
 
 function advancedSettingsPanel(node) {
-  const assetValidationSetting = getNodeGenerationMode(node) === "video"
-    ? `
-      <div class="advanced-setting-row">
-        <div class="advanced-setting-label"><span>自动校验素材</span>${advancedSettingInfo(node, "assetValidation", "自动校验素材")}</div>
-        <button class="advanced-setting-switch ${node.assetValidationEnabled ? "is-on" : ""}" data-action="asset-validation" data-canvas-mutation type="button" role="switch" aria-label="自动校验素材" aria-checked="${node.assetValidationEnabled}" ${node.generating ? "disabled" : ""}><span></span></button>
-      </div>
-    `
-    : "";
   return `
     <section class="advanced-settings" id="advanced-settings-${escapeHtml(node.id)}" aria-label="高级设置">
       <div class="advanced-settings-title">高级设置</div>
       <div class="advanced-setting-row">
-        <div class="advanced-setting-label"><span>智能引用 AutoLink</span>${advancedSettingInfo(node, "autoLink", "智能引用 AutoLink")}</div>
-        <button class="advanced-setting-switch ${node.autoLinkEnabled ? "is-on" : ""}" data-action="auto-link" data-canvas-mutation type="button" role="switch" aria-label="智能引用 AutoLink" aria-checked="${node.autoLinkEnabled}" ${node.generating ? "disabled" : ""}><span></span></button>
+        <div class="advanced-setting-label"><span>自动校验素材</span>${advancedSettingInfo(node, "assetValidation", "自动校验素材")}</div>
+        <button class="advanced-setting-switch ${node.assetValidationEnabled ? "is-on" : ""}" data-action="asset-validation" data-canvas-mutation type="button" role="switch" aria-label="自动校验素材" aria-checked="${node.assetValidationEnabled}" ${node.generating ? "disabled" : ""}><span></span></button>
       </div>
-      ${assetValidationSetting}
       <div class="advanced-setting-row advanced-setting-schedule">
         <div class="advanced-setting-label"><span>定时任务</span>${advancedSettingInfo(node, "schedule", "定时任务")}</div>
         <button class="advanced-schedule-button" type="button" disabled aria-disabled="true" aria-label="定时任务暂未开放" title="定时任务暂未开放"><svg class="advanced-schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3.5v4M16.5 3.5v4M3.5 9.5h17M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></button>
@@ -6030,20 +6014,20 @@ function advancedSettingsPanel(node) {
   `;
 }
 
-function parameterSection(node, label, action, values) {
+function parameterSection(node, label, action, values, canvas = true) {
   if (!values?.length) return "";
   const columns = values.length > 7 ? Math.ceil(values.length / 2) : values.length;
   return `
     <section class="parameter-group parameter-${action}">
       <div class="param-heading">${label}</div>
       <div class="segmented ${action}-segmented" style="--option-columns: ${columns}">
-      ${values.map((value) => paramButton(node, action, value)).join("")}
+      ${values.map((value) => paramButton(node, action, value, canvas)).join("")}
       </div>
     </section>
   `;
 }
 
-function paramButton(node, action, value) {
+function paramButton(node, action, value, canvas = true) {
   const aspectIcon = action === "aspect" ? renderAspectIcon(value) : "";
   const pressed = action === "aspect" ? ` aria-pressed="${node[action] === value}"` : "";
   const displayLabel = getCapabilityDisplayLabel(node, action, value);
@@ -6052,7 +6036,7 @@ function paramButton(node, action, value) {
   const disabledAttributes = disabled
     ? ` disabled aria-disabled="true" title="当前任务类型仅支持 ${escapeHtml(getCapabilityDisplayLabel(node, "aspect", constrainedAspect))} 比例"`
     : "";
-  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${escapeHtml(value)}" data-canvas-mutation type="button"${pressed}${disabledAttributes}>${aspectIcon}<span>${escapeHtml(displayLabel)}</span></button>`;
+  return `<button class="${action === "aspect" ? "aspect-option " : ""}${node[action] === value ? "active" : ""}" data-action="${action}" data-value="${escapeHtml(value)}" ${canvas ? "data-canvas-mutation" : ""} type="button"${pressed}${disabledAttributes}>${aspectIcon}<span>${escapeHtml(displayLabel)}</span></button>`;
 }
 
 function renderAspectIcon(value) {
@@ -6080,7 +6064,6 @@ const generationLockedActions = new Set([
   "audio",
   "output-format",
   "prompt-optimization",
-  "auto-link",
   "asset-validation",
   "aspect",
   "duration",
@@ -6090,11 +6073,11 @@ const generationLockedActions = new Set([
 
 const generatorParameterActions = new Set([
   "model", "workflow", "omni-reference-task-type", "audio", "output-format",
-  "auto-link", "asset-validation", "aspect", "duration", "quality", "resolution",
+  "asset-validation", "aspect", "duration", "quality", "resolution",
 ]);
 const generatorParameterFields = [
   "name", "model", "workflow", "omniReferenceTaskType", "audioEnabled", "outputFormat",
-  "autoLinkEnabled", "assetValidationEnabled", "aspect", "duration", "quality", "resolution", "count", "x", "y",
+  "assetValidationEnabled", "aspect", "duration", "quality", "resolution", "count", "x", "y",
 ];
 
 function handleGeneratorParameterAction(node, action, value) {
@@ -6148,11 +6131,7 @@ function handleGeneratorParameterAction(node, action, value) {
       if (!getCapabilityValues(node, "outputFormats").includes(value)) return;
       draft.outputFormat = value;
       break;
-    case "auto-link":
-      draft.autoLinkEnabled = !node.autoLinkEnabled;
-      break;
     case "asset-validation":
-      if (getNodeGenerationMode(node) !== "video") return;
       draft.assetValidationEnabled = !node.assetValidationEnabled;
       break;
     case "aspect":
@@ -6172,7 +6151,7 @@ function handleGeneratorParameterAction(node, action, value) {
   if (!result.ok) return;
   node.panel = nextPanel;
   if (action === "model") node.modelFilter = getNodeGenerationMode(node);
-  if (!["auto-link", "asset-validation"].includes(action)) rememberPreset(node);
+  if (action !== "asset-validation") rememberPreset(node);
   if (aspectChanged) {
     canvasNodeLayoutTransition.start({
       id: getNodeLayoutTransitionId(node), from: toNodeTransitionGeometry(from),
@@ -7309,7 +7288,7 @@ function getDialogFocusFallback(previousFocus) {
   return [...document.querySelectorAll(selector)].find(canRestoreDialogFocus) || null;
 }
 
-function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, onConfirm, onCancel }) {
+function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, variant = "default", onConfirm, onCancel }) {
   const existingLayer = document.querySelector(".confirm-layer");
   if (existingLayer) {
     if (typeof existingLayer.closeConfirmDialog === "function") {
@@ -7324,6 +7303,8 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
   const titleId = `confirm-title-${crypto.randomUUID()}`;
   const layer = document.createElement("dialog");
   layer.className = "confirm-layer";
+  const isConversationDelete = variant === "conversation-delete";
+  if (isConversationDelete) layer.classList.add("conversation-delete");
   layer.setAttribute("aria-modal", "true");
   layer.setAttribute("aria-labelledby", titleId);
   Object.assign(layer.style, {
@@ -7338,7 +7319,7 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
   });
   layer.innerHTML = `
     <div class="confirm-dialog">
-      <div class="confirm-title" id="${titleId}">${escapeHtml(title)}</div>
+      <div class="confirm-title" id="${titleId}">${isConversationDelete ? '<span class="confirm-warning-symbol" aria-hidden="true">!</span>' : ""}${escapeHtml(title)}</div>
       <div class="confirm-body">${escapePlainText(body)}</div>
       <div class="confirm-actions">
         ${showCancel ? `<button class="confirm-cancel" type="button" autofocus>${escapeHtml(cancelText)}</button>` : ""}
@@ -7385,23 +7366,10 @@ function escapePlainText(value) {
 }
 
 function getConversation(id) {
-  return agentConversations.find((item) => item.id === id) || agentConversations[0];
+  return agentHistory.getConversation(id) || agentHistory.getConversation();
 }
 
-function renderAgentHistory() {
-  if (!agentHistoryList) return;
-  agentHistoryList.innerHTML = agentConversations
-    .map(
-      (conversation) => `
-        <button class="history-item ${conversation.id === state.activeConversationId ? "active" : ""}" type="button" data-chat-id="${escapeHtml(conversation.id)}">
-          ${escapeHtml(conversation.title)}
-        </button>
-      `,
-    )
-    .join("");
-}
-
-function renderAgentMessages(conversation = getConversation(state.activeConversationId)) {
+function renderAgentMessages(conversation = getConversation()) {
   if (!agentMessages) return;
   if (!conversation.messages.length) {
     agentMessages.replaceChildren();
@@ -7425,26 +7393,94 @@ function renderAgentMessages(conversation = getConversation(state.activeConversa
   agentMessages.scrollTop = agentMessages.scrollHeight;
 }
 
+const agentHistory = window.REELAY_AGENT_HISTORY.createController({
+  list: agentHistoryList,
+  seed: seedAgentConversations,
+  escapeHtml,
+  refreshIcons,
+  onSelect(conversation, { closeMenu }) {
+    cancelAgentPromptOptimization();
+    agentConversationTitle.textContent = conversation.title;
+    agentConversationTitle.title = conversation.title;
+    renderAgentMessages(conversation);
+    if (closeMenu) setAgentHistoryOpen(false);
+  },
+  onRename(conversation) {
+    if (conversation.id === agentHistory.getActiveId()) {
+      agentConversationTitle.textContent = conversation.title;
+      agentConversationTitle.title = conversation.title;
+    }
+  },
+  requestDelete({ conversation, onConfirm }) {
+    setAgentHistoryOpen(false);
+    agentHistoryBtn?.focus();
+    showConfirmDialog({
+      title: "删除对话",
+      body: `确定删除「${conversation.title}」吗？`,
+      confirmText: "删除",
+      danger: true,
+      variant: "conversation-delete",
+      onConfirm,
+    });
+  },
+});
+
+const agentParameters = window.REELAY_AGENT_PARAMETERS.createController({
+  trigger: agentParamSummary,
+  menu: document.querySelector("#agentParamMenu"),
+  boundary: agentPanel,
+  normalize: normalizeNodeParameters,
+  renderPanel: (parameters) => paramPanel(parameters, { canvas: false }),
+  beforeOpen() {
+    setAgentHistoryOpen(false);
+    setAgentModeMenuOpen(false);
+    setAgentModelMenuOpen(false);
+    setAgentAdvancedOpen(false);
+  },
+  onChange: syncAgentModelButton,
+  refreshIcons,
+});
+
 const agentComposerModes = {
-  image: { label: "图片生成", icon: "image" },
-  video: { label: "视频生成", icon: "play-square" },
-  agent: { label: "Agent 托管", icon: "bot" },
+  generation: { label: "生成模式", icon: "sparkles" },
+  agent: { label: "Agent 模式", icon: "workflow" },
 };
+
+const agentModels = window.REELAY_AGENT_MODELS.createController({
+  trigger: agentModelBtn,
+  menu: agentModelMenu,
+  boundary: agentPanel,
+  models,
+  initialModelId: "seedance-2",
+  escapeHtml,
+  modelIconMarkup,
+  refreshIcons,
+  beforeOpen() {
+    agentParameters.setOpen(false);
+    setAgentHistoryOpen(false);
+    setAgentModeMenuOpen(false);
+    setAgentAdvancedOpen(false);
+  },
+  onChange: syncAgentComposerControls,
+});
 
 function setAgentHistoryOpen(open, { focus = false } = {}) {
   const shouldOpen = Boolean(open);
+  if (!shouldOpen) agentHistory.close();
   if (shouldOpen) {
+    agentParameters.setOpen(false);
     setAgentModeMenuOpen(false);
     setAgentModelMenuOpen(false);
   }
   agentHistoryMenu?.classList.toggle("hidden", !shouldOpen);
   agentHistoryBtn?.setAttribute("aria-expanded", String(shouldOpen));
-  if (shouldOpen && focus) window.requestAnimationFrame(() => agentHistorySearch?.focus());
+  if (shouldOpen && focus) window.requestAnimationFrame(() => agentHistoryNewChatBtn?.focus());
 }
 
 function setAgentModeMenuOpen(open, { focus = false } = {}) {
   const shouldOpen = Boolean(open);
   if (shouldOpen) {
+    agentParameters.setOpen(false);
     setAgentHistoryOpen(false);
     setAgentModelMenuOpen(false);
   }
@@ -7456,22 +7492,12 @@ function setAgentModeMenuOpen(open, { focus = false } = {}) {
   }
 }
 
-function setAgentModelMenuOpen(open, { focus = false } = {}) {
-  const shouldOpen = Boolean(open) && !agentModelBtn?.disabled;
-  if (shouldOpen) {
-    setAgentHistoryOpen(false);
-    setAgentModeMenuOpen(false);
-    renderAgentModelMenu();
-  }
-  agentModelMenu?.classList.toggle("hidden", !shouldOpen);
-  agentModelBtn?.classList.toggle("active", shouldOpen);
-  agentModelBtn?.setAttribute("aria-expanded", String(shouldOpen));
-  if (shouldOpen && focus) {
-    window.requestAnimationFrame(() => agentModelMenu?.querySelector(".agent-model-option.active")?.focus());
-  }
+function setAgentModelMenuOpen(open, options = {}) {
+  agentModels.setOpen(open, options);
 }
 
 function closeAgentPopovers() {
+  agentParameters.setOpen(false);
   setAgentHistoryOpen(false);
   setAgentModeMenuOpen(false);
   setAgentModelMenuOpen(false);
@@ -7479,6 +7505,7 @@ function closeAgentPopovers() {
 
 function setAgentAdvancedOpen(open) {
   const shouldOpen = Boolean(open);
+  if (shouldOpen) closeAgentPopovers();
   state.agentAdvancedSettingsExpanded = shouldOpen;
   agentAdvancedSettings?.classList.toggle("hidden", !shouldOpen);
   agentAdvancedSettings?.setAttribute("aria-hidden", String(!shouldOpen));
@@ -7487,32 +7514,10 @@ function setAgentAdvancedOpen(open) {
   agentComposer?.classList.toggle("advanced-open", shouldOpen);
 }
 
-function setAgentAutoLinkEnabled(enabled) {
-  state.agentAutoLinkEnabled = Boolean(enabled);
-  agentAutoLinkBtn?.setAttribute("aria-checked", String(state.agentAutoLinkEnabled));
-  agentAutoLinkBtn?.classList.toggle("is-on", state.agentAutoLinkEnabled);
-}
-
-function setAgentConversation(id) {
-  cancelAgentPromptOptimization();
-  const conversation = getConversation(id);
-  state.activeConversationId = conversation.id;
-  if (agentConversationTitle) {
-    agentConversationTitle.textContent = conversation.title;
-  }
-  agentHistoryList?.querySelectorAll(".history-item").forEach((item) => {
-    item.classList.toggle("active", item.dataset.chatId === conversation.id);
-  });
-  renderAgentMessages(conversation);
-  setAgentHistoryOpen(false);
-}
-
-function filterAgentHistory(keyword = "") {
-  const normalizedKeyword = keyword.trim().toLowerCase();
-  agentHistoryList?.querySelectorAll(".history-item").forEach((item) => {
-    const visible = !normalizedKeyword || item.textContent.toLowerCase().includes(normalizedKeyword);
-    item.classList.toggle("hidden", !visible);
-  });
+function setAgentAssetValidationEnabled(enabled) {
+  state.agentAssetValidationEnabled = Boolean(enabled);
+  agentAssetValidationBtn?.setAttribute("aria-checked", String(state.agentAssetValidationEnabled));
+  agentAssetValidationBtn?.classList.toggle("is-on", state.agentAssetValidationEnabled);
 }
 
 function syncAgentPromptOptimizationControl() {
@@ -7565,7 +7570,7 @@ function startAgentPromptOptimization() {
   const sourcePrompt = agentInput?.value.trim();
   if (!sourcePrompt || state.agentPromptOptimizationTask) return;
   const task = {
-    conversationId: state.activeConversationId,
+    conversationId: agentHistory.getActiveId(),
     sourcePrompt,
     timeoutId: 0,
   };
@@ -7580,7 +7585,7 @@ function sendAgentMessage() {
   if (state.agentPromptOptimizationTask) return;
   const content = agentInput?.value.trim();
   if (!content) return;
-  const conversation = getConversation(state.activeConversationId);
+  const conversation = getConversation();
   conversation.messages.push({ role: "user", content });
   conversation.messages.push({
     role: "agent",
@@ -7591,50 +7596,15 @@ function sendAgentMessage() {
   renderAgentMessages(conversation);
 }
 
-function getSelectedAgentModelIds() {
-  const ids = Array.isArray(state.agentModelIds) && state.agentModelIds.length
-    ? state.agentModelIds
-    : [state.agentModelId || "gpt-image-2"];
-  return ids.filter((id, index) => ids.indexOf(id) === index && models.some((model) => model.id === id));
-}
-
-function getSelectedAgentModels() {
-  const selectedIds = getSelectedAgentModelIds();
-  return selectedIds.map((id) => models.find((model) => model.id === id)).filter(Boolean);
-}
-
-function getAgentComposerModel(mode = state.agentComposerMode) {
-  if (mode !== "image" && mode !== "video") return null;
-  const active = models.find((model) => model.id === state.agentModelId && model.type === mode);
-  if (active) return active;
-  const preferred = getSelectedAgentModels().find((model) => model.type === mode);
-  if (preferred) return preferred;
-  const fallbackId = mode === "video" ? "seedance-2" : "gpt-image-2";
-  return models.find((model) => model.id === fallbackId)
-    || models.find((model) => model.type === mode)
-    || null;
+function getAgentComposerModel() {
+  return agentModels.getModel();
 }
 
 function getAgentComposerParameterParts(model) {
   if (!model) {
     return { beforeAspect: "自动规划模型与参数", aspect: "", afterAspect: "" };
   }
-  const defaults = model.defaults || {};
-  if (model.type === "video") {
-    const workflow = generationWorkflows.video?.find((item) => item.id === defaults.workflow);
-    const after = [defaults.quality, defaults.duration].filter(Boolean).join(" · ");
-    return {
-      beforeAspect: workflow?.label ? `${workflow.label} · ` : "",
-      aspect: defaults.aspect || "自动",
-      afterAspect: after ? ` · ${after}` : "",
-    };
-  }
-  const after = [defaults.resolution, defaults.quality].filter(Boolean).join(" · ");
-  return {
-    beforeAspect: "",
-    aspect: defaults.aspect || "自动",
-    afterAspect: after ? ` · ${after}` : "",
-  };
+  return getParamLabelParts(agentParameters.sync(model));
 }
 
 function getAgentComposerParameterSummary(model) {
@@ -7649,12 +7619,12 @@ function getAgentComposerParameterMarkup(model) {
 }
 
 function syncAgentComposerControls() {
-  const mode = agentComposerModes[state.agentComposerMode] ? state.agentComposerMode : "video";
+  const mode = agentModels.getMode();
   const definition = agentComposerModes[mode];
   if (agentModeBtn) {
     agentModeBtn.innerHTML = `<i data-agent-mode-icon data-lucide="${definition.icon}" aria-hidden="true"></i><span class="control-chip-label" data-agent-mode-label>${definition.label}</span>`;
-    agentModeBtn.title = `生成模式：${definition.label}`;
-    agentModeBtn.setAttribute("aria-label", `生成模式：${definition.label}`);
+    agentModeBtn.title = `当前模式：${definition.label}`;
+    agentModeBtn.setAttribute("aria-label", `当前模式：${definition.label}`);
   }
   agentModeMenu?.querySelectorAll("[data-agent-mode]").forEach((button) => {
     const active = button.dataset.agentMode === mode;
@@ -7665,169 +7635,43 @@ function syncAgentComposerControls() {
 }
 
 function setAgentComposerMode(mode, { focusInput = false } = {}) {
-  const nextMode = agentComposerModes[mode] ? mode : "video";
-  state.agentComposerMode = nextMode;
-  if (nextMode === "image" || nextMode === "video") {
-    const model = getAgentComposerModel(nextMode);
-    if (model) {
-      state.agentModelId = model.id;
-      if (!getSelectedAgentModelIds().includes(model.id)) {
-        state.agentModelIds = [...getSelectedAgentModelIds(), model.id];
-      }
-    }
-    state.agentModelTab = nextMode;
-  }
+  agentModels.setMode(mode);
   setAgentModeMenuOpen(false);
   syncAgentComposerControls();
   if (focusInput) agentInput?.focus();
 }
 
 function syncAgentModelButton() {
-  const selectedModels = getSelectedAgentModels();
+  const selectedModels = agentModels.getPreferredModels();
   const names = selectedModels.map((model) => model.name);
   const preferenceLabel =
     names.length > 2
       ? `已选模型：${names.slice(0, 2).join("、")} 等 ${names.length} 个`
       : `已选模型：${names.join("、") || "未选择"}`;
   const model = getAgentComposerModel();
-  const agentManaged = state.agentComposerMode === "agent";
+  const parameters = agentParameters.sync(model);
+  const agentManaged = agentModels.getMode() === "agent";
   if (agentModelBtn) {
-    agentModelBtn.disabled = agentManaged;
+    agentModelBtn.disabled = false;
     agentModelBtn.classList.toggle("agent-managed", agentManaged);
     agentModelBtn.innerHTML = agentManaged
-      ? '<i data-lucide="bot" aria-hidden="true"></i><span class="agent-model-button-label control-chip-label">自动编排</span>'
+      ? `<i class="agent-composer-model-icon" data-lucide="layers-2" aria-hidden="true"></i><span class="agent-model-button-label control-chip-label">模型偏好 · ${names.length}</span>`
       : `${modelIconMarkup(model, "model-chip-glyph agent-composer-model-icon")}<span class="agent-model-button-label control-chip-label">${escapeHtml(model?.name || "选择模型")}</span>`;
-    const label = agentManaged ? "Agent 托管将自动编排模型" : `${preferenceLabel}；当前 ${model?.name || "未选择"}`;
+    const label = agentManaged ? preferenceLabel : `当前模型：${model?.name || "未选择"}`;
     agentModelBtn.title = label;
     agentModelBtn.setAttribute("aria-label", label);
   }
   if (agentParamSummary) {
     const summary = getAgentComposerParameterSummary(model);
-    agentParamSummary.innerHTML = `<span class="control-chip-label param-chip-label">${getAgentComposerParameterMarkup(model)}</span>${model?.type === "video" ? '<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="volume-2" aria-label="音频开启"></i>' : ""}`;
-    agentParamSummary.setAttribute("aria-label", `当前生成参数：${summary}`);
+    const audioLabel = model?.type === "video" ? `；音频${parameters.audioEnabled ? "开启" : "关闭"}` : "";
+    agentParamSummary.innerHTML = `<span class="control-chip-label param-chip-label">${getAgentComposerParameterMarkup(model)}</span>${audioLabel ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${parameters.audioEnabled ? "volume-2" : "volume-x"}" aria-hidden="true"></i>` : ""}`;
+    agentParamSummary.setAttribute("aria-label", `当前生成参数：${summary}${audioLabel}`);
+    agentParamSummary.title = agentManaged ? summary : `调整生成参数：${summary}${audioLabel}`;
   }
   refreshIcons();
 }
 
-function renderAgentModelMenu() {
-  if (!agentModelMenu) return;
-  const activeTab = state.agentModelTab === "video" ? "video" : "image";
-  const selectedIds = new Set(getSelectedAgentModelIds());
-  const imageModels = models.filter((model) => model.type === "image");
-  const videoModels = models.filter((model) => model.type === "video");
-  const renderOption = (model) => {
-    const active = selectedIds.has(model.id);
-    return `
-      <button class="agent-model-option ${active ? "active" : ""}" type="button" data-agent-model="${model.id}" aria-pressed="${active}">
-        ${modelIconMarkup(model, "agent-model-provider")}
-        <span class="agent-model-copy">
-          <span class="agent-model-title">${escapeHtml(model.name)}</span>
-          <span class="agent-model-detail">${escapeHtml(model.desc)}</span>
-          <span class="agent-model-badge">${escapeHtml(model.badge || "30s")}</span>
-        </span>
-        <i class="agent-model-check" data-lucide="check" aria-hidden="true"></i>
-      </button>
-    `;
-  };
 
-  agentModelMenu.innerHTML = `
-    <div class="agent-model-fixed">
-      <div class="agent-model-menu-head">
-        <div class="agent-model-menu-title">模型偏好</div>
-        <label class="agent-auto-toggle">
-          <span>自动</span>
-          <input type="checkbox" data-agent-auto ${state.agentModelAuto ? "checked" : ""} />
-          <i aria-hidden="true"></i>
-        </label>
-      </div>
-      <div class="agent-model-tabs" style="--active-index: ${activeTab === "video" ? 1 : 0}" role="tablist" aria-label="模型类型">
-        <span class="agent-model-tab-indicator" aria-hidden="true"></span>
-        <button class="${activeTab === "image" ? "active" : ""}" type="button" data-agent-model-tab="image">图片</button>
-        <button class="${activeTab === "video" ? "active" : ""}" type="button" data-agent-model-tab="video">视频</button>
-      </div>
-    </div>
-    <div class="agent-model-scroll">
-      <div class="agent-model-section" data-agent-model-section="image">
-        <div class="agent-model-section-label">图片模型</div>
-        <div class="agent-model-list">${imageModels.map(renderOption).join("")}</div>
-      </div>
-      <div class="agent-model-section" data-agent-model-section="video">
-        <div class="agent-model-section-label">视频模型</div>
-        <div class="agent-model-list">${videoModels.map(renderOption).join("")}</div>
-      </div>
-    </div>
-  `;
-  const scroll = agentModelMenu.querySelector(".agent-model-scroll");
-  scroll?.addEventListener("scroll", syncAgentModelTabFromScroll, { passive: true });
-  scroll?.addEventListener("wheel", () => requestAnimationFrame(syncAgentModelTabFromScroll), { passive: true });
-  updateAgentModelTabUi(activeTab);
-  refreshIcons();
-}
-
-function toggleAgentModel(modelId) {
-  const selected = models.find((item) => item.id === modelId);
-  if (!selected) return;
-  const scrollTop = agentModelMenu?.querySelector(".agent-model-scroll")?.scrollTop || 0;
-  const selectedIds = getSelectedAgentModelIds();
-  const exists = selectedIds.includes(selected.id);
-  const isActiveGenerationType = selected.type === state.agentComposerMode;
-  const sameTypeCount = selectedIds
-    .map((id) => models.find((model) => model.id === id))
-    .filter((model) => model?.type === selected.type).length;
-  if (exists && selectedIds.length > 1 && (!isActiveGenerationType || sameTypeCount > 1)) {
-    state.agentModelIds = selectedIds.filter((id) => id !== selected.id);
-    if (state.agentModelId === selected.id) {
-      state.agentModelId = state.agentModelIds
-        .map((id) => models.find((model) => model.id === id))
-        .find((model) => model?.type === state.agentComposerMode)?.id
-        || state.agentModelIds[0];
-    }
-  } else if (!exists) {
-    state.agentModelIds = [...selectedIds, selected.id];
-    if (isActiveGenerationType) state.agentModelId = selected.id;
-  } else {
-    state.agentModelIds = selectedIds;
-  }
-  syncAgentModelButton();
-  renderAgentModelMenu();
-  const nextScroll = agentModelMenu?.querySelector(".agent-model-scroll");
-  if (nextScroll) nextScroll.scrollTop = scrollTop;
-}
-
-function setAgentModelTab(tab) {
-  if (!agentModelMenu) return;
-  state.agentModelTab = tab === "video" ? "video" : "image";
-  const scroll = agentModelMenu.querySelector(".agent-model-scroll");
-  const section = agentModelMenu.querySelector(`[data-agent-model-section="${state.agentModelTab}"]`);
-  updateAgentModelTabUi(state.agentModelTab);
-  if (scroll && section) {
-    scroll.scrollTo({
-      top: section.offsetTop - scroll.offsetTop,
-      behavior: "smooth",
-    });
-  }
-}
-
-function updateAgentModelTabUi(tab = state.agentModelTab) {
-  if (!agentModelMenu) return;
-  const nextTab = tab === "video" ? "video" : "image";
-  state.agentModelTab = nextTab;
-  agentModelMenu.querySelector(".agent-model-tabs")?.style.setProperty("--active-index", nextTab === "video" ? "1" : "0");
-  agentModelMenu.querySelectorAll("[data-agent-model-tab]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.agentModelTab === nextTab);
-  });
-}
-
-function syncAgentModelTabFromScroll() {
-  if (!agentModelMenu) return;
-  const scroll = agentModelMenu.querySelector(".agent-model-scroll");
-  const videoSection = agentModelMenu.querySelector('[data-agent-model-section="video"]');
-  if (!scroll || !videoSection) return;
-  const scrollRect = scroll.getBoundingClientRect();
-  const videoRect = videoSection.getBoundingClientRect();
-  const switchLine = scrollRect.top + Math.min(96, scrollRect.height * 0.34);
-  updateAgentModelTabUi(videoRect.top <= switchLine ? "video" : "image");
-}
 
 function getResolvedTheme(mode = state.themeMode) {
   return normalizeThemeMode(mode);
@@ -7888,6 +7732,7 @@ function setAgentWidth(width) {
     ? Math.min(viewportMax, window.innerWidth - panelWidthRules.edgeInset * 2 - panelWidthRules.canvasCorridor - opposingWidth)
     : viewportMax;
   applyAgentWidth(clampPanelWidth(width, panelWidthRules.agentMin, maxWidth));
+  syncPromptPanelLayouts();
   renderSelectionToolbar();
   scheduleNodePopoverLayouts();
 }
@@ -7924,7 +7769,7 @@ function setAgentOpen(open) {
     setAgentAdvancedOpen(false);
   }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
-  scheduleNodePopoverLayouts();
+  syncPromptPanelLayouts();
   if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => agentInput?.focus());
   if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
 }
@@ -8386,30 +8231,33 @@ function arrangeNodes(nodes, layout = "grid") {
     { left: Infinity, top: Infinity },
   );
   const gap = 28;
-  const layouts = ordered.map((node) => ({ node, layout: getNodeLayout(node) }));
+  const layouts = ordered.map((node) => {
+    const visual = getNodeVisualBounds(node);
+    return { node, visual, insetX: visual.left - node.x };
+  });
 
   if (layout === "horizontal") {
     let cursorX = bounds.left;
     const top = bounds.top;
     for (const item of layouts) {
-      item.node.x = cursorX;
+      item.node.x = cursorX - item.insetX;
       item.node.y = top;
-      cursorX += item.layout.nodeWidth + gap;
+      cursorX += item.visual.width + gap;
     }
   } else if (layout === "vertical") {
     const left = bounds.left;
     let cursorY = bounds.top;
     for (const item of layouts) {
-      item.node.x = left;
+      item.node.x = left - item.insetX;
       item.node.y = cursorY;
-      cursorY += item.layout.nodeHeight + gap;
+      cursorY += item.visual.height + gap;
     }
   } else {
     const columns = Math.ceil(Math.sqrt(layouts.length));
-    const cellWidth = Math.max(...layouts.map((item) => item.layout.nodeWidth)) + gap;
-    const cellHeight = Math.max(...layouts.map((item) => item.layout.nodeHeight)) + gap;
+    const cellWidth = Math.max(...layouts.map((item) => item.visual.width)) + gap;
+    const cellHeight = Math.max(...layouts.map((item) => item.visual.height)) + gap;
     layouts.forEach((item, index) => {
-      item.node.x = bounds.left + (index % columns) * cellWidth;
+      item.node.x = bounds.left + (index % columns) * cellWidth - item.insetX;
       item.node.y = bounds.top + Math.floor(index / columns) * cellHeight;
     });
   }
@@ -8669,8 +8517,18 @@ function isConnectionDropSurface(target) {
   );
 }
 
-function shouldBypassCanvasWheel(target) {
+function shouldBypassCanvasWheel(target, { zooming = false } = {}) {
   if (!(target instanceof Element)) return false;
+  if (target.closest(".generator-node .prompt-panel")) {
+    // Menus and reference strips keep their own scrolling. The editor surface
+    // belongs to canvas navigation until the user actually focuses its text.
+    if (target.closest("[data-wheel-scope='local'], .panel-popover, .material-panel, .asset-shelf")) return true;
+    const prompt = target.closest("[data-node-prompt-input]");
+    if (prompt) {
+      return !zooming && prompt === document.activeElement && prompt.scrollHeight > prompt.clientHeight + 1;
+    }
+    return Boolean(target.closest("button, input, textarea, select, [contenteditable='true'], [role='slider']"));
+  }
   return Boolean(
     target.closest(
       [
@@ -8684,7 +8542,6 @@ function shouldBypassCanvasWheel(target) {
         ".top-actions",
         ".left-rail",
         ".agent-dock",
-        ".prompt-panel",
         ".asset-shelf",
         ".media-edit-toolbar",
         ".media-tool-menu",
@@ -9240,7 +9097,10 @@ window.addEventListener(
 shell.addEventListener(
   "wheel",
   (event) => {
-    const shouldBypass = shouldBypassCanvasWheel(event.target);
+    const shouldBypass = shouldBypassCanvasWheel(event.target, { zooming: event.ctrlKey || event.metaKey });
+    if (!shouldBypass && document.activeElement?.matches("[data-node-prompt-input]")) {
+      document.activeElement.blur();
+    }
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
       if (shouldBypass) return;
@@ -10781,9 +10641,11 @@ agentLauncher?.addEventListener("keydown", (event) => {
   setAgentOpen(true);
 });
 agentCloseBtn?.addEventListener("click", () => setAgentOpen(false));
-agentNewChatBtn?.addEventListener("click", () => {
-  setAgentConversation("new");
-  agentInput?.focus();
+document.querySelectorAll("#agentNewChatBtn, #agentHistoryNewChatBtn").forEach((button) => {
+  button.addEventListener("click", () => {
+    agentHistory.startNew();
+    agentInput?.focus();
+  });
 });
 agentHistoryBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
@@ -10791,14 +10653,6 @@ agentHistoryBtn?.addEventListener("click", (event) => {
 });
 agentHistoryMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
-});
-agentHistoryList?.addEventListener("click", (event) => {
-  const item = event.target.closest("[data-chat-id]");
-  if (!item) return;
-  setAgentConversation(item.dataset.chatId);
-});
-agentHistorySearch?.addEventListener("input", (event) => {
-  filterAgentHistory(event.currentTarget.value);
 });
 agentSendButton?.addEventListener("click", sendAgentMessage);
 agentInput?.addEventListener("input", syncAgentPromptOptimizationControl);
@@ -10816,8 +10670,8 @@ agentPromptOptimizationBtn?.addEventListener("click", startAgentPromptOptimizati
 agentAdvancedBtn?.addEventListener("click", () => {
   setAgentAdvancedOpen(!state.agentAdvancedSettingsExpanded);
 });
-agentAutoLinkBtn?.addEventListener("click", () => {
-  setAgentAutoLinkEnabled(!state.agentAutoLinkEnabled);
+agentAssetValidationBtn?.addEventListener("click", () => {
+  setAgentAssetValidationEnabled(!state.agentAssetValidationEnabled);
 });
 agentModeBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
@@ -10832,35 +10686,21 @@ agentModeMenu?.addEventListener("click", (event) => {
   if (!option) return;
   setAgentComposerMode(option.dataset.agentMode, { focusInput: true });
 });
-agentModelBtn?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  setAgentModelMenuOpen(agentModelMenu?.classList.contains("hidden"), { focus: true });
-});
-agentModelMenu?.addEventListener("pointerdown", (event) => {
-  event.stopPropagation();
-});
-agentModelMenu?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  const tab = event.target.closest("[data-agent-model-tab]");
-  if (tab) {
-    setAgentModelTab(tab.dataset.agentModelTab);
-    return;
-  }
-  const option = event.target.closest("[data-agent-model]");
-  if (!option) return;
-  toggleAgentModel(option.dataset.agentModel);
-});
-agentModelMenu?.addEventListener("change", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  const autoInput = target?.closest("[data-agent-auto]");
-  if (!autoInput) return;
-  state.agentModelAuto = autoInput.checked;
-});
+
+
 agentPanel?.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+  if (agentParameters.isOpen()) {
+    event.preventDefault();
+    event.stopPropagation();
+    agentParameters.setOpen(false);
+    agentParamSummary?.focus();
+    return;
+  }
   if (!agentHistoryMenu?.classList.contains("hidden")) {
     event.preventDefault();
     event.stopPropagation();
+    if (agentHistory.handleEscape()) return;
     setAgentHistoryOpen(false);
     agentHistoryBtn?.focus();
     return;
@@ -11059,10 +10899,9 @@ setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
 setAgentWidth(state.agentWidth);
 reconcileAgentVerticalInsets("top");
 setAgentOpen(false);
-renderAgentHistory();
-setAgentConversation(state.activeConversationId);
+agentHistory.select(agentHistory.getActiveId());
 setAgentAdvancedOpen(state.agentAdvancedSettingsExpanded);
-setAgentAutoLinkEnabled(state.agentAutoLinkEnabled);
+setAgentAssetValidationEnabled(state.agentAssetValidationEnabled);
 syncAgentComposerControls();
 syncAgentPromptOptimizationControl();
 syncCreditDisplay();

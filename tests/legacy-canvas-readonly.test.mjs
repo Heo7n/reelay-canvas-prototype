@@ -4,6 +4,9 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
+const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-history.js", root), "utf8");
+const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
+const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
 const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
@@ -46,6 +49,11 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
+const [nodeEditorLayout, nodePromptView] = await Promise.all([
+  readFile(new URL("src/legacy-canvas/canvas-node-editor-layout.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-node-prompt-view.js", root), "utf8"),
+]);
+
 test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", (t) => {
   const dom = new JSDOM(html, {
     url: "http://reelay.test/index.html",
@@ -86,6 +94,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(spatialSelection);
   window.eval(nodeInteraction);
   window.eval(nodePlacement);
+  window.eval(nodeEditorLayout);
+  window.eval(nodePromptView);
   window.eval(nodeLayoutTransition);
   window.eval(nodePointerController);
   window.eval(nodeDragController);
@@ -110,6 +120,9 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(persistenceCoordinator);
   window.eval(mediaAssetCoordinator);
   window.eval(entityAssetCoordinator);
+  window.eval(agentHistory);
+  window.eval(agentParameters);
+  window.eval(agentModels);
   window.eval(app);
 
   const injectionProbe = window.document.createElement("div");
@@ -212,6 +225,11 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.querySelector(".empty-create-main").textContent, "画布暂无内容");
   assert.equal(window.document.querySelector(".empty-create-sub"), null);
   assert.equal(node.querySelector(".prompt-panel"), null);
+  const readonlyGenerator = window.getActiveCanvas().nodes[0];
+  const readonlyValidation = readonlyGenerator.assetValidationEnabled;
+  window.handleAction(readonlyGenerator, "asset-validation");
+  assert.equal(readonlyGenerator.assetValidationEnabled, readonlyValidation);
+  assert.equal(window.getActiveCanvas().undoStack.length, 0);
 
   const readonlyProjectName = window.document.querySelector("[data-project-name]");
   readonlyProjectName.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
@@ -312,7 +330,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   const agentModelMenu = window.document.querySelector("#agentModelMenu");
   const agentAdvancedBtn = window.document.querySelector("#agentAdvancedBtn");
   const agentAdvancedSettings = window.document.querySelector("#agentAdvancedSettings");
-  const agentAutoLinkBtn = window.document.querySelector("#agentAutoLinkBtn");
+  const agentAssetValidationBtn = window.document.querySelector("#agentAssetValidationBtn");
   const agentPromptOptimizationBtn = window.document.querySelector("#agentPromptOptimizationBtn");
   const agentCloseBtn = window.document.querySelector("#agentCloseBtn");
 
@@ -377,7 +395,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "true");
   assert.equal(agentModeBtn.getAttribute("aria-expanded"), "false");
   assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
-  assert.equal(window.document.activeElement, window.document.querySelector("#agentHistorySearch"));
+  assert.equal(window.document.activeElement, window.document.querySelector("#agentHistoryNewChatBtn"));
   window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", {
     bubbles: true,
     cancelable: true,
@@ -417,19 +435,41 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
   assert.equal(window.document.activeElement, agentModelBtn);
 
+  const snapshotBeforeComposerModel = JSON.parse(JSON.stringify(window.createCanvasDocumentSnapshot()));
+  const savesBeforeComposerModel = postedMessages.filter((message) => message.type === "canvas:save").length;
+  agentModelBtn.click();
+  agentModelMenu.querySelector('[data-agent-model="gpt-image-2"]').click();
+  assert.equal(window.getAgentComposerModel()?.id, "gpt-image-2");
+  assert.equal(agentModelMenu.classList.contains("hidden"), true);
+  assert.equal(window.document.activeElement, agentModelBtn);
+  agentModelBtn.click();
+  assert.deepEqual(
+    [...agentModelMenu.querySelectorAll("[data-agent-model].active")].map((option) => option.dataset.agentModel),
+    ["gpt-image-2"],
+  );
+  agentModelMenu.querySelector('[data-agent-model="seedance-2"]').click();
+  assert.equal(window.getAgentComposerModel()?.id, "seedance-2");
+  assert.deepEqual(JSON.parse(JSON.stringify(window.createCanvasDocumentSnapshot())), snapshotBeforeComposerModel);
+  assert.equal(postedMessages.filter((message) => message.type === "canvas:save").length, savesBeforeComposerModel);
+
   agentAdvancedBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   assert.equal(agentAdvancedBtn.getAttribute("aria-expanded"), "true");
   assert.equal(agentAdvancedSettings.classList.contains("hidden"), false);
   assert.equal(agentAdvancedSettings.getAttribute("aria-hidden"), "false");
   assert.equal(window.document.querySelector("#agentScheduleBtn").disabled, true);
   assert.equal(window.document.querySelector("#agentScheduleBtn").getAttribute("aria-disabled"), "true");
-  assert.equal(agentAutoLinkBtn.getAttribute("role"), "switch");
-  agentAutoLinkBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  assert.equal(agentAutoLinkBtn.getAttribute("aria-checked"), "false");
-  agentAutoLinkBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  assert.equal(agentAutoLinkBtn.getAttribute("aria-checked"), "true");
-  agentAutoLinkBtn.focus();
-  agentAutoLinkBtn.dispatchEvent(new window.KeyboardEvent("keydown", {
+  assert.equal(agentAssetValidationBtn.getAttribute("role"), "switch");
+  assert.equal(agentAssetValidationBtn.getAttribute("aria-checked"), "false");
+  const snapshotBeforeLocalValidation = JSON.parse(JSON.stringify(window.createCanvasDocumentSnapshot()));
+  const savesBeforeLocalValidation = postedMessages.filter((message) => message.type === "canvas:save").length;
+  agentAssetValidationBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentAssetValidationBtn.getAttribute("aria-checked"), "true");
+  agentAssetValidationBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(agentAssetValidationBtn.getAttribute("aria-checked"), "false");
+  assert.deepEqual(JSON.parse(JSON.stringify(window.createCanvasDocumentSnapshot())), snapshotBeforeLocalValidation);
+  assert.equal(postedMessages.filter((message) => message.type === "canvas:save").length, savesBeforeLocalValidation);
+  agentAssetValidationBtn.focus();
+  agentAssetValidationBtn.dispatchEvent(new window.KeyboardEvent("keydown", {
     bubbles: true,
     cancelable: true,
     key: "Escape",
@@ -615,7 +655,6 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(stage.style.transform, scaleBeforeControlWheel);
 
   for (const className of [
-    "prompt-panel",
     "panel-popover",
     "material-panel",
     "media-edit-toolbar",

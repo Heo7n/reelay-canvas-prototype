@@ -4,6 +4,8 @@
   --canvas-project-bar-height: 38px;
   --canvas-viewport-toolbar-height: 38px;
   --canvas-chrome-panel-gap: 4px;
+  --canvas-rail-item-size: 40px;
+  --canvas-rail-item-gap: 2px;
   --canvas-side-panel-top: calc(var(--canvas-edge-inset) + var(--canvas-project-bar-height) + var(--canvas-chrome-panel-gap));
   --canvas-side-panel-bottom: calc(var(--canvas-edge-inset) + var(--canvas-viewport-toolbar-height) + var(--canvas-chrome-panel-gap));
   --canvas-chrome-bg: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -357,7 +359,7 @@ html[data-theme="light"] {
   right: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--canvas-rail-item-gap);
   align-items: center;
   width: 48px;
   height: auto;
@@ -385,9 +387,9 @@ html[data-theme="light"] {
 
 .left-rail .rail-button,
 .left-rail .profile-anchor {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: var(--canvas-rail-item-size);
+  height: var(--canvas-rail-item-size);
+  flex: 0 0 var(--canvas-rail-item-size);
 }
 
 .left-rail .rail-button {
@@ -449,8 +451,8 @@ html[data-theme="light"] {
 }
 
 .left-rail .avatar-button {
-  width: 40px;
-  height: 40px;
+  width: var(--canvas-rail-item-size);
+  height: var(--canvas-rail-item-size);
   border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--text) 96%, var(--bg)), color-mix(in srgb, var(--text) 78%, var(--bg))),

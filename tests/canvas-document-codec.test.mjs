@@ -190,7 +190,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.deepEqual(sortedKeys(canvas), ["connections", "groups", "id", "name", "nodes", "viewport", "zCounter"]);
   assert.deepEqual(sortedKeys(canvas.viewport), ["scale", "tx", "ty"]);
   assert.deepEqual(sortedKeys(generator), [
-    "activeAssetId", "aspect", "assetValidationEnabled", "assets", "audioEnabled", "autoLinkEnabled", "count", "duration", "generatedAsset", "groupId", "id", "kind",
+    "activeAssetId", "aspect", "assetValidationEnabled", "assets", "audioEnabled", "count", "duration", "generatedAsset", "groupId", "id", "kind",
     "mediaKind", "model", "name", "omniReferenceTaskType", "outputFormat", "preview", "prompt", "quality", "resolution",
     "workflow", "x", "y", "z",
   ]);
@@ -247,7 +247,7 @@ test("the canvas document codec persists only explicit content fields and restor
   assert.equal(restoredGenerator.audioEnabled, true);
   assert.equal(restoredGenerator.promptOptimizing, false);
   assert.equal(Object.hasOwn(restoredGenerator, "promptOptimization"), false);
-  assert.equal(restoredGenerator.autoLinkEnabled, false);
+  assert.equal(Object.hasOwn(restoredGenerator, "autoLinkEnabled"), false);
   assert.equal(restoredGenerator.assetValidationEnabled, true);
   assert.equal(restoredGenerator.generatedAsset.id, "result-1");
   assert.equal(restoredGenerator.generating, false);
@@ -428,6 +428,26 @@ test("the codec restores legacy version-one canvases without a connections field
   });
 
   assert.deepEqual(plain(restored.canvases[0].connections), []);
+});
+
+test("asset validation round trips for either media type without reviving the legacy AutoLink flag", () => {
+  for (const mode of ["image", "video"]) {
+    for (const enabled of [true, false, undefined]) {
+      const snapshot = codec.createSnapshot({
+        activeCanvasId: "canvas",
+        canvases: [{ id: "canvas", nodes: [{
+          id: "generator", kind: "generator", mode,
+          autoLinkEnabled: true, assetValidationEnabled: enabled,
+        }] }],
+      });
+      const saved = snapshot.canvases[0].nodes[0];
+      assert.equal(saved.assetValidationEnabled, enabled === true);
+      assert.equal(Object.hasOwn(saved, "autoLinkEnabled"), false);
+      const restored = codec.restoreSnapshot(plain(snapshot)).canvases[0].nodes[0];
+      assert.equal(restored.assetValidationEnabled, enabled === true);
+      assert.equal(Object.hasOwn(restored, "autoLinkEnabled"), false);
+    }
+  }
 });
 
 test("legacy generator type aliases migrate once to mediaKind without entering runtime state", () => {

@@ -4,11 +4,11 @@
   const NODE_FIELDS = Object.freeze([
     "name", "prompt", "model", "workflow", "omniReferenceTaskType", "aspect",
     "resolution", "quality", "duration", "outputFormat", "count", "audioEnabled",
-    "autoLinkEnabled", "assetValidationEnabled", "x", "y", "z", "groupId",
+    "assetValidationEnabled", "x", "y", "z", "groupId",
   ]);
   const GROUP_FIELDS = Object.freeze(["name", "x", "y", "width", "height", "z", "nodeIds"]);
   const FIELD_SETS = { nodes: new Set(NODE_FIELDS), groups: new Set(GROUP_FIELDS) };
-  const BOOLEAN_FIELDS = new Set(["audioEnabled", "autoLinkEnabled", "assetValidationEnabled"]);
+  const BOOLEAN_FIELDS = new Set(["audioEnabled", "assetValidationEnabled"]);
   const NUMBER_FIELDS = new Set(["x", "y", "z", "width", "height", "count"]);
   const hasOwn = (record, field) => Object.prototype.hasOwnProperty.call(record, field);
   const isRecord = (value) => Boolean(value && typeof value === "object" && !Array.isArray(value));

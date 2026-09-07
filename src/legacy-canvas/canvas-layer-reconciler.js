@@ -9,7 +9,9 @@
     const getSignature = options?.getSignature;
     const createElement = options?.createElement;
     const syncElement = options?.syncElement;
+    const updateElement = options?.updateElement;
     const prepareItem = options?.prepareItem;
+    const renderedItems = new WeakMap();
 
     if (!layer || !selector || !datasetKey) return null;
     if (![getId, getSignature, createElement, syncElement].every((value) => typeof value === "function")) {
@@ -37,11 +39,19 @@
         const signature = getSignature(item);
         let element = existingElements.get(id);
 
-        if (!element || element.dataset.renderSignature !== signature) {
+        const sameItem = element && (!updateElement || renderedItems.get(element) === item);
+        if (sameItem && element.dataset.renderSignature !== signature && updateElement?.(element, item) === true) {
+          element.dataset.renderSignature = signature;
+          syncElement(element, item);
+          return;
+        }
+
+        if (!sameItem || element.dataset.renderSignature !== signature) {
           const nextElement = createElement(item);
           if (!nextElement) return;
           nextElement.dataset[datasetKey] = id;
           nextElement.dataset.renderSignature = signature;
+          renderedItems.set(nextElement, item);
           if (element) {
             element.replaceWith(nextElement);
           } else {
