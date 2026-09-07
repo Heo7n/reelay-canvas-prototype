@@ -39,7 +39,7 @@ describe("LoginDialog", () => {
     expect(screen.getByLabelText("账号")).toHaveAttribute("autofocus");
     expect(screen.getByLabelText("账号")).toHaveFocus();
     act(() => vi.advanceTimersByTime(4_500));
-    expect(screen.getByRole("button", { name: "显示角色叙事" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: "显示灵感展开" })).toHaveAttribute("aria-current", "true");
   });
 
   it("keeps registration unavailable and restores focus and scroll on dismissal", () => {
