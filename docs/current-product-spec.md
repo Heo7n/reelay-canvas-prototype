@@ -21,12 +21,14 @@
 这是一个本地可运行的产品原型：
 
 - 没有真实 AIGC API。
-- 没有生产账号生命周期、完整云端素材库或积分账本。本地已有个人 Media 与 Entity 的首个持久化切片；Folder、组织共享、平台审核与积分仍是原型边界。公网原型已通过 Vercel 与 Supabase 部署用于评审；私有 Supabase ObjectStore 配置与三主体 12 图迁移已完成，Vercel 资产 / 主体 API 代码仍待部署及 HTTP 验收，不构成生产可用承诺。
+- 没有生产账号生命周期、完整云端素材库或积分账本。本地已有个人 Media 与 Entity 的首个持久化切片；Folder、组织共享、平台审核与积分仍是原型边界。公网原型已通过 Vercel 与 Supabase 部署用于评审；私有 Supabase ObjectStore 配置与三主体 12 图迁移已完成，正式主域已通过资产 / 主体 HTTP 读取、鉴权、大小限制与三主体浏览器展示验收，不构成生产可用承诺。
 - 本地主链路已经进入 React browser routes：`/app/login`、`/app/w/:workspaceId`、`/app/w/:workspaceId/projects` 和受保护的画布宿主路由。页面通过 HTTP adapters 消费本地共享 API；静态登录 / 主页双轨已经删除，`index.html` 只保留为迁移期旧画布 iframe。
 - 十个固定 `.test` 演示账号由服务端校验并使用 HttpOnly Cookie 维持独立会话；这只验证登录、路由保护、单组织成员关系和项目级访问控制，不是正式账号系统。组织角色固定为 `1` 名主账户、`2` 名管理员和 `7` 名成员。
-- 用户、会话、唯一组织 Workspace、Project、项目成员关系、CanvasDocument、WorkspaceMediaAsset 元数据、个人 placement、ProjectAssetReference，以及个人根目录 Entity 的字段、有序 Media 引用和版本保存在 PostgreSQL；本地资产二进制交给 filesystem ObjectStore，Vercel 入口使用私有 Supabase ObjectStore。最小链路已通过本地服务重启回读；公网已迁移至 `0013` 并完成私有桶与三主体 12 图写入，资产 / 主体 API 仍待新代码部署和 HTTP 验收，内存 adapter 只用于快速契约测试和显式开发回退。
+- 用户、会话、唯一组织 Workspace、Project、项目成员关系、CanvasDocument、WorkspaceMediaAsset 元数据、个人 placement、ProjectAssetReference，以及个人根目录 Entity 的字段、有序 Media 引用和版本保存在 PostgreSQL；本地资产二进制交给 filesystem ObjectStore，Vercel 入口使用私有 Supabase ObjectStore。最小链路已通过本地服务重启回读；公网已迁移至 `0013` 并完成私有桶与三主体 12 图写入，正式主域已验证三主体精确目录、12 图 HTTP 内容及个人主体页三张封面，内存 adapter 只用于快速契约测试和显式开发回退。
 - 从受保护路由进入的旧画布会恢复多画布、节点、组、视口和模型参数；直接打开静态 `index.html` 仍是单次页面内存原型。
 - “生成”是模拟行为，用于验证生成后的媒体状态、标题和规格展示。
+
+2026-09-07 正式主域运行部署 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X`，构建源 `28580275b042890bcb4c634adde46fb718259643`；对应改动已合入 `main` 的 `5ee4efc237b1f50eb789ac0dc231177b25d944b6`。主域 HTTP 与三主体页面已验收，候选地址与主域的具体验证范围见 [公网预览记录](vercel-supabase-preview.md)。
 
 这意味着当前项目更接近“可交互产品样机”，不是生产应用。
 
@@ -350,9 +352,9 @@ Agent 对话栏展开或调整尺寸时，不拖动左上、左侧和左下工�
 
 - 组织 / 平台素材、主体、文件夹和 placement 仍来自确定性 seed。受保护宿主中的个人 Media 与个人根目录 Entity 来自服务端目录并可在本地 PostgreSQL 重启后恢复；目录整理、组织共享和审核仍只保存在页面运行内存中。平台内容只是只读 seed，不是已上线的公共目录服务。
 - 本地 `db:seed` 会为 Hoo 的个人空间幂等创建 v4 演示夹具：使用用户提供的 12 张原图，组成“幽影”5 张、“白汐”3 张、“玄翎”4 张，并关联到“香水品牌 TVC”项目。每组首图为封面；幽影依次为主视觉、多视图、概念草图、链刃武器、能量护盾；白汐依次为肖像、三视图、装备；玄翎依次为主视觉、多视图、服装变体、装备。展示文件名采用“主体名_两位序号_用途”，仓库文件使用对应英文标识与同一序号；保留原始 PNG / JPEG 格式和尺寸。旧 v1–v3 案例只在完整指纹匹配时原位升级，保留已有 Entity ID；旧媒体仍被其他内容使用时保留其引用。源文件随仓库同步，首次本机初始化通过 `npm run db:setup` 重建 PostgreSQL 元数据与 filesystem ObjectStore；已有本机环境按夹具变更执行定向更新。
-- 2026-09-07 首次公网资产迁移已将本机真实三主体和 12 张原图写入 Supabase，保留原 ID、微秒时间戳、封面、顺序与当前版本（玄翎 `v2`、幽影 `v4`、白汐 `v4`）。素材从既有 ObjectStore 读取后上传私有桶，全量 SHA-256 与字节范围读取通过；目录经冲突 / 幂等验证后以单事务导入，账号、会话、项目、画布与项目引用等保护表哈希保持不变。该次操作未运行标准 seed；存储与目录已就绪，仍待新代码公网 HTTP / 浏览器验收。
+- 2026-09-07 首次公网资产迁移已将本机真实三主体和 12 张原图写入 Supabase，保留原 ID、微秒时间戳、封面、顺序与当前版本（玄翎 `v2`、幽影 `v4`、白汐 `v4`）。素材从既有 ObjectStore 读取后上传私有桶，全量 SHA-256 与字节范围读取通过；目录经冲突 / 幂等验证后以单事务导入，账号、会话、项目、画布与项目引用等保护表哈希保持不变。该次操作未运行标准 seed；候选部署已通过三主体精确目录和 12 图 HTTP 读取验收，候选地址的浏览器已登录 Hoo 并验证 12 素材、三主体封面和幽影的 5 图 / 描述 / 顺序，刷新后保持；正式主域切换后已通过同一组 HTTP 验证，Chrome 重新登录 Hoo 并在“香水品牌 TVC”既有画布的个人主体页显示玄翎、幽影、白汐三张正确封面。本次没有创建测试新素材或改变既有画布。
 - `npm run db:seed:preview-assets` 是后续显式写入标准仓库夹具的入口，要求 preview 模式、专用写入开关、同一目标项目的迁移连接与私有 Storage 配置；其内部使用 `seedDemoAssetLibrary(..., { personalOnly: true })`。它只写 Hoo 个人库的 Media、placement 与三主体，不重跑账号 / 会话 / 项目 seed，不修改画布或项目引用，不自动迁移，也不覆盖指纹不匹配的用户编辑记录。普通 `db:seed` 在 preview 模式继续跳过媒体。此入口不是本地与公网双向同步，任一环境后续用户数据不会随 Git 或部署自动复制。
-- 首个持久化切片将媒体所有权留在 WorkspaceMediaAsset，个人可见性由 personal placement 表达，项目复用由 ProjectAssetReference 表达。`0013` 以数据库约束保证个人主体引用的素材仍有同一用户的 personal placement。本地 PostgreSQL + filesystem ObjectStore 支持列表、内容读取与跨服务重启恢复；Vercel 已接入私有 Supabase ObjectStore 代码，桶需预先配置，缺失或公开时拒绝使用，不会回退到临时文件系统。公网已完成私有桶配置及真实目录迁移，资产 / 主体能力仍待新代码 HTTP 部署验收。
+- 首个持久化切片将媒体所有权留在 WorkspaceMediaAsset，个人可见性由 personal placement 表达，项目复用由 ProjectAssetReference 表达。`0013` 以数据库约束保证个人主体引用的素材仍有同一用户的 personal placement。本地 PostgreSQL + filesystem ObjectStore 支持列表、内容读取与跨服务重启恢复；Vercel 已接入私有 Supabase ObjectStore 代码，桶需预先配置，缺失或公开时拒绝使用，不会回退到临时文件系统。公网已完成私有桶配置及真实目录迁移，正式主域的资产 / 主体 HTTP 读取及个人主体页展示已验收；未将新素材上传与项目挂载写入列为本次公网已实测。
 - Entity 已有个人根目录 create / get / list / update repository；Folder repository、Entity 删除、organization placement、平台目录版本与导入策略、组织资产权限、Node 级引用、恢复和 GenerationResult 显式晋升仍未实现。私有 Supabase Storage adapter 的代码完成不代表上述领域能力也已完成。
 - 完整资产中心仍应进入 React 工作台路由；当前切片只实现画布内高保真资产面板与可替换的领域模型。
 
@@ -657,7 +659,7 @@ src/legacy-canvas
 - 主要 React 页面已经按 route 拆包，HTTP adapter 只向页面暴露 application error；构建主包不再把组织中心、账号用量和画布宿主全部提前加载。
 - 旧画布已有 JavaScript、配置、CSS、HTML 检查以及序列化、只读和持久化状态机行为测试；React 壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
 - 暂无代码格式化、lint 和自动浏览器端到端测试；当前 React 主链路已完成两套隔离浏览器的人工验证，下一阶段应把稳定的登录、路由保护和组织共享流程固化为 E2E。
-- 会话、账号联系资料、Workspace、Membership、Project、CanvasDocument、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已通过 PostgreSQL 持久化；本地资产二进制使用 filesystem ObjectStore，私有 Supabase ObjectStore 配置与真实三主体 12 图迁移已完成，Vercel 新代码仍待 HTTP 部署验收。仓库与公网 schema 均已至 `0013`。可重复 migration、幂等写入、乐观版本和重启集成测试覆盖本地持久化边界。画布文档仍处于迁移桥阶段，Folder、组织资产、生成任务与积分仍只存在原型状态。
+- 会话、账号联系资料、Workspace、Membership、Project、CanvasDocument、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已通过 PostgreSQL 持久化；本地资产二进制使用 filesystem ObjectStore，私有 Supabase ObjectStore 配置与真实三主体 12 图迁移已完成，正式主域已通过 HTTP 读取、鉴权、大小限制和三主体浏览器展示验收。仓库与公网 schema 均已至 `0013`。可重复 migration、幂等写入、乐观版本和重启集成测试覆盖本地持久化边界。画布文档仍处于迁移桥阶段，Folder、组织资产、生成任务与积分仍只存在原型状态。
 - migration checksum 统一按 LF 计算并由 `.gitattributes` 固定 SQL 换行，Windows / Linux worktree 不会因 CRLF 差异误报历史 migration 被改写。
 - 演示会话 token 以摘要存库并具有过期 / 撤销状态，但十个固定账号、确定性 demo 密码散列和预置项目角色仍不是正式账号生命周期或完整权限管理系统。
 - 全局可变状态仍缺少完整 action/store 边界；连接与上述节点 / 分组切片已共用原子命令和按画布隔离的混合撤销分派，节点删除、高频移动预览、主体增量引用撤销与素材命名等仍保留有界的 legacy adapter。
@@ -671,7 +673,7 @@ src/legacy-canvas
 - CanvasDocument v1 在服务端与 legacy codec 共享 canonical allow-list 边界：不支持的版本会失败关闭，字段、数量与数值被收敛，持久媒体 URL 只保留经安全校验的 HTTP(S) 或相对地址。它仍是迁移快照，不应继续容纳生成历史、资产二进制、积分或账号运行态；新增字段必须先明确恢复语义并扩展行为测试。
 - 当前生成任务只存在页面内存中，启动快照已记录与节点创建类型一致的 `mediaKind` 及当次参数，但还没有持久化、节点内多结果历史、取消 UI 或失败退款。
 - 当前撤销仍不是完整 command 系统：连接、离散节点参数、生成结果命名、建组 / 解组与现有局部排列已进入带前置冲突检查、事务校验和 50 条上限的原子命令；节点删除、Alt 复制与 pointer 移动 / 缩放的历史格式仍沿用 legacy action，成员结算和恢复已通过组关系事务。普通双击新建尚未统一登记创建撤销，整画布整理、生成任务和结果版本撤销也未实现；后续节点命令继续使用内容字段白名单，不能恢复任务、临时 UI 或创建类型。项目重命名暂不支持撤销。
-- 资产库已落地 WorkspaceMediaAsset、personal placement、ProjectAssetReference、ObjectStore 与个人根目录 Entity 的最小切片，但画布消费仍会创建 legacy 媒体投影。公网私有对象存储配置、对象与目录迁移已完成，仍待新代码 HTTP 部署验收；Folder / organization placement、Entity 删除恢复、Node 级引用、回收站和 GenerationResult 晋升尚未落地。
+- 资产库已落地 WorkspaceMediaAsset、personal placement、ProjectAssetReference、ObjectStore 与个人根目录 Entity 的最小切片，但画布消费仍会创建 legacy 媒体投影。公网私有对象存储配置、对象与目录迁移已完成，正式主域 HTTP 读取与三主体浏览器展示已验收；Folder / organization placement、Entity 删除恢复、Node 级引用、回收站和 GenerationResult 晋升尚未落地。
 - 完整演进顺序只在 `docs/product-expansion-plan.md` 维护，本说明不再保留第二套路线路。
 
 ## 15. 当前产品一句话
