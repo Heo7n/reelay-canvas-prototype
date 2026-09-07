@@ -3,7 +3,7 @@
 
   function createCanvasEntityUseController(options = {}) {
     const { grid, detailPortal, pickerPortal, background, view } = options;
-    if (!grid || !detailPortal || !pickerPortal || !view?.renderEntityDetail || !view?.renderEntityPicker) {
+    if (!grid || !detailPortal || !pickerPortal || !view?.renderEntityDetail || !view?.updateEntityPicker) {
       throw new TypeError("Canvas Entity use controller dependencies are incomplete.");
     }
     for (const name of ["getScope", "getDetailContext", "getDetailEntity", "getPickerEntities", "isTargetAvailable", "isMutable", "requireMutation", "getPickerTrigger", "onAddEntities", "onAddToCanvas"]) {
@@ -105,19 +105,29 @@
       const entity = options.getDetailEntity(detail.entityId, detail.space);
       if (!entity) return closeDetail();
       const anchorRect = findCard(detail.entityId).getBoundingClientRect();
+      const viewportRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+      // Measure the rendered content at its usable width before placing it. Position
+      // belongs to the portal so the panel cannot retain a conflicting inline offset.
+      detailPortal.innerHTML = view.renderEntityDetail({ entity, media: entity.media, pinned: detail.pinned, canAdd: options.isMutable() });
+      view.syncEntityDetailPortal(detailPortal, { visible: true, pinned: detail.pinned, placement: {
+        left: 12, top: 12,
+        width: Math.min(340, Math.max(1, viewportRect.width - 24)),
+        maxHeight: Math.max(1, viewportRect.height - 24),
+      } });
+      refreshIcons();
+      const panel = detailPortal.querySelector(".entity-use-detail");
       const placement = view.computeDetailPlacement({
-        viewportRect: { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
+        viewportRect,
         anchorRect,
         sourceRect: anchorRect,
         avoidRects: options.getAvoidRects?.() || [],
-        panelWidth: 340,
-        panelHeight: 454,
+        panelWidth: panel.offsetWidth,
+        panelHeight: panel.offsetHeight,
         gap: 10,
         margin: 12,
       });
-      detailPortal.innerHTML = view.renderEntityDetail({ entity, media: entity.media, pinned: detail.pinned, placement, canAdd: options.isMutable() });
       view.syncEntityDetailPortal(detailPortal, { visible: true, pinned: detail.pinned, placement });
-      refreshIcons();
+      panel.dataset.placement = placement.side;
     }
 
     function openDetail(entityId, { pinned = false, delay = 0 } = {}) {
@@ -208,7 +218,7 @@
       }
       const session = picker;
       cancelFrame("picker-focus");
-      pickerPortal.innerHTML = view.renderEntityPicker({
+      view.updateEntityPicker(pickerPortal, {
         entities: options.getPickerEntities(), space: session.space, query: session.query,
         selectedIds: session.selectedIds, canAdd: true,
       });
@@ -311,6 +321,7 @@
       if (detail?.pinned) renderDetail();
       else closeDetail();
     }, { passive: true });
+    listen(window, "resize", refreshDetail);
     listen(detailPortal, "pointerenter", clearCloseTimer);
     listen(detailPortal, "pointerleave", () => scheduleDetailClose());
     listen(detailPortal, "focusin", clearCloseTimer);
@@ -345,7 +356,9 @@
       const action = button.dataset.entityUseAction;
       if (action === "close-picker" || action === "cancel-picker") return closePicker();
       if (action === "change-space") {
-        picker.space = button.dataset.entityUseSpace === "organization" ? "organization" : "personal";
+        const nextSpace = button.dataset.entityUseSpace === "organization" ? "organization" : "personal";
+        if (picker.space === nextSpace) return;
+        picker.space = nextSpace;
         renderPicker();
       } else if (action === "clear-search") {
         picker.query = "";

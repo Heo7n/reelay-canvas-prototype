@@ -48,6 +48,7 @@ test("create mode keeps the title 新建主体 and renders the complete empty dr
   assert.match(markup, /role="region" aria-labelledby="canvasEntityEditorTitle"/);
   assert.match(markup, /data-entity-editor-mode="create"/);
   assert.match(markup, /<h2 id="canvasEntityEditorTitle" title="新建主体">新建主体<\/h2>/);
+  assert.match(markup, /class="entity-editor-title">\s*<svg[^>]*data-entity-editor-icon="square-user-round"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg>\s*<h2 id="canvasEntityEditorTitle"/);
   assert.match(markup, /data-entity-editor-name="true"/);
   assert.match(markup, /value="正在输入的名称"/);
   assert.match(markup, /required aria-required="true"/);
@@ -116,7 +117,7 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
   assert.match(markup, /aria-label="3 个">\(3\)<\/span>/);
   assert.doesNotMatch(markup, /entity-editor-media-kind/);
   assert.match(markup, /data-entity-editor-preview="portrait"/);
-  assert.match(markup, /entity-editor-preview-kind-icon[^]*data-lucide="image"/);
+  assert.match(markup, /entity-editor-preview-kind-icon[^]*data-entity-editor-icon="image"/);
   assert.match(markup, /data-entity-editor-preview-name="portrait"[^>]*>正面照<\/button>/);
   assert.match(markup, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<span class="entity-editor-cover-control entity-editor-cover-status" role="status"[^>]*>当前封面<\/span>/);
 });
@@ -156,9 +157,9 @@ test("image, video, and audio previews use only structured safe Media fields", (
   });
 
   assert.match(image, /<img src="https:\/\/cdn\.example\/portrait\.jpg\?x=1&amp;y=2" alt="正面照">/);
-  assert.match(image, /data-lucide="image"/);
-  assert.match(video, /data-lucide="play-square"/);
-  assert.match(audio, /data-lucide="audio-lines"/);
+  for (const [markup, expectedIcon] of [[image, "image"], [video, "square-play"], [audio, "audio-lines"]]) {
+    assert.match(markup, new RegExp(`entity-editor-preview-kind-icon[^]*<svg[^>]*data-entity-editor-icon="${expectedIcon}"[^>]*stroke-width="1.8"[^>]*aria-hidden="true"`));
+  }
   assert.match(image, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<button class="entity-editor-cover-control entity-editor-cover-action"[^>]*data-entity-editor-set-cover="portrait"[^>]*>设为封面<\/button>/);
   assert.match(video, /<video src="blob:https:\/\/reelay\.example\/video-1" poster="\/thumbs\/turnaround\.webp" controls playsinline/);
   assert.match(audio, /<audio src="https:\/\/cdn\.example\/voice\.mp3" controls preload="metadata"/);
@@ -179,7 +180,7 @@ test("preview filename rename keeps the suffix fixed in a horizontal inline cont
     mediaRenameValue: "角色定妆",
   });
 
-  assert.match(markup, /data-lucide="image"[^]*data-entity-editor-preview-rename="portrait"/);
+  assert.match(markup, /data-entity-editor-icon="image"[^]*data-entity-editor-preview-rename="portrait"/);
   assert.match(markup, /value="角色定妆"/);
   assert.match(markup, /固定扩展名 \.webp[^>]*>\.webp<\/span>/);
   assert.doesNotMatch(markup, /value="角色定妆\.webp"/);

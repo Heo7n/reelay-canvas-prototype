@@ -22,6 +22,7 @@
     const saveEntity = requireFunction(options.saveEntity, "saveEntity");
     const confirmDiscard = typeof options.confirmDiscard === "function" ? options.confirmDiscard : () => true;
     const onVisibilityChange = typeof options.onVisibilityChange === "function" ? options.onVisibilityChange : () => undefined;
+    const onExitStart = typeof options.onExitStart === "function" ? options.onExitStart : () => undefined;
     const onSaved = typeof options.onSaved === "function" ? options.onSaved : () => undefined;
     const onError = typeof options.onError === "function" ? options.onError : () => undefined;
     const refreshIcons = typeof options.refreshIcons === "function" ? options.refreshIcons : () => undefined;
@@ -47,9 +48,11 @@
     let pickerSelectedIds = new Set();
     let pickerMedia = [];
     let permissions = { ...basePermissions };
+    let closeRequest = null;
+    let exitSession = null;
 
     function isBusy() {
-      return submitting || uploading || mediaRenameBusy;
+      return submitting || uploading || mediaRenameBusy || Boolean(closeRequest) || Boolean(exitSession);
     }
 
     function canEditDraft() {
@@ -98,7 +101,9 @@
       setHostVisibility(host, true);
       refreshIcons();
       if (focus) {
+        const renderedDraft = draft;
         queueMicrotask(() => {
+          if (draft !== renderedDraft || isBusy() || host.hidden) return;
           const element = host.querySelector(focus);
           element?.focus();
           if (element?.select && (focus.includes("name") || focus.includes("preview-rename"))) element.select();
@@ -128,7 +133,7 @@
 
     async function finishMediaRename(input, { cancel = false } = {}) {
       const mediaId = renamingMediaId;
-      if (!mediaId || mediaRenameBusy) return false;
+      if (!mediaId || isBusy()) return false;
       if (cancel) {
         renamingMediaId = null;
         mediaRenameValue = "";
@@ -237,7 +242,12 @@
       pickerFilter = "all";
       pickerSelectedIds.clear();
       renderPicker();
-      queueMicrotask(() => host.querySelector("[data-entity-editor-add-from-library]")?.focus());
+      const pickerDraft = draft;
+      queueMicrotask(() => {
+        if (pickerDraft && draft === pickerDraft && !isBusy()) {
+          host.querySelector("[data-entity-editor-add-from-library]")?.focus();
+        }
+      });
     }
 
     function openPicker() {
@@ -250,6 +260,11 @@
     }
 
     function finishClose() {
+      const closedEntityId = entityId;
+      const animations = exitSession?.animations || [];
+      exitSession = null;
+      closeRequest = null;
+      animations.forEach((animation) => animation.cancel());
       draft = null;
       entityId = null;
       submitting = false;
@@ -261,19 +276,51 @@
       errors = {};
       closePicker();
       renderEditor();
-      onVisibilityChange(false);
+      onVisibilityChange(false, { entityId: closedEntityId });
+    }
+
+    async function exitEditor(expectedDraft) {
+      if (draft !== expectedDraft) return false;
+      const panel = host.querySelector("[data-entity-editor]");
+      const session = { animations: [] };
+      exitSession = session;
+      host.setAttribute("inert", "");
+      onExitStart();
+      const reducedMotion = root.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      if (panel?.animate && !reducedMotion) {
+        const style = root.getComputedStyle(panel);
+        const timing = { duration: 200, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" };
+        session.animations = [
+          panel.animate([{ backgroundColor: style.backgroundColor }, { backgroundColor: "transparent" }], timing),
+          panel.querySelector(".entity-editor-details").animate([{ opacity: 1 }, { opacity: 0 }], timing),
+          panel.querySelector(".entity-editor-preview").animate([
+            { opacity: 1, transform: "translate(0, 0)" },
+            { opacity: 0, transform: `translate(${style.getPropertyValue("--entity-exit-preview-x") || "12px"}, ${style.getPropertyValue("--entity-exit-preview-y") || "0px"})` },
+          ], { ...timing, duration: 160 }),
+        ];
+        await Promise.allSettled(session.animations.map((animation) => animation.finished));
+      }
+      if (exitSession !== session || draft !== expectedDraft) return false;
+      finishClose();
+      return true;
     }
 
     async function requestClose() {
-      if (!draft || submitting || uploading) return false;
+      if (!draft || isBusy()) return false;
       if (pickerOpen) {
         closePicker();
         return false;
       }
-      if (draft.isDirty() && !(await Promise.resolve(confirmDiscard()))) return false;
-      draft.cancel();
-      finishClose();
-      return true;
+      const request = { draft };
+      closeRequest = request;
+      try {
+        if (request.draft.isDirty() && !(await Promise.resolve(confirmDiscard()))) return false;
+        if (closeRequest !== request || draft !== request.draft) return false;
+        request.draft.cancel();
+        return await exitEditor(request.draft);
+      } finally {
+        if (closeRequest === request) closeRequest = null;
+      }
     }
 
     async function submit() {
@@ -289,11 +336,14 @@
       errors = {};
       submitting = true;
       renderEditor();
+      const savingDraft = draft;
       try {
         const entity = await saveEntity({ mode, entityId, ...payload });
+        if (draft !== savingDraft) return;
         onSaved(entity);
-        finishClose();
+        await exitEditor(savingDraft);
       } catch (error) {
+        if (draft !== savingDraft) return;
         submitting = false;
         onError(error);
         renderEditor();
@@ -326,7 +376,7 @@
       }
       draft = model.createCanvasEntityEditorDraft(draftOptions);
       onVisibilityChange(true);
-      renderEditor({ focus: "[data-entity-editor-name]" });
+      renderEditor({ focus: ".entity-editor-header [data-entity-editor-cancel]" });
       return draft.getState();
     }
 
@@ -536,7 +586,7 @@
     });
 
     const handleKeydown = (event) => {
-      if (!draft || event.key !== "Escape") return;
+      if (!draft || isBusy() || event.key !== "Escape") return;
       event.preventDefault();
       if (pickerOpen) closePicker();
       else void requestClose();

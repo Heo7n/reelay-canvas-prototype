@@ -25,6 +25,7 @@ test("registers a frozen Entity consumption view and portal synchronization API"
     "renderEntityPicker",
     "syncEntityDetailPortal",
     "syncEntityPickerPortal",
+    "updateEntityPicker",
   ]);
   for (const helper of Object.values(view)) assert.equal(typeof helper, "function");
 });
@@ -85,7 +86,7 @@ test("detail preview remains non-interactive until pinned and fails closed witho
   assert.equal(view.renderEntityDetail({ visible: false }), "");
 });
 
-test("detail placement follows each source card edge, stays in the viewport, and avoids Agent space", () => {
+test("detail placement centers on the source card, stays in the viewport, and avoids Agent space", () => {
   const placement = view.computeDetailPlacement({
     viewportRect: { left: 0, top: 0, width: 1440, height: 900 },
     anchorRect: { left: 382, top: 200, width: 164, height: 164 },
@@ -102,12 +103,76 @@ test("detail placement follows each source card edge, stays in the viewport, and
     panelHeight: 360,
   });
 
-  assert.deepEqual({ ...placement }, { left: 556, top: 200, width: 328, maxHeight: 688, side: "right" });
+  assert.deepEqual({ ...placement }, { left: 556, top: 59, width: 328, maxHeight: 829, side: "right" });
   assert.equal(lowPlacement.left, 554);
   assert.equal(lowPlacement.top, 348);
   assert.equal(lowPlacement.maxHeight, 360);
   assert.equal(lowPlacement.side, "right");
   assert.ok(lowPlacement.left >= 12 && lowPlacement.left + lowPlacement.width <= 1188);
+});
+
+test("grid cards and list rows share their horizontal centerline with a measured detail panel", () => {
+  for (const anchorRect of [
+    { left: 380, top: 300, width: 164, height: 164 },
+    { left: 20, top: 350, width: 524, height: 48 },
+  ]) {
+    const placement = view.computeDetailPlacement({
+      viewportRect: { left: 0, top: 0, width: 1440, height: 900 },
+      anchorRect,
+      panelWidth: 340,
+      panelHeight: 386,
+    });
+    assert.equal(placement.top + 386 / 2, anchorRect.top + anchorRect.height / 2);
+    assert.equal(placement.left, anchorRect.left + anchorRect.width + 10);
+    assert.equal(placement.side, "right");
+  }
+});
+
+test("detail center alignment yields only as far as necessary at viewport top and bottom", () => {
+  for (const { anchorRect, expectedTop } of [
+    { anchorRect: { left: 380, top: 12, width: 164, height: 164 }, expectedTop: 12 },
+    { anchorRect: { left: 20, top: 12, width: 524, height: 48 }, expectedTop: 12 },
+    { anchorRect: { left: 380, top: 520, width: 164, height: 164 }, expectedTop: 322 },
+    { anchorRect: { left: 20, top: 640, width: 524, height: 48 }, expectedTop: 322 },
+  ]) {
+    const placement = view.computeDetailPlacement({
+      viewportRect: { left: 0, top: 0, width: 1200, height: 720 },
+      anchorRect,
+      panelWidth: 340,
+      panelHeight: 386,
+    });
+    assert.equal(placement.top, expectedTop);
+    assert.ok(placement.top >= 12 && placement.top + 386 <= 708);
+    assert.ok(placement.maxHeight >= 386);
+  }
+});
+
+test("an oversized detail uses the available short viewport height within its margins", () => {
+  const placement = view.computeDetailPlacement({
+    viewportRect: { left: 0, top: 0, width: 960, height: 300 },
+    anchorRect: { left: 20, top: 228, width: 420, height: 48 },
+    panelWidth: 340,
+    panelHeight: 700,
+  });
+  assert.equal(placement.top, 12);
+  assert.equal(placement.maxHeight, 276);
+  assert.equal(placement.top + placement.maxHeight, 288);
+  assert.equal(placement.left, 450);
+  assert.equal(placement.side, "right");
+});
+
+test("detail can flip left to avoid Agent while retaining the source centerline", () => {
+  const anchorRect = { left: 550, top: 278, width: 164, height: 164 };
+  const placement = view.computeDetailPlacement({
+    viewportRect: { left: 0, top: 0, width: 1440, height: 720 },
+    anchorRect,
+    avoidRects: [{ left: 724, top: 12, width: 704, height: 696 }],
+    panelWidth: 340,
+    panelHeight: 386,
+  });
+  assert.equal(placement.side, "left");
+  assert.equal(placement.left + placement.width + 10, anchorRect.left);
+  assert.equal(placement.top + 386 / 2, anchorRect.top + anchorRect.height / 2);
 });
 
 test("picker renders personal and organization tabs, search, checkbox multi-selection, and exact labels", () => {

@@ -4,6 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
+const assetSpaceSwitcher = await readFile(new URL("src/legacy-canvas/canvas-asset-space-switcher.js", root), "utf8");
 const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-history.js", root), "utf8");
 const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
 const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
@@ -123,6 +124,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(agentHistory);
   window.eval(agentParameters);
   window.eval(agentModels);
+  window.eval(assetSpaceSwitcher);
   window.eval(app);
 
   const injectionProbe = window.document.createElement("div");

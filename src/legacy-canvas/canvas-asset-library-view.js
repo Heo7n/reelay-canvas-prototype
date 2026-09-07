@@ -497,7 +497,7 @@
     const safeKind = escapeHtml(kind);
     const hasMenuActions = getItemActions({ kind, space, mediaKind, allowedActions }).length > 0;
     return `
-      ${selectionMode && selectable
+      ${kind !== "folder" && selectable && (mutable || space === "platform")
         ? `
           <button class="${classNames("asset-library-selection-button", selected && "active")}" type="button" aria-label="${selected ? "取消选择" : "选择"}" aria-pressed="${selected}" data-library-select="${safeId}" data-library-item-kind="${safeKind}">
             ${selected ? icon("check") : ""}
@@ -539,6 +539,79 @@
         ${renderCardControls({ id, kind: "media", selected, selectionMode, menuOpen, mutable, selectable: selectionEnabled, space, mediaKind })}
       </article>
     `;
+  }
+
+  const gridMarkup = new WeakMap();
+  const regionMarkup = new WeakMap();
+
+  function syncAttributes(target, source) {
+    for (const attribute of [...target.attributes]) {
+      if (!source.hasAttribute(attribute.name)) target.removeAttribute(attribute.name);
+    }
+    for (const attribute of source.attributes) {
+      if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
+    }
+  }
+
+  function rememberRegion(element) {
+    regionMarkup.set(element, { outer: element.outerHTML, inner: element.innerHTML });
+  }
+
+  function syncCardRegion(target, source) {
+    const previous = regionMarkup.get(target);
+    const next = { outer: source.outerHTML, inner: source.innerHTML };
+    if (previous?.outer === next.outer) return;
+    syncAttributes(target, source);
+    // Keep a loaded video/image connected when only the surrounding control or
+    // its accessible name changes. Compare source markup, before icon hydration.
+    if (previous?.inner !== next.inner) target.replaceChildren(...source.childNodes);
+    regionMarkup.set(target, next);
+  }
+
+  function gridItemKey(element) {
+    for (const kind of ["folder", "media", "entity"]) {
+      const id = element.getAttribute(`data-library-${kind}`);
+      if (id !== null) return `${element.dataset.librarySpace}:${kind}:${id}`;
+    }
+    return "empty";
+  }
+
+  function syncGrid(grid, markup) {
+    if (gridMarkup.get(grid) === markup) return;
+    const template = grid.ownerDocument.createElement("template");
+    template.innerHTML = markup;
+    const existing = new Map([...grid.children].map((element) => [gridItemKey(element), element]));
+    let position = grid.firstElementChild;
+    for (const source of [...template.content.children]) {
+      const key = gridItemKey(source);
+      let target = existing.get(key);
+      if (!target) {
+        target = source;
+        [...target.children].forEach(rememberRegion);
+      } else {
+        syncAttributes(target, source);
+        const regions = new Map([...target.children].map((region) => [region.classList[0] || region.tagName, region]));
+        let regionPosition = target.firstElementChild;
+        for (const nextRegion of [...source.children]) {
+          const regionKey = nextRegion.classList[0] || nextRegion.tagName;
+          let region = regions.get(regionKey);
+          if (region && region.tagName === nextRegion.tagName) syncCardRegion(region, nextRegion);
+          else {
+            region = nextRegion;
+            rememberRegion(region);
+          }
+          if (region !== regionPosition) target.insertBefore(region, regionPosition);
+          regionPosition = region.nextElementSibling;
+          regions.delete(regionKey);
+        }
+        regions.forEach((region) => region.remove());
+      }
+      if (target !== position) grid.insertBefore(target, position);
+      position = target.nextElementSibling;
+      existing.delete(key);
+    }
+    existing.forEach((element) => element.remove());
+    gridMarkup.set(grid, markup);
   }
 
   function renderEntityCard(options = {}) {
@@ -689,5 +762,6 @@
     renderEntityCard,
     renderEmptyState,
     renderMovePopover,
+    syncGrid,
   });
 }(typeof globalThis === "object" ? globalThis : window));

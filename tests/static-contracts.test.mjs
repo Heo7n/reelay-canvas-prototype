@@ -1012,8 +1012,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260907-canvas-integration-1/);
-  assert.match(html, /app\.js\?v=20260907-canvas-integration-1/);
+  assert.match(html, /styles\.css\?v=20260907-library-drop-111/);
+  assert.match(html, /app\.js\?v=20260907-library-drop-111/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1505,10 +1505,10 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps compact left zones and an independently sized Agent dock", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260907-canvas-integration-1/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260907-library-drop-111/);
   assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260907-asset-toggle-alignment-99/);
-  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260907-asset-toggle-alignment-99/);
-  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260903-ui-rhythm-78/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260907-library-selection-110/);
+  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260907-entity-exit-106/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
@@ -1594,14 +1594,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260907-canvas-integration-1/);
+  assert.match(html, /styles\.css\?v=20260907-library-drop-111/);
   assert.match(html, /prototype-config\.js\?v=20260907-canvas-integration-1/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
+  assert.match(html, /canvas-asset-library-view\.js\?v=20260907-library-selection-109/);
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
-  assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
+  assert.match(html, /canvas-entity-use-view\.js\?v=20260907-entity-picker-stable-108/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260907-canvas-integration-1/);
+  assert.match(html, /app\.js\?v=20260907-library-drop-111/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
@@ -1631,7 +1631,8 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(entityUseControllerSource, /root\.REELAY_CANVAS_ENTITY_USE_CONTROLLER/);
   assert.match(appSource, /case "entity-picker":[\s\S]*?if \(!canNodeUseEntityReferences\(node\)\) return/);
 
-  assert.match(appSource, /closest\("#assetLibrarySpaceMenu \[data-library-space\]"\)/);
+  assert.match(appSource, /REELAY_ASSET_SPACE_SWITCHER\.createController/);
+  assert.match(html, /canvas-asset-space-switcher\.js\?v=20260907-entity-exit-107/);
   assert.match(appSource, /closest\("#assetLibrarySectionTabs \[data-library-section\]"\)/);
   assert.match(appSource, /closest\("#assetLibraryCommandBar button\[data-library-display\]"\)/);
   assert.match(appSource, /const eventPath = typeof event\.composedPath === "function"/);
@@ -1651,7 +1652,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.doesNotMatch(renderAssetLibrarySource, /section === "entity"\s*\?\s*\[\]/);
   assert.doesNotMatch(renderAssetLibrarySource, /allowedActions:/);
   assert.match(runLibraryActionSource, /if \(includesPersistedEntity && \["move", "share-organization", "delete"\]\.includes\(action\)\) \{\s*showActionToast\("主体的移动、共享与删除将在对应持久化切片接入；本次未执行"\);\s*return;\s*\}/);
-  assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetToCanvas/);
+  assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetsToCanvas/);
   assert.match(appSource, /action === "save-personal"[\s\S]*?保存平台素材到个人素材库尚未接入/);
   assert.doesNotMatch(appSource, /savePlatformMediaToPersonal|savePlatformSelectionToPersonal|save-material/);
   assert.match(assetLibraryViewSource, /PLATFORM_BATCH_ACTIONS[\s\S]*?add-canvas[\s\S]*?save-personal/);

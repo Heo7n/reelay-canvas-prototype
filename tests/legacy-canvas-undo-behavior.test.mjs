@@ -316,6 +316,244 @@ function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function prepareLibraryDrag(h) {
+  const assets = [
+    { id: "drag-image", type: "image", name: "drag-fixture image", url: "https://example.test/drag.png", aspectRatio: 1.5 },
+    { id: "drag-video", type: "video", name: "drag-fixture video", url: "https://example.test/drag.mp4", aspectRatio: 16 / 9 },
+    { id: "drag-audio", type: "audio", name: "drag-fixture audio", url: "https://example.test/drag.mp3" },
+  ];
+  h.window.registerLibraryAssets(assets, "personal");
+  h.window.switchAssetLibraryContext({ space: "personal", section: "media" });
+  h.state.librarySearch = "drag-fixture";
+  h.window.openAssetLibrary();
+  const card = (id) => h.window.document.querySelector(`[data-library-media="${id}"]`);
+  function transfer() {
+    const values = new Map();
+    return {
+      get types() { return [...values.keys()]; },
+      getData(type) { return values.get(type) || ""; },
+      setData(type, value) { values.set(type, value); },
+      effectAllowed: "uninitialized",
+      dropEffect: "none",
+    };
+  }
+  function dispatch(type, target, dataTransfer, options = {}) {
+    const event = new h.window.MouseEvent(type, {
+      bubbles: true, cancelable: true, clientX: 800, clientY: 400, ...options,
+    });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    target.dispatchEvent(event);
+    return event;
+  }
+  function drag(id) {
+    const dataTransfer = transfer();
+    dispatch("dragstart", card(id), dataTransfer);
+    return dataTransfer;
+  }
+  function drop(dataTransfer, target = h.window.document.querySelector("#canvasShell")) {
+    return dispatch("drop", target, dataTransfer);
+  }
+  return { assets, card, transfer, dispatch, drag, drop };
+}
+
+test("dragging a selected library card places all visible selected media in one undoable canvas batch", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("library-drop");
+  const second = h.canvas("other");
+  h.install(first, second);
+  const library = prepareLibraryDrag(h);
+  library.card("drag-video").querySelector("[data-library-select]").click();
+  library.card("drag-image").querySelector("[data-library-select]").click();
+  h.state.librarySelectedIds.add("hidden-stale-selection");
+  const payload = library.transfer();
+  let dragPreview;
+  payload.setDragImage = (element) => { dragPreview = element; };
+  library.dispatch("dragstart", library.card("drag-video"), payload);
+  assert.equal(dragPreview.textContent, "2 个素材");
+  assert.equal(dragPreview.querySelector("video, img"), null, "drag preview must not reload media");
+  const expected = [...h.window.document.querySelectorAll("[data-library-media]")]
+    .map((element) => element.dataset.libraryMedia)
+    .filter((id) => h.state.librarySelectedIds.has(id));
+  assert.deepEqual(JSON.parse(payload.getData("application/x-reelay-asset")).assetIds, expected);
+  library.drop(payload);
+  library.dispatch("dragend", library.card("drag-video"), payload);
+  assert.equal(dragPreview.isConnected, false);
+  assert.equal(h.window.document.querySelector(".asset-library-drag-preview"), null);
+  assert.equal(first.nodes.length, 2);
+  assert.deepEqual(plain(first.nodes.map((node) => node.assets[0].librarySourceId)), expected);
+  assert.equal(first.undoStack.length, 1);
+  assert.equal(first.undoStack[0].type, "create");
+  assert.deepEqual([...h.state.selectedIds], first.nodes.map((node) => node.id));
+  assert.equal(second.nodes.length, 0);
+  assert.equal(second.undoStack.length, 0);
+  const [left, right] = first.nodes.map((node) => ({ ...node, layout: h.window.getNodeLayout(node) }));
+  assert.ok(left.x + left.layout.nodeWidth <= right.x, "batch items must not overlap");
+  h.window.undoLastAction();
+  assert.equal(first.nodes.length, 0);
+  assert.equal(first.undoStack.length, 0);
+});
+
+test("dragging an unselected library card keeps the gesture single even during multi-select", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("single-library-drop");
+  h.install(first);
+  const library = prepareLibraryDrag(h);
+  library.card("drag-video").querySelector("[data-library-select]").click();
+  library.card("drag-image").querySelector("[data-library-select]").click();
+  const selectedBefore = [...h.state.librarySelectedIds];
+  const payload = library.drag("drag-audio");
+  assert.deepEqual(JSON.parse(payload.getData("application/x-reelay-asset")).assetIds, ["drag-audio"]);
+  library.drop(payload);
+  assert.equal(first.nodes.length, 1);
+  assert.equal(first.nodes[0].assets[0].librarySourceId, "drag-audio");
+  assert.deepEqual([...h.state.librarySelectedIds], selectedBefore);
+  assert.equal(first.undoStack.length, 1);
+});
+
+test("library dragover restores copy after crossing the panel for both grid and list destinations", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("library-dragover", [h.node("drop-target")]));
+  const library = prepareLibraryDrag(h);
+  library.card("drag-video").querySelector("[data-library-select]").click();
+  library.card("drag-image").querySelector("[data-library-select]").click();
+  const shell = h.window.document.querySelector("#canvasShell");
+  for (const display of ["grid", "list"]) {
+    if (h.state.libraryDisplay !== display) {
+      h.window.document.querySelector("#assetLibraryCommandBar button[data-library-display]").click();
+    }
+    assert.equal(h.state.libraryDisplay, display);
+    const dataTransfer = library.drag("drag-video");
+    for (const destination of [shell, h.window.document.querySelector('[data-id="drop-target"]')]) {
+      const rejected = library.dispatch("dragover", library.card("drag-video"), dataTransfer);
+      assert.equal(rejected.defaultPrevented, true);
+      assert.equal(dataTransfer.dropEffect, "none");
+      assert.equal(shell.classList.contains("file-dragging"), false);
+      const accepted = library.dispatch("dragover", destination, dataTransfer);
+      assert.equal(accepted.defaultPrevented, true);
+      assert.equal(dataTransfer.dropEffect, "copy", `${display} drag must recover from the panel's rejected target`);
+      assert.equal(shell.classList.contains("file-dragging"), true);
+    }
+    library.dispatch("dragend", library.card("drag-video"), dataTransfer);
+    assert.equal(shell.classList.contains("file-dragging"), false);
+  }
+});
+
+test("library video cards retain their media when checking a corner box and clicking blank canvas", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("library-media-stability", [h.node("selected-node")]));
+  const library = prepareLibraryDrag(h);
+  const card = library.card("drag-video");
+  const video = card.querySelector("video");
+  const preview = card.querySelector("[data-library-preview]");
+  assert.ok(video);
+  video.currentTime = 3;
+  card.querySelector("[data-library-select]").click();
+  assert.equal(h.state.librarySelectionMode, true);
+  assert.equal(h.state.librarySelectedIds.has("drag-video"), true);
+  assert.equal(library.card("drag-video"), card);
+  assert.equal(card.querySelector("video"), video);
+  h.window.setSelection(["selected-node"], "selected-node");
+  h.window.render();
+  const shell = h.window.document.querySelector("#canvasShell");
+  for (const type of ["pointerdown", "pointerup"]) {
+    const event = new h.window.MouseEvent(type, {
+      bubbles: true, cancelable: true, button: 0, clientX: 800, clientY: 400,
+    });
+    Object.defineProperty(event, "pointerId", { value: 12 });
+    shell.dispatchEvent(event);
+  }
+  assert.equal(h.state.selectedIds.size, 0, "the real blank-canvas gesture clears node selection");
+  assert.equal(library.card("drag-video"), card);
+  assert.equal(card.querySelector("[data-library-preview]"), preview);
+  assert.equal(card.querySelector("video"), video);
+  assert.equal(video.currentTime, 3);
+  assert.equal(h.state.librarySelectedIds.has("drag-video"), true);
+});
+
+test("library batch drop appends generator references once and undo preserves later content", (t) => {
+  const h = createHarness(t);
+  const original = { id: "original-reference", type: "image", url: "https://example.test/original.png" };
+  const target = h.node("library-target", { model: "seedance-2", assets: [original], activeAssetId: original.id });
+  const first = h.canvas("generator-library-drop", [target]);
+  h.install(first);
+  const library = prepareLibraryDrag(h);
+  library.card("drag-image").querySelector("[data-library-select]").click();
+  library.card("drag-video").querySelector("[data-library-select]").click();
+  const payload = library.drag("drag-image");
+  library.drop(payload, h.window.document.querySelector('[data-id="library-target"]'));
+  assert.equal(target.assets.length, 3);
+  assert.equal(first.nodes.length, 1);
+  assert.equal(first.undoStack.length, 1);
+  assert.equal(first.undoStack[0].type, "node-assets-add");
+  assert.equal(first.undoStack[0].addedAssetIds.length, 2);
+  assert.ok(target.assets.slice(1).every((asset) => asset.id !== asset.librarySourceId));
+  original.displayName = "仍然保留的新名称";
+  const later = { id: "later-reference", type: "audio", url: "https://example.test/later.mp3" };
+  target.assets.push(later);
+  target.prompt = "追加后继续编辑";
+  h.window.undoLastAction();
+  assert.deepEqual(plain(target.assets.map((asset) => asset.id)), [original.id, later.id]);
+  assert.equal(target.assets[0], original);
+  assert.equal(original.displayName, "仍然保留的新名称");
+  assert.equal(target.activeAssetId, original.id);
+  assert.equal(target.prompt, "追加后继续编辑");
+});
+
+test("library drag rejects malformed, stale-scope, hidden-media and readonly drops atomically", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("validated-library-drop");
+  const second = h.canvas("other-library-drop");
+  h.install(first, second);
+  const library = prepareLibraryDrag(h);
+  const valid = library.drag("drag-image");
+  const base = JSON.parse(valid.getData("application/x-reelay-asset"));
+  const invalidValues = [
+    "drag-image", "{", "null", JSON.stringify([]),
+    JSON.stringify({ ...base, version: 2 }),
+    JSON.stringify({ ...base, assetIds: ["drag-image", "missing"] }),
+    JSON.stringify({ ...base, assetIds: ["drag-image", "drag-image"] }),
+    JSON.stringify({ ...base, assetIds: [1] }),
+    JSON.stringify({ ...base, projectId: "another-project" }),
+    JSON.stringify({ ...base, space: "organization" }),
+  ];
+  for (const value of invalidValues) {
+    const payload = library.transfer();
+    payload.setData("application/x-reelay-asset", value);
+    assert.equal(library.drop(payload).defaultPrevented, true);
+    assert.equal(first.nodes.length, 0);
+    assert.equal(first.undoStack.length, 0);
+  }
+  h.state.librarySearch = "drag-fixture video";
+  library.drop(valid);
+  assert.equal(first.nodes.length, 0, "newly hidden media must not be added from a stale drag");
+  h.state.librarySearch = "drag-fixture";
+  h.window.switchCanvas(second.id);
+  library.drop(valid);
+  assert.equal(second.nodes.length, 0);
+  assert.equal(second.undoStack.length, 0);
+  h.window.switchCanvas(first.id);
+  library.drop(valid, h.window.document.querySelector("#assetLibraryGrid"));
+  assert.equal(first.nodes.length, 0, "asset panel is not a canvas destination");
+
+  const host = { postMessage() {} };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const message = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
+  });
+  assert.equal(message({ type: "host:init", context: {
+    protocolVersion: 1, projectId: h.state.projectId, canvasId: first.id, writable: false,
+  } }), true);
+  assert.equal(message({ type: "host:document", protocolVersion: 1, document: null, writable: false }), true);
+  assert.equal(h.window.canvasTest.canvasPersistence.getAccessMode(), "readonly");
+  library.drop(valid);
+  assert.equal(first.nodes.length, 0);
+  assert.equal(first.undoStack.length, 0);
+  const blocked = library.transfer();
+  const event = library.dispatch("dragstart", library.card("drag-image"), blocked);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(blocked.types.length, 0);
+});
+
 test("media toolbar defaults to icons while preserving explicit saved label choices", (t) => {
   const { window } = createHarness(t);
   for (const saved of [null, { image: { tools: ["crop"] } }, {
@@ -422,7 +660,16 @@ test("deleting every group member requires confirmation and undo restores the co
   h.window.deleteSelectedNodes();
   assert.equal(first.nodes.length, 2);
   assert.equal(first.undoStack.length, 0);
-  assert.ok(h.window.document.querySelector(".confirm-layer"));
+  const dialog = h.window.document.querySelector(".confirm-layer");
+  assert.ok(dialog);
+  const description = h.window.document.getElementById(dialog.getAttribute("aria-describedby"));
+  assert.match(description.textContent, /可通过撤销恢复/);
+  assert.equal(h.window.document.activeElement, dialog.querySelector(".confirm-cancel"));
+  dialog.dispatchEvent(new h.window.Event("cancel", { cancelable: true }));
+  assert.equal(h.window.document.querySelector(".confirm-layer"), null);
+  assert.equal(first.nodes.length, 2, "dismissing confirmation must retain the group content");
+  assert.equal(first.undoStack.length, 0);
+  h.window.deleteSelectedNodes();
   h.window.document.querySelector(".confirm-ok").click();
   assert.equal(first.nodes.length, 0);
   assert.equal(first.groups.length, 0);

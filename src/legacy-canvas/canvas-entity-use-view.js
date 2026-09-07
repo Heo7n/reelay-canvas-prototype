@@ -230,7 +230,7 @@
     const margin = clamp(finiteNumber(options.margin, 12), 0, Math.min(viewport.width, viewport.height) / 3);
     const gap = clamp(finiteNumber(options.gap, 10), 0, 48);
     const requestedWidth = clamp(finiteNumber(options.panelWidth, 328), 240, Math.max(240, viewport.width - margin * 2));
-    const requestedHeight = clamp(finiteNumber(options.panelHeight, 446), 180, Math.max(180, viewport.height - margin * 2));
+    const requestedHeight = clamp(finiteNumber(options.panelHeight, 446), 1, Math.max(1, viewport.height - margin * 2));
     const width = Math.min(requestedWidth, Math.max(1, viewport.width - margin * 2));
     const height = Math.min(requestedHeight, Math.max(1, viewport.height - margin * 2));
     const anchor = normalizeRect(options.anchorRect, {
@@ -248,7 +248,7 @@
     const topMin = viewport.top + margin;
     const topMax = viewport.bottom - margin - height;
     const preferredLeft = source.right + gap;
-    const preferredTop = anchor.top;
+    const preferredTop = anchor.top + (anchor.height - height) / 2;
     const horizontalCandidates = uniqueNumbers([
       clamp(preferredLeft, leftMin, leftMax),
       clamp(anchor.right + gap, leftMin, leftMax),
@@ -263,7 +263,7 @@
     const verticalCandidates = uniqueNumbers([
       clamp(preferredTop, topMin, topMax),
       clamp(anchor.bottom - height, topMin, topMax),
-      clamp(anchor.top + anchor.height / 2 - height / 2, topMin, topMax),
+      clamp(anchor.top, topMin, topMax),
       ...avoidRects.flatMap((rect) => [
         clamp(rect.top - gap - height, topMin, topMax),
         clamp(rect.bottom + gap, topMin, topMax),
@@ -434,6 +434,98 @@
     `;
   }
 
+  function syncPickerAttributes(target, source) {
+    for (const attribute of [...target.attributes]) {
+      if (!source.hasAttribute(attribute.name)) target.removeAttribute(attribute.name);
+    }
+    for (const attribute of source.attributes) {
+      if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
+    }
+  }
+
+  function updatePickerCard(target, source) {
+    const button = target.querySelector("button");
+    const nextButton = source.querySelector("button");
+    const selectionChanged = target.dataset.selected !== source.dataset.selected;
+    syncPickerAttributes(target, source);
+    syncPickerAttributes(button, nextButton);
+    const cover = target.querySelector(".entity-use-picker-cover");
+    const nextCover = source.querySelector(".entity-use-picker-cover");
+    const image = cover.querySelector("img");
+    const nextImage = nextCover.querySelector("img");
+    if (image && nextImage && image.getAttribute("src") === nextImage.getAttribute("src")) {
+      syncPickerAttributes(image, nextImage);
+    } else {
+      cover.replaceChildren(...nextCover.childNodes);
+    }
+    const title = target.querySelector("strong");
+    const nextTitle = source.querySelector("strong");
+    syncPickerAttributes(title, nextTitle);
+    if (title.textContent !== nextTitle.textContent) title.textContent = nextTitle.textContent;
+    if (selectionChanged) {
+      target.querySelector(".entity-use-picker-check").replaceChildren(...source.querySelector(".entity-use-picker-check").childNodes);
+    }
+  }
+
+  // The backdrop and dialog belong to the open session. Keep them mounted so
+  // filtering cannot replay their entrance animations or detach focused controls.
+  function updateEntityPicker(portal, options = {}) {
+    const template = portal.ownerDocument.createElement("template");
+    template.innerHTML = renderEntityPicker(options);
+    const next = template.content.querySelector("[data-entity-use-picker]");
+    const current = portal.querySelector("[data-entity-use-picker]");
+    if (!current || !next) {
+      portal.replaceChildren(template.content);
+      return;
+    }
+    const spaceChanged = current.dataset.space !== next.dataset.space;
+    syncPickerAttributes(current, next);
+    for (const space of ENTITY_SPACES) {
+      syncPickerAttributes(current.querySelector(`#entity-use-space-${space.id}`), next.querySelector(`#entity-use-space-${space.id}`));
+    }
+    const search = current.querySelector("[data-entity-use-search]");
+    const nextSearch = next.querySelector("[data-entity-use-search]");
+    syncPickerAttributes(search, nextSearch);
+    if (search.value !== nextSearch.value) search.value = nextSearch.value;
+    const clear = current.querySelector(".entity-use-picker-search > button");
+    const nextClear = next.querySelector(".entity-use-picker-search > button");
+    if (clear && nextClear) syncPickerAttributes(clear, nextClear);
+    else if (clear) clear.remove();
+    else if (nextClear) current.querySelector(".entity-use-picker-search").append(nextClear);
+
+    const results = current.querySelector("[data-entity-use-picker-results]");
+    const nextResults = next.querySelector("[data-entity-use-picker-results]");
+    syncPickerAttributes(results, nextResults);
+    const existing = new Map([...results.children].map((card) => [card.dataset.entityUsePickerCard || "empty", card]));
+    let position = results.firstElementChild;
+    for (const card of [...nextResults.children]) {
+      const key = card.dataset.entityUsePickerCard || "empty";
+      const retained = existing.get(key);
+      const element = retained || card;
+      if (retained) {
+        if (card.hasAttribute("data-entity-use-picker-card")) updatePickerCard(retained, card);
+        else if (retained.textContent !== card.textContent) retained.replaceChildren(...card.childNodes);
+      }
+      if (element !== position) results.insertBefore(element, position);
+      position = element.nextElementSibling;
+      existing.delete(key);
+    }
+    existing.forEach((element) => element.remove());
+    if (spaceChanged) results.scrollTop = 0;
+
+    const count = current.querySelector("[data-entity-use-picker-count]");
+    const nextCount = next.querySelector("[data-entity-use-picker-count]");
+    if (count.textContent !== nextCount.textContent) count.textContent = nextCount.textContent;
+    for (const selector of ["[data-entity-use-picker-cancel]", "[data-entity-use-picker-add]"]) {
+      const button = current.querySelector(selector);
+      const nextButton = next.querySelector(selector);
+      if (Boolean(button.querySelector("svg, i")) !== Boolean(nextButton.querySelector("svg, i"))) {
+        button.replaceChildren(...nextButton.childNodes);
+      }
+      syncPickerAttributes(button, nextButton);
+    }
+  }
+
   function setPortalVisibility(portal, visible) {
     if (!portal || typeof portal !== "object") return;
     portal.hidden = !visible;
@@ -477,6 +569,7 @@
     computeDetailPlacement,
     renderEntityDetail,
     renderEntityPicker,
+    updateEntityPicker,
     syncEntityDetailPortal,
     syncEntityPickerPortal,
   });

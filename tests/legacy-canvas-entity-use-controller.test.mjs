@@ -39,6 +39,7 @@ function createHarness(t) {
     scope: { projectId: "project-one", canvasId: "canvas-one" },
     context: { eligible: true, space: "personal" },
     mutable: true,
+    avoidRects: [{ left: 800, top: 0, width: 200, height: 800 }],
     target: { id: "node-one", supported: true, generating: false, promptOptimizing: false },
   };
   const media = [{ id: "image-one", mediaKind: "image", name: "图片一", url: "https://cdn.example/one.jpg" }];
@@ -54,7 +55,7 @@ function createHarness(t) {
     getDetailContext: () => environment.context,
     getDetailEntity: (id, space) => entities.find((entity) => entity.id === id && entity.spaces.includes(space)),
     getPickerEntities: () => entities,
-    getAvoidRects: () => [{ left: 800, top: 0, width: 200, height: 800 }],
+    getAvoidRects: () => environment.avoidRects,
     isTargetAvailable: (id) => environment.target?.id === id && environment.target.supported && !environment.target.generating && !environment.target.promptOptimizing,
     isMutable: () => environment.mutable,
     requireMutation: () => environment.mutable,
@@ -88,6 +89,26 @@ function createHarness(t) {
     return event;
   }
   return { window, document, grid, detail, picker, background, controller, environment, entities, calls, timers, frames, tick, flushFrames, click, pointer, key };
+}
+
+function capturePickerShell(picker) {
+  return [
+    "[data-entity-use-picker-backdrop]", "[data-entity-use-picker]", "header",
+    '[data-entity-use-space="personal"]', '[data-entity-use-space="organization"]',
+    "[data-entity-use-search]", "[data-entity-use-picker-results]", "footer",
+    "[data-entity-use-picker-cancel]", "[data-entity-use-picker-add]",
+  ].map((selector) => {
+    const element = picker.querySelector(selector);
+    assert.ok(element, `Missing stable picker element: ${selector}`);
+    return { selector, element };
+  });
+}
+
+function assertPickerShellUnchanged(picker, shell) {
+  for (const { selector, element } of shell) {
+    assert.equal(picker.querySelector(selector), element, `${selector} must survive an in-place picker update`);
+    assert.equal(element.isConnected, true);
+  }
 }
 
 test("hover and focus detail sessions retain card-to-detail traversal and pinned behavior", (t) => {
@@ -125,6 +146,95 @@ test("hover and focus detail sessions retain card-to-detail traversal and pinned
   h.controller.openDetail("one");
   h.grid.dispatchEvent(new h.window.Event("scroll"));
   assert.equal(h.detail.hidden, true);
+});
+
+test("detail centers using its rendered dimensions and remeasures when content changes", (t) => {
+  const h = createHarness(t);
+  h.environment.avoidRects = [];
+  h.window.innerWidth = 1440;
+  h.window.innerHeight = 900;
+  const card = h.grid.querySelector('[data-library-entity="one"]');
+  card.getBoundingClientRect = () => ({ left: 380, top: 300, width: 164, height: 164 });
+  let measuredHeight = 386;
+  let heightReads = 0;
+  Object.defineProperties(h.window.HTMLElement.prototype, {
+    offsetWidth: {
+      configurable: true,
+      get() { return this.matches(".entity-use-detail") ? 318 : 0; },
+    },
+    offsetHeight: {
+      configurable: true,
+      get() {
+        if (!this.matches(".entity-use-detail")) return 0;
+        heightReads += 1;
+        assert.equal(h.detail.hidden, false, "the panel must participate in layout before measurement");
+        assert.ok(h.calls.iconRefreshes > 0, "measure the final icon-rendered content");
+        assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-width"), "340px");
+        return measuredHeight;
+      },
+    },
+  });
+
+  h.controller.openDetail("one");
+  assert.ok(heightReads > 0);
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-top"), "189px");
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-left"), "554px");
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-width"), "318px");
+  let panel = h.detail.querySelector(".entity-use-detail");
+  assert.equal(panel.style.getPropertyValue("--entity-use-detail-top"), "", "placement has no stale child override");
+  assert.equal(panel.dataset.placement, "right");
+
+  measuredHeight = 432;
+  h.entities[0].description = "内容变长后，定位应重新使用整个面板的实际高度。";
+  h.controller.refreshDetail();
+  h.flushFrames();
+  assert.ok(heightReads >= 2);
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-top"), "166px");
+  panel = h.detail.querySelector(".entity-use-detail");
+  assert.equal(panel.style.getPropertyValue("--entity-use-detail-top"), "");
+});
+
+test("list detail recenters on resize and remains inside a short viewport", (t) => {
+  const h = createHarness(t);
+  h.environment.avoidRects = [];
+  h.window.innerWidth = 1200;
+  h.window.innerHeight = 900;
+  const card = h.grid.querySelector('[data-library-entity="one"]');
+  let rowTop = 400;
+  card.getBoundingClientRect = () => ({ left: 20, top: rowTop, width: 524, height: 48 });
+  Object.defineProperties(h.window.HTMLElement.prototype, {
+    offsetWidth: {
+      configurable: true,
+      get() { return this.matches(".entity-use-detail") ? 340 : 0; },
+    },
+    offsetHeight: {
+      configurable: true,
+      get() {
+        return this.matches(".entity-use-detail")
+          ? Math.min(386, Number.parseFloat(h.detail.style.getPropertyValue("--entity-use-detail-max-height")))
+          : 0;
+      },
+    },
+  });
+
+  h.controller.openDetail("one");
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-top"), "231px");
+
+  h.window.innerHeight = 720;
+  rowTop = 640;
+  h.window.dispatchEvent(new h.window.Event("resize"));
+  h.flushFrames();
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-top"), "322px");
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-max-height"), "386px");
+
+  h.window.innerHeight = 160;
+  rowTop = 80;
+  h.window.dispatchEvent(new h.window.Event("resize"));
+  h.flushFrames();
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-top"), "12px");
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-max-height"), "136px");
+  assert.equal(h.detail.querySelector(".entity-use-detail").offsetHeight, 136);
+  assert.ok(h.detail.querySelector("[data-entity-use-add-canvas]"));
 });
 
 test("pending detail timers and stale detail actions cannot cross library, canvas or project scopes", (t) => {
@@ -207,10 +317,124 @@ test("picker retains cross-space selections and dispatches an immutable selectio
   assert.equal(submitted.selections.length, 2);
 });
 
+test("switching picker spaces retains the dialog shell, search and focused space control", (t) => {
+  const h = createHarness(t);
+  h.entities[1].description = "雾森外景";
+  h.controller.openPicker("node-one");
+  h.flushFrames();
+  const shell = capturePickerShell(h.picker);
+  const input = h.picker.querySelector("[data-entity-use-search]");
+  input.value = "雾森";
+  input.setSelectionRange(1, 1);
+  input.dispatchEvent(new h.window.InputEvent("input", { bubbles: true }));
+  h.flushFrames();
+  assertPickerShellUnchanged(h.picker, shell);
+  const results = h.picker.querySelector("[data-entity-use-picker-results]");
+  const sharedCard = h.picker.querySelector('[data-entity-use-picker-card="one"]');
+  const sharedImage = sharedCard.querySelector("img");
+  assert.ok(sharedImage);
+
+  for (const space of ["organization", "personal", "organization", "personal"]) {
+    const selector = `[data-entity-use-space="${space}"]`;
+    const spaceButton = h.picker.querySelector(selector);
+    results.scrollTop = 220;
+    spaceButton.focus();
+    h.click(selector);
+    h.flushFrames();
+    assertPickerShellUnchanged(h.picker, shell);
+    assert.equal(h.document.activeElement, spaceButton, "switching must not send focus back to search");
+    assert.equal(spaceButton.getAttribute("aria-pressed"), "true");
+    assert.equal(results.getAttribute("aria-labelledby"), `entity-use-space-${space}`);
+    assert.equal(results.scrollTop, 0, "new space results start at the top");
+    assert.equal(input.value, "雾森");
+    assert.equal(input.selectionStart, 1);
+    assert.equal(h.picker.querySelectorAll("[data-entity-use-picker-card]").length, space === "organization" ? 2 : 1);
+    assert.equal(h.picker.querySelector('[data-entity-use-picker-card="one"]'), sharedCard);
+    assert.equal(sharedCard.querySelector("img"), sharedImage, "an unchanged cover must not reload across spaces");
+  }
+});
+
+test("clicking the active picker space is a no-op and keeps the current reading position", (t) => {
+  const h = createHarness(t);
+  h.controller.openPicker("node-one");
+  h.flushFrames();
+  const results = h.picker.querySelector("[data-entity-use-picker-results]");
+  const activeSpace = h.picker.querySelector('[data-entity-use-space="personal"]');
+  results.scrollTop = 180;
+  activeSpace.focus();
+  const observer = new h.window.MutationObserver(() => undefined);
+  observer.observe(h.picker, { subtree: true, childList: true, attributes: true, characterData: true });
+  const iconRefreshes = h.calls.iconRefreshes;
+  h.click('[data-entity-use-space="personal"]');
+  h.flushFrames();
+  assert.equal(results.scrollTop, 180);
+  assert.equal(h.document.activeElement, activeSpace);
+  assert.equal(h.calls.iconRefreshes, iconRefreshes);
+  assert.equal(observer.takeRecords().length, 0, "an already-active space must not trigger a render");
+  observer.disconnect();
+});
+
+test("selecting picker cards updates selection without replacing covers, focus or scroll position", (t) => {
+  const h = createHarness(t);
+  h.controller.openPicker("node-one");
+  h.flushFrames();
+  const shell = capturePickerShell(h.picker);
+  const results = h.picker.querySelector("[data-entity-use-picker-results]");
+  const card = h.picker.querySelector('[data-entity-use-picker-card="one"]');
+  const button = card.querySelector("button");
+  const image = card.querySelector("img");
+  const add = h.picker.querySelector("[data-entity-use-picker-add]");
+  assert.ok(image);
+  results.scrollTop = 190;
+  button.focus();
+
+  for (const selected of [true, false, true]) {
+    h.click('[data-entity-use-toggle="one"]');
+    h.flushFrames();
+    assertPickerShellUnchanged(h.picker, shell);
+    assert.equal(h.picker.querySelector('[data-entity-use-picker-card="one"]'), card);
+    assert.equal(card.querySelector("button"), button);
+    assert.equal(card.querySelector("img"), image);
+    assert.equal(h.document.activeElement, button);
+    assert.equal(results.scrollTop, 190);
+    assert.equal(button.getAttribute("aria-pressed"), String(selected));
+    assert.equal(card.dataset.selected, String(selected));
+    assert.equal(card.classList.contains("is-selected"), selected);
+    assert.equal(h.picker.querySelector("[data-entity-use-picker-count]").textContent, `已选 ${selected ? 1 : 0} 个`);
+    assert.equal(add.disabled, !selected);
+  }
+});
+
+test("external picker refresh updates entity text while keeping live controls and unchanged media", (t) => {
+  const h = createHarness(t);
+  h.controller.openPicker("node-one");
+  h.flushFrames();
+  const shell = capturePickerShell(h.picker);
+  const results = h.picker.querySelector("[data-entity-use-picker-results]");
+  const card = h.picker.querySelector('[data-entity-use-picker-card="one"]');
+  const button = card.querySelector("button");
+  const image = card.querySelector("img");
+  const activeSpace = h.picker.querySelector('[data-entity-use-space="personal"]');
+  results.scrollTop = 165;
+  activeSpace.focus();
+  h.entities[0].name = "雾森角色 · 已更新";
+  h.controller.refresh({ renderPicker: true });
+  h.flushFrames();
+  assertPickerShellUnchanged(h.picker, shell);
+  assert.equal(h.picker.querySelector('[data-entity-use-picker-card="one"]'), card);
+  assert.equal(card.querySelector("button"), button);
+  assert.equal(card.querySelector("img"), image);
+  assert.equal(button.getAttribute("aria-label"), "选择 雾森角色 · 已更新");
+  assert.equal(card.querySelector("strong").textContent, "雾森角色 · 已更新");
+  assert.equal(h.document.activeElement, activeSpace);
+  assert.equal(results.scrollTop, 165);
+});
+
 test("search preserves committed Chinese text and caret without replacing the composing input", (t) => {
   const h = createHarness(t);
   h.controller.openPicker("node-one");
   h.flushFrames();
+  const shell = capturePickerShell(h.picker);
   const input = h.picker.querySelector("input");
   input.dispatchEvent(new h.window.CompositionEvent("compositionstart", { bubbles: true }));
   input.value = "雾森";
@@ -222,17 +446,20 @@ test("search preserves committed Chinese text and caret without replacing the co
   input.dispatchEvent(new h.window.CompositionEvent("compositionend", { bubbles: true, data: "雾森" }));
   h.flushFrames();
   const committed = h.picker.querySelector("input");
-  assert.notEqual(committed, input);
+  assert.equal(committed, input, "committing an IME composition preserves the live input");
+  assertPickerShellUnchanged(h.picker, shell);
   assert.equal(committed.value, "雾森");
   assert.equal(committed.selectionStart, 1);
   assert.equal(h.document.activeElement, committed);
   committed.setSelectionRange(0, 1);
   h.controller.refresh({ renderPicker: true });
   h.flushFrames();
+  assertPickerShellUnchanged(h.picker, shell);
   assert.equal(h.picker.querySelector("input").selectionStart, 0);
   assert.equal(h.picker.querySelector("input").selectionEnd, 1);
   h.click('[data-entity-use-action="clear-search"]');
   h.flushFrames();
+  assertPickerShellUnchanged(h.picker, shell);
   assert.equal(h.picker.querySelector("input").value, "");
   assert.equal(h.picker.querySelector("input").selectionStart, 0);
 });

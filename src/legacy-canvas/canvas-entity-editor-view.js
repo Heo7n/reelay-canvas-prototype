@@ -22,6 +22,19 @@
     audio: "音频",
   });
 
+  // Official Lucide 1.25.0 paths, scoped to editor headings so they also render
+  // consistently without the optional Lucide runtime. License: assets/icons/LUCIDE-LICENSE.txt.
+  const HEADING_ICON_PATHS = Object.freeze({
+    "square-user-round": '<path d="M18 21a6 6 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/><rect width="18" height="18" x="3" y="3" rx="2"/>',
+    image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+    "square-play": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z"/>',
+    "audio-lines": '<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>',
+  });
+
+  function headingIcon(name) {
+    return `<svg class="entity-editor-heading-glyph" data-entity-editor-icon="${name}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${HEADING_ICON_PATHS[name]}</svg>`;
+  }
+
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
   }
@@ -106,7 +119,7 @@
   }
 
   function mediaKindIcon(mediaKind) {
-    if (mediaKind === "video") return "play-square";
+    if (mediaKind === "video") return "square-play";
     if (mediaKind === "audio") return "audio-lines";
     return "image";
   }
@@ -287,8 +300,11 @@
       <section class="canvas-entity-editor" role="region" aria-labelledby="canvasEntityEditorTitle" aria-busy="${busy}" data-entity-editor="true" data-entity-editor-mode="${mode}" data-entity-editor-busy="${busy}" data-entity-editor-filter-active="${activeFilter}" data-entity-editor-selected-media="${escapeHtml(selectedId)}" data-entity-editor-cover-media="${escapeHtml(coverMediaId)}">
         <form class="entity-editor-details" id="canvasEntityEditorForm" data-entity-editor-form="true" novalidate>
           <header class="entity-editor-header">
+            <div class="entity-editor-title">
+              ${headingIcon("square-user-round")}
+              <h2 id="canvasEntityEditorTitle" title="${escapeHtml(title)}">${escapeHtml(title)}</h2>
+            </div>
             <button type="button" aria-label="关闭主体编辑器" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>${icon("x")}</button>
-            <h2 id="canvasEntityEditorTitle" title="${escapeHtml(title)}">${escapeHtml(title)}</h2>
           </header>
 
           <div class="entity-editor-details-scroll">
@@ -351,7 +367,7 @@
             <div class="entity-editor-preview-meta">
               ${selectedMedia ? `
                 <span class="entity-editor-preview-kind-icon" title="${MEDIA_KIND_LABELS[selectedMedia.mediaKind]}">
-                  ${icon(mediaKindIcon(selectedMedia.mediaKind))}
+                  ${headingIcon(mediaKindIcon(selectedMedia.mediaKind))}
                   <span class="sr-only">${MEDIA_KIND_LABELS[selectedMedia.mediaKind]}</span>
                 </span>
                 <h3 class="sr-only" id="canvasEntityEditorPreviewTitle">${escapeHtml(selectedFileName)}</h3>
@@ -364,7 +380,7 @@
                   <button class="entity-editor-preview-filename" type="button" title="双击重命名文件（扩展名保持不变）" aria-label="文件名称 ${escapeHtml(selectedFileName)}，双击或按 F2 重命名" data-entity-editor-preview-name="${escapeHtml(selectedId)}"${editable ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(selectedFileName)}</button>
                 `}
               ` : `
-                <span class="entity-editor-preview-kind-icon">${icon("images")}</span>
+                <span class="entity-editor-preview-kind-icon">${headingIcon("image")}</span>
                 <h3 id="canvasEntityEditorPreviewTitle">预览</h3>
               `}
             </div>
