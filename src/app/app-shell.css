@@ -28,6 +28,7 @@ textarea {
 
 .experience-runtime-shell { display: flex; flex-direction: column; }
 .experience-content { flex: 1; min-height: 0; overflow: auto; }
+.experience-content .legacy-canvas-frame { display: block; }
 .experience-notice {
   display: flex;
   align-items: center;
