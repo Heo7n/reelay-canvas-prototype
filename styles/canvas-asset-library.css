@@ -25,7 +25,7 @@
   container-name: asset-library;
   container-type: inline-size;
   flex-direction: column;
-  transform: translateX(calc(-100% - 24px));
+  transform: translateX(calc(-100% - var(--canvas-edge-inset, 8px) - 32px));
   transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -47,7 +47,7 @@ html[data-theme="light"] .asset-library-panel {
 .asset-library-panel.hidden {
   display: flex !important;
   pointer-events: none;
-  transform: translateX(calc(-100% - 24px));
+  transform: translateX(calc(-100% - var(--canvas-edge-inset, 8px) - 32px));
 }
 
 .asset-library-panel .hidden,
@@ -98,12 +98,34 @@ html[data-theme="light"] .asset-library-panel {
 }
 
 .asset-library-close {
+  position: absolute;
+  z-index: 9;
+  /* Align with the second of four rail actions, including asymmetric panel insets. */
+  top: calc(50% + (var(--canvas-side-panel-bottom) - var(--canvas-side-panel-top) - var(--canvas-rail-item-size) - var(--canvas-rail-item-gap)) / 2);
+  right: -24px;
   width: 24px;
-  height: 30px;
-  border-radius: 8px;
+  height: 40px;
+  border: 1px solid var(--asset-panel-line);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: var(--asset-panel-bg);
+  box-shadow: 3px 0 8px rgb(0 0 0 / 5%);
+  transform: translateY(-50%);
+  transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 
 .asset-library-close:hover,
+.asset-library-close:focus-visible,
+.asset-library-panel:not(.resizing):has(> .asset-library-resize-handle:is(:hover, :focus-visible)) > .asset-library-close {
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, var(--asset-panel-bg));
+  color: var(--text);
+}
+
+.asset-library-close:active {
+  background: color-mix(in srgb, var(--text) 10%, var(--asset-panel-bg));
+}
+
 .asset-library-folder-create:not(:disabled):hover,
 .asset-library-preview-dialog [data-library-preview-close]:hover {
   background: var(--asset-panel-hover);
@@ -126,8 +148,9 @@ html[data-theme="light"] .asset-library-panel {
 }
 
 .asset-library-close svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.75;
 }
 
 .asset-library-space-switcher {
@@ -1345,37 +1368,35 @@ html[data-theme="light"] .asset-library-folder-preview {
   bottom: 0;
   width: 12px;
   outline: 0;
-  cursor: ew-resize;
+  cursor: col-resize;
   touch-action: none;
 }
 
 .asset-library-resize-handle::after {
   position: absolute;
-  top: 50%;
-  right: 4px;
-  width: 3px;
-  height: 36px;
+  top: 10px;
+  bottom: 10px;
+  right: 5px;
+  width: 2px;
   border-radius: 999px;
-  background: transparent;
+  background: color-mix(in srgb, var(--text) 28%, transparent);
   content: "";
   opacity: 0;
-  transform: translateY(-50%);
+  pointer-events: none;
   transition: background 0.14s ease, opacity 0.14s ease;
 }
 
-.asset-library-resize-handle:hover::after {
-  background: color-mix(in srgb, var(--text) 16%, transparent);
-  opacity: 1;
-}
-
-.asset-library-resize-handle:focus-visible::after {
-  background: color-mix(in srgb, var(--text) 42%, transparent);
-  opacity: 1;
-}
-
+.asset-library-resize-handle:hover::after,
+.asset-library-resize-handle:active::after,
+.asset-library-resize-handle:focus-visible::after,
 .asset-library-panel.resizing .asset-library-resize-handle::after {
-  background: color-mix(in srgb, var(--text) 24%, transparent);
   opacity: 1;
+}
+
+.asset-library-resize-handle:active::after,
+.asset-library-resize-handle:focus-visible::after,
+.asset-library-panel.resizing .asset-library-resize-handle::after {
+  background: color-mix(in srgb, var(--text) 44%, transparent);
 }
 
 .asset-library-preview-dialog {
@@ -1610,6 +1631,21 @@ html[data-theme="light"] .asset-library-folder-preview {
 
   .asset-library-footer {
     border-radius: 0;
+  }
+
+  .asset-library-header {
+    padding-right: 48px;
+  }
+
+  .asset-library-close {
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: none;
+    transform: none;
   }
 
   .asset-library-resize-handle {

@@ -146,9 +146,9 @@ test("node controls preserve the live prompt editor and media across content ren
   h.window.render();
   assert.equal(h.window.document.activeElement, input, "unrelated redraw does not leave text editing");
   element.querySelector('[data-action="advanced-settings-toggle"]').click();
-  const beforeAutoLink = node.autoLinkEnabled;
-  element.querySelector('[data-action="auto-link"]').click();
-  assert.equal(node.autoLinkEnabled, !beforeAutoLink);
+  const beforeValidation = node.assetValidationEnabled;
+  element.querySelector('[data-action="asset-validation"]').click();
+  assert.equal(node.assetValidationEnabled, !beforeValidation);
   assert.equal(input.scrollTop, 640);
   h.window.handleAction(node, "param-panel");
   assert.equal(element.querySelector("[data-node-prompt-input]"), input);
@@ -315,6 +315,55 @@ function group(id, nodeIds, overrides = {}) {
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
+
+test("media toolbar defaults to icons while preserving explicit saved label choices", (t) => {
+  const { window } = createHarness(t);
+  for (const saved of [null, { image: { tools: ["crop"] } }, {
+    image: { tools: ["crop"], showLabels: true },
+    video: { tools: ["trim"], showLabels: false },
+  }]) {
+    window.localStorage.setItem("reelay-media-tools", JSON.stringify(saved));
+    const preferences = window.loadMediaToolPreferences();
+    assert.equal(preferences.image.showLabels, saved?.image?.showLabels === true);
+    assert.equal(preferences.video.showLabels, false);
+    assert.equal(preferences.audio.showLabels, false);
+    if (saved?.image) assert.deepEqual(plain(preferences.image.tools), ["crop"]);
+  }
+});
+
+test("media toolbar retains its screen size across the full canvas zoom range", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("image", { mode: "image" }), h.node("video", { mode: "video" }), {
+    kind: "asset", assets: [{ id: "media", type: "image", aspectRatio: 16 / 9 }], activeAssetId: "media",
+  }];
+  for (const scale of [0.2, 0.28, 0.5, 1, 1.65, 2]) {
+    h.state.scale = scale;
+    for (const node of nodes) {
+      assert.ok(Math.abs(h.window.getNodeLayout(node).toolbarScale * scale - 1) < 1e-10);
+    }
+  }
+});
+
+test("media toolbar is not pushed back into view when its node moves above the viewport", (t) => {
+  const h = createHarness(t);
+  const node = h.window.defaultAssetNode(100, -200, {
+    id: "image", type: "image", url: "blob:http://reelay.test/image", width: 1280, height: 714,
+  });
+  h.install(h.canvas("main", [node]));
+  h.window.setSelection([node.id], node.id);
+  h.state.mediaToolbarNodeId = node.id;
+  h.window.render();
+  const element = h.window.document.querySelector(`[data-id="${node.id}"]`);
+  const toolbar = element.querySelector("[data-media-toolbar]");
+  assert.ok(toolbar);
+  toolbar.getBoundingClientRect = () => ({ top: -280, bottom: -238, left: 100, right: 500, width: 400, height: 42 });
+  for (const scale of [0.2, 1, 2]) {
+    h.state.scale = scale;
+    h.window.syncNodeVisualLayout(node, element);
+    assert.equal(toolbar.style.getPropertyValue("--toolbar-nudge"), "");
+    assert.equal(element.style.top, "-200px");
+  }
+});
 
 function assertMembership(canvas) {
   for (const current of canvas.groups) {
@@ -843,17 +892,17 @@ for (const taskKind of ["generation", "prompt-optimization"]) {
     const first = h.canvas("one", [edited, running]);
     h.install(first);
     const originalPrompt = running.prompt;
-    const originalAutoLink = edited.autoLinkEnabled;
+    const originalAssetValidation = edited.assetValidationEnabled;
     const start = taskKind === "generation" ? h.window.startSimulatedGeneration : h.window.startPromptOptimization;
     assert.equal(start(running), true);
     const pending = h.scheduledTask();
-    h.window.handleAction(edited, "auto-link");
+    h.window.handleAction(edited, "asset-validation");
     assert.equal(first.undoStack.length, 1);
-    assert.equal(edited.autoLinkEnabled, !originalAutoLink);
+    assert.equal(edited.assetValidationEnabled, !originalAssetValidation);
     assert.equal(first.nodes[0], edited);
     assert.equal(first.nodes[1], running);
     h.window.undoLastAction();
-    assert.equal(edited.autoLinkEnabled, originalAutoLink);
+    assert.equal(edited.assetValidationEnabled, originalAssetValidation);
     assert.equal(first.nodes[0], edited);
     assert.equal(first.nodes[1], running);
     assert.equal(first.undoStack.length, 0);
@@ -873,8 +922,8 @@ test("parameter undo restores only its fields after independent prompt, media, p
   const node = h.node("edited", { expanded: true });
   const first = h.canvas("one", [node]);
   h.install(first);
-  const originalAutoLink = node.autoLinkEnabled;
-  h.window.handleAction(node, "auto-link");
+  const originalAssetValidation = node.assetValidationEnabled;
+  h.window.handleAction(node, "asset-validation");
   const prompt = h.window.document.querySelector('.canvas-node[data-id="edited"] .prompt-input');
   prompt.value = "参数修改之后的新提示词";
   prompt.dispatchEvent(new h.window.Event("input", { bubbles: true }));
@@ -888,7 +937,7 @@ test("parameter undo restores only its fields after independent prompt, media, p
   assert.equal(first.undoStack.length, 1);
   h.window.undoLastAction();
   assert.equal(first.nodes[0], node);
-  assert.equal(node.autoLinkEnabled, originalAutoLink);
+  assert.equal(node.assetValidationEnabled, originalAssetValidation);
   assert.equal(node.prompt, prompt.value);
   assert.equal(node.assets[0], asset);
   assert.equal(node.activeAssetId, asset.id);
@@ -935,21 +984,21 @@ test("parameters remain editable during optimization while undo waits for the ta
   const node = h.node("video");
   const first = h.canvas("one", [node]);
   h.install(first);
-  const originalAutoLink = node.autoLinkEnabled;
+  const originalAssetValidation = node.assetValidationEnabled;
   const originalPrompt = node.prompt;
   h.window.startPromptOptimization(node);
   const pending = h.scheduledTask();
-  h.window.handleAction(node, "auto-link");
-  assert.equal(node.autoLinkEnabled, !originalAutoLink);
+  h.window.handleAction(node, "asset-validation");
+  assert.equal(node.assetValidationEnabled, !originalAssetValidation);
   h.window.undoLastAction();
   assert.equal(first.undoStack.length, 1);
   assert.equal(node.promptOptimizing, true);
   h.fireTimer(pending.timeoutId);
   h.window.undoLastAction();
   assert.equal(node.prompt, originalPrompt);
-  assert.equal(node.autoLinkEnabled, !originalAutoLink);
+  assert.equal(node.assetValidationEnabled, !originalAssetValidation);
   h.window.undoLastAction();
-  assert.equal(node.autoLinkEnabled, originalAutoLink);
+  assert.equal(node.assetValidationEnabled, originalAssetValidation);
   assert.equal(first.nodes[0], node);
   assert.equal(first.undoStack.length, 0);
 });
@@ -1282,20 +1331,20 @@ test("matching node ids on different canvases keep parameter commands and undo s
   const first = h.canvas("one", [firstNode]);
   const second = h.canvas("two", [otherNode]);
   h.install(first, second);
-  const original = firstNode.autoLinkEnabled;
-  h.window.handleAction(firstNode, "auto-link");
+  const original = firstNode.assetValidationEnabled;
+  h.window.handleAction(firstNode, "asset-validation");
   h.window.switchCanvas(second.id);
   const otherBefore = plain(second);
-  h.window.handleAction(firstNode, "auto-link");
+  h.window.handleAction(firstNode, "asset-validation");
   h.window.renameMediaNode(firstNode, "foreign-edit");
   h.window.undoLastAction();
   assert.deepEqual(plain(second), otherBefore);
   assert.equal(first.undoStack.length, 1);
-  assert.equal(firstNode.autoLinkEnabled, !original);
+  assert.equal(firstNode.assetValidationEnabled, !original);
   h.window.switchCanvas(first.id);
   h.window.undoLastAction();
   assert.equal(first.nodes[0], firstNode);
-  assert.equal(firstNode.autoLinkEnabled, original);
+  assert.equal(firstNode.assetValidationEnabled, original);
   assert.equal(second.nodes[0], otherNode);
   assert.equal(first.undoStack.length, 0);
 });
@@ -1305,18 +1354,18 @@ test("legacy deletion undo reconnects earlier field history to the restored node
   const node = h.node("edited");
   const first = h.canvas("one", [node]);
   h.install(first);
-  const original = node.autoLinkEnabled;
-  h.window.handleAction(node, "auto-link");
+  const original = node.assetValidationEnabled;
+  h.window.handleAction(node, "asset-validation");
   h.window.setSelection([node.id]);
   h.window.deleteSelectedNodes(true);
   assert.equal(first.nodes.length, 0);
   assert.equal(first.undoStack.length, 2);
   h.window.undoLastAction();
   const restored = first.nodes[0];
-  assert.equal(restored.autoLinkEnabled, !original);
+  assert.equal(restored.assetValidationEnabled, !original);
   h.window.undoLastAction();
   assert.equal(first.nodes[0], restored);
-  assert.equal(restored.autoLinkEnabled, original);
+  assert.equal(restored.assetValidationEnabled, original);
   assert.equal(first.undoStack.length, 0);
 });
 
@@ -1329,8 +1378,8 @@ test("successful generation retires only its node input history and keeps other 
   h.window.setSelection([node.id, other.id]);
   h.window.groupSelectedNodes();
   h.moveNode(other.id, 60, 30);
-  const otherOriginal = other.autoLinkEnabled;
-  h.window.handleAction(other, "auto-link");
+  const otherOriginal = other.assetValidationEnabled;
+  h.window.handleAction(other, "asset-validation");
   const entity = h.window.getEntityUsePickerEntities().find((entry) => entry.spaces.includes("personal") && entry.media.length);
   h.window.addSelectedEntitiesToGenerator({
     scope: { projectId: h.state.projectId, canvasId: first.id }, nodeId: node.id,
@@ -1342,7 +1391,7 @@ test("successful generation retires only its node input history and keeps other 
   node.preview = true;
   node.generatedAsset = { id: "previous-result", type: "video", url: "https://example.test/old.mp4", aspectRatio: 16 / 9 };
   h.window.renameMediaNode(node, "下一次结果");
-  h.window.handleAction(node, "auto-link");
+  h.window.handleAction(node, "asset-validation");
   const nodeInputHistory = first.undoStack.length;
   assert.equal(nodeInputHistory, 7);
   assert.equal(h.window.startSimulatedGeneration(node), true);
@@ -1353,9 +1402,9 @@ test("successful generation retires only its node input history and keeps other 
   h.fireTimer(pending.timeoutId);
   assert.equal(first.undoStack.length, 3);
   const generatedResult = node.generatedAsset;
-  const inputs = plain({ prompt: node.prompt, assets: node.assets, autoLinkEnabled: node.autoLinkEnabled });
+  const inputs = plain({ prompt: node.prompt, assets: node.assets, assetValidationEnabled: node.assetValidationEnabled });
   h.window.undoLastAction();
-  assert.equal(other.autoLinkEnabled, otherOriginal);
+  assert.equal(other.assetValidationEnabled, otherOriginal);
   h.window.undoLastAction();
   assert.deepEqual({ x: other.x, y: other.y }, { x: 500, y: 20 });
   h.window.undoLastAction();
@@ -1363,7 +1412,7 @@ test("successful generation retires only its node input history and keeps other 
   assert.equal(first.undoStack.length, 0);
   assert.equal(first.nodes[0], node);
   assert.equal(node.generatedAsset, generatedResult);
-  assert.deepEqual(plain({ prompt: node.prompt, assets: node.assets, autoLinkEnabled: node.autoLinkEnabled }), inputs);
+  assert.deepEqual(plain({ prompt: node.prompt, assets: node.assets, assetValidationEnabled: node.assetValidationEnabled }), inputs);
 });
 
 for (const titleChange of ["rename", "model-default-name"]) {
@@ -1376,8 +1425,8 @@ for (const titleChange of ["rename", "model-default-name"]) {
     });
     const first = h.canvas("one", [node]);
     h.install(first);
-    const originalAutoLink = node.autoLinkEnabled;
-    h.window.handleAction(node, "auto-link");
+    const originalAssetValidation = node.assetValidationEnabled;
+    h.window.handleAction(node, "asset-validation");
     if (titleChange === "rename") h.window.renameMediaNode(node, "修改后的结果名");
     else h.window.handleAction(node, "model", "seedance-2-fast");
     assert.ok(node.name);
@@ -1401,8 +1450,293 @@ for (const titleChange of ["rename", "model-default-name"]) {
       assert.equal(restored.name, "", "the mixed model command no longer owns the overwritten title");
     }
     h.window.undoLastAction();
-    assert.equal(restored.autoLinkEnabled, originalAutoLink);
+    assert.equal(restored.assetValidationEnabled, originalAssetValidation);
     assert.equal(restored.name, "");
     assert.equal(first.undoStack.length, 0);
   });
 }
+
+for (const mode of ["image", "video"]) {
+  test(`${mode} material validation is one reversible setting and stays locked during generation`, (t) => {
+    const h = createHarness(t);
+    const node = h.window.defaultGeneratorNode(10, 20, mode);
+    node.id = "generator";
+    node.prompt = "森林中的明亮小屋";
+    node.advancedSettingsExpanded = true;
+    const first = h.canvas("one", [node]);
+    h.install(first);
+    const { document } = h.window;
+    const settings = () => document.querySelector('.canvas-node[data-id="generator"] .advanced-settings');
+    const toggle = () => settings().querySelector('[data-action="asset-validation"]');
+    assert.equal(node.assetValidationEnabled, false);
+    assert.equal(Object.hasOwn(node, "autoLinkEnabled"), false);
+    assert.equal(settings().querySelectorAll(".advanced-setting-row").length, 2);
+    assert.equal(settings().querySelectorAll('[role="switch"]').length, 1);
+    assert.match(settings().textContent, /自动提交尚未审核的图片与视频素材/);
+    assert.equal(h.window.getNodeLayout(node).advancedSettingsHeight, 118);
+    toggle().click();
+    assert.equal(node.assetValidationEnabled, true);
+    assert.equal(toggle().getAttribute("aria-checked"), "true");
+    assert.equal(first.undoStack.length, 1);
+    assert.equal(h.window.createCanvasDocumentSnapshot().canvases[0].nodes[0].assetValidationEnabled, true);
+    h.window.normalizeNodeParameters(node);
+    assert.equal(node.assetValidationEnabled, true, "normalization must retain a saved image or video preference");
+    h.window.undoLastAction();
+    assert.equal(node.assetValidationEnabled, false);
+    assert.equal(first.undoStack.length, 0);
+
+    assert.equal(h.window.startSimulatedGeneration(node), true);
+    const pending = h.scheduledTask();
+    assert.equal(settings(), null, "generation closes editable advanced settings");
+    h.window.handleAction(node, "asset-validation");
+    assert.equal(node.assetValidationEnabled, false);
+    assert.equal(first.undoStack.length, 0);
+    h.fireTimer(pending.timeoutId);
+  });
+}
+
+function agentParameterControls(h) {
+  const { document } = h.window;
+  const trigger = document.querySelector("#agentParamSummary");
+  const menu = document.querySelector("#agentParamMenu");
+  const click = (action, value) => {
+    const control = menu.querySelector(`[data-action="${action}"][data-value="${value}"]`);
+    assert.ok(control, `expected the Agent ${action}=${value} control`);
+    control.click();
+    assert.ok(menu.querySelector(`[data-action="${action}"][data-value="${value}"]`).classList.contains("active"));
+  };
+  const mode = (value) => {
+    document.querySelector("#agentModeBtn").click();
+    document.querySelector(`[data-agent-mode="${value}"]`).click();
+  };
+  const model = (id) => {
+    if (h.window.getAgentComposerModel()?.id === id) return;
+    document.querySelector("#agentModelBtn").click();
+    const selector = `#agentModelMenu [data-agent-model="${id}"]`;
+    const option = document.querySelector(selector);
+    assert.ok(option, `expected available Agent model ${id}`);
+    option.click();
+    assert.equal(h.window.getAgentComposerModel()?.id, id);
+    assert.equal(document.querySelector("#agentModelMenu").classList.contains("hidden"), true);
+    assert.equal(document.activeElement, document.querySelector("#agentModelBtn"));
+  };
+  const open = () => {
+    if (menu.hidden) trigger.click();
+    assert.equal(menu.hidden, false);
+    assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  };
+  return { trigger, menu, click, mode, model, open };
+}
+
+test("Agent video parameter clicks update the summary and constraints without touching canvas content or undo", (t) => {
+  const h = createHarness(t);
+  const node = h.node("video", { model: "seedance-2-5" });
+  const first = h.canvas("one", [node]);
+  const second = h.canvas("two", [h.node("video", { model: "kling-video-3" })]);
+  h.install(first, second);
+  h.window.setAgentOpen(true);
+  const controls = agentParameterControls(h);
+  controls.model("seedance-2-5");
+  assert.equal(controls.trigger.tagName, "BUTTON");
+  controls.open();
+  const snapshot = plain(h.window.createCanvasDocumentSnapshot());
+  const canvases = plain([first, second]);
+
+  controls.click("aspect", "9:16");
+  controls.click("quality", "1080p");
+  assert.match(controls.trigger.textContent, /9:16/);
+  assert.match(controls.trigger.textContent, /1080P/i);
+  const range = controls.menu.querySelector("[data-duration-range]");
+  range.value = "12";
+  range.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(controls.menu.querySelector("[data-duration-number]").value, "12");
+  assert.match(controls.trigger.textContent, /12s/);
+  const number = controls.menu.querySelector("[data-duration-number]");
+  number.value = "99";
+  number.dispatchEvent(new h.window.Event("change", { bubbles: true }));
+  assert.equal(number.value, "30");
+  assert.equal(controls.menu.querySelector("[data-duration-range]").value, "30");
+  assert.match(controls.trigger.textContent, /30s/);
+  controls.click("audio", "off");
+  controls.click("output-format", "mov");
+  controls.click("omni-reference-task-type", "edit");
+  assert.equal(controls.menu.querySelector("[data-duration-range]"), null);
+  assert.deepEqual([...controls.menu.querySelectorAll('[data-action="aspect"]')].map((button) => button.dataset.value), ["adaptive"]);
+  assert.match(controls.trigger.textContent, /视频编辑/);
+  assert.doesNotMatch(controls.trigger.textContent, /30s/);
+  controls.click("omni-reference-task-type", "extend");
+  assert.equal(controls.menu.querySelector("[data-duration-number]"), null);
+  assert.match(controls.trigger.textContent, /视频延长/);
+  controls.click("omni-reference-task-type", "auto");
+  assert.ok(controls.menu.querySelector("[data-duration-range]"));
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.deepEqual(plain([first, second]), canvases);
+});
+
+test("generation model selection crosses media types and retains independent per-model parameters", (t) => {
+  const h = createHarness(t);
+  h.window.setAgentOpen(true);
+  const controls = agentParameterControls(h);
+  controls.model("gpt-image-2");
+  controls.open();
+  controls.click("aspect", "3:2");
+  controls.click("resolution", "4K");
+  controls.click("quality", "高");
+  assert.match(controls.trigger.textContent, /3:2/);
+  assert.match(controls.trigger.textContent, /4K/);
+  assert.match(controls.trigger.textContent, /高/);
+  assert.equal(controls.menu.querySelector("[data-duration-range]"), null);
+
+  controls.model("seedream-5-lite");
+  controls.open();
+  controls.click("aspect", "16:9");
+  controls.click("resolution", "2K");
+  assert.equal(controls.menu.querySelector('[data-action="quality"]'), null);
+  controls.model("gpt-image-2");
+  controls.open();
+  for (const [action, value] of [["aspect", "3:2"], ["resolution", "4K"], ["quality", "高"]]) {
+    assert.ok(controls.menu.querySelector(`[data-action="${action}"][data-value="${value}"].active`));
+  }
+
+  controls.model("kling-video-3");
+  controls.open();
+  controls.click("workflow", "first-last-frame");
+  controls.click("aspect", "9:16");
+  controls.click("quality", "1080p");
+  controls.click("audio", "off");
+  assert.match(controls.trigger.textContent, /首尾帧/);
+  assert.equal(controls.menu.querySelector('[data-action="resolution"]'), null);
+  controls.model("gpt-image-2");
+  controls.open();
+  assert.ok(controls.menu.querySelector('[data-action="aspect"][data-value="3:2"].active'));
+  assert.ok(controls.menu.querySelector('[data-action="resolution"][data-value="4K"].active'));
+  controls.model("kling-video-3");
+  controls.open();
+  assert.ok(controls.menu.querySelector('[data-action="workflow"][data-value="first-last-frame"].active'));
+  assert.ok(controls.menu.querySelector('[data-action="audio"][data-value="off"].active'));
+});
+
+test("generation mode always selects exactly one model across image and video without mutating either canvas", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("one", [h.node("image", { mode: "image", model: "gpt-image-2" })]);
+  const second = h.canvas("two", [h.node("video", { model: "kling-video-3" })]);
+  h.install(first, second);
+  h.window.setAgentOpen(true);
+  const { document } = h.window;
+  const snapshot = plain(h.window.createCanvasDocumentSnapshot());
+  const canvases = plain([first, second]);
+  const credits = plain(h.state.account);
+  const trigger = document.querySelector("#agentModelBtn");
+  const menu = document.querySelector("#agentModelMenu");
+  const selectedIds = () => [...menu.querySelectorAll("[data-agent-model].active")].map((option) => option.dataset.agentModel);
+  assert.deepEqual([...document.querySelectorAll("[data-agent-mode]")].map((option) => option.dataset.agentMode), ["generation", "agent"]);
+
+  for (const id of ["gpt-image-2", "kling-video-3", "kling-video-3", "seedream-5-lite"]) {
+    trigger.click();
+    assert.equal(menu.querySelector("[data-agent-auto]"), null, "automatic multi-model preferences belong only to Agent mode");
+    assert.ok(menu.querySelector('[data-agent-model-section="image"]'));
+    assert.ok(menu.querySelector('[data-agent-model-section="video"]'));
+    assert.deepEqual(selectedIds(), [h.window.getAgentComposerModel().id]);
+    menu.querySelector(`[data-agent-model="${id}"]`).click();
+    assert.equal(h.window.getAgentComposerModel().id, id);
+    assert.equal(menu.classList.contains("hidden"), true);
+    assert.equal(document.activeElement, trigger);
+    trigger.click();
+    assert.deepEqual(selectedIds(), [id], "reselecting the current model must not clear it or add a second selection");
+    trigger.click();
+    assert.equal(document.querySelector('[data-agent-mode="generation"]').getAttribute("aria-checked"), "true");
+  }
+
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.deepEqual(plain([first, second]), canvases);
+  assert.deepEqual(plain(h.state.account), credits);
+});
+
+test("Agent multi-model preferences and automatic choice remain independent from the generation model", (t) => {
+  const h = createHarness(t);
+  h.window.setAgentOpen(true);
+  const controls = agentParameterControls(h);
+  const { document } = h.window;
+  const trigger = document.querySelector("#agentModelBtn");
+  const menu = document.querySelector("#agentModelMenu");
+  const selectedIds = () => [...menu.querySelectorAll("[data-agent-model].active")].map((option) => option.dataset.agentModel).sort();
+  const togglePreference = (id) => menu.querySelector(`[data-agent-model="${id}"]`).click();
+  controls.model("kling-video-3");
+  controls.mode("agent");
+  assert.equal(h.window.getAgentComposerModel(), null);
+  assert.equal(controls.trigger.disabled, true);
+  assert.equal(trigger.disabled, false, "Agent preferences remain editable");
+  trigger.click();
+  assert.deepEqual(selectedIds(), ["seedance-2"], "choosing a generation model must not add it to the Agent pool");
+  togglePreference("seedance-2");
+  assert.deepEqual(selectedIds(), ["seedance-2"], "Agent keeps at least one preferred model");
+  togglePreference("gpt-image-2");
+  assert.deepEqual(selectedIds(), ["gpt-image-2", "seedance-2"]);
+  assert.equal(menu.classList.contains("hidden"), false, "multi-select stays open for another preference");
+  togglePreference("seedance-2");
+  assert.deepEqual(selectedIds(), ["gpt-image-2"]);
+  const auto = menu.querySelector("[data-agent-auto]");
+  assert.ok(auto);
+  auto.checked = true;
+  auto.dispatchEvent(new h.window.Event("change", { bubbles: true }));
+
+  controls.mode("generation");
+  assert.equal(menu.classList.contains("hidden"), true);
+  assert.equal(h.window.getAgentComposerModel().id, "kling-video-3");
+  assert.equal(controls.trigger.disabled, false);
+  controls.model("seedream-5-lite");
+  controls.mode("agent");
+  trigger.click();
+  assert.deepEqual(selectedIds(), ["gpt-image-2"]);
+  assert.equal(menu.querySelector("[data-agent-auto]").checked, true);
+  controls.mode("generation");
+  assert.equal(h.window.getAgentComposerModel().id, "seedream-5-lite");
+});
+
+test("Agent parameter disclosure closes for competing controls, restores keyboard focus and disables in managed mode", (t) => {
+  const h = createHarness(t);
+  h.window.setAgentOpen(true);
+  const { document } = h.window;
+  const controls = agentParameterControls(h);
+  controls.open();
+  controls.menu.querySelector("button").dispatchEvent(new h.window.KeyboardEvent("keydown", {
+    key: "Escape", bubbles: true, cancelable: true,
+  }));
+  assert.equal(controls.menu.hidden, true);
+  assert.equal(document.activeElement, controls.trigger);
+  assert.equal(controls.trigger.getAttribute("aria-expanded"), "false");
+
+  controls.open();
+  const sendButton = document.querySelector(".agent-send");
+  sendButton.focus();
+  assert.equal(document.activeElement, sendButton);
+  assert.equal(controls.menu.hidden, false, "moving keyboard focus outside the popup leaves it open");
+  sendButton.dispatchEvent(new h.window.KeyboardEvent("keydown", {
+    key: "Escape", bubbles: true, cancelable: true,
+  }));
+  assert.equal(controls.menu.hidden, true);
+  assert.equal(document.activeElement, controls.trigger);
+  assert.equal(controls.trigger.getAttribute("aria-expanded"), "false");
+
+  for (const [buttonId, menuId] of [
+    ["agentHistoryBtn", "agentHistoryMenu"], ["agentModeBtn", "agentModeMenu"],
+    ["agentModelBtn", "agentModelMenu"], ["agentAdvancedBtn", "agentAdvancedSettings"],
+  ]) {
+    controls.open();
+    document.getElementById(buttonId).click();
+    assert.equal(controls.menu.hidden, true, `${buttonId} must close Agent parameters`);
+    assert.equal(document.getElementById(menuId).classList.contains("hidden"), false);
+    controls.open();
+    assert.equal(document.getElementById(menuId).classList.contains("hidden"), true, "opening parameters closes the competing surface");
+  }
+  document.querySelector("#agentCloseBtn").click();
+  assert.equal(controls.menu.hidden, true);
+  h.window.setAgentOpen(true);
+  controls.mode("agent");
+  assert.equal(controls.trigger.disabled, true);
+  controls.trigger.click();
+  assert.equal(controls.menu.hidden, true);
+  controls.mode("generation");
+  assert.equal(controls.trigger.disabled, false);
+  controls.open();
+});

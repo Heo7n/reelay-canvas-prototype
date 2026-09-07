@@ -51,6 +51,22 @@ describe("CanvasDocument v1 cross-runtime contract", () => {
     expect(canonicalizeLegacyCanvasDocumentV1(input)).toEqual(plain(codec.createSnapshot(input)));
   });
 
+  it.each(["image", "video"])("preserves %s material validation while ignoring legacy AutoLink", (mediaKind) => {
+    for (const enabled of [true, false, undefined]) {
+      const input = {
+        kind: "reelay-legacy-canvas", version: 1, activeCanvasId: "canvas-1",
+        canvases: [{ id: "canvas-1", nodes: [{
+          id: "generator", kind: "generator", mediaKind,
+          autoLinkEnabled: true, assetValidationEnabled: enabled,
+        }] }],
+      };
+      const document = canonicalizeLegacyCanvasDocumentV1(input);
+      expect(document).toEqual(plain(codec.createSnapshot(input)));
+      expect(document?.canvases[0]?.nodes[0]?.assetValidationEnabled).toBe(enabled === true);
+      expect(document?.canvases[0]?.nodes[0]).not.toHaveProperty("autoLinkEnabled");
+    }
+  });
+
   it.each([
     "javascript:alert(1)",
     "data:image/svg+xml,<svg/>",

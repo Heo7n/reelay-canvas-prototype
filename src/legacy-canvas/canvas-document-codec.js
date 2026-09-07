@@ -122,8 +122,7 @@
       node.omniReferenceTaskType = boundedString(candidate.omniReferenceTaskType, "", 80);
     }
     node.audioEnabled = candidate.audioEnabled === true;
-    node.autoLinkEnabled = candidate.autoLinkEnabled !== false;
-    node.assetValidationEnabled = node.mediaKind === "video" && candidate.assetValidationEnabled === true;
+    node.assetValidationEnabled = candidate.assetValidationEnabled === true;
     node.prompt = boundedString(candidate.prompt, "", 20_000);
     node.preview = candidate.preview === true;
     node.name = boundedString(candidate.name, "", 300);

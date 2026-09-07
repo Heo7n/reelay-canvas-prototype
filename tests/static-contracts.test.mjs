@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
+const agentModelsSource = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
 const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource, assetLibraryCss, entityEditorViewSource, entityEditorCss, entityUseModelSource, entityUseViewSource, entityUseCss, entityUseControllerSource] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
@@ -62,11 +63,11 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(appSource, /modelIconMarkup\(item, "model-icon"\)/);
   assert.match(appSource, /function modelIconMarkup\(model, className\)[\s\S]*?model\?\.iconSrc[\s\S]*?model-brand-monochrome[\s\S]*?<img src="\$\{escapeHtml\(model\.iconSrc\)\}" alt="" \/>/);
   assert.doesNotMatch(appSource, /workflow-panel|hasWorkflowControl|workflowPanel/);
-  assert.match(appSource, /function workflowParameterSection\(node\)[\s\S]*?data-action="workflow"/);
-  assert.match(appSource, /function omniReferenceTaskTypeParameterSection\(node\)[\s\S]*?data-action="omni-reference-task-type"/);
+  assert.match(appSource, /function workflowParameterSection\(node, canvas = true\)[\s\S]*?data-action="workflow"/);
+  assert.match(appSource, /function omniReferenceTaskTypeParameterSection\(node, canvas = true\)[\s\S]*?data-action="omni-reference-task-type"/);
   assert.match(appSource, /function getParamLabelParts\(node\)[\s\S]*?getOmniReferenceTaskTypeLabel\(node\)/);
   assert.match(appSource, /placeholder="描述你想生成的内容，或输入 @ 引用"/);
-  assert.match(appSource, /modelIconMarkup\(model, "agent-model-provider"\)/);
+  assert.match(agentModelsSource, /modelIconMarkup\(model, "agent-model-provider"\)/);
   assert.match(appSource, /"box":\s*'<path/);
   assert.match(appSource, /commitGenerationUndoBoundary\(canvas, node\.id\)/);
   assert.doesNotMatch(appSource, /"node-update"/);
@@ -76,8 +77,8 @@ test("generator nodes keep their creation modality and only expose compatible mo
 test("parameter controls preserve canonical values and omit redundant workflow choices", () => {
   const omniTaskTypeSectionSource = sourceBetween(
     appSource,
-    "function omniReferenceTaskTypeParameterSection(node)",
-    "function workflowParameterSection(node)",
+    "function omniReferenceTaskTypeParameterSection(node, canvas = true)",
+    "function workflowParameterSection(node, canvas = true)",
   );
   const renderOmniTaskTypeSection = Function(
     "getOmniReferenceTaskTypeCapability",
@@ -107,7 +108,7 @@ test("parameter controls preserve canonical values and omit redundant workflow c
 
   const workflowSectionSource = sourceBetween(
     appSource,
-    "function workflowParameterSection(node)",
+    "function workflowParameterSection(node, canvas = true)",
     "function durationParameterSection(node)",
   );
   const renderWorkflowSection = Function(
@@ -128,7 +129,7 @@ test("parameter controls preserve canonical values and omit redundant workflow c
   );
   assert.match(workflowSectionSource, /if \(workflows\.length <= 1\) return "";/);
 
-  const paramButtonStart = appSource.indexOf("function paramButton(node, action, value)");
+  const paramButtonStart = appSource.indexOf("function paramButton(node, action, value, canvas = true)");
   const paramButtonEnd = appSource.indexOf("function renderAspectIcon(value)", paramButtonStart);
   assert.ok(paramButtonStart >= 0 && paramButtonEnd > paramButtonStart);
   const paramButtonSource = appSource.slice(paramButtonStart, paramButtonEnd);
@@ -174,7 +175,7 @@ test("parameter controls preserve canonical values and omit redundant workflow c
 test("Seedance 2.5 task types render the intended compact and full parameter layouts", () => {
   const paramPanelSource = sourceBetween(
     appSource,
-    "function paramPanel(node)",
+    "function paramPanel(node, { canvas = true } = {})",
     "const advancedSettingHints",
   );
   const renderParamPanel = Function(
@@ -1011,8 +1012,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260907-prompt-retention-1/);
-  assert.match(html, /app\.js\?v=20260907-prompt-retention-1/);
+  assert.match(html, /styles\.css\?v=20260907-canvas-integration-1/);
+  assert.match(html, /app\.js\?v=20260907-canvas-integration-1/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1088,16 +1089,15 @@ test("node selection and connection relationships use one restrained neutral hie
   assert.doesNotMatch(connectionStyles, /\.canvas-shell\.connection-low-detail \.connection-layer/);
 });
 
-test("media metadata uses bounded screen compensation and stays above the frame", () => {
-  assert.match(appSource, /clamp\(state\.scale,\s*0\.85,\s*1\.8\)/);
-  assert.match(appCss, /\.media-meta\s*\{[\s\S]*?bottom:\s*calc\(100% \+ 2px \+ 5px \* var\(--node-meta-ui-scale/);
-  assert.match(appCss, /\.media-meta\s*\{[\s\S]*?height:\s*calc\(18px \* var\(--node-meta-ui-scale/);
-  assert.doesNotMatch(appCss, /top:\s*calc\(-27px \* var\(--node-meta-ui-scale/);
+test("media metadata follows the node scale and stays bounded above the frame", () => {
+  assert.match(appCss, /\.media-meta\s*\{[\s\S]*?bottom:\s*calc\(100% \+ 7px\);[\s\S]*?width:\s*100%;/);
+  assert.doesNotMatch(appCss, /--node-meta-ui-scale|@container node-metadata/);
+  assert.doesNotMatch(appSource, /--node-meta-ui-scale/);
 });
 
 test("group chrome uses bounded labels, neutral fixed-width framing, and corner resize cues", async () => {
   const connectionStyles = await readFile(new URL("styles/canvas-connections.css", root), "utf8");
-  assert.match(appSource, /setProperty\("--group-ui-scale",\s*nodeMetaScale\)/);
+  assert.match(appSource, /setProperty\("--group-ui-scale",\s*groupUiScale\)/);
   assert.match(appSource, /setProperty\("--group-interaction-scale",\s*inverseCanvasScale\)/);
   assert.match(
     appCss,
@@ -1168,11 +1168,11 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appSource, /canvasNodeTasks\.cancelScope\(\{ projectId: state\.projectId, canvasId \}, "canvas-deleted"\)/);
   assert.doesNotMatch(appSource, /promptOptimization:\s*(?:true|false)/);
   assert.match(appCss, /\.prompt-optimization-button\.is-processing \.prompt-optimization-spinner\s*\{[\s\S]*?animation:\s*promptOptimizationSpin 720ms linear infinite/);
-  assert.match(appSource, /function advancedSettingsPanel\(node\)[\s\S]*?getNodeGenerationMode\(node\) === "video"[\s\S]*?自动校验素材[\s\S]*?智能引用 AutoLink[\s\S]*?assetValidationSetting[\s\S]*?定时任务/);
-  assert.match(appSource, /自动匹配参考素材名称，一键 AutoLink，省去手动@麻烦/);
-  assert.match(appSource, /开启后自动校验素材合规性，提升真人视频生成成功率；非真人生成可关闭，跳过检测节省耗时。/);
+  assert.match(appSource, /function advancedSettingsPanel\(node\)[\s\S]*?自动校验素材[\s\S]*?data-action="asset-validation"[\s\S]*?定时任务/);
+  assert.doesNotMatch(appSource, /autoLink|AutoLink|auto-link/);
+  assert.match(appSource, /自动提交尚未审核的图片与视频素材/);
   assert.match(appSource, /可定时设置生成任务，到点自动执行/);
-  assert.match(appCss, /\.advanced-settings\s*\{[\s\S]*?height:\s*var\(--prompt-advanced-height, 154px\)[\s\S]*?border-top:/);
+  assert.match(appCss, /\.advanced-settings\s*\{[\s\S]*?height:\s*var\(--prompt-advanced-height, 118px\)[\s\S]*?border-top:/);
   assert.match(appCss, /\.advanced-setting-switch\.is-on > span\s*\{[\s\S]*?translateX\(18px\)/);
   assert.match(appCss, /\.advanced-setting-info:hover \.advanced-setting-tooltip,[\s\S]*?\.advanced-setting-info:focus-visible \.advanced-setting-tooltip/);
   assert.match(appSource, /function syncAdvancedSettingTooltipLayout\(trigger\)[\s\S]*?placements:\s*\["top-start", "bottom-start"\]/);
@@ -1217,7 +1217,7 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appCss, /\.duration-control-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 44px 10px/);
   assert.match(appCss, /\.duration-range-input::\-webkit-slider-runnable-track\s*\{[\s\S]*?height:\s*4px/);
   assert.match(appCss, /\.duration-range-input::\-webkit-slider-thumb\s*\{[\s\S]*?width:\s*10px[\s\S]*?border-radius:\s*50%/);
-  assert.match(appSource, /function outputFormatParameterSection\(node\)[\s\S]*?getCapabilityValues\(node, "outputFormats"\)[\s\S]*?data-action="output-format"/);
+  assert.match(appSource, /function outputFormatParameterSection\(node, canvas = true\)[\s\S]*?getCapabilityValues\(node, "outputFormats"\)[\s\S]*?data-action="output-format"/);
   assert.match(appCss, /\.parameter-footer-grid\.has-output-format\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(appSource, /draft\.model = selected\.id;[\s\S]*?draft\.duration = selected\.defaults\?\.duration \|\| "";[\s\S]*?normalizeNodeParameters\(draft\)/);
   assert.doesNotMatch(appCss, /\.duration-scale(?:\b|-)/);
@@ -1378,9 +1378,6 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
   assert.match(appSource, /"arrow-right-from-line":\s*'<path/);
 
   assert.match(appCss, /\.agent-panel\s*\{[^}]*grid-template-rows:\s*52px 1fr auto;/);
-  assert.match(appCss, /\.agent-icon-button\s*\{[^}]*width:\s*32px;[^}]*height:\s*32px;/);
-  assert.match(appCss, /\.agent-icon-button \.lucide\s*\{[^}]*width:\s*18px;[^}]*height:\s*18px;/);
-  assert.doesNotMatch(appCss, /\.agent-icon-button \.lucide\s*\{[^}]*\b(?:width|height):\s*48px/);
 
   assert.match(agentMarkup, /<textarea[^>]*id="agentInput"[^>]*aria-label="给 Reelay Agent 的消息"/);
   assert.match(agentMarkup, /class="agent-composer prompt-composer-surface" id="agentComposer"/);
@@ -1390,11 +1387,10 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
   assert.equal((appCss.match(/\.agent-messages\s*\{/g) || []).length, 1);
   assert.match(appCss, /\.agent-messages\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/);
   assert.match(appCss, /\.agent-message-body\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*1\.55;/);
-  assert.match(appCss, /\.agent-composer-spacer\s*\{\s*display:\s*none;/);
+  assert.match(appCss, /\.agent-composer-spacer\s*\{\s*display:\s*block;\s*flex:\s*1 1 0;/);
   assert.match(appCss, /\.agent-composer-bar\s*\{\s*gap:\s*4px;/);
-  assert.match(appCss, /\.agent-send\.generate-button\s*\{\s*flex-basis:\s*96px;/);
-  assert.match(appCss, /\.agent-send \.credit-mark\s*\{[^}]*font-size:\s*14px;/);
-  assert.match(appCss, /@container agent-composer \(max-width:\s*540px\)\s*\{[\s\S]*?\.agent-composer-model-icon\s*\{\s*display:\s*none;[\s\S]*?\.agent-param-summary \.param-summary-before\s*\{\s*display:\s*none;/);
+  assert.match(appCss, /@container agent-composer \(max-width:\s*540px\)\s*\{[\s\S]*?\.agent-param-summary \.param-summary-before\s*\{\s*display:\s*none;/);
+  assert.doesNotMatch(appCss, /\.agent-composer-model-icon\s*\{\s*display:\s*none;/);
   assert.match(appCss, /@container agent-composer \(max-width:\s*500px\)\s*\{[\s\S]*?\.agent-mode \.control-chip-label\s*\{\s*display:\s*none;/);
   assert.match(appCss, /@container agent-composer \(max-width:\s*440px\)\s*\{[\s\S]*?\.agent-model-button \.agent-composer-model-icon\s*\{\s*display:\s*grid;[\s\S]*?\.agent-model-button-label\s*\{\s*display:\s*none;/);
   assert.match(appCss, /@container agent-composer \(max-width:\s*380px\)\s*\{[\s\S]*?\.agent-param-summary \.param-summary-after\s*\{\s*display:\s*none;[\s\S]*?\.agent-param-summary \.control-chip-audio-separator\s*\{\s*display:\s*none;/);
@@ -1420,9 +1416,8 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
   const modelWrapStart = agentMarkup.indexOf('class="agent-model-wrap"', modeMenuStart);
   assert.ok(modeMenuStart >= 0 && modelWrapStart > modeMenuStart);
   const modeMenuMarkup = agentMarkup.slice(modeMenuStart, modelWrapStart);
-  assert.equal((modeMenuMarkup.match(/role="menuitemradio"/g) || []).length, 3);
-  assert.match(modeMenuMarkup, /role="menuitemradio" data-agent-mode="image" aria-checked="false"/);
-  assert.match(modeMenuMarkup, /role="menuitemradio" data-agent-mode="video" aria-checked="true"/);
+  assert.equal((modeMenuMarkup.match(/role="menuitemradio"/g) || []).length, 2);
+  assert.match(modeMenuMarkup, /role="menuitemradio" data-agent-mode="generation" aria-checked="true"/);
   assert.match(modeMenuMarkup, /role="menuitemradio" data-agent-mode="agent" aria-checked="false"/);
 
   assert.match(
@@ -1439,7 +1434,7 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
   );
   assert.match(
     agentMarkup,
-    /id="agentAutoLinkBtn"[^>]*role="switch"[^>]*aria-label="智能引用 AutoLink"[^>]*aria-checked="true"/,
+    /id="agentAssetValidationBtn"[^>]*role="switch"[^>]*aria-label="自动校验素材"[^>]*aria-checked="false"/,
   );
   const promptOptimizationStart = agentMarkup.indexOf('id="agentPromptOptimizationBtn"');
   const advancedSettingsStart = agentMarkup.indexOf('id="agentAdvancedBtn"');
@@ -1510,9 +1505,9 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps compact left zones and an independently sized Agent dock", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260907-prompt-retention-1/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260903-ui-rhythm-78/);
-  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260903-ui-rhythm-78/);
+  assert.match(stylesEntry, /styles\/app\.css\?v=20260907-canvas-integration-1/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260907-asset-toggle-alignment-99/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260907-asset-toggle-alignment-99/);
   assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260903-ui-rhythm-78/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
@@ -1546,7 +1541,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(canvasChromeCss, /\.top-bar \.project-nav-name\[contenteditable="true"\]\s*\{[\s\S]*?outline:\s*0;[\s\S]*?background:\s*color-mix\(in srgb, var\(--text\) 7%, transparent\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?top:\s*50%[\s\S]*?transform:\s*translateY\(-50%\)/);
   assert.match(canvasChromeCss, /\.left-rail\s*\{[\s\S]*?width:\s*48px/);
-  assert.match(canvasChromeCss, /\.left-rail \.rail-button,[\s\S]*?width:\s*40px;[\s\S]*?height:\s*40px/);
+  assert.match(canvasChromeCss, /\.left-rail \.rail-button,[\s\S]*?width:\s*var\(--canvas-rail-item-size\);[\s\S]*?height:\s*var\(--canvas-rail-item-size\)/);
   assert.match(canvasChromeCss, /\.left-rail \.avatar-button\.active \+ \.profile-button-tip\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?opacity:\s*0;/);
   assert.match(canvasChromeCss, /\.left-rail \.rail-button\s*\{[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/);
   assert.match(canvasChromeCss, /\.left-rail \.profile-menu\s*\{[\s\S]*?top:\s*auto;[\s\S]*?bottom:\s*-4px;[\s\S]*?left:\s*calc\(100% \+ 12px\)/);
@@ -1584,7 +1579,6 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(appSource, /agentTopInset:\s*0,[\s\S]*?agentBottomInset:\s*0/);
   assert.match(appSource, /function setAgentTopInset\(top\)[\s\S]*?function setAgentBottomInset\(bottom\)/);
   assert.match(appSource, /bindAgentHeightResizeHandle\(agentTopResizeHandle, "top"\)[\s\S]*?bindAgentHeightResizeHandle\(agentBottomResizeHandle, "bottom"\)/);
-  assert.match(appCss, /\.agent-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--agent-panel-line\)/);
   assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
   assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
 });
@@ -1600,14 +1594,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260907-prompt-retention-1/);
-  assert.match(html, /prototype-config\.js\?v=20260907-prompt-retention-1/);
+  assert.match(html, /styles\.css\?v=20260907-canvas-integration-1/);
+  assert.match(html, /prototype-config\.js\?v=20260907-canvas-integration-1/);
   assert.match(html, /canvas-asset-library-model\.js\?v=20260903-entity-preview-filename-70/);
   assert.match(html, /canvas-asset-library-view\.js\?v=20260901-platform-space-27/);
   assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
   assert.match(html, /canvas-entity-use-view\.js\?v=20260903-entity-label-63/);
   assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260907-prompt-retention-1/);
+  assert.match(html, /app\.js\?v=20260907-canvas-integration-1/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
@@ -1663,7 +1657,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(assetLibraryViewSource, /PLATFORM_BATCH_ACTIONS[\s\S]*?add-canvas[\s\S]*?save-personal/);
   assert.match(assetLibraryCss, /\.asset-library-content\s*\{[\s\S]*?overflow:\s*hidden/);
   assert.match(assetLibraryCss, /\.asset-library-grid\s*\{[\s\S]*?overflow-y:\s*auto[\s\S]*?flex:\s*1 1 0/);
-  assert.match(assetLibraryCss, /\.asset-library-resize-handle::after\s*\{[\s\S]*?height:\s*36px;[\s\S]*?opacity:\s*0/);
+  assert.match(assetLibraryCss, /\.asset-library-resize-handle::after\s*\{[\s\S]*?top:\s*10px;[\s\S]*?bottom:\s*10px;[\s\S]*?width:\s*2px;[\s\S]*?opacity:\s*0/);
   assert.match(entityUseCss, /\.entity-use-picker-portal\s*\{[\s\S]*?z-index:\s*120/);
 });
 test("shortcut help mirrors the implemented canvas gestures", () => {

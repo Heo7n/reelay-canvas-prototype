@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260907-prompt-retention-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260907-canvas-integration-1" />
     <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
   </head>
   <body>
@@ -166,11 +166,11 @@
         </div>
       </aside>
       <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库" aria-hidden="true" inert>
+        <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起资产库" aria-label="收起资产库" aria-controls="assetLibraryPanel">
+          <i data-lucide="chevron-left" aria-hidden="true"></i>
+        </button>
         <header class="asset-library-header">
           <div class="asset-library-heading">
-            <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="返回画布" aria-label="返回画布">
-              <i data-lucide="chevron-left" aria-hidden="true"></i>
-            </button>
             <h2>资产库</h2>
           </div>
           <div class="asset-library-space-switcher">
@@ -441,14 +441,14 @@
           <div class="agent-height-resize-handle agent-height-resize-handle-top" id="agentTopResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 顶部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 顶部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
           <div class="agent-height-resize-handle agent-height-resize-handle-bottom" id="agentBottomResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 底部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 底部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
           <header class="agent-header">
-            <div class="agent-title" id="agentConversationTitle">新对话</div>
+            <button class="agent-title-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话" aria-label="历史对话" aria-controls="agentHistoryMenu" aria-haspopup="dialog" aria-expanded="false">
+              <span class="agent-title" id="agentConversationTitle">新对话</span>
+              <i data-lucide="chevron-down" aria-hidden="true"></i>
+            </button>
             <div class="agent-actions">
               <div class="agent-new-group" aria-label="对话操作">
                 <button class="agent-icon-button new-chat-button" id="agentNewChatBtn" type="button" title="新建对话" aria-label="新建对话">
                   <i data-lucide="message-square-plus" aria-hidden="true"></i>
-                </button>
-                <button class="agent-icon-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话" aria-label="历史对话" aria-controls="agentHistoryMenu" aria-expanded="false">
-                  <i data-lucide="chevron-down" aria-hidden="true"></i>
                 </button>
               </div>
               <button class="agent-icon-button close-chat-button" id="agentCloseBtn" type="button" title="收起 Reelay Agent" aria-label="收起 Reelay Agent">
@@ -458,12 +458,7 @@
           </header>
 
           <div class="agent-history-menu hidden" id="agentHistoryMenu" role="dialog" aria-label="历史对话">
-            <div class="history-title">历史对话</div>
-            <label class="history-search">
-              <span aria-hidden="true">⌕</span>
-              <input id="agentHistorySearch" type="search" placeholder="请输入搜索关键词" />
-            </label>
-            <div class="history-section-label">新对话</div>
+            <button class="history-new-chat" id="agentHistoryNewChatBtn" type="button"><i data-lucide="plus" aria-hidden="true"></i><span>新建对话</span></button>
             <div class="history-list" id="agentHistoryList"></div>
           </div>
 
@@ -483,10 +478,10 @@
               </div>
               <div class="agent-setting-row advanced-setting-row">
                 <div class="advanced-setting-label">
-                  <span>智能引用 AutoLink</span>
-                  <button class="agent-setting-info advanced-setting-info" type="button" aria-label="智能引用说明" title="自动关联当前画布中与描述相关的内容"><span aria-hidden="true">i</span></button>
+                  <span>自动校验素材</span>
+                  <button class="agent-setting-info advanced-setting-info" type="button" aria-label="自动校验素材说明" title="自动提交尚未审核的图片与视频素材"><span aria-hidden="true">i</span></button>
                 </div>
-                <button class="agent-setting-switch advanced-setting-switch is-on" id="agentAutoLinkBtn" type="button" role="switch" aria-label="智能引用 AutoLink" aria-checked="true">
+                <button class="agent-setting-switch advanced-setting-switch" id="agentAssetValidationBtn" type="button" role="switch" aria-label="自动校验素材" aria-checked="false">
                   <span aria-hidden="true"></span>
                 </button>
               </div>
@@ -511,38 +506,36 @@
 
               <div class="agent-composer-bar control-bar">
                 <div class="agent-mode-wrap">
-                  <button class="agent-mode control-chip has-divider" id="agentModeBtn" type="button" title="生成模式" aria-label="生成模式：视频生成" aria-controls="agentModeMenu" aria-haspopup="menu" aria-expanded="false">
-                    <i data-agent-mode-icon data-lucide="play-square" aria-hidden="true"></i>
-                    <span class="control-chip-label" data-agent-mode-label>视频生成</span>
+                  <button class="agent-mode control-chip has-divider" id="agentModeBtn" type="button" title="当前模式：生成模式" aria-label="当前模式：生成模式" aria-controls="agentModeMenu" aria-haspopup="menu" aria-expanded="false">
+                    <i data-agent-mode-icon data-lucide="sparkles" aria-hidden="true"></i>
+                    <span class="control-chip-label" data-agent-mode-label>生成模式</span>
                   </button>
                   <div class="agent-mode-menu hidden" id="agentModeMenu" role="menu" aria-label="选择生成模式">
-                    <button type="button" role="menuitemradio" data-agent-mode="image" aria-checked="false">
-                      <i data-lucide="image" aria-hidden="true"></i><span>图片生成</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
-                    </button>
-                    <button class="active" type="button" role="menuitemradio" data-agent-mode="video" aria-checked="true">
-                      <i data-lucide="play-square" aria-hidden="true"></i><span>视频生成</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                    <button class="active" type="button" role="menuitemradio" data-agent-mode="generation" aria-checked="true">
+                      <i data-lucide="sparkles" aria-hidden="true"></i><span>生成模式</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
                     </button>
                     <button type="button" role="menuitemradio" data-agent-mode="agent" aria-checked="false">
-                      <i data-lucide="bot" aria-hidden="true"></i><span>Agent 托管</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                      <i data-lucide="workflow" aria-hidden="true"></i><span>Agent 模式</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
                     </button>
                   </div>
                 </div>
                 <div class="agent-model-wrap">
-                  <button class="agent-model-button control-chip model-chip has-divider" id="agentModelBtn" type="button" title="模型偏好" aria-label="模型偏好" aria-controls="agentModelMenu" aria-haspopup="dialog" aria-expanded="false">
+                  <button class="agent-model-button control-chip model-chip has-divider" id="agentModelBtn" type="button" title="选择模型" aria-label="选择模型" aria-controls="agentModelMenu" aria-haspopup="dialog" aria-expanded="false">
                     <span class="agent-model-button-label control-chip-label">Seedance 2.0</span>
                   </button>
-                  <div class="agent-model-menu hidden" id="agentModelMenu" role="dialog" aria-label="模型偏好"></div>
+                  <div class="agent-model-menu hidden" id="agentModelMenu" role="dialog" aria-label="选择模型"></div>
                 </div>
-                <div class="agent-param-summary control-chip param-chip" id="agentParamSummary" aria-label="当前生成参数">
+                <button class="agent-param-summary control-chip param-chip" id="agentParamSummary" type="button" aria-label="当前生成参数" aria-controls="agentParamMenu" aria-haspopup="dialog" aria-expanded="false">
                   <span class="control-chip-label param-chip-label"><span class="param-summary-before">全能参考 · </span><span class="param-summary-aspect">16:9</span><span class="param-summary-after"> · 720p · 4s</span></span>
                   <i data-lucide="volume-2" aria-hidden="true"></i>
-                </div>
+                </button>
                 <div class="agent-composer-spacer control-spacer"></div>
                 <button class="agent-send generate-button" type="button" title="发送；当前可用积分 3,000" aria-label="发送；当前可用积分 3,000">
                   <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span id="agentCreditValue">3,000</span></span>
-                  <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.25 20.6V9.45L6.7 13q-.95.95-1.9 0l-.75-.75q-.95-.95 0-1.9l6.5-6.5q1.45-1.45 2.9 0l6.5 6.5q.95.95 0 1.9l-.75.75q-.95.95-1.9 0l-3.55-3.55V20.6q0 1.4-1.4 1.4h-.7q-1.4 0-1.4-1.4Z" /></svg></span>
+                  <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></span>
                 </button>
               </div>
+              <div class="agent-param-menu" id="agentParamMenu" role="dialog" aria-label="综合参数" hidden></div>
             </div>
           </div>
         </section>
@@ -552,21 +545,21 @@
     <div class="entity-use-detail-portal" id="entityUseDetailPortal" aria-hidden="true" inert hidden></div>
     <div class="entity-use-picker-portal" id="entityUsePickerPortal" aria-hidden="true" inert hidden></div>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
-    <script src="./data/model-catalog.js?v=20260903-node-params-integration-73"></script>
-    <script src="./src/config/prototype-config.js?v=20260907-prompt-retention-1"></script>
+    <script src="./data/model-catalog.js?v=20260907-model-capability-copy-95"></script>
+    <script src="./src/config/prototype-config.js?v=20260907-canvas-integration-1"></script>
     <script src="./src/legacy-canvas/canvas-connections.js?v=20260827-connection-confirm-46"></script>
     <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260824-node-body-target-1"></script>
     <script src="./src/legacy-canvas/canvas-connection-feedback-motion.js?v=20260827-connection-confirm-46"></script>
     <script src="./src/legacy-canvas/canvas-connection-feedback-controller.js?v=20260827-connection-confirm-46"></script>
     <script src="./src/legacy-canvas/canvas-connection-renderer.js?v=20260827-connection-confirm-46"></script>
-    <script src="./src/legacy-canvas/canvas-layer-reconciler.js?v=20260907-prompt-retention-1"></script>
-    <script src="./src/legacy-canvas/canvas-node-prompt-view.js?v=20260907-prompt-retention-1"></script>
+    <script src="./src/legacy-canvas/canvas-layer-reconciler.js?v=20260907-canvas-integration-1"></script>
+    <script src="./src/legacy-canvas/canvas-node-prompt-view.js?v=20260907-canvas-integration-1"></script>
     <script src="./src/legacy-canvas/canvas-generator-model-policy.js?v=20260901-entity-use-43"></script>
     <script src="./src/legacy-canvas/canvas-popover-placement.js?v=20260824-node-controls-2"></script>
     <script src="./src/legacy-canvas/canvas-spatial-selection.js?v=20260831-exact-group-selection-42"></script>
     <script src="./src/legacy-canvas/canvas-node-interaction.js?v=20260818-progressive-split-3"></script>
     <script src="./src/legacy-canvas/canvas-node-placement.js?v=20260827-aspect-layout-41"></script>
-    <script src="./src/legacy-canvas/canvas-node-editor-layout.js?v=20260907-prompt-retention-1"></script>
+    <script src="./src/legacy-canvas/canvas-node-editor-layout.js?v=20260907-canvas-integration-1"></script>
     <script src="./src/legacy-canvas/canvas-node-layout-transition.js?v=20260827-aspect-layout-41"></script>
     <script src="./src/legacy-canvas/canvas-node-pointer-controller.js?v=20260824-selection-frame-drag-33"></script>
     <script src="./src/legacy-canvas/canvas-node-drag-controller.js?v=20260905-content-commands-1"></script>
@@ -574,6 +567,9 @@
     <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
     <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260903-agent-vertical-74"></script>
     <script src="./src/legacy-canvas/canvas-agent-panel-geometry.js?v=20260903-agent-vertical-74"></script>
+    <script src="./src/legacy-canvas/canvas-agent-parameters.js?v=20260907-canvas-integration-1"></script>
+    <script src="./src/legacy-canvas/canvas-agent-models.js?v=20260907-canvas-integration-1"></script>
+    <script src="./src/legacy-canvas/canvas-agent-history.js?v=20260907-canvas-integration-1"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260903-entity-preview-filename-70"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260901-platform-space-27"></script>
     <script src="./src/legacy-canvas/canvas-entity-editor-model.js?v=20260903-entity-preview-filename-70"></script>
@@ -582,15 +578,15 @@
     <script src="./src/legacy-canvas/canvas-entity-use-model.js?v=20260901-entity-use-43"></script>
     <script src="./src/legacy-canvas/canvas-entity-use-view.js?v=20260903-entity-label-63"></script>
     <script src="./src/legacy-canvas/canvas-entity-use-controller.js?v=20260905-entity-use-controller-1"></script>
-    <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260819-progressive-split-10"></script>
+    <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260907-canvas-integration-1"></script>
     <script src="./src/legacy-canvas/canvas-runtime-store.js?v=20260826-canvas-runtime-store-38"></script>
     <script src="./src/legacy-canvas/canvas-node-task-runner.js?v=20260905-node-task-runner-1"></script>
-    <script src="./src/legacy-canvas/canvas-content-commands.js?v=20260905-content-commands-1"></script>
+    <script src="./src/legacy-canvas/canvas-content-commands.js?v=20260907-canvas-integration-1"></script>
     <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260905-content-commands-1"></script>
-    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260903-node-params-integration-73"></script>
+    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260907-canvas-integration-1"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
     <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js?v=20260903-entity-preview-filename-70"></script>
     <script src="./src/legacy-canvas/canvas-entity-asset-coordinator.js?v=20260901-platform-space-27"></script>
-    <script src="./app.js?v=20260907-prompt-retention-1"></script>
+    <script src="./app.js?v=20260907-canvas-integration-1"></script>
   </body>
 </html>
