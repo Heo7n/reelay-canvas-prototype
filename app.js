@@ -9485,6 +9485,13 @@ function createAssetLibraryFolder() {
   renderAssetLibrary();
 }
 
+function libraryImagePreviewUrl(contentUrl, mediaKind) {
+  if (mediaKind !== "image") return "";
+  const previewUrl = new URL(contentUrl);
+  previewUrl.searchParams.set("preview", "library");
+  return previewUrl.href;
+}
+
 function projectAssetToLibraryMedia(projectAsset) {
   const contentUrl = new URL(projectAsset.contentUrl, window.location.href);
   if (contentUrl.origin !== window.location.origin) throw new Error("资产内容地址不属于当前 Reelay 服务");
@@ -9504,6 +9511,7 @@ function projectAssetToLibraryMedia(projectAsset) {
     byteSize: projectAsset.byteSize,
     checksumSha256: projectAsset.checksumSha256,
     url,
+    thumbnailUrl: libraryImagePreviewUrl(contentUrl, projectAsset.mediaKind),
     source: "workspace",
   };
 }
@@ -9526,6 +9534,7 @@ function workspaceAssetToLibraryMedia(workspaceAsset) {
     byteSize: workspaceAsset.byteSize,
     checksumSha256: workspaceAsset.checksumSha256,
     url,
+    thumbnailUrl: libraryImagePreviewUrl(contentUrl, workspaceAsset.mediaKind),
     source: "workspace",
   };
 }

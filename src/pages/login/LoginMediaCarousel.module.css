@@ -10,6 +10,7 @@
 .slides,
 .slide,
 .slide img,
+.placeholder,
 .shade {
   position: absolute;
   inset: 0;
@@ -23,8 +24,17 @@
   pointer-events: none;
 }
 
-.active { opacity: 1; }
-.slide img { object-fit: cover; }
+.previous { opacity: 1; transition: none; }
+.active { z-index: 1; opacity: 1; }
+.slide img { object-fit: cover; opacity: 0; transition: opacity 240ms ease; }
+.slide img.imageReady { opacity: 1; }
+
+.placeholder {
+  background-color: #526065;
+  background-size: cover;
+  filter: blur(8px);
+  transform: scale(1.04);
+}
 
 .shade {
   background: linear-gradient(180deg, rgb(0 0 0 / 4%) 45%, rgb(0 0 0 / 75%) 100%);
@@ -63,6 +73,7 @@
 
 .controls {
   position: absolute;
+  z-index: 2;
   right: 0;
   bottom: 0;
   left: 0;
@@ -103,5 +114,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .slide,
+  .slide img,
   .segment span { transition: none; }
 }

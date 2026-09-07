@@ -191,7 +191,7 @@
       if (thumbnailUrl) return `<img src="${thumbnailUrl}" alt="${safeName}">`;
       return `<div class="entity-editor-preview-empty">${icon("video")}<strong>${safeName}</strong><span>视频暂不可预览</span></div>`;
     }
-    const imageUrl = thumbnailUrl || url;
+    const imageUrl = url || thumbnailUrl;
     return imageUrl
       ? `<img src="${imageUrl}" alt="${safeName}">`
       : `<div class="entity-editor-preview-empty">${icon("image")}<strong>${safeName}</strong><span>图片暂不可预览</span></div>`;

@@ -46,3 +46,7 @@ export const RenamePersonalAssetBodySchema = z.object({
 export const PersonalAssetQuerySchema = z.object({
   scope: z.literal("personal").optional().default("personal"),
 }).strict();
+
+export const AssetContentQuerySchema = z.object({
+  preview: z.literal("library").optional(),
+}).strict();
