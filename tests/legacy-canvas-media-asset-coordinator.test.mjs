@@ -20,7 +20,7 @@ const workspaceAsset = {
 };
 const flushTasks = () => new Promise((resolve) => setImmediate(resolve));
 
-function harness() {
+function harness(options = {}) {
   const parent = {};
   const posted = [];
   const uploads = [];
@@ -39,12 +39,34 @@ function harness() {
     getExpectedOrigin: () => "https://reelay.test",
     getExpectedSource: () => parent,
     onProjectAssets: (assets) => snapshots.push(assets),
+    ...options,
   });
   const dispatch = (data, overrides = {}) => coordinator.handleHostMessage({
     data, origin: "https://reelay.test", source: parent, ...overrides,
   });
   return { coordinator, dispatch, posted, snapshots, uploads };
 }
+
+test("transient imports send bounded bytes to the host without HTTP upload or finalize", async () => {
+  const { coordinator, dispatch, posted, uploads } = harness({ useTransientUpload: () => true });
+  const body = new ArrayBuffer(42);
+  const result = coordinator.persistFile({ name: "cover.png", type: "image/png", size: 42, arrayBuffer: async () => body }, { mediaKind: "image" });
+  await flushTasks();
+  const request = posted[0];
+  assert.equal(request.type, "canvas:import-transient-media");
+  assert.equal(request.body, body);
+  assert.equal(Object.hasOwn(request, "workspaceId"), false);
+  const response = { source: "reelay-shell", type: "host:transient-media-result", protocolVersion: 1,
+    requestId: request.requestId, instanceId: "instance-1", target: "project", projectAsset };
+  assert.equal(dispatch({ ...response, instanceId: "old-instance" }), false);
+  assert.equal(dispatch({ ...response, target: "personal", workspaceAsset }), false);
+  assert.equal(dispatch(response), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(await result)), projectAsset);
+  assert.equal(dispatch(response), false);
+  assert.equal(uploads.length, 0);
+  assert.equal(posted.length, 1);
+  await assert.rejects(coordinator.persistFile({ name: "big.png", type: "image/png", size: 4 * 1024 * 1024 + 1 }, { mediaKind: "image" }), /4 MB/);
+});
 
 test("coordinates checksum, same-origin upload grant, finalize and correlated result", async () => {
   const { coordinator, dispatch, posted, uploads } = harness();

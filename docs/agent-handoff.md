@@ -6,6 +6,7 @@
 
 - 两台 Windows 长期接续开发：本机已完成 Ho_Org 下独立 Reelay_Dev（oocagsuhijyvmzwotyxn，新加坡，已确认月费 0）的业务数据与 42 个原文件迁移，并切换为主目录 `dev:server:shared` API；前端 5173 / API 5175 同用 `D:\Software\codePro\0707` 代码，与演示站 Reelay_Test 分离。家里电脑尚待安装与接续验收，不能宣称两机端到端已完成。用户明确不迁聊天记录，开发上下文随仓库交接；最新证据见下文“开始与验证”及 `cross-device-development.md`。
 
+- 当前免注册体验切片：用户确认内部继续共用主账号，外部使用独立静态体验站，所有修改刷新重置。`npm run build:experience` → `dist/experience`，必须单独部署，不能覆盖内部主域。通过构建常量注入 `createExperienceServices`，保留相同 React / CanvasHost UI；三主体 12 图为公开 fixture，非主账号实时读取。临时文件≤4 MiB/个、累计≤128 MiB，经 ArrayBuffer bridge 进入宿主 Blob 内存。测试项目、画布、主体及素材改名在 SPA 导航中保留，刷新或退出重置；业务内容不进入浏览器持久存储。实际发布 URL 与部署 ID 见该切片 PR。
 - 当前加载修复切片基于 PR #18 的 `bb4650c`：登录媒体增加首图预加载、内联占位与解码后切换；持久图片卡片改用受鉴权的 512px WebP，原图消费不变。新增 `ImagePreviewService` 与原内容路由固定 preview 查询，无 schema / seed / 账号变更。新增 sharp 0.35.4，Fastify 同主版本更新至 5.12.1；现有 12 图实测缩略图总量约 292 KiB，原图约 23.3 MiB。测试和发布证据见该切片 PR。
 - 日常开发使用主工作目录中的活动开发分支，`main` 保留已验证集成基线；分支名、worktree 和未提交改动必须在接手时用 `git branch --show-current`、`git status --short` 与 `npm run worktrees` 重新确认，本交接不把静态分支名当成事实。此前改崩的用量看板实验 worktree 与本地分支已经清理，不再作为可恢复或可合并来源。
 - 当前本地主链路是访客主页 `/app` → 登录弹窗 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。登录、主页和项目库只保留 React 正式路由；旧静态双轨已经删除，`index.html` 仅作为迁移期画布 iframe。

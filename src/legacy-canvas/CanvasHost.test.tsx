@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render as renderTestingLibrary, screen, waitFor } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationError } from "../application/shared/ApplicationError";
@@ -159,6 +159,71 @@ const createProjectMessage = {
 };
 
 describe("CanvasHost", () => {
+  it("consumes a launch prompt after initialization without hydrating again or replaying it to a new iframe instance", async () => {
+    const consumed = vi.fn();
+    function LaunchHost() {
+      const [launchPrompt, setLaunchPrompt] = useState("一支香水广告");
+      return <CanvasHost repository={repository} context={{ ...editableContext, launchPrompt }}
+        onLaunchPromptConsumed={() => { consumed(); setLaunchPrompt(""); }} />;
+    }
+    render(<LaunchHost />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    consumed.mockImplementation(() => {
+      expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({ type: "host:document" });
+    });
+    act(() => dispatchCanvasMessage(frame, readyMessage));
+    await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
+    expect(postMessage.mock.calls.map(([message]) => message.type)).toEqual(["host:init", "host:document"]);
+    expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+      type: "host:init", context: { launchPrompt: "一支香水广告" },
+    });
+
+    act(() => dispatchCanvasMessage(frame, readyMessage));
+    expect(postMessage).toHaveBeenCalledTimes(2);
+    act(() => dispatchCanvasMessage(frame, { ...readyMessage, instanceId: "replacement-instance" }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledTimes(4));
+    expect(postMessage.mock.calls[2]?.[0]).toMatchObject({ type: "host:init", context: { launchPrompt: "" } });
+    expect(consumed).toHaveBeenCalledTimes(1);
+  });
+
+  it("imports transient bytes once in host scope and ignores completion from a replaced iframe instance", async () => {
+    const asset = { id: "memory-1", workspaceId: "organization-1", mediaKind: "image" as const,
+      displayName: "memory.png", objectVersion: 1, contentType: "image/png", byteSize: 16,
+      checksumSha256: "a".repeat(64), createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z",
+      contentUrl: `blob:${window.location.origin}/memory-1` };
+    const projectAsset = { referenceId: "reference-memory", assetId: asset.id, assetVersion: 1,
+      mediaKind: asset.mediaKind, displayName: asset.displayName, contentType: asset.contentType,
+      byteSize: asset.byteSize, checksumSha256: asset.checksumSha256, contentUrl: asset.contentUrl };
+    let complete!: (result: { asset: typeof asset; projectAsset: typeof projectAsset | null }) => void;
+    const importFile = vi.fn(() => new Promise<{ asset: typeof asset; projectAsset: typeof projectAsset | null }>((resolve) => { complete = resolve; }));
+    const createUploadIntent = vi.fn();
+    const mediaAssetRepository = { listProjectAssets: vi.fn(async () => []), createUploadIntent } as never;
+    render(<CanvasHost repository={repository} mediaAssetRepository={mediaAssetRepository}
+      transientMediaRepository={{ importFile }} context={{ ...editableContext,
+        capabilities: { ...editableContext.capabilities, assetPersistence: true, transientMediaUpload: true } }} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchCanvasMessage(frame, readyMessage));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:init",
+      context: expect.objectContaining({ capabilities: expect.objectContaining({ transientMediaUpload: true }) }) }), window.location.origin));
+    const message = { source: "reelay-legacy-canvas", type: "canvas:import-transient-media", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "transient-1", target: "project", mediaKind: "image",
+      displayName: "memory.png", contentType: "image/png", body: new ArrayBuffer(16) };
+    act(() => { dispatchCanvasMessage(frame, message); dispatchCanvasMessage(frame, message); });
+    expect(importFile).toHaveBeenCalledTimes(1);
+    expect(importFile).toHaveBeenCalledWith({ workspaceId: "organization-1", projectId: "project-1", target: "project",
+      displayName: "memory.png", contentType: "image/png", mediaKind: "image", body: message.body });
+    await act(async () => complete({ asset, projectAsset }));
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:transient-media-result", requestId: "transient-1", projectAsset }), window.location.origin);
+    act(() => dispatchCanvasMessage(frame, message));
+    expect(importFile).toHaveBeenCalledTimes(1);
+    act(() => dispatchCanvasMessage(frame, { ...message, requestId: "transient-2", target: "personal" }));
+    act(() => dispatchCanvasMessage(frame, { ...readyMessage, instanceId: "replacement-instance" }));
+    await act(async () => complete({ asset, projectAsset: null }));
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "host:transient-media-result", requestId: "transient-2" }), window.location.origin);
+    expect(createUploadIntent).not.toHaveBeenCalled();
+  });
   it("keeps workspace, project, and canvas identity on the isolated legacy URL", async () => {
     render(
       <CanvasHost
@@ -523,6 +588,7 @@ describe("CanvasHost", () => {
       checksumSha256: "c".repeat(64),
       createdAt: "2026-09-01T00:00:00.000Z",
       updatedAt: "2026-09-03T00:00:00.000Z",
+      contentUrl: "blob:http://localhost/renamed-file",
     };
     let resolveRename!: (asset: typeof renamedAsset) => void;
     const renamePersonalAsset = vi.fn(() => new Promise<typeof renamedAsset>((resolve) => {

@@ -293,6 +293,7 @@ const state = {
     projectSwitcher: false,
     assetPersistence: false,
     entityPersistence: false,
+    transientMediaUpload: false,
   },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
@@ -423,6 +424,8 @@ const canvasNodeTasks = canvasNodeTaskRunnerFactory.createCanvasNodeTaskRunner({
   onCancel: applyCanvasNodeTaskCancellation,
 });
 let canvasAccessNoticeTimer = 0;
+let transientLaunchPrompt = "";
+let transientLaunchPromptReceived = false;
 const canvasInstanceId = crypto.randomUUID();
 const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
   instanceId: canvasInstanceId,
@@ -445,6 +448,11 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.hostCapabilities.projectSwitcher = context.capabilities?.projectSwitcher === true;
     state.hostCapabilities.assetPersistence = context.capabilities?.assetPersistence === true;
     state.hostCapabilities.entityPersistence = context.capabilities?.entityPersistence === true;
+    state.hostCapabilities.transientMediaUpload = context.capabilities?.transientMediaUpload === true;
+    if (state.hostCapabilities.transientMediaUpload && !transientLaunchPromptReceived) {
+      transientLaunchPrompt = String(context.launchPrompt || "").trim().slice(0, 600);
+      transientLaunchPromptReceived = true;
+    }
     state.projects = normalizeProjectOptions(context.projects);
     state.projectSearch = "";
     if (projectMenuSearch) projectMenuSearch.value = "";
@@ -485,6 +493,10 @@ const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAs
   uploadFile: async ({ url, method, headers, file }) => {
     const response = await fetch(url, { method, headers, body: file, credentials: "include" });
     if (!response.ok) throw new Error(`媒体上传失败（${response.status}）`);
+  },
+  useTransientUpload: () => state.hostCapabilities.transientMediaUpload,
+  onProjectAssets: (assets) => {
+    if (state.hostCapabilities.transientMediaUpload) restoreTransientCanvasMedia(assets.map(projectAssetToLibraryMedia));
   },
   getBaseUrl: () => window.location.href,
   setTimer: (callback, delay) => window.setTimeout(callback, delay),
@@ -7038,7 +7050,9 @@ function consumeHomeLaunchIntent() {
   if (!isCanvasMutationAllowed()) return false;
   let prompt = "";
   try {
-    prompt = sessionStorage.getItem(homeLaunchIntentKey)?.trim() || "";
+    prompt = state.hostCapabilities.transientMediaUpload
+      ? transientLaunchPrompt
+      : sessionStorage.getItem(homeLaunchIntentKey)?.trim() || "";
   } catch {
     return false;
   }
@@ -7048,7 +7062,8 @@ function consumeHomeLaunchIntent() {
   node.prompt = prompt;
   node.expanded = true;
   try {
-    sessionStorage.removeItem(homeLaunchIntentKey);
+    if (state.hostCapabilities.transientMediaUpload) transientLaunchPrompt = "";
+    else sessionStorage.removeItem(homeLaunchIntentKey);
   } catch {
     // The node is already created; storage cleanup can safely fail.
   }
@@ -9488,6 +9503,12 @@ function createAssetLibraryFolder() {
 function libraryImagePreviewUrl(contentUrl, mediaKind) {
   if (mediaKind !== "image") return "";
   const previewUrl = new URL(contentUrl);
+  if (previewUrl.protocol === "blob:") return previewUrl.href;
+  if (state.hostCapabilities.transientMediaUpload) {
+    const fixture = previewUrl.pathname.match(/^\/assets\/home\/(entity-(?:umbra|baixi|xuanling)-[^/]+-v4)\.(?:png|jpe?g)$/i);
+    if (fixture) return new URL(`/assets/experience-preview/${fixture[1]}.webp`, previewUrl).href;
+    return previewUrl.href;
+  }
   previewUrl.searchParams.set("preview", "library");
   return previewUrl.href;
 }
@@ -9548,10 +9569,34 @@ function registerHostWorkspaceAssetCatalog({ assets = [], entities = [] } = {}) 
     assetLibraryStore.syncPersistedEntities({ entities });
     hostPersonalMediaIds.clear();
     media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+    restoreTransientCanvasMedia(media);
     renderAssetLibrary();
   } catch (error) {
     showActionToast(error?.message || "个人资产目录同步失败");
   }
+}
+
+// Serialized documents retain stable asset references, never page-owned blob URLs.
+// Reconnect those references only from the current experience host's catalog.
+function restoreTransientCanvasMedia(media) {
+  if (!state.hostCapabilities.transientMediaUpload) return;
+  const byId = new Map(media.map((asset) => [asset.id, asset]));
+  let changed = false;
+  for (const canvas of state.canvases) {
+    for (const node of canvas.nodes) {
+      for (const asset of [...(node.assets || []), node.generatedAsset].filter(Boolean)) {
+        const source = byId.get(asset.librarySourceId || asset.id);
+        if (!source || asset.url === source.url) continue;
+        asset.url = source.url;
+        asset.thumbnailUrl = source.thumbnailUrl;
+        asset.librarySourceId = source.id;
+        asset.workspaceAssetId = source.workspaceAssetId;
+        if (source.projectAssetReferenceId) asset.projectAssetReferenceId = source.projectAssetReferenceId;
+        changed = true;
+      }
+    }
+  }
+  if (changed) render();
 }
 
 function syncHostEntity(entity) {

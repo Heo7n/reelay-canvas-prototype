@@ -57,6 +57,9 @@ jobs:
       - name: Build application shell
         run: npm run build:shell
 
+      - name: Build isolated static experience
+        run: npm run build:experience
+
   postgres:
     name: postgres
     runs-on: ubuntu-latest

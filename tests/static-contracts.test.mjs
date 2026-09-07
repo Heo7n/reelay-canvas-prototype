@@ -785,9 +785,12 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
   const node = {};
   const removedKeys = [];
   const scheduledDelays = [];
+  let storedPrompt = "  Create a quiet product shot  ";
+  let createdNodeCount = 0;
   let renderCount = 0;
   const consumeLaunchIntent = Function(
     "isCanvasMutationAllowed",
+    "state",
     "sessionStorage",
     "homeLaunchIntentKey",
     "addNodeAt",
@@ -797,18 +800,21 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
     `${functionSource}; return consumeHomeLaunchIntent;`,
   )(
     () => true,
+    { hostCapabilities: { transientMediaUpload: false } },
     {
-      getItem: () => "  Create a quiet product shot  ",
-      removeItem: (key) => removedKeys.push(key),
+      getItem: () => storedPrompt,
+      removeItem: (key) => { removedKeys.push(key); storedPrompt = null; },
     },
     "reelay-home-launch-intent",
-    () => node,
+    () => { createdNodeCount += 1; return node; },
     { innerWidth: 1440, innerHeight: 900 },
     () => { renderCount += 1; },
     (delay) => scheduledDelays.push(delay),
   );
 
   assert.equal(consumeLaunchIntent(), true);
+  assert.equal(consumeLaunchIntent(), false);
+  assert.equal(createdNodeCount, 1);
   assert.equal(node.prompt, "Create a quiet product shot");
   assert.equal(node.expanded, true);
   assert.deepEqual(removedKeys, ["reelay-home-launch-intent"]);

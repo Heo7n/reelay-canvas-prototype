@@ -3,6 +3,7 @@ import { Form } from "react-router-dom";
 import type { FormEvent } from "react";
 
 import styles from "./WorkspacePages.module.css";
+import { setLaunchIntent } from "./launch-intent";
 
 interface CreationComposerProps {
   onRequestLogin?: () => void;
@@ -10,8 +11,6 @@ interface CreationComposerProps {
   onPromptChange: (prompt: string) => void;
   prompt: string;
 }
-
-const launchIntentKey = "reelay-home-launch-intent";
 
 export function CreationComposer({ onNotice, onPromptChange, prompt, onRequestLogin }: CreationComposerProps) {
   function submit(event: FormEvent<HTMLFormElement>): void {
@@ -24,11 +23,7 @@ export function CreationComposer({ onNotice, onPromptChange, prompt, onRequestLo
       onRequestLogin();
       return;
     }
-    try {
-      window.sessionStorage.setItem(launchIntentKey, prompt.trim());
-    } catch {
-      // The project can still open if session storage is unavailable.
-    }
+    setLaunchIntent(prompt);
   }
 
   return (

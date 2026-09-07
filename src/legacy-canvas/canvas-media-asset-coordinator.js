@@ -45,6 +45,7 @@
     const getExpectedOrigin = typeof options.getExpectedOrigin === "function" ? options.getExpectedOrigin : () => "";
     const getExpectedSource = typeof options.getExpectedSource === "function" ? options.getExpectedSource : () => null;
     const onProjectAssets = typeof options.onProjectAssets === "function" ? options.onProjectAssets : () => undefined;
+    const useTransientUpload = typeof options.useTransientUpload === "function" ? options.useTransientUpload : () => false;
     const requestTimeoutMs = Number.isFinite(options.requestTimeoutMs) ? options.requestTimeoutMs : 120_000;
     const pending = new Map();
     const seenProjectAssetRequests = new Set();
@@ -82,6 +83,18 @@
         || !isNonEmptyString(contentType, 120) || !Number.isInteger(byteSize)
         || byteSize <= 0 || byteSize > MAX_UPLOAD_BYTES) {
         throw commandError("invalid", "文件类型、大小或名称不符合上传要求");
+      }
+      if (useTransientUpload()) {
+        if (byteSize > 4 * 1024 * 1024) throw commandError("invalid", "体验模式单个素材最大支持 4 MB");
+        const body = await file.arrayBuffer();
+        if (body.byteLength !== byteSize) throw commandError("invalid", "文件内容大小不匹配");
+        const requestId = String(makeRequestId()).trim();
+        if (!requestId || pending.has(requestId)) throw commandError("invalid", "无法创建唯一的上传请求");
+        return new Promise((resolve, reject) => {
+          const timeoutId = setTimer(() => finish(requestId, commandError("network", "文件导入已超时")), requestTimeoutMs);
+          pending.set(requestId, { resolve, reject, timeoutId, stage: "transient", target });
+          send("canvas:import-transient-media", { requestId, target, mediaKind, displayName, contentType, body });
+        });
       }
       const checksumSha256 = String(await checksumFile(file)).toLowerCase();
       if (!/^[a-f\d]{64}$/.test(checksumSha256)) throw commandError("invalid", "文件校验值无效");
@@ -170,6 +183,15 @@
       return finish(message.requestId, null, { ...message.workspaceAsset });
     }
 
+    function acceptTransientResult(message) {
+      const operation = pending.get(message.requestId);
+      if (message.instanceId !== instanceId || !operation || operation.stage !== "transient"
+        || message.target !== operation.target) return false;
+      const asset = operation.target === "personal" ? message.workspaceAsset : message.projectAsset;
+      if (!(operation.target === "personal" ? isWorkspaceAsset(asset) : isProjectAsset(asset))) return false;
+      return finish(message.requestId, null, { ...asset });
+    }
+
     function acceptError(message) {
       const operation = pending.get(message.requestId);
       if (message.instanceId !== instanceId || !operation || !ERROR_CODES.has(message.code)) return false;
@@ -183,6 +205,7 @@
       if (message.type === "host:project-assets") return acceptProjectAssets(message);
       if (message.type === "host:media-upload-grant") return acceptUploadGrant(message);
       if (message.type === "host:media-upload-result") return acceptUploadResult(message);
+      if (message.type === "host:transient-media-result") return acceptTransientResult(message);
       if (message.type === "host:media-rename-result") return acceptRenameResult(message);
       if (message.type === "host:asset-command-error") return acceptError(message);
       return false;

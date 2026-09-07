@@ -6,6 +6,7 @@ import { createRouteHandlers } from "./route-data";
 import { routePaths } from "./routes";
 import { applicationServices, type ApplicationServices } from "./services";
 import { WORKSPACE_ROUTE_ID } from "./useWorkspaceRouteData";
+import { isExperienceRuntime } from "./runtime-mode";
 
 type OrganizationSection = "management" | "credits" | "usage";
 
@@ -21,17 +22,17 @@ function lazyOrganizationSection(section: OrganizationSection): NonNullable<Rout
   };
 }
 
-export function createAppRouteObjects(services: ApplicationServices): RouteObject[] {
+export function createAppRouteObjects(services: ApplicationServices, experience = isExperienceRuntime): RouteObject[] {
   const handlers = createRouteHandlers(services);
   return [
     {
-      element: <AppShell />,
+      element: <AppShell experience={experience} />,
       errorElement: <RouteErrorPage />,
       HydrateFallback: RouteLoadingPage,
       children: [
-        {
+        ...(experience ? [{ index: true, loader: handlers.rootLoader, element: <></> }] : [{
           id: "public-entry",
-          lazy: async () => {
+          lazy: import.meta.env.VITE_REELAY_EXPERIENCE === "true" ? undefined : async () => {
             const { PublicEntryPage } = await import("../pages/home/PublicEntryPage");
             return { Component: PublicEntryPage };
           },
@@ -42,13 +43,13 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
               path: "login",
               loader: handlers.loginLoader,
               action: handlers.loginAction,
-              lazy: async () => {
+              lazy: import.meta.env.VITE_REELAY_EXPERIENCE === "true" ? undefined : async () => {
                 const { LoginPage } = await import("../pages/login/LoginPage");
                 return { Component: LoginPage };
               },
             },
           ],
-        },
+        }] as RouteObject[]),
         { path: "account", action: handlers.accountAction },
         { path: "logout", action: handlers.logoutAction },
         {
@@ -96,6 +97,7 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
                       canvasDocumentRepository={services.canvasDocumentRepository}
                       entityRepository={services.entityRepository}
                       mediaAssetRepository={services.mediaAssetRepository}
+                      transientMediaRepository={services.transientMediaRepository}
                     />
                   );
                 }

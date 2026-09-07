@@ -13,6 +13,8 @@
     "build:shell": "tsc -p tsconfig.shell.json --noEmit && vite build --config vite.shell.config.ts",
     "build:preview": "npm run build:shell && node scripts/copy-legacy-canvas.mjs",
     "build": "npm run build:preview",
+    "build:experience": "tsc -p tsconfig.shell.json --noEmit && tsx scripts/build-experience.mts",
+    "preview:experience": "node scripts/serve-experience.mjs",
     "test:shell": "vitest run --config vitest.shell.config.ts",
     "check:shell": "tsc -p tsconfig.shell.json --noEmit && npm run test:shell",
     "test:server": "vitest run --config vitest.server.config.ts",
