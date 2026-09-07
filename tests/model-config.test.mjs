@@ -226,20 +226,16 @@ test("asset-library demo images cover varied ratios and Entity covers resolve to
   const personalImages = seed.media.filter((media) => (
     personalMediaIds.has(media.id) && (media.mediaKind || media.type) === "image"
   ));
-  const hasRatio = (ratio) => personalImages.some((media) => Math.abs(media.width / media.height - ratio) < 1e-9);
-
-  assert.ok(personalImages.length >= 7);
-  assert.ok(hasRatio(1));
-  assert.ok(hasRatio(3 / 4));
-  assert.ok(hasRatio(4 / 3));
-  assert.ok(hasRatio(16 / 9));
+  assert.ok(personalImages.length >= 12);
+  assert.ok(personalImages.some((media) => media.width > media.height));
+  assert.ok(personalImages.some((media) => media.width < media.height));
   for (const image of personalImages) {
     assert.equal(image.aspectRatio, image.width / image.height, `${image.id} ratio metadata must match its dimensions`);
     assert.match(image.url, /^\.\/assets\//, `${image.id} must remain available without a remote image host`);
   }
 
   const mediaById = new Map(seed.media.map((media) => [media.id, media]));
-  assert.ok(seed.entities.length >= 2);
+  assert.deepEqual(Array.from(seed.entities, (entity) => entity.mediaRefs.length), [5, 3, 4]);
   for (const entity of seed.entities) {
     assert.ok(entity.mediaRefs.length >= 3);
     if (!entity.coverMediaId) continue;

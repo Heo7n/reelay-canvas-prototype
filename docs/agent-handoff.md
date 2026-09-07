@@ -122,7 +122,7 @@ npm run check
 
 启动前先按 [本地开发与数据位置](local-development.md) 区分继续现有环境与首次初始化；依赖已安装时不重复 `npm ci`。`npm run db:setup` 用于显式初始化或经复核的演示夹具更新，不是每天恢复预览的步骤。它依次执行 `db:up`、`db:migrate` 和幂等 `db:seed`，拒绝 production / preview 环境。当前本机目标检查优先读取 `MIGRATION_DATABASE_URL`，未设置时检查 `DATABASE_URL`，并非分别验证两者；首次初始化必须按启动说明让两者指向同一本机数据库。公网初始化仍按 `docs/vercel-supabase-preview.md` 单独执行。
 
-该 seed 除账号和项目外，还会为 Hoo 写入 v3 演示夹具：共 9 张图片与 2 条本地 MP3；“雾森信使”引用 6 项，“曜石勘探体”引用 5 项，合计覆盖 `16:9`、`9:16`、方形 / `4:3` 和音频。旧版“绯雾调香师 / 曜金香氛核心”仅在完整旧 fixture 指纹匹配时原位校准，保留 Entity ID 与 placement；旧六图在无额外 Entity、项目或画布引用时只撤销个人 placement 和演示项目引用，底层资产 / blob 不硬删。用户编辑过的旧主体会 fail closed，不会追加成四个主体；并发编辑发生在上传与事务校准之间时，事务仍会二次校验并失败，已经完成的 canonical Media 可在解决冲突后由下一次 seed 幂等收敛。
+该 seed 除账号和项目外，还会为 Hoo 写入 v4 演示夹具：用户提供的 12 张 PNG / JPEG 原图组成“幽影”5 张、“白汐”3 张、“玄翎”4 张。各组从主形象 / 肖像开始作为封面，再按形象设定、造型探索、装备 / 特效排序；展示名和仓库文件名均带组内两位序号。v1–v3 的两组历史主体仅在完整旧 fixture 指纹匹配时原位校准，保留 Entity ID 与 placement，第三组使用新的固定创建键。历史媒体在无额外 Entity、项目或画布引用时只撤销个人 placement 和演示项目引用，底层资产 / blob 不硬删；已发布的历史文件与指纹仍留在仓库。用户编辑过的旧主体会 fail closed，不会偷偷覆盖或追加重复案例；并发编辑发生在上传与事务校准之间时，事务仍会二次校验并失败，已经完成的 canonical Media 可在解决冲突后由下一次 seed 幂等收敛。只更换现有本地案例时，可在核对数据库和 API 的 ObjectStore 根后定向调用 `seedDemoAssetLibrary`，不重复初始化账号与项目。
 
 素材源文件随 Git 同步，但 PostgreSQL 元数据与 ObjectStore 都是本机状态。新电脑首次初始化可重建仓库定义的演示夹具，不能恢复另一台电脑上用户创建的项目、主体和上传素材；这些状态需要数据库与 ObjectStore 配套备份。已有环境日常拉取后按变更范围决定是否执行 migration 或 seed。公网 preview 因缺少持久 ObjectStore 会继续跳过这些本地媒体夹具。服务启动和依赖安装不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
 

@@ -6,8 +6,6 @@ import {
   DEMO_ENTITY_FIXTURES,
   DEMO_PROJECT_ID,
   DEMO_WORKSPACE_ID,
-  LEGACY_DEMO_ENTITY_FIXTURES,
-  PREVIOUS_DEMO_ENTITY_FIXTURES,
   type DemoAssetFixture,
   type DemoEntityFixture,
 } from "./demo-asset-fixtures";
@@ -18,6 +16,12 @@ export interface ResolvedDemoAssetFixture extends DemoAssetFixture {
   idempotencyKey: string;
   byteSize: number;
   checksumSha256: string;
+}
+
+export interface ResolvedDemoFixtureGeneration {
+  entities: readonly DemoEntityFixture[];
+  assets: readonly ResolvedDemoAssetFixture[];
+  allowedEntityVersions: readonly number[];
 }
 
 interface EntityRow extends QueryResultRow {
@@ -250,19 +254,18 @@ function matchingCanonicalFixture(createIdempotencyKey: string): DemoEntityFixtu
 function assertReconcileableState(
   state: EntityState,
   canonicalAssets: readonly ResolvedDemoAssetFixture[],
-  previousAssets: readonly ResolvedDemoAssetFixture[],
-  legacyAssets: readonly ResolvedDemoAssetFixture[],
-): "canonical" | "previous" | "legacy" {
+  historicalGenerations: readonly ResolvedDemoFixtureGeneration[],
+): "canonical" | "historical" {
   const canonicalFixture = matchingCanonicalFixture(state.entity.create_idempotency_key);
   if (stateMatchesFixture(state, canonicalFixture, canonicalAssets, null)) return "canonical";
-  const previousFixture = PREVIOUS_DEMO_ENTITY_FIXTURES.find(
-    (candidate) => candidate.createIdempotencyKey === state.entity.create_idempotency_key,
-  );
-  if (previousFixture && stateMatchesFixture(state, previousFixture, previousAssets, [1, 2])) return "previous";
-  const legacyFixture = LEGACY_DEMO_ENTITY_FIXTURES.find(
-    (candidate) => candidate.createIdempotencyKey === state.entity.create_idempotency_key,
-  );
-  if (legacyFixture && stateMatchesFixture(state, legacyFixture, legacyAssets, [1])) return "legacy";
+  for (const generation of historicalGenerations) {
+    const fixture = generation.entities.find(
+      (candidate) => candidate.createIdempotencyKey === state.entity.create_idempotency_key,
+    );
+    if (fixture && stateMatchesFixture(state, fixture, generation.assets, generation.allowedEntityVersions)) {
+      return "historical";
+    }
+  }
   throw new DemoAssetFixtureConflictError(
     `Demo Entity ${state.entity.id} no longer matches a published fixture generation; refusing to overwrite user changes.`,
   );
@@ -271,14 +274,13 @@ function assertReconcileableState(
 export async function assertDemoEntityFixturesCanBeReconciled(
   pool: Pool,
   canonicalAssets: readonly ResolvedDemoAssetFixture[],
-  previousAssets: readonly ResolvedDemoAssetFixture[],
-  legacyAssets: readonly ResolvedDemoAssetFixture[],
+  historicalGenerations: readonly ResolvedDemoFixtureGeneration[],
 ): Promise<void> {
   const client = await pool.connect();
   try {
     for (const fixture of DEMO_ENTITY_FIXTURES) {
       const state = await readEntityState(client, fixture.createIdempotencyKey, false);
-      if (state) assertReconcileableState(state, canonicalAssets, previousAssets, legacyAssets);
+      if (state) assertReconcileableState(state, canonicalAssets, historicalGenerations);
     }
   } finally {
     client.release();
@@ -339,20 +341,19 @@ async function replaceEntityContent(
 export async function reconcileHistoricalDemoEntities(
   pool: Pool,
   canonicalAssets: readonly ResolvedDemoAssetFixture[],
-  previousAssets: readonly ResolvedDemoAssetFixture[],
-  legacyAssets: readonly ResolvedDemoAssetFixture[],
+  historicalGenerations: readonly ResolvedDemoFixtureGeneration[],
   canonicalAssetsByKey: ReadonlyMap<string, WorkspaceMediaAsset>,
 ): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [DEMO_FIXTURE_LOCK_KEY]);
-    const staged: Array<{ state: EntityState; status: "canonical" | "previous" | "legacy" }> = [];
+    const staged: Array<{ state: EntityState; status: "canonical" | "historical" }> = [];
     for (const fixture of DEMO_ENTITY_FIXTURES) {
       const state = await readEntityState(client, fixture.createIdempotencyKey, true);
       if (state) staged.push({
         state,
-        status: assertReconcileableState(state, canonicalAssets, previousAssets, legacyAssets),
+        status: assertReconcileableState(state, canonicalAssets, historicalGenerations),
       });
     }
     for (const { state, status } of staged) {
