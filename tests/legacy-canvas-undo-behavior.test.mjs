@@ -18,7 +18,7 @@ const scripts = await Promise.all(scriptPaths.map(async (path) => ({
 
 // Load the real entry and controllers; only browser scheduling/media APIs are stubbed.
 // The test-only export exposes state without changing the shipped application.
-function createHarness(t) {
+function createHarness(t, { trackMetadataImages = false } = {}) {
   const dom = new JSDOM(html, {
     url: "http://reelay.test/index.html",
     runScripts: "outside-only",
@@ -26,6 +26,17 @@ function createHarness(t) {
   });
   t.after(() => dom.window.close());
   const { window } = dom;
+  const metadataImages = [];
+  if (trackMetadataImages) {
+    window.Image = class {
+      naturalWidth = 0;
+      naturalHeight = 0;
+      set src(value) {
+        this.url = value;
+        metadataImages.push(this);
+      }
+    };
+  }
   const timers = new Map();
   const timerDelays = new Map();
   let nextTimerId = 0;
@@ -115,8 +126,52 @@ function createHarness(t) {
     const timeoutId = [...timers.keys()].at(-1);
     return { timeoutId, delay: timerDelays.get(timeoutId) };
   };
-  return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, timers, scheduledTask };
+  return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, timers, scheduledTask, metadataImages };
 }
+
+test("closed library catalog registration loads no media; using an asset hydrates only that node", async (t) => {
+  const h = createHarness(t, { trackMetadataImages: true });
+  assert.deepEqual(h.metadataImages.map((image) => image.url), ["./assets/reelay-logo.png"],
+    "startup loads its favicon but must not probe any media in the demo library");
+  h.metadataImages.length = 0;
+  h.install(h.canvas("on-demand-media"));
+  const assets = Array.from({ length: 12 }, (_, index) => ({
+    assetId: `catalog-image-${index}`,
+    assetVersion: 1,
+    mediaKind: "image",
+    displayName: `catalog-fixture-${index}`,
+    contentType: "image/png",
+    byteSize: 1024,
+    checksumSha256: "a".repeat(64),
+    contentUrl: `/api/catalog-images/${index}/content`,
+  }));
+  h.window.registerHostWorkspaceAssetCatalog({ assets });
+  assert.equal(h.window.isAssetLibraryOpen(), false);
+  assert.equal(h.metadataImages.length, 0, "a catalog describes media without downloading its original bytes");
+  assert.equal(h.window.document.querySelectorAll("#assetLibraryGrid img, #assetLibraryGrid video").length, 0,
+    "a closed panel must not mount hidden media previews");
+  assert.ok(assets.every((asset) => h.window.findLibraryAsset(asset.assetId)));
+
+  h.window.switchAssetLibraryContext({ space: "personal", section: "media" });
+  h.state.librarySearch = "catalog-fixture";
+  h.window.openAssetLibrary();
+  assert.equal(h.window.document.querySelectorAll("#assetLibraryGrid img").length, 12,
+    "opening the library mounts its visible image previews");
+  assert.equal(h.metadataImages.length, 0, "visible previews do not start a second full-library metadata scan");
+
+  h.window.useLibraryAsset(assets[3].assetId, 600, 400);
+  assert.equal(h.state.nodes.length, 1);
+  assert.equal(h.metadataImages.length, 1);
+  assert.equal(h.metadataImages[0].url, `http://reelay.test${assets[3].contentUrl}`);
+  Object.assign(h.metadataImages[0], { naturalWidth: 900, naturalHeight: 1600 });
+  h.metadataImages[0].onload();
+  await Promise.resolve();
+  const placed = h.state.nodes[0].assets[0];
+  assert.equal(placed.width, 900);
+  assert.equal(placed.height, 1600);
+  assert.equal(placed.aspectRatio, 900 / 1600);
+  assert.equal(h.metadataImages.length, 1, "dimension completion must not start background requests for unused assets");
+});
 
 test("node controls preserve the live prompt editor and media across content renders", (t) => {
   const h = createHarness(t);

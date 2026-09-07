@@ -70,6 +70,14 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:5173/api/health'
 
 然后打开原项目画布，确认节点、资产预览和控制台正常。健康接口只说明服务可访问，不能证明媒体目录和页面内容正确。若恢复失败，先对照端口、前端 / API 日志及对象目录定位原因。
 
+### 登录与主页的独立评审预览
+
+本切片位于 `C:\Users\Ho\.codex\worktrees\ead8\0707`，活动分支 `codex/home-login-development`，起始基线为 `c6dd68a`。使用该目录自己的 `node_modules`，隐藏后台运行 `npm.cmd run dev:shell -- --host 127.0.0.1 --port 5176 --strictPort`；重启前仍须重新核对端口与进程，不根据静态 PID 结束进程。
+
+访客入口为 `http://localhost:5176/app`，登录弹窗为 `http://localhost:5176/app/login`。使用 `localhost` 可与其他任务的 `127.0.0.1` Cookie 主机隔离；相同主机不同端口仍可能共享会话。`127.0.0.1:5176` 也可访问，但已有共享会话时会直接进入主页。API 继续代理到 `127.0.0.1:5175`，数据仍与其他前端预览共享，此切片不执行 migration、seed 或数据库 / ObjectStore 重置。
+
+隐藏进程启动脚本、环境记录和日志保存在本 worktree 的 Git 元数据目录 `D:\Software\codePro\0707\.git\worktrees\07071`：`home-login-preview.ps1`、`home-login-preview.json`、`home-login-preview.stdout.log` 与 `home-login-preview.stderr.log`。这些文件不进入 Git。5173 / 5174 及现有 API 服务保持原有归属。
+
 ## 2. 新机器首次初始化
 
 本节只用于尚无项目数据的本地环境。需要 Node `24.x`、npm 和正在运行的 Docker Desktop；在自己的仓库根目录使用独立的本地开发终端，确认数据库目标为本机，未继承公网部署环境。

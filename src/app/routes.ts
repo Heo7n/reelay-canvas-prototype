@@ -3,6 +3,7 @@ function segment(value: string) {
 }
 
 export const appRoutes = {
+  home: () => "/app",
   login: () => "/app/login",
   logout: () => "/app/logout",
   noWorkspace: () => "/app/no-workspace",
@@ -20,6 +21,7 @@ export const appRoutes = {
 } as const;
 
 export const routePaths = {
+  home: () => "/",
   account: () => "/account",
   login: () => "/login",
   logout: () => "/logout",

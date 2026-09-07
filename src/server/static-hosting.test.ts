@@ -30,7 +30,7 @@ describe("production static hosting", () => {
   it("redirects the root and serves application history routes", async () => {
     const root = await app.inject({ method: "GET", url: "/" });
     expect(root.statusCode).toBe(302);
-    expect(root.headers.location).toBe("/app/login");
+    expect(root.headers.location).toBe("/app");
 
     const deepLink = await app.inject({
       method: "GET",

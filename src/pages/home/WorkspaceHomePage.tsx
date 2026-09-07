@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { Link, useActionData } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { routePaths } from "../../app/routes";
 import type { WorkspaceActionData } from "../../app/route-data";
@@ -13,6 +13,7 @@ import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
 import { CapabilityStrip } from "./CapabilityStrip";
 import { CreationComposer } from "./CreationComposer";
 import { HeroCarousel } from "./HeroCarousel";
+import { clearGuestCreationDraft, readGuestCreationDraft } from "./guest-creation-draft";
 import { capabilities, heroSlides, type Capability, type HeroSlide } from "./home-content";
 import styles from "./WorkspacePages.module.css";
 
@@ -20,7 +21,8 @@ export function WorkspaceHomePage() {
   const data = useWorkspaceRouteData();
   const actionData = useActionData() as WorkspaceActionData | undefined;
   const [activeSlide, setActiveSlide] = useState(1);
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(readGuestCreationDraft);
+  useEffect(clearGuestCreationDraft, []);
   const { notice, showNotice } = useTransientNotice();
   const recentProjects = [...data.projects]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))

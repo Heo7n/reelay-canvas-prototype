@@ -13,8 +13,19 @@
   "redirects": [
     {
       "source": "/",
-      "destination": "/app/login",
+      "destination": "/app",
       "permanent": false
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/legacy-canvas-:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     }
   ],
   "rewrites": [

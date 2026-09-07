@@ -64,7 +64,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
       wildcard: false,
     });
 
-    app.get("/", async (_request, reply) => reply.redirect("/app/login"));
+    app.get("/", async (_request, reply) => reply.redirect("/app"));
     app.setNotFoundHandler(async (request, reply) => {
       const pathname = request.url.split("?", 1)[0];
       if (request.method === "GET" && /^\/app(?:\/|$)/.test(pathname)) {

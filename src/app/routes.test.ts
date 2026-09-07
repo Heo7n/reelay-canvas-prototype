@@ -15,6 +15,8 @@ describe("application route contract", () => {
   });
 
   it("separates browser-facing app URLs from basename-relative navigation paths", () => {
+    expect(appRoutes.home()).toBe("/app");
+    expect(routePaths.home()).toBe("/");
     expect(appRoutes.login()).toBe("/app/login");
     expect(routePaths.login()).toBe("/login");
     expect(routePaths.projects("workspace one")).toBe("/w/workspace%20one/projects");
