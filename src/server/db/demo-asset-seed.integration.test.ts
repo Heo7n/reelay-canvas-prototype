@@ -16,6 +16,8 @@ import {
   LEGACY_DEMO_ENTITY_FIXTURES,
   PREVIOUS_DEMO_ASSET_FIXTURES,
   PREVIOUS_DEMO_ENTITY_FIXTURES,
+  V3_DEMO_ASSET_FIXTURES,
+  V3_DEMO_ENTITY_FIXTURES,
   resolveDemoAssetFixtures,
   seedDemoAssetLibrary,
 } from "./demo-asset-seed";
@@ -26,6 +28,7 @@ import {
   demoAssetIdempotencyKey,
   legacyDemoAssetIdempotencyKey,
   previousDemoAssetIdempotencyKey,
+  v3DemoAssetIdempotencyKey,
   type DemoAssetFixture,
   type DemoEntityFixture,
 } from "./demo-asset-fixtures";
@@ -109,6 +112,7 @@ beforeEach(async () => {
         asset_upload_intents,
         workspace_media_assets
     `);
+    await pool.query("DELETE FROM canvas_documents WHERE canvas_id = 'fixture-retention-test'");
   } finally {
     await pool.end();
   }
@@ -208,19 +212,6 @@ function seedLegacyDemoAssetLibrary(
   );
 }
 
-function seedPreviousDemoAssetLibrary(
-  pool: Pool,
-  objectStore: InMemoryObjectStore,
-): Promise<SeededHistoricalLibrary> {
-  return seedHistoricalDemoAssetLibrary(
-    pool,
-    objectStore,
-    PREVIOUS_DEMO_ASSET_FIXTURES,
-    PREVIOUS_DEMO_ENTITY_FIXTURES,
-    previousDemoAssetIdempotencyKey,
-  );
-}
-
 async function readDemoEntityRows(pool: Pool) {
   return pool.query<{
     id: string;
@@ -259,11 +250,70 @@ function expectCanonicalEntityContents(
         DEMO_ASSET_FIXTURES.find((assetFixture) => assetFixture.key === key)?.mediaKind
       )));
     expect(entity?.mediaRefs.filter(({ mediaAssetId }) =>
-      assetsById.get(mediaAssetId)?.mediaKind === "audio")).toHaveLength(1);
+      assetsById.get(mediaAssetId)?.mediaKind === "audio")).toHaveLength(0);
   }
 }
 
 describe("demo asset library seed", () => {
+  it.each([false, true])("seeds a personal-only catalog idempotently without changing projects or accounts (historical catalog: %s)", async (withHistoricalCatalog) => {
+    const pool = createPool();
+    const assetStore = new PostgresAssetStore(pool);
+    const entityStore = new PostgresEntityStore(pool);
+    const objectStore = new InMemoryObjectStore();
+    const dependencies = { pool, assetStore, entityStore, objectStore };
+    const preservedTables = [
+      "users", "password_identities", "sessions", "workspaces", "memberships",
+      "projects", "project_memberships", "canvas_documents", "project_asset_references",
+    ];
+    const readPreservedState = () => Promise.all(preservedTables.map(async (table) => {
+      const result = await pool.query(`SELECT to_jsonb(record) AS content FROM ${table} AS record ORDER BY to_jsonb(record)::text`);
+      return result.rows;
+    }));
+
+    try {
+      const historical = withHistoricalCatalog ? await seedLegacyDemoAssetLibrary(pool, objectStore) : null;
+      if (historical) {
+        await assetStore.attachAssetToProject({
+          actorId: DEMO_ACTOR_ID,
+          projectId: "project-scifi-trailer",
+          assetId: [...historical.assetIdsByKey.values()][0]!,
+        });
+      }
+      const originalCanvas = { nodes: [{ id: "existing-user-node", prompt: "保留用户画布" }] };
+      await pool.query(
+        `INSERT INTO canvas_documents (project_id, canvas_id, schema_version, revision, content,
+           created_by_user_id, updated_by_user_id)
+         VALUES ($1, 'fixture-retention-test', 1, 7, $2::jsonb, $3, $3)`,
+        [DEMO_PROJECT_ID, JSON.stringify(originalCanvas), DEMO_ACTOR_ID],
+      );
+      const before = await readPreservedState();
+      const first = await seedDemoAssetLibrary(dependencies, { personalOnly: true });
+      expect(await readPreservedState()).toEqual(before);
+      const second = await seedDemoAssetLibrary(dependencies, { personalOnly: true });
+      expect(await readPreservedState()).toEqual(before);
+
+      expect(first.assets).toHaveLength(12);
+      expect(first.entities).toHaveLength(3);
+      expect(second).toEqual(first);
+      expectCanonicalEntityContents(first);
+      const personalAssets = await assetStore.listPersonalAssets({ actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID });
+      expect(personalAssets.map(({ id }) => id).sort()).toEqual([
+        ...first.assets.map(({ id }) => id),
+        ...(historical ? [...historical.assetIdsByKey.values()] : []),
+      ].sort());
+      expect(await entityStore.listPersonalEntities({ actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID }))
+        .toHaveLength(3);
+      for (const asset of first.assets) {
+        await expect(objectStore.headObject(asset.objectKey)).resolves.toEqual(expect.objectContaining({
+          byteSize: asset.byteSize,
+          checksumSha256: asset.checksumSha256,
+        }));
+      }
+    } finally {
+      await pool.end();
+    }
+  });
+
   it("persists the static prototype fixtures on a fresh database and remains idempotent", async () => {
     const pool = createPool();
     const assetStore = new PostgresAssetStore(pool);
@@ -275,8 +325,9 @@ describe("demo asset library seed", () => {
       const first = await seedDemoAssetLibrary(dependencies);
       const second = await seedDemoAssetLibrary(dependencies);
 
-      expect(first.assets).toHaveLength(DEMO_ASSET_FIXTURES.length);
-      expect(first.entities).toHaveLength(DEMO_ENTITY_FIXTURES.length);
+      expect(first.assets).toHaveLength(12);
+      expect(first.entities).toHaveLength(3);
+      expect(first.entities.map(({ mediaRefs }) => mediaRefs.length)).toEqual([5, 3, 4]);
       expect(second.assets.map(({ id }) => id)).toEqual(first.assets.map(({ id }) => id));
       expect(second.entities.map(({ id }) => id)).toEqual(first.entities.map(({ id }) => id));
 
@@ -355,13 +406,16 @@ describe("demo asset library seed", () => {
       const rowsAfterSecond = await readDemoEntityRows(pool);
 
       expect(rowsAfterFirst.rows).toHaveLength(DEMO_ENTITY_FIXTURES.length);
-      expect(rowsAfterFirst.rows.map(({ id }) => id).sort()).toEqual(
+      expect(rowsAfterFirst.rows.filter(({ create_idempotency_key }) =>
+        legacy.entityIdsByCreateKey.has(create_idempotency_key)).map(({ id }) => id).sort()).toEqual(
         [...legacy.entityIdsByCreateKey.values()].sort(),
       );
       expect(rowsAfterFirst.rows.map(({ name }) => name).sort()).toEqual(
         DEMO_ENTITY_FIXTURES.map(({ name }) => name).sort(),
       );
-      expect(rowsAfterFirst.rows.every(({ version }) => version === 2)).toBe(true);
+      for (const row of rowsAfterFirst.rows) {
+        expect(row.version).toBe(legacy.entityIdsByCreateKey.has(row.create_idempotency_key) ? 2 : 1);
+      }
       expect(rowsAfterSecond.rows).toEqual(rowsAfterFirst.rows);
       expect(second.entities.map(({ id }) => id)).toEqual(first.entities.map(({ id }) => id));
 
@@ -384,7 +438,9 @@ describe("demo asset library seed", () => {
          WHERE workspace_id = $1 AND owner_user_id = $2 ORDER BY entity_id`,
         [DEMO_WORKSPACE_ID, DEMO_ACTOR_ID],
       );
-      expect(placementsAfter.rows).toEqual(placementsBefore.rows);
+      expect(placementsAfter.rows.filter(({ entity_id }) =>
+        [...legacy.entityIdsByCreateKey.values()].includes(entity_id))).toEqual(placementsBefore.rows);
+      expect(placementsAfter.rows).toHaveLength(3);
 
       const personalAssets = await assetStore.listPersonalAssets({
         actorId: DEMO_ACTOR_ID,
@@ -427,14 +483,22 @@ describe("demo asset library seed", () => {
     }
   });
 
-  it("upgrades pristine v2 fixtures to v3 in place with audio while preserving Entity identities and placements", async () => {
+  it.each([
+    { generation: "v2", assets: PREVIOUS_DEMO_ASSET_FIXTURES, entities: PREVIOUS_DEMO_ENTITY_FIXTURES, keyFor: previousDemoAssetIdempotencyKey, entityVersion: 1 },
+    { generation: "v3", assets: V3_DEMO_ASSET_FIXTURES, entities: V3_DEMO_ENTITY_FIXTURES, keyFor: v3DemoAssetIdempotencyKey, entityVersion: 1 },
+    { generation: "v3", assets: V3_DEMO_ASSET_FIXTURES, entities: V3_DEMO_ENTITY_FIXTURES, keyFor: v3DemoAssetIdempotencyKey, entityVersion: 2 },
+    { generation: "v3", assets: V3_DEMO_ASSET_FIXTURES, entities: V3_DEMO_ENTITY_FIXTURES, keyFor: v3DemoAssetIdempotencyKey, entityVersion: 3 },
+  ])("upgrades pristine $generation Entities at version $entityVersion to v4 without duplicating or replacing their identities", async ({ assets, entities, keyFor, entityVersion }) => {
     const pool = createPool();
     const objectStore = new InMemoryObjectStore();
     const assetStore = new PostgresAssetStore(pool);
     const entityStore = new PostgresEntityStore(pool);
     const dependencies = { pool, assetStore, entityStore, objectStore };
     try {
-      const previous = await seedPreviousDemoAssetLibrary(pool, objectStore);
+      const previous = await seedHistoricalDemoAssetLibrary(pool, objectStore, assets, entities, keyFor);
+      await pool.query("UPDATE workspace_entities SET version = $1 WHERE id = ANY($2::text[])", [
+        entityVersion, [...previous.entityIdsByCreateKey.values()],
+      ]);
       const rowsBefore = await readDemoEntityRows(pool);
       const placementsBefore = await pool.query<{ id: string; entity_id: string }>(
         `SELECT id, entity_id FROM entity_placements
@@ -447,16 +511,17 @@ describe("demo asset library seed", () => {
       const second = await seedDemoAssetLibrary(dependencies);
       const rowsAfterSecond = await readDemoEntityRows(pool);
 
-      expect(rowsBefore.rows).toHaveLength(PREVIOUS_DEMO_ENTITY_FIXTURES.length);
+      expect(rowsBefore.rows).toHaveLength(entities.length);
       expect(rowsAfterFirst.rows).toHaveLength(DEMO_ENTITY_FIXTURES.length);
-      expect(rowsAfterFirst.rows.map(({ id }) => id).sort()).toEqual(
+      expect(rowsAfterFirst.rows.filter(({ create_idempotency_key }) =>
+        previous.entityIdsByCreateKey.has(create_idempotency_key)).map(({ id }) => id).sort()).toEqual(
         [...previous.entityIdsByCreateKey.values()].sort(),
       );
       const versionsBeforeByCreateKey = new Map(
         rowsBefore.rows.map(({ create_idempotency_key, version }) => [create_idempotency_key, version]),
       );
       for (const row of rowsAfterFirst.rows) {
-        expect(row.version).toBe(versionsBeforeByCreateKey.get(row.create_idempotency_key)! + 1);
+        expect(row.version).toBe((versionsBeforeByCreateKey.get(row.create_idempotency_key) ?? 0) + 1);
       }
       expect(rowsAfterSecond.rows).toEqual(rowsAfterFirst.rows);
       expect(second.entities.map(({ id }) => id)).toEqual(first.entities.map(({ id }) => id));
@@ -467,7 +532,9 @@ describe("demo asset library seed", () => {
          WHERE workspace_id = $1 AND owner_user_id = $2 ORDER BY entity_id`,
         [DEMO_WORKSPACE_ID, DEMO_ACTOR_ID],
       );
-      expect(placementsAfter.rows).toEqual(placementsBefore.rows);
+      expect(placementsAfter.rows.filter(({ entity_id }) =>
+        [...previous.entityIdsByCreateKey.values()].includes(entity_id))).toEqual(placementsBefore.rows);
+      expect(placementsAfter.rows).toHaveLength(3);
 
       const bindings = await pool.query<{ count: string }>(
         `SELECT count(*)::text AS count
@@ -507,7 +574,7 @@ describe("demo asset library seed", () => {
       expect(historicalLinks.rows[0]).toEqual({
         placements: "0",
         project_references: "0",
-        assets: String(PREVIOUS_DEMO_ASSET_FIXTURES.length),
+        assets: String(assets.length),
       });
       for (const assetId of previousAssetIds) {
         const asset = await pool.query<{ object_key: string }>(
@@ -556,7 +623,7 @@ describe("demo asset library seed", () => {
       );
       expect(canonicalIntents.rows[0]?.count).toBe("0");
       const entityRows = await readDemoEntityRows(pool);
-      expect(entityRows.rows).toHaveLength(DEMO_ENTITY_FIXTURES.length);
+      expect(entityRows.rows).toHaveLength(LEGACY_DEMO_ENTITY_FIXTURES.length);
       expect(entityRows.rows.find(({ id }) => id === entityId)).toEqual(expect.objectContaining({
         name: "用户修改后的主体",
         version: 2,
@@ -566,14 +633,17 @@ describe("demo asset library seed", () => {
     }
   });
 
-  it("fails closed before creating v3 media when a previous v2 Entity was edited", async () => {
+  it.each([
+    { generation: "v2", assets: PREVIOUS_DEMO_ASSET_FIXTURES, entities: PREVIOUS_DEMO_ENTITY_FIXTURES, keyFor: previousDemoAssetIdempotencyKey },
+    { generation: "v3", assets: V3_DEMO_ASSET_FIXTURES, entities: V3_DEMO_ENTITY_FIXTURES, keyFor: v3DemoAssetIdempotencyKey },
+  ])("fails closed before creating v4 media when a $generation Entity was edited", async ({ assets, entities, keyFor }) => {
     const pool = createPool();
     const objectStore = new InMemoryObjectStore();
     const assetStore = new PostgresAssetStore(pool);
     const entityStore = new PostgresEntityStore(pool);
     try {
-      const previous = await seedPreviousDemoAssetLibrary(pool, objectStore);
-      const firstFixture = PREVIOUS_DEMO_ENTITY_FIXTURES[0];
+      const previous = await seedHistoricalDemoAssetLibrary(pool, objectStore, assets, entities, keyFor);
+      const firstFixture = entities[0];
       const entityId = previous.entityIdsByCreateKey.get(firstFixture.createIdempotencyKey)!;
       const current = await entityStore.getPersonalEntity({
         actorId: DEMO_ACTOR_ID,
@@ -610,16 +680,20 @@ describe("demo asset library seed", () => {
     }
   });
 
-  it("keeps a legacy asset visible and stored when another personal Entity still references it", async () => {
+  it.each([
+    { generation: "v1", assets: LEGACY_DEMO_ASSET_FIXTURES, entities: LEGACY_DEMO_ENTITY_FIXTURES, keyFor: legacyDemoAssetIdempotencyKey },
+    { generation: "v3", assets: V3_DEMO_ASSET_FIXTURES, entities: V3_DEMO_ENTITY_FIXTURES, keyFor: v3DemoAssetIdempotencyKey },
+  ])("preserves $generation assets referenced by user Entities, other projects, or canvas documents", async ({ assets, entities, keyFor }) => {
     const pool = createPool();
     const objectStore = new InMemoryObjectStore();
     const assetStore = new PostgresAssetStore(pool);
     const entityStore = new PostgresEntityStore(pool);
     try {
-      const legacy = await seedLegacyDemoAssetLibrary(pool, objectStore);
-      const protectedAssetId = legacy.assetIdsByKey.get(LEGACY_DEMO_ASSET_FIXTURES[0].key)!;
-      const projectProtectedAssetId = legacy.assetIdsByKey.get(LEGACY_DEMO_ASSET_FIXTURES[1].key)!;
-      await entityStore.createPersonalEntity({
+      const legacy = await seedHistoricalDemoAssetLibrary(pool, objectStore, assets, entities, keyFor);
+      const protectedAssetId = legacy.assetIdsByKey.get(assets[0].key)!;
+      const projectProtectedAssetId = legacy.assetIdsByKey.get(assets[1].key)!;
+      const canvasProtectedIds = assets.slice(2, 5).map(({ key }) => legacy.assetIdsByKey.get(key)!);
+      const userEntity = await entityStore.createPersonalEntity({
         actorId: DEMO_ACTOR_ID,
         workspaceId: DEMO_WORKSPACE_ID,
         idempotencyKey: "user-entity-preserving-a-legacy-demo-asset",
@@ -634,7 +708,48 @@ describe("demo asset library seed", () => {
         assetId: projectProtectedAssetId,
       });
 
+      const canvasAssets = await pool.query<{ id: string; object_key: string; reference_id: string }>(
+        `SELECT asset.id, asset.object_key, reference.id AS reference_id
+         FROM workspace_media_assets AS asset
+         JOIN project_asset_references AS reference ON reference.asset_id = asset.id
+         WHERE asset.id = ANY($1::text[]) AND reference.project_id = $2`,
+        [canvasProtectedIds, DEMO_PROJECT_ID],
+      );
+      const canvasAssetsById = new Map(canvasAssets.rows.map((asset) => [asset.id, asset]));
+      const originalCanvas = {
+        nodes: [
+          { id: "existing-media", mediaAssetId: canvasProtectedIds[0] },
+          { id: "existing-object", objectKey: canvasAssetsById.get(canvasProtectedIds[1])!.object_key },
+          { id: "existing-reference", projectAssetReferenceId: canvasAssetsById.get(canvasProtectedIds[2])!.reference_id },
+        ],
+      };
+      await pool.query(
+        `INSERT INTO canvas_documents (project_id, canvas_id, schema_version, revision, content,
+           created_by_user_id, updated_by_user_id)
+         VALUES ($1, 'fixture-retention-test', 1, 1, $2::jsonb, $3, $3)`,
+        [DEMO_PROJECT_ID, JSON.stringify(originalCanvas), DEMO_ACTOR_ID],
+      );
+
       await seedDemoAssetLibrary({ pool, assetStore, entityStore, objectStore });
+
+      expect(await entityStore.getPersonalEntity({
+        actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID, entityId: userEntity.id,
+      })).toEqual(userEntity);
+      const canvasAfter = await pool.query<{ revision: number; content: unknown }>(
+        "SELECT revision, content FROM canvas_documents WHERE project_id = $1 AND canvas_id = 'fixture-retention-test'",
+        [DEMO_PROJECT_ID],
+      );
+      expect(canvasAfter.rows[0]).toEqual({ revision: 1, content: originalCanvas });
+      for (const assetId of canvasProtectedIds) {
+        const retainedCanvasAsset = await pool.query<{ placements: string; project_references: string }>(
+          `SELECT
+             (SELECT count(*) FROM media_asset_placements WHERE asset_id = $1)::text AS placements,
+             (SELECT count(*) FROM project_asset_references WHERE asset_id = $1)::text AS project_references`,
+          [assetId],
+        );
+        expect(retainedCanvasAsset.rows[0]).toEqual({ placements: "1", project_references: "1" });
+        await expect(objectStore.headObject(canvasAssetsById.get(assetId)!.object_key)).resolves.toBeTruthy();
+      }
 
       const retained = await pool.query<{ placements: string; project_references: string; assets: string }>(
         `SELECT
@@ -653,7 +768,7 @@ describe("demo asset library seed", () => {
       );
       expect(projectRetained.rows[0]).toEqual({ placements: "1", project_references: "2", assets: "1" });
       const unreferencedLegacyIds = [...legacy.assetIdsByKey.values()].filter(
-        (id) => id !== protectedAssetId && id !== projectProtectedAssetId,
+        (id) => id !== protectedAssetId && id !== projectProtectedAssetId && !canvasProtectedIds.includes(id),
       );
       const hidden = await pool.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM media_asset_placements WHERE asset_id = ANY($1::text[])",

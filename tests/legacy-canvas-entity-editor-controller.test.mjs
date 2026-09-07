@@ -56,6 +56,7 @@ function createHarness(overrides = {}) {
     saved: [],
     savePayloads: [],
     visibility: [],
+    exitStarts: 0,
   };
   let confirmResult = overrides.confirmResult ?? true;
   const getAvailableMedia = overrides.getAvailableMedia || (() => media);
@@ -83,8 +84,9 @@ function createHarness(overrides = {}) {
     saveEntity,
     confirmDiscard: async () => {
       calls.confirms += 1;
-      return confirmResult;
+      return overrides.confirmDiscard ? overrides.confirmDiscard() : confirmResult;
     },
+    onExitStart: () => { calls.exitStarts += 1; },
     onVisibilityChange: (visible) => calls.visibility.push(visible),
     onSaved: (entity) => calls.saved.push(entity),
     onError: (error) => calls.errors.push(error),
@@ -133,6 +135,116 @@ async function flushAsync() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function mockExitAnimations(harness) {
+  const animations = [];
+  harness.window.Element.prototype.animate = function (frames, timing) {
+    let finish;
+    let reject;
+    const finished = new Promise((resolve, rejectPromise) => { finish = resolve; reject = rejectPromise; });
+    const animation = {
+      target: this, frames, timing, finished, finish, cancelled: false,
+      cancel() { this.cancelled = true; reject(new Error("Animation cancelled")); },
+    };
+    animations.push(animation);
+    return animation;
+  };
+  return animations;
+}
+
+test("closing keeps the real panels visible and inert until every exit animation settles", async () => {
+  const harness = createHarness();
+  const animations = mockExitAnimations(harness);
+  harness.controller.open({ mode: "edit", entity: editEntity, media });
+  const panel = harness.host.querySelector("[data-entity-editor]");
+  const closing = harness.controller.requestClose();
+  assert.equal(harness.calls.exitStarts, 1);
+  assert.equal(harness.controller.isOpen(), true);
+  assert.equal(harness.host.hidden, false);
+  assert.equal(harness.host.hasAttribute("inert"), true);
+  assert.equal(harness.host.querySelector("[data-entity-editor]"), panel);
+  assert.equal(await harness.controller.requestClose(), false);
+  harness.input("[data-entity-editor-name]", "退场中不应写入");
+  await harness.controller.submit();
+  assert.equal(harness.controller.getDraftState().name, editEntity.name);
+  assert.equal(harness.calls.savePayloads.length, 0);
+  assert.equal(animations.length, 3);
+  animations[2].finish();
+  await flushAsync();
+  assert.equal(harness.controller.isOpen(), true);
+  animations[0].finish();
+  animations[1].finish();
+  assert.equal(await closing, true);
+  assert.equal(harness.host.hidden, true);
+  assert.equal(harness.host.innerHTML, "");
+  assert.deepEqual(harness.calls.visibility, [true, false]);
+  harness.controller.destroy();
+});
+
+test("reopening or destroying cancels exit animations and retires their completion", async () => {
+  for (const action of ["reopen", "destroy"]) {
+    const harness = createHarness();
+    const animations = mockExitAnimations(harness);
+    harness.controller.open({ mode: "edit", entity: editEntity, media });
+    const closing = harness.controller.requestClose();
+    if (action === "reopen") harness.controller.open({ mode: "create", media });
+    else harness.controller.destroy();
+    assert.equal(await closing, false);
+    assert.equal(animations.every((animation) => animation.cancelled), true);
+    assert.equal(harness.controller.isOpen(), action === "reopen");
+    if (action === "reopen") {
+      assert.equal(harness.controller.getDraftState().name, "");
+      assert.equal(harness.host.hasAttribute("inert"), false);
+      harness.controller.destroy();
+    }
+  }
+});
+
+test("a stale discard confirmation cannot animate or close a replacement draft", async () => {
+  let confirm;
+  const harness = createHarness({ confirmDiscard: () => new Promise((resolve) => { confirm = resolve; }) });
+  mockExitAnimations(harness);
+  harness.controller.open({ mode: "edit", entity: editEntity, media });
+  harness.input("[data-entity-editor-description]", "修改描述");
+  const closing = harness.controller.requestClose();
+  assert.equal(await harness.controller.requestClose(), false);
+  assert.equal(harness.calls.confirms, 1);
+  assert.equal(harness.calls.exitStarts, 0);
+  harness.controller.open({ mode: "create", media });
+  confirm(true);
+  assert.equal(await closing, false);
+  assert.equal(harness.controller.isOpen(), true);
+  assert.equal(harness.calls.exitStarts, 0);
+  harness.controller.destroy();
+});
+
+test("reduced motion restores the destination immediately without waiting for animation", async () => {
+  const harness = createHarness();
+  const animations = mockExitAnimations(harness);
+  harness.window.matchMedia = () => ({ matches: true });
+  harness.controller.open({ mode: "edit", entity: editEntity, media });
+  assert.equal(await harness.controller.requestClose(), true);
+  assert.equal(harness.calls.exitStarts, 1);
+  assert.equal(animations.length, 0);
+  assert.equal(harness.host.hidden, true);
+  harness.controller.destroy();
+});
+
+test("a completed save cannot start an exit on a replacement editor", async () => {
+  let save;
+  const harness = createHarness({ saveEntity: () => new Promise((resolve) => { save = resolve; }) });
+  mockExitAnimations(harness);
+  harness.controller.open({ mode: "edit", entity: editEntity, media });
+  const saving = harness.controller.submit();
+  assert.equal(await harness.controller.requestClose(), false);
+  harness.controller.open({ mode: "create", media });
+  save(editEntity);
+  await saving;
+  assert.equal(harness.controller.isOpen(), true);
+  assert.equal(harness.calls.saved.length, 0);
+  assert.equal(harness.calls.exitStarts, 0);
+  harness.controller.destroy();
+});
+
 test("create keeps 新建主体 while edit follows the current Entity name", () => {
   const create = createHarness();
   create.controller.open({ mode: "create", media });
@@ -147,6 +259,25 @@ test("create keeps 新建主体 while edit follows the current Entity name", () 
   edit.input("[data-entity-editor-name]", "Lirael II");
   assert.equal(edit.host.querySelector("#canvasEntityEditorTitle")?.textContent, "Lirael II");
   edit.controller.destroy();
+});
+
+test("opening an Entity editor focuses its close control without selecting the name", async () => {
+  for (const mode of ["create", "edit"]) {
+    const harness = createHarness();
+    harness.controller.open({ mode, entity: editEntity, media });
+    await flushAsync();
+
+    const name = harness.host.querySelector("[data-entity-editor-name]");
+    const close = harness.host.querySelector(".entity-editor-header [data-entity-editor-cancel]");
+    assert.equal(harness.window.document.activeElement, close);
+    assert.equal(name.selectionStart, name.selectionEnd);
+    assert.equal(harness.controller.getDraftState().dirty, false);
+
+    name.focus();
+    assert.equal(harness.window.document.activeElement, name);
+    assert.equal(name.selectionStart, name.selectionEnd);
+    harness.controller.destroy();
+  }
 });
 
 test("all four filters apply only to Media already referenced by the Entity", () => {
@@ -432,9 +563,11 @@ test("validation errors are removed from DOM when the corresponding draft data i
   const harness = createHarness();
   harness.controller.open({ mode: "create", media });
   await harness.controller.submit();
+  await flushAsync();
 
   assert.ok(harness.host.querySelector("#canvasEntityEditorNameError"));
   assert.ok(harness.host.querySelector("#canvasEntityEditorMediaError"));
+  assert.equal(harness.window.document.activeElement, harness.host.querySelector("[data-entity-editor-name]"));
   harness.input("[data-entity-editor-name]", "已修正名称");
   assert.equal(harness.host.querySelector("#canvasEntityEditorNameError"), null);
   assert.equal(harness.host.querySelector("[data-entity-editor-name]")?.hasAttribute("aria-invalid"), false);

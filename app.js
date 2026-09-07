@@ -53,6 +53,15 @@ const assetLibraryEntityTab = document.querySelector("#assetLibraryEntityTab");
 const assetLibrarySpaceButton = document.querySelector("#assetLibrarySpaceButton");
 const assetLibrarySpaceLabel = document.querySelector("#assetLibrarySpaceLabel");
 const assetLibrarySpaceMenu = document.querySelector("#assetLibrarySpaceMenu");
+const assetSpaceSwitcher = window.REELAY_ASSET_SPACE_SWITCHER.createController({
+  root: assetLibrarySpaceButton.closest(".asset-library-space-switcher"),
+  trigger: assetLibrarySpaceButton,
+  menu: assetLibrarySpaceMenu,
+  canOpen: () => !assetLibraryPanel.classList.contains("hidden") && !assetLibraryPanel.inert,
+  onSelect: (space) => {
+    if (space !== state.librarySpace) switchAssetLibraryContext({ space });
+  },
+});
 const assetLibraryDirectoryName = document.querySelector("#assetLibraryDirectoryName");
 const assetLibraryDirectoryButton = document.querySelector("#assetLibraryDirectoryButton");
 const assetLibraryDirectoryTreePopover = document.querySelector("#assetLibraryDirectoryTreePopover");
@@ -180,6 +189,14 @@ const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
 if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
 const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
 if (!canvasPopoverPlacement) throw new Error("Canvas popover placement helper is unavailable.");
+const assetLibraryItemMenu = window.REELAY_CANVAS_ASSET_LIBRARY_MENU_CONTROLLER.create({
+  grid: assetLibraryGrid,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+  onDismiss() {
+    state.libraryMenuTarget = null;
+    renderAssetLibrary();
+  },
+});
 
 function loadMediaToolPreferences() {
   try {
@@ -555,6 +572,7 @@ const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntit
   },
   saveEntity: saveEntityEditorDraft,
   confirmDiscard: confirmEntityEditorDiscard,
+  onExitStart: prepareEntityEditorReturn,
   onVisibilityChange: setEntityEditorOpen,
   onSaved(entity) {
     if (window.parent !== window) syncHostEntity(entity);
@@ -3535,6 +3553,7 @@ function getVisibleAssetLibraryContent() {
 
 function renderAssetLibrary() {
   if (!assetLibraryGrid || !canvasAssetLibraryView) return;
+  const previousRenameInput = assetLibraryGrid.querySelector("[data-library-rename-input]");
   const mutable = isAssetLibraryMutable();
   const space = state.librarySpace;
   const platform = space === "platform";
@@ -3697,14 +3716,14 @@ function renderAssetLibrary() {
     })
     .join("");
 
-  assetLibraryGrid.innerHTML = folderMarkup + itemMarkup || canvasAssetLibraryView.renderEmptyState({
+  canvasAssetLibraryView.syncGrid(assetLibraryGrid, folderMarkup + itemMarkup || canvasAssetLibraryView.renderEmptyState({
     section,
     space,
     hasQuery: Boolean(state.librarySearch || (section === "media" && state.libraryFilter !== "all")),
     mutable,
     canCreateEntity,
     canUploadMedia,
-  });
+  }));
 
   if (assetLibraryCount) {
     if (platform) {
@@ -3732,12 +3751,14 @@ function renderAssetLibrary() {
   }
   refreshIcons();
   if (state.libraryRenameTarget) {
-    window.requestAnimationFrame(() => {
-      const input = assetLibraryGrid.querySelector("[data-library-rename-input]");
-      input?.focus();
-      input?.select();
+    const input = assetLibraryGrid.querySelector("[data-library-rename-input]");
+    if (input && input !== previousRenameInput) window.requestAnimationFrame(() => {
+      if (!input.isConnected) return;
+      input.focus();
+      input.select();
     });
   }
+  assetLibraryItemMenu.sync();
   canvasEntityUse.refreshDetail();
 }
 
@@ -4042,6 +4063,8 @@ function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
 }
 
 function closeAssetLibrary({ restoreFocus = true } = {}) {
+  assetSpaceSwitcher.close();
+  assetLibraryItemMenu.dispose();
   const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
   canvasEntityUse.closeDetail();
   state.libraryTargetNodeId = null;
@@ -4067,38 +4090,71 @@ function closeAssetLibrary({ restoreFocus = true } = {}) {
 }
 
 function addAssetToGeneratorNode(node, sourceAsset) {
-  if (!requireCanvasMutation()) return;
-  if (!node || node.kind !== "generator" || node.generating || !sourceAsset) return;
-  const asset = cloneAsset(sourceAsset, "library");
-  node.assets.push(asset);
-  node.activeAssetId = asset.id;
+  return addAssetsToGeneratorNode(node, sourceAsset ? [sourceAsset] : [])[0] || null;
+}
+
+function addAssetsToGeneratorNode(node, sourceAssets) {
+  if (!requireCanvasMutation()) return [];
+  if (!node || !state.nodes.includes(node) || node.kind !== "generator" || node.generating || node.promptOptimizing || !sourceAssets.length) return [];
+  const assets = sourceAssets.map((asset) => cloneAsset(asset, "library"));
+  pushUndoAction({ type: "node-assets-add", nodeId: node.id,
+    addedAssetIds: assets.map((asset) => asset.id), previousActiveAssetId: node.activeAssetId });
+  node.assets.push(...assets);
+  node.activeAssetId = assets[0].id;
   node.expanded = true;
   node.panel = null;
-  hydrateAssetMetadata(asset, node.id);
+  assets.forEach((asset) => hydrateAssetMetadata(asset, node.id));
   bringNodesToFront([node]);
   setSelection([node.id], node.id);
   render();
+  return assets;
 }
 
 function addLibraryAssetToCanvas(sourceAsset, clientX, clientY) {
-  if (!requireCanvasMutation()) return null;
-  if (!sourceAsset) return null;
+  return addLibraryAssetsToCanvas(sourceAsset ? [sourceAsset] : [], clientX, clientY)[0] || null;
+}
+
+function addLibraryAssetsToCanvas(sourceAssets, clientX, clientY) {
+  if (!requireCanvasMutation() || !sourceAssets.length) return [];
   const rect = shell.getBoundingClientRect();
   const x = Number.isFinite(clientX) ? clientX : rect.left + rect.width / 2;
   const y = Number.isFinite(clientY) ? clientY : rect.top + rect.height / 2;
-  const asset = cloneAsset(sourceAsset, "library");
   const world = screenToWorld(x, y);
-  const node = defaultAssetNode(0, 0, asset);
-  const layout = getNodeLayout(node);
-  node.x = world.x - layout.nodeWidth / 2;
-  node.y = world.y - layout.mediaHeight / 2;
-  hydrateAssetMetadata(asset, node.id);
+  const nodes = sourceAssets.map((sourceAsset) => {
+    const asset = cloneAsset(sourceAsset, "library");
+    const node = defaultAssetNode(0, 0, asset);
+    hydrateAssetMetadata(asset, node.id);
+    return node;
+  });
+  if (nodes.length === 1) {
+    const layout = getNodeLayout(nodes[0]);
+    nodes[0].x = world.x - layout.nodeWidth / 2;
+    nodes[0].y = world.y - layout.mediaHeight / 2;
+  } else {
+    const layoutPlan = canvasEntityUseModel.createCenteredGridPlan(nodes.map((node) => {
+      const layout = getNodeLayout(node);
+      return { media: node.assets[0], layoutWidth: layout.nodeWidth, layoutHeight: layout.nodeHeight };
+    }), {
+      centerX: world.x,
+      centerY: world.y,
+      viewportWidth: Math.max(1, rect.width / state.scale),
+      viewportHeight: Math.max(1, rect.height / state.scale),
+      padding: 0,
+      gapX: 30 / state.scale,
+      gapY: 30 / state.scale,
+    });
+    layoutPlan.items.forEach((item, index) => {
+      nodes[index].x = item.x;
+      nodes[index].y = item.y;
+    });
+  }
   collapseAllGeneratorPanels();
-  state.nodes.push(node);
-  bringNodesToFront([node]);
-  setSelection([node.id], node.id);
+  pushUndoAction({ type: "create", nodeIds: nodes.map((node) => node.id) });
+  state.nodes.push(...nodes);
+  bringNodesToFront(nodes);
+  setSelection(nodes.map((node) => node.id), nodes[0].id);
   render();
-  return node;
+  return nodes;
 }
 
 function useLibraryAsset(assetId, clientX, clientY) {
@@ -4478,6 +4534,24 @@ function hasDraggedFiles(event) {
 
 function hasDraggedLibraryAsset(event) {
   return Array.from(event.dataTransfer?.types || []).includes("application/x-reelay-asset");
+}
+
+function getDraggedLibraryAssets(event) {
+  let payload;
+  try {
+    payload = JSON.parse(event.dataTransfer?.getData("application/x-reelay-asset") || "");
+  } catch {
+    return [];
+  }
+  if (!payload || payload.version !== 1
+    || payload.projectId !== state.projectId || payload.canvasId !== state.activeCanvasId
+    || payload.space !== state.librarySpace || state.librarySection !== "media"
+    || !Array.isArray(payload.assetIds) || !payload.assetIds.length
+    || payload.assetIds.some((id) => typeof id !== "string" || !id)
+    || new Set(payload.assetIds).size !== payload.assetIds.length) return [];
+  const visibleMedia = new Map(getVisibleAssetLibraryContent().items.map((asset) => [asset.id, asset]));
+  const assets = payload.assetIds.map((id) => visibleMedia.get(id));
+  return assets.every(Boolean) ? assets : [];
 }
 
 function isCanvasDropTarget(target) {
@@ -7072,9 +7146,9 @@ function deleteSelectedNodes(confirmed = false) {
   const fullGroups = state.groups.filter((group) => group.nodeIds.length && group.nodeIds.every((id) => state.selectedIds.has(id)));
   if (!confirmed && fullGroups.length) {
     showConfirmDialog({
-      title: "删除组内内容",
+      title: "删除组内内容？",
       body: `当前选择包含 ${fullGroups.length} 个完整组，共 ${state.selectedIds.size} 个节点。\n删除会移除组框以及组内内容，可通过撤销恢复最近一次删除。`,
-      confirmText: "删除",
+      confirmText: "删除内容",
       danger: true,
       onConfirm: () => deleteSelectedNodes(true),
     });
@@ -7288,7 +7362,7 @@ function getDialogFocusFallback(previousFocus) {
   return [...document.querySelectorAll(selector)].find(canRestoreDialogFocus) || null;
 }
 
-function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, variant = "default", onConfirm, onCancel }) {
+function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, onConfirm, onCancel }) {
   const existingLayer = document.querySelector(".confirm-layer");
   if (existingLayer) {
     if (typeof existingLayer.closeConfirmDialog === "function") {
@@ -7301,12 +7375,12 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
   const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const fallbackFocus = getDialogFocusFallback(previousFocus);
   const titleId = `confirm-title-${crypto.randomUUID()}`;
+  const bodyId = `${titleId}-body`;
   const layer = document.createElement("dialog");
   layer.className = "confirm-layer";
-  const isConversationDelete = variant === "conversation-delete";
-  if (isConversationDelete) layer.classList.add("conversation-delete");
   layer.setAttribute("aria-modal", "true");
   layer.setAttribute("aria-labelledby", titleId);
+  layer.setAttribute("aria-describedby", bodyId);
   Object.assign(layer.style, {
     width: "100vw",
     height: "100vh",
@@ -7319,8 +7393,8 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
   });
   layer.innerHTML = `
     <div class="confirm-dialog">
-      <div class="confirm-title" id="${titleId}">${isConversationDelete ? '<span class="confirm-warning-symbol" aria-hidden="true">!</span>' : ""}${escapeHtml(title)}</div>
-      <div class="confirm-body">${escapePlainText(body)}</div>
+      <h2 class="confirm-title" id="${titleId}">${escapeHtml(title)}</h2>
+      <div class="confirm-body" id="${bodyId}">${escapePlainText(body)}</div>
       <div class="confirm-actions">
         ${showCancel ? `<button class="confirm-cancel" type="button" autofocus>${escapeHtml(cancelText)}</button>` : ""}
         <button class="confirm-ok ${danger ? "danger" : ""}" type="button" ${showCancel ? "" : "autofocus"}>${escapeHtml(confirmText)}</button>
@@ -7415,11 +7489,10 @@ const agentHistory = window.REELAY_AGENT_HISTORY.createController({
     setAgentHistoryOpen(false);
     agentHistoryBtn?.focus();
     showConfirmDialog({
-      title: "删除对话",
-      body: `确定删除「${conversation.title}」吗？`,
-      confirmText: "删除",
+      title: "删除对话？",
+      body: `「${conversation.title}」及其中的消息将被删除，此操作无法撤销。`,
+      confirmText: "删除对话",
       danger: true,
-      variant: "conversation-delete",
       onConfirm,
     });
   },
@@ -8144,9 +8217,9 @@ function deleteCanvas(canvasId) {
   const canvas = state.canvases.find((item) => item.id === canvasId);
   if (!canvas) return;
   showConfirmDialog({
-    title: "删除画布",
-    body: `将删除「${canvas.name}」及其中的节点。此操作当前原型不可撤销。`,
-    confirmText: "删除",
+    title: "删除画布？",
+    body: `「${canvas.name}」及其中的节点将被删除，此操作无法撤销。`,
+    confirmText: "删除画布",
     danger: true,
     onConfirm: () => {
       canvasNodeTasks.cancelScope({ projectId: state.projectId, canvasId }, "canvas-deleted");
@@ -9232,17 +9305,23 @@ localAssetInput.addEventListener("change", (event) => {
 window.addEventListener("dragover", (event) => {
   if (!hasDraggedFiles(event) && !hasDraggedLibraryAsset(event)) return;
   event.preventDefault();
-  if (!isCanvasDropTarget(event.target)) {
+  if (!isCanvasDropTarget(event.target) || !isCanvasMutationAllowed()) {
     if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
     shell.classList.remove("file-dragging");
     return;
   }
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
   shell.classList.add("file-dragging");
 });
 
 window.addEventListener("dragleave", (event) => {
   if (event.clientX !== 0 && event.clientY !== 0) return;
   shell.classList.remove("file-dragging");
+});
+
+window.addEventListener("dragend", () => {
+  shell.classList.remove("file-dragging");
+  document.querySelectorAll(".asset-library-drag-preview").forEach((preview) => preview.remove());
 });
 
 window.addEventListener("drop", (event) => {
@@ -9252,16 +9331,17 @@ window.addEventListener("drop", (event) => {
     shell.classList.remove("file-dragging");
     return;
   }
-  const libraryAssetId = event.dataTransfer?.getData("application/x-reelay-asset");
-  if (libraryAssetId) {
+  if (hasDraggedLibraryAsset(event)) {
     event.preventDefault();
     shell.classList.remove("file-dragging");
-    const sourceAsset = findLibraryAsset(libraryAssetId);
+    if (!requireCanvasMutation()) return;
+    const sourceAssets = getDraggedLibraryAssets(event);
+    if (!sourceAssets.length) return;
     const targetNode = getNodeFromElement(event.target);
     if (targetNode?.kind === "generator") {
-      addAssetToGeneratorNode(targetNode, sourceAsset);
+      addAssetsToGeneratorNode(targetNode, sourceAssets);
     } else {
-      addLibraryAssetToCanvas(sourceAsset, event.clientX, event.clientY);
+      addLibraryAssetsToCanvas(sourceAssets, event.clientX, event.clientY);
     }
     return;
   }
@@ -9292,7 +9372,16 @@ function setAssetLibrarySelectionMode(enabled) {
 }
 
 function toggleAssetLibrarySelection(id) {
-  if (!state.librarySelectionMode) return;
+  if (!isAssetLibraryMutable() && state.librarySpace !== "platform") return;
+  if (!getVisibleAssetLibraryContent().items.some((item) => item.id === id)) return;
+  if (!state.librarySelectionMode) {
+    canvasEntityUse.closeDetail();
+    state.librarySelectionMode = true;
+    state.librarySelectedIds.clear();
+    state.libraryMenuTarget = null;
+    state.libraryMoveItems = [];
+    state.libraryMoveFolderId = null;
+  }
   if (state.librarySelectedIds.has(id)) state.librarySelectedIds.delete(id);
   else state.librarySelectedIds.add(id);
   state.libraryToolbarMenu = null;
@@ -9533,6 +9622,7 @@ function confirmEntityEditorDiscard() {
     showConfirmDialog({
       title: "放弃未保存的修改？",
       body: "主体名称、描述和素材调整都不会保留。",
+      cancelText: "继续编辑",
       confirmText: "放弃修改",
       danger: true,
       onConfirm: () => resolve(true),
@@ -9541,9 +9631,24 @@ function confirmEntityEditorDiscard() {
   });
 }
 
-function setEntityEditorOpen(open) {
+function prepareEntityEditorReturn() {
+  assetSpaceSwitcher.suspendHover();
+  document.body.classList.add("entity-editor-returning");
+  if (!reopenAssetLibraryAfterEntityEditor) return;
+  state.librarySpace = "personal";
+  state.librarySection = "entity";
+  state.libraryFolderId = null;
+  openAssetLibrary();
+  // Reveal the destination beneath the exiting workspace without accepting input yet.
+  assetLibraryPanel.inert = true;
+  assetLibraryPanel.setAttribute("aria-hidden", "true");
+}
+
+function setEntityEditorOpen(open, { entityId = null } = {}) {
+  const returning = document.body.classList.contains("entity-editor-returning");
   document.body.classList.toggle("entity-editor-open", open);
   if (open) {
+    document.body.classList.remove("entity-editor-returning");
     closeAssetLibrary();
     setAgentOpen(false);
     closeProfileMenu();
@@ -9575,10 +9680,16 @@ function setEntityEditorOpen(open) {
     state.librarySection = "entity";
     state.libraryFolderId = null;
     openAssetLibrary();
+    if (returning) {
+      const source = [...assetLibraryPanel.querySelectorAll('[data-library-preview][data-library-item-kind="entity"]')]
+        .find((button) => button.dataset.libraryPreview === entityId);
+      (source || assetLibraryPanel.querySelector("[data-library-create-entity]") || assetLibrarySearchInput)?.focus({ preventScroll: true });
+    }
   } else if (leftRail) {
     leftRail.inert = false;
     leftRail.removeAttribute("aria-hidden");
   }
+  document.body.classList.remove("entity-editor-returning");
 }
 
 function openEntityEditorCreate() {
@@ -9708,11 +9819,11 @@ function deleteAssetLibraryItems(items) {
   if (!items.length) return;
   const noun = state.librarySection === "entity" ? "主体" : "素材";
   showConfirmDialog({
-    title: `删除${items.length > 1 ? ` ${items.length} 个` : ""}${noun}`,
+    title: `删除${items.length > 1 ? ` ${items.length} 个` : ""}${noun}？`,
     body: state.librarySection === "entity"
-      ? "删除主体不会删除它引用的素材。"
-      : "仍被主体引用的素材不会被删除。",
-    confirmText: "删除",
+      ? "主体将从当前空间移除，它引用的素材会保留。此操作无法撤销。"
+      : "素材将从当前空间移除。若仍被主体引用，本次删除会被阻止。此操作无法撤销。",
+    confirmText: `删除${noun}`,
     danger: true,
     onConfirm: () => {
       try {
@@ -9739,25 +9850,16 @@ function addPlatformMediaToCanvas(items) {
   if (!requireCanvasMutation()) return 0;
 
   const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId);
+  let addedCount;
   if (targetNode?.kind === "generator") {
-    assets.forEach((asset) => addAssetToGeneratorNode(targetNode, asset));
+    addedCount = addAssetsToGeneratorNode(targetNode, assets).length;
   } else {
-    const rect = shell.getBoundingClientRect();
-    const columns = Math.max(1, Math.ceil(Math.sqrt(assets.length)));
-    const rows = Math.ceil(assets.length / columns);
-    assets.forEach((asset, index) => {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
-      addLibraryAssetToCanvas(
-        asset,
-        rect.left + rect.width / 2 + (column - (columns - 1) / 2) * 320,
-        rect.top + rect.height / 2 + (row - (rows - 1) / 2) * 240,
-      );
-    });
+    addedCount = addLibraryAssetsToCanvas(assets).length;
   }
+  if (!addedCount) return 0;
   clearAssetLibrarySelection();
-  showActionToast(`已添加 ${assets.length} 个平台素材到画布`);
-  return assets.length;
+  showActionToast(`已添加 ${addedCount} 个平台素材到画布`);
+  return addedCount;
 }
 
 function runAssetLibraryAction(action, items) {
@@ -9818,9 +9920,9 @@ function deleteAssetLibraryFolder(folderId) {
   const folder = assetLibraryStore.getFolder(folderId);
   if (!folder) return;
   showConfirmDialog({
-    title: `删除文件夹“${folder.name}”`,
-    body: "该文件夹及其子目录中的资产会从当前空间移除；仍被主体引用的素材不会被误删。",
-    confirmText: "删除",
+    title: "删除文件夹？",
+    body: `「${folder.name}」及其子文件夹中的资产将从当前空间移除。若素材仍被其他主体引用，本次删除会被阻止。此操作无法撤销。`,
+    confirmText: "删除文件夹",
     danger: true,
     onConfirm: () => {
       try {
@@ -9909,19 +10011,6 @@ assetLibrarySearchInput?.addEventListener("input", (event) => {
   renderAssetLibrary();
 });
 assetLibraryPanel?.addEventListener("click", (event) => {
-  if (event.target.closest("#assetLibrarySpaceButton")) {
-    const willOpen = assetLibrarySpaceMenu?.classList.contains("hidden");
-    assetLibrarySpaceMenu?.classList.toggle("hidden", !willOpen);
-    assetLibrarySpaceButton?.setAttribute("aria-expanded", willOpen ? "true" : "false");
-    return;
-  }
-  const space = event.target.closest("#assetLibrarySpaceMenu [data-library-space]")?.dataset.librarySpace;
-  if (space) {
-    assetLibrarySpaceMenu?.classList.add("hidden");
-    assetLibrarySpaceButton?.setAttribute("aria-expanded", "false");
-    switchAssetLibraryContext({ space });
-    return;
-  }
   const section = event.target.closest("#assetLibrarySectionTabs [data-library-section]")?.dataset.librarySection;
   if (section) {
     switchAssetLibraryContext({ section });
@@ -10150,9 +10239,38 @@ assetLibraryGrid?.addEventListener("keydown", (event) => {
 assetLibraryGrid?.addEventListener("dragstart", (event) => {
   const assetId = event.target.closest("[data-library-media]")?.dataset.libraryMedia;
   if (!assetId || !event.dataTransfer) return;
+  if (!requireCanvasMutation({ notify: false }) || state.librarySection !== "media") {
+    event.preventDefault();
+    return;
+  }
+  const { items } = getVisibleAssetLibraryContent();
+  const draggingSelection = state.librarySelectionMode && state.librarySelectedIds.has(assetId);
+  const assetIds = items.filter((item) => draggingSelection
+    ? state.librarySelectedIds.has(item.id)
+    : item.id === assetId).map((item) => item.id);
+  if (!assetIds.length) {
+    event.preventDefault();
+    return;
+  }
   event.dataTransfer.effectAllowed = "copy";
-  event.dataTransfer.setData("application/x-reelay-asset", assetId);
-  event.dataTransfer.setData("text/plain", assetId);
+  event.dataTransfer.setData("application/x-reelay-asset", JSON.stringify({
+    version: 1, projectId: state.projectId, canvasId: state.activeCanvasId,
+    space: state.librarySpace, assetIds,
+  }));
+  event.dataTransfer.setData("text/plain", assetIds.join("\n"));
+  if (assetIds.length > 1 && typeof event.dataTransfer.setDragImage === "function") {
+    const preview = document.createElement("div");
+    preview.className = "asset-library-drag-preview";
+    preview.textContent = `${assetIds.length} 个素材`;
+    preview.setAttribute("aria-hidden", "true");
+    document.body.append(preview);
+    try {
+      event.dataTransfer.setDragImage(preview, 16, 18);
+    } catch {
+      preview.remove();
+    }
+    window.requestAnimationFrame(() => preview.remove());
+  }
 });
 assetLibraryPreviewDialog?.addEventListener("click", (event) => {
   if (event.target === assetLibraryPreviewDialog || event.target.closest("[data-library-preview-close]")) {
@@ -10826,10 +10944,6 @@ document.addEventListener("click", (event) => {
   if (!target?.closest(".project-nav, .project-menu, .canvas-menu, .canvas-more-menu")) {
     closeProjectMenus();
   }
-  if (!target?.closest(".asset-library-space-switcher")) {
-    assetLibrarySpaceMenu?.classList.add("hidden");
-    assetLibrarySpaceButton?.setAttribute("aria-expanded", "false");
-  }
   let shouldRenderLibrary = false;
   if (!pathMatches(".asset-library-directory-shell") && state.libraryDirectoryMenuOpen) {
     state.libraryDirectoryMenuOpen = false;
@@ -10888,7 +11002,10 @@ window.addEventListener("resize", () => {
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
-  if (!event.persisted) canvasNodeTasks.dispose();
+  if (!event.persisted) {
+    assetLibraryItemMenu.dispose();
+    canvasNodeTasks.dispose();
+  }
   flushCanvasDocumentSave();
 });
 document.addEventListener("visibilitychange", () => {

@@ -32,7 +32,7 @@ export function getMigrationDatabaseUrl(): string {
 function getConnectionConfig(connectionString: string): Pick<PoolConfig, "connectionString" | "ssl"> {
   const url = new URL(connectionString);
   const isSupabase =
-    url.hostname.endsWith(".supabase.com") || url.hostname.endsWith(".pooler.supabase.com");
+    url.hostname.endsWith(".supabase.com") || url.hostname.endsWith(".supabase.co");
   if (!isSupabase) return { connectionString };
 
   url.searchParams.delete("sslmode");

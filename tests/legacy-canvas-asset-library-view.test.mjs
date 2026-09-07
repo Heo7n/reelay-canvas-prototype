@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { JSDOM } from "jsdom";
 
 const source = await readFile(
   new URL("../src/legacy-canvas/canvas-asset-library-view.js", import.meta.url),
@@ -23,6 +24,7 @@ test("registers the complete frozen canvas asset-library view API", () => {
       "renderFolderCard",
       "renderMediaCard",
       "renderMovePopover",
+      "syncGrid",
     ],
   );
   for (const renderer of Object.values(view)) assert.equal(typeof renderer, "function");
@@ -453,6 +455,104 @@ test("media cards build previews only from structured safe media fields", () => 
   assert.match(rejected, /data-lucide="image"/);
   assert.doesNotMatch(obfuscated, /java\nscript/);
   assert.doesNotMatch(obfuscated, /<video/);
+});
+
+test("browse cards expose direct selection without exposing edits in read-only spaces", () => {
+  const media = { id: "video", mediaKind: "video", name: "镜头" };
+  assert.match(view.renderMediaCard({ media, mutable: true }), /data-library-select="video"/);
+  assert.doesNotMatch(view.renderMediaCard({ media, mutable: false }), /data-library-select/);
+  assert.match(view.renderMediaCard({ media, space: "platform", mutable: false }), /data-library-select="video"/);
+  assert.match(view.renderEntityCard({ entity: { id: "entity" }, mutable: true }), /data-library-select="entity"/);
+  assert.doesNotMatch(view.renderEntityCard({ entity: { id: "entity" }, mutable: false }), /data-library-select/);
+  assert.doesNotMatch(view.renderFolderCard({ folder: { id: "folder" } }), /data-library-select=/);
+});
+
+test("grid updates retain loaded media, control focus and scroll across selection and menus", (t) => {
+  const dom = new JSDOM("<div id='grid'></div>");
+  t.after(() => dom.window.close());
+  const grid = dom.window.document.querySelector("#grid");
+  const media = { id: "video", name: "镜头", mediaKind: "video", url: "https://example.test/video.mp4" };
+  const render = (options = {}) => view.renderMediaCard({ media, mutable: true, ...options });
+  view.syncGrid(grid, render());
+  const card = grid.firstElementChild;
+  const preview = card.querySelector(".asset-library-card-preview");
+  const video = card.querySelector("video");
+  const selection = card.querySelector("[data-library-select]");
+  const more = card.querySelector("[data-library-menu-toggle]");
+  const observer = new dom.window.MutationObserver(() => {});
+  observer.observe(grid, { subtree: true, childList: true, attributes: true, characterData: true });
+  video.currentTime = 4.5;
+  grid.scrollTop = 140;
+  selection.focus();
+  view.syncGrid(grid, render());
+  assert.equal(observer.takeRecords().length, 0, "a canvas-only render must not touch library content");
+
+  for (const options of [{ selected: true, selectionMode: true }, { menuOpen: true }, { name: "新名称" }]) {
+    view.syncGrid(grid, render(options));
+    assert.equal(grid.firstElementChild, card);
+    assert.equal(card.querySelector(".asset-library-card-preview"), preview);
+    assert.equal(card.querySelector("video"), video);
+    assert.equal(video.isConnected, true);
+    assert.equal(video.currentTime, 4.5);
+    assert.equal(card.querySelector("[data-library-select]"), selection);
+    assert.equal(card.querySelector("[data-library-menu-toggle]"), more);
+    assert.equal(dom.window.document.activeElement, selection);
+    assert.equal(grid.scrollTop, 140);
+  }
+  assert.equal(preview.getAttribute("aria-label"), "预览 新名称");
+  assert.equal(card.querySelector(".asset-library-card-name").textContent, "新名称");
+  assert.equal(card.querySelector(".asset-library-item-menu"), null);
+  observer.disconnect();
+});
+
+test("grid reconciles membership and media updates without recycling another space's card", (t) => {
+  const dom = new JSDOM("<div id='grid'></div>");
+  t.after(() => dom.window.close());
+  const grid = dom.window.document.querySelector("#grid");
+  const render = (id, options = {}) => view.renderMediaCard({
+    media: { id, name: id, mediaKind: "image", url: `https://example.test/${id}.jpg` }, ...options,
+  });
+  view.syncGrid(grid, render("a") + render("b"));
+  const a = grid.children[0];
+  const b = grid.children[1];
+  const bImage = b.querySelector("img");
+  view.syncGrid(grid, render("b") + render("a") + render("c"));
+  assert.deepEqual([...grid.children].slice(0, 2), [b, a]);
+  assert.equal(b.querySelector("img"), bImage);
+  view.syncGrid(grid, render("b"));
+  assert.equal(a.isConnected, false);
+  assert.equal(grid.children.length, 1);
+  assert.equal(grid.firstElementChild, b);
+  view.syncGrid(grid, render("b", { media: { id: "b", mediaKind: "video", url: "https://example.test/new.mp4" } }));
+  assert.equal(grid.firstElementChild, b);
+  assert.equal(b.querySelector("img"), null);
+  assert.equal(b.querySelector("video").getAttribute("src"), "https://example.test/new.mp4");
+  view.syncGrid(grid, render("b", { space: "organization" }));
+  assert.notEqual(grid.firstElementChild, b);
+  view.syncGrid(grid, view.renderEmptyState({ hasQuery: true }));
+  assert.equal(grid.querySelectorAll(".asset-library-card").length, 0);
+  assert.match(grid.textContent, /没有匹配结果/);
+  view.syncGrid(grid, view.renderEmptyState({ section: "entity", mutable: true }));
+  assert.match(grid.textContent, /还没有主体/);
+  assert.equal(grid.querySelector("[data-library-clear-query]"), null);
+});
+
+test("a library refresh preserves an in-progress rename and its caret", (t) => {
+  const dom = new JSDOM("<div id='grid'></div>");
+  t.after(() => dom.window.close());
+  const grid = dom.window.document.querySelector("#grid");
+  const render = (selected) => view.renderMediaCard({ media: { id: "a", name: "原名称" }, mutable: true, renaming: true, selected });
+  view.syncGrid(grid, render(false));
+  const input = grid.querySelector("input");
+  input.focus();
+  input.value = "正在编辑的名称";
+  input.setSelectionRange(2, 4);
+  view.syncGrid(grid, render(true));
+  assert.equal(grid.querySelector("input"), input);
+  assert.equal(input.value, "正在编辑的名称");
+  assert.equal(input.selectionStart, 2);
+  assert.equal(input.selectionEnd, 4);
+  assert.equal(dom.window.document.activeElement, input);
 });
 
 test("organization single-item menus omit sharing and platform cards keep selection without mutation controls", () => {

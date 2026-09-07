@@ -83,7 +83,7 @@ $env:REELAY_OBJECT_STORE_ROOT = Join-Path (Get-Location).Path '.reelay-data/obje
 npm run db:setup
 ```
 
-`db:setup` 会启动并等待 PostgreSQL 健康、执行 migration、幂等写入演示账号 / 项目 / 个人素材与主体。它只在 seed 子进程中打开 `ALLOW_DEMO_SEED`，不清空业务数据，失败时返回非零退出码。仓库的本地媒体夹具为 9 张图片与 2 条 MP3，详见 [交接中的夹具边界](agent-handoff.md#开始与验证)。已有环境拉取代码后不必重复初始化；schema 或 fixture 有变化时再按本次变更执行相应命令。
+`db:setup` 会启动并等待 PostgreSQL 健康、执行 migration、幂等写入演示账号 / 项目 / 个人素材与主体。它只在 seed 子进程中打开 `ALLOW_DEMO_SEED`，不清空业务数据，失败时返回非零退出码。仓库的 v4 本地媒体夹具为 12 张原图，组成幽影（5 张）、白汐（3 张）、玄翎（4 张），详见 [交接中的夹具边界](agent-handoff.md#开始与验证)。已有环境拉取代码后不必重复初始化；schema 或 fixture 有变化时再按本次变更执行相应命令。
 
 在该终端执行 `npm run dev:server`，让 API 与 seed 使用同一数据库 / ObjectStore；在另一个位于同一仓库根目录的终端执行 `npm run dev:shell -- --host 127.0.0.1 --port 5173 --strictPort`。默认 API 端口为 `5175`。当前服务端启动脚本读取进程环境，不自动加载 `.env.local`；不能把 Vite 或公网环境文件的加载方式套用到 API。
 

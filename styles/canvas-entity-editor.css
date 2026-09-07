@@ -7,7 +7,15 @@ body.entity-editor-open #agentDock {
   pointer-events: none;
 }
 
+body.entity-editor-returning #assetLibraryPanel {
+  visibility: visible;
+  pointer-events: none;
+  transition: none;
+}
+
 .canvas-entity-editor {
+  --entity-exit-preview-x: 12px;
+  --entity-exit-preview-y: 0px;
   --entity-editor-bg: #0b0c0e;
   --entity-editor-panel: #111214;
   --entity-editor-raised: #191a1d;
@@ -84,9 +92,9 @@ html[data-theme="light"] .entity-editor-preview {
 .entity-editor-header {
   display: grid;
   min-height: 52px;
-  padding: 6px 14px 6px 8px;
+  padding: 6px 8px 6px 14px;
   border-bottom: 1px solid var(--entity-editor-line);
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 34px;
   align-items: center;
   gap: 4px;
 }
@@ -130,6 +138,7 @@ html[data-theme="light"] .entity-editor-preview {
 }
 
 .entity-editor-header h2 {
+  min-width: 0;
   margin: 0;
   overflow: hidden;
   font-size: 15px;
@@ -137,6 +146,20 @@ html[data-theme="light"] .entity-editor-preview {
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.entity-editor-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.entity-editor-heading-glyph {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  flex: 0 0 auto;
 }
 
 .entity-editor-details-scroll {
@@ -532,9 +555,8 @@ html[data-theme="light"] .entity-editor-preview {
 
 .entity-editor-footer {
   display: flex;
-  min-height: 58px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--entity-editor-line);
+  min-height: 48px;
+  padding: 8px 14px;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -542,7 +564,7 @@ html[data-theme="light"] .entity-editor-preview {
 
 .entity-editor-footer button {
   min-width: 72px;
-  height: 36px;
+  height: 32px;
   padding: 0 15px;
   border-radius: 9px;
   background: var(--entity-editor-raised);
@@ -599,11 +621,6 @@ html[data-theme="light"] .entity-editor-preview {
   color: var(--muted);
   flex: 0 0 auto;
   place-items: center;
-}
-
-.entity-editor-preview-kind-icon > svg {
-  width: 16px;
-  height: 16px;
 }
 
 .entity-editor-preview-meta h3,
@@ -828,6 +845,8 @@ html[data-theme="light"] .entity-editor-preview {
 
 @media (max-width: 720px) {
   .canvas-entity-editor {
+    --entity-exit-preview-x: 0px;
+    --entity-exit-preview-y: 8px;
     top: 8px;
     right: 8px;
     bottom: 8px;

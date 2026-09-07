@@ -4,9 +4,11 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
+const assetSpaceSwitcher = await readFile(new URL("src/legacy-canvas/canvas-asset-space-switcher.js", root), "utf8");
 const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-history.js", root), "utf8");
 const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
 const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
+const assetLibraryMenuController = await readFile(new URL("src/legacy-canvas/canvas-asset-library-menu-controller.js", root), "utf8");
 const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
@@ -105,6 +107,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(agentPanelGeometry);
   window.eval(assetLibraryModel);
   window.eval(assetLibraryView);
+  window.eval(assetLibraryMenuController);
   window.eval(entityEditorModel);
   window.eval(entityEditorView);
   window.eval(entityEditorController);
@@ -123,6 +126,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(agentHistory);
   window.eval(agentParameters);
   window.eval(agentModels);
+  window.eval(assetSpaceSwitcher);
   window.eval(app);
 
   const injectionProbe = window.document.createElement("div");

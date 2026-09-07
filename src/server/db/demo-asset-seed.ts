@@ -14,6 +14,7 @@ import {
   reconcileHistoricalDemoEntities,
   retireUnreferencedHistoricalDemoAssets,
   type ResolvedDemoAssetFixture,
+  type ResolvedDemoFixtureGeneration,
 } from "./demo-asset-fixture-reconciler";
 import {
   DEMO_ACTOR_ID,
@@ -22,10 +23,15 @@ import {
   DEMO_PROJECT_ID,
   DEMO_WORKSPACE_ID,
   LEGACY_DEMO_ASSET_FIXTURES,
+  LEGACY_DEMO_ENTITY_FIXTURES,
   PREVIOUS_DEMO_ASSET_FIXTURES,
+  PREVIOUS_DEMO_ENTITY_FIXTURES,
+  V3_DEMO_ASSET_FIXTURES,
+  V3_DEMO_ENTITY_FIXTURES,
   demoAssetIdempotencyKey,
   legacyDemoAssetIdempotencyKey,
   previousDemoAssetIdempotencyKey,
+  v3DemoAssetIdempotencyKey,
   type DemoAssetFixture,
 } from "./demo-asset-fixtures";
 
@@ -36,6 +42,8 @@ export {
   LEGACY_DEMO_ENTITY_FIXTURES,
   PREVIOUS_DEMO_ASSET_FIXTURES,
   PREVIOUS_DEMO_ENTITY_FIXTURES,
+  V3_DEMO_ASSET_FIXTURES,
+  V3_DEMO_ENTITY_FIXTURES,
 } from "./demo-asset-fixtures";
 export { DemoAssetFixtureConflictError } from "./demo-asset-fixture-reconciler";
 
@@ -49,6 +57,11 @@ export interface DemoAssetSeedDependencies {
 export interface DemoAssetSeedResult {
   assets: WorkspaceMediaAsset[];
   entities: WorkspaceEntity[];
+}
+
+export interface DemoAssetSeedOptions {
+  /** Seed the personal catalog without attaching assets to projects or retiring historical links. */
+  personalOnly?: boolean;
 }
 
 function fixtureUrl(fileName: string): URL {
@@ -112,11 +125,6 @@ async function seedAsset(
     workspaceId: DEMO_WORKSPACE_ID,
     uploadIntentId: intent.id,
   });
-  await dependencies.assetStore.attachAssetToProject({
-    actorId: DEMO_ACTOR_ID,
-    projectId: DEMO_PROJECT_ID,
-    assetId: asset.id,
-  });
   return asset;
 }
 
@@ -131,30 +139,53 @@ function requireAsset(
 
 export async function seedDemoAssetLibrary(
   dependencies: DemoAssetSeedDependencies,
+  options: DemoAssetSeedOptions = {},
 ): Promise<DemoAssetSeedResult> {
   const canonicalFixtureAssets = await resolveDemoAssetFixtures(
     DEMO_ASSET_FIXTURES,
     demoAssetIdempotencyKey,
   );
-  const previousFixtureAssets = await resolveDemoAssetFixtures(
-    PREVIOUS_DEMO_ASSET_FIXTURES,
-    previousDemoAssetIdempotencyKey,
-  );
-  const legacyFixtureAssets = await resolveDemoAssetFixtures(
-    LEGACY_DEMO_ASSET_FIXTURES,
-    legacyDemoAssetIdempotencyKey,
-  );
+  const historicalGenerations: ResolvedDemoFixtureGeneration[] = await Promise.all([
+    {
+      entities: V3_DEMO_ENTITY_FIXTURES,
+      assets: V3_DEMO_ASSET_FIXTURES,
+      idempotencyKeyFor: v3DemoAssetIdempotencyKey,
+      allowedEntityVersions: [1, 2, 3],
+    },
+    {
+      entities: PREVIOUS_DEMO_ENTITY_FIXTURES,
+      assets: PREVIOUS_DEMO_ASSET_FIXTURES,
+      idempotencyKeyFor: previousDemoAssetIdempotencyKey,
+      allowedEntityVersions: [1, 2],
+    },
+    {
+      entities: LEGACY_DEMO_ENTITY_FIXTURES,
+      assets: LEGACY_DEMO_ASSET_FIXTURES,
+      idempotencyKeyFor: legacyDemoAssetIdempotencyKey,
+      allowedEntityVersions: [1],
+    },
+  ].map(async (generation) => ({
+    entities: generation.entities,
+    assets: await resolveDemoAssetFixtures(generation.assets, generation.idempotencyKeyFor),
+    allowedEntityVersions: generation.allowedEntityVersions,
+  })));
   await assertDemoEntityFixturesCanBeReconciled(
     dependencies.pool,
     canonicalFixtureAssets,
-    previousFixtureAssets,
-    legacyFixtureAssets,
+    historicalGenerations,
   );
 
   const assets: WorkspaceMediaAsset[] = [];
   const assetsByKey = new Map<string, WorkspaceMediaAsset>();
   for (const fixture of canonicalFixtureAssets) {
     const asset = await seedAsset(dependencies, fixture);
+    if (!options.personalOnly) {
+      await dependencies.assetStore.attachAssetToProject({
+        actorId: DEMO_ACTOR_ID,
+        projectId: DEMO_PROJECT_ID,
+        assetId: asset.id,
+      });
+    }
     assets.push(asset);
     assetsByKey.set(fixture.key, asset);
   }
@@ -162,8 +193,7 @@ export async function seedDemoAssetLibrary(
   await reconcileHistoricalDemoEntities(
     dependencies.pool,
     canonicalFixtureAssets,
-    previousFixtureAssets,
-    legacyFixtureAssets,
+    historicalGenerations,
     assetsByKey,
   );
 
@@ -182,10 +212,12 @@ export async function seedDemoAssetLibrary(
     }));
   }
 
-  await retireUnreferencedHistoricalDemoAssets(
-    dependencies.pool,
-    [...previousFixtureAssets, ...legacyFixtureAssets],
-  );
+  if (!options.personalOnly) {
+    await retireUnreferencedHistoricalDemoAssets(
+      dependencies.pool,
+      historicalGenerations.flatMap(({ assets: historicalAssets }) => historicalAssets),
+    );
+  }
 
   return { assets, entities };
 }
