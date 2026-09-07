@@ -8,6 +8,7 @@ import { PostgresCollaborationStore } from "../src/server/infrastructure/Postgre
 import { PostgresAssetStore } from "../src/server/infrastructure/PostgresAssetStore";
 import { PostgresEntityStore } from "../src/server/infrastructure/PostgresEntityStore";
 import { createSupabaseObjectStore } from "../src/server/supabase-object-store-config";
+import { normalizeVercelApiUrl } from "../src/server/http/vercel-api-path";
 
 const pool = createPostgresPool();
 attachDatabasePool(pool);
@@ -36,21 +37,11 @@ function getApp() {
   return appPromise;
 }
 
-function restoreApiPath(request: IncomingMessage): void {
-  const url = new URL(request.url ?? "/api", "http://localhost");
-  const apiPath = url.searchParams.get("apiPath");
-  if (url.pathname !== "/api" || !apiPath) return;
-
-  url.searchParams.delete("apiPath");
-  const search = url.searchParams.toString();
-  request.url = `/api/${apiPath.replace(/^\/+/, "")}${search ? `?${search}` : ""}`;
-}
-
 export default async function handler(
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
-  restoreApiPath(request);
+  request.url = normalizeVercelApiUrl(request.url);
   const app = await getApp();
   app.server.emit("request", request, response);
 }
