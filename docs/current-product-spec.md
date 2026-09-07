@@ -21,10 +21,10 @@
 这是一个本地可运行的产品原型：
 
 - 没有真实 AIGC API。
-- 没有生产账号生命周期、完整云端素材库或积分账本。本地已有个人 Media 与 Entity 的首个持久化切片；Folder、组织共享、平台审核与积分仍是原型边界。公网原型已通过 Vercel 与 Supabase 部署用于评审，但尚未接入私有 Supabase Storage，不构成生产可用承诺。
+- 没有生产账号生命周期、完整云端素材库或积分账本。本地已有个人 Media 与 Entity 的首个持久化切片；Folder、组织共享、平台审核与积分仍是原型边界。公网原型已通过 Vercel 与 Supabase 部署用于评审；私有 Supabase ObjectStore 配置与三主体 12 图迁移已完成，Vercel 资产 / 主体 API 代码仍待部署及 HTTP 验收，不构成生产可用承诺。
 - 本地主链路已经进入 React browser routes：`/app/login`、`/app/w/:workspaceId`、`/app/w/:workspaceId/projects` 和受保护的画布宿主路由。页面通过 HTTP adapters 消费本地共享 API；静态登录 / 主页双轨已经删除，`index.html` 只保留为迁移期旧画布 iframe。
 - 十个固定 `.test` 演示账号由服务端校验并使用 HttpOnly Cookie 维持独立会话；这只验证登录、路由保护、单组织成员关系和项目级访问控制，不是正式账号系统。组织角色固定为 `1` 名主账户、`2` 名管理员和 `7` 名成员。
-- 用户、会话、唯一组织 Workspace、Project、项目成员关系、CanvasDocument、WorkspaceMediaAsset 元数据、个人 placement、ProjectAssetReference，以及个人根目录 Entity 的字段、有序 Media 引用和版本保存在本地 PostgreSQL；资产二进制交给本地 filesystem ObjectStore。这条最小链路可在服务重启后回读，内存 adapter 只用于快速契约测试和显式开发回退。
+- 用户、会话、唯一组织 Workspace、Project、项目成员关系、CanvasDocument、WorkspaceMediaAsset 元数据、个人 placement、ProjectAssetReference，以及个人根目录 Entity 的字段、有序 Media 引用和版本保存在 PostgreSQL；本地资产二进制交给 filesystem ObjectStore，Vercel 入口使用私有 Supabase ObjectStore。最小链路已通过本地服务重启回读；公网已迁移至 `0013` 并完成私有桶与三主体 12 图写入，资产 / 主体 API 仍待新代码部署和 HTTP 验收，内存 adapter 只用于快速契约测试和显式开发回退。
 - 从受保护路由进入的旧画布会恢复多画布、节点、组、视口和模型参数；直接打开静态 `index.html` 仍是单次页面内存原型。
 - “生成”是模拟行为，用于验证生成后的媒体状态、标题和规格展示。
 
@@ -322,6 +322,7 @@ Agent 对话栏展开或调整尺寸时，不拖动左上、左侧和左下工�
 创建与整理：
 
 - 素材分栏的主操作是多文件上传，接受图片、视频和音频。在受保护的 React 画布宿主中，个人空间上传会创建带 checksum 的 upload intent，写入 ObjectStore，完成 WorkspaceMediaAsset 登记并幂等挂到当前项目。持久 placement 当前只是 personal root，UI 子目录尚不持久；宿主内非个人空间上传会明确拒绝，直接打开静态画布时才使用页面内存媒体。
+- Vercel 入口单文件上传上限为 `4 MiB`，适配 Function 的 `4.5 MB` 请求 / 响应限制；超过时在申请 upload intent 阶段返回 `413 / asset_too_large` 和“当前环境单个素材最大支持 4 MB。”，本地服务仍为 `64 MiB`。公网内容通过已鉴权的同源 API 读取，私有桶地址和服务端密钥不作为客户端访问凭据。
 - “主体”分栏的“新建主体”进入独立编辑工作区；新建时标题固定为“新建主体”，编辑既有记录时标题跟随主体名称。左侧编辑栏跟随资产库的当前首选宽度；名称、描述、“添加素材”标题及其下由素材分类和“从素材库添加 / 上传”组成的工具行固定，只让工具行以下的素材卡片区独立滚动。编辑器包含该主体已添加素材的 `全部 / 图片 / 视频 / 音频` 四类筛选、从个人素材库添加、上传、单项预览与移除；只有图片可以设为封面。预览头部左侧以单行的媒体类型图标和文件名称标识当前素材；双击文件名称或按 `F2` 可原位重命名，输入只修改扩展名前的主文件名，扩展名固定保留，修改直接写回同一 WorkspaceMediaAsset，不在 Entity 内复制名称。右上角使用约 `80 × 30px` 的纯文字圆角按钮显示可执行的“设为封面”，已为封面时原位替换成同尺寸、非交互的“当前封面”状态；不使用旧书签图标。左侧对应素材卡片常显轻量“封面”标记。四类筛选只改变当前主体素材的显示，不是全局资产筛选；主体至少引用一个 Media 才能保存。
 - 受保护宿主中的新建与编辑分别调用个人 Entity 的幂等创建和带 `expectedVersion` 的更新。新上传内容先走现有 Media 持久化链路，再由 Entity 保存资产 ID；上传成功但主体保存失败时 Media 仍留在个人素材库，不伪装成跨资源原子事务。版本冲突失败关闭并保留编辑草稿供用户处理。
 - 默认目录计为第 1 层，未达到总计 5 层上限的可编辑目录可以继续创建子文件夹；文件夹与条目都支持行内重命名和同分栏移动。同一父目录内的文件夹名称必须唯一，领域模型会拒绝循环移动、跨空间 / 跨分栏移动、同级重名和移动后超过深度上限，不能由界面补偿非法目录状态。
@@ -348,9 +349,11 @@ Agent 对话栏展开或调整尺寸时，不拖动左上、左侧和左下工�
 持久化边界：
 
 - 组织 / 平台素材、主体、文件夹和 placement 仍来自确定性 seed。受保护宿主中的个人 Media 与个人根目录 Entity 来自服务端目录并可在本地 PostgreSQL 重启后恢复；目录整理、组织共享和审核仍只保存在页面运行内存中。平台内容只是只读 seed，不是已上线的公共目录服务。
-- 本地 `db:seed` 会为 Hoo 的个人空间幂等创建 v4 演示夹具：使用用户提供的 12 张原图，组成“幽影”5 张、“白汐”3 张、“玄翎”4 张，并关联到“香水品牌 TVC”项目。每组首图为封面；幽影依次为主视觉、多视图、概念草图、链刃武器、能量护盾；白汐依次为肖像、三视图、装备；玄翎依次为主视觉、多视图、服装变体、装备。展示文件名采用“主体名_两位序号_用途”，仓库文件使用对应英文标识与同一序号；保留原始 PNG / JPEG 格式和尺寸。旧 v1–v3 案例只在完整指纹匹配时原位升级，保留已有 Entity ID；旧媒体仍被其他内容使用时保留其引用。源文件随仓库同步，首次初始化通过 `npm run db:setup` 重建 PostgreSQL 元数据与 filesystem ObjectStore；已有本机环境按夹具变更执行定向更新。公网 preview 因没有持久对象存储而继续跳过这批本地媒体夹具，不能把临时文件系统伪装成可跨部署恢复的资产服务。
-- 首个持久化切片将媒体所有权留在 WorkspaceMediaAsset，个人可见性由 personal placement 表达，项目复用由 ProjectAssetReference 表达。本地 PostgreSQL + filesystem ObjectStore 支持列表、内容读取与跨服务重启恢复；filesystem adapter 不适用于 Vercel serverless。
-- Entity 已有个人根目录 create / get / list / update repository；Folder repository、Entity 删除、organization placement、平台目录版本与导入策略、组织资产权限、Node 级引用、恢复和 GenerationResult 显式晋升仍未实现。公网还需私有 Supabase Storage adapter，不能把本地文件系统当作云端对象存储。
+- 本地 `db:seed` 会为 Hoo 的个人空间幂等创建 v4 演示夹具：使用用户提供的 12 张原图，组成“幽影”5 张、“白汐”3 张、“玄翎”4 张，并关联到“香水品牌 TVC”项目。每组首图为封面；幽影依次为主视觉、多视图、概念草图、链刃武器、能量护盾；白汐依次为肖像、三视图、装备；玄翎依次为主视觉、多视图、服装变体、装备。展示文件名采用“主体名_两位序号_用途”，仓库文件使用对应英文标识与同一序号；保留原始 PNG / JPEG 格式和尺寸。旧 v1–v3 案例只在完整指纹匹配时原位升级，保留已有 Entity ID；旧媒体仍被其他内容使用时保留其引用。源文件随仓库同步，首次本机初始化通过 `npm run db:setup` 重建 PostgreSQL 元数据与 filesystem ObjectStore；已有本机环境按夹具变更执行定向更新。
+- 2026-09-07 首次公网资产迁移已将本机真实三主体和 12 张原图写入 Supabase，保留原 ID、微秒时间戳、封面、顺序与当前版本（玄翎 `v2`、幽影 `v4`、白汐 `v4`）。素材从既有 ObjectStore 读取后上传私有桶，全量 SHA-256 与字节范围读取通过；目录经冲突 / 幂等验证后以单事务导入，账号、会话、项目、画布与项目引用等保护表哈希保持不变。该次操作未运行标准 seed；存储与目录已就绪，仍待新代码公网 HTTP / 浏览器验收。
+- `npm run db:seed:preview-assets` 是后续显式写入标准仓库夹具的入口，要求 preview 模式、专用写入开关、同一目标项目的迁移连接与私有 Storage 配置；其内部使用 `seedDemoAssetLibrary(..., { personalOnly: true })`。它只写 Hoo 个人库的 Media、placement 与三主体，不重跑账号 / 会话 / 项目 seed，不修改画布或项目引用，不自动迁移，也不覆盖指纹不匹配的用户编辑记录。普通 `db:seed` 在 preview 模式继续跳过媒体。此入口不是本地与公网双向同步，任一环境后续用户数据不会随 Git 或部署自动复制。
+- 首个持久化切片将媒体所有权留在 WorkspaceMediaAsset，个人可见性由 personal placement 表达，项目复用由 ProjectAssetReference 表达。`0013` 以数据库约束保证个人主体引用的素材仍有同一用户的 personal placement。本地 PostgreSQL + filesystem ObjectStore 支持列表、内容读取与跨服务重启恢复；Vercel 已接入私有 Supabase ObjectStore 代码，桶需预先配置，缺失或公开时拒绝使用，不会回退到临时文件系统。公网已完成私有桶配置及真实目录迁移，资产 / 主体能力仍待新代码 HTTP 部署验收。
+- Entity 已有个人根目录 create / get / list / update repository；Folder repository、Entity 删除、organization placement、平台目录版本与导入策略、组织资产权限、Node 级引用、恢复和 GenerationResult 显式晋升仍未实现。私有 Supabase Storage adapter 的代码完成不代表上述领域能力也已完成。
 - 完整资产中心仍应进入 React 工作台路由；当前切片只实现画布内高保真资产面板与可替换的领域模型。
 
 ### 7.7 生成后状态
@@ -654,7 +657,7 @@ src/legacy-canvas
 - 主要 React 页面已经按 route 拆包，HTTP adapter 只向页面暴露 application error；构建主包不再把组织中心、账号用量和画布宿主全部提前加载。
 - 旧画布已有 JavaScript、配置、CSS、HTML 检查以及序列化、只读和持久化状态机行为测试；React 壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
 - 暂无代码格式化、lint 和自动浏览器端到端测试；当前 React 主链路已完成两套隔离浏览器的人工验证，下一阶段应把稳定的登录、路由保护和组织共享流程固化为 E2E。
-- 会话、账号联系资料、Workspace、Membership、Project、CanvasDocument、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已通过 PostgreSQL 持久化；本地资产二进制使用 filesystem ObjectStore。可重复 migration、幂等写入、乐观版本和重启集成测试覆盖这些边界。画布文档仍处于迁移桥阶段，Folder、组织资产、生成任务与积分仍只存在原型状态。
+- 会话、账号联系资料、Workspace、Membership、Project、CanvasDocument、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已通过 PostgreSQL 持久化；本地资产二进制使用 filesystem ObjectStore，私有 Supabase ObjectStore 配置与真实三主体 12 图迁移已完成，Vercel 新代码仍待 HTTP 部署验收。仓库与公网 schema 均已至 `0013`。可重复 migration、幂等写入、乐观版本和重启集成测试覆盖本地持久化边界。画布文档仍处于迁移桥阶段，Folder、组织资产、生成任务与积分仍只存在原型状态。
 - migration checksum 统一按 LF 计算并由 `.gitattributes` 固定 SQL 换行，Windows / Linux worktree 不会因 CRLF 差异误报历史 migration 被改写。
 - 演示会话 token 以摘要存库并具有过期 / 撤销状态，但十个固定账号、确定性 demo 密码散列和预置项目角色仍不是正式账号生命周期或完整权限管理系统。
 - 全局可变状态仍缺少完整 action/store 边界；连接与上述节点 / 分组切片已共用原子命令和按画布隔离的混合撤销分派，节点删除、高频移动预览、主体增量引用撤销与素材命名等仍保留有界的 legacy adapter。
@@ -668,7 +671,7 @@ src/legacy-canvas
 - CanvasDocument v1 在服务端与 legacy codec 共享 canonical allow-list 边界：不支持的版本会失败关闭，字段、数量与数值被收敛，持久媒体 URL 只保留经安全校验的 HTTP(S) 或相对地址。它仍是迁移快照，不应继续容纳生成历史、资产二进制、积分或账号运行态；新增字段必须先明确恢复语义并扩展行为测试。
 - 当前生成任务只存在页面内存中，启动快照已记录与节点创建类型一致的 `mediaKind` 及当次参数，但还没有持久化、节点内多结果历史、取消 UI 或失败退款。
 - 当前撤销仍不是完整 command 系统：连接、离散节点参数、生成结果命名、建组 / 解组与现有局部排列已进入带前置冲突检查、事务校验和 50 条上限的原子命令；节点删除、Alt 复制与 pointer 移动 / 缩放的历史格式仍沿用 legacy action，成员结算和恢复已通过组关系事务。普通双击新建尚未统一登记创建撤销，整画布整理、生成任务和结果版本撤销也未实现；后续节点命令继续使用内容字段白名单，不能恢复任务、临时 UI 或创建类型。项目重命名暂不支持撤销。
-- 资产库已落地 WorkspaceMediaAsset、personal placement、ProjectAssetReference、ObjectStore 与个人根目录 Entity 的最小切片，但画布消费仍会创建 legacy 媒体投影。Folder / organization placement、Entity 删除恢复、公网私有对象存储、Node 级引用、回收站和 GenerationResult 晋升尚未落地。
+- 资产库已落地 WorkspaceMediaAsset、personal placement、ProjectAssetReference、ObjectStore 与个人根目录 Entity 的最小切片，但画布消费仍会创建 legacy 媒体投影。公网私有对象存储配置、对象与目录迁移已完成，仍待新代码 HTTP 部署验收；Folder / organization placement、Entity 删除恢复、Node 级引用、回收站和 GenerationResult 晋升尚未落地。
 - 完整演进顺序只在 `docs/product-expansion-plan.md` 维护，本说明不再保留第二套路线路。
 
 ## 15. 当前产品一句话

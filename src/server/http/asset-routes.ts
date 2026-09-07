@@ -49,6 +49,7 @@ const CONTENT_TYPES_BY_KIND = Object.freeze({
 });
 
 interface AssetRouteDependencies {
+  maxUploadBytes?: number;
   assetStore: WorkspaceMediaAssetStore & ProjectAssetReferenceStore;
   objectStore: ObjectStore;
   projects: ProjectAccessReader;
@@ -199,10 +200,14 @@ export async function registerAssetRoutes(
   app: FastifyInstance,
   dependencies: AssetRouteDependencies,
 ): Promise<void> {
+  const maxUploadBytes = dependencies.maxUploadBytes ?? MAX_UPLOAD_BYTES;
+  if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes <= 0 || maxUploadBytes > MAX_UPLOAD_BYTES) {
+    throw new Error("Asset upload byte limit is invalid.");
+  }
   if (!app.hasContentTypeParser("application/octet-stream")) {
     app.addContentTypeParser(
       "application/octet-stream",
-      { parseAs: "buffer", bodyLimit: MAX_UPLOAD_BYTES },
+      { parseAs: "buffer", bodyLimit: maxUploadBytes },
       (_request, body, done) => done(null, body),
     );
   }
@@ -214,6 +219,11 @@ export async function registerAssetRoutes(
     const body = CreateAssetUploadIntentBodySchema.safeParse(request.body);
     if (!params.success || !body.success) {
       return reply.code(400).send({ error: { code: "invalid_request", message: "上传文件信息无效。" } });
+    }
+    if (body.data.byteSize > maxUploadBytes) {
+      return reply.code(413).send({
+        error: { code: "asset_too_large", message: `当前环境单个素材最大支持 ${maxUploadBytes / (1024 * 1024)} MB。` },
+      });
     }
     if (!CONTENT_TYPES_BY_KIND[body.data.mediaKind].has(body.data.contentType)) {
       return reply.code(400).send({
@@ -247,13 +257,13 @@ export async function registerAssetRoutes(
 
   app.put(
     "/api/workspaces/:workspaceId/media-upload-intents/:uploadId/content",
-    { config: { rawBody: false }, bodyLimit: MAX_UPLOAD_BYTES },
+    { config: { rawBody: false }, bodyLimit: maxUploadBytes },
     async (request, reply) => {
       const actor = await requireActor(request, reply, dependencies.sessions);
       if (!actor) return reply;
       const params = AssetUploadParamsSchema.safeParse(request.params);
       const body = Buffer.isBuffer(request.body) ? request.body : null;
-      if (!params.success || !body || body.byteLength <= 0 || body.byteLength > MAX_UPLOAD_BYTES) {
+      if (!params.success || !body || body.byteLength <= 0 || body.byteLength > maxUploadBytes) {
         return reply.code(400).send({ error: { code: "invalid_request", message: "上传内容无效。" } });
       }
       try {

@@ -255,6 +255,65 @@ function expectCanonicalEntityContents(
 }
 
 describe("demo asset library seed", () => {
+  it.each([false, true])("seeds a personal-only catalog idempotently without changing projects or accounts (historical catalog: %s)", async (withHistoricalCatalog) => {
+    const pool = createPool();
+    const assetStore = new PostgresAssetStore(pool);
+    const entityStore = new PostgresEntityStore(pool);
+    const objectStore = new InMemoryObjectStore();
+    const dependencies = { pool, assetStore, entityStore, objectStore };
+    const preservedTables = [
+      "users", "password_identities", "sessions", "workspaces", "memberships",
+      "projects", "project_memberships", "canvas_documents", "project_asset_references",
+    ];
+    const readPreservedState = () => Promise.all(preservedTables.map(async (table) => {
+      const result = await pool.query(`SELECT to_jsonb(record) AS content FROM ${table} AS record ORDER BY to_jsonb(record)::text`);
+      return result.rows;
+    }));
+
+    try {
+      const historical = withHistoricalCatalog ? await seedLegacyDemoAssetLibrary(pool, objectStore) : null;
+      if (historical) {
+        await assetStore.attachAssetToProject({
+          actorId: DEMO_ACTOR_ID,
+          projectId: "project-scifi-trailer",
+          assetId: [...historical.assetIdsByKey.values()][0]!,
+        });
+      }
+      const originalCanvas = { nodes: [{ id: "existing-user-node", prompt: "保留用户画布" }] };
+      await pool.query(
+        `INSERT INTO canvas_documents (project_id, canvas_id, schema_version, revision, content,
+           created_by_user_id, updated_by_user_id)
+         VALUES ($1, 'fixture-retention-test', 1, 7, $2::jsonb, $3, $3)`,
+        [DEMO_PROJECT_ID, JSON.stringify(originalCanvas), DEMO_ACTOR_ID],
+      );
+      const before = await readPreservedState();
+      const first = await seedDemoAssetLibrary(dependencies, { personalOnly: true });
+      expect(await readPreservedState()).toEqual(before);
+      const second = await seedDemoAssetLibrary(dependencies, { personalOnly: true });
+      expect(await readPreservedState()).toEqual(before);
+
+      expect(first.assets).toHaveLength(12);
+      expect(first.entities).toHaveLength(3);
+      expect(second).toEqual(first);
+      expectCanonicalEntityContents(first);
+      const personalAssets = await assetStore.listPersonalAssets({ actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID });
+      expect(personalAssets.map(({ id }) => id).sort()).toEqual([
+        ...first.assets.map(({ id }) => id),
+        ...(historical ? [...historical.assetIdsByKey.values()] : []),
+      ].sort());
+      expect(await entityStore.listPersonalEntities({ actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID }))
+        .toHaveLength(3);
+      for (const asset of first.assets) {
+        await expect(objectStore.headObject(asset.objectKey)).resolves.toEqual(expect.objectContaining({
+          byteSize: asset.byteSize,
+          checksumSha256: asset.checksumSha256,
+        }));
+      }
+    } finally {
+      await pool.end();
+    }
+  });
+
   it("persists the static prototype fixtures on a fresh database and remains idempotent", async () => {
     const pool = createPool();
     const assetStore = new PostgresAssetStore(pool);

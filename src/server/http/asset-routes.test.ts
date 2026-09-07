@@ -356,3 +356,31 @@ describe("asset persistence routes", () => {
     expect(response.json().error.code).toBe("workspace_not_found");
   });
 });
+
+it("rejects uploads beyond the deployment limit before creating an intent or accepting bytes", async () => {
+  const seed = createDemoSeed();
+  const store = new InMemoryCollaborationStore(seed);
+  const assetStore = new InMemoryAssetStore({
+    workspaceMemberships: seed.memberships.map(({ workspaceId, actorId }) => ({ workspaceId, actorId })),
+    projects: [],
+  });
+  const createIntent = vi.spyOn(assetStore, "createUploadIntent");
+  const app = await buildServer({ store, assetStore, objectStore: new InMemoryObjectStore(), maxAssetUploadBytes: 4 * 1024 * 1024 });
+  try {
+    const session = await login(app, "creator@reelay.test");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/workspaces/workspace-organization-reelay/media-upload-intents",
+      headers: { cookie: session },
+      payload: { idempotencyKey: "cloud-limit-contract", mediaKind: "image", displayName: "large.png", contentType: "image/png", byteSize: 4 * 1024 * 1024 + 1, checksumSha256: "a".repeat(64) },
+    });
+    expect(response.statusCode).toBe(413);
+    expect(response.json().error).toEqual({ code: "asset_too_large", message: "当前环境单个素材最大支持 4 MB。" });
+    expect(createIntent).not.toHaveBeenCalled();
+    const oversized = await app.inject({
+      method: "PUT", url: "/api/workspaces/workspace-organization-reelay/media-upload-intents/test/content",
+      headers: { cookie: session, "content-type": "application/octet-stream" }, payload: Buffer.alloc(4 * 1024 * 1024 + 1),
+    });
+    expect(oversized.statusCode).toBe(413);
+  } finally { await app.close(); }
+});

@@ -5,8 +5,9 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 
 公开地址：<https://reelay-canvas-prototype.vercel.app>
 
-当前 Supabase 项目已完成 `0001` 至 `0009` 迁移和固定 demo seed。部署验收已覆盖
-健康检查、固定账号登录、组织项目读取，以及画布文档写入和回读。
+2026-09-07 公网 Supabase 项目 `yacgzkkttwtyxkfxiwyn` 已从 `0009` 补迁移至 `0013`，私有桶 `reelay-assets`、Production Storage 环境变量与三主体 12 图的数据迁移已完成。对象存储读取及完整性检查通过，**新代码的公网 HTTP 部署验收尚待完成**。此前公网基线已覆盖健康检查、固定账号登录、组织项目读取与画布文档写入 / 回读，不能用这些旧版结果代替新增资产 API 的验收。
+
+本次用户已要求推送、合并、同步公网版本，并让公网个人库能看到本机三主体与 12 张原图；此前“只同步代码、暂不部署”的限制不再代表本次范围。私有 Supabase ObjectStore、Vercel 资产 / 主体 API 接线和后续标准夹具入口已具备代码实现。迁移、存储、数据写入与部署结果分别记录，不能由代码提交推断公网页面已可使用。
 
 ## 部署边界
 
@@ -23,9 +24,21 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 
 ## 资产文件边界
 
-当前公网预览没有接入私有 Supabase Storage，也没有完成公网资产上传 / 读取验收。仓库内的首个 `WorkspaceMediaAsset + personal placement + ProjectAssetReference + ObjectStore` 切片目前只在本地 PostgreSQL + filesystem ObjectStore 上提供跨服务重启持久化。
+`api/index.ts` 已接入 `PostgresAssetStore`、`PostgresEntityStore` 与 `SupabaseObjectStore`，复用现有 `WorkspaceMediaAsset + personal placement + ProjectAssetReference + ObjectStore` 链路。浏览器仍通过同源 API 和 HttpOnly 会话访问，服务端校验项目成员与素材可见性后读取私有对象；不把 service key 或公开桶地址交给浏览器。本地 `src/server/start.ts` 继续使用 filesystem ObjectStore。
 
-公网启用该能力前，必须配置私有 Storage bucket 与专用 ObjectStore adapter，保留服务端项目成员授权、对象键隔离、checksum / 大小校验和受控内容读取。Supabase service key 只能留在服务端；未完成这些接线与验收前，不对公网宣告 `assetPersistence` 能力。
+适配器只连接预先创建的私有 bucket，不会在运行时创建桶或把桶改为公开。配置缺失、桶不存在或桶为公开时失败关闭，不回退到临时文件系统。对象按受控键写入，保留 checksum、字节数、内容类型与不可覆盖的幂等校验；读取支持受控字节范围和完整性验证。当前私有桶与对象存储直连已通过验证，公网 API 上传 / 读取与重部署验收尚待完成，不能把 Storage 结果等同于公网 `assetPersistence` 全链路已验收。
+
+Vercel Function 的请求与响应受 `4.5 MB` 负载限制，公网单文件上传在 `api/index.ts` 限制为 `4 * 1024 * 1024` 字节；超过时在申请 upload intent 阶段返回 `413 / asset_too_large`，中文提示为“当前环境单个素材最大支持 4 MB。”，不会等发送完整文件后才失败。本地上限仍为 `64 MiB`。当前内容读取也经同一个 Function，定向导入的演示原图必须核对大小，不能借导入绕过公网可读取边界。
+
+### 服务端配置
+
+| 环境变量 | 用途与边界 |
+| --- | --- |
+| `SUPABASE_URL` | 同一目标项目的 HTTPS origin，例如 `https://<project-ref>.supabase.co`；不填写 Storage 子路径。 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 服务端专用 secret key；适配器接受 `sb_secret_...` 或旧 `service_role` JWT，拒绝 anon / publishable key。禁止 `VITE_` 等客户端前缀，不写入仓库、浏览器、构建静态文件或日志。 |
+| `REELAY_SUPABASE_STORAGE_BUCKET` | 已存在且 `public=false` 的 bucket ID；运行时只验证并使用，不自动创建。 |
+
+在需要发布的 Vercel 环境分别配置这三项与 `DATABASE_URL`。定向导入进程使用同一 Supabase 项目的迁移连接与 Storage 配置，运行完释放临时进程环境；真实值不写入 `.env.example`。不能把本机数据库配到公网 Storage，或把公网数据库配到本机 ObjectStore。
 
 ## 数据库连接
 
@@ -39,11 +52,40 @@ Root 2021 CA 校验 TLS，不在运行时关闭证书验证。
 
 ## 新环境初始化
 
-1. 在空 Supabase 项目执行 `src/server/db/migrations` 中的迁移。
+1. 在空 Supabase 项目执行 `src/server/db/migrations` 中的迁移，当前仓库要求至 `0013`。`0010`–`0012` 建立资产、个人 placement、项目引用与 Entity；`0013` 建立个人主体到个人素材 placement 的数据库绑定约束。保留表上的 RLS 与对 `anon / authenticated` 的拒绝，不为接入 Storage 开放数据库直读。
 2. 临时设置 `REELAY_DEPLOYMENT_MODE=preview` 与 `ALLOW_DEMO_SEED=true`。
-3. 运行一次 `npm run db:seed`，随后删除 seed 开关。
-4. 在 Vercel 的 Preview 与 Production 环境设置 `DATABASE_URL`。
-5. 部署后检查 `/api/health`、登录、项目读写与画布自动保存。只有完成上述私有 Storage 接线后，才增加资产上传、项目挂载、内容读取和重部署后保留验收。
+3. 仅对首次初始化的空环境运行 `npm run db:seed` 建立固定账号与项目，随后删除 seed 开关。该命令在 preview 模式仍跳过媒体，不能用它代替下述个人素材定向导入，也不要为更新素材重跑账号 / 项目 seed。
+4. 创建并验证私有 bucket，按上表配置 Vercel 的目标环境；数据库与 Storage 必须属于同一目标项目。
+5. 如需 v4 三主体案例，执行下述个人库定向导入，再部署验收。初始化、迁移和导入都不会在构建、服务启动或请求中自动执行。
+
+## 2026-09-07 首次公网迁移记录
+
+- 数据库：先验证既有 migration ledger，再一次补执行 `0010`–`0013`，目标为 `yacgzkkttwtyxkfxiwyn`。未重新初始化账号或项目。Security Advisors 只有既有且符合服务端独占访问设计的 INFO：启用 RLS、未向客户端配置策略；没有 warning / error。
+- 存储与配置：已创建 `reelay-assets`，核验 `public=false`，桶文件上限为 `4 MiB`；Vercel Production 的三个 Storage 环境变量已配置。此记录不代表 Preview 环境也已配置。
+- 对象：从本机既有 ObjectStore 读取 12 张真实素材的二进制并上传私有桶，逐张验证全量 SHA-256 和字节范围读取，全部通过。没有重新编码或替换原图。
+- 目录：本次没有运行 `db:seed:preview-assets`。Vercel 中现有敏感数据库凭据无法拉取，因此将本机真实的三条 Entity、12 条 Media、个人 placement、Entity 有序素材引用、个人绑定与已完成 upload intent 精确导出；在临时 PostgreSQL 上通过五项冲突 / 幂等验证后，经 MCP 单事务导入。导入保留原 ID、微秒时间戳、封面、顺序和版本（玄翎 `v2`、幽影 `v4`、白汐 `v4`），没有用标准夹具重置用户已编辑的主体。
+- 保护边界：账号、会话、项目、画布及项目引用等保护表的哈希在操作前后保持一致；数据库目录与 Storage 对象已就绪，新代码仍待 HTTP 部署验收。
+
+这是一次按已确认范围迁移本机真实记录的操作，区别于下一节的标准仓库夹具入口。后续再次迁移真实用户数据需要重新核对范围与冲突，不能直接把标准 seed 当作数据库同步工具。
+
+## 后续环境的标准夹具入口
+
+1. 核对目标、现有 migration ledger、备份与当前账号 / 会话 / 项目 / 画布状态，只补执行实际缺失的迁移至 `0013`，不重建库或重跑账号 seed。当前公网已到 `0013`，无需重复本次补迁移。
+2. 在同一 Supabase 项目预先创建私有桶，配置三项 Storage 环境变量。服务端 secret key 只进入 Vercel 与本次受控导入进程，不需要用户在产品页面输入。
+3. 在受控终端临时设置 `REELAY_DEPLOYMENT_MODE=preview`、`ALLOW_DEMO_ASSET_SEED=true`、目标项目的 `MIGRATION_DATABASE_URL` 和上述三个 Storage 变量，再运行 `npm run db:seed:preview-assets`。迁移连接使用 direct 或 session pooler，不能使用端口 `6543` 的 transaction pooler。入口 `src/server/db/seed-preview-assets-command.ts` 调用 `seedDemoAssetLibrary(dependencies, { personalOnly: true })`，只为 Hoo 的个人库建立幂等 Media、personal placement 和三条 Entity；不自动执行 migration，不调用账号 / 会话 seed，不修改项目、画布或 ProjectAssetReference，也不清退旧的项目引用。历史主体仅在完整 fixture 指纹匹配时校准；用户编辑过的旧主体会拒绝覆盖。完成后移除临时写入开关及本次终端凭据。
+4. 导入前后对比账号 / 会话 / 项目 / 画布与项目引用，核验新增的“幽影”5 张、“白汐”3 张、“玄翎”4 张及其封面、顺序、名称与 checksum；重复执行应返回同一批记录，不追加副本。导入使用仓库原图，不拷贝本机任意用户数据。
+5. 从已验收的集成代码部署，再按下一节验收公网。Git 推送、PR 合并、Vercel 部署、数据库迁移和对象写入是不同结果，需要逐项确认。
+
+这个入口是一次明确指定目标的夹具写入，不是本地与公网的双向同步。Git 只携带代码和仓库原图，后续本机或公网新建的主体、上传素材、项目与画布不会自动复制到另一环境。
+
+## 首次公网验收
+
+当前数据库、私有桶、Production 配置与真实个人目录迁移已经完成，以下新增 HTTP / 浏览器链路仍待部署后验收；通过后记录实际部署 ID / 代码 SHA 与结果，不记录凭据。
+
+- `/api/health`、固定账号登录、项目列表和画布回读保持正常；资产更新不改变已有账号、会话、项目或画布。
+- Hoo 登录后个人主体库展示三主体，共 12 张原图；封面、顺序、预览与主体选择器可用，刷新后仍能读取。
+- 小文件上传、项目挂载、鉴权后的内容读取与视频范围请求正常；超过 `4 MiB` 在 intent 阶段得到中文 `413`，未登录或无权用户不能读取私有素材。
+- 重新部署后同一批记录和对象仍可读取；桶保持私有，浏览器构建产物不含服务端凭据。
 
 固定演示账号与密码见 `docs/agent-handoff.md`。免费层可能在长期无活动后暂停，
 因此该地址只作为前端原型评审环境，不承诺正式生产可用性。

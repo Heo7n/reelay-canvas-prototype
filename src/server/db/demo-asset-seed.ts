@@ -59,6 +59,11 @@ export interface DemoAssetSeedResult {
   entities: WorkspaceEntity[];
 }
 
+export interface DemoAssetSeedOptions {
+  /** Seed the personal catalog without attaching assets to projects or retiring historical links. */
+  personalOnly?: boolean;
+}
+
 function fixtureUrl(fileName: string): URL {
   return new URL(`../../../assets/home/${fileName}`, import.meta.url);
 }
@@ -120,11 +125,6 @@ async function seedAsset(
     workspaceId: DEMO_WORKSPACE_ID,
     uploadIntentId: intent.id,
   });
-  await dependencies.assetStore.attachAssetToProject({
-    actorId: DEMO_ACTOR_ID,
-    projectId: DEMO_PROJECT_ID,
-    assetId: asset.id,
-  });
   return asset;
 }
 
@@ -139,6 +139,7 @@ function requireAsset(
 
 export async function seedDemoAssetLibrary(
   dependencies: DemoAssetSeedDependencies,
+  options: DemoAssetSeedOptions = {},
 ): Promise<DemoAssetSeedResult> {
   const canonicalFixtureAssets = await resolveDemoAssetFixtures(
     DEMO_ASSET_FIXTURES,
@@ -178,6 +179,13 @@ export async function seedDemoAssetLibrary(
   const assetsByKey = new Map<string, WorkspaceMediaAsset>();
   for (const fixture of canonicalFixtureAssets) {
     const asset = await seedAsset(dependencies, fixture);
+    if (!options.personalOnly) {
+      await dependencies.assetStore.attachAssetToProject({
+        actorId: DEMO_ACTOR_ID,
+        projectId: DEMO_PROJECT_ID,
+        assetId: asset.id,
+      });
+    }
     assets.push(asset);
     assetsByKey.set(fixture.key, asset);
   }
@@ -204,10 +212,12 @@ export async function seedDemoAssetLibrary(
     }));
   }
 
-  await retireUnreferencedHistoricalDemoAssets(
-    dependencies.pool,
-    historicalGenerations.flatMap(({ assets: historicalAssets }) => historicalAssets),
-  );
+  if (!options.personalOnly) {
+    await retireUnreferencedHistoricalDemoAssets(
+      dependencies.pool,
+      historicalGenerations.flatMap(({ assets: historicalAssets }) => historicalAssets),
+    );
+  }
 
   return { assets, entities };
 }

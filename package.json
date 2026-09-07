@@ -35,7 +35,8 @@
     "check:canvas": "npm run check:js && npm run check:css && npm run check:html && npm run test:canvas",
     "check:legacy": "npm run check:js && npm run check:config && npm run check:css && npm run check:html && npm test",
     "verify:shell": "npm run check:shell && npm run build:shell",
-    "check": "npm run check:legacy && npm run check:shell && npm run check:server"
+    "check": "npm run check:legacy && npm run check:shell && npm run check:server",
+    "db:seed:preview-assets": "tsx src/server/db/seed-preview-assets-command.ts"
   },
   "engines": {
     "node": "24.x"

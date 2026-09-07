@@ -18,6 +18,7 @@ export interface BuildServerOptions {
   assetStore?: WorkspaceMediaAssetStore & ProjectAssetReferenceStore;
   entityStore?: EntityStore;
   logger?: boolean;
+  maxAssetUploadBytes?: number;
   objectStore?: ObjectStore;
   secureCookies?: boolean;
   staticRoot?: string;
@@ -46,6 +47,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     await registerAssetRoutes(app, {
       assetStore: options.assetStore,
       objectStore: options.objectStore,
+      maxUploadBytes: options.maxAssetUploadBytes,
       projects: store,
       sessions: store,
     });
