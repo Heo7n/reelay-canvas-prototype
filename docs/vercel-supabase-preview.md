@@ -13,6 +13,7 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 
 2026-09-05 只读核验：该 Vercel 项目尚未关联 Git 仓库，当前生产部署来源为 CLI；GitHub 工作流只执行检查与构建。因此当前推送代码不会自动发布公网。若后续连接 Git 或添加部署工作流，这个结论必须重新核验，不能把“推送”和“部署”长期视为天然分离。
 
+- Vercel rewrite 的 `apiPath` 内部参数在 API 入口统一移除；同时兼容保留原请求路径和只提供 `/api` 目标路径的运行时，业务查询仍执行原有严格校验。
 - `api/index.ts` 是 Vercel 的无状态 API 入口；`src/server/start.ts`
   只服务本地常驻进程。两者复用同一个 `buildServer` 和 PostgreSQL store。
 - `npm run build` 生成 React 应用壳并复制迁移期旧画布到 `dist/shell`。
