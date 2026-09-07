@@ -7,6 +7,14 @@ import styles from "./LoginMediaCarousel.module.css";
 
 const slides = [
   {
+    image: worldImage,
+    position: "50% center",
+    alt: "嵌入海岸岩壁的圆环建筑，框住远处的海面与晨雾",
+    category: "想象世界",
+    title: "为想象，打开新的场景。",
+    description: "让光影、空间与细节，共同构建一个世界。",
+  },
+  {
     image: brandImage,
     position: "50% center",
     alt: "象牙白薄片在深色空间舒展，柔和光线从折面之间透出",
@@ -21,14 +29,6 @@ const slides = [
     category: "角色叙事",
     title: "让角色，走进你的故事。",
     description: "从人物设定出发，延展故事里的每一幕。",
-  },
-  {
-    image: worldImage,
-    position: "50% center",
-    alt: "嵌入海岸岩壁的圆环建筑，框住远处的海面与晨雾",
-    category: "想象世界",
-    title: "为想象，打开新的场景。",
-    description: "让光影、空间与细节，共同构建一个世界。",
   },
 ] as const;
 
