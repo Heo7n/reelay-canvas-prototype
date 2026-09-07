@@ -8,8 +8,12 @@ import type { SessionGateway } from "../application/session/SessionGateway";
 import type { WorkspaceRepository } from "../application/workspaces/WorkspaceRepository";
 import type { WorkspaceContextGateway } from "../application/workspaces/WorkspaceContextGateway";
 import { createHttpServices } from "../infrastructure/http/createHttpServices";
+import { createExperienceServices } from "../infrastructure/experience/createExperienceServices";
+import type { TransientMediaRepository } from "../application/assets/TransientMediaRepository";
+import { isExperienceRuntime } from "./runtime-mode";
 
 export interface ApplicationServices {
+  transientMediaRepository?: TransientMediaRepository;
   accountRepository: AccountRepository;
   canvasDocumentRepository: CanvasDocumentRepository;
   entityRepository: EntityRepository;
@@ -21,4 +25,6 @@ export interface ApplicationServices {
   workspaceRepository: WorkspaceRepository;
 }
 
-export const applicationServices: ApplicationServices = createHttpServices();
+export const applicationServices: ApplicationServices = isExperienceRuntime
+  ? createExperienceServices()
+  : createHttpServices();

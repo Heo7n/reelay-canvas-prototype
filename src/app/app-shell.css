@@ -26,6 +26,25 @@ textarea {
   font: inherit;
 }
 
+.experience-runtime-shell { display: flex; flex-direction: column; }
+.experience-content { flex: 1; min-height: 0; overflow: auto; }
+.experience-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 28px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgb(0 0 0 / 6%);
+  background: #eceeea;
+  color: #626660;
+  font-size: 11px;
+}
+.experience-notice strong { font-weight: 600; color: #454b42; }
+.experience-notice-detail { margin-left: auto; }
+html[data-theme="dark"] .experience-notice { background: #20231f; color: #a3aaa0; border-color: rgb(255 255 255 / 6%); }
+html[data-theme="dark"] .experience-notice strong { color: #d0d6cd; }
+@media (max-width: 600px) { .experience-notice-detail { display: none; } }
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;

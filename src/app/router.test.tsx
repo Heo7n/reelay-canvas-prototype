@@ -7,6 +7,12 @@ import { createAppRouteObjects } from "./router";
 import { applicationServices } from "./services";
 
 describe("application router", () => {
+  it("provides direct workspace entry without a login action in an experience router", () => {
+    const children = createAppRouteObjects(applicationServices, true)[0].children ?? [];
+    expect(children.some((route) => route.id === "public-entry" || route.path === "login")).toBe(false);
+    expect(children.find((route) => route.index)?.loader).toEqual(expect.any(Function));
+    expect(children.find((route) => route.path === "w/:workspaceId")?.loader).toEqual(expect.any(Function));
+  });
   it("keeps data handlers eager while loading routed page components on demand", () => {
     const [rootRoute] = createAppRouteObjects(applicationServices);
     const rootChildren = rootRoute?.children ?? [];

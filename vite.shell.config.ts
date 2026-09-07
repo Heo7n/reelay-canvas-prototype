@@ -22,19 +22,20 @@ function shellHistoryFallback() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: "/",
+  define: { "import.meta.env.VITE_REELAY_EXPERIENCE": JSON.stringify(mode === "experience" ? "true" : "false") },
   plugins: [react(), shellHistoryFallback(), canvasLayoutTunerPlugin()],
   server: {
-    proxy: {
+    proxy: mode === "experience" ? undefined : {
       "/api": "http://127.0.0.1:5175",
     },
   },
   build: {
-    outDir: "dist/shell",
+    outDir: mode === "experience" ? "dist/experience" : "dist/shell",
     emptyOutDir: true,
     rollupOptions: {
       input: "app-shell.html",
     },
   },
-});
+}));

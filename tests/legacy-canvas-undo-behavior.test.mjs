@@ -129,6 +129,47 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
   return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, timers, scheduledTask, metadataImages };
 }
 
+test("experience restores uploaded media by catalog identity after canonical document reload", (t) => {
+  const h = createHarness(t);
+  h.state.hostCapabilities.transientMediaUpload = true;
+  const localAsset = { id: "instance-asset", librarySourceId: "memory-file", type: "image", name: "local.png", url: "blob:http://reelay.test/original" };
+  h.install(h.canvas("first", [h.node("with-file", { assets: [localAsset], activeAssetId: localAsset.id })]),
+    h.canvas("second", [h.node("also-file", { assets: [{ ...localAsset, id: "instance-2" }], activeAssetId: "instance-2" })]));
+  const serialized = h.window.createCanvasDocumentSnapshot();
+  assert.equal(serialized.canvases[0].nodes[0].assets[0].url, "");
+  assert.equal(h.window.hydrateCanvasDocumentSnapshot(serialized), true);
+  h.window.restoreTransientCanvasMedia([{ id: "memory-file", workspaceAssetId: "memory-file", url: "blob:http://reelay.test/current", thumbnailUrl: "blob:http://reelay.test/current" }]);
+  for (const canvas of h.state.canvases) {
+    assert.equal(canvas.nodes[0].assets[0].url, "blob:http://reelay.test/current");
+    assert.equal(canvas.nodes[0].assets[0].librarySourceId, "memory-file");
+  }
+  assert.equal(h.window.libraryImagePreviewUrl("blob:http://reelay.test/current", "image"), "blob:http://reelay.test/current");
+  assert.equal(h.window.libraryImagePreviewUrl("http://reelay.test/assets/home/entity-umbra-01-key-art-v4.jpg", "image"),
+    "http://reelay.test/assets/experience-preview/entity-umbra-01-key-art-v4.webp");
+  h.state.hostCapabilities.transientMediaUpload = false;
+  h.window.restoreTransientCanvasMedia([{ id: "memory-file", url: "blob:http://reelay.test/forbidden" }]);
+  assert.equal(h.state.canvases[0].nodes[0].assets[0].url, "blob:http://reelay.test/current");
+  assert.equal(h.window.libraryImagePreviewUrl("http://reelay.test/api/assets/1/content", "image"), "http://reelay.test/api/assets/1/content?preview=library");
+});
+
+test("experience home launch consumes its context prompt once without touching session storage", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("empty"));
+  h.window.sessionStorage.setItem("reelay-home-launch-intent", "internal pending prompt");
+  const host = { postMessage() {} };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
+  });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: "experience-project", canvasId: "main",
+    writable: true, capabilities: { transientMediaUpload: true }, launchPrompt: "experience prompt" } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: true });
+  assert.equal(h.state.nodes.length, 1);
+  assert.equal(h.state.nodes[0].prompt, "experience prompt");
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+  assert.equal(h.window.sessionStorage.getItem("reelay-home-launch-intent"), "internal pending prompt");
+});
+
 test("closed library catalog registration loads no media; using an asset hydrates only that node", async (t) => {
   const h = createHarness(t, { trackMetadataImages: true });
   assert.deepEqual(h.metadataImages.map((image) => image.url), ["./assets/reelay-logo.png"],

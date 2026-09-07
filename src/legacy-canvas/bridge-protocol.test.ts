@@ -22,6 +22,16 @@ const document = {
 };
 
 describe("legacy canvas bridge", () => {
+  it("accepts only bounded ArrayBuffer bodies for transient imports", () => {
+    const message = { source: "reelay-legacy-canvas", type: "canvas:import-transient-media", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", target: "personal", mediaKind: "image",
+      displayName: "photo.png", contentType: "image/png", body: new ArrayBuffer(16) };
+    expect(parseCanvasMessage(message)).not.toBeNull();
+    expect(parseCanvasMessage({ ...message, body: new Uint8Array(16) })).toBeNull();
+    expect(parseCanvasMessage({ ...message, body: new ArrayBuffer(0) })).toBeNull();
+    expect(parseCanvasMessage({ ...message, body: new ArrayBuffer(4 * 1024 * 1024 + 1) })).toBeNull();
+    expect(parseCanvasMessage({ ...message, workspaceId: "forged-scope" })).toBeNull();
+  });
   const projectAsset = {
     referenceId: "reference-1",
     assetId: "asset-1",

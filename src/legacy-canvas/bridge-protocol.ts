@@ -16,6 +16,7 @@ const legacyCanvasCapabilitiesSchema = z
     projectSwitcher: z.boolean().optional(),
     assetPersistence: z.boolean().optional(),
     entityPersistence: z.boolean().optional(),
+    transientMediaUpload: z.boolean().optional(),
   })
   .strict();
 
@@ -38,6 +39,7 @@ export const legacyCanvasContextSchema = z
     theme: z.enum(["light", "dark"]),
     writable: z.boolean(),
     capabilities: legacyCanvasCapabilitiesSchema.optional(),
+    launchPrompt: z.string().max(600).optional(),
     actor: z.object({
       account: z.string().min(1),
       displayName: z.string().min(1),
@@ -226,6 +228,19 @@ export const hostMediaRenameResultMessageSchema = z.object({
   workspaceAsset: bridgeWorkspaceAssetSchema,
 }).strict();
 
+const hostTransientMediaResultFields = {
+  source: z.literal("reelay-shell"),
+  type: z.literal("host:transient-media-result"),
+  protocolVersion: z.literal(1),
+  requestId: bridgeRequestIdSchema,
+  instanceId: canvasInstanceIdSchema,
+};
+
+export const hostTransientMediaResultMessageSchema = z.discriminatedUnion("target", [
+  z.object({ ...hostTransientMediaResultFields, target: z.literal("project"), projectAsset: bridgeProjectAssetSchema }).strict(),
+  z.object({ ...hostTransientMediaResultFields, target: z.literal("personal"), workspaceAsset: bridgeWorkspaceAssetSchema }).strict(),
+]);
+
 export const hostAssetCommandErrorMessageSchema = z.object({
   source: z.literal("reelay-shell"),
   type: z.literal("host:asset-command-error"),
@@ -236,6 +251,18 @@ export const hostAssetCommandErrorMessageSchema = z.object({
 }).strict();
 
 export const canvasMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:import-transient-media"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    requestId: bridgeRequestIdSchema,
+    target: z.enum(["project", "personal"]),
+    mediaKind: mediaKindSchema,
+    displayName: z.string().trim().min(1).max(300),
+    contentType: z.string().trim().min(1).max(120),
+    body: z.instanceof(ArrayBuffer).refine((body) => body.byteLength > 0 && body.byteLength <= 4 * 1024 * 1024),
+  }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:ready"),
