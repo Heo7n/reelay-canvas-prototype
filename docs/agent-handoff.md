@@ -4,6 +4,8 @@
 
 ## 当前定位
 
+- 两台 Windows 长期接续开发：本机已完成 Ho_Org 下独立 Reelay_Dev（oocagsuhijyvmzwotyxn，新加坡，已确认月费 0）的业务数据与 42 个原文件迁移，并切换为主目录 `dev:server:shared` API；前端 5173 / API 5175 同用 `D:\Software\codePro\0707` 代码，与演示站 Reelay_Test 分离。家里电脑尚待安装与接续验收，不能宣称两机端到端已完成。用户明确不迁聊天记录，开发上下文随仓库交接；最新证据见下文“开始与验证”及 `cross-device-development.md`。
+
 - 当前加载修复切片基于 PR #18 的 `bb4650c`：登录媒体增加首图预加载、内联占位与解码后切换；持久图片卡片改用受鉴权的 512px WebP，原图消费不变。新增 `ImagePreviewService` 与原内容路由固定 preview 查询，无 schema / seed / 账号变更。新增 sharp 0.35.4，Fastify 同主版本更新至 5.12.1；现有 12 图实测缩略图总量约 292 KiB，原图约 23.3 MiB。测试和发布证据见该切片 PR。
 - 日常开发使用主工作目录中的活动开发分支，`main` 保留已验证集成基线；分支名、worktree 和未提交改动必须在接手时用 `git branch --show-current`、`git status --short` 与 `npm run worktrees` 重新确认，本交接不把静态分支名当成事实。此前改崩的用量看板实验 worktree 与本地分支已经清理，不再作为可恢复或可合并来源。
 - 当前本地主链路是访客主页 `/app` → 登录弹窗 `/app/login` → `/app/w/:workspaceId` → `/app/w/:workspaceId/projects` → 受保护的 legacy canvas host。登录、主页和项目库只保留 React 正式路由；旧静态双轨已经删除，`index.html` 仅作为迁移期画布 iframe。
@@ -25,7 +27,7 @@
 - `LegacyCanvasHost` 已受路由权限保护；旧 `index.html` 消费版本化账号 / 组织 / 项目上下文和 CanvasDocument 消息，按 `projectId + canvasId` 加载 / 自动保存。PostgreSQL 使用 revision 乐观并发，`admin/edit` 可写、`view` 只读，非成员不可见；只读画布保留选择、浏览、缩放和下载，但会禁用拖动、删除、生成、重命名与参数修改。CanvasDocument v1 已收敛到 canonical allow-list，不支持的版本失败关闭，持久媒体 URL 会经过安全校验后才进入快照与 DOM sink。
 - legacy 画布壳层已重排为四个独立区域：左上返回主页 / 项目名 / 项目选择，左侧中部常显内部画布 / 资产 / 分享 / 个人，左下小地图 / 适应视图 / 禁用的整理占位 / 缩放滑条，右上只保留 Agent。左上项目栏、左中竖条和左下工具栏分别收敛为约 `248 × 38px`、`48px` 宽和 `248 × 38px`；中部入口使用约 `40px` 命中区，两端等高后资产面板获得对称的上下边界。共享的 `8px` 外边距和 `4px` 沟槽只继续定义资产面板与主体编辑器的上下边界。展开后的 Agent 默认约 `560px` 宽，并恢复为顶、右、底贴合视口的完整高度抽屉；桌面端顶部和底部可独立拖动或键盘调整，最小高度为 `420px`，脱离视口的一侧才恢复边界和左侧圆角，高度偏好不写入 CanvasDocument。空会话由输入框占位文案引导，不重复显示大号品牌欢迎区。积分已从右上常驻徽标迁入个人菜单，并通过严格 `canvas:open-account` 的 `profile | credits` bridge 打开 React 对应分栏；旧无 `section` 消息兼容为 `profile`。个人入口只在 hover 时显示文字提示，点击才展开菜单；菜单与左侧胶囊外框底边对齐，前两项为“我的积分 / 组织中心”，退出账号使用中性色。帮助子菜单位于主菜单右侧并与其底边对齐；帮助触发行到子菜单之间使用真实命中桥和 `180ms` 菜单关闭延迟，横向移动不再意外收起。帮助项按“使用教程 / 反馈问题 / 快捷键”排列；第三项展开的约 `620px` 双栏快捷键卡片位于帮助子菜单下方，并以一级菜单为定位容器对齐其左边缘，不使用与菜单宽度耦合的反向偏移。项目名编辑态只使用 hover 同款浅色底框，不额外显示描边、下划线或阴影。项目选择器由 React host 传入当前账号授权项目投影，支持搜索、缩略图、当前项勾选和固定的新建项目入口；打开其他项目与新建项目意图都会先等待当前画布保存，再由宿主路由或现有 workspace action 执行，iframe 不持有 repository 或伪造项目。资产面板改为独立的“资产库 / 空间切换”头部，收起入口固定在面板右缘，与左侧资产库入口保持同一水平线，上下间距由共享尺寸变量稳定保持约 `4px`。画布壳层覆盖集中在 `styles/canvas-chrome.css`，资产库独立样式位于 `styles/canvas-asset-library.css`；两者都不要与 `styles/app.css` 中的组框 / 临时选择面规则重新耦合。
 - 个人菜单最新视觉契约：竖条 → 一级菜单 → 帮助子菜单 → 快捷键卡片的三个实测沟槽为 `7px / 7px / 7px`；组织中心默认透明，仅在交互时显底；主题项位于账号设置前；快捷键箭头按“收起向下 / 展开向上”反馈状态。
-- 画布内资产库已按 `个人 / 组织 / 平台` 三空间和 `素材 / 主体` 两分栏重做，网格 / 列表、搜索、媒体筛选、预览和拖入画布均已接通。顶部控件高度按“分栏 > 搜索 > 目录命令行”收敛；搜索与文件夹行内编辑不显示额外黑框；“上传 / 操作”主按钮右缘与“素材”选中块右缘对齐，多选态使用 `list-checks` 批处理图标且不再叠加下拉箭头，未选条目时保持深色主按钮身份并降低整体强度来表达禁用，而不是切换成浅灰次级按钮。网格卡片固定约 `164px`，面板在 `380–780px` 间调整时按外宽约 `550px / 728px` 阈值从 `2 → 3 → 4` 列重排，不拉伸条目；右侧调宽热区与 Agent 左缘统一使用原生 col-resize 光标及悬停/拖动边线反馈；默认不额外显示边线，悬停显现细线，拖动时加强对比。指针、键盘、ARIA 和 Agent 联动共用实际宽度边界，Agent 关闭后恢复资产库首选宽度；`≤480px` 全屏降级隐藏无效调整器。卡片待选态使用空复选框，选中后显示带勾复选框；右上三点菜单进入浏览器顶层，只有视口空间不足时翻转，可跨出资产库边界并随触发按钮滚动定位。个人空间 Media 上传通过 host bridge 执行 checksum 约束的 upload intent，写入 ObjectStore，登记 WorkspaceMediaAsset + personal root placement，并幂等创建当前项目的 ProjectAssetReference。个人主体已改为单封面卡片和独立编辑工作区：新建标题为“新建主体”，编辑标题跟随名称，可填写名称 / 描述，从个人素材库或上传添加 Media，四类标签只筛选主体内素材。只有图片可设封面；预览区以纯文字“设为封面 / 当前封面”区分动作与状态，素材卡常显封面标记。左栏只让分类工具行以下的素材卡片区滚动，名称、描述与分类工具保持固定；资产库仍只让目录命令行以下的网格滚动。Entity create / list / get / update、幂等键、引用可见性与乐观版本已通过独立 repository、0012 migration 和严格 bridge 落地；持久 Entity 的移动、组织复制与删除仍未实现，这些操作会明确拒绝而不制造页面内成功。主体使用预览已有逐 Media 展开为独立画布节点的适配，正式 Node 级引用和完整持久化验收仍待补齐。私有 Supabase ObjectStore 配置与三主体 12 图迁移已完成，正式主域已通过 Asset / Entity HTTP 读取、鉴权、大小限制和三主体浏览器展示验收；本地 filesystem adapter 仍只服务常驻本机进程。
+- 画布内资产库已按 `个人 / 组织 / 平台` 三空间和 `素材 / 主体` 两分栏重做，网格 / 列表、搜索、媒体筛选、预览和拖入画布均已接通。顶部控件高度按“分栏 > 搜索 > 目录命令行”收敛；搜索与文件夹行内编辑不显示额外黑框；“上传 / 操作”主按钮右缘与“素材”选中块右缘对齐，多选态使用 `list-checks` 批处理图标且不再叠加下拉箭头，未选条目时保持深色主按钮身份并降低整体强度来表达禁用，而不是切换成浅灰次级按钮。网格卡片固定约 `164px`，面板在 `380–780px` 间调整时按外宽约 `550px / 728px` 阈值从 `2 → 3 → 4` 列重排，不拉伸条目；右侧调宽热区与 Agent 左缘统一使用原生 col-resize 光标及悬停/拖动边线反馈；默认不额外显示边线，悬停显现细线，拖动时加强对比。指针、键盘、ARIA 和 Agent 联动共用实际宽度边界，Agent 关闭后恢复资产库首选宽度；`≤480px` 全屏降级隐藏无效调整器。卡片待选态使用空复选框，选中后显示带勾复选框；右上三点菜单进入浏览器顶层，只有视口空间不足时翻转，可跨出资产库边界并随触发按钮滚动定位。个人空间 Media 上传通过 host bridge 执行 checksum 约束的 upload intent，写入 ObjectStore，登记 WorkspaceMediaAsset + personal root placement，并幂等创建当前项目的 ProjectAssetReference。个人主体已改为单封面卡片和独立编辑工作区：新建标题为“新建主体”，编辑标题跟随名称，可填写名称 / 描述，从个人素材库或上传添加 Media，四类标签只筛选主体内素材。只有图片可设封面；预览区以纯文字“设为封面 / 当前封面”区分动作与状态，素材卡常显封面标记。左栏只让分类工具行以下的素材卡片区滚动，名称、描述与分类工具保持固定；资产库仍只让目录命令行以下的网格滚动。Entity create / list / get / update、幂等键、引用可见性与乐观版本已通过独立 repository、0012 migration 和严格 bridge 落地；持久 Entity 的移动、组织复制与删除仍未实现，这些操作会明确拒绝而不制造页面内成功。主体使用预览已有逐 Media 展开为独立画布节点的适配，正式 Node 级引用和完整持久化验收仍待补齐。私有 Supabase ObjectStore 配置与三主体 12 图迁移已完成，正式主域已通过 Asset / Entity HTTP 读取、鉴权、大小限制和三主体浏览器展示验收；filesystem adapter 保留供独立本机环境；当前日常 API 已改用 Reelay_Dev 私有 Storage。
 - 账号分栏 bridge 使用显式能力协商：新宿主在 `host:init` 提供 `accountSections`，新 iframe 只有看到该能力才为积分入口附加 `section`；缺少 capability 的旧宿主继续收到原始 v1 消息并降级打开默认个人页。旧 iframe 发来的无 `section` 消息则由新宿主默认解释为 `profile`，不能在 v1 strict schema 上无协商扩字段。
 - 画布壳层 disclosure 已补齐键盘闭环：项目 / 画布 / 更多操作 / 个人入口同步 expanded 状态，键盘打开后进入首个可用项，Escape 分层关闭并回焦，画布改名结束回到对应行。资产面板和 Agent 同开时至少保留 `280px` 画布走廊，`1000px` 以下改为互斥；后续调整面板最小宽度时要一起更新联合约束和行为测试。
 - 开发服务器必须让 `/app/*` 回退到 `app-shell.html`，同时保留 `/index.html` 给旧画布 iframe；不要重新引入会吞掉 Vite 内部脚本或旧画布入口的宽泛回退。
@@ -64,7 +66,7 @@ Agent 标题兼作历史菜单入口，右侧保留新建 / 收起。`canvas-age
 
 主体使用规则已确认：主体只组织与圈定素材，使用时展开为独立 Media 输入 / 连接，放入画布时拆成独立素材节点；后续编辑或删除主体不联动既有使用。底层 Media 的删除、权限、版本，以及模型容量与类型不兼容是另外的设计边界，不从该规则推导。详见 `product-expansion-plan.md` 第 4.2 节。
 
-本机服务与数据目录统一记录在 [本地开发与数据位置](local-development.md)：前端使用当前活动代码目录，API 与两处保留的 ObjectStore 需分别核对。恢复预览不重新 seed；迁移 API 时必须显式指定并验证既有 ObjectStore。
+本机服务与数据位置统一记录在 [本地开发与数据位置](local-development.md)：前端与共享 API 都从主目录读取当前活动代码，API 通过忽略配置连接 Reelay_Dev PostgreSQL 与私有桶。日常使用 `npm run dev:server:shared`，不重跑 seed；旧 Docker 和两处 ObjectStore 仅保留作迁移源，不再日常写入或反向覆盖云库。
 
 产品方向澄清：项目是正式 Reelay 前端的产品行为预演版，已确认规则需可执行，后端可模拟；后续范围与滚动路线已补入 `product-expansion-plan.md` 第 1 / 8.1 节。用户已启动独立的首页 / 登录设计切片，旧“首页与登录后置”不再限制本切片。面向 B 端，邀请码已确定为注册资格，不默认表达组织成员关系；此阶段注册入口只展示禁用态。手机号 / 邮箱、验证码与账号关联的详细流程仍待定，参考图和归档草稿不替代最终规则。
 
@@ -115,6 +117,12 @@ CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画
 
 ## 开始与验证
 
+2026-09-07 共享开发库切换：停止旧 5175 API（当时 PID 36992）后，最终快照写入 `.reelay-data/shared-development/source-backup-2026-09-07T11-55-08-749Z/`。Reelay_Dev 按仓库 0001–0013 建立 schema；`cloud-import-result.json` 记录全部业务表经 PostgreSQL 类型化精确比对后事务导入，保留 15 项目、6 画布、3 主体、42 Media、账号密码散列及所有关联，65 条旧 sessions 未导入。只有 `nodes.assets.url` 中 18 处本机 5173 / 5174 的持久 API 地址规范为同源相对路径，精确差异在同快照的 `canvas-url-normalization.json`；原 ID、revision、封面、素材顺序与其他内容保留，没有运行 seed。
+
+42 个原文件共 85,123,200 字节已上传同项目私有 `reelay-assets` 桶并全量回读 SHA-256 验证；证据在较早快照 `source-backup-2026-09-07T11-43-38-793Z/cloud-object-verification.json`，切换前已再次核对最终快照的 object key / hash 一致。桶及本地 Supabase API 上限为 50 MiB，filesystem 为 64 MiB，Vercel 仍为 4 MiB。当前主目录通过 `node scripts/start-shared-server.mjs` 后台运行共享 API（启动时父 PID 57800），日志为 `.git/dev-shared-api.stdout.log` / `.git/dev-shared-api.stderr.log`；恢复前重新检查实际进程，常规启动命令为 `npm run dev:server:shared`。
+
+本次本机 HTTP 已验证：创作者登录、两个原项目画布 200、3 主体 / 20 个人素材列表、三主体封面原图 Range 206、缩略图 200、未登录 401，以及 5173 / 5175 health。旧 Docker 54329 和两处素材根保留，不再日常写入。家里电脑安装、首次连接及两机保存接续仍待验收，本轮尚未实测新素材上传或再次画布保存。首次迁移步骤已执行，不能在家里接入时重新 seed 或导入旧快照覆盖共享数据。
+
 2026-09-07 后续登录整合已纳入 `b7cc3b37e27c44f8f0934e8c0e3234fa809eb8f6` 的访客主页和登录弹窗；下文较早资产发布记录中的“排除登录”仅描述当时范围。整合保留当前云端 Storage、三主体目录与加载修复，不重跑迁移或 seed；根地址经 `/app` 进入访客主页或当前账号的工作空间。合并后的 `npm run check` 共 742 项、生产构建和 diff 检查通过；实际构建预览已复验浅深主题、关闭登录后输入保留与错误密码反馈。此次正式部署 ID、构建源 SHA 和公网性能复验记录随集成 PR 的发布结果更新，不能由本地通过推断公网已更新。
 
 2026-09-07 公网加载修复：进入画布时取消整库原图的元数据探测，关闭的资产库不渲染媒体预览；实际使用 / 编辑的尺寸读取保留。生产构建将 45 个经典脚本与导入样式分别合为带内容哈希的单一 JS / CSS，仅公开静态产物使用 immutable 缓存。此次未修改数据库、私有媒体权限或导航前保存。发布前线上完整进入项目的一次连续测量为约 5.5 秒；纯返回主页约 129 毫秒，尚未稳定复现用户描述的长时间返回阻塞，不能由这次加载修复宣称所有导航卡顿已解决。
@@ -127,7 +135,7 @@ CanvasDocument 当前仍是迁移桥：一个路由 `main` 文档内保存旧画
 
 本次目录迁移没有运行 `db:seed:preview-assets`：Vercel 中现有敏感数据库凭据无法拉取，因此准确导出本机真实三主体、12 媒体、个人 placement、Entity 有序素材引用、个人绑定和 finalized upload intent，在临时 PostgreSQL 通过五项冲突 / 幂等验证后，经 MCP 单事务导入公网。原 ID、微秒时间戳、封面、顺序与版本（玄翎 `v2`、幽影 `v4`、白汐 `v4`）保留，账号、会话、项目、画布与项目引用等保护表哈希前后不变。存储与目录已就绪，候选部署已通过三主体精确目录及 12 图 HTTP 内容验证；候选地址的浏览器已登录 Hoo 并验证 12 素材、三主体封面和幽影的 5 图 / 描述 / 顺序，刷新后保持；正式主域切换后也已通过 HTTP 与三主体封面浏览器复验。本次没有制造测试新素材或改变既有画布。
 
-`SupabaseObjectStore` 和 `api/index.ts` 的 Asset / Entity store 接线已具备代码；公网单素材限制为 `4 MiB`，超过时 intent 阶段返回中文 `413`，本地仍为 `64 MiB`。运行时只验证预建私有桶，不创建桶或回退到临时文件系统。后续标准夹具入口为 `npm run db:seed:preview-assets`，要求 `REELAY_DEPLOYMENT_MODE=preview`、`ALLOW_DEMO_ASSET_SEED=true`、同一 Supabase 项目的 `MIGRATION_DATABASE_URL`（direct / session，非 6543）及上述三个 Storage 变量。入口使用 `seedDemoAssetLibrary(..., { personalOnly: true })`，只写个人 Media / placement / Entity，不执行账号 / 会话 / 项目 seed、不改画布或 ProjectAssetReference、不清退旧项目引用、不自动 migration，也不覆盖指纹不匹配的用户编辑记录。它不是本次真实记录迁移的执行入口。登录设计继续排除；真实凭据不进源码和日志。
+`SupabaseObjectStore` 和 `api/index.ts` 的 Asset / Entity store 接线已具备代码；公网单素材限制为 `4 MiB`，超过时 intent 阶段返回中文 `413`，本地 filesystem 模式为 `64 MiB`，当前日常 Supabase 模式为 `50 MiB`。运行时只验证预建私有桶，不创建桶或回退到临时文件系统。后续标准夹具入口为 `npm run db:seed:preview-assets`，要求 `REELAY_DEPLOYMENT_MODE=preview`、`ALLOW_DEMO_ASSET_SEED=true`、同一 Supabase 项目的 `MIGRATION_DATABASE_URL`（direct / session，非 6543）及上述三个 Storage 变量。入口使用 `seedDemoAssetLibrary(..., { personalOnly: true })`，只写个人 Media / placement / Entity，不执行账号 / 会话 / 项目 seed、不改画布或 ProjectAssetReference、不清退旧项目引用、不自动 migration，也不覆盖指纹不匹配的用户编辑记录。它不是本次真实记录迁移的执行入口。登录设计继续排除；真实凭据不进源码和日志。
 
 2026-09-07 发布验证：Vercel 部署 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X` 来自 `28580275b042890bcb4c634adde46fb718259643`，地址为 <https://reelay-canvas-prototype-dyfzxyrf9-heos-projects-560eccff.vercel.app>。Vercel rewrite 的 `apiPath` 内部 query 已在入口移除，避免业务严格查询校验误拒绝。`npm run check` 的 716 项及 CI `quality / postgres` 全通过。实际 HTTP 已验证 health、三主体 ID / version / cover / 顺序、12 媒体逐张内容 SHA-256、range `206`、匿名 `401`、超 `4 MiB` intent `413`；候选地址的浏览器已真实登录 Hoo、进入既有项目，验证 12 素材与封面正确的三主体；幽影打开后显示 5 张图、描述与正确顺序，主视觉原图清晰，刷新后 12 素材和三主体仍可读取。本次未创建测试新素材或改变既有画布，不能把新素材上传、项目挂载与视频播放写成公网实测完成。
 
@@ -140,11 +148,11 @@ npm run worktrees
 npm run check
 ```
 
-启动前先按 [本地开发与数据位置](local-development.md) 区分继续现有环境与首次初始化；依赖已安装时不重复 `npm ci`。`npm run db:setup` 用于显式初始化或经复核的演示夹具更新，不是每天恢复预览的步骤。它依次执行 `db:up`、`db:migrate` 和幂等 `db:seed`，拒绝 production / preview 环境。当前本机目标检查优先读取 `MIGRATION_DATABASE_URL`，未设置时检查 `DATABASE_URL`，并非分别验证两者；首次初始化必须按启动说明让两者指向同一本机数据库。公网初始化仍按 `docs/vercel-supabase-preview.md` 单独执行。
+启动前按 [本地开发与数据位置](local-development.md) 使用共享 API 入口；依赖已安装时不重复 `npm ci`，家里电脑首次接入也不初始化数据库。`npm run db:setup` 只用于明确隔离的新建本机演示环境，不用于当前保留源或共享开发库；它依次执行 `db:up`、`db:migrate` 和幂等 `db:seed`，拒绝 production / preview 环境。该脚本的本机目标检查优先读取 `MIGRATION_DATABASE_URL`，未设置时检查 `DATABASE_URL`，并非分别验证两者；独立初始化时必须先让两者指向同一测试数据库，不能沿用云端凭据。公网初始化仍按 `docs/vercel-supabase-preview.md` 单独执行。
 
-该 seed 除账号和项目外，还会为 Hoo 写入 v4 演示夹具：用户提供的 12 张 PNG / JPEG 原图组成“幽影”5 张、“白汐”3 张、“玄翎”4 张。各组从主形象 / 肖像开始作为封面，再按形象设定、造型探索、装备 / 特效排序；展示名和仓库文件名均带组内两位序号。v1–v3 的两组历史主体仅在完整旧 fixture 指纹匹配时原位校准，保留 Entity ID 与 placement，第三组使用新的固定创建键。历史媒体在无额外 Entity、项目或画布引用时只撤销个人 placement 和演示项目引用，底层资产 / blob 不硬删；已发布的历史文件与指纹仍留在仓库。用户编辑过的旧主体会 fail closed，不会偷偷覆盖或追加重复案例；并发编辑发生在上传与事务校准之间时，事务仍会二次校验并失败，已经完成的 canonical Media 可在解决冲突后由下一次 seed 幂等收敛。只更换现有本地案例时，可在核对数据库和 API 的 ObjectStore 根后定向调用 `seedDemoAssetLibrary`，不重复初始化账号与项目。
+该 seed 除账号和项目外，还会为 Hoo 写入 v4 演示夹具：用户提供的 12 张 PNG / JPEG 原图组成“幽影”5 张、“白汐”3 张、“玄翎”4 张。各组从主形象 / 肖像开始作为封面，再按形象设定、造型探索、装备 / 特效排序；展示名和仓库文件名均带组内两位序号。v1–v3 的两组历史主体仅在完整旧 fixture 指纹匹配时原位校准，保留 Entity ID 与 placement，第三组使用新的固定创建键。历史媒体在无额外 Entity、项目或画布引用时只撤销个人 placement 和演示项目引用，底层资产 / blob 不硬删；已发布的历史文件与指纹仍留在仓库。用户编辑过的旧主体会 fail closed，不会偷偷覆盖或追加重复案例；并发编辑发生在上传与事务校准之间时，事务仍会二次校验并失败，已经完成的 canonical Media 可在解决冲突后由下一次 seed 幂等收敛。只有在独立本机夹具环境中更新案例时，才可在核对数据库和 API 的 ObjectStore 根后定向调用 `seedDemoAssetLibrary`；不针对保留迁移源或 Reelay_Dev 运行该步骤。
 
-素材源文件随 Git 同步，PostgreSQL 元数据与 ObjectStore 各属其环境。新电脑首次初始化可重建仓库定义的演示夹具，不能恢复另一台电脑上用户创建的项目、主体和上传素材；这些状态需要数据库与 ObjectStore 配套备份。已有环境日常拉取后按变更范围决定是否执行 migration 或 seed。普通 `db:seed` 的 preview 模式继续跳过媒体；`db:seed:preview-assets` 是后续显式写入标准仓库夹具的入口，本次公网真实三主体 12 图已通过上文的一次性事务迁移落地，候选部署 HTTP 读取已验收，正式主域切换后也已通过 HTTP 与三主体封面浏览器复验。该命令不会自动进行本地与公网双向同步，也不会复制任一环境的后续用户数据。服务启动和依赖安装不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
+素材源文件随 Git 同步；日常开发的 PostgreSQL 元数据与原始对象已统一到 Reelay_Dev，家里电脑接入同一环境即可读取现有用户内容，不用 seed 重建。云端状态仍需要数据库与 ObjectStore 配套备份，旧本机迁移源不能覆盖云端的新编辑。共享 schema 变更由一个任务按变更范围执行，普通换机或拉取不运行 migration / seed。普通 `db:seed` 的 preview 模式继续跳过媒体；`db:seed:preview-assets` 是独立公网演示环境显式写入标准仓库夹具的入口，上文公网真实三主体 12 图的一次性迁移与当前共享开发迁移是不同记录。该命令不会建立 Reelay_Dev 与演示站的双向同步，也不会复制后续用户数据。服务启动和依赖安装不会自动 migration 或 seed，也不会在 PostgreSQL 故障时回退到内存。
 
 - 已安装依赖时不必重复执行 `npm ci`。
 - 开发中的定向检查与文档选读按 `docs/development-workflow.md` 执行。
