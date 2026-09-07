@@ -9,13 +9,12 @@ test("catalog keeps stable image and video defaults", () => {
   assert.equal(catalog.find((model) => model.type === "video")?.id, "seedance-2-5");
 });
 
-test("catalog exposes the seven product models in stable display order", () => {
+test("catalog exposes the six product models in stable display order", () => {
   assert.deepEqual(
     [...catalog].map(({ id, name, type }) => ({ id, name, type })),
     [
       { id: "gpt-image-2", name: "GPT Image 2", type: "image" },
       { id: "seedream-5-lite", name: "Seedream 5.0 Lite", type: "image" },
-      { id: "nano-banana-pro", name: "NanoBanana Pro", type: "image" },
       { id: "seedance-2-5", name: "Seedance 2.5", type: "video" },
       { id: "seedance-2", name: "Seedance 2.0", type: "video" },
       { id: "seedance-2-fast", name: "Seedance 2.0 Fast", type: "video" },
@@ -35,7 +34,7 @@ test("the Seedance family is identified by shared catalog brand metadata", () =>
 
 test("shared directory is the frozen source for canvas and usage model metadata", () => {
   assert.ok(Object.isFrozen(modelDirectory));
-  assert.equal(modelDirectory.length, 11);
+  assert.equal(modelDirectory.length, 10);
   assert.ok(catalog.every((model) => modelDirectory.includes(model)));
   assert.deepEqual(
     [...modelDirectory].filter((model) => !catalog.includes(model)).map(({ id, name, type }) => ({ id, name, type })),
@@ -49,7 +48,7 @@ test("shared directory is the frozen source for canvas and usage model metadata"
   const demoTemplates = [...modelDirectory].flatMap((model) => (
     model.demoUsage.map((template) => ({ modelId: model.id, modelName: model.name, ...template }))
   )).sort((left, right) => left.order - right.order);
-  assert.equal(demoTemplates.length, 27);
+  assert.equal(demoTemplates.length, 23);
   assert.deepEqual(demoTemplates.slice(0, 3).map(({ modelId, modelName, baseCredits }) => ({ modelId, modelName, baseCredits })), [
     { modelId: "seedance-2", modelName: "Seedance 2.0", baseCredits: 720 },
     { modelId: "seedance-2", modelName: "Seedance 2.0", baseCredits: 380 },
@@ -62,7 +61,6 @@ test("every model exposes a shared local brand logo contract", () => {
   assert.ok(catalog.every((model) => model.iconMode === "mask"));
   assert.equal(catalog.find((model) => model.id === "kling-video-3")?.iconSrc, "./assets/model-logos/kling-mono.svg");
   assert.ok(catalog.filter((model) => model.provider === "ByteDance").every((model) => model.iconSrc.endsWith("/bytedance-mono.svg")));
-  assert.equal(catalog.find((model) => model.id === "nano-banana-pro")?.iconSrc, "./assets/model-logos/nanobanana-mono.svg");
 });
 
 test("default GPT Image 2 generation keeps the five-credit prototype cost", () => {
@@ -156,7 +154,7 @@ test("prompt panels preserve the 705 wide design geometry with bounded content g
   assert.equal(config.layoutRules.normalPanelHeight, 291);
   assert.equal(config.layoutRules.compactPanelHeight, 260);
   assert.equal(config.layoutRules.advancedSettingsHeightByMode.image, 118);
-  assert.equal(config.layoutRules.advancedSettingsHeightByMode.video, 154);
+  assert.equal(config.layoutRules.advancedSettingsHeightByMode.video, 118);
   assert.equal(config.layoutRules.promptInputTop, 73);
   assert.equal(config.layoutRules.promptInputBottom, 51);
   assert.equal(config.layoutRules.promptTargetScreenWidth, 705);

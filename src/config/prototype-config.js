@@ -332,9 +332,9 @@
   };
 
   const defaultMediaToolPreferences = {
-    image: { tools: ["enhance", "crop", "remove-bg", "add-library"], showLabels: true },
-    video: { tools: ["enhance", "trim", "interpolate", "add-library"], showLabels: true },
-    audio: { tools: ["enhance", "trim", "denoise", "add-library"], showLabels: true },
+    image: { tools: ["enhance", "crop", "remove-bg", "add-library"], showLabels: false },
+    video: { tools: ["enhance", "trim", "interpolate", "add-library"], showLabels: false },
+    audio: { tools: ["enhance", "trim", "denoise", "add-library"], showLabels: false },
   };
 
   const generationWorkflows = {
@@ -398,7 +398,7 @@
     compactPanelHeight: 260,
     advancedSettingsHeightByMode: {
       image: 118,
-      video: 154,
+      video: 118,
     },
     promptInputTop: 73,
     promptInputBottom: 51,

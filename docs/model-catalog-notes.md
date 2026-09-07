@@ -1,6 +1,6 @@
 # 模型目录说明
 
-更新时间：2026-09-03
+更新时间：2026-09-07
 
 ## 命名原则
 
@@ -15,7 +15,6 @@
 
 - `GPT Image 2`
 - `Seedream 5.0 Lite`
-- `NanoBanana Pro`
 
 视频模型：
 
@@ -24,19 +23,28 @@
 - `Seedance 2.0 Fast`
 - `Kling 3.0`
 
-当前共 7 个生成模型：图片 3 个、视频 4 个。音频暂不提供独立生成模型，只保留画布素材上传、播放与编辑能力。
+当前共 6 个生成模型：图片 2 个、视频 4 个。音频暂不提供独立生成模型，只保留画布素材上传、播放与编辑能力。
 
 ## 菜单展示短句与资料依据
 
-模型菜单的说明是面向创作者的单行能力摘要，不照搬供应商营销文案，也不把当前原型尚未接入的 API 能力表述为已经可用。当前短句依据 2026-08-24 可访问的公开资料统一压缩：
+模型菜单使用一行“核心能力 + 辨识度”摘要，优先概括模型本身的生成、编辑、参考、控制或推理能力。保留有区分作用的时长，不把单一应用场景当作完整模型定位，也不使用未经核实的领先性、倍率或效果保证。以下资料均于 2026-09-07 重新联网读取；节点和对话框共用同一目录。
 
-- GPT Image 2：OpenAI 将其定位为快速、高质量的图像生成与编辑模型，并强调灵活尺寸、高保真图像输入和改进的文字呈现；菜单摘要为“快速生成与编辑，强化文字与参考还原”。来源：[OpenAI 模型页](https://developers.openai.com/api/docs/models/gpt-image-2)、[ChatGPT Images 2.0](https://openai.com/index/introducing-chatgpt-images-2-0/)。
-- Seedream 5.0 Lite：ByteDance Seed 将其定位为具备深度思考和在线检索能力的统一多模态图像生成模型；菜单摘要为“深度推理与实时检索，提升生成准确度”。来源：[Seedream 5.0 Lite](https://seed.bytedance.com/seedream5_0_lite)。
-- NanoBanana Pro：Google 将其称为 Gemini 3 Pro Image，面向复杂、专业场景，强调高级推理、稳健控制、图像生成与编辑；菜单摘要为“专业级生成与编辑，强化复杂视觉控制”。来源：[Introducing Nano Banana Pro](https://blog.google/innovation-and-ai/products/nano-banana-pro/)、[Gemini 3 Pro Image for developers](https://blog.google/innovation-and-ai/technology/developers-tools/gemini-3-pro-image-developers/)。
-- Seedance 2.5：ByteDance Seed 强调 30 秒叙事、音视频联合生成、精准参考控制和编辑能力；菜单摘要为“30 秒音视频叙事，支持精准参考与编辑”。来源：[Seedance 2.5](https://seed.bytedance.com/en/seedance2_5)。
-- Seedance 2.0：ByteDance Seed 将其定义为支持文字、图片、音频和视频四种输入的统一多模态音视频联合生成架构；菜单摘要为“四模态输入，统一音视频生成与编辑”。来源：[Seedance 2.0](https://seed.bytedance.com/seedance2_0)。
-- Seedance 2.0 Fast：公开模型服务将其描述为 Seedance 2.0 的速度优化变体，支持同步音频和多模态输入；菜单只保留经得起跨服务差异的定位，摘要为“加速多模态生成，适合高频创意迭代”。来源：[Replicate 模型页](https://replicate.com/bytedance/seedance-2.0-fast)、[Krea 模型页](https://www.krea.ai/models/seedance-2-fast)。
-- Kling 3.0：Kling 官方说明其最长生成 15 秒，支持原生音视频输出和灵活的多镜头叙事；菜单摘要为“15 秒原生音视频，强化多镜头叙事”。来源：[Kling VIDEO 3.0 指南](https://app.klingai.com/global/quickstart/klingai-video-3-model-user-guide)。
+| 模型 | 菜单简介 | 核实依据 |
+| --- | --- | --- |
+| GPT Image 2 | 高质量图像生成，文字呈现与高保真编辑 | [官方模型页](https://developers.openai.com/api/docs/models/gpt-image-2)说明高质量生成与编辑；[图像生成指南](https://developers.openai.com/api/docs/guides/image-generation#image-input-fidelity)明确 GPT Image 2 自动以高保真处理图像输入。文字呈现依据指南的 GPT Image 系列说明，不承诺文字布局完全准确。 |
+| Seedream 5.0 Lite | 深度推理与联网检索，精准图像创作 | [官方模型页](https://seed.bytedance.com/seedream5_0_lite)明确深度思考、实时检索增强、指令响应及风格与排版控制。 |
+| Seedance 2.5 | 30 秒音画叙事，精细参考与音视频编辑 | [官方模型页](https://seed.bytedance.com/zh/seedance2_5)明确 30 秒长叙事、参考视频意图与镜头语言理解，以及更广的音视频编辑能力。 |
+| Seedance 2.0 | 全模态音画生成，精准表演与运镜控制 | [官方模型页](https://seed.bytedance.com/seedance2_0)明确文字、图片、音频与视频输入、音视频联合生成，以及表演、光影、运镜调度。 |
+| Seedance 2.0 Fast | 多模态参考与灵活运镜，快速生成同步音画 | [fal 的 Fast 专属端点](https://fal.ai/models/bytedance/seedance-2.0/fast/reference-to-video)明确较低延迟、多种图像/视频/音频参考、同步音频及运镜控制；不推导具体提速倍率或各渠道价格。 |
+| Kling 3.0 | 原生音画同步生成，多镜头叙事与主体一致性 | [官方 VIDEO 3.0 指南](https://app.klingai.com/global/quickstart/klingai-video-3-model-user-guide)明确 Native Audio、Multi-Shot 及 Enhanced Subject Consistency，均属于 VIDEO 3.0 本身，不借用 Omni 专属能力。 |
+
+这些简介描述模型的官方能力定位，不代表原型已接入供应商 API、联网检索、多镜头专用控件或真实生成服务。参数可选范围仍由下方原型能力契约定义；此次仅更新介绍，未修改能力字段、价格或调用路径。
+
+## 素材校验文案边界
+
+2026-09-07 核对的[火山引擎官方说明](https://developer.volcengine.com/articles/7628567056649125942)将人脸验证、肖像授权及虚拟人像素材分别说明；这支持区分授权与素材使用流程，但不是各版本、各服务渠道通用的审核 API 契约。
+
+Reelay 的“自动校验素材”按用户确认的产品规则表达为：用户选择素材类别，系统按类别将当前生成中尚未审核的相关图片和视频提交至模型平台。这里“自动”只修饰提交动作，不代表自动识别真人、不代表代用户分类，也不代表自动审核通过。当前仍只保存开关偏好，分类、审核任务与供应商授权流程尚未接入；实际接入时按所选模型和服务渠道校准。
 
 ## 原型能力契约
 
@@ -44,7 +52,6 @@
 
 - GPT Image 2：常用比例、`1K / 2K / 4K` 与低/中/高生成质量。
 - Seedream 5.0 Lite：常用比例与 `2K / 4K`。
-- NanoBanana Pro：常用比例与 `1K / 2K / 4K`。
 - Seedance 2.5：底层 workflow 固定为 `omni-reference`；界面任务类型为全模态参考 / 视频编辑 / 视频延长，对应 `omni_reference_task_type=auto / edit / extend`，接口支持但界面不单列的 `reference` 仍保留在能力表中。比例为 `adaptive / 21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16`，其中 `adaptive` 显示为 `Auto`；分辨率显示为 `480P / 720P / 1080P`；普通输出时长为 `4–30s`、逐秒可调；默认 `auto · 16:9 · 480p · 10s`，与参数稿选中态一致。
 - Seedance 2.5 特殊约束：`edit` 与 `extend` 必须包含真实参考视频且比例固定为 `adaptive`；两种模式的比例区只呈现一个占满整行的 `Auto`，并都隐藏时长控件。`edit` 的参考视频须为 `4–30s`，生成请求时长仍固定为 `-1`。三种任务类型在同一参数弹层内切换，变化内容与弹层高度使用短促连续过渡；系统减少动态效果时直接采用最终布局。这些约束用于前端生成可用性和模拟任务快照；实际处理时模型仍可能因任务类型不一致而异步失败。
 - Seedance 2.0：底层固定为 `omni-reference`，不显示模式选择；比例为 `21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16`，分辨率显示为 `480P / 720P / 1080P`，时长为 `4–15s`、逐秒可调，默认 `4s`。
