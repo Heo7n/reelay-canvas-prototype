@@ -10,6 +10,7 @@ import {
   DEMO_ENTITY_FIXTURES,
   LEGACY_DEMO_ASSET_FIXTURES,
   PREVIOUS_DEMO_ASSET_FIXTURES,
+  V3_DEMO_ASSET_FIXTURES,
 } from "./demo-asset-fixtures";
 
 interface StaticMediaFixture {
@@ -19,6 +20,8 @@ interface StaticMediaFixture {
   type: "image" | "video" | "audio";
   contentType: string;
   url: string;
+  width: number;
+  height: number;
 }
 
 interface StaticEntityFixture {
@@ -39,39 +42,27 @@ function readStaticAssetLibrarySeed(): { media: StaticMediaFixture[]; entities: 
   return config.assetLibrarySeed;
 }
 
-function readUint24LE(source: Buffer, offset: number): number {
-  return source[offset]! | (source[offset + 1]! << 8) | (source[offset + 2]! << 16);
-}
-
-function readWebpDimensions(fileName: string): { width: number; height: number } {
+function readImageDimensions(fileName: string): { width: number; height: number } {
   const filePath = fileURLToPath(new URL(`../../../assets/home/${fileName}`, import.meta.url));
   const body = readFileSync(filePath);
-  expect(body.subarray(0, 4).toString("ascii")).toBe("RIFF");
-  expect(body.subarray(8, 12).toString("ascii")).toBe("WEBP");
-
-  const chunkType = body.subarray(12, 16).toString("ascii");
-  if (chunkType === "VP8 ") {
-    expect(body.subarray(23, 26)).toEqual(Buffer.from([0x9d, 0x01, 0x2a]));
-    return {
-      width: body.readUInt16LE(26) & 0x3fff,
-      height: body.readUInt16LE(28) & 0x3fff,
-    };
+  if (fileName.endsWith(".png")) {
+    expect(body.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    return { width: body.readUInt32BE(16), height: body.readUInt32BE(20) };
   }
-  if (chunkType === "VP8L") {
-    expect(body[20]).toBe(0x2f);
-    const packed = body.readUInt32LE(21);
-    return {
-      width: (packed & 0x3fff) + 1,
-      height: ((packed >>> 14) & 0x3fff) + 1,
-    };
+  expect(body.readUInt16BE(0)).toBe(0xffd8);
+  let offset = 2;
+  while (offset + 8 < body.length) {
+    expect(body[offset]).toBe(0xff);
+    while (body[offset] === 0xff) offset++;
+    const marker = body[offset++]!;
+    if ([0xc0, 0xc1, 0xc2].includes(marker)) {
+      return { width: body.readUInt16BE(offset + 5), height: body.readUInt16BE(offset + 3) };
+    }
+    const length = body.readUInt16BE(offset);
+    if (length < 2) break;
+    offset += length;
   }
-  if (chunkType === "VP8X") {
-    return {
-      width: readUint24LE(body, 24) + 1,
-      height: readUint24LE(body, 27) + 1,
-    };
-  }
-  throw new Error(`Unsupported WebP fixture encoding: ${fileName} (${chunkType}).`);
+  throw new Error(`Missing JPEG dimensions: ${fileName}.`);
 }
 
 describe("canonical demo asset fixtures", () => {
@@ -88,6 +79,8 @@ describe("canonical demo asset fixtures", () => {
         type: fixture.mediaKind,
         contentType: fixture.contentType,
         url: `./assets/home/${fixture.fileName}`,
+        width: fixture.width,
+        height: fixture.height,
       }));
     }
     for (const fixture of DEMO_ENTITY_FIXTURES) {
@@ -105,8 +98,8 @@ describe("canonical demo asset fixtures", () => {
     }
   });
 
-  it("keeps the published v1 and v2 media fingerprints stable for safe in-place detection", () => {
-    for (const fixture of [...LEGACY_DEMO_ASSET_FIXTURES, ...PREVIOUS_DEMO_ASSET_FIXTURES]) {
+  it("keeps every published media fingerprint stable for safe in-place detection", () => {
+    for (const fixture of [...LEGACY_DEMO_ASSET_FIXTURES, ...PREVIOUS_DEMO_ASSET_FIXTURES, ...V3_DEMO_ASSET_FIXTURES, ...DEMO_ASSET_FIXTURES]) {
       const filePath = fileURLToPath(new URL(`../../../assets/home/${fixture.fileName}`, import.meta.url));
       const body = readFileSync(filePath);
       expect(body.byteLength).toBe(fixture.goldenByteSize);
@@ -114,10 +107,11 @@ describe("canonical demo asset fixtures", () => {
     }
   });
 
-  it("provides every Entity with landscape, exact 9:16, square, 4:3, and audio references", () => {
-    expect(DEMO_ASSET_FIXTURES.filter(({ mediaKind }) => mediaKind === "image")).toHaveLength(9);
-    expect(DEMO_ASSET_FIXTURES.filter(({ mediaKind }) => mediaKind === "audio")).toHaveLength(2);
-    expect(DEMO_ENTITY_FIXTURES.map(({ assetKeys }) => assetKeys.length).sort()).toEqual([5, 6]);
+  it("preserves the supplied 5/3/4 character groups, cover-first order, and original dimensions", () => {
+    expect(DEMO_ASSET_FIXTURES).toHaveLength(12);
+    expect(DEMO_ASSET_FIXTURES.every(({ mediaKind }) => mediaKind === "image")).toBe(true);
+    expect(DEMO_ENTITY_FIXTURES.map(({ assetKeys }) => assetKeys.length)).toEqual([5, 3, 4]);
+    expect(new Set(DEMO_ENTITY_FIXTURES.flatMap(({ assetKeys }) => assetKeys)).size).toBe(12);
 
     const assetsByKey = new Map(DEMO_ASSET_FIXTURES.map((fixture) => [fixture.key, fixture]));
     for (const entity of DEMO_ENTITY_FIXTURES) {
@@ -126,18 +120,13 @@ describe("canonical demo asset fixtures", () => {
         if (!asset) throw new Error(`Entity fixture references an unknown canonical asset: ${key}.`);
         return asset;
       });
-      const imageDimensions = assets
-        .filter(({ mediaKind }) => mediaKind === "image")
-        .map(({ fileName }) => readWebpDimensions(fileName));
-
-      expect(assets.filter(({ mediaKind }) => mediaKind === "audio")).toHaveLength(1);
-      expect(imageDimensions.some(({ width, height }) => width * 9 === height * 16)).toBe(true);
-      expect(imageDimensions).toContainEqual({ width: 900, height: 1600 });
-      expect(imageDimensions.some(({ width, height }) => width === height)).toBe(true);
-      expect(imageDimensions.some(({ width, height }) => width * 3 === height * 4)).toBe(true);
-
-      const cover = assetsByKey.get(entity.coverAssetKey);
-      expect(cover?.mediaKind).toBe("image");
+      expect(entity.coverAssetKey).toBe(entity.assetKeys[0]);
+      for (const [index, asset] of assets.entries()) {
+        expect(readImageDimensions(asset.fileName)).toEqual({ width: asset.width, height: asset.height });
+        const ordinal = String(index + 1).padStart(2, "0");
+        expect(asset.fileName).toContain(`-${ordinal}-`);
+        expect(asset.displayName).toMatch(new RegExp(`^${entity.name}_${ordinal}_`));
+      }
     }
   });
 });

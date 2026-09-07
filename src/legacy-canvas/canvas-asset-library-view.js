@@ -481,7 +481,7 @@
     const itemLabel = safeKind === "folder" ? "文件夹" : safeKind === "entity" ? "主体" : "素材";
     const actions = getItemActions({ kind, space, mediaKind, allowedActions });
     return `
-      <div class="asset-library-item-menu" role="menu" aria-label="${itemLabel}操作">
+      <div class="asset-library-item-menu" popover="manual" role="menu" aria-label="${itemLabel}操作">
         ${actions.map((action) => `
           <button class="${action.danger ? "danger" : ""}" type="button" role="menuitem" data-library-menu-item="${action.id}" data-library-item-id="${safeId}" data-library-item-kind="${safeKind}"${action.id === "rename" ? ` data-library-rename="${safeId}"` : ""}${action.id === "edit" ? ` data-library-edit-entity="${safeId}"` : ""}>
             ${icon(action.icon)}
