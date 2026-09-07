@@ -3552,7 +3552,7 @@ function getVisibleAssetLibraryContent() {
 }
 
 function renderAssetLibrary() {
-  if (!assetLibraryGrid || !canvasAssetLibraryView) return;
+  if (!assetLibraryGrid || !canvasAssetLibraryView || !isAssetLibraryOpen()) return;
   const previousRenameInput = assetLibraryGrid.querySelector("[data-library-rename-input]");
   const mutable = isAssetLibraryMutable();
   const space = state.librarySpace;
@@ -9535,7 +9535,6 @@ function registerHostWorkspaceAssetCatalog({ assets = [], entities = [] } = {}) 
     const media = assets.map(workspaceAssetToLibraryMedia);
     media.forEach((asset) => {
       assetLibraryStore.registerMedia({ media: asset, space: "personal", folderId: null });
-      hydrateAssetMetadata(asset, null);
     });
     assetLibraryStore.syncPersistedEntities({ entities });
     hostPersonalMediaIds.clear();
@@ -11024,7 +11023,6 @@ syncAgentPromptOptimizationControl();
 syncCreditDisplay();
 applyTheme(state.themeMode);
 syncFaviconContrast();
-assetLibraryStore.listAllMedia().forEach((asset) => hydrateAssetMetadata(asset, null));
 initializeCanvases();
 applyTransform();
 consumeHomeLaunchIntent();

@@ -26,6 +26,7 @@
 - 十个固定 `.test` 演示账号由服务端校验并使用 HttpOnly Cookie 维持独立会话；这只验证登录、路由保护、单组织成员关系和项目级访问控制，不是正式账号系统。组织角色固定为 `1` 名主账户、`2` 名管理员和 `7` 名成员。
 - 用户、会话、唯一组织 Workspace、Project、项目成员关系、CanvasDocument、WorkspaceMediaAsset 元数据、个人 placement、ProjectAssetReference，以及个人根目录 Entity 的字段、有序 Media 引用和版本保存在 PostgreSQL；本地资产二进制交给 filesystem ObjectStore，Vercel 入口使用私有 Supabase ObjectStore。最小链路已通过本地服务重启回读；公网已迁移至 `0013` 并完成私有桶与三主体 12 图写入，正式主域已验证三主体精确目录、12 图 HTTP 内容及个人主体页三张封面，内存 adapter 只用于快速契约测试和显式开发回退。
 - 从受保护路由进入的旧画布会恢复多画布、节点、组、视口和模型参数；直接打开静态 `index.html` 仍是单次页面内存原型。
+- 进入画布只注册个人素材与主体目录，不为整个资产库预读原图或探测媒体尺寸。资产库关闭时不生成隐藏的媒体预览；打开后按当前列表展示，实际使用素材或编辑时仍保留必要的尺寸读取。
 - “生成”是模拟行为，用于验证生成后的媒体状态、标题和规格展示。
 
 2026-09-07 正式主域运行部署 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X`，构建源 `28580275b042890bcb4c634adde46fb718259643`；对应改动已合入 `main` 的 `5ee4efc237b1f50eb789ac0dc231177b25d944b6`。主域 HTTP 与三主体页面已验收，候选地址与主域的具体验证范围见 [公网预览记录](vercel-supabase-preview.md)。
