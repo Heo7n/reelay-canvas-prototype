@@ -29,15 +29,25 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
       errorElement: <RouteErrorPage />,
       HydrateFallback: RouteLoadingPage,
       children: [
-        { index: true, loader: handlers.rootLoader },
         {
-          path: "login",
-          loader: handlers.loginLoader,
-          action: handlers.loginAction,
+          id: "public-entry",
           lazy: async () => {
-            const { LoginPage } = await import("../pages/login/LoginPage");
-            return { Component: LoginPage };
+            const { PublicEntryPage } = await import("../pages/home/PublicEntryPage");
+            return { Component: PublicEntryPage };
           },
+          children: [
+            // The homepage lives in the parent; this leaf adds no overlay.
+            { index: true, loader: handlers.rootLoader, element: <></> },
+            {
+              path: "login",
+              loader: handlers.loginLoader,
+              action: handlers.loginAction,
+              lazy: async () => {
+                const { LoginPage } = await import("../pages/login/LoginPage");
+                return { Component: LoginPage };
+              },
+            },
+          ],
         },
         { path: "account", action: handlers.accountAction },
         { path: "logout", action: handlers.logoutAction },
@@ -108,7 +118,7 @@ export function createAppRouteObjects(services: ApplicationServices): RouteObjec
             },
           ],
         },
-        { path: "*", element: <Navigate to={routePaths.login()} replace /> },
+        { path: "*", element: <Navigate to={routePaths.home()} replace /> },
       ],
     },
   ];

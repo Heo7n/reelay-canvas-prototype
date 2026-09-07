@@ -1,0 +1,34 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 76px;
+  padding: 0 36px;
+}
+.accountActions { display: flex; align-items: center; gap: 12px; }
+.accountActions button { height: 38px; border: 0; border-radius: 9px; font: inherit; font-size: 13px; }
+.themeToggle { display: grid; width: 38px; padding: 0; place-items: center; background: transparent; color: var(--workspace-muted); cursor: pointer; }
+.themeToggle:hover { background: var(--workspace-hover); color: var(--workspace-text); }
+.themeToggle svg { width: 18px; height: 18px; }
+.accountActions .login { height: 44px; min-width: 116px; padding: 0 22px; border-radius: 12px; background: var(--workspace-text); color: var(--workspace-bg); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.login:hover { opacity: .86; }
+.examples { margin-top: 42px; }
+.sectionHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+.sectionHeading h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.sectionHeading > span { color: var(--workspace-muted); font-size: 12px; }
+.exampleGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.example { min-width: 0; overflow: hidden; padding: 0; border: 1px solid var(--workspace-border); border-radius: 14px; background: var(--workspace-surface); color: var(--workspace-text); text-align: left; cursor: pointer; }
+.example img { display: block; width: 100%; aspect-ratio: 16 / 8; object-fit: cover; }
+.example > div { display: grid; gap: 7px; padding: 17px 19px 19px; }
+.example strong { font-size: 15px; font-weight: 650; }
+.example span { color: var(--workspace-muted); font-size: 12px; line-height: 1.5; }
+.example:hover { border-color: var(--workspace-border-strong); }
+.accountActions button:focus-visible, .example:focus-visible { outline: 2px solid var(--workspace-text); outline-offset: 4px; }
+@media (max-width: 720px) {
+  .header { height: 68px; padding: 0 20px; }
+  .accountActions { gap: 4px; }
+  .accountActions .login { height: 40px; min-width: 102px; padding: 0 16px; }
+  .exampleGrid { grid-template-columns: 1fr; gap: 16px; }
+  .sectionHeading { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .example img { aspect-ratio: 16 / 7; }
+}
