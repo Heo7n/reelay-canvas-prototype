@@ -5,7 +5,7 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 
 公开地址：<https://reelay-canvas-prototype.vercel.app>
 
-2026-09-07 公网 Supabase 项目 `yacgzkkttwtyxkfxiwyn` 已从 `0009` 补迁移至 `0013`，私有桶 `reelay-assets`、Production Storage 环境变量与三主体 12 图的数据迁移已完成。对象存储读取及完整性检查通过，**新代码的公网 HTTP 部署验收尚待完成**。此前公网基线已覆盖健康检查、固定账号登录、组织项目读取与画布文档写入 / 回读，不能用这些旧版结果代替新增资产 API 的验收。
+2026-09-07 公网 Supabase 项目 `yacgzkkttwtyxkfxiwyn` 已从 `0009` 补迁移至 `0013`，私有桶 `reelay-assets`、Production Storage 环境变量与三主体 12 图的数据迁移已完成。本次部署已 promote 到正式主域名，CLI 核验指向 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X` 且 Ready；切换后的主域 HTTP 与浏览器复验均已通过，Hoo 可在既有项目的个人主体页看到玄翎、幽影、白汐。
 
 本次用户已要求推送、合并、同步公网版本，并让公网个人库能看到本机三主体与 12 张原图；此前“只同步代码、暂不部署”的限制不再代表本次范围。私有 Supabase ObjectStore、Vercel 资产 / 主体 API 接线和后续标准夹具入口已具备代码实现。迁移、存储、数据写入与部署结果分别记录，不能由代码提交推断公网页面已可使用。
 
@@ -27,7 +27,7 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 
 `api/index.ts` 已接入 `PostgresAssetStore`、`PostgresEntityStore` 与 `SupabaseObjectStore`，复用现有 `WorkspaceMediaAsset + personal placement + ProjectAssetReference + ObjectStore` 链路。浏览器仍通过同源 API 和 HttpOnly 会话访问，服务端校验项目成员与素材可见性后读取私有对象；不把 service key 或公开桶地址交给浏览器。本地 `src/server/start.ts` 继续使用 filesystem ObjectStore。
 
-适配器只连接预先创建的私有 bucket，不会在运行时创建桶或把桶改为公开。配置缺失、桶不存在或桶为公开时失败关闭，不回退到临时文件系统。对象按受控键写入，保留 checksum、字节数、内容类型与不可覆盖的幂等校验；读取支持受控字节范围和完整性验证。当前私有桶与对象存储直连已通过验证，公网 API 上传 / 读取与重部署验收尚待完成，不能把 Storage 结果等同于公网 `assetPersistence` 全链路已验收。
+适配器只连接预先创建的私有 bucket，不会在运行时创建桶或把桶改为公开。配置缺失、桶不存在或桶为公开时失败关闭，不回退到临时文件系统。对象按受控键写入，保留 checksum、字节数、内容类型与不可覆盖的幂等校验；读取支持受控字节范围和完整性验证。私有桶与对象存储直连、候选部署的三主体目录及 12 图内容读取均已通过验证；本次没有在公网创建测试新素材或修改既有画布，未将新素材上传和项目挂载列为已实测。
 
 Vercel Function 的请求与响应受 `4.5 MB` 负载限制，公网单文件上传在 `api/index.ts` 限制为 `4 * 1024 * 1024` 字节；超过时在申请 upload intent 阶段返回 `413 / asset_too_large`，中文提示为“当前环境单个素材最大支持 4 MB。”，不会等发送完整文件后才失败。本地上限仍为 `64 MiB`。当前内容读取也经同一个 Function，定向导入的演示原图必须核对大小，不能借导入绕过公网可读取边界。
 
@@ -65,7 +65,7 @@ Root 2021 CA 校验 TLS，不在运行时关闭证书验证。
 - 存储与配置：已创建 `reelay-assets`，核验 `public=false`，桶文件上限为 `4 MiB`；Vercel Production 的三个 Storage 环境变量已配置。此记录不代表 Preview 环境也已配置。
 - 对象：从本机既有 ObjectStore 读取 12 张真实素材的二进制并上传私有桶，逐张验证全量 SHA-256 和字节范围读取，全部通过。没有重新编码或替换原图。
 - 目录：本次没有运行 `db:seed:preview-assets`。Vercel 中现有敏感数据库凭据无法拉取，因此将本机真实的三条 Entity、12 条 Media、个人 placement、Entity 有序素材引用、个人绑定与已完成 upload intent 精确导出；在临时 PostgreSQL 上通过五项冲突 / 幂等验证后，经 MCP 单事务导入。导入保留原 ID、微秒时间戳、封面、顺序和版本（玄翎 `v2`、幽影 `v4`、白汐 `v4`），没有用标准夹具重置用户已编辑的主体。
-- 保护边界：账号、会话、项目、画布及项目引用等保护表的哈希在操作前后保持一致；数据库目录与 Storage 对象已就绪，新代码仍待 HTTP 部署验收。
+- 保护边界：账号、会话、项目、画布及项目引用等保护表的哈希在操作前后保持一致；数据库目录与 Storage 对象已就绪，随后候选部署的 HTTP 验收结果见下文。
 
 这是一次按已确认范围迁移本机真实记录的操作，区别于下一节的标准仓库夹具入口。后续再次迁移真实用户数据需要重新核对范围与冲突，不能直接把标准 seed 当作数据库同步工具。
 
@@ -79,14 +79,17 @@ Root 2021 CA 校验 TLS，不在运行时关闭证书验证。
 
 这个入口是一次明确指定目标的夹具写入，不是本地与公网的双向同步。Git 只携带代码和仓库原图，后续本机或公网新建的主体、上传素材、项目与画布不会自动复制到另一环境。
 
-## 首次公网验收
+## 2026-09-07 部署与验收
 
-当前数据库、私有桶、Production 配置与真实个人目录迁移已经完成，以下新增 HTTP / 浏览器链路仍待部署后验收；通过后记录实际部署 ID / 代码 SHA 与结果，不记录凭据。
+正式部署为 `dpl_6qMnyrE8Wihk4eryUySZvL6idE6X`，构建源代码 `28580275b042890bcb4c634adde46fb718259643`，部署专属地址为 <https://reelay-canvas-prototype-dyfzxyrf9-heos-projects-560eccff.vercel.app>。`apiPath` 内部 query 参数误入业务严格校验的问题已修复。对应代码的 `npm run check` 共 716 项通过，CI `quality / postgres` 通过。
 
-- `/api/health`、固定账号登录、项目列表和画布回读保持正常；资产更新不改变已有账号、会话、项目或画布。
-- Hoo 登录后个人主体库展示三主体，共 12 张原图；封面、顺序、预览与主体选择器可用，刷新后仍能读取。
-- 小文件上传、项目挂载、鉴权后的内容读取与视频范围请求正常；超过 `4 MiB` 在 intent 阶段得到中文 `413`，未登录或无权用户不能读取私有素材。
-- 重新部署后同一批记录和对象仍可读取；桶保持私有，浏览器构建产物不含服务端凭据。
+[PR #15](https://github.com/Heo7n/reelay-canvas-prototype/pull/15) 已合并为 `df5839a`；修复 [PR #16](https://github.com/Heo7n/reelay-canvas-prototype/pull/16) 已合入 `main`，合并提交为 `5ee4efc237b1f50eb789ac0dc231177b25d944b6`。构建源 `2858027` 与主线合并提交分别记录，不将 merge SHA 当作构建源 SHA。`vercel promote dpl_6qMnyrE8Wihk4eryUySZvL6idE6X` 已成功，CLI inspect 正式主域名 <https://reelay-canvas-prototype.vercel.app> 解析到同一部署，状态为 Ready；切换后的 HTTP / UI 复验通过。
+
+- 正式主域 HTTP 已在 `2026-09-07T08:35:57.883Z` 通过：`/api/health`、三主体精确 ID / version / cover / 媒体顺序、12 条媒体逐张内容 SHA-256、字节范围 `206`、匿名访问 `401`，以及超过 `4 MiB` 的 upload intent `413`。候选地址也已通过同一组验证。
+- 候选地址的浏览器已通过：真实登录 Hoo、进入既有项目，资产库显示 12 素材与封面正确的三主体；打开幽影可见 5 张图、正确描述和顺序，主视觉原图清晰。刷新后 12 素材与三主体仍可读取。
+- 正式主域的 Chrome 已重新登录 Hoo，进入“香水品牌 TVC”的既有画布，在资产库个人主体页真实显示玄翎、幽影、白汐及三张正确封面，并完成截图验收。此项与候选地址上打开幽影、刷新列表的验证分别记录。
+- 本次只定向同步既有三主体 12 图，未在公网制造测试新素材或改变既有画布；新素材上传、项目挂载与视频播放不属于本次已完成的公网实测。
+- 私有桶保持 `public=false`。这批对象已在正式主域的新部署中读取验证；数据库、Storage、代码合并、promotion 与主域复验均有各自的完成证据。
 
 固定演示账号与密码见 `docs/agent-handoff.md`。免费层可能在长期无活动后暂停，
 因此该地址只作为前端原型评审环境，不承诺正式生产可用性。
