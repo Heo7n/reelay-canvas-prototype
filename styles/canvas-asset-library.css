@@ -1049,12 +1049,15 @@ html[data-theme="light"] .asset-library-folder-preview {
 }
 
 .asset-library-item-menu {
-  position: absolute;
-  z-index: 25;
-  top: 34px;
-  right: 6px;
+  position: fixed;
+  inset: auto;
   display: grid;
-  width: 204px;
+  width: max-content;
+  min-width: 160px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  margin: 0;
+  overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--asset-panel-line);
   border-radius: 12px;
@@ -1063,16 +1066,8 @@ html[data-theme="light"] .asset-library-folder-preview {
   gap: 2px;
 }
 
-.asset-library-grid.grid-view .asset-library-item-menu {
-  top: 5px;
-  right: auto;
-  left: calc(100% + 4px);
-  width: 188px;
-}
-
-.asset-library-grid.grid-view .asset-library-card:nth-child(even) .asset-library-item-menu {
-  right: calc(100% + 4px);
-  left: auto;
+.asset-library-item-menu:not(:popover-open) {
+  display: none;
 }
 
 .asset-library-item-menu button {
@@ -1091,6 +1086,7 @@ html[data-theme="light"] .asset-library-folder-preview {
   align-items: center;
   gap: 9px;
   text-align: left;
+  white-space: nowrap;
 }
 
 .asset-library-item-menu button:hover {
@@ -1100,6 +1096,7 @@ html[data-theme="light"] .asset-library-folder-preview {
 .asset-library-item-menu button svg {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
 }
 
 .asset-library-item-menu button[disabled] {
@@ -1190,11 +1187,6 @@ html[data-theme="light"] .asset-library-folder-preview {
 .asset-library-grid.list-view .asset-library-selection-button {
   top: 11px;
   left: 10px;
-}
-
-.asset-library-grid.list-view .asset-library-item-menu {
-  top: 46px;
-  right: 4px;
 }
 
 .asset-library-empty {
@@ -1535,31 +1527,11 @@ html[data-theme="light"] .asset-library-folder-preview {
   .asset-library-grid.grid-view {
     grid-template-columns: repeat(3, var(--asset-card-size));
   }
-
-  .asset-library-grid.grid-view .asset-library-card:nth-child(even) .asset-library-item-menu {
-    right: auto;
-    left: calc(100% + 4px);
-  }
-
-  .asset-library-grid.grid-view .asset-library-card:nth-child(3n) .asset-library-item-menu {
-    right: calc(100% + 4px);
-    left: auto;
-  }
 }
 
 @container asset-library (min-width: 726px) {
   .asset-library-grid.grid-view {
     grid-template-columns: repeat(4, var(--asset-card-size));
-  }
-
-  .asset-library-grid.grid-view .asset-library-card:nth-child(3n) .asset-library-item-menu {
-    right: auto;
-    left: calc(100% + 4px);
-  }
-
-  .asset-library-grid.grid-view .asset-library-card:nth-child(4n) .asset-library-item-menu {
-    right: calc(100% + 4px);
-    left: auto;
   }
 }
 
@@ -1574,12 +1546,6 @@ html[data-theme="light"] .asset-library-folder-preview {
 @container asset-library (max-width: 369px) {
   .asset-library-grid.grid-view {
     grid-template-columns: var(--asset-card-size);
-  }
-
-  .asset-library-grid.grid-view .asset-library-card:nth-child(n) .asset-library-item-menu {
-    top: 34px;
-    right: 6px;
-    left: auto;
   }
 }
 

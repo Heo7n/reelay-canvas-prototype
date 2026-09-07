@@ -180,6 +180,14 @@ const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
 if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
 const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
 if (!canvasPopoverPlacement) throw new Error("Canvas popover placement helper is unavailable.");
+const assetLibraryItemMenu = window.REELAY_CANVAS_ASSET_LIBRARY_MENU_CONTROLLER.create({
+  grid: assetLibraryGrid,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+  onDismiss() {
+    state.libraryMenuTarget = null;
+    renderAssetLibrary();
+  },
+});
 
 function loadMediaToolPreferences() {
   try {
@@ -3738,6 +3746,7 @@ function renderAssetLibrary() {
       input?.select();
     });
   }
+  assetLibraryItemMenu.sync();
   canvasEntityUse.refreshDetail();
 }
 
@@ -4042,6 +4051,7 @@ function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
 }
 
 function closeAssetLibrary({ restoreFocus = true } = {}) {
+  assetLibraryItemMenu.dispose();
   const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
   canvasEntityUse.closeDetail();
   state.libraryTargetNodeId = null;
@@ -10888,6 +10898,7 @@ window.addEventListener("resize", () => {
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
+  assetLibraryItemMenu.dispose();
   if (!event.persisted) canvasNodeTasks.dispose();
   flushCanvasDocumentSave();
 });
