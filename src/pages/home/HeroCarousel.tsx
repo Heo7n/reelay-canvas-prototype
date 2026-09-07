@@ -5,13 +5,14 @@ import type { HeroSlide } from "./home-content";
 import styles from "./WorkspacePages.module.css";
 
 interface HeroCarouselProps {
+  paused?: boolean;
   activeIndex: number;
   onActiveIndexChange: (index: number) => void;
   onChooseSlide: (slide: HeroSlide) => void;
   slides: HeroSlide[];
 }
 
-export function HeroCarousel({ activeIndex, onActiveIndexChange, onChooseSlide, slides }: HeroCarouselProps) {
+export function HeroCarousel({ activeIndex, onActiveIndexChange, onChooseSlide, slides, paused = false }: HeroCarouselProps) {
   const [isInteractionPaused, setIsInteractionPaused] = useState(false);
   const [canAutoPlay, setCanAutoPlay] = useState(true);
 
@@ -35,14 +36,14 @@ export function HeroCarousel({ activeIndex, onActiveIndexChange, onChooseSlide, 
   }, []);
 
   useEffect(() => {
-    if (!canAutoPlay || isInteractionPaused || slides.length < 2) return undefined;
+    if (paused || !canAutoPlay || isInteractionPaused || slides.length < 2) return undefined;
 
     const timer = window.setTimeout(() => {
       onActiveIndexChange((activeIndex + 1) % slides.length);
     }, 4_000);
 
     return () => window.clearTimeout(timer);
-  }, [activeIndex, canAutoPlay, isInteractionPaused, onActiveIndexChange, slides.length]);
+  }, [activeIndex, canAutoPlay, isInteractionPaused, onActiveIndexChange, paused, slides.length]);
 
   function move(direction: -1 | 1): void {
     onActiveIndexChange((activeIndex + direction + slides.length) % slides.length);

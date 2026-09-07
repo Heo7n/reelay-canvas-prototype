@@ -129,6 +129,40 @@ async function expectRedirect(promise: Promise<unknown>, location: string): Prom
 }
 
 describe("application route data", () => {
+  it("lets guests browse home without requesting any private data", async () => {
+    const services = createServices(false);
+    expect(await createRouteHandlers(services).rootLoader()).toBeNull();
+    expect(services.workspaceRepository.listForActor).not.toHaveBeenCalled();
+    expect(services.workspaceContextGateway.load).not.toHaveBeenCalled();
+    expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("sends signed-in home visitors to their own workspace", async () => {
+    await expectRedirect(createRouteHandlers(createServices()).rootLoader(), "/w/workspace-organization");
+  });
+
+  it("preserves an allowed login return target when a session already exists", async () => {
+    const target = "/w/workspace-organization/projects";
+    await expectRedirect(
+      createRouteHandlers(createServices()).loginLoader(loaderArgs(`http://reelay.local/app/login?returnTo=${encodeURIComponent(target)}`)),
+      target,
+    );
+  });
+
+  it("rejects a different workspace return target for an existing session", async () => {
+    await expectRedirect(
+      createRouteHandlers(createServices()).loginLoader(loaderArgs("http://reelay.local/app/login?returnTo=%2Fw%2Fanother-workspace")),
+      "/w/workspace-organization",
+    );
+  });
+
+  it("returns to the public homepage after signing out", async () => {
+    const services = createServices();
+    const response = await createRouteHandlers(services).logoutAction();
+    expect(services.sessionGateway.signOut).toHaveBeenCalledOnce();
+    expect(response.headers.get("Location")).toBe("/");
+  });
+
   it("sends anonymous workspace deep links to login with an internal return target", async () => {
     const handlers = createRouteHandlers(createServices(false));
     await expectRedirect(

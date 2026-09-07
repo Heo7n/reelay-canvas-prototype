@@ -1,9 +1,11 @@
 import { ArrowUp, Box, Image, Plus, Sparkles } from "lucide-react";
 import { Form } from "react-router-dom";
+import type { FormEvent } from "react";
 
 import styles from "./WorkspacePages.module.css";
 
 interface CreationComposerProps {
+  onRequestLogin?: () => void;
   onNotice: (message: string) => void;
   onPromptChange: (prompt: string) => void;
   prompt: string;
@@ -11,8 +13,17 @@ interface CreationComposerProps {
 
 const launchIntentKey = "reelay-home-launch-intent";
 
-export function CreationComposer({ onNotice, onPromptChange, prompt }: CreationComposerProps) {
-  function preservePrompt(): void {
+export function CreationComposer({ onNotice, onPromptChange, prompt, onRequestLogin }: CreationComposerProps) {
+  function submit(event: FormEvent<HTMLFormElement>): void {
+    if (!prompt.trim()) {
+      event.preventDefault();
+      return;
+    }
+    if (onRequestLogin) {
+      event.preventDefault();
+      onRequestLogin();
+      return;
+    }
     try {
       window.sessionStorage.setItem(launchIntentKey, prompt.trim());
     } catch {
@@ -21,7 +32,7 @@ export function CreationComposer({ onNotice, onPromptChange, prompt }: CreationC
   }
 
   return (
-    <Form className={styles.composer} method="post" onSubmit={preservePrompt}>
+    <Form className={styles.composer} method="post" onSubmit={submit}>
       <input type="hidden" name="intent" value="create" />
       <label className={styles.srOnly} htmlFor="creation-prompt">描述你的创作需求</label>
       <textarea
@@ -46,7 +57,7 @@ export function CreationComposer({ onNotice, onPromptChange, prompt }: CreationC
           <button type="button" aria-label="添加图片" onClick={() => onNotice("图片上传将在资产持久化阶段接入。") }><Image aria-hidden="true" /></button>
           <button type="button" aria-label="使用 Reelay Agent" onClick={() => onNotice("Reelay Agent 主页入口将在后续接入。") }><Sparkles aria-hidden="true" /></button>
         </div>
-        <button className={styles.composerSubmit} type="submit" aria-label="带着创作需求创建项目" disabled={!prompt.trim()}>
+        <button className={styles.composerSubmit} type="submit" aria-label={onRequestLogin ? "登录后继续创作" : "带着创作需求创建项目"} disabled={!prompt.trim()}>
           <ArrowUp aria-hidden="true" />
         </button>
       </div>

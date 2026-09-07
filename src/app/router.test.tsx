@@ -10,7 +10,8 @@ describe("application router", () => {
   it("keeps data handlers eager while loading routed page components on demand", () => {
     const [rootRoute] = createAppRouteObjects(applicationServices);
     const rootChildren = rootRoute?.children ?? [];
-    const loginRoute = rootChildren.find((route) => route.path === "login");
+    const publicRoute = rootChildren.find((route) => route.id === "public-entry");
+    const loginRoute = publicRoute?.children?.find((route) => route.path === "login");
     const noWorkspaceRoute = rootChildren.find((route) => route.path === "no-workspace");
     const workspaceRoute = rootChildren.find((route) => route.path === "w/:workspaceId");
     const workspaceChildren = workspaceRoute?.children ?? [];
@@ -22,6 +23,8 @@ describe("application router", () => {
     const organizationRoute = workspaceChildren.find((route) => route.path === "organization");
 
     expect(rootRoute?.HydrateFallback).toBe(RouteLoadingPage);
+    expect(publicRoute?.lazy).toEqual(expect.any(Function));
+    expect(publicRoute?.children?.find((route) => route.index)?.loader).toEqual(expect.any(Function));
     expect(loginRoute).toMatchObject({
       action: expect.any(Function),
       loader: expect.any(Function),

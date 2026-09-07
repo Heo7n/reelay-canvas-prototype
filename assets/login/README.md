@@ -1,0 +1,23 @@
+# 登录展示图
+
+2026-09-07，使用内置 image_gen 生成，三张无字原生竖幅图。图像为 5:6 左右的比例，页面保持 cover 居中裁切；底部文案由 React 排版，不烘焙到图片。WebP 仅做格式压缩，未修改构图或颜色；原始 PNG 留在生成目录。替换资产时保留主体中央安全区与底部文案留白。
+
+| 文件 | 方向 |
+| --- | --- |
+| `brand-light.webp` | 灵感展开：薄片舒展与折面透光，表达“灵感展开” |
+| `coastal-story.webp` | 角色叙事：海岸晨光中的人物 |
+| `observatory-world.webp` | 想象世界：海岸圆环建筑 |
+
+## 最终生成提示词
+
+### brand
+
+Use case: stylized-concept. Asset type: signature brand artwork for the first image in the login dialog of Reelay, a B2B visual storytelling and creation platform. Concept: an idea unfolding from a flat surface into an imagined space. Create an extraordinary yet restrained contemporary sculpture: one broad, impossibly thin ivory sheet gently rising from a dark horizontal plane, unfolding into two spacious fluid architectural folds, with a luminous warm-white and faint champagne interior revealed between them. The exterior is matte porcelain-white with a very fine paper-like texture, the interior softly translucent; one edge catches a precise line of light. The folds feel like an expansive sail or an opening frame, but must remain abstract, not a literal recognisable product. The hero silhouette has clear graphic intention and balanced generous negative space, no random crumpling. The light within appears to generate the form, a visual metaphor of imagination becoming image. Deep ink-charcoal atmosphere, sculpted soft studio light, gentle warm reflections across the floor, exceptionally refined material realism, sophisticated art-gallery installation photographed like a cinematic brand campaign. Avoid gold luxury styling, holographic rainbow, generic metallic blobs or neon technology effects. Vertical 5:6 composition around 1200x1440. Place the sculpture inside the upper 70% with central crop safety; lower 25% is a quiet charcoal floor fading into shadow for live white typography. Full bleed. No commercial product of any kind, no perfume, no bottle, no shoes, no human figures, no logo, no writing, no text, no icons, no UI, no borders, no collage.
+
+### story
+
+Use case: ads-marketing. Asset type: one vertical cinematic story key visual for the image panel of Reelay, a B2B cinematic creation platform login dialog. An original film still: a young adult East Asian woman with short wind-swept black hair, wearing a finely textured dark olive field coat, seen waist-up in quiet three-quarter profile looking toward the light. She stands in a vast windswept coastal landscape at first light; distant hazy cliffs, sea mist, restrained silver-blue ocean behind her. One subtle warm amber rim of sunrise touches her cheek and the coat shoulder. Emotional, thoughtful, natural posture and credible skin texture, understated wardrobe, no fantasy costume, no weapons, no jewellery advertising pose. High-end narrative cinematography, lens separation with the face in sharp focus, soft background, subtle analogue grain, muted mineral blue, olive and warm ivory, deep soft shadows consistent with a premium campaign series. Vertical 5:6 composition around 1200x1440. Place her face in upper-middle central area, central 60% safe crop, no facial/body detail near edges. Lower 25% is quiet deep out-of-focus dark coat/foreground reserved for white live typography. Full-bleed photograph, NO text, NO lettering, NO logo, NO UI, NO border, NO collage, no extreme HDR.
+
+### world
+
+Use case: ads-marketing. Asset type: one vertical cinematic world-building key visual for Reelay's B2B cinematic creation platform login modal. A monumental circular pale limestone observatory, built into a rugged dark coastal rock cliff, with an open circular aperture framing distant blue sea and low morning mist. A thin warm amber light glows from a recessed passage inside the architecture. One tiny solitary human silhouette on the distant pathway gives believable scale. This is sophisticated speculative architecture in a film world, physically convincing, quietly extraordinary, no alien ships or robots. Masterful architecture photography meets cinematic production design, fine stone weathering, soft atmospheric depth, precise restrained composition, deep charcoal rock, pale mineral concrete, muted teal-blue sea, a single warm accent, subtle analogue grain. Vertical 5:6 image around 1200x1440, main aperture in upper middle, composition survives central 60% horizontal crop. Bottom 25% remains quiet dark foreground rock/water for live white typography, not occupied by busy detail. Refined series matching premium commercial film and narrative key visuals. Full bleed, NO text, NO lettering, NO logo, NO UI, NO borders, NO collage, no neon cyberpunk, no glossy generic sci-fi rendering.

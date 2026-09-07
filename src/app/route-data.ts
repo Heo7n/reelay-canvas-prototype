@@ -132,16 +132,17 @@ export function createRouteHandlers(services: ApplicationServices) {
   return {
     rootLoader: async () => {
       const context = await getSessionContext(services);
-      if (!context.actor) throw redirect(routePaths.login());
+      if (!context.actor) return null;
       const workspace = selectDefaultWorkspace(context.workspaces);
       throw redirect(workspace ? routePaths.workspaceHome(workspace.id) : routePaths.noWorkspace());
     },
 
-    loginLoader: async () => {
+    loginLoader: async ({ request }: LoaderFunctionArgs) => {
       const context = await getSessionContext(services);
       if (!context.actor) return null;
       const workspace = selectDefaultWorkspace(context.workspaces);
-      throw redirect(workspace ? routePaths.workspaceHome(workspace.id) : routePaths.noWorkspace());
+      const fallback = workspace ? routePaths.workspaceHome(workspace.id) : routePaths.noWorkspace();
+      throw redirect(safeReturnTo(new URL(request.url).searchParams.get("returnTo"), context.workspaces, fallback));
     },
 
     loginAction: async ({ request }: ActionFunctionArgs): Promise<LoginActionData | Response> => {
@@ -168,7 +169,7 @@ export function createRouteHandlers(services: ApplicationServices) {
 
     logoutAction: async () => {
       await services.sessionGateway.signOut();
-      return redirect(routePaths.login());
+      return redirect(routePaths.home());
     },
 
     accountAction: async ({ request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {

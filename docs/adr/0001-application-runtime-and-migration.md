@@ -34,6 +34,7 @@
 Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 
 ```text
+/                   # 访客主页；已有会话进入所属工作空间
 /login
 /w/:workspaceId
 /w/:workspaceId/projects
@@ -43,6 +44,8 @@ Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 /w/:workspaceId/members
 /settings
 ```
+
+`/` 与 `/login` 在 `/app` basename 下共用访客主页父级；登录是其模态子路由，退出或取消后返回访客主页。公共父级不访问组织 / 项目数据，受保护的 Workspace 子树继续使用原有 loader 与 API 授权。
 
 首期由唯一 organization Workspace 提供稳定路由 scope；具体项目权限来自 ProjectMembership，不从 `workspace.kind`、组织 Membership 或前端标签推断。详见 ADR 0002。
 
