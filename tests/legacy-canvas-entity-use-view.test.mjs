@@ -58,7 +58,7 @@ test("renders a cover-led Entity detail with inline metadata and the exact full-
   assert.match(markup, /class="entity-use-detail is-pinned" role="dialog" aria-modal="false"/);
   assert.match(markup, /data-entity-use-detail="courier" data-entity-use-state="pinned" data-pinned="true" data-placement="right"/);
   assert.match(markup, /style="--entity-use-detail-left:572px;--entity-use-detail-top:174px;--entity-use-detail-width:328px;--entity-use-detail-max-height:650px"/);
-  assert.match(markup, /class="entity-use-detail-cover" data-cover-kind="image" data-media-kind="image">\s*<img src="https:\/\/cdn\.example\/portrait\.png"/);
+  assert.match(markup, /class="entity-use-detail-cover" data-cover-kind="image" data-media-kind="image"[^>]*>\s*<img src="https:\/\/cdn\.example\/portrait\.png"/);
   assert.match(markup, /class="entity-use-detail-title-row">\s*<h2 id="entity-use-detail-title"[^>]*>雾森信使<\/h2>\s*<span class="entity-use-detail-count">5 个素材<\/span>/);
   assert.match(markup, /雨林中的稳定角色设定/);
   assert.match(markup, /data-entity-use-action="add-canvas" data-entity-use-add-canvas="courier"/);
@@ -315,7 +315,7 @@ test("explicit video covers are accepted as visual covers without embedding auto
     entity: { id: "motion-entity", name: "动态主体", coverMediaId: "motion", media },
   });
 
-  assert.match(markup, /data-cover-kind="video" data-media-kind="video">\s*<img src="https:\/\/cdn\.example\/motion\.webp"/);
+  assert.match(markup, /data-cover-kind="video" data-media-kind="video"[^>]*>\s*<img src="https:\/\/cdn\.example\/motion\.webp"/);
   assert.doesNotMatch(markup, /<video|autoplay|src="https:\/\/cdn\.example\/motion\.mp4"/);
 });
 

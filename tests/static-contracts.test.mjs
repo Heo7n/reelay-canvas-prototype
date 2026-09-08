@@ -716,7 +716,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
   const generatedAssetSource = sourceBetween(
     appSource,
     "function createGeneratedAsset(parameterSnapshot)",
-    "function generatorMediaContent(node)",
+    "function generatorMediaContent(",
   );
   assert.match(generatedAssetSource, /Number\.isFinite\(parameterSnapshot\.outputDuration\)/);
   assert.match(generatedAssetSource, /generated\.duration = parameterSnapshot\.outputDuration/);

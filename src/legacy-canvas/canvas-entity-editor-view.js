@@ -192,6 +192,12 @@
       return `<div class="entity-editor-preview-empty">${icon("video")}<strong>${safeName}</strong><span>视频暂不可预览</span></div>`;
     }
     const imageUrl = url || thumbnailUrl;
+    if (url && thumbnailUrl && url !== thumbnailUrl) {
+      return `<span class="entity-editor-progressive-preview" data-progressive-preview data-preview-quality="preview" aria-busy="true">
+        <img src="${thumbnailUrl}" alt="" data-preview-thumbnail decoding="async" fetchpriority="high">
+        <img data-preview-full="${url}" alt="${safeName}" decoding="async" fetchpriority="low">
+      </span>`;
+    }
     return imageUrl
       ? `<img src="${imageUrl}" alt="${safeName}">`
       : `<div class="entity-editor-preview-empty">${icon("image")}<strong>${safeName}</strong><span>图片暂不可预览</span></div>`;
@@ -386,7 +392,7 @@
             </div>
             ${coverControl}
           </header>
-          <div class="entity-editor-preview-stage" data-entity-editor-preview="${escapeHtml(selectedId)}">
+          <div class="entity-editor-preview-stage" data-entity-editor-preview="${escapeHtml(selectedId)}" data-media-preview-key="${escapeHtml(JSON.stringify([selectedId, selectedMedia?.mediaKind, selectedMedia?.url, selectedMedia?.thumbnailUrl]))}">
             ${renderPreviewMedia(selectedMedia)}
           </div>
         </section>

@@ -3,6 +3,11 @@ import react from "@vitejs/plugin-react";
 
 import { canvasLayoutTunerPlugin } from "./src/dev/canvas-layout-tuner-plugin";
 
+const developmentApiPort = Number(process.env.REELAY_DEV_API_PORT || "5175");
+if (!Number.isInteger(developmentApiPort) || developmentApiPort < 1 || developmentApiPort > 65535) {
+  throw new Error("REELAY_DEV_API_PORT must be a valid local API port.");
+}
+
 function shellHistoryFallback() {
   return {
     name: "reelay-shell-history-fallback",
@@ -28,7 +33,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [react(), shellHistoryFallback(), canvasLayoutTunerPlugin()],
   server: {
     proxy: mode === "experience" ? undefined : {
-      "/api": "http://127.0.0.1:5175",
+      "/api": `http://127.0.0.1:${developmentApiPort}`,
     },
   },
   build: {

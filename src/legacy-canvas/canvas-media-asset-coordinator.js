@@ -46,9 +46,13 @@
     const getExpectedSource = typeof options.getExpectedSource === "function" ? options.getExpectedSource : () => null;
     const onProjectAssets = typeof options.onProjectAssets === "function" ? options.onProjectAssets : () => undefined;
     const useTransientUpload = typeof options.useTransientUpload === "function" ? options.useTransientUpload : () => false;
+    const usesProgressiveAssetLoading = typeof options.usesProgressiveAssetLoading === "function"
+      ? options.usesProgressiveAssetLoading : () => false;
+    const onAvailability = typeof options.onAvailability === "function" ? options.onAvailability : () => undefined;
     const requestTimeoutMs = Number.isFinite(options.requestTimeoutMs) ? options.requestTimeoutMs : 120_000;
     const pending = new Map();
     const seenProjectAssetRequests = new Set();
+    let lastAvailability = "";
 
     function send(type, payload) {
       if (!isHosted()) return false;
@@ -137,6 +141,18 @@
       return true;
     }
 
+    function acceptAvailability(message) {
+      const states = ["loading", "ready", "unavailable"];
+      if (!usesProgressiveAssetLoading() || message.instanceId !== instanceId
+        || !states.includes(message.projectAssets) || !states.includes(message.workspaceCatalog)) return false;
+      const key = `${message.projectAssets}:${message.workspaceCatalog}`;
+      if (lastAvailability !== key) {
+        lastAvailability = key;
+        onAvailability({ projectAssets: message.projectAssets, workspaceCatalog: message.workspaceCatalog });
+      }
+      return true;
+    }
+
     function acceptUploadGrant(message) {
       const operation = pending.get(message.requestId);
       if (message.instanceId !== instanceId || !operation || operation.stage !== "grant"
@@ -203,6 +219,7 @@
       const message = event.data;
       if (!message || typeof message !== "object" || message.source !== HOST_SOURCE || message.protocolVersion !== PROTOCOL_VERSION) return false;
       if (message.type === "host:project-assets") return acceptProjectAssets(message);
+      if (message.type === "host:asset-availability") return acceptAvailability(message);
       if (message.type === "host:media-upload-grant") return acceptUploadGrant(message);
       if (message.type === "host:media-upload-result") return acceptUploadResult(message);
       if (message.type === "host:transient-media-result") return acceptTransientResult(message);

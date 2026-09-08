@@ -170,6 +170,90 @@ test("experience home launch consumes its context prompt once without touching s
   assert.equal(h.window.sessionStorage.getItem("reelay-home-launch-intent"), "internal pending prompt");
 });
 
+test("progressive asset arrival preserves the editable document, running task, save, undo and focused prompt", (t) => {
+  const h = createHarness(t);
+  const editing = h.node("editing", { expanded: true, assets: [{ id: "local", librarySourceId: "memory-file",
+    type: "image", name: "local.png", url: "" }], activeAssetId: "local" });
+  const running = h.node("running");
+  h.install(h.canvas("working", [editing, running]));
+  const posted = [];
+  const host = { postMessage(message) { posted.push(message); } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.dispatchEvent(new h.window.MessageEvent("message", {
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  }));
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: "main", writable: true,
+    capabilities: { progressiveAssetLoading: true, transientMediaUpload: true, assetPersistence: false, entityPersistence: false } } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  h.window.canvasTest.canvasPersistence.post("canvas:ready");
+  const instanceId = posted.findLast((message) => message.type === "canvas:ready").instanceId;
+  const availability = (projectAssets, workspaceCatalog) => dispatch({ type: "host:asset-availability", instanceId, projectAssets, workspaceCatalog });
+  availability("loading", "loading");
+  assert.equal(h.window.isCanvasMutationAllowed(), true);
+  assert.equal(h.window.canPersistLibraryMedia(), false);
+  h.window.openAssetLibrary();
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /正在加载个人资产/);
+  assert.equal(h.window.isAssetLibraryMutable(), false);
+  h.window.closeAssetLibrary();
+
+  assert.equal(h.window.startSimulatedGeneration(running), true);
+  const task = h.scheduledTask();
+  h.moveNode(editing.id, 30, 15);
+  h.window.flushCanvasDocumentSave();
+  const undoStack = h.state.canvases[0].undoStack;
+  const undoCount = undoStack.length;
+  const input = h.window.document.querySelector('[data-id="editing"] [data-node-prompt-input]');
+  input.focus();
+  input.setSelectionRange(2, 6);
+  const before = JSON.stringify(h.window.canvasTest.canvasPersistence.getState());
+  const credits = JSON.stringify(h.state.account);
+  const media = { assetId: "memory-file", assetVersion: 1, mediaKind: "image", displayName: "local.png",
+    contentType: "image/png", byteSize: 42, checksumSha256: "a".repeat(64), contentUrl: "blob:http://reelay.test/current" };
+  dispatch({ type: "host:workspace-asset-catalog", instanceId, requestId: "personal-ready", assets: [media], entities: [] });
+  availability("loading", "ready");
+  assert.equal(h.window.canPersistLibraryMedia(), false, "project discovery has not yet settled");
+  assert.equal(h.window.canPersistLibraryEntities(), true);
+  dispatch({ type: "host:project-assets", instanceId, requestId: "project-ready", projectAssets: [{ ...media, referenceId: "reference" }] });
+  availability("ready", "ready");
+  assert.equal(h.window.canPersistLibraryMedia(), true);
+  assert.equal(editing.assets[0].url, "blob:http://reelay.test/current");
+  assert.equal(h.state.activeCanvasId, "working");
+  assert.equal(h.state.nodes[0], editing);
+  assert.equal(h.state.canvases[0].undoStack, undoStack);
+  assert.equal(undoStack.length, undoCount);
+  assert.equal(JSON.stringify(h.window.canvasTest.canvasPersistence.getState()), before);
+  assert.equal(running.generating, true);
+  assert.equal(h.timers.has(task.timeoutId), true);
+  assert.equal(JSON.stringify(h.state.account), credits);
+  assert.equal(h.window.document.activeElement, input);
+  assert.equal(h.window.document.querySelector('[data-id="editing"] [data-node-prompt-input]'), input);
+  assert.equal(input.selectionStart, 2);
+  assert.equal(input.selectionEnd, 6);
+});
+
+test("progressive personal catalog failure exposes unavailable state without writable placeholder data", (t) => {
+  const h = createHarness(t);
+  const posted = [];
+  const host = { postMessage(message) { posted.push(message); } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.dispatchEvent(new h.window.MessageEvent("message", {
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  }));
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: "main", writable: true,
+    capabilities: { progressiveAssetLoading: true } } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  h.window.canvasTest.canvasPersistence.post("canvas:ready");
+  const instanceId = posted.findLast((message) => message.type === "canvas:ready").instanceId;
+  dispatch({ type: "host:asset-availability", instanceId, projectAssets: "ready", workspaceCatalog: "unavailable" });
+  h.window.openAssetLibrary();
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /个人资产暂时无法加载/);
+  assert.equal(h.window.isAssetLibraryMutable(), false);
+  assert.equal(h.window.canPersistLibraryMedia(), false);
+  assert.equal(h.window.canPersistLibraryEntities(), false);
+  assert.equal(h.window.isCanvasMutationAllowed(), true);
+  assert.equal(h.state.hostCapabilities.assetPersistence, true, "project-local file uploads can remain available after personal discovery fails");
+});
+
 test("closed library catalog registration loads no media; using an asset hydrates only that node", async (t) => {
   const h = createHarness(t, { trackMetadataImages: true });
   assert.deepEqual(h.metadataImages.map((image) => image.url), ["./assets/reelay-logo.png"],

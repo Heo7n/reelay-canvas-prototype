@@ -34,7 +34,7 @@ const media = [
   },
 ];
 
-test("editor cards use thumbnails while its large image preview keeps original detail", () => {
+test("editor initially displays the thumbnail while retaining the original as its full-detail source", () => {
   const dom = new JSDOM(view.renderEntityEditor({
     media: [{ ...media[0], thumbnailUrl: "https://cdn.example/portrait-preview.webp" }],
     selectedMediaId: "portrait",
@@ -42,7 +42,9 @@ test("editor cards use thumbnails while its large image preview keeps original d
   const doc = dom.window.document;
   assert.equal(doc.querySelector('[data-entity-editor-media="portrait"] img').src,
     "https://cdn.example/portrait-preview.webp");
-  assert.equal(doc.querySelector('[data-entity-editor-preview="portrait"] img').src, media[0].url);
+  assert.equal(doc.querySelector('[data-entity-editor-preview="portrait"] [data-preview-thumbnail]').src,
+    "https://cdn.example/portrait-preview.webp");
+  assert.equal(doc.querySelector('[data-entity-editor-preview="portrait"] [data-preview-full]').dataset.previewFull, media[0].url);
   dom.window.close();
 });
 
