@@ -4,6 +4,8 @@
 
 ## 当前定位
 
+- 2026-09-08 管理员演示入口：`/app/login?demo=admin` 预填既有林静账号；账号版 / 体验版分别使用炭黑 / 紫色 SVG Favicon。公网 Reelay_Test 已通过原有 HTTP 上传和主体创建流程，为林静建立独立的 12 素材与 3 主体；5 个主账号项目及 4 份画布以受保护事务复制为林静的个人项目，素材 URL 指向新副本。管理员原有项目与权限保留，主账号内容未被覆盖；这是一份当前示例快照，不是后续双向同步。本机忽略目录 `.reelay-data/admin-demo/` 保存源快照、映射、事务与验证记录，不随 Git 或部署发布。此次没有向 Reelay_Dev 复制这些公网测试副本。
+
 - 两台 Windows 长期接续开发：本机已完成 Ho_Org 下独立 Reelay_Dev（oocagsuhijyvmzwotyxn，新加坡，已确认月费 0）的业务数据与 42 个原文件迁移，并切换为主目录 `dev:server:shared` API；前端 5173 / API 5175 同用 `D:\Software\codePro\0707` 代码，与演示站 Reelay_Test 分离。家里电脑尚待安装与接续验收，不能宣称两机端到端已完成。用户明确不迁聊天记录，开发上下文随仓库交接；最新证据见下文“开始与验证”及 `cross-device-development.md`。
 
 - 当前免注册体验切片：用户确认内部继续共用主账号，外部使用独立静态体验站，所有修改刷新重置。`npm run build:experience` → `dist/experience`，必须单独部署，不能覆盖内部主域。通过构建常量注入 `createExperienceServices`，保留相同 React / CanvasHost UI；三主体 12 图为公开 fixture，非主账号实时读取。临时文件≤4 MiB/个、累计≤128 MiB，经 ArrayBuffer bridge 进入宿主 Blob 内存。测试项目、画布、主体及素材改名在 SPA 导航中保留，刷新或退出重置；业务内容不进入浏览器持久存储。实际发布 URL 与部署 ID 见该切片 PR。

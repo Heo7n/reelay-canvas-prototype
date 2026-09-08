@@ -9,7 +9,7 @@ import { buildLegacyCanvas } from "./copy-legacy-canvas.mjs";
 const root = process.cwd();
 const output = path.join(root, "dist", "experience");
 await build({ configFile: path.join(root, "vite.shell.config.ts"), mode: "experience" });
-await buildLegacyCanvas(root, output);
+await buildLegacyCanvas(root, output, { experience: true });
 await mkdir(path.join(output, "assets", "home"), { recursive: true });
 await mkdir(path.join(output, "assets", "experience-preview"), { recursive: true });
 

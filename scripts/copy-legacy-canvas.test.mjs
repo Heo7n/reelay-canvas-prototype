@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createContext, Script } from "node:vm";
 import { JSDOM } from "jsdom";
+import { build, loadConfigFromFile } from "vite";
 import { buildLegacyCanvas, bundleClassicScripts } from "./copy-legacy-canvas.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -58,6 +59,10 @@ test("builds the real entry with content hashes, complete references and unchang
   const before = await readFile(path.join(root, "index.html"), "utf8");
   const result = await buildLegacyCanvas(root, output);
   const html = await readFile(path.join(output, "index.html"), "utf8");
+  assert.match(result.faviconReference, /favicon-account-[a-f0-9]+\.svg$/);
+  assert.ok(html.includes(`href="${result.faviconReference}"`));
+  assert.deepEqual(await readFile(path.join(output, result.faviconReference)), await readFile(path.join(root, "assets/favicon-account.svg")));
+  assert.doesNotMatch(html, /favicon-experience/);
   assert.equal(result.scriptCount, [...before.matchAll(/<script src=/g)].length);
   assert.equal([...html.matchAll(/<script\b/g)].length, 1);
   assert.equal([...html.matchAll(/rel="stylesheet"/g)].length, 1);
@@ -82,6 +87,68 @@ test("builds the real entry with content hashes, complete references and unchang
   const again = await buildLegacyCanvas(root, output);
   assert.equal(again.scriptReference, result.scriptReference);
   assert.equal(again.styleReference, result.styleReference);
+});
+
+test("experience legacy build uses its own hashed favicon without the account icon", async (t) => {
+  const output = await temporaryDirectory(t);
+  const result = await buildLegacyCanvas(root, output, { experience: true });
+  const html = await readFile(path.join(output, "index.html"), "utf8");
+  assert.match(result.faviconReference, /favicon-experience-[a-f0-9]+\.svg$/);
+  assert.ok(html.includes(`href="${result.faviconReference}"`));
+  assert.deepEqual(await readFile(path.join(output, result.faviconReference)), await readFile(path.join(root, "assets/favicon-experience.svg")));
+  assert.doesNotMatch(html, /favicon-account/);
+  assert.ok(!(await readdir(path.join(output, "assets"))).some((name) => name.startsWith("favicon-account")));
+});
+
+for (const [mode, variant] of [["production", "account"], ["experience", "experience"]]) {
+  test(`shell HTML emits an accessible ${variant} favicon in ${mode} mode`, async (t) => {
+    const fixture = await temporaryDirectory(t);
+    await mkdir(path.join(fixture, "assets"));
+    for (const name of ["account", "experience"]) {
+      await copyFile(path.join(root, `assets/favicon-${name}.svg`), path.join(fixture, `assets/favicon-${name}.svg`));
+    }
+    // Use the real HTML and mode-specific plugin, without rebuilding unrelated UI.
+    const sourceHtml = (await readFile(path.join(root, "app-shell.html"), "utf8")).replace(/<script\b[\s\S]*?<\/script>/g, "");
+    await writeFile(path.join(fixture, "app-shell.html"), sourceHtml);
+    const configured = await loadConfigFromFile({ command: "build", mode }, path.join(root, "vite.shell.config.ts"));
+    const plugin = configured.config.plugins.flat().find((candidate) => candidate?.name === "reelay-site-favicon");
+    assert.ok(plugin);
+    const output = path.join(fixture, "dist");
+    await build({ configFile: false, root: fixture, mode, logLevel: "silent", plugins: [plugin],
+      build: { outDir: output, rollupOptions: { input: path.join(fixture, "app-shell.html") } } });
+    const html = await readFile(path.join(output, "app-shell.html"), "utf8");
+    const dom = new JSDOM(html);
+    t.after(() => dom.window.close());
+    const icons = dom.window.document.querySelectorAll('link[rel="icon"]');
+    assert.equal(icons.length, 1);
+    assert.equal(icons[0].getAttribute("type"), "image/svg+xml");
+    const href = icons[0].getAttribute("href");
+    assert.match(href, new RegExp(`^/assets/favicon-${variant}-.+\\.svg$`));
+    assert.deepEqual(await readFile(path.join(output, href.slice(1))), await readFile(path.join(root, `assets/favicon-${variant}.svg`)));
+    const other = variant === "account" ? "experience" : "account";
+    assert.doesNotMatch(html, new RegExp(`favicon-${other}`));
+    assert.ok(!(await readdir(path.join(output, "assets"))).some((name) => name.startsWith(`favicon-${other}`)));
+  });
+}
+
+test("shell history fallback serves a demo query on the public root without capturing assets", async () => {
+  const configured = await loadConfigFromFile({ command: "serve", mode: "development" }, path.join(root, "vite.shell.config.ts"));
+  const plugin = configured.config.plugins.flat().find((candidate) => candidate?.name === "reelay-shell-history-fallback");
+  let middleware;
+  plugin.configureServer({ middlewares: { use: (handler) => { middleware = handler; } } });
+  for (const [url, expected] of [
+    ["/app?demo=admin", "/app-shell.html"],
+    ["/app/login?demo=admin", "/app-shell.html"],
+    ["/app/icon.svg?no-inline", "/app/icon.svg?no-inline"],
+    ["/app/@vite/client", "/app/@vite/client"],
+    ["/apple?demo=admin", "/apple?demo=admin"],
+  ]) {
+    const request = { url };
+    let continued = false;
+    middleware(request, {}, () => { continued = true; });
+    assert.equal(request.url, expected);
+    assert.equal(continued, true);
+  }
 });
 
 function runCanvas(t, html, scripts) {

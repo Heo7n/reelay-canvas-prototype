@@ -111,16 +111,16 @@ async function flattenStyles(root, reference, ancestors = []) {
   return `/* ${reference} */\n${source}\n`;
 }
 
-async function writeHashed(outputRoot, extension, source) {
+async function writeHashed(outputRoot, extension, source, name = "legacy-canvas") {
   const hash = createHash("sha256").update(source).digest("hex").slice(0, 16);
-  const reference = `./assets/legacy-canvas-${hash}.${extension}`;
+  const reference = `./assets/${name}-${hash}.${extension}`;
   const filename = localPath(outputRoot, reference);
   await mkdir(path.dirname(filename), { recursive: true });
   await writeFile(filename, source);
   return reference;
 }
 
-export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(workspaceRoot, "dist", "shell")) {
+export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(workspaceRoot, "dist", "shell"), { experience = false } = {}) {
   let html = await readFile(path.join(workspaceRoot, "index.html"), "utf8");
   const scriptTags = [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi)];
   const scripts = await Promise.all(scriptTags.map(async ([tag]) => {
@@ -141,6 +141,11 @@ export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(wo
   const styleReference = await writeHashed(outputRoot, "css", styles.join("\n"));
   html = replaceAdjacent(html, styleTags, `<link rel="stylesheet" href="${styleReference}" />`);
 
+  const faviconName = `favicon-${experience ? "experience" : "account"}`;
+  const faviconSource = await readFile(path.join(workspaceRoot, "assets", `${faviconName}.svg`));
+  const faviconReference = await writeHashed(outputRoot, "svg", faviconSource, faviconName);
+  html = html.replace("./assets/favicon-account.svg", faviconReference);
+
   for (const relativePath of ["assets/reelay-logo.png", "assets/canvas-empty-cursor.png"]) {
     const destination = path.join(outputRoot, relativePath);
     await mkdir(path.dirname(destination), { recursive: true });
@@ -154,7 +159,7 @@ export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(wo
     .map((match) => match[1]).filter((reference) => !/^(?:[a-z]+:|#|\/\/)/i.test(reference));
   await Promise.all(references.map((reference) => access(localPath(outputRoot, reference))));
   await writeFile(path.join(outputRoot, "index.html"), html);
-  return { scriptCount: scripts.length, referenceCount: references.length, scriptReference, styleReference };
+  return { scriptCount: scripts.length, referenceCount: references.length, scriptReference, styleReference, faviconReference };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -10,6 +10,7 @@ import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { useTheme } from "../../shared/theme/theme";
 import { Brand } from "../../shared/ui/Brand";
 import { preloadFirstLoginImage } from "../login/login-media";
+import { getDemoLoginPreset } from "../login/demo-login-preset";
 import { CapabilityStrip } from "./CapabilityStrip";
 import { CreationComposer } from "./CreationComposer";
 import { HeroCarousel } from "./HeroCarousel";
@@ -35,6 +36,7 @@ export function PublicEntryPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const loginOpen = location.pathname === routePaths.login();
+  const demoSearch = getDemoLoginPreset(location.search).search;
   const [prompt, setPrompt] = useState(readGuestCreationDraft);
   const [activeSlide, setActiveSlide] = useState(1);
   const loginButton = useRef<HTMLButtonElement>(null);
@@ -63,7 +65,7 @@ export function PublicEntryPage() {
     // Another tab may already have established the shared cookie; the loader
     // can redirect straight to the workspace without ever showing the form.
     saveGuestCreationDraft(prompt);
-    void navigate(routePaths.login(), { preventScrollReset: true });
+    void navigate(`${routePaths.login()}${demoSearch}`, { preventScrollReset: true });
   }
 
   function chooseCapability(capability: Capability): void {
@@ -72,7 +74,7 @@ export function PublicEntryPage() {
   }
 
   const context: PublicEntryContext = {
-    closeLogin: () => { void navigate(routePaths.home(), { replace: true, preventScrollReset: true }); },
+    closeLogin: () => { void navigate(`${routePaths.home()}${demoSearch}`, { replace: true, preventScrollReset: true }); },
     prepareLogin: () => {
       // A protected deep link takes precedence over an unrelated composing draft.
       saveGuestCreationDraft(new URLSearchParams(location.search).has("returnTo") ? "" : prompt);
