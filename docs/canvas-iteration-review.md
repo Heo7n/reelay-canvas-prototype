@@ -14,6 +14,8 @@
 
 验证通过：`npm run check` 1018 项（539 legacy / 283 shell / 188 server / 8 setup）、本机 PostgreSQL 33 项、账号和静态体验两套构建。新增覆盖失效路由、StrictMode、文档失败与重试、空文档、目录晚到的保存状态，以及真实连接的保留、释放和空闲断连后恢复。PostgreSQL 故障用例只终止测试自身新建的连接，没有写入业务表；浏览器对比只读取既有项目。此次优化为本地阶段更新，公网仍以 PR #23 的部署为准。
 
+代码提交 `1328d83` 已快进到主目录，并通过原专用入口重启共享 API `5175`；`5176` 前端仍来自 `ead8/0707`。最终 `5176 → 5175` 复验健康正常，文档 HTTP 为 `5.20s`、点击到文档 ready 约 `5.40s`，三个目录在文档完成后 `7–8ms` 开始，随后恢复 20 个素材与 3 个主体，控制台无 error / warn。该样本再次说明网络波动仍明显，不能只引用候选的 3 秒结果。对比及最终访问均无业务写请求；原始基线日志保留在主目录 `.git/connection-priority-baseline-api.log`，当前共享服务继续使用 `.git/dev-shared-api.stdout.log` / `.stderr.log`。
+
 ## 2026-09-08 接续工作区的加载实测
 
 本文原评估从下文旧目录接入；当前任务实际目录为 `C:\Users\Ho\.codex\worktrees\cc38\0707`，活动分支为 `codex/canvas-agent-refinement`。完整路由预览为 `http://127.0.0.1:5178/app/login`。初测复用主目录启动的 `5175` API，实际连接共享开发云端 PostgreSQL / Storage，并非旧记录中的本机数据库 / filesystem ObjectStore。验证阶段已切到本任务 `5180` 候选 API，读取当前 worktree 服务端代码和同一共享数据；原 `5175` 保持运行。未复制凭据或数据，也未整合主目录的两个共享开发提交。
