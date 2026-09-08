@@ -4,6 +4,8 @@
 
 ## 当前定位
 
+- 2026-09-08 管理员入口与两站 Favicon 已上线：账号 <https://reelay-canvas-prototype.vercel.app/app/login?demo=admin>（炭黑），体验 <https://reelay-experience.vercel.app/app>（紫色）。构建源 `c23b338`；两个实际部署、独立上传边界和 HTTP / UI 证据见 `vercel-supabase-preview.md` 的当日记录。林静的 3 份正式 main 画布已深比通过；另保留的历史 deployment-smoke 源/副本均是原有无效测试文档，不能计作可用画布。
+
 - 2026-09-08 管理员演示入口：`/app/login?demo=admin` 预填既有林静账号；账号版 / 体验版分别使用炭黑 / 紫色 SVG Favicon。公网 Reelay_Test 已通过原有 HTTP 上传和主体创建流程，为林静建立独立的 12 素材与 3 主体；5 个主账号项目及 4 份画布以受保护事务复制为林静的个人项目，素材 URL 指向新副本。管理员原有项目与权限保留，主账号内容未被覆盖；这是一份当前示例快照，不是后续双向同步。本机忽略目录 `.reelay-data/admin-demo/` 保存源快照、映射、事务与验证记录，不随 Git 或部署发布。此次没有向 Reelay_Dev 复制这些公网测试副本。
 
 - 两台 Windows 长期接续开发：本机已完成 Ho_Org 下独立 Reelay_Dev（oocagsuhijyvmzwotyxn，新加坡，已确认月费 0）的业务数据与 42 个原文件迁移，并切换为主目录 `dev:server:shared` API；前端 5173 / API 5175 同用 `D:\Software\codePro\0707` 代码，与演示站 Reelay_Test 分离。家里电脑尚待安装与接续验收，不能宣称两机端到端已完成。用户明确不迁聊天记录，开发上下文随仓库交接；最新证据见下文“开始与验证”及 `cross-device-development.md`。
