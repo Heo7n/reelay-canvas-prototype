@@ -733,6 +733,9 @@ html[data-theme="light"] .entity-editor-preview {
 .entity-editor-preview-stage {
   position: relative;
   display: grid;
+  /* Fit media to the stage, without intrinsic image dimensions expanding its track. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   margin: 14px;
