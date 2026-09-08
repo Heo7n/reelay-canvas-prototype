@@ -1,4 +1,4 @@
-import { Building2, Check, ChevronDown, Fingerprint, MoreHorizontal, Pencil, Search, UsersRound } from "lucide-react";
+import { Building2, Check, ChevronDown, MoreHorizontal, Pencil, Search, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { SessionActor } from "../../domain/identity/session";
@@ -23,8 +23,6 @@ const roleLabels = {
   admin: "管理员",
   member: "成员",
 } as const;
-
-const demoOrganizationId = "REELAY-7X29M4";
 
 export function OrganizationManagementSection({
   actor,
@@ -106,7 +104,7 @@ export function OrganizationManagementSection({
 
   return (
     <section className={styles.section} aria-labelledby="organization-information-title">
-      <h1 id="organization-information-title" className={styles.srOnly}>组织信息</h1>
+      <h2 id="organization-information-title" className={styles.srOnly}>组织信息</h2>
 
       <article className={styles.organizationCard}>
         {canEditOrganization ? (
@@ -179,7 +177,7 @@ export function OrganizationManagementSection({
           ) : <h2>{organizationName}</h2>}
           <div className={styles.organizationMeta}>
             <span><UsersRound aria-hidden="true" />{members.length} 位成员</span>
-            <span><Fingerprint aria-hidden="true" />组织 ID：{demoOrganizationId}</span>
+            <span>我的角色：{roleLabels[currentRole]}</span>
           </div>
         </div>
       </article>

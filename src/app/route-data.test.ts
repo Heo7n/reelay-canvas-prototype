@@ -255,11 +255,38 @@ describe("application route data", () => {
       ),
     );
 
-    expect(data.members).toEqual(members);
+    expect(await data.members).toEqual({ status: "ready", members });
     expect(services.organizationRepository.listMembers).toHaveBeenCalledWith("workspace-organization");
     expect(services.workspaceContextGateway.load).not.toHaveBeenCalled();
     expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
   });
+
+  it("returns organization routing data before the member request completes", async () => {
+    const services = createServices();
+    let finish!: (value: typeof members) => void;
+    vi.mocked(services.organizationRepository.listMembers).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const data = createRouteHandlers(services).organizationLoader(loaderArgs(
+      "http://reelay.local/app/w/workspace-organization/organization", { workspaceId: "workspace-organization" },
+    ));
+    expect(data).not.toBeInstanceOf(Promise);
+    expect(data.members).toBeInstanceOf(Promise);
+    finish(members);
+    expect(await data.members).toEqual({ status: "ready", members });
+  });
+
+  it.each(["authentication_required", "forbidden", "request_failed"] as const)(
+    "settles an early %s member failure without an unhandled rejection", async (code) => {
+      const services = createServices();
+      vi.mocked(services.organizationRepository.listMembers).mockRejectedValueOnce(new ApplicationError(code, "Unavailable"));
+      const data = createRouteHandlers(services).organizationLoader(loaderArgs(
+        "http://reelay.local/app/w/workspace-organization/organization", { workspaceId: "workspace-organization" },
+      ));
+      const result = await data.members;
+      if (code === "request_failed") expect(result).toEqual({ status: "error" });
+      else if (code === "forbidden") expect(result).toEqual({ status: "redirect", to: "/w/workspace-organization" });
+      else expect(result).toEqual({ status: "redirect", to: expect.stringContaining("/login?returnTo=") });
+    },
+  );
 
   it("uses the route workspace as the authority for project mutations", async () => {
     const services = createServices();

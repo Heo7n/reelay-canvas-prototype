@@ -16,6 +16,7 @@
 .collapseToggle:hover .expandIcon, .collapseToggle:focus-visible .expandIcon { opacity: 1; }
 .sidebar svg { width: 20px; height: 20px; flex: 0 0 20px; stroke-width: 1.7; }
 .navigation { display: grid; gap: 6px; margin-top: 12px; }
+.organizationNavigation { display: grid; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--workspace-border); }
 .navigation a, .sidebarFooter a { display: flex; width: 100%; min-height: 44px; align-items: center; gap: 12px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--workspace-muted); font: inherit; font-size: 14px; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .navigation a:hover, .sidebarFooter a:hover { background: var(--workspace-hover); color: var(--workspace-text); }
 .navigation .active { background: var(--workspace-hover); color: var(--workspace-text); font-weight: 550; }

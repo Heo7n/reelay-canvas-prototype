@@ -23,6 +23,7 @@ import {
   type AccountSection,
 } from "../../features/account/AccountSettingsDialog";
 import { useTheme } from "../theme/theme";
+import { isOrganizationPath, organizationNavigationState } from "../navigation/organization-navigation";
 import { Brand } from "./Brand";
 import { CreditIcon } from "./CreditIcon";
 import styles from "./WorkspaceHeader.module.css";
@@ -243,9 +244,8 @@ export function WorkspaceHeader({
                 <div className={styles.accountOverview}>
                   <Link
                     className={styles.overviewRow}
-                    state={{
-                      organizationReturnTo: `${location.pathname}${location.search}${location.hash}`,
-                    }}
+                    state={organizationNavigationState(currentWorkspace.id, location)}
+                    replace={isOrganizationPath(currentWorkspace.id, location.pathname)}
                     to={routePaths.organization(currentWorkspace.id)}
                     aria-label={`进入${currentWorkspace.name}组织信息`}
                     onClick={closeProfile}

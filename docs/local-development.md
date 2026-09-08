@@ -6,6 +6,15 @@
 
 ## 1. 继续当前机器的开发
 
+### 当前：2026-09-08 组织中心加载预览
+
+当前组织中心迭代使用 `5176 → 5189`，前端和候选 API 都读取 `C:/Users/Ho/.codex/worktrees/ead8/0707` 的 `codex/canvas-loading-priority`，包括本轮本地阶段提交的组织中心 UI 与加载修复。`5173 → 5175` 仍由主目录提供，未合入这轮成员 API 优化；下方原 `5176 → 5175` 是本次切换前的记录。
+
+- 本机启动文件和记录目录：`D:/Software/codePro/0707/.git/worktrees/07071`。`home-login-preview.ps1` 为前端设置 `REELAY_DEV_API_PORT=5189` 后启动原 5176；`organization-preview-api.mjs` 用当前 worktree 的 `createSharedServerEnvironment` 在进程内读取主目录 `.env.shared-development.local`，仅把 PORT 改为 5189，并运行本 worktree 的 `src/server/start.ts`。不复制任何凭据；仍是同一 Reelay_Dev PostgreSQL、私有桶和现有会话。
+- 进程启动时：前端 launcher `27792` / Vite `23168`，API launcher `92048` / Node `29904`。使用前重查端口与命令行，不直接沿用 PID。`home-login-preview.json` 已记录本轮来源、端口和启动文件；stdout / stderr 与各启动文件同目录同前缀。
+- 两个启动文件均用隐藏进程运行，恢复时先核对端口，再分别运行 `node organization-preview-api.mjs` 与 `powershell -NoProfile -ExecutionPolicy Bypass -File home-login-preview.ps1`。重启前端不能更新 API；本轮没有 migration / seed、数据迁移或公网部署。
+- 若后续同步到主目录并重启共享 5175，应再把本前端 launcher 中的 `REELAY_DEV_API_PORT` 恢复到 5175，验收后停止候选 5189；不能只停止候选却保留代理指向该端口。
+
 ### 2026-09-08 文档优先与连接复用
 
 本轮基于已发布的 `f068def`，优化分支为 `codex/canvas-loading-priority`，目录为 `C:\Users\Ho\.codex\worktrees\ead8\0707`。该目录的前端继续使用 `5176 → 5175`；主目录 `D:\Software\codePro\0707` 的 `codex/canvas-development` 同步本轮代码后，`5173` 与共享 API `5175` 使用同一版本。后端代码修改需要重启 `5175`，仅前端 HMR 不会更新连接池。

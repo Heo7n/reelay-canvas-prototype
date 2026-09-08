@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { OrganizationRouteData } from "../../app/route-data";
+import type { OrganizationMembersResult, OrganizationRouteData } from "../../app/route-data";
 import { OrganizationCenterPage } from "./OrganizationCenterPage";
 import { OrganizationSectionRoute, type OrganizationSection } from "./OrganizationSectionRoute";
 
@@ -46,13 +46,17 @@ function renderSection(
   data: OrganizationRouteData = routeData,
   loader: () => Promise<OrganizationRouteData> = async () => data,
   returnTo?: string,
+  loadMembers?: () => Promise<OrganizationMembersResult>,
 ) {
   const suffix = section === "management" ? "" : `/${section}`;
   const initialEntry = `/w/workspace-organization-reelay/organization${suffix}`;
   const router = createMemoryRouter([
     {
       path: "/w/:workspaceId/organization",
-      loader,
+      loader: async () => {
+        const loaded = await loader();
+        return { ...loaded, members: loadMembers ? loadMembers() : Promise.resolve({ status: "ready", members: loaded.members }) };
+      },
       element: <OrganizationCenterPage />,
       children: [
         { index: true, element: <OrganizationSectionRoute section="management" /> },
@@ -80,17 +84,57 @@ function renderSection(
 }
 
 describe("organization center", () => {
+  it("opens its navigation while members are pending without showing an empty directory", async () => {
+    let finish!: (result: OrganizationMembersResult) => void;
+    const pending = new Promise<OrganizationMembersResult>((resolve) => { finish = resolve; });
+    renderSection("management", routeData, undefined, undefined, () => pending);
+
+    expect(await screen.findByRole("heading", { name: "组织中心", level: 1 })).toBeInTheDocument();
+    expect(screen.getByLabelText("正在加载组织成员")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("link", { name: "首页" })).toBeInTheDocument();
+    expect(screen.queryByText("0 位成员")).not.toBeInTheDocument();
+    await act(async () => { finish({ status: "ready", members: routeData.members }); });
+    expect(await screen.findByText("linjing@reelay.test")).toBeInTheDocument();
+    expect(screen.queryByLabelText("正在加载组织成员")).not.toBeInTheDocument();
+  });
+
+  it("keeps a member load failure local and retries it", async () => {
+    const loadMembers = vi.fn<() => Promise<OrganizationMembersResult>>()
+      .mockResolvedValueOnce({ status: "error" })
+      .mockResolvedValueOnce({ status: "ready", members: routeData.members });
+    renderSection("management", routeData, undefined, undefined, loadMembers);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("成员信息暂时无法加载");
+    expect(screen.getByRole("link", { name: "首页" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(await screen.findByText("linjing@reelay.test")).toBeInTheDocument();
+    expect(loadMembers).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not apply a late member redirect after leaving the organization page", async () => {
+    let finish!: (result: OrganizationMembersResult) => void;
+    const pending = new Promise<OrganizationMembersResult>((resolve) => { finish = resolve; });
+    const router = renderSection("management", routeData, undefined, undefined, () => pending);
+    fireEvent.click(await screen.findByRole("link", { name: "首页" }));
+    expect(await screen.findByText("workspace origin")).toBeInTheDocument();
+    await act(async () => { finish({ status: "redirect", to: "/login" }); });
+    expect(router.state.location.pathname).toBe("/w/workspace-organization-reelay");
+  });
+
   it("keeps organization information and member management on one page", async () => {
     renderSection("management");
 
     expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "成员管理" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "组织中心", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "组织中心" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "首页" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "返回画布" })).not.toBeInTheDocument();
     expect(screen.getByText("2 位成员")).toBeInTheDocument();
-    expect(screen.getByText("组织 ID：REELAY-7X29M4")).toBeInTheDocument();
+    expect(screen.getByText("我的角色：主账户")).toBeInTheDocument();
     expect(screen.queryByText(/当前身份/)).toBeNull();
     expect(screen.queryByText("2 位组织成员")).toBeNull();
-    expect(screen.queryByLabelText("打开账户菜单")).toBeNull();
+    expect(screen.getByLabelText("打开账户菜单")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "更改组织名称" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "更改组织头像" })).toBeInTheDocument();
     expect(screen.getByText("linjing@reelay.test")).toBeInTheDocument();
@@ -120,14 +164,19 @@ describe("organization center", () => {
   });
 
   it("returns to the recorded application source after switching organization sections", async () => {
-    const canvasPath = "/w/workspace-organization-reelay/projects/project-one/canvases/main";
-    renderSection("management", routeData, async () => routeData, canvasPath);
+    const canvasPath = "/w/workspace-organization-reelay/projects/project-one/canvases/main?layoutTune=1#selection";
+    const router = renderSection("management", routeData, async () => routeData, canvasPath);
 
     fireEvent.click(await screen.findByRole("link", { name: "积分管理" }));
     expect(await screen.findByRole("heading", { name: "积分管理" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+    fireEvent.click(screen.getByRole("link", { name: "组织中心" }));
+    expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回画布" })).toHaveAttribute("href", canvasPath);
+    fireEvent.click(screen.getByRole("link", { name: "返回画布" }));
 
     expect(await screen.findByText("canvas origin")).toBeInTheDocument();
+    expect(router.state.location.search).toBe("?layoutTune=1");
+    expect(router.state.location.hash).toBe("#selection");
   });
 
   it("closes the temporary role selector after clicking elsewhere", async () => {
@@ -483,7 +532,7 @@ describe("organization center", () => {
     expect(screen.queryByRole("dialog", { name: "选择日期范围" })).toBeNull();
   });
 
-  it("gives regular members a read-only organization directory and redirects restricted sections", async () => {
+  it.each(["credits", "usage"] as const)("gives regular members a read-only directory when entering %s", async (section) => {
     const memberData: OrganizationRouteData = {
       ...routeData,
       actor: {
@@ -506,7 +555,7 @@ describe("organization center", () => {
         },
       ],
     };
-    const router = renderSection("usage", memberData);
+    const router = renderSection(section, memberData);
 
     expect(await screen.findByRole("heading", { name: "组织信息" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "组织成员" })).toBeInTheDocument();
