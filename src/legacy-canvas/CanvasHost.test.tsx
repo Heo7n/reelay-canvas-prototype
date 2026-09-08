@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render as renderTestingLibrary, screen, waitFor } from "@testing-library/react";
-import { useState, type ReactElement } from "react";
+import { StrictMode, useState, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationError } from "../application/shared/ApplicationError";
@@ -122,6 +122,133 @@ const progressiveContext = {
 };
 
 describe("CanvasHost progressive asset loading", () => {
+  it.each([document, null])("starts catalogs only after a successful document read, including empty canvases: %j", async (loadedDocument) => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const catalog = pendingResult<[]>();
+    const saved = pendingResult<CanvasDocument>();
+    const listProjectAssets = vi.fn(() => catalog.promise);
+    const listPersonalAssets = vi.fn(() => catalog.promise);
+    const listPersonal = vi.fn(() => catalog.promise);
+    const save = vi.fn(() => saved.promise);
+    render(<CanvasHost
+      repository={{ getCanvasDocument: vi.fn(() => initialDocument.promise), save }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+
+    await act(async () => initialDocument.resolve(loadedDocument));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:document", document: loadedDocument }), window.location.origin);
+    expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", projectAssets: "loading", workspaceCatalog: "loading" });
+
+    act(() => {
+      dispatchCanvasMessage(frame, dirtyMessage(true));
+      dispatchCanvasMessage(frame, saveMessage("while-catalogs-load", canvasInstanceId, loadedDocument?.revision ?? 0));
+    });
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saving");
+    await act(async () => catalog.resolve([]));
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:init")).toHaveLength(1);
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:document")).toHaveLength(1);
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saving");
+    await act(async () => saved.resolve({ ...document, revision: (loadedDocument?.revision ?? 0) + 1 }));
+  });
+
+  it.each([new Error("offline"), new ApplicationError("not_found", "missing")])("does not read catalogs after document failure and keeps retry document-first: %s", async (error) => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const retriedDocument = pendingResult<CanvasDocument | null>();
+    const getCanvasDocument = vi.fn().mockReturnValueOnce(initialDocument.promise).mockReturnValueOnce(retriedDocument.promise);
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    render(<CanvasHost repository={{ ...repository, getCanvasDocument }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    await act(async () => initialDocument.reject(error));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
+    expect(getCanvasDocument).toHaveBeenCalledTimes(2);
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    await act(async () => retriedDocument.resolve(document));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+  });
+
+  it.each([
+    { field: "project", nextContext: { ...progressiveContext, projectId: "project-2" } },
+    { field: "canvas", nextContext: { ...progressiveContext, canvasId: "second" } },
+    { field: "workspace", nextContext: { ...progressiveContext, workspaceId: "organization-2" } },
+  ])("does not start obsolete catalogs when a document resolves after changing $field", async ({ nextContext }) => {
+    const previous = pendingResult<CanvasDocument | null>();
+    const current = pendingResult<CanvasDocument | null>();
+    const documents = { ...repository, getCanvasDocument: vi.fn().mockReturnValueOnce(previous.promise).mockReturnValueOnce(current.promise) };
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    const mediaAssetRepository = { listProjectAssets, listPersonalAssets } as never;
+    const entityRepository = { listPersonal } as never;
+    const ui = (context: typeof progressiveContext) => <CanvasHost repository={documents}
+      mediaAssetRepository={mediaAssetRepository} entityRepository={entityRepository} context={context} />;
+    const view = render(ui(progressiveContext));
+    view.rerender(routed(ui(nextContext)));
+    await act(async () => previous.resolve(document));
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    await act(async () => current.resolve({ ...document, projectId: nextContext.projectId, id: nextContext.canvasId }));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith(nextContext.projectId);
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith(nextContext.workspaceId);
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith(nextContext.workspaceId);
+  });
+
+  it("does not start catalogs when the host unmounts before its document arrives", async () => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    const view = render(<CanvasHost repository={{ ...repository, getCanvasDocument: () => initialDocument.promise }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    view.unmount();
+    await act(async () => initialDocument.resolve(document));
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+  });
+
+  it("starts only the live effect's catalogs when StrictMode replays a shared document read", async () => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const getCanvasDocument = vi.fn(() => initialDocument.promise);
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    renderTestingLibrary(<StrictMode>{routed(<CanvasHost repository={{ ...repository, getCanvasDocument }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />)}</StrictMode>);
+    expect(getCanvasDocument).toHaveBeenCalledTimes(2);
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    await act(async () => initialDocument.resolve(document));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+  });
+
   it("rejects late discovery from a replaced project and only sends the current scope to its new instance", async () => {
     const oldProject = pendingResult<[]>();
     const oldPersonal = pendingResult<[]>();

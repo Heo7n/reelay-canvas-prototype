@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { capturePool } = vi.hoisted(() => ({ capturePool: vi.fn() }));
-vi.mock("pg", () => ({ Pool: class { constructor(options: unknown) { capturePool(options); } } }));
+vi.mock("pg", () => ({ Pool: class { constructor(options: unknown) { capturePool(options); } on() { return this; } } }));
 
 import { buildServer } from "./app";
 import { DEFAULT_LOCAL_DATABASE_URL } from "./db/config";

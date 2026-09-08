@@ -327,10 +327,57 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     setPersistenceStatus("loading");
     void repository.getCanvasDocument(safeContext.projectId, safeContext.canvasId).then(
       (document) => {
-        if (active) {
-          authoritativeDocumentNeedsRefreshRef.current = false;
-          setDocumentState({ status: "ready", document });
-          setPersistenceStatus("saved");
+        if (!active) return;
+        authoritativeDocumentNeedsRefreshRef.current = false;
+        setDocumentState({ status: "ready", document });
+        setPersistenceStatus("saved");
+        // Keep catalog reads off the document's critical path and shared connection pool.
+        // An obsolete load attempt must not start a new batch after navigation or retry.
+        if (safeContext.capabilities?.assetPersistence && mediaAssetRepository) {
+          void mediaAssetRepository.listProjectAssets(safeContext.projectId).then(
+            (assets) => {
+              if (!active) return;
+              setProjectAssets(assets);
+              setAssetPersistenceAvailable(true);
+              setProjectAssetsLoaded(true);
+            },
+            () => {
+              if (!active) return;
+              setProjectAssets([]);
+              setAssetPersistenceAvailable(false);
+              setProjectAssetsLoaded(true);
+            },
+          );
+        } else {
+          setProjectAssetsLoaded(true);
+        }
+        if (
+          safeContext.capabilities?.assetPersistence
+          && safeContext.capabilities?.entityPersistence
+          && mediaAssetRepository
+          && entityRepository
+        ) {
+          void Promise.all([
+            mediaAssetRepository.listPersonalAssets(safeContext.workspaceId),
+            entityRepository.listPersonal(safeContext.workspaceId),
+          ]).then(
+            ([assets, entities]) => {
+              if (!active) return;
+              setWorkspaceAssets(assets);
+              setWorkspaceEntities(entities);
+              setEntityPersistenceAvailable(true);
+              setWorkspaceCatalogLoaded(true);
+            },
+            () => {
+              if (!active) return;
+              setWorkspaceAssets([]);
+              setWorkspaceEntities([]);
+              setEntityPersistenceAvailable(false);
+              setWorkspaceCatalogLoaded(true);
+            },
+          );
+        } else {
+          setWorkspaceCatalogLoaded(true);
         }
       },
       (error: unknown) => {
@@ -343,52 +390,6 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         }
       },
     );
-    if (safeContext.capabilities?.assetPersistence && mediaAssetRepository) {
-      void mediaAssetRepository.listProjectAssets(safeContext.projectId).then(
-        (assets) => {
-          if (!active) return;
-          setProjectAssets(assets);
-          setAssetPersistenceAvailable(true);
-          setProjectAssetsLoaded(true);
-        },
-        () => {
-          if (!active) return;
-          setProjectAssets([]);
-          setAssetPersistenceAvailable(false);
-          setProjectAssetsLoaded(true);
-        },
-      );
-    } else {
-      setProjectAssetsLoaded(true);
-    }
-    if (
-      safeContext.capabilities?.assetPersistence
-      && safeContext.capabilities?.entityPersistence
-      && mediaAssetRepository
-      && entityRepository
-    ) {
-      void Promise.all([
-        mediaAssetRepository.listPersonalAssets(safeContext.workspaceId),
-        entityRepository.listPersonal(safeContext.workspaceId),
-      ]).then(
-        ([assets, entities]) => {
-          if (!active) return;
-          setWorkspaceAssets(assets);
-          setWorkspaceEntities(entities);
-          setEntityPersistenceAvailable(true);
-          setWorkspaceCatalogLoaded(true);
-        },
-        () => {
-          if (!active) return;
-          setWorkspaceAssets([]);
-          setWorkspaceEntities([]);
-          setEntityPersistenceAvailable(false);
-          setWorkspaceCatalogLoaded(true);
-        },
-      );
-    } else {
-      setWorkspaceCatalogLoaded(true);
-    }
     return () => {
       active = false;
       if (navigationTimeoutRef.current !== null) window.clearTimeout(navigationTimeoutRef.current);
