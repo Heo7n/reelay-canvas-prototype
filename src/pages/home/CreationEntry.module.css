@@ -1,0 +1,26 @@
+.composer { display: flex; width: 100%; min-height: 160px; flex-direction: column; gap: 12px; margin: 0; padding: 20px 20px 16px; border: 1px solid var(--workspace-border-strong); border-radius: 22px; background: var(--workspace-input); color: var(--workspace-text); box-shadow: 0 2px 8px rgb(0 0 0 / 2%); transition: border-color 180ms ease, box-shadow 180ms ease; }
+.composer:focus-within { border-color: color-mix(in srgb, var(--workspace-muted) 65%, transparent); box-shadow: 0 0 0 3px var(--workspace-hover); }
+.field { position: relative; min-width: 0; }
+.field textarea { display: block; width: 100%; height: 70px; resize: none; padding: 0; border: 0; outline: none; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 26px; }
+.field textarea::placeholder { color: var(--workspace-muted); }
+.examples { position: absolute; inset: 0; overflow: hidden; pointer-events: none; color: var(--workspace-muted); font-size: 16px; line-height: 26px; }
+.toolbar { display: flex; min-height: 38px; align-items: center; justify-content: flex-end; gap: 16px; margin-top: auto; }
+.count { color: var(--workspace-subtle); font-size: 11px; font-variant-numeric: tabular-nums; }
+.submit { display: inline-flex; height: 38px; align-items: center; justify-content: center; gap: 10px; padding: 0 14px; border: 0; border-radius: 11px; background: var(--workspace-text); color: var(--workspace-bg); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: opacity 160ms ease; }
+.submit svg { width: 18px; height: 18px; flex-shrink: 0; stroke-width: 1.8; }
+.submit:hover:not(:disabled) { opacity: .84; }
+.submit:focus-visible { outline: 2px solid var(--workspace-text); outline-offset: 4px; }
+.submit:disabled { opacity: .5; cursor: wait; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.spinner { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) {
+  .composer { min-height: 182px; padding: 19px 17px 15px; border-radius: 20px; }
+  .field textarea { height: 84px; }
+  .field textarea, .examples { font-size: 14px; line-height: 24px; }
+  .submit { height: 36px; gap: 8px; padding-inline: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer, .submit { transition: none; }
+  .spinner { animation: none; }
+}

@@ -1,15 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ProjectSummary } from "../../domain/project/project";
 import { ProjectCard } from "./ProjectCard";
 import { ProjectMenuProvider } from "./ProjectMenuProvider";
 
-afterEach(cleanup);
+const routers: ReturnType<typeof createMemoryRouter>[] = [];
+afterEach(() => {
+  cleanup();
+  routers.splice(0).forEach((router) => router.dispose());
+});
 
 function renderCard(
   project: ProjectSummary,
@@ -29,6 +33,7 @@ function renderCard(
     ],
     { initialEntries: ["/w/workspace-organization/projects"] },
   );
+  routers.push(router);
   render(<RouterProvider router={router} />);
 }
 
@@ -48,6 +53,7 @@ function renderCards(projects: ProjectSummary[]): void {
     ],
     { initialEntries: ["/w/workspace-organization/projects"] },
   );
+  routers.push(router);
   render(<RouterProvider router={router} />);
 }
 
@@ -59,6 +65,14 @@ const collaborativeViewerProject: ProjectSummary = {
   name: "只读协作项目",
   updatedAt: "2026-07-22T08:00:00.000Z",
   coverAssetId: null,
+};
+
+const editableProject: ProjectSummary = {
+  ...collaborativeViewerProject,
+  id: "project-editable",
+  accessKind: "private",
+  currentUserRole: "admin",
+  name: "个人项目",
 };
 
 describe("ProjectCard access projection", () => {
@@ -188,5 +202,203 @@ describe("ProjectCard access projection", () => {
       intent: "delete",
       projectId: "project-admin",
     });
+  });
+});
+
+describe("ProjectCard inline name editing", () => {
+  it.each([
+    ["home index", "/w/workspace-organization"],
+    ["projects", "/w/workspace-organization/projects"],
+  ])("saves through the owning %s route and reloads the new name", async (_page, initialEntry) => {
+    let project = { ...editableProject };
+    const submitted = vi.fn();
+    const action = async ({ request }: { request: Request }) => {
+      const fields = Object.fromEntries(await request.formData());
+      submitted(fields);
+      project = { ...project, name: String(fields.name) };
+      return { ok: true };
+    };
+    function LoadedProjectCard() {
+      const loadedProject = useRouteLoaderData("workspace") as ProjectSummary;
+      return <ProjectMenuProvider><ProjectCard project={loadedProject} onNotice={vi.fn()} /></ProjectMenuProvider>;
+    }
+    const router = createMemoryRouter([
+      {
+        id: "workspace",
+        path: "/w/:workspaceId",
+        loader: async () => project,
+        element: <Outlet />,
+        errorElement: <div role="alert">项目页面路由错误</div>,
+        // The real workspace parent owns the loader but deliberately has no action.
+        children: [
+          { index: true, action, element: <LoadedProjectCard /> },
+          { path: "projects", action, element: <LoadedProjectCard /> },
+        ],
+      },
+    ], { initialEntries: [initialEntry] });
+    routers.push(router);
+    render(<RouterProvider router={router} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "重命名 个人项目" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(input, { target: { value: "已保存的项目名称" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(await screen.findByRole("button", { name: "重命名 已保存的项目名称" })).toHaveTextContent("已保存的项目名称");
+    expect(screen.getByRole("link", { name: "打开项目 已保存的项目名称" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(router.state.location.pathname).toBe(initialEntry);
+    expect(submitted).toHaveBeenCalledExactlyOnceWith({
+      intent: "rename",
+      projectId: editableProject.id,
+      name: "已保存的项目名称",
+    });
+  });
+
+  it("edits the name in place, keeps the cover as navigation, and saves Enter plus blur only once", async () => {
+    let releaseSave: (() => void) | undefined;
+    const savePending = new Promise<void>((resolve) => { releaseSave = resolve; });
+    const submitted = vi.fn();
+    renderCard(editableProject, async ({ request }) => {
+      submitted(Object.fromEntries(await request.formData()));
+      await savePending;
+      return { ok: true };
+    });
+
+    const title = screen.getByRole("button", { name: "重命名 个人项目" });
+    expect(title).toHaveTextContent("个人项目");
+    expect(screen.getByRole("link", { name: "打开项目 个人项目" })).toHaveAttribute(
+      "href",
+      "/w/workspace-organization/projects/project-editable/canvases/main",
+    );
+    fireEvent.click(title);
+    const input = screen.getByRole("textbox", { name: "项目名称" }) as HTMLInputElement;
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(editableProject.name.length);
+
+    fireEvent.change(input, { target: { value: "春日产品影像" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
+    expect(submitted).toHaveBeenCalledWith({
+      intent: "rename",
+      projectId: editableProject.id,
+      name: "春日产品影像",
+    });
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveProperty("readOnly", true);
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+    expect(submitted).toHaveBeenCalledTimes(1);
+
+    await act(async () => { releaseSave?.(); });
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull());
+    expect(submitted).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves a changed name when focus leaves the input", async () => {
+    const submitted = vi.fn();
+    renderCard(editableProject, async ({ request }) => {
+      submitted(Object.fromEntries(await request.formData()));
+      return { ok: true };
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 个人项目" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(input, { target: { value: "秋季主视觉" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(submitted).toHaveBeenCalledWith({
+      intent: "rename",
+      projectId: editableProject.id,
+      name: "秋季主视觉",
+    }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull());
+  });
+
+  it("preserves a failed edit with a visible error and allows a corrected retry", async () => {
+    const submitted = vi.fn();
+    renderCard(editableProject, async ({ request }) => {
+      submitted(Object.fromEntries(await request.formData()));
+      return submitted.mock.calls.length === 1
+        ? { error: "保存失败，请重试。" }
+        : { ok: true };
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 个人项目" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(input, { target: { value: "第一次名称" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("保存失败，请重试。");
+    expect(screen.getByRole("alert")).toBeVisible();
+    expect(input).toHaveValue("第一次名称");
+    expect(input).toHaveProperty("readOnly", false);
+
+    fireEvent.change(input, { target: { value: "修订名称" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(submitted).toHaveBeenCalledTimes(2));
+    expect(submitted).toHaveBeenLastCalledWith({
+      intent: "rename",
+      projectId: editableProject.id,
+      name: "修订名称",
+    });
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("cancels Escape and leaves unchanged names without sending a rename request", async () => {
+    const action = vi.fn(async () => ({ ok: true }));
+    renderCard(editableProject, action);
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 个人项目" }));
+    const changedInput = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.change(changedInput, { target: { value: "取消的名称" } });
+    fireEvent.keyDown(changedInput, { key: "Escape" });
+    fireEvent.blur(changedInput);
+    expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull();
+    expect(screen.getByRole("button", { name: "重命名 个人项目" })).toHaveTextContent("个人项目");
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 个人项目" }));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "项目名称" }), { key: "Enter" });
+    expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 个人项目" }));
+    fireEvent.blur(screen.getByRole("textbox", { name: "项目名称" }));
+    expect(screen.queryByRole("textbox", { name: "项目名称" })).toBeNull();
+    await act(async () => {});
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it("does not save Enter used to confirm an IME composition", async () => {
+    const action = vi.fn(async () => ({ ok: true }));
+    renderCard(editableProject, action);
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名 个人项目" }));
+    const input = screen.getByRole("textbox", { name: "项目名称" });
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "中文名称" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true, keyCode: 229 });
+    fireEvent.compositionEnd(input);
+    await act(async () => {});
+
+    expect(action).not.toHaveBeenCalled();
+    expect(input).toHaveValue("中文名称");
+    expect(input).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows the updated date in a stable local YYYY-MM-DD format", () => {
+    const updatedAt = new Date(2026, 8, 5, 12, 30).toISOString();
+    renderCard({ ...collaborativeViewerProject, updatedAt });
+
+    expect(screen.getByText("2026-09-05")).toHaveAttribute("dateTime", updatedAt);
+    expect(screen.getByLabelText("协作项目")).toBeInTheDocument();
   });
 });

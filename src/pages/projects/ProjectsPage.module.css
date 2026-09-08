@@ -1,0 +1,38 @@
+.projectsMain { width: min(1600px, calc(100% - 96px)); margin: 0 auto; padding: 8px 0 64px; outline: none; }
+.pageTitle { margin: 0 0 20px; color: var(--workspace-text); font-size: 24px; font-weight: 550; line-height: 1.4; }
+.projectsHeading { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.scopeTabs { display: flex; flex-shrink: 0; gap: 2px; padding: 4px; border: 1px solid var(--workspace-border); border-radius: 12px; background: var(--workspace-hover); }
+.scopeTabs a { display: flex; min-width: 84px; height: 34px; align-items: center; justify-content: center; padding-inline: 18px; border-radius: 8px; color: var(--workspace-muted); font-size: 14px; line-height: 1.4; text-decoration: none; white-space: nowrap; }
+.scopeTabs a:hover { color: var(--workspace-text); }
+.scopeTabs .activeTab { background: var(--workspace-elevated); color: var(--workspace-text); box-shadow: 0 1px 3px rgb(0 0 0 / 5%); font-weight: 500; }
+.scopeTabs a:focus-visible { outline: 2px solid var(--workspace-text); outline-offset: 3px; }
+.searchBox { display: flex; width: 280px; min-width: 0; height: 44px; align-items: center; gap: 9px; padding: 0 14px; border: 1px solid var(--workspace-border); border-radius: 12px; background: var(--workspace-input); color: var(--workspace-muted); }
+.searchBox:focus-within { border-color: var(--workspace-muted); }
+.searchBox svg { width: 16px; height: 16px; flex-shrink: 0; }
+.searchBox input { min-width: 0; width: 100%; border: 0; outline: none; background: transparent; color: var(--workspace-text); font: inherit; font-size: 14px; }
+.searchBox input::placeholder { color: var(--workspace-muted); }
+.libraryGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 28px 22px; }
+.emptyProjects { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 32px; padding: 32px 20px; border-top: 1px solid var(--workspace-border); color: var(--workspace-muted); }
+.emptyProjects > svg { width: 26px; height: 26px; flex-shrink: 0; stroke-width: 1.4; }
+.emptyProjects strong { color: var(--workspace-text); font-size: 14px; font-weight: 500; }
+.emptyProjects p { margin: 8px 0 0; font-size: 12px; line-height: 1.7; }
+.toast { position: fixed; z-index: 80; right: 28px; bottom: 26px; max-width: min(420px, calc(100vw - 40px)); padding: 12px 16px; border: 1px solid var(--workspace-border); border-radius: 11px; background: var(--workspace-elevated); box-shadow: 0 16px 42px rgb(16 16 20 / 12%); color: var(--workspace-text); font-size: 13px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity 180ms ease, transform 180ms ease; }
+.toastVisible { opacity: 1; transform: translateY(0); }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 1200px) {
+  .projectsMain { width: calc(100% - 64px); }
+}
+@media (max-width: 800px) {
+  .projectsMain { width: calc(100% - 48px); }
+}
+@media (max-width: 600px) {
+  .projectsMain { width: calc(100% - 32px); }
+  .pageTitle { margin-bottom: 16px; font-size: 20px; }
+  .projectsHeading { align-items: flex-start; flex-direction: column; gap: 14px; margin-bottom: 24px; }
+  .searchBox { width: 100%; }
+  .libraryGrid { gap: 24px; }
+  .emptyProjects { align-items: flex-start; padding: 24px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; }
+}

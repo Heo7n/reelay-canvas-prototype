@@ -152,7 +152,7 @@ test("experience restores uploaded media by catalog identity after canonical doc
   assert.equal(h.window.libraryImagePreviewUrl("http://reelay.test/api/assets/1/content", "image"), "http://reelay.test/api/assets/1/content?preview=library");
 });
 
-test("experience home launch consumes its context prompt once without touching session storage", (t) => {
+for (const experience of [false, true]) test(`home launch consumes its context prompt once after hydration with experience=${experience}`, (t) => {
   const h = createHarness(t);
   h.install(h.canvas("empty"));
   h.window.sessionStorage.setItem("reelay-home-launch-intent", "internal pending prompt");
@@ -161,13 +161,35 @@ test("experience home launch consumes its context prompt once without touching s
   const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
     origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
   });
-  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: "experience-project", canvasId: "main",
-    writable: true, capabilities: { transientMediaUpload: true }, launchPrompt: "experience prompt" } });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: "new-project", canvasId: "main",
+    writable: true, capabilities: { transientMediaUpload: experience }, launchPrompt: "context prompt" } });
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+  assert.equal(h.state.nodes.length, 0);
   dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: true });
   assert.equal(h.state.nodes.length, 1);
-  assert.equal(h.state.nodes[0].prompt, "experience prompt");
+  assert.equal(h.state.nodes[0].prompt, "context prompt");
   assert.equal(h.window.consumeHomeLaunchIntent(), false);
   assert.equal(h.window.sessionStorage.getItem("reelay-home-launch-intent"), "internal pending prompt");
+});
+
+test("home launch cannot mutate a read-only document or cross into another project context", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("empty"));
+  const host = { postMessage() {} };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
+  });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, workspaceId: "workspace", projectId: "read-only-project",
+    canvasId: "main", writable: false, launchPrompt: "不能写入的需求" } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: false });
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+  assert.equal(h.state.nodes.length, 0);
+  dispatch({ type: "host:init", context: { protocolVersion: 1, workspaceId: "workspace", projectId: "other-project",
+    canvasId: "main", writable: true } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: true });
+  assert.equal(h.state.nodes.length, 0);
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
 });
 
 test("closed library catalog registration loads no media; using an asset hydrates only that node", async (t) => {

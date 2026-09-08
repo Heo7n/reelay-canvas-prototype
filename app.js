@@ -137,7 +137,6 @@ const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
-const homeLaunchIntentKey = "reelay-home-launch-intent";
 
 const models = window.REELAY_MODEL_CATALOG || [];
 const prototypeConfig = window.REELAY_PROTOTYPE_CONFIG || {};
@@ -395,8 +394,9 @@ const canvasNodeTasks = canvasNodeTaskRunnerFactory.createCanvasNodeTaskRunner({
   onCancel: applyCanvasNodeTaskCancellation,
 });
 let canvasAccessNoticeTimer = 0;
-let transientLaunchPrompt = "";
-let transientLaunchPromptReceived = false;
+let hostLaunchPrompt = "";
+let hostLaunchPromptReceived = false;
+let hostLaunchScope = "";
 const canvasInstanceId = crypto.randomUUID();
 const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
   instanceId: canvasInstanceId,
@@ -420,9 +420,15 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.hostCapabilities.assetPersistence = context.capabilities?.assetPersistence === true;
     state.hostCapabilities.entityPersistence = context.capabilities?.entityPersistence === true;
     state.hostCapabilities.transientMediaUpload = context.capabilities?.transientMediaUpload === true;
-    if (state.hostCapabilities.transientMediaUpload && !transientLaunchPromptReceived) {
-      transientLaunchPrompt = String(context.launchPrompt || "").trim().slice(0, 600);
-      transientLaunchPromptReceived = true;
+    const launchScope = JSON.stringify([context.workspaceId, context.projectId, context.canvasId]);
+    if (hostLaunchScope !== launchScope) {
+      hostLaunchScope = launchScope;
+      hostLaunchPrompt = "";
+      hostLaunchPromptReceived = false;
+    }
+    if (!hostLaunchPromptReceived && context.launchPrompt) {
+      hostLaunchPrompt = String(context.launchPrompt).trim().slice(0, 600);
+      hostLaunchPromptReceived = true;
     }
     state.projects = normalizeProjectOptions(context.projects);
     state.projectSearch = "";
@@ -7019,25 +7025,13 @@ function addNodeAt(clientX, clientY, mode = "image", options = {}) {
 
 function consumeHomeLaunchIntent() {
   if (!isCanvasMutationAllowed()) return false;
-  let prompt = "";
-  try {
-    prompt = state.hostCapabilities.transientMediaUpload
-      ? transientLaunchPrompt
-      : sessionStorage.getItem(homeLaunchIntentKey)?.trim() || "";
-  } catch {
-    return false;
-  }
+  const prompt = hostLaunchPrompt;
   if (!prompt) return false;
   const node = addNodeAt(window.innerWidth / 2, window.innerHeight / 2);
   if (!node) return false;
   node.prompt = prompt;
   node.expanded = true;
-  try {
-    if (state.hostCapabilities.transientMediaUpload) transientLaunchPrompt = "";
-    else sessionStorage.removeItem(homeLaunchIntentKey);
-  } catch {
-    // The node is already created; storage cleanup can safely fail.
-  }
+  hostLaunchPrompt = "";
   render();
   scheduleCanvasDocumentSave(0);
   return true;

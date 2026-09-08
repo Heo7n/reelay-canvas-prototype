@@ -1,0 +1,17 @@
+.form { min-width: 0; margin: 0; }
+.card { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: var(--workspace-text); font: inherit; text-align: left; cursor: pointer; }
+.cover { border: 1px solid var(--workspace-border-strong); background: linear-gradient(135deg, var(--workspace-elevated), color-mix(in srgb, var(--workspace-text) 5%, var(--workspace-bg))); transition: border-color 160ms ease; }
+.content { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; font-size: 14px; font-weight: 500; }
+.content > svg { width: 28px; height: 28px; stroke-width: 1.5; }
+.info { display: block; color: var(--workspace-muted); font-size: 14px; font-weight: 400; }
+.info > span:first-child { align-items: center; }
+.card:hover:not(:disabled) .cover { border-color: var(--workspace-muted); }
+.card:focus-visible { outline: none; }
+.card:focus-visible .cover { outline: 2px solid var(--workspace-text); outline-offset: 3px; }
+.card:disabled { opacity: .5; cursor: wait; }
+.spinner { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .cover { transition: none; }
+  .spinner { animation: none; }
+}
