@@ -137,7 +137,6 @@ const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
-const homeLaunchIntentKey = "reelay-home-launch-intent";
 
 const models = window.REELAY_MODEL_CATALOG || [];
 const prototypeConfig = window.REELAY_PROTOTYPE_CONFIG || {};
@@ -160,6 +159,10 @@ const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
 if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
 const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
 if (!canvasPopoverPlacement) throw new Error("Canvas popover placement helper is unavailable.");
+window.REELAY_CANVAS_PARAMETER_HELP.createController({
+  document,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+});
 const assetLibraryItemMenu = window.REELAY_CANVAS_ASSET_LIBRARY_MENU_CONTROLLER.create({
   grid: assetLibraryGrid,
   placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
@@ -265,6 +268,8 @@ const state = {
     assetPersistence: false,
     entityPersistence: false,
     transientMediaUpload: false,
+    progressiveAssetLoading: false,
+    workspaceCatalog: "unavailable",
   },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
@@ -395,8 +400,9 @@ const canvasNodeTasks = canvasNodeTaskRunnerFactory.createCanvasNodeTaskRunner({
   onCancel: applyCanvasNodeTaskCancellation,
 });
 let canvasAccessNoticeTimer = 0;
-let transientLaunchPrompt = "";
-let transientLaunchPromptReceived = false;
+let hostLaunchPrompt = "";
+let hostLaunchPromptReceived = false;
+let hostLaunchScope = "";
 const canvasInstanceId = crypto.randomUUID();
 const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
   instanceId: canvasInstanceId,
@@ -420,9 +426,17 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.hostCapabilities.assetPersistence = context.capabilities?.assetPersistence === true;
     state.hostCapabilities.entityPersistence = context.capabilities?.entityPersistence === true;
     state.hostCapabilities.transientMediaUpload = context.capabilities?.transientMediaUpload === true;
-    if (state.hostCapabilities.transientMediaUpload && !transientLaunchPromptReceived) {
-      transientLaunchPrompt = String(context.launchPrompt || "").trim().slice(0, 600);
-      transientLaunchPromptReceived = true;
+    state.hostCapabilities.progressiveAssetLoading = context.capabilities?.progressiveAssetLoading === true;
+    state.hostCapabilities.workspaceCatalog = state.hostCapabilities.progressiveAssetLoading ? "loading" : "unavailable";
+    const launchScope = JSON.stringify([context.workspaceId, context.projectId, context.canvasId]);
+    if (hostLaunchScope !== launchScope) {
+      hostLaunchScope = launchScope;
+      hostLaunchPrompt = "";
+      hostLaunchPromptReceived = false;
+    }
+    if (!hostLaunchPromptReceived && context.launchPrompt) {
+      hostLaunchPrompt = String(context.launchPrompt).trim().slice(0, 600);
+      hostLaunchPromptReceived = true;
     }
     state.projects = normalizeProjectOptions(context.projects);
     state.projectSearch = "";
@@ -466,6 +480,14 @@ const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAs
     if (!response.ok) throw new Error(`媒体上传失败（${response.status}）`);
   },
   useTransientUpload: () => state.hostCapabilities.transientMediaUpload,
+  usesProgressiveAssetLoading: () => state.hostCapabilities.progressiveAssetLoading,
+  onAvailability({ projectAssets, workspaceCatalog }) {
+    state.hostCapabilities.assetPersistence = projectAssets === "ready" && workspaceCatalog !== "loading";
+    state.hostCapabilities.entityPersistence = workspaceCatalog === "ready";
+    state.hostCapabilities.workspaceCatalog = workspaceCatalog;
+    renderAssetLibrary();
+    canvasEntityUse.refresh({ renderPicker: true });
+  },
   onProjectAssets: (assets) => {
     if (state.hostCapabilities.transientMediaUpload) restoreTransientCanvasMedia(assets.map(projectAssetToLibraryMedia));
   },
@@ -1216,6 +1238,7 @@ function syncNodeVisualLayout(
   if (!element) return;
   const { y, layout } = presentation;
   const canonicalLayout = getNodeLayout(node);
+  canvasMediaImageView.syncImages(element, { scale: state.scale, displayWidth: canonicalLayout.mediaWidth });
   const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
   element.style.left = `${node.x}px`;
   element.style.top = `${node.y}px`;
@@ -2834,12 +2857,6 @@ function syncCreditDisplay() {
     profileCreditValue.closest("[data-profile-action='credits']")
       ?.setAttribute("aria-label", `查看我的积分，当前 ${credits}`);
   }
-  if (agentCreditValue) agentCreditValue.textContent = credits;
-  if (agentSendButton) {
-    const label = `发送；当前可用积分 ${credits}`;
-    agentSendButton.title = label;
-    agentSendButton.setAttribute("aria-label", label);
-  }
 }
 
 function hasEnoughCredits(cost) {
@@ -3270,6 +3287,8 @@ function mediaEditToolbar(node, layout) {
   });
 }
 
+const canvasMediaImageView = window.REELAY_CANVAS_MEDIA_IMAGE_VIEW.createCanvasMediaImageView({ origin: window.location.origin });
+
 function assetPreview(asset) {
   const safeUrl = safeMediaAttributeUrl(asset.url);
   if (!safeUrl) {
@@ -3278,7 +3297,7 @@ function assetPreview(asset) {
     return `<span class="asset-glyph">▧</span>`;
   }
   if (asset.type === "image") {
-    return `<img src="${safeUrl}" alt="" draggable="false" />`;
+    return canvasMediaImageView.renderImage({ ...asset, url: sanitizeRuntimeMediaUrl(asset.url) }, { thumbnail: true });
   }
   if (asset.type === "video") {
     return `
@@ -3415,13 +3434,21 @@ function switchAssetLibraryContext({ space = state.librarySpace, section = state
 
 function isAssetLibraryMutable() {
   return canvasAssetLibraryModel.isMutableSpace(state.librarySpace)
-    && (window.parent === window || state.hostCapabilities.hostWritable);
+    && (window.parent === window || state.hostCapabilities.hostWritable)
+    && (state.librarySpace !== "personal" || !getPersonalCatalogStatus());
+}
+
+function getPersonalCatalogStatus() {
+  return window.parent !== window && state.hostCapabilities.progressiveAssetLoading
+    && state.hostCapabilities.workspaceCatalog !== "ready"
+    ? state.hostCapabilities.workspaceCatalog : "";
 }
 
 function canPersistLibraryMedia() {
   return window.parent === window || (
     state.hostCapabilities.hostWritable
     && state.hostCapabilities.assetPersistence
+    && !getPersonalCatalogStatus()
   );
 }
 
@@ -3508,6 +3535,9 @@ function getAssetLibraryFolderDescendantIds(folderId) {
 }
 
 function getVisibleAssetLibraryContent() {
+  if (state.librarySpace === "personal" && getPersonalCatalogStatus()) {
+    return { folders: [], allItems: [], items: [] };
+  }
   const kind = state.librarySection;
   const query = state.librarySearch;
   const mediaKind = kind === "media" ? state.libraryFilter : "all";
@@ -3699,7 +3729,12 @@ function renderAssetLibrary() {
     })
     .join("");
 
-  canvasAssetLibraryView.syncGrid(assetLibraryGrid, folderMarkup + itemMarkup || canvasAssetLibraryView.renderEmptyState({
+  const catalogStatus = space === "personal" ? getPersonalCatalogStatus() : "";
+  const catalogNotice = catalogStatus
+    ? `<div class="asset-library-empty" role="status"><strong>${catalogStatus === "loading"
+      ? "正在加载个人资产…" : "个人资产暂时无法加载"}</strong><span>${catalogStatus === "loading"
+      ? "画布可继续编辑" : "重新进入项目后重试"}</span></div>` : "";
+  canvasAssetLibraryView.syncGrid(assetLibraryGrid, catalogNotice || folderMarkup + itemMarkup || canvasAssetLibraryView.renderEmptyState({
     section,
     space,
     hasQuery: Boolean(state.librarySearch || (section === "media" && state.libraryFilter !== "all")),
@@ -3709,7 +3744,9 @@ function renderAssetLibrary() {
   }));
 
   if (assetLibraryCount) {
-    if (platform) {
+    if (catalogStatus) {
+      assetLibraryCount.textContent = catalogStatus === "loading" ? "正在加载" : "暂时无法加载";
+    } else if (platform) {
       assetLibraryCount.textContent = `共 ${items.length} 个结果`;
     } else {
     const noun = section === "entity" ? "个主体" : "个素材";
@@ -3790,6 +3827,7 @@ function getEntityUseDetailPayload(entityId, space) {
 function getEntityUsePickerEntities() {
   const entitiesById = new Map();
   for (const space of ["personal", "organization"]) {
+    if (space === "personal" && getPersonalCatalogStatus()) continue;
     const entities = assetLibraryStore.listItems({ space, kind: "entity" });
     for (const entity of entities) {
       const existing = entitiesById.get(entity.id);
@@ -4296,7 +4334,7 @@ function createGeneratedAsset(parameterSnapshot) {
   return generated;
 }
 
-function generatorMediaContent(node) {
+function generatorMediaContent(node, displayWidth) {
   if (node.generating) {
     return `
       <div class="media-content generating-preview">
@@ -4307,7 +4345,7 @@ function generatorMediaContent(node) {
   }
 
   if (node.generatedAsset) {
-    return assetMediaContent(node.generatedAsset);
+    return assetMediaContent(node.generatedAsset, displayWidth);
   }
 
   if (node.preview) {
@@ -4343,7 +4381,7 @@ function generatorMediaContent(node) {
   `;
 }
 
-function assetMediaContent(asset) {
+function assetMediaContent(asset, displayWidth) {
   if (!asset) {
     return `
       <div class="media-content empty-image">
@@ -4355,7 +4393,7 @@ function assetMediaContent(asset) {
   const safeUrl = safeMediaAttributeUrl(asset.url);
 
   if (asset.type === "image" && safeUrl) {
-    return `<div class="media-content image"><img class="frame-media" src="${safeUrl}" alt="" draggable="false" /></div>`;
+    return `<div class="media-content image">${canvasMediaImageView.renderImage({ ...asset, url: sanitizeRuntimeMediaUrl(asset.url) }, { className: "frame-media", displayWidth })}</div>`;
   }
 
   if (asset.type === "video" && safeUrl) {
@@ -4542,6 +4580,11 @@ function isCanvasDropTarget(target) {
 }
 
 function render() {
+  renderCanvasView();
+  scheduleCanvasDocumentSave();
+}
+
+function renderCanvasView() {
   canvasEntityUse.refresh();
   if (state.activeGroupId && !getGroupById(state.activeGroupId)) state.activeGroupId = null;
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
@@ -4558,7 +4601,6 @@ function render() {
   syncCanvasAccessUi();
   scheduleGroupChromeLayout();
   requestAnimationFrame(syncPromptPanelLayouts);
-  scheduleCanvasDocumentSave();
 }
 
 function getNodeRenderSignature(node) {
@@ -4899,11 +4941,12 @@ function createAssetNodeElement(node) {
     <section class="media-frame source-frame ${asset ? `has-asset ${asset.type}-asset` : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
-      ${assetMediaContent(asset)}
+      ${assetMediaContent(asset, layout.mediaWidth)}
       ${nodePortMarkup(node)}
     </section>
   `;
 
+  canvasMediaImageView.syncImages(el, { scale: state.scale, displayWidth: layout.mediaWidth });
   bindNodeEvents(el, node);
   return el;
 }
@@ -4945,7 +4988,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
         ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
-        <textarea class="prompt-input" data-node-prompt-input placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
+        <textarea class="prompt-input" data-node-prompt-input placeholder="${escapeHtml(generatorModelPolicy.getPromptPlaceholder(models, node))}" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
           <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" aria-label="${escapeHtml(model?.name || "暂无可用模型")}" title="${escapeHtml(model?.name || "暂无可用模型")}" ${generationInputsDisabled}>
             ${modelIconMarkup(model, "model-chip-glyph")}
@@ -4967,7 +5010,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
           </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
             <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
-            <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.25 20.6V9.45L6.7 13q-.95.95-1.9 0l-.75-.75q-.95-.95 0-1.9l6.5-6.5q1.45-1.45 2.9 0l6.5 6.5q.95.95 0 1.9l-.75.75q-.95.95-1.9 0l-3.55-3.55V20.6q0 1.4-1.4 1.4h-.7q-1.4 0-1.4-1.4Z" /></svg></span>
+            <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></span>
           </button>
         </div>
         ${node.panel === "material" ? materialPanel() : ""}
@@ -4982,12 +5025,13 @@ function createGeneratorNodeElement(node, existingElement = null) {
     <section class="media-frame generator-frame ${node.preview ? "has-preview" : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
-      ${generatorMediaContent(node)}
+      ${generatorMediaContent(node, layout.mediaWidth)}
       ${nodePortMarkup(node)}
     </section>
     ${promptPanel}
   `);
 
+  canvasMediaImageView.syncImages(el, { scale: state.scale, displayWidth: layout.mediaWidth });
   bindNodeEvents(el, node, { bindRoot: !existingElement, bindMedia: !retainedMedia });
   const promptInput = el.querySelector(".prompt-input");
   if (!retainedInput) promptInput?.addEventListener("keydown", (event) => {
@@ -5960,12 +6004,16 @@ function omniReferenceTaskTypeParameterSection(node, canvas = true) {
   const values = Array.isArray(capability?.uiValues) ? capability.uiValues : [];
   if (!values.length) return "";
   const activeIndex = Math.max(0, values.indexOf(node.omniReferenceTaskType));
+  const helpItems = values.map((value) => ({
+    title: getOmniReferenceTaskTypeLabel(node, value),
+    description: capability.descriptions?.[value],
+  })).filter((item) => item.description);
   return `
     <section class="parameter-group parameter-omni-reference-task-type">
-      <div class="param-heading">模式</div>
+      <div class="param-heading parameter-mode-heading"><span>模式</span>${helpItems.length ? `<button class="parameter-mode-help" data-parameter-help data-help-title="模式说明" data-help-items="${escapeHtml(JSON.stringify(helpItems))}" type="button" aria-label="了解三种视频模式"><i data-lucide="circle-help" aria-hidden="true"></i></button>` : ""}</div>
       <div class="segmented omni-reference-task-type-segmented" style="--option-columns: ${values.length}; --task-type-selection-index: ${activeIndex}">
         ${values.map((value) => `
-          <button class="${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" ${canvas ? "data-canvas-mutation" : ""} type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
+          <button class="parameter-mode-select ${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" ${canvas ? "data-canvas-mutation" : ""} type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
         `).join("")}
       </div>
     </section>
@@ -7019,25 +7067,13 @@ function addNodeAt(clientX, clientY, mode = "image", options = {}) {
 
 function consumeHomeLaunchIntent() {
   if (!isCanvasMutationAllowed()) return false;
-  let prompt = "";
-  try {
-    prompt = state.hostCapabilities.transientMediaUpload
-      ? transientLaunchPrompt
-      : sessionStorage.getItem(homeLaunchIntentKey)?.trim() || "";
-  } catch {
-    return false;
-  }
+  const prompt = hostLaunchPrompt;
   if (!prompt) return false;
   const node = addNodeAt(window.innerWidth / 2, window.innerHeight / 2);
   if (!node) return false;
   node.prompt = prompt;
   node.expanded = true;
-  try {
-    if (state.hostCapabilities.transientMediaUpload) transientLaunchPrompt = "";
-    else sessionStorage.removeItem(homeLaunchIntentKey);
-  } catch {
-    // The node is already created; storage cleanup can safely fail.
-  }
+  hostLaunchPrompt = "";
   render();
   scheduleCanvasDocumentSave(0);
   return true;
@@ -7709,6 +7745,15 @@ function syncAgentModelButton() {
       : `已选模型：${names.join("、") || "未选择"}`;
   const model = getAgentComposerModel();
   const parameters = agentParameters.sync(model);
+  if (agentInput) agentInput.placeholder = generatorModelPolicy.getPromptPlaceholder(models, parameters);
+  const cost = parameters ? getCost(parameters) : null;
+  const costLabel = Number.isFinite(cost) && cost > 0 ? formatCredit(cost) : null;
+  if (agentCreditValue) agentCreditValue.textContent = costLabel ?? "—";
+  if (agentSendButton) {
+    const label = costLabel ? `发送；本次预计消耗 ${costLabel} 积分` : "发送；本次消耗待估算";
+    agentSendButton.title = label;
+    agentSendButton.setAttribute("aria-label", label);
+  }
   const agentManaged = agentModels.getMode() === "agent";
   if (agentModelBtn) {
     agentModelBtn.disabled = false;
@@ -9567,7 +9612,7 @@ function restoreTransientCanvasMedia(media) {
       }
     }
   }
-  if (changed) render();
+  if (changed) renderCanvasView();
 }
 
 function syncHostEntity(entity) {
@@ -11071,4 +11116,6 @@ window.REELAY_CANVAS_LAYOUT_TUNER_BOOTSTRAP?.({
     }[key];
   },
 });
+// Separate negotiation keeps the original strict ready message compatible with older hosts.
+canvasPersistence.post("canvas:capabilities", { capabilities: { progressiveAssetLoading: true } });
 canvasPersistence.post("canvas:ready");

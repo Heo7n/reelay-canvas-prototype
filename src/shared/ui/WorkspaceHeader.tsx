@@ -50,6 +50,7 @@ interface WorkspaceHeaderProps {
   actor: SessionActor;
   currentWorkspace: Workspace;
   showAccount?: boolean;
+  showBrand?: boolean;
 }
 
 function ShortcutHelp() {
@@ -140,6 +141,7 @@ export function WorkspaceHeader({
   actor,
   currentWorkspace,
   showAccount = true,
+  showBrand = true,
 }: WorkspaceHeaderProps) {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
@@ -191,8 +193,8 @@ export function WorkspaceHeader({
 
   return (
     <>
-      <header className={styles.header}>
-        <Brand to={routePaths.workspaceHome(currentWorkspace.id)} />
+      <header className={`${styles.header} ${showBrand ? "" : styles.accountOnly}`}>
+        {showBrand ? <Brand to={routePaths.workspaceHome(currentWorkspace.id)} /> : null}
 
         {showAccount ? (
           <div className={styles.account}>

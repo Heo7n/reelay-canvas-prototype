@@ -159,7 +159,8 @@ describe("asset persistence routes", () => {
     });
     expect(content.statusCode).toBe(206);
     expect(content.headers["content-range"]).toBe(`bytes 2-5/${body.byteLength}`);
-    expect(content.headers["cache-control"]).toBe("private, no-store");
+    expect(content.headers["cache-control"]).toBe("private, no-cache");
+    expect(content.headers.vary).toBe("Cookie");
     expect(content.headers.etag).toBe(`"${checksumSha256}"`);
     expect(content.headers["x-content-type-options"]).toBe("nosniff");
     expect(content.rawPayload).toEqual(body.subarray(2, 6));

@@ -9,6 +9,7 @@ const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-hist
 const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
 const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
 const assetLibraryMenuController = await readFile(new URL("src/legacy-canvas/canvas-asset-library-menu-controller.js", root), "utf8");
+const parameterHelpController = await readFile(new URL("src/legacy-canvas/canvas-parameter-help-controller.js", root), "utf8");
 const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
@@ -51,9 +52,11 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
-const [nodeEditorLayout, nodePromptView] = await Promise.all([
+const [nodeEditorLayout, nodePromptView, mediaImageView, mediaPreview] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-node-editor-layout.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-prompt-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-image-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-preview.js", root), "utf8"),
 ]);
 
 test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", (t) => {
@@ -93,6 +96,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(layerReconciler);
   window.eval(generatorModelPolicy);
   window.eval(popoverPlacement);
+  window.eval(parameterHelpController);
   window.eval(spatialSelection);
   window.eval(nodeInteraction);
   window.eval(nodePlacement);
@@ -115,6 +119,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(entityUseView);
   window.eval(entityUseController);
   window.eval(mediaToolbarView);
+  window.eval(mediaImageView);
+  window.eval(mediaPreview);
   window.eval(runtimeStore);
   window.eval(nodeTaskRunner);
   window.eval(contentCommands);

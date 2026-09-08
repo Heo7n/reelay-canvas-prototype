@@ -152,7 +152,7 @@ test("experience restores uploaded media by catalog identity after canonical doc
   assert.equal(h.window.libraryImagePreviewUrl("http://reelay.test/api/assets/1/content", "image"), "http://reelay.test/api/assets/1/content?preview=library");
 });
 
-test("experience home launch consumes its context prompt once without touching session storage", (t) => {
+for (const experience of [false, true]) test(`home launch consumes its context prompt once after hydration with experience=${experience}`, (t) => {
   const h = createHarness(t);
   h.install(h.canvas("empty"));
   h.window.sessionStorage.setItem("reelay-home-launch-intent", "internal pending prompt");
@@ -161,13 +161,119 @@ test("experience home launch consumes its context prompt once without touching s
   const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
     origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
   });
-  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: "experience-project", canvasId: "main",
-    writable: true, capabilities: { transientMediaUpload: true }, launchPrompt: "experience prompt" } });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: "new-project", canvasId: "main",
+    writable: true, capabilities: { transientMediaUpload: experience }, launchPrompt: "context prompt" } });
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+  assert.equal(h.state.nodes.length, 0);
   dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: true });
   assert.equal(h.state.nodes.length, 1);
-  assert.equal(h.state.nodes[0].prompt, "experience prompt");
+  assert.equal(h.state.nodes[0].prompt, "context prompt");
   assert.equal(h.window.consumeHomeLaunchIntent(), false);
   assert.equal(h.window.sessionStorage.getItem("reelay-home-launch-intent"), "internal pending prompt");
+});
+
+test("home launch cannot mutate a read-only document or cross into another project context", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("empty"));
+  const host = { postMessage() {} };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
+  });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, workspaceId: "workspace", projectId: "read-only-project",
+    canvasId: "main", writable: false, launchPrompt: "不能写入的需求" } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: false });
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+  assert.equal(h.state.nodes.length, 0);
+  dispatch({ type: "host:init", context: { protocolVersion: 1, workspaceId: "workspace", projectId: "other-project",
+    canvasId: "main", writable: true } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: true });
+  assert.equal(h.state.nodes.length, 0);
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+});
+
+test("progressive asset arrival preserves the editable document, running task, save, undo and focused prompt", (t) => {
+  const h = createHarness(t);
+  const editing = h.node("editing", { expanded: true, assets: [{ id: "local", librarySourceId: "memory-file",
+    type: "image", name: "local.png", url: "" }], activeAssetId: "local" });
+  const running = h.node("running");
+  h.install(h.canvas("working", [editing, running]));
+  const posted = [];
+  const host = { postMessage(message) { posted.push(message); } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.dispatchEvent(new h.window.MessageEvent("message", {
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  }));
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: "main", writable: true,
+    capabilities: { progressiveAssetLoading: true, transientMediaUpload: true, assetPersistence: false, entityPersistence: false } } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  h.window.canvasTest.canvasPersistence.post("canvas:ready");
+  const instanceId = posted.findLast((message) => message.type === "canvas:ready").instanceId;
+  const availability = (projectAssets, workspaceCatalog) => dispatch({ type: "host:asset-availability", instanceId, projectAssets, workspaceCatalog });
+  availability("loading", "loading");
+  assert.equal(h.window.isCanvasMutationAllowed(), true);
+  assert.equal(h.window.canPersistLibraryMedia(), false);
+  h.window.openAssetLibrary();
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /正在加载个人资产/);
+  assert.equal(h.window.isAssetLibraryMutable(), false);
+  h.window.closeAssetLibrary();
+
+  assert.equal(h.window.startSimulatedGeneration(running), true);
+  const task = h.scheduledTask();
+  h.moveNode(editing.id, 30, 15);
+  h.window.flushCanvasDocumentSave();
+  const undoStack = h.state.canvases[0].undoStack;
+  const undoCount = undoStack.length;
+  const input = h.window.document.querySelector('[data-id="editing"] [data-node-prompt-input]');
+  input.focus();
+  input.setSelectionRange(2, 6);
+  const before = JSON.stringify(h.window.canvasTest.canvasPersistence.getState());
+  const credits = JSON.stringify(h.state.account);
+  const media = { assetId: "memory-file", assetVersion: 1, mediaKind: "image", displayName: "local.png",
+    contentType: "image/png", byteSize: 42, checksumSha256: "a".repeat(64), contentUrl: "blob:http://reelay.test/current" };
+  dispatch({ type: "host:workspace-asset-catalog", instanceId, requestId: "personal-ready", assets: [media], entities: [] });
+  availability("loading", "ready");
+  assert.equal(h.window.canPersistLibraryMedia(), false, "project discovery has not yet settled");
+  assert.equal(h.window.canPersistLibraryEntities(), true);
+  dispatch({ type: "host:project-assets", instanceId, requestId: "project-ready", projectAssets: [{ ...media, referenceId: "reference" }] });
+  availability("ready", "ready");
+  assert.equal(h.window.canPersistLibraryMedia(), true);
+  assert.equal(editing.assets[0].url, "blob:http://reelay.test/current");
+  assert.equal(h.state.activeCanvasId, "working");
+  assert.equal(h.state.nodes[0], editing);
+  assert.equal(h.state.canvases[0].undoStack, undoStack);
+  assert.equal(undoStack.length, undoCount);
+  assert.equal(JSON.stringify(h.window.canvasTest.canvasPersistence.getState()), before);
+  assert.equal(running.generating, true);
+  assert.equal(h.timers.has(task.timeoutId), true);
+  assert.equal(JSON.stringify(h.state.account), credits);
+  assert.equal(h.window.document.activeElement, input);
+  assert.equal(h.window.document.querySelector('[data-id="editing"] [data-node-prompt-input]'), input);
+  assert.equal(input.selectionStart, 2);
+  assert.equal(input.selectionEnd, 6);
+});
+
+test("progressive personal catalog failure exposes unavailable state without writable placeholder data", (t) => {
+  const h = createHarness(t);
+  const posted = [];
+  const host = { postMessage(message) { posted.push(message); } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.dispatchEvent(new h.window.MessageEvent("message", {
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  }));
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: "main", writable: true,
+    capabilities: { progressiveAssetLoading: true } } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  h.window.canvasTest.canvasPersistence.post("canvas:ready");
+  const instanceId = posted.findLast((message) => message.type === "canvas:ready").instanceId;
+  dispatch({ type: "host:asset-availability", instanceId, projectAssets: "ready", workspaceCatalog: "unavailable" });
+  h.window.openAssetLibrary();
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /个人资产暂时无法加载/);
+  assert.equal(h.window.isAssetLibraryMutable(), false);
+  assert.equal(h.window.canPersistLibraryMedia(), false);
+  assert.equal(h.window.canPersistLibraryEntities(), false);
+  assert.equal(h.window.isCanvasMutationAllowed(), true);
+  assert.equal(h.state.hostCapabilities.assetPersistence, true, "project-local file uploads can remain available after personal discovery fails");
 });
 
 test("closed library catalog registration loads no media; using an asset hydrates only that node", async (t) => {
@@ -281,6 +387,60 @@ test("node controls preserve the live prompt editor and media across content ren
   replacementInput.dispatchEvent(new h.window.Event("input", { bubbles: true }));
   assert.equal(replacement.prompt, "只属于新画布");
   assert.equal(node.prompt, "外部更新后的提示词");
+});
+
+test("mode guidance updates the live node editor without becoming prompt content or resetting reading state", (t) => {
+  const h = createHarness(t);
+  const guidance = h.window.REELAY_MODEL_CATALOG.find((model) => model.id === "seedance-2-5")
+    .capabilities.omniReferenceTaskType.promptPlaceholders;
+  assert.ok(guidance?.auto && guidance?.edit && guidance?.extend, "the model catalog supplies each visible task's guidance");
+  const node = h.node("mode-guidance", { expanded: true, model: "seedance-2-5", prompt: "" });
+  const canvas = h.canvas("guidance", [node]);
+  h.install(canvas);
+  const element = h.window.document.querySelector('[data-id="mode-guidance"]');
+  const input = element.querySelector("[data-node-prompt-input]");
+  assert.equal(input.placeholder, guidance.auto, "initial rendering resolves the default task");
+  h.window.handleAction(node, "omni-reference-task-type", "edit");
+  assert.equal(element.querySelector("[data-node-prompt-input]"), input);
+  assert.equal(input.placeholder, guidance.edit);
+  assert.equal(input.value, "");
+  assert.equal(node.prompt, "");
+  assert.equal(canvas.undoStack.length, 1, "guidance adds no separate content command");
+  assert.equal(h.window.getGenerationAvailability(node).canGenerate, false, "placeholder text cannot enable generation");
+
+  const prompt = "镜头缓慢推进，保持光影连续。".repeat(120);
+  input.value = prompt;
+  input.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  input.setSelectionRange(8, 28, "backward");
+  input.scrollTop = 640;
+  input.focus();
+  const valueDescriptor = Object.getOwnPropertyDescriptor(h.window.HTMLTextAreaElement.prototype, "value");
+  let valueWrites = 0;
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get() { return valueDescriptor.get.call(this); },
+    set(value) { valueWrites += 1; valueDescriptor.set.call(this, value); },
+  });
+  function assertEditor(expectedPlaceholder) {
+    assert.equal(element.querySelector("[data-node-prompt-input]"), input);
+    assert.equal(input.placeholder, expectedPlaceholder);
+    assert.equal(input.value, prompt);
+    assert.equal(node.prompt, prompt);
+    assert.equal(input.scrollTop, 640);
+    assert.deepEqual([input.selectionStart, input.selectionEnd, input.selectionDirection], [8, 28, "backward"]);
+    assert.equal(h.window.document.activeElement, input);
+    assert.equal(valueWrites, 0, "metadata updates must not rewrite the live value and discard native text undo");
+  }
+  element.querySelector('[data-action="omni-reference-task-type"][data-value="extend"]').click();
+  assertEditor(guidance.extend);
+  h.window.undoLastAction();
+  assertEditor(guidance.edit);
+  h.window.handleAction(node, "model", "kling-video-3");
+  assertEditor("描述你想生成的内容，或输入 @ 引用");
+  h.window.undoLastAction();
+  assertEditor(guidance.edit);
+  h.window.render();
+  assertEditor(guidance.edit);
 });
 
 test("prompt scrolling follows editing focus instead of interrupting canvas navigation on hover", (t) => {
@@ -1876,6 +2036,145 @@ function agentParameterControls(h) {
   };
   return { trigger, menu, click, mode, model, open };
 }
+
+test("Agent send estimate follows the generation model and parameters and recovers from unknown costs", (t) => {
+  const h = createHarness(t);
+  h.window.setAgentOpen(true);
+  const controls = agentParameterControls(h);
+  const { document } = h.window;
+  const amount = document.querySelector("#agentCreditValue");
+  const send = document.querySelector(".agent-send");
+  const assertEstimate = (cost) => {
+    assert.equal(amount.textContent, cost === null ? "—" : String(cost));
+    const label = cost === null ? "发送；本次消耗待估算" : `发送；本次预计消耗 ${cost} 积分`;
+    assert.equal(send.getAttribute("aria-label"), label);
+    assert.equal(send.title, label);
+  };
+
+  assert.equal(h.window.getAgentComposerModel().id, "seedance-2");
+  assertEstimate(12);
+  controls.open();
+  const duration = controls.menu.querySelector("[data-duration-range]");
+  duration.value = "8";
+  duration.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assertEstimate(24);
+  controls.click("quality", "1080p");
+  assertEstimate(36);
+
+  controls.model("seedance-2-5");
+  assertEstimate(24);
+  controls.open();
+  controls.click("omni-reference-task-type", "edit");
+  assertEstimate(null);
+  controls.click("omni-reference-task-type", "auto");
+  assertEstimate(24);
+
+  controls.model("gpt-image-2");
+  assertEstimate(5);
+  controls.open();
+  controls.click("resolution", "4K");
+  assertEstimate(9);
+  controls.click("quality", "高");
+  assertEstimate(17);
+  controls.mode("agent");
+  assertEstimate(null);
+  controls.mode("generation");
+  assertEstimate(17);
+  controls.model("seedance-2");
+  assertEstimate(36);
+});
+
+test("Agent send estimate is independent of account balance and simulated messages do not charge or change canvases", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("one", [h.node("shared-id")]);
+  const second = h.canvas("two", [h.node("shared-id", { model: "seedance-2-5" })]);
+  h.install(first, second);
+  h.window.setAgentOpen(true);
+  const { document } = h.window;
+  const snapshot = plain(h.window.createCanvasDocumentSnapshot());
+  const canvases = plain([first, second]);
+  const amount = document.querySelector("#agentCreditValue");
+  const send = document.querySelector(".agent-send");
+  const estimate = { amount: amount.textContent, label: send.getAttribute("aria-label") };
+
+  h.window.chargeCredits(27);
+  assert.equal(h.state.account.credits, 2973);
+  assert.equal(h.state.account.consumedCredits, 27);
+  assert.equal(document.querySelector("#profileCreditValue").textContent, "2,973");
+  assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
+
+  const account = plain(h.state.account);
+  const conversation = h.window.getConversation();
+  const messageCount = conversation.messages.length;
+  const input = document.querySelector("#agentInput");
+  input.value = "生成一个森林中的视频镜头";
+  send.click();
+  assert.equal(conversation.messages.length, messageCount + 2, "the local user message and example reply remain available");
+  assert.equal(conversation.messages[messageCount].content, "生成一个森林中的视频镜头");
+  assert.equal(input.value, "");
+  assert.deepEqual(plain(h.state.account), account);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.deepEqual(plain([first, second]), canvases);
+  assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
+});
+
+test("Agent task and model switches update guidance while preserving the original input and canvas content", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("agent-guidance", [h.node("unrelated")]));
+  h.window.setAgentOpen(true);
+  const input = h.window.document.querySelector("#agentInput");
+  const controls = agentParameterControls(h);
+  const guidance = h.window.REELAY_MODEL_CATALOG.find((model) => model.id === "seedance-2-5")
+    .capabilities.omniReferenceTaskType.promptPlaceholders;
+  assert.ok(guidance?.auto && guidance?.edit && guidance?.extend);
+  const generic = "描述你想生成的内容，或输入 @ 引用";
+  assert.equal(input.placeholder, generic);
+  const snapshot = plain(h.window.createCanvasDocumentSnapshot());
+  controls.model("seedance-2-5");
+  assert.equal(input.placeholder, guidance.auto);
+  controls.open();
+  controls.click("omni-reference-task-type", "edit");
+  assert.equal(input.placeholder, guidance.edit);
+  assert.equal(input.value, "");
+  h.window.sendAgentMessage();
+  assert.equal(input.value, "", "mode guidance is not message content");
+
+  const prompt = "继续修改画面并保留其余镜头。".repeat(80);
+  input.value = prompt;
+  input.setSelectionRange(7, 20, "backward");
+  input.scrollTop = 480;
+  const valueDescriptor = Object.getOwnPropertyDescriptor(h.window.HTMLTextAreaElement.prototype, "value");
+  let valueWrites = 0;
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get() { return valueDescriptor.get.call(this); },
+    set(value) { valueWrites += 1; valueDescriptor.set.call(this, value); },
+  });
+  function assertEditor(expectedPlaceholder) {
+    assert.equal(h.window.document.querySelector("#agentInput"), input);
+    assert.equal(input.placeholder, expectedPlaceholder);
+    assert.equal(input.value, prompt);
+    assert.equal(input.scrollTop, 480);
+    assert.deepEqual([input.selectionStart, input.selectionEnd, input.selectionDirection], [7, 20, "backward"]);
+    assert.equal(valueWrites, 0);
+  }
+  controls.click("omni-reference-task-type", "extend");
+  assertEditor(guidance.extend);
+  controls.model("gpt-image-2");
+  assertEditor(generic);
+  controls.model("seedance-2-5");
+  assertEditor(guidance.extend);
+  controls.mode("agent");
+  assertEditor(generic);
+  controls.mode("generation");
+  assertEditor(guidance.extend);
+  input.focus();
+  h.window.syncAgentComposerControls();
+  assert.equal(h.window.document.activeElement, input, "an incidental control sync must retain editing focus");
+  assertEditor(guidance.extend);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.equal(h.state.undoStack.length, 0);
+});
 
 test("Agent video parameter clicks update the summary and constraints without touching canvas content or undo", (t) => {
   const h = createHarness(t);

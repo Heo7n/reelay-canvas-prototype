@@ -83,7 +83,7 @@
       }
       const state = draft.getState();
       const media = currentMedia();
-      host.innerHTML = view.renderEntityEditor({
+      const markup = view.renderEntityEditor({
         ...state,
         entity: { id: entityId, name: state.name, description: state.description, coverMediaId: state.coverMediaId },
         media,
@@ -98,6 +98,7 @@
         mediaRenameValue,
         errors,
       });
+      root.REELAY_CANVAS_MEDIA_PREVIEW.renderPreservingMedia(host, markup, "[data-entity-editor-preview]");
       setHostVisibility(host, true);
       refreshIcons();
       if (focus) {

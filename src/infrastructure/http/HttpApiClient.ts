@@ -23,31 +23,72 @@ export class HttpResponseValidationError extends Error {
 export class HttpApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
+  private readonly pendingJsonReads = new Map<string, Promise<string>>();
+  private activeWrites = 0;
 
   constructor(options: HttpAdapterOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "").replace(/\/+$/, "");
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
-  async read<T>(path: string, schema: ZodType<T>, init: RequestInit = {}): Promise<T> {
-    const response = await this.send(path, init);
-    let payload: unknown;
+  async read<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
+    return this.withWriteBoundary(init, async () => {
+      const text = await this.readPayload(path, init);
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch (cause) {
+        throw new HttpResponseValidationError(path, { cause });
+      }
 
-    try {
-      payload = await response.json();
-    } catch (cause) {
-      throw new HttpResponseValidationError(path, { cause });
-    }
-
-    const parsed = schema.safeParse(payload);
-    if (!parsed.success) {
-      throw new HttpResponseValidationError(path, { cause: parsed.error });
-    }
-    return parsed.data;
+      const parsed = schema.safeParse(payload);
+      if (!parsed.success) {
+        throw new HttpResponseValidationError(path, { cause: parsed.error });
+      }
+      return parsed.data;
+    });
   }
 
   async sendWithoutResponse(path: string, init: RequestInit = {}): Promise<void> {
-    await this.send(path, init);
+    await this.withWriteBoundary(init, () => this.send(path, init));
+  }
+
+  private readPayload(path: string, init?: RequestInit): Promise<string> {
+    // Explicit request options retain their own headers, credentials and cancellation.
+    if (init !== undefined || this.activeWrites > 0) return this.loadPayload(path, init ?? {});
+    const key = this.resolveUrl(path);
+    const current = this.pendingJsonReads.get(key);
+    if (current) return current;
+    const pending = this.loadPayload(path, {}).finally(() => {
+      if (this.pendingJsonReads.get(key) === pending) this.pendingJsonReads.delete(key);
+    });
+    this.pendingJsonReads.set(key, pending);
+    return pending;
+  }
+
+  private async loadPayload(path: string, init: RequestInit): Promise<string> {
+    const response = await this.send(path, init);
+    try {
+      return await response.text();
+    } catch (cause) {
+      throw new HttpResponseValidationError(path, { cause });
+    }
+  }
+
+  private async withWriteBoundary<T>(init: RequestInit | undefined, operation: () => Promise<T>): Promise<T> {
+    const writes = !["GET", "HEAD"].includes((init?.method ?? "GET").toUpperCase());
+    if (writes) {
+      this.activeWrites += 1;
+      this.pendingJsonReads.clear();
+    }
+    try {
+      return await operation();
+    } finally {
+      if (writes) {
+        this.activeWrites -= 1;
+        this.pendingJsonReads.clear();
+      }
+    }
   }
 
   private async send(path: string, init: RequestInit): Promise<Response> {

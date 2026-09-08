@@ -6,6 +6,14 @@
 
 ## 1. 继续当前机器的开发
 
+### 2026-09-08 画布加载候选预览
+
+当前画布任务位于 `C:\Users\Ho\.codex\worktrees\cc38\0707`。完整路由入口为 <http://127.0.0.1:5178/app/login>，Vite 通过 `REELAY_DEV_API_PORT=5180` 连接本任务候选 API；未设置此变量时仍默认代理本机 `5175`。只允许有效数字端口，代理主机固定为 `127.0.0.1`。
+
+候选 API 在 `5180` 读取本 worktree 服务端代码，通过已有主目录共享开发环境在进程内复用同一云端 PostgreSQL / Supabase Storage。没有复制凭据、数据库、ObjectStore 或依赖，没有执行 migration / seed，也没有集成主目录共享开发提交。`5175` 仍属于原共享服务，不能为重启本任务预览而停止它。下方 2026-09-05 的本机数据库表是历史环境记录，不能用于推断当前候选数据位置。
+
+本任务隐藏启动入口、运行记录和日志位于 `D:\Software\codePro\0707\.git\worktrees\07072`：`canvas-candidate-api.mjs`、`canvas-candidate-api.stdout.log` / `.stderr.log`、`canvas-preview.json`、`canvas-preview.stdout.log` / `.stderr.log`。重启前重新核对端口与进程命令行；前端继续使用 `vite.shell.config.ts --host 127.0.0.1 --port 5178 --strictPort`，API 入口使用当前 worktree 的 Node / tsx 运行上述本机脚本。该运行记录不代表公网发布。
+
 先检查实际分支与服务；已经运行且目录正确的服务直接复用：
 
 ```powershell
@@ -41,6 +49,8 @@ npm run dev:shell -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
 入口为 <http://127.0.0.1:5173/app/login>；现有会话可直接回到原项目 URL。主演示账号为 `creator@reelay.test / reelay-demo`，完整账号列表见 [当前交接](agent-handoff.md)。`--strictPort` 防止地址悄悄切换。Vite 把 `/api` 代理到 `127.0.0.1:5175`，只启动前端不能替代 API 和数据库。
+
+旧画布源码入口 `index.html` 与 `styles.css` 的脚本、样式引用保持无手工版本查询参数。Vite 会把带 `?v=` 的资源当成已版本化资源并返回一年 `immutable` 缓存，继续沿用同一版本值会让本地预览停留在旧代码；无查询参数的源码请求使用 `no-cache`，刷新时重新验证。正式构建仍由 `copy-legacy-canvas.mjs` 生成带内容哈希的 JS / CSS 文件，产物缓存策略不受影响。
 
 ### 只恢复当前 API
 

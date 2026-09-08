@@ -11,6 +11,8 @@ import type { WorkspaceContext } from "../application/workspaces/WorkspaceContex
 import { isApplicationError } from "../application/shared/ApplicationError";
 import { routePaths } from "./routes";
 import type { ApplicationServices } from "./services";
+import { publishProjectLaunchIntent } from "../pages/home/launch-intent";
+import { prepareCreationDraftReturn, saveGuestCreationDraft } from "../pages/home/guest-creation-draft";
 
 export interface WorkspaceRouteData {
   actor: SessionActor;
@@ -50,8 +52,8 @@ function internalReturnTo(request: Request): string {
   return `${routePath}${url.search}${url.hash}`;
 }
 
-function loginRedirect(request: Request): Response {
-  const params = new URLSearchParams({ returnTo: internalReturnTo(request) });
+function loginRedirect(request: Request, returnTo = internalReturnTo(request)): Response {
+  const params = new URLSearchParams({ returnTo });
   return redirect(`${routePaths.login()}?${params.toString()}`);
 }
 
@@ -142,7 +144,10 @@ export function createRouteHandlers(services: ApplicationServices) {
       if (!context.actor) return null;
       const workspace = selectDefaultWorkspace(context.workspaces);
       const fallback = workspace ? routePaths.workspaceHome(workspace.id) : routePaths.noWorkspace();
-      throw redirect(safeReturnTo(new URL(request.url).searchParams.get("returnTo"), context.workspaces, fallback));
+      const returnTo = new URL(request.url).searchParams.get("returnTo");
+      const destination = safeReturnTo(returnTo, context.workspaces, fallback);
+      prepareCreationDraftReturn(destination, returnTo);
+      throw redirect(destination);
     },
 
     loginAction: async ({ request }: ActionFunctionArgs): Promise<LoginActionData | Response> => {
@@ -158,7 +163,9 @@ export function createRouteHandlers(services: ApplicationServices) {
         const fallbackWorkspace = selectDefaultWorkspace(workspaces);
         if (!fallbackWorkspace) return { error: "此演示账号尚未加入工作空间。" };
         const returnTo = new URL(request.url).searchParams.get("returnTo");
-        return redirect(safeReturnTo(returnTo, workspaces, routePaths.workspaceHome(fallbackWorkspace.id)));
+        const destination = safeReturnTo(returnTo, workspaces, routePaths.workspaceHome(fallbackWorkspace.id));
+        prepareCreationDraftReturn(destination, returnTo);
+        return redirect(destination);
       } catch (error) {
         if (isApplicationError(error, "authentication_required")) {
           return { error: error.message };
@@ -230,8 +237,10 @@ export function createRouteHandlers(services: ApplicationServices) {
       try {
         if (intent === "create") {
           const prompt = String(formData.get("prompt") ?? "").trim();
+          if (prompt.length > 600) return { error: "创作描述最多 600 字。" };
           const name = prompt ? prompt.slice(0, 32) : "未命名项目";
           const project = await services.projectRepository.create(workspaceId, { name });
+          publishProjectLaunchIntent({ workspaceId, projectId: project.id, canvasId: "main" }, prompt);
           return redirect(routePaths.canvas(workspaceId, project.id, "main"));
         }
 
@@ -255,7 +264,14 @@ export function createRouteHandlers(services: ApplicationServices) {
 
         return { error: "无法识别此项目操作。" };
       } catch (error) {
-        if (isApplicationError(error, "authentication_required")) throw loginRedirect(request);
+        if (isApplicationError(error, "authentication_required")) {
+          const homePath = routePaths.workspaceHome(workspaceId);
+          if (intent === "create" && new URL(request.url).pathname === `/app${homePath}`) {
+            saveGuestCreationDraft(String(formData.get("prompt") ?? ""), workspaceId);
+            throw loginRedirect(request, homePath);
+          }
+          throw loginRedirect(request);
+        }
         if (isApplicationError(error)) return { error: error.message };
         return { error: "项目操作失败，请稍后重试。" };
       }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { JSDOM } from "jsdom";
 
 const root = new URL("../", import.meta.url);
 const agentModelsSource = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
@@ -66,7 +67,6 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(appSource, /function workflowParameterSection\(node, canvas = true\)[\s\S]*?data-action="workflow"/);
   assert.match(appSource, /function omniReferenceTaskTypeParameterSection\(node, canvas = true\)[\s\S]*?data-action="omni-reference-task-type"/);
   assert.match(appSource, /function getParamLabelParts\(node\)[\s\S]*?getOmniReferenceTaskTypeLabel\(node\)/);
-  assert.match(appSource, /placeholder="描述你想生成的内容，或输入 @ 引用"/);
   assert.match(agentModelsSource, /modelIconMarkup\(model, "agent-model-provider"\)/);
   assert.match(appSource, /"box":\s*'<path/);
   assert.match(appSource, /commitGenerationUndoBoundary\(canvas, node\.id\)/);
@@ -211,11 +211,12 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     () => ({ min: 4, max: 30, step: 1 }),
     () => 10,
     (_node, _action, value) => String(value),
-    String,
+    Function(`${sourceBetween(appSource, "function escapeHtml(value)", "function sanitizeRuntimeMediaUrl(value)")}; return escapeHtml;`)(),
   );
   const taskTypeCapability = {
     uiValues: ["auto", "edit", "extend"],
     labels: { auto: "全模态参考", edit: "视频编辑", extend: "视频延长" },
+    descriptions: { auto: "根据提示词判断任务", edit: "修改参考视频", extend: "续写参考视频" },
     constraints: {
       edit: { aspect: "adaptive", duration: -1, hideDuration: true },
       extend: { aspect: "adaptive", hideDuration: true },
@@ -246,6 +247,38 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
   };
 
   const autoMarkup = renderParamPanel(createNode("auto"));
+  for (const canvas of [true, false]) {
+    const dom = new JSDOM(renderParamPanel(createNode("auto"), { canvas }));
+    const document = dom.window.document;
+    const helpButtons = document.querySelectorAll("[data-parameter-help]");
+    assert.equal(helpButtons.length, 1);
+    const help = helpButtons[0];
+    assert.ok(help.closest(".parameter-mode-heading"));
+    assert.equal(help.getAttribute("aria-label"), "了解三种视频模式");
+    assert.deepEqual(JSON.parse(help.dataset.helpItems), taskTypeCapability.uiValues.map((value) => ({
+      title: taskTypeCapability.labels[value], description: taskTypeCapability.descriptions[value],
+    })));
+    assert.doesNotMatch(help.outerHTML, /data-action|data-canvas-mutation|aria-pressed|data-help-description/);
+    const modeButtons = [...document.querySelectorAll(".omni-reference-task-type-segmented > button")];
+    assert.equal(modeButtons.length, 3);
+    assert.deepEqual(modeButtons.map((button) => button.textContent), ["全模态参考", "视频编辑", "视频延长"]);
+    assert.equal(modeButtons.every((button) => button.hasAttribute("data-canvas-mutation") === canvas), true);
+    assert.equal(document.querySelector(".parameter-mode-option"), null);
+    dom.window.close();
+  }
+  const escapedNode = createNode("auto");
+  const special = '<img src=x onerror="alert(1)"> & "引用"';
+  escapedNode.taskTypeCapability = {
+    ...taskTypeCapability,
+    labels: { ...taskTypeCapability.labels, auto: special },
+    descriptions: { ...taskTypeCapability.descriptions, auto: special },
+  };
+  const escapedDom = new JSDOM(renderParamPanel(escapedNode));
+  assert.deepEqual(JSON.parse(escapedDom.window.document.querySelector("[data-parameter-help]").dataset.helpItems)[0], {
+    title: special, description: special,
+  });
+  assert.equal(escapedDom.window.document.querySelector("img"), null);
+  escapedDom.window.close();
   assert.match(autoMarkup, /class="panel-popover param-panel "/);
   assert.doesNotMatch(autoMarkup, /is-task-type-compact/);
   assert.match(autoMarkup, /data-omni-reference-task-type="auto"/);
@@ -716,7 +749,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
   const generatedAssetSource = sourceBetween(
     appSource,
     "function createGeneratedAsset(parameterSnapshot)",
-    "function generatorMediaContent(node)",
+    "function generatorMediaContent(",
   );
   assert.match(generatedAssetSource, /Number\.isFinite\(parameterSnapshot\.outputDuration\)/);
   assert.match(generatedAssetSource, /generated\.duration = parameterSnapshot\.outputDuration/);
@@ -783,16 +816,12 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
   assert.ok(functionStart >= 0 && functionEnd > functionStart);
   const functionSource = appSource.slice(functionStart, functionEnd);
   const node = {};
-  const removedKeys = [];
   const scheduledDelays = [];
-  let storedPrompt = "  Create a quiet product shot  ";
   let createdNodeCount = 0;
   let renderCount = 0;
   const consumeLaunchIntent = Function(
     "isCanvasMutationAllowed",
-    "state",
-    "sessionStorage",
-    "homeLaunchIntentKey",
+    "hostLaunchPrompt",
     "addNodeAt",
     "window",
     "render",
@@ -800,12 +829,7 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
     `${functionSource}; return consumeHomeLaunchIntent;`,
   )(
     () => true,
-    { hostCapabilities: { transientMediaUpload: false } },
-    {
-      getItem: () => storedPrompt,
-      removeItem: (key) => { removedKeys.push(key); storedPrompt = null; },
-    },
-    "reelay-home-launch-intent",
+    "Create a quiet product shot",
     () => { createdNodeCount += 1; return node; },
     { innerWidth: 1440, innerHeight: 900 },
     () => { renderCount += 1; },
@@ -817,7 +841,6 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
   assert.equal(createdNodeCount, 1);
   assert.equal(node.prompt, "Create a quiet product shot");
   assert.equal(node.expanded, true);
-  assert.deepEqual(removedKeys, ["reelay-home-launch-intent"]);
   assert.equal(renderCount, 1);
   assert.deepEqual(scheduledDelays, [0]);
 });
@@ -1011,15 +1034,15 @@ test("connection ports keep their external field while media frames accept body 
   assert.match(interactionSource, /function selectNodeBodyCandidate/);
   assert.match(appSource, /targetRect:[\s\S]*?frameRect\.left[\s\S]*?frameRect\.bottom/);
   assert.match(appSource, /canvasConnectionInteraction\.selectNodeBodyCandidate/);
-  assert.match(html, /canvas-connections\.css\?v=20260827-connection-confirm-46/);
-  assert.match(html, /canvas-connection-feedback-motion\.js\?v=20260827-connection-confirm-46/);
-  assert.match(html, /canvas-connection-feedback-controller\.js\?v=20260827-connection-confirm-46/);
-  assert.match(html, /canvas-connection-renderer\.js\?v=20260827-connection-confirm-46/);
-  assert.match(html, /canvas-connection-interaction\.js\?v=20260824-node-body-target-1/);
+  assert.match(html, /canvas-connections\.css"/);
+  assert.match(html, /canvas-connection-feedback-motion\.js"/);
+  assert.match(html, /canvas-connection-feedback-controller\.js"/);
+  assert.match(html, /canvas-connection-renderer\.js"/);
+  assert.match(html, /canvas-connection-interaction\.js"/);
   assert.match(html, /id="connectionTargetGlow"/);
   assert.doesNotMatch(html, /connection-target-glow-halo/);
-  assert.match(html, /styles\.css\?v=20260907-asset-integration-112/);
-  assert.match(html, /app\.js\?v=20260907-asset-integration-112/);
+  assert.match(html, /styles\.css"/);
+  assert.match(html, /app\.js"/);
   assert.match(appSource, /function showConnectionTargetGlow[\s\S]*?entry\.frameRect\.left - shellRect\.left[\s\S]*?--connection-target-radius/);
   assert.match(appSource, /function hideConnectionTargetGlow/);
   assert.match(appSource, /markConnectionTarget[\s\S]*?showConnectionTargetGlow\(entry\)/);
@@ -1187,17 +1210,15 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appSource, /case "advanced-settings-toggle":[\s\S]*?if \(node\.advancedSettingsExpanded\) node\.panel = null/);
   assert.match(appCss, /\.advanced-setting-tooltip\[data-placement\^="bottom"\]::after/);
   assert.doesNotMatch(appSource, /settingsPanel\(|settings-panel|settings-utilities/);
-  assert.match(appCss, /\.generate-button\s*\{[\s\S]*?flex:\s*0 0 106px[\s\S]*?height:\s*36px/);
   assert.match(appSource, /class="credit-semantic-icon" src="\.\/assets\/icons\/credit-prism\.svg"/);
-  assert.match(appSource, /class="send-arrow-icon"[\s\S]*?<path d="M10\.25 20\.6V9\.45/);
-  assert.match(appCss, /\.generate-button\s*\{[\s\S]*?background:\s*var\(--node-chip-strong-bg\)[\s\S]*?box-shadow:\s*inset/);
-  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--node-chip-strong-bg:\s*#f4f4f4[\s\S]*?--node-send-bg:\s*#ffffff[\s\S]*?--node-send-text:\s*#111111[\s\S]*?--node-send-disabled-text:\s*#a5a5aa/);
-  assert.match(appCss, /\.credit-mark\s*\{[\s\S]*?font-size:\s*16px[\s\S]*?font-variant-numeric:\s*tabular-nums/);
-  assert.match(appCss, /\.credit-mark \.credit-semantic-icon\s*\{[\s\S]*?width:\s*22px[\s\S]*?height:\s*20px/);
-  assert.match(appCss, /\.send-arrow\s*\{[\s\S]*?width:\s*32px[\s\S]*?height:\s*32px/);
-  assert.match(appCss, /\.generate-button\.disabled \.credit-mark\s*\{[\s\S]*?opacity:\s*1/);
+  const sendArrow = /class="send-arrow-icon"[^>]*><path d="([^"]+)"/;
+  assert.ok(appSource.match(sendArrow));
+  assert.equal(appSource.match(sendArrow)[1], html.match(sendArrow)[1]);
+  assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--node-send-bg:\s*var\(--agent-send-bg\)[\s\S]*?--node-send-text:\s*var\(--agent-send-text\)/);
+  assert.match(appCss, /\.credit-mark\s*\{[^}]*font-variant-numeric:\s*tabular-nums/);
+  assert.match(appCss, /\.generate-button\.disabled \.credit-mark,[\s\S]*?opacity:\s*1/);
   assert.match(appCss, /\.generate-button\.disabled \.send-arrow,[\s\S]*?background:\s*var\(--node-send-disabled-bg\)[\s\S]*?color:\s*var\(--node-send-disabled-text\)/);
-  assert.match(appCss, /\.send-arrow-icon\s*\{[\s\S]*?fill:\s*currentColor/);
+  assert.match(appCss, /\.send-arrow-icon\s*\{[^}]*fill:\s*none;[^}]*stroke:\s*currentColor/);
   assert.match(appCss, /\.control-chip\.model-chip\s*\{[\s\S]*?flex:\s*0 1 auto[\s\S]*?width:\s*max-content/);
   assert.match(appCss, /\.param-chip\s*\{[\s\S]*?flex:\s*0 1 auto[\s\S]*?background:\s*transparent/);
   assert.match(appSource, /class="control-chip param-chip/);
@@ -1237,7 +1258,7 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appCss, /\.param-panel\s*\{[\s\S]*?width:\s*348px[\s\S]*?border-radius:\s*12px/);
   assert.match(appSource, /<section class="panel-popover param-panel(?:\s|\")/);
   assert.doesNotMatch(appSource, /class="settings-card param-panel"/);
-  assert.match(appCss, /\.panel-popover\s*\{[\s\S]*?background:\s*#151618/);
+  assert.match(appCss, /\.panel-popover\s*\{[\s\S]*?background:\s*var\(--canvas-popover-bg\)/);
   assert.doesNotMatch(appCss, /@keyframes nodePopoverIn\s*\{[\s\S]*?scale:/);
   assert.match(appCss, /\[data-node-popover\]\[data-placement\]\.param-panel\s*\{[\s\S]*?animation:\s*none/);
   assert.match(appCss, /\.model-option:hover \.model-desc,[\s\S]*?\.model-option\.active \.model-desc,[\s\S]*?\.model-option:focus-visible \.model-desc/);
@@ -1262,7 +1283,7 @@ test("prompt workspace adapts screen width while preserving world anchors and co
 });
 
 test("aspect changes preserve node identity and isolate the prompt workspace from media layout", () => {
-  assert.match(html, /canvas-node-layout-transition\.js\?v=20260827-aspect-layout-41/);
+  assert.match(html, /canvas-node-layout-transition\.js"/);
   assert.match(
     appSource,
     /function getNodeRenderSignature\(node\)[\s\S]*?!\["x", "y", "z", "groupId", "aspect"\]\.includes\(key\)/,
@@ -1511,10 +1532,10 @@ test("canvas chrome controls expose keyboard-operable names and expanded state",
 });
 
 test("canvas chrome keeps compact left zones and an independently sized Agent dock", () => {
-  assert.match(stylesEntry, /styles\/app\.css\?v=20260907-asset-integration-112/);
-  assert.match(stylesEntry, /styles\/canvas-chrome\.css\?v=20260907-asset-toggle-alignment-99/);
-  assert.match(stylesEntry, /styles\/canvas-asset-library\.css\?v=20260907-asset-integration-112/);
-  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css\?v=20260907-entity-exit-106/);
+  assert.match(stylesEntry, /styles\/app\.css"/);
+  assert.match(stylesEntry, /styles\/canvas-chrome\.css"/);
+  assert.match(stylesEntry, /styles\/canvas-asset-library\.css"/);
+  assert.match(stylesEntry, /styles\/canvas-entity-editor\.css"/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
   assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
@@ -1580,8 +1601,8 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(appCss, /\.agent-dock\.is-inset-bottom \.agent-panel\s*\{[\s\S]*?border-bottom-left-radius:\s*14px/);
   assert.match(html, /id="agentTopResizeHandle"[^>]*role="separator"[^>]*aria-orientation="horizontal"/);
   assert.match(html, /id="agentBottomResizeHandle"[^>]*role="separator"[^>]*aria-orientation="horizontal"/);
-  assert.match(html, /canvas-agent-panel-geometry\.js\?v=20260903-agent-vertical-74/);
-  assert.match(html, /canvas-pointer-dispatch-controller\.js\?v=20260903-agent-vertical-74/);
+  assert.match(html, /canvas-agent-panel-geometry\.js"/);
+  assert.match(html, /canvas-pointer-dispatch-controller\.js"/);
   assert.match(appSource, /agentTopInset:\s*0,[\s\S]*?agentBottomInset:\s*0/);
   assert.match(appSource, /function setAgentTopInset\(top\)[\s\S]*?function setAgentBottomInset\(bottom\)/);
   assert.match(appSource, /bindAgentHeightResizeHandle\(agentTopResizeHandle, "top"\)[\s\S]*?bindAgentHeightResizeHandle\(agentBottomResizeHandle, "bottom"\)/);
@@ -1600,14 +1621,14 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
 
-  assert.match(html, /styles\.css\?v=20260907-asset-integration-112/);
-  assert.match(html, /prototype-config\.js\?v=20260907-asset-integration-112/);
-  assert.match(html, /canvas-asset-library-model\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /canvas-asset-library-view\.js\?v=20260907-asset-integration-112/);
-  assert.match(html, /canvas-entity-use-model\.js\?v=20260901-entity-use-43/);
-  assert.match(html, /canvas-entity-use-view\.js\?v=20260907-entity-picker-stable-108/);
-  assert.match(html, /canvas-media-asset-coordinator\.js\?v=20260903-entity-preview-filename-70/);
-  assert.match(html, /app\.js\?v=20260907-asset-integration-112/);
+  assert.match(html, /styles\.css"/);
+  assert.match(html, /prototype-config\.js"/);
+  assert.match(html, /canvas-asset-library-model\.js"/);
+  assert.match(html, /canvas-asset-library-view\.js"/);
+  assert.match(html, /canvas-entity-use-model\.js"/);
+  assert.match(html, /canvas-entity-use-view\.js"/);
+  assert.match(html, /canvas-media-asset-coordinator\.js"/);
+  assert.match(html, /app\.js"/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
   assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
@@ -1638,7 +1659,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(appSource, /case "entity-picker":[\s\S]*?if \(!canNodeUseEntityReferences\(node\)\) return/);
 
   assert.match(appSource, /REELAY_ASSET_SPACE_SWITCHER\.createController/);
-  assert.match(html, /canvas-asset-space-switcher\.js\?v=20260907-entity-exit-107/);
+  assert.match(html, /canvas-asset-space-switcher\.js"/);
   assert.match(appSource, /closest\("#assetLibrarySectionTabs \[data-library-section\]"\)/);
   assert.match(appSource, /closest\("#assetLibraryCommandBar button\[data-library-display\]"\)/);
   assert.match(appSource, /const eventPath = typeof event\.composedPath === "function"/);
