@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import { heroSlides } from "./home-content";
 import styles from "./HeroCarousel.module.css";
@@ -8,12 +8,64 @@ interface HeroCarouselProps {
   paused?: boolean;
 }
 
+const SLIDE_COUNT = heroSlides.length;
+const TRANSITION_MS = 500;
+// Keep neighbouring copies mounted so the loop can reset outside the viewport.
+const trackSlides = [...heroSlides, ...heroSlides, ...heroSlides];
+
+interface TrackState {
+  center: number;
+  requestedIndex: number;
+  phase: "idle" | "moving" | "rebasing";
+}
+
+type TrackAction =
+  | { type: "select"; index: number; instant: boolean }
+  | { type: "step"; direction: -1 | 1; instant: boolean }
+  | { type: "finished" }
+  | { type: "rebased" }
+  | { type: "settle" };
+
+function slideIndex(position: number): number {
+  return ((position % SLIDE_COUNT) + SLIDE_COUNT) % SLIDE_COUNT;
+}
+
+function startRequestedMove(state: TrackState): TrackState {
+  const distance = slideIndex(state.requestedIndex - slideIndex(state.center));
+  if (distance === 0) return { ...state, phase: "idle" };
+  const direction = distance <= SLIDE_COUNT / 2 ? 1 : -1;
+  return { ...state, center: state.center + direction, phase: "moving" };
+}
+
+function reduceTrack(state: TrackState, action: TrackAction): TrackState {
+  if (action.type === "settle") {
+    return { ...state, center: SLIDE_COUNT + state.requestedIndex, phase: "idle" };
+  }
+  if (action.type === "finished") {
+    const normalizedCenter = SLIDE_COUNT + slideIndex(state.center);
+    return normalizedCenter === state.center
+      ? startRequestedMove(state)
+      : { ...state, center: normalizedCenter, phase: "rebasing" };
+  }
+  if (action.type === "rebased") return startRequestedMove(state);
+
+  const requestedIndex = action.type === "step"
+    ? slideIndex(state.requestedIndex + action.direction)
+    : action.index;
+  const next = { ...state, requestedIndex };
+  if (action.instant) return { ...next, center: SLIDE_COUNT + requestedIndex, phase: "idle" };
+  // Finish the current physical step, then honour the latest requested image.
+  return state.phase === "idle" ? startRequestedMove(next) : next;
+}
+
 export function HeroCarousel({ paused = false }: HeroCarouselProps) {
-  const activeCardRef = useRef<HTMLButtonElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [track, dispatch] = useReducer(reduceTrack, { center: SLIDE_COUNT, requestedIndex: 0, phase: "idle" });
+  const activeIndex = slideIndex(track.center);
   const [pointerPaused, setPointerPaused] = useState(false);
   const [focusPaused, setFocusPaused] = useState(false);
-  const [canAutoPlay, setCanAutoPlay] = useState(true);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [pageVisible, setPageVisible] = useState(true);
 
   useEffect(() => {
     const reducedMotionQuery = typeof window.matchMedia === "function"
@@ -21,7 +73,9 @@ export function HeroCarousel({ paused = false }: HeroCarouselProps) {
       : null;
 
     function syncAutoPlayPreference(): void {
-      setCanAutoPlay(!document.hidden && !reducedMotionQuery?.matches);
+      setPageVisible(!document.hidden);
+      setReducedMotion(Boolean(reducedMotionQuery?.matches));
+      if (reducedMotionQuery?.matches) dispatch({ type: "settle" });
     }
 
     syncAutoPlayPreference();
@@ -34,15 +88,46 @@ export function HeroCarousel({ paused = false }: HeroCarouselProps) {
   }, []);
 
   useEffect(() => {
-    if (paused || !canAutoPlay || pointerPaused || focusPaused) return undefined;
+    if (track.phase === "moving") {
+      const timer = window.setTimeout(() => dispatch({ type: "finished" }), TRANSITION_MS);
+      return () => window.clearTimeout(timer);
+    }
+    if (track.phase === "rebasing") {
+      // Commit the equivalent resting positions before enabling another transition.
+      let nextFrame = 0;
+      const firstFrame = window.requestAnimationFrame(() => {
+        nextFrame = window.requestAnimationFrame(() => dispatch({ type: "rebased" }));
+      });
+      return () => {
+        window.cancelAnimationFrame(firstFrame);
+        window.cancelAnimationFrame(nextFrame);
+      };
+    }
+    return undefined;
+  }, [track.center, track.phase]);
+
+  useLayoutEffect(() => {
+    const focusedPosition = cardRefs.current.findIndex((card) => card !== null && card === document.activeElement);
+    if (focusedPosition < 0 || Math.abs(focusedPosition - track.center) <= 1) return;
+    const distance = slideIndex(focusedPosition - track.center);
+    const nearestOffset = distance <= SLIDE_COUNT / 2 ? distance : distance - SLIDE_COUNT;
+    cardRefs.current[track.center + nearestOffset]?.focus({ preventScroll: true });
+  }, [track.center]);
+
+  useEffect(() => {
+    if (paused || !pageVisible || reducedMotion || pointerPaused || focusPaused) return undefined;
     const timer = window.setTimeout(() => {
-      setActiveIndex((index) => (index + 1) % heroSlides.length);
+      dispatch({ type: "step", direction: 1, instant: false });
     }, 4_000);
     return () => window.clearTimeout(timer);
-  }, [activeIndex, canAutoPlay, focusPaused, paused, pointerPaused]);
+  }, [activeIndex, pageVisible, reducedMotion, focusPaused, paused, pointerPaused]);
 
   function move(direction: -1 | 1): void {
-    setActiveIndex((index) => (index + direction + heroSlides.length) % heroSlides.length);
+    dispatch({ type: "step", direction, instant: reducedMotion });
+  }
+
+  function select(index: number): void {
+    dispatch({ type: "select", index, instant: reducedMotion });
   }
 
   return (
@@ -64,38 +149,38 @@ export function HeroCarousel({ paused = false }: HeroCarouselProps) {
       }}
     >
       <div className={styles.viewport}>
-        <div className={styles.track}>
-          {(["left", "active", "right"] as const).map((position, slotIndex) => {
-            const index = (activeIndex + slotIndex - 1 + heroSlides.length) % heroSlides.length;
-            const slide = heroSlides[index];
+        <div
+          className={styles.track}
+          data-moving={track.phase === "moving" || undefined}
+          style={{ "--carousel-duration": `${TRANSITION_MS}ms` } as CSSProperties}
+        >
+          {trackSlides.map((slide, position) => {
+            const offset = position - track.center;
+            const isVisible = Math.abs(offset) <= 1;
+            const isActive = offset === 0;
             return (
               <button
-                className={`${styles.card} ${styles[position]}`}
-                ref={position === "active" ? activeCardRef : undefined}
-                key={position}
+                className={`${styles.card} ${isActive ? styles.active : ""}`}
+                style={{ "--card-offset": offset } as CSSProperties}
+                ref={(card) => { cardRefs.current[position] = card; }}
+                key={`${slide.id}-${Math.floor(position / SLIDE_COUNT)}`}
                 type="button"
-                onClick={() => {
-                  setActiveIndex(index);
-                  activeCardRef.current?.focus({ preventScroll: true });
+                tabIndex={isVisible ? 0 : -1}
+                aria-hidden={!isVisible || undefined}
+                onClick={(event) => {
+                  event.currentTarget.focus({ preventScroll: true });
+                  select(slideIndex(position));
                 }}
                 aria-label={slide.title}
                 aria-description={slide.description}
-                aria-pressed={index === activeIndex}
+                aria-pressed={isActive}
               >
-                {heroSlides.map((artwork, artworkIndex) => (
-                  <span
-                    key={artwork.id}
-                    className={`${styles.artwork} ${artworkIndex === index ? styles.visibleArtwork : ""}`}
-                    aria-hidden="true"
-                  >
-                    <img src={artwork.image} alt="" decoding="async" fetchPriority={position === "active" && artworkIndex === 0 ? "high" : "auto"} />
-                    <span className={styles.shade} />
-                    <span className={styles.caption}>
-                      <strong className={styles.title}>{artwork.title}</strong>
-                      <span className={styles.description}>{artwork.description}</span>
-                    </span>
-                  </span>
-                ))}
+                <img src={slide.image} alt="" decoding="async" fetchPriority={position === SLIDE_COUNT ? "high" : "auto"} />
+                <span className={styles.shade} aria-hidden="true" />
+                <span className={styles.caption} aria-hidden="true">
+                  <strong className={styles.title}>{slide.title}</strong>
+                  <span className={styles.description}>{slide.description}</span>
+                </span>
               </button>
             );
           })}
@@ -115,7 +200,7 @@ export function HeroCarousel({ paused = false }: HeroCarouselProps) {
             className={index === activeIndex ? styles.activeSegment : ""}
             aria-label={`显示${slide.title}`}
             aria-current={index === activeIndex ? "true" : undefined}
-            onClick={() => setActiveIndex(index)}
+            onClick={() => select(index)}
           ><span aria-hidden="true" /></button>
         ))}
       </div>

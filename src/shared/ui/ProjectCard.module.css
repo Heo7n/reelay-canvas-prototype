@@ -33,20 +33,6 @@
   object-fit: cover;
 }
 
-.semanticCover {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: linear-gradient(145deg, var(--workspace-hover, rgba(23, 23, 25, 0.055)), var(--workspace-bg, #f8f8f7));
-}
-.semanticCover span { position: absolute; border: 1px solid var(--workspace-border-strong, rgba(23, 23, 25, 0.19)); border-radius: 999px; }
-.semanticCover span:nth-child(1) { inset: 24% 14% 18% 42%; }
-.semanticCover span:nth-child(2) { inset: 16% 48% 35% 18%; }
-.semanticCover span:nth-child(3) { right: 10%; bottom: 15%; width: 28%; height: 12%; }
-
 .menuDetails { position: relative; z-index: 5; flex: 0 0 auto; align-self: flex-start; }
 .menuDetails[open] { z-index: 8; }
 .menuDetails summary { list-style: none; }

@@ -2,6 +2,14 @@
 
 本文只保留下一位开发者真正需要的当前状态。产品细节、规划和工程规则分别以 `current-product-spec.md`、`product-expansion-plan.md`、`engineering-guardrails.md` 与 ADR 为准；阅读路径见 `development-workflow.md`。
 
+## 2026-09-08 主页轮播与项目封面（本地阶段提交）
+
+- 本轮按用户要求保存为 `ead8/0707` 的本地阶段提交，`5176` 使用当前界面；未推送、未部署，也未同步到主目录。上一轮性能优化提交保留在同一分支历史中。
+- HeroCarousel 从固定槽位的透明交叠改为 500ms 连续水平位移与中心缩放，4 秒节奏不变；复用常驻图片，屏外循环归位，保留暂停、键盘、减少动态效果与最后一次快速选择。定向 13 项测试覆盖循环、焦点、快速操作及卸载清理。
+- 内置 image_gen 新生成 7 个示例封面和 1 个统一默认图，WebP 1280 × 720，约 57–163 KB/张；最终素材及提示词见 `assets/home/project-covers-v2.md`。原有五个封面 key 沿用，新增品牌故事与个人概念 key，默认图用于空值 / 未知 key；不按项目名称猜图，不新增上传功能。
+- 已通过本机 `5175` 的现有鉴权 PATCH API，将 Reelay_Dev 的 `project-brand-story` 和 `project-personal-concept` 原空封面分别补为 `demo-cover-brand-story`、`demo-cover-concept`；只发送 coverAssetId，正常 updatedAt 随保存更新，名称、权限与画布内容未改。变更前后记录在主目录 `.git/project-cover-update-20260908.json`。新环境 fixture 同步这两个 key，未运行 seed / migration；公网 Test 数据本轮没有修改，后续正式发布时再核对缺图项目，不能假定 Git 会同步这两条开发数据。
+- 本轮 `npm run check` 1025 项（539 legacy / 290 shell / 188 server / 8 setup）、本机 PostgreSQL 33 项及账号、静态体验两套构建通过。浏览器确认实际中间帧水平移动且图片保持不透明，全部个人 / 协作封面可读，390px 与 2560px 无横向溢出，深浅主题正常；验证后恢复原主题与视口。提交时代码未变，复用同一代码状态的验证结果并再次检查 staged diff。性能优化切片的提交仍保留，见下一节。
+
 ## 2026-09-08 画布文档优先与连接复用
 
 - 本轮从已发布的 PR #23 / `f068def` 开始，活动分支 `codex/canvas-loading-priority`，目录 `ead8/0707`。先取文档，成功后再并行读取三个目录；文档失败或旧作用域不会启动目录。渐进握手、权限和晚到目录不覆盖保存状态的边界保留。
