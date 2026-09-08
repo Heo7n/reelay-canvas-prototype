@@ -1,55 +1,50 @@
 import { ChevronRight } from "lucide-react";
-import { Link, useActionData } from "react-router-dom";
+import { Link, useActionData, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 
 import { routePaths } from "../../app/routes";
 import type { WorkspaceActionData } from "../../app/route-data";
 import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
-import { NewProjectCard } from "../../shared/ui/NewProjectCard";
 import { ProjectCard } from "../../shared/ui/ProjectCard";
+import { NewProjectCard } from "../../shared/ui/NewProjectCard";
 import { ProjectMenuProvider } from "../../shared/ui/ProjectMenuProvider";
 import { WorkspaceHeader } from "../../shared/ui/WorkspaceHeader";
-import { CapabilityStrip } from "./CapabilityStrip";
-import { CreationComposer } from "./CreationComposer";
 import { HeroCarousel } from "./HeroCarousel";
+import { HomeFooter } from "./HomeFooter";
+import { CreationEntry } from "./CreationEntry";
+import { EntryFrame } from "./EntryFrame";
 import { clearGuestCreationDraft, readGuestCreationDraft } from "./guest-creation-draft";
-import { capabilities, heroSlides, type Capability, type HeroSlide } from "./home-content";
 import styles from "./WorkspacePages.module.css";
 
 export function WorkspaceHomePage() {
   const data = useWorkspaceRouteData();
+  const location = useLocation();
   const actionData = useActionData() as WorkspaceActionData | undefined;
-  const [activeSlide, setActiveSlide] = useState(1);
-  const [prompt, setPrompt] = useState(readGuestCreationDraft);
-  useEffect(clearGuestCreationDraft, []);
+  const workspaceId = data.currentWorkspace.id;
+  const [draft, setDraft] = useState(() => ({ workspaceId, prompt: readGuestCreationDraft(workspaceId) }));
+  const prompt = draft.workspaceId === workspaceId ? draft.prompt : "";
+  useEffect(() => {
+    const pendingPrompt = readGuestCreationDraft(workspaceId);
+    setDraft((current) => current.workspaceId === workspaceId ? current : { workspaceId, prompt: pendingPrompt });
+    clearGuestCreationDraft();
+  }, [location.key, workspaceId]);
   const { notice, showNotice } = useTransientNotice();
   const recentProjects = [...data.projects]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    .slice(0, 4);
-
-  function chooseSlide(slide: HeroSlide): void {
-    setPrompt(`我想从「${slide.title}」开始一个新项目`);
-  }
-
-  function chooseCapability(capability: Capability): void {
-    if (!capability.prompt) {
-      showNotice("更多能力会随核心工作台逐步开放。");
-      return;
-    }
-    setPrompt(capability.prompt);
-  }
+    .slice(0, 3);
 
   return (
-    <div className={styles.workspaceShell}>
-      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} />
-      <main className={styles.homeMain}>
-        <h1 className={styles.srOnly}>Reelay 创作主页</h1>
-        <HeroCarousel slides={heroSlides} activeIndex={activeSlide} onActiveIndexChange={setActiveSlide} onChooseSlide={chooseSlide} />
-
+    <EntryFrame activePage="home" workspaceId={data.currentWorkspace.id} header={
+      <WorkspaceHeader actor={data.actor} currentWorkspace={data.currentWorkspace} showBrand={false} />
+    }>
+      <main id="entry-content" tabIndex={-1} className={styles.homeMain}>
+        <HeroCarousel />
         <section className={styles.creationStart} aria-label="开始创作">
-          <CreationComposer prompt={prompt} onPromptChange={setPrompt} onNotice={showNotice} />
-          <CapabilityStrip capabilities={capabilities} onChoose={chooseCapability} />
+          <div className={styles.welcome}>
+            <h1>让想法，成为画面。</h1>
+          </div>
+          <CreationEntry prompt={prompt} onPromptChange={(prompt) => setDraft({ workspaceId, prompt })} />
         </section>
 
         <section className={styles.recentSection} aria-labelledby="recent-projects-title">
@@ -67,10 +62,11 @@ export function WorkspaceHomePage() {
           </ProjectMenuProvider>
         </section>
       </main>
+      <HomeFooter homePath={routePaths.workspaceHome(data.currentWorkspace.id)} />
 
       <div className={`${styles.toast} ${notice || actionData?.error || actionData?.notice ? styles.toastVisible : ""}`} role="status" aria-live="polite">
         {actionData?.error ?? actionData?.notice ?? notice}
       </div>
-    </div>
+    </EntryFrame>
   );
 }
