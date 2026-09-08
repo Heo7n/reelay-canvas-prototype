@@ -2,6 +2,14 @@
 
 本文只保留下一位开发者真正需要的当前状态。产品细节、规划和工程规则分别以 `current-product-spec.md`、`product-expansion-plan.md`、`engineering-guardrails.md` 与 ADR 为准；阅读路径见 `development-workflow.md`。
 
+## 2026-09-08 节点与对话框提交交接
+
+- 本批在实际分支 `codex/entity-library-design`、worktree `f859/0707` 上完成，父提交为 `9fce2e5`。统一节点与 Agent 输入区、积分发送区、模型 / 参数 / 添加菜单的主题和文字层级；Seedance 2.5 三模式名称居中，仅在“模式”标题旁提供一个说明入口，说明跟随父面板等宽对齐并避让视口。
+- 模式说明区分上传、生成和续写时长；节点与 Agent 生成模式共用 `data/model-catalog.js` 的动态占位。全模态最终只保留“基于图片、视频或音频参考生成新视频”，不恢复两行“若需要……”；编辑 / 延长保留操作引导。更新只改 placeholder，原文、输入框身份、选区、滚动与原生文字撤销保持。
+- `index.html` 与 `styles.css` 移除固定 `?v=`，修复 Vite 将旧源码视为 immutable 导致预览显示滞后；生产构建仍生成内容哈希。合并其他分支的新增 script / favicon 时保留双方入口与脚本顺序，不恢复手工版本值；新帮助 controller 及其测试入口必须一并保留。
+- 本轮 `npm run check` 通过；此前已实测节点与 Agent 三模式、深浅主题、说明对齐及边界，5174 完整路由与 5177 静态体验均已更新。最后一次文案仅删除全模态两行占位，本次提交前再次通过完整检查；未执行公网发布、数据迁移或 seed。
+- 后续同步先重新执行 `npm run worktrees` 核对现场。本次只读盘点时，`codex/canvas-development` 在 `e0638a7`、`codex/canvas-agent-refinement` 在 `4e85533`，两者干净；`codex/home-login-development` 和 `codex/canvas-dialog-refinement` 尚有未提交内容。主要交集是 `app.js`、`index.html`、`package.json`、共享测试与文档，需按功能合并，不整文件覆盖；参数说明 / 占位逻辑与新增媒体加载模块均须保留。主体预览修复 `9fce2e5` 与另一分支的 `f966305` 已核对 stable patch-id 相同，避免重复移植。以上为盘点快照，不代表其他任务已经合并，也不能据此推断远端或公网状态。
+
 ## 当前定位
 
 - 当前免注册体验切片：用户确认内部继续共用主账号，外部使用独立静态体验站，所有修改刷新重置。`npm run build:experience` → `dist/experience`，必须单独部署，不能覆盖内部主域。通过构建常量注入 `createExperienceServices`，保留相同 React / CanvasHost UI；三主体 12 图为公开 fixture，非主账号实时读取。临时文件≤4 MiB/个、累计≤128 MiB，经 ArrayBuffer bridge 进入宿主 Blob 内存。测试项目、画布、主体及素材改名在 SPA 导航中保留，刷新或退出重置；业务内容不进入浏览器持久存储。实际发布 URL 与部署 ID 见该切片 PR。

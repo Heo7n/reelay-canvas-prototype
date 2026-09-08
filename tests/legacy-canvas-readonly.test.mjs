@@ -9,6 +9,7 @@ const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-hist
 const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
 const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
 const assetLibraryMenuController = await readFile(new URL("src/legacy-canvas/canvas-asset-library-menu-controller.js", root), "utf8");
+const parameterHelpController = await readFile(new URL("src/legacy-canvas/canvas-parameter-help-controller.js", root), "utf8");
 const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
@@ -93,6 +94,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(layerReconciler);
   window.eval(generatorModelPolicy);
   window.eval(popoverPlacement);
+  window.eval(parameterHelpController);
   window.eval(spatialSelection);
   window.eval(nodeInteraction);
   window.eval(nodePlacement);

@@ -73,8 +73,13 @@ test("Seedance 2.5 drives the reference parameter layout", () => {
   const seedance = catalog.find((model) => model.id === "seedance-2-5");
   assert.ok(seedance);
   assert.deepEqual([...seedance.capabilities.workflows], ["omni-reference"]);
+  const { descriptions, promptPlaceholders, ...taskTypeContract } = seedance.capabilities.omniReferenceTaskType;
+  assert.deepEqual(Object.keys(descriptions), [...taskTypeContract.uiValues]);
+  assert.ok(Object.values(descriptions).every((description) => typeof description === "string" && description.trim().length > 0));
+  assert.deepEqual(Object.keys(promptPlaceholders), [...taskTypeContract.uiValues]);
+  assert.ok(Object.values(promptPlaceholders).every((placeholder) => typeof placeholder === "string" && placeholder.trim().length > 0));
   assert.deepEqual({
-    ...seedance.capabilities.omniReferenceTaskType,
+    ...taskTypeContract,
     values: [...seedance.capabilities.omniReferenceTaskType.values],
     uiValues: [...seedance.capabilities.omniReferenceTaskType.uiValues],
     labels: { ...seedance.capabilities.omniReferenceTaskType.labels },

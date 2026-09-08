@@ -22,6 +22,7 @@
       panel.className = nextPanel.className;
       panel.style.cssText = nextPanel.style.cssText;
       input.disabled = nextInput.disabled;
+      if (input.placeholder !== nextInput.placeholder) input.placeholder = nextInput.placeholder;
       if (input.value !== nextInput.value) input.value = nextInput.value;
       replaceAround(panel, nextPanel, new Map([[nextInput, input]]));
       retained.set(nextPanel, panel);
