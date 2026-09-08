@@ -20,6 +20,26 @@ const workspaceAsset = {
 };
 const flushTasks = () => new Promise((resolve) => setImmediate(resolve));
 
+test("asset availability requires negotiation and a trusted current instance, and duplicate states have no effects", () => {
+  let negotiated = false;
+  const updates = [];
+  const { dispatch } = harness({ usesProgressiveAssetLoading: () => negotiated,
+    onAvailability: (state) => updates.push(JSON.parse(JSON.stringify(state))) });
+  const message = { source: "reelay-shell", type: "host:asset-availability", protocolVersion: 1,
+    instanceId: "instance-1", projectAssets: "ready", workspaceCatalog: "loading" };
+  assert.equal(dispatch(message), false, "an older host has not negotiated this extension");
+  negotiated = true;
+  assert.equal(dispatch({ ...message, instanceId: "old" }), false);
+  assert.equal(dispatch(message, { origin: "https://other.test" }), false);
+  assert.equal(dispatch(message, { source: {} }), false);
+  assert.equal(dispatch({ ...message, workspaceCatalog: true }), false);
+  assert.equal(dispatch(message), true);
+  assert.equal(dispatch(message), true);
+  assert.deepEqual(updates, [{ projectAssets: "ready", workspaceCatalog: "loading" }]);
+  assert.equal(dispatch({ ...message, workspaceCatalog: "unavailable" }), true);
+  assert.deepEqual(updates.at(-1), { projectAssets: "ready", workspaceCatalog: "unavailable" });
+});
+
 function harness(options = {}) {
   const parent = {};
   const posted = [];

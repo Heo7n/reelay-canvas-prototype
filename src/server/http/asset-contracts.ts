@@ -48,5 +48,5 @@ export const PersonalAssetQuerySchema = z.object({
 }).strict();
 
 export const AssetContentQuerySchema = z.object({
-  preview: z.literal("library").optional(),
+  preview: z.enum(["library", "canvas"]).optional(),
 }).strict();

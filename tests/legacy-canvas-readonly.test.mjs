@@ -51,9 +51,11 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
-const [nodeEditorLayout, nodePromptView] = await Promise.all([
+const [nodeEditorLayout, nodePromptView, mediaImageView, mediaPreview] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-node-editor-layout.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-prompt-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-image-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-preview.js", root), "utf8"),
 ]);
 
 test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", (t) => {
@@ -115,6 +117,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(entityUseView);
   window.eval(entityUseController);
   window.eval(mediaToolbarView);
+  window.eval(mediaImageView);
+  window.eval(mediaPreview);
   window.eval(runtimeStore);
   window.eval(nodeTaskRunner);
   window.eval(contentCommands);

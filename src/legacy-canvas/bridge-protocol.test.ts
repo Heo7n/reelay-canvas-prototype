@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hostDocumentMessageSchema,
   hostAssetCommandErrorMessageSchema,
+  hostAssetAvailabilityMessageSchema,
   hostFlushMessageSchema,
   hostMediaRenameResultMessageSchema,
   hostMediaUploadGrantMessageSchema,
@@ -22,6 +23,20 @@ const document = {
 };
 
 describe("legacy canvas bridge", () => {
+  it("negotiates progressive assets separately from the backwards-compatible ready message", () => {
+    const ready = { source: "reelay-legacy-canvas", type: "canvas:ready", protocolVersion: 1, instanceId: "instance" };
+    expect(parseCanvasMessage(ready)).toEqual(ready);
+    const announcement = { ...ready, type: "canvas:capabilities", capabilities: { progressiveAssetLoading: true } };
+    expect(parseCanvasMessage(announcement)).toEqual(announcement);
+    expect(parseCanvasMessage({ ...announcement, capabilities: { progressiveAssetLoading: false } })).toBeNull();
+    expect(parseCanvasMessage({ ...announcement, instanceId: "" })).toBeNull();
+    const availability = { source: "reelay-shell", type: "host:asset-availability", protocolVersion: 1,
+      instanceId: "instance", projectAssets: "loading", workspaceCatalog: "unavailable" };
+    expect(hostAssetAvailabilityMessageSchema.parse(availability)).toEqual(availability);
+    expect(hostAssetAvailabilityMessageSchema.safeParse({ ...availability, instanceId: "" }).success).toBe(false);
+    expect(hostAssetAvailabilityMessageSchema.safeParse({ ...availability, projectAssets: true }).success).toBe(false);
+    expect(hostAssetAvailabilityMessageSchema.safeParse({ ...availability, document: null }).success).toBe(false);
+  });
   it("accepts only bounded ArrayBuffer bodies for transient imports", () => {
     const message = { source: "reelay-legacy-canvas", type: "canvas:import-transient-media", protocolVersion: 1,
       instanceId: "instance", requestId: "request", target: "personal", mediaKind: "image",

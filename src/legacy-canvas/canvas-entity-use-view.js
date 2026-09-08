@@ -176,7 +176,7 @@
 
     return `
       <section class="${classNames("entity-use-detail", pinned && "is-pinned", busy && "is-busy")}" role="dialog" aria-modal="false" aria-labelledby="entity-use-detail-title" data-entity-use-detail="${safeId}" data-entity-use-state="${state}" data-pinned="${pinned}" data-placement="${escapeHtml(placement?.side || "right")}"${detailPlacementStyle(placement)}>
-        <div class="entity-use-detail-cover" data-cover-kind="${cover ? normalizeMediaKind(cover) : featuredMedia ? "preview" : "empty"}" data-media-kind="${normalizeMediaKind(featuredMedia) || "empty"}">
+        <div class="entity-use-detail-cover" data-cover-kind="${cover ? normalizeMediaKind(cover) : featuredMedia ? "preview" : "empty"}" data-media-kind="${normalizeMediaKind(featuredMedia) || "empty"}" data-media-preview-key="${escapeHtml(JSON.stringify([entityId, featuredMedia?.id, normalizeMediaKind(featuredMedia), featuredMedia?.url, featuredMedia?.thumbnailUrl]))}">
           ${featuredMedia ? renderMediaThumbnail(featuredMedia) : `<span class="entity-use-media-placeholder entity">${icon("user-round")}</span>`}
         </div>
         <div class="entity-use-detail-copy">

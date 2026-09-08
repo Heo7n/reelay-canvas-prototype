@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 
-const [viewSource, controllerSource] = await Promise.all([
+const [viewSource, controllerSource, mediaPreviewSource] = await Promise.all([
   readFile(new URL("../src/legacy-canvas/canvas-entity-use-view.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-entity-use-controller.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/legacy-canvas/canvas-media-preview.js", import.meta.url), "utf8"),
 ]);
 
 function createHarness(t) {
@@ -18,6 +19,7 @@ function createHarness(t) {
     <div id="picker" hidden inert aria-hidden="true"></div>
   </body>`, { runScripts: "outside-only", url: "https://reelay.test/" });
   const { window } = dom;
+  window.eval(mediaPreviewSource);
   const document = window.document;
   let serial = 0;
   let time = 0;

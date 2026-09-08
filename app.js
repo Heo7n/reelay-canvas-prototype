@@ -264,6 +264,8 @@ const state = {
     assetPersistence: false,
     entityPersistence: false,
     transientMediaUpload: false,
+    progressiveAssetLoading: false,
+    workspaceCatalog: "unavailable",
   },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
@@ -420,6 +422,8 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.hostCapabilities.assetPersistence = context.capabilities?.assetPersistence === true;
     state.hostCapabilities.entityPersistence = context.capabilities?.entityPersistence === true;
     state.hostCapabilities.transientMediaUpload = context.capabilities?.transientMediaUpload === true;
+    state.hostCapabilities.progressiveAssetLoading = context.capabilities?.progressiveAssetLoading === true;
+    state.hostCapabilities.workspaceCatalog = state.hostCapabilities.progressiveAssetLoading ? "loading" : "unavailable";
     const launchScope = JSON.stringify([context.workspaceId, context.projectId, context.canvasId]);
     if (hostLaunchScope !== launchScope) {
       hostLaunchScope = launchScope;
@@ -472,6 +476,14 @@ const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAs
     if (!response.ok) throw new Error(`媒体上传失败（${response.status}）`);
   },
   useTransientUpload: () => state.hostCapabilities.transientMediaUpload,
+  usesProgressiveAssetLoading: () => state.hostCapabilities.progressiveAssetLoading,
+  onAvailability({ projectAssets, workspaceCatalog }) {
+    state.hostCapabilities.assetPersistence = projectAssets === "ready" && workspaceCatalog !== "loading";
+    state.hostCapabilities.entityPersistence = workspaceCatalog === "ready";
+    state.hostCapabilities.workspaceCatalog = workspaceCatalog;
+    renderAssetLibrary();
+    canvasEntityUse.refresh({ renderPicker: true });
+  },
   onProjectAssets: (assets) => {
     if (state.hostCapabilities.transientMediaUpload) restoreTransientCanvasMedia(assets.map(projectAssetToLibraryMedia));
   },
@@ -1222,6 +1234,7 @@ function syncNodeVisualLayout(
   if (!element) return;
   const { y, layout } = presentation;
   const canonicalLayout = getNodeLayout(node);
+  canvasMediaImageView.syncImages(element, { scale: state.scale, displayWidth: canonicalLayout.mediaWidth });
   const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
   element.style.left = `${node.x}px`;
   element.style.top = `${node.y}px`;
@@ -3276,6 +3289,8 @@ function mediaEditToolbar(node, layout) {
   });
 }
 
+const canvasMediaImageView = window.REELAY_CANVAS_MEDIA_IMAGE_VIEW.createCanvasMediaImageView({ origin: window.location.origin });
+
 function assetPreview(asset) {
   const safeUrl = safeMediaAttributeUrl(asset.url);
   if (!safeUrl) {
@@ -3284,7 +3299,7 @@ function assetPreview(asset) {
     return `<span class="asset-glyph">▧</span>`;
   }
   if (asset.type === "image") {
-    return `<img src="${safeUrl}" alt="" draggable="false" />`;
+    return canvasMediaImageView.renderImage({ ...asset, url: sanitizeRuntimeMediaUrl(asset.url) }, { thumbnail: true });
   }
   if (asset.type === "video") {
     return `
@@ -3421,13 +3436,21 @@ function switchAssetLibraryContext({ space = state.librarySpace, section = state
 
 function isAssetLibraryMutable() {
   return canvasAssetLibraryModel.isMutableSpace(state.librarySpace)
-    && (window.parent === window || state.hostCapabilities.hostWritable);
+    && (window.parent === window || state.hostCapabilities.hostWritable)
+    && (state.librarySpace !== "personal" || !getPersonalCatalogStatus());
+}
+
+function getPersonalCatalogStatus() {
+  return window.parent !== window && state.hostCapabilities.progressiveAssetLoading
+    && state.hostCapabilities.workspaceCatalog !== "ready"
+    ? state.hostCapabilities.workspaceCatalog : "";
 }
 
 function canPersistLibraryMedia() {
   return window.parent === window || (
     state.hostCapabilities.hostWritable
     && state.hostCapabilities.assetPersistence
+    && !getPersonalCatalogStatus()
   );
 }
 
@@ -3514,6 +3537,9 @@ function getAssetLibraryFolderDescendantIds(folderId) {
 }
 
 function getVisibleAssetLibraryContent() {
+  if (state.librarySpace === "personal" && getPersonalCatalogStatus()) {
+    return { folders: [], allItems: [], items: [] };
+  }
   const kind = state.librarySection;
   const query = state.librarySearch;
   const mediaKind = kind === "media" ? state.libraryFilter : "all";
@@ -3705,7 +3731,12 @@ function renderAssetLibrary() {
     })
     .join("");
 
-  canvasAssetLibraryView.syncGrid(assetLibraryGrid, folderMarkup + itemMarkup || canvasAssetLibraryView.renderEmptyState({
+  const catalogStatus = space === "personal" ? getPersonalCatalogStatus() : "";
+  const catalogNotice = catalogStatus
+    ? `<div class="asset-library-empty" role="status"><strong>${catalogStatus === "loading"
+      ? "正在加载个人资产…" : "个人资产暂时无法加载"}</strong><span>${catalogStatus === "loading"
+      ? "画布可继续编辑" : "重新进入项目后重试"}</span></div>` : "";
+  canvasAssetLibraryView.syncGrid(assetLibraryGrid, catalogNotice || folderMarkup + itemMarkup || canvasAssetLibraryView.renderEmptyState({
     section,
     space,
     hasQuery: Boolean(state.librarySearch || (section === "media" && state.libraryFilter !== "all")),
@@ -3715,7 +3746,9 @@ function renderAssetLibrary() {
   }));
 
   if (assetLibraryCount) {
-    if (platform) {
+    if (catalogStatus) {
+      assetLibraryCount.textContent = catalogStatus === "loading" ? "正在加载" : "暂时无法加载";
+    } else if (platform) {
       assetLibraryCount.textContent = `共 ${items.length} 个结果`;
     } else {
     const noun = section === "entity" ? "个主体" : "个素材";
@@ -3796,6 +3829,7 @@ function getEntityUseDetailPayload(entityId, space) {
 function getEntityUsePickerEntities() {
   const entitiesById = new Map();
   for (const space of ["personal", "organization"]) {
+    if (space === "personal" && getPersonalCatalogStatus()) continue;
     const entities = assetLibraryStore.listItems({ space, kind: "entity" });
     for (const entity of entities) {
       const existing = entitiesById.get(entity.id);
@@ -4302,7 +4336,7 @@ function createGeneratedAsset(parameterSnapshot) {
   return generated;
 }
 
-function generatorMediaContent(node) {
+function generatorMediaContent(node, displayWidth) {
   if (node.generating) {
     return `
       <div class="media-content generating-preview">
@@ -4313,7 +4347,7 @@ function generatorMediaContent(node) {
   }
 
   if (node.generatedAsset) {
-    return assetMediaContent(node.generatedAsset);
+    return assetMediaContent(node.generatedAsset, displayWidth);
   }
 
   if (node.preview) {
@@ -4349,7 +4383,7 @@ function generatorMediaContent(node) {
   `;
 }
 
-function assetMediaContent(asset) {
+function assetMediaContent(asset, displayWidth) {
   if (!asset) {
     return `
       <div class="media-content empty-image">
@@ -4361,7 +4395,7 @@ function assetMediaContent(asset) {
   const safeUrl = safeMediaAttributeUrl(asset.url);
 
   if (asset.type === "image" && safeUrl) {
-    return `<div class="media-content image"><img class="frame-media" src="${safeUrl}" alt="" draggable="false" /></div>`;
+    return `<div class="media-content image">${canvasMediaImageView.renderImage({ ...asset, url: sanitizeRuntimeMediaUrl(asset.url) }, { className: "frame-media", displayWidth })}</div>`;
   }
 
   if (asset.type === "video" && safeUrl) {
@@ -4548,6 +4582,11 @@ function isCanvasDropTarget(target) {
 }
 
 function render() {
+  renderCanvasView();
+  scheduleCanvasDocumentSave();
+}
+
+function renderCanvasView() {
   canvasEntityUse.refresh();
   if (state.activeGroupId && !getGroupById(state.activeGroupId)) state.activeGroupId = null;
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
@@ -4564,7 +4603,6 @@ function render() {
   syncCanvasAccessUi();
   scheduleGroupChromeLayout();
   requestAnimationFrame(syncPromptPanelLayouts);
-  scheduleCanvasDocumentSave();
 }
 
 function getNodeRenderSignature(node) {
@@ -4905,11 +4943,12 @@ function createAssetNodeElement(node) {
     <section class="media-frame source-frame ${asset ? `has-asset ${asset.type}-asset` : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
-      ${assetMediaContent(asset)}
+      ${assetMediaContent(asset, layout.mediaWidth)}
       ${nodePortMarkup(node)}
     </section>
   `;
 
+  canvasMediaImageView.syncImages(el, { scale: state.scale, displayWidth: layout.mediaWidth });
   bindNodeEvents(el, node);
   return el;
 }
@@ -4988,12 +5027,13 @@ function createGeneratorNodeElement(node, existingElement = null) {
     <section class="media-frame generator-frame ${node.preview ? "has-preview" : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
-      ${generatorMediaContent(node)}
+      ${generatorMediaContent(node, layout.mediaWidth)}
       ${nodePortMarkup(node)}
     </section>
     ${promptPanel}
   `);
 
+  canvasMediaImageView.syncImages(el, { scale: state.scale, displayWidth: layout.mediaWidth });
   bindNodeEvents(el, node, { bindRoot: !existingElement, bindMedia: !retainedMedia });
   const promptInput = el.querySelector(".prompt-input");
   if (!retainedInput) promptInput?.addEventListener("keydown", (event) => {
@@ -9561,7 +9601,7 @@ function restoreTransientCanvasMedia(media) {
       }
     }
   }
-  if (changed) render();
+  if (changed) renderCanvasView();
 }
 
 function syncHostEntity(entity) {
@@ -11065,4 +11105,6 @@ window.REELAY_CANVAS_LAYOUT_TUNER_BOOTSTRAP?.({
     }[key];
   },
 });
+// Separate negotiation keeps the original strict ready message compatible with older hosts.
+canvasPersistence.post("canvas:capabilities", { capabilities: { progressiveAssetLoading: true } });
 canvasPersistence.post("canvas:ready");

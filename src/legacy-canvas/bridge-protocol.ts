@@ -17,6 +17,7 @@ const legacyCanvasCapabilitiesSchema = z
     assetPersistence: z.boolean().optional(),
     entityPersistence: z.boolean().optional(),
     transientMediaUpload: z.boolean().optional(),
+    progressiveAssetLoading: z.boolean().optional(),
   })
   .strict();
 
@@ -161,6 +162,15 @@ export const hostProjectAssetsMessageSchema = z.object({
   projectAssets: z.array(bridgeProjectAssetSchema).max(10_000),
 }).strict();
 
+export const hostAssetAvailabilityMessageSchema = z.object({
+  source: z.literal("reelay-shell"),
+  type: z.literal("host:asset-availability"),
+  protocolVersion: z.literal(1),
+  instanceId: canvasInstanceIdSchema,
+  projectAssets: z.enum(["loading", "ready", "unavailable"]),
+  workspaceCatalog: z.enum(["loading", "ready", "unavailable"]),
+}).strict();
+
 export const hostWorkspaceAssetCatalogMessageSchema = z.object({
   source: z.literal("reelay-shell"),
   type: z.literal("host:workspace-asset-catalog"),
@@ -251,6 +261,13 @@ export const hostAssetCommandErrorMessageSchema = z.object({
 }).strict();
 
 export const canvasMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:capabilities"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    capabilities: z.object({ progressiveAssetLoading: z.literal(true) }).strict(),
+  }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:import-transient-media"),

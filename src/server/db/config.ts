@@ -62,7 +62,9 @@ export function createPostgresPool(
     ...getConnectionConfig(connectionString ?? getDatabaseUrl(environment), environment),
     max: readPositiveInteger("REELAY_DB_POOL_MAX", environment) ?? (isServerless ? 2 : 10),
     connectionTimeoutMillis: readPositiveInteger("REELAY_DB_CONNECT_TIMEOUT_MS", environment) ?? 15_000,
-    idleTimeoutMillis: readPositiveInteger("REELAY_DB_IDLE_TIMEOUT_MS", environment) ?? 10_000,
+    // A long-lived API should reuse its bounded pool between normal UI actions;
+    // discarding it after ten seconds repeatedly pays the remote TLS handshake.
+    idleTimeoutMillis: readPositiveInteger("REELAY_DB_IDLE_TIMEOUT_MS", environment) ?? (isServerless ? 10_000 : 60_000),
     allowExitOnIdle: true,
     application_name: "reelay-server",
   });

@@ -17,6 +17,19 @@ describe("Supabase database transport", () => {
     expect(options.ssl.rejectUnauthorized).toBe(true);
     expect(options.ssl.ca).toContain("BEGIN CERTIFICATE");
   });
+
+  it.each([["", 60_000], ["1", 10_000]] as const)("bounds idle reuse for VERCEL=%s", (vercel, idleTimeout) => {
+    vi.stubEnv("VERCEL", vercel);
+    vi.stubEnv("REELAY_DB_IDLE_TIMEOUT_MS", "");
+    createPostgresPool("postgresql://local:local@127.0.0.1:54329/reelay");
+    expect(capturePool.mock.lastCall?.[0].idleTimeoutMillis).toBe(idleTimeout);
+  });
+
+  it("preserves an explicitly configured idle timeout", () => {
+    vi.stubEnv("REELAY_DB_IDLE_TIMEOUT_MS", "25000");
+    createPostgresPool("postgresql://local:local@127.0.0.1:54329/reelay");
+    expect(capturePool.mock.lastCall?.[0].idleTimeoutMillis).toBe(25_000);
+  });
 });
 
 describe("database environment selection", () => {

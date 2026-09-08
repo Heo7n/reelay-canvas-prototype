@@ -108,7 +108,9 @@
       const viewportRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
       // Measure the rendered content at its usable width before placing it. Position
       // belongs to the portal so the panel cannot retain a conflicting inline offset.
-      detailPortal.innerHTML = view.renderEntityDetail({ entity, media: entity.media, pinned: detail.pinned, canAdd: options.isMutable() });
+      root.REELAY_CANVAS_MEDIA_PREVIEW.renderPreservingMedia(detailPortal,
+        view.renderEntityDetail({ entity, media: entity.media, pinned: detail.pinned, canAdd: options.isMutable() }),
+        ".entity-use-detail-cover");
       view.syncEntityDetailPortal(detailPortal, { visible: true, pinned: detail.pinned, placement: {
         left: 12, top: 12,
         width: Math.min(340, Math.max(1, viewportRect.width - 24)),
