@@ -1931,6 +1931,87 @@ function agentParameterControls(h) {
   return { trigger, menu, click, mode, model, open };
 }
 
+test("Agent send estimate follows the generation model and parameters and recovers from unknown costs", (t) => {
+  const h = createHarness(t);
+  h.window.setAgentOpen(true);
+  const controls = agentParameterControls(h);
+  const { document } = h.window;
+  const amount = document.querySelector("#agentCreditValue");
+  const send = document.querySelector(".agent-send");
+  const assertEstimate = (cost) => {
+    assert.equal(amount.textContent, cost === null ? "—" : String(cost));
+    const label = cost === null ? "发送；本次消耗待估算" : `发送；本次预计消耗 ${cost} 积分`;
+    assert.equal(send.getAttribute("aria-label"), label);
+    assert.equal(send.title, label);
+  };
+
+  assert.equal(h.window.getAgentComposerModel().id, "seedance-2");
+  assertEstimate(12);
+  controls.open();
+  const duration = controls.menu.querySelector("[data-duration-range]");
+  duration.value = "8";
+  duration.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assertEstimate(24);
+  controls.click("quality", "1080p");
+  assertEstimate(36);
+
+  controls.model("seedance-2-5");
+  assertEstimate(24);
+  controls.open();
+  controls.click("omni-reference-task-type", "edit");
+  assertEstimate(null);
+  controls.click("omni-reference-task-type", "auto");
+  assertEstimate(24);
+
+  controls.model("gpt-image-2");
+  assertEstimate(5);
+  controls.open();
+  controls.click("resolution", "4K");
+  assertEstimate(9);
+  controls.click("quality", "高");
+  assertEstimate(17);
+  controls.mode("agent");
+  assertEstimate(null);
+  controls.mode("generation");
+  assertEstimate(17);
+  controls.model("seedance-2");
+  assertEstimate(36);
+});
+
+test("Agent send estimate is independent of account balance and simulated messages do not charge or change canvases", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("one", [h.node("shared-id")]);
+  const second = h.canvas("two", [h.node("shared-id", { model: "seedance-2-5" })]);
+  h.install(first, second);
+  h.window.setAgentOpen(true);
+  const { document } = h.window;
+  const snapshot = plain(h.window.createCanvasDocumentSnapshot());
+  const canvases = plain([first, second]);
+  const amount = document.querySelector("#agentCreditValue");
+  const send = document.querySelector(".agent-send");
+  const estimate = { amount: amount.textContent, label: send.getAttribute("aria-label") };
+
+  h.window.chargeCredits(27);
+  assert.equal(h.state.account.credits, 2973);
+  assert.equal(h.state.account.consumedCredits, 27);
+  assert.equal(document.querySelector("#profileCreditValue").textContent, "2,973");
+  assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
+
+  const account = plain(h.state.account);
+  const conversation = h.window.getConversation();
+  const messageCount = conversation.messages.length;
+  const input = document.querySelector("#agentInput");
+  input.value = "生成一个森林中的视频镜头";
+  send.click();
+  assert.equal(conversation.messages.length, messageCount + 2, "the local user message and example reply remain available");
+  assert.equal(conversation.messages[messageCount].content, "生成一个森林中的视频镜头");
+  assert.equal(input.value, "");
+  assert.deepEqual(plain(h.state.account), account);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.deepEqual(plain([first, second]), canvases);
+  assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
+});
+
 test("Agent task and model switches update guidance while preserving the original input and canvas content", (t) => {
   const h = createHarness(t);
   h.install(h.canvas("agent-guidance", [h.node("unrelated")]));

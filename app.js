@@ -2867,12 +2867,6 @@ function syncCreditDisplay() {
     profileCreditValue.closest("[data-profile-action='credits']")
       ?.setAttribute("aria-label", `查看我的积分，当前 ${credits}`);
   }
-  if (agentCreditValue) agentCreditValue.textContent = credits;
-  if (agentSendButton) {
-    const label = `发送；当前可用积分 ${credits}`;
-    agentSendButton.title = label;
-    agentSendButton.setAttribute("aria-label", label);
-  }
 }
 
 function hasEnoughCredits(cost) {
@@ -7747,6 +7741,14 @@ function syncAgentModelButton() {
   const model = getAgentComposerModel();
   const parameters = agentParameters.sync(model);
   if (agentInput) agentInput.placeholder = generatorModelPolicy.getPromptPlaceholder(models, parameters);
+  const cost = parameters ? getCost(parameters) : null;
+  const costLabel = Number.isFinite(cost) && cost > 0 ? formatCredit(cost) : null;
+  if (agentCreditValue) agentCreditValue.textContent = costLabel ?? "—";
+  if (agentSendButton) {
+    const label = costLabel ? `发送；本次预计消耗 ${costLabel} 积分` : "发送；本次消耗待估算";
+    agentSendButton.title = label;
+    agentSendButton.setAttribute("aria-label", label);
+  }
   const agentManaged = agentModels.getMode() === "agent";
   if (agentModelBtn) {
     agentModelBtn.disabled = false;

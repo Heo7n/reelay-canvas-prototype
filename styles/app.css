@@ -4915,6 +4915,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 }
 
 .agent-composer.prompt-composer-surface {
+  --agent-add-size: 36px;
   --agent-control-font-size: 13px;
   --agent-control-font-weight: 500;
   --agent-tool-icon-size: 22px;
@@ -4931,8 +4932,8 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 .agent-composer .agent-add-button {
   top: var(--agent-content-inset);
   left: var(--agent-content-inset);
-  width: var(--agent-control-size);
-  height: var(--agent-control-size);
+  width: var(--agent-add-size);
+  height: var(--agent-add-size);
   padding: 0;
   border: 1px solid var(--agent-panel-line);
   border-radius: var(--agent-control-radius);
@@ -4946,8 +4947,8 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 }
 
 .agent-composer .agent-add-button > svg {
-  width: var(--agent-icon-size);
-  height: var(--agent-icon-size);
+  width: 20px;
+  height: 20px;
   stroke-width: var(--agent-icon-stroke);
 }
 
@@ -4973,7 +4974,7 @@ html[data-theme="light"] .asset-node.audio-source .audio-progress-fill {
 .agent-composer-top-actions {
   position: absolute;
   z-index: 3;
-  top: var(--agent-content-inset);
+  top: calc(var(--agent-content-inset) + (var(--agent-add-size) - var(--agent-control-size)) / 2);
   right: var(--agent-content-inset);
   display: flex;
   align-items: center;
