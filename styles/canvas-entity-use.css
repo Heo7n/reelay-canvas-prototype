@@ -43,15 +43,15 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 .generator-node .entity-drop,
 .generator-node .asset-drop {
   position: absolute;
-  top: 16px;
+  top: 22px;
   display: grid;
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border: 0;
-  border-radius: 14px;
+  border: 1px solid var(--node-panel-line);
+  border-radius: 8px;
   outline: 0;
-  background: var(--node-chip-bg);
+  background: transparent;
   color: var(--node-chip-text);
   cursor: pointer;
   font-size: var(--node-font-label);
@@ -69,7 +69,7 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 }
 
 .generator-node .asset-shelf {
-  left: 84px;
+  left: 64px;
 }
 
 .generator-node .prompt-panel.has-entity-entry .entity-drop {
@@ -77,19 +77,19 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 }
 
 .generator-node .prompt-panel.has-entity-entry .asset-drop {
-  left: 84px;
+  left: 60px;
 }
 
 .generator-node .prompt-panel.has-entity-entry .asset-shelf {
-  left: 148px;
+  left: 108px;
 }
 
 .generator-node .prompt-panel.has-entity-entry .entity-drop::after {
   position: absolute;
-  left: 58px;
-  top: 12px;
+  left: 40px;
+  top: 8px;
   width: 1px;
-  height: 24px;
+  height: 20px;
   background: var(--node-panel-line);
   content: "";
   pointer-events: none;
@@ -113,15 +113,15 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 
 .generator-node .entity-drop > svg,
 .generator-node .asset-drop > svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   stroke-width: 1.45;
 }
 
 .generator-node .entity-entry-glyph {
   display: block;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   color: currentColor;
 }
 

@@ -159,6 +159,10 @@ const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
 if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
 const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
 if (!canvasPopoverPlacement) throw new Error("Canvas popover placement helper is unavailable.");
+window.REELAY_CANVAS_PARAMETER_HELP.createController({
+  document,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+});
 const assetLibraryItemMenu = window.REELAY_CANVAS_ASSET_LIBRARY_MENU_CONTROLLER.create({
   grid: assetLibraryGrid,
   placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
@@ -2853,12 +2857,6 @@ function syncCreditDisplay() {
     profileCreditValue.closest("[data-profile-action='credits']")
       ?.setAttribute("aria-label", `查看我的积分，当前 ${credits}`);
   }
-  if (agentCreditValue) agentCreditValue.textContent = credits;
-  if (agentSendButton) {
-    const label = `发送；当前可用积分 ${credits}`;
-    agentSendButton.title = label;
-    agentSendButton.setAttribute("aria-label", label);
-  }
 }
 
 function hasEnoughCredits(cost) {
@@ -4990,7 +4988,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
         ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
-        <textarea class="prompt-input" data-node-prompt-input placeholder="描述你想生成的内容，或输入 @ 引用" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
+        <textarea class="prompt-input" data-node-prompt-input placeholder="${escapeHtml(generatorModelPolicy.getPromptPlaceholder(models, node))}" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
         <div class="control-bar">
           <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" aria-label="${escapeHtml(model?.name || "暂无可用模型")}" title="${escapeHtml(model?.name || "暂无可用模型")}" ${generationInputsDisabled}>
             ${modelIconMarkup(model, "model-chip-glyph")}
@@ -5012,7 +5010,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
           </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
             <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
-            <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.25 20.6V9.45L6.7 13q-.95.95-1.9 0l-.75-.75q-.95-.95 0-1.9l6.5-6.5q1.45-1.45 2.9 0l6.5 6.5q.95.95 0 1.9l-.75.75q-.95.95-1.9 0l-3.55-3.55V20.6q0 1.4-1.4 1.4h-.7q-1.4 0-1.4-1.4Z" /></svg></span>
+            <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></span>
           </button>
         </div>
         ${node.panel === "material" ? materialPanel() : ""}
@@ -6006,12 +6004,16 @@ function omniReferenceTaskTypeParameterSection(node, canvas = true) {
   const values = Array.isArray(capability?.uiValues) ? capability.uiValues : [];
   if (!values.length) return "";
   const activeIndex = Math.max(0, values.indexOf(node.omniReferenceTaskType));
+  const helpItems = values.map((value) => ({
+    title: getOmniReferenceTaskTypeLabel(node, value),
+    description: capability.descriptions?.[value],
+  })).filter((item) => item.description);
   return `
     <section class="parameter-group parameter-omni-reference-task-type">
-      <div class="param-heading">模式</div>
+      <div class="param-heading parameter-mode-heading"><span>模式</span>${helpItems.length ? `<button class="parameter-mode-help" data-parameter-help data-help-title="模式说明" data-help-items="${escapeHtml(JSON.stringify(helpItems))}" type="button" aria-label="了解三种视频模式"><i data-lucide="circle-help" aria-hidden="true"></i></button>` : ""}</div>
       <div class="segmented omni-reference-task-type-segmented" style="--option-columns: ${values.length}; --task-type-selection-index: ${activeIndex}">
         ${values.map((value) => `
-          <button class="${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" ${canvas ? "data-canvas-mutation" : ""} type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
+          <button class="parameter-mode-select ${node.omniReferenceTaskType === value ? "active" : ""}" data-action="omni-reference-task-type" data-value="${escapeHtml(value)}" ${canvas ? "data-canvas-mutation" : ""} type="button" aria-pressed="${node.omniReferenceTaskType === value}">${escapeHtml(getOmniReferenceTaskTypeLabel(node, value))}</button>
         `).join("")}
       </div>
     </section>
@@ -7743,6 +7745,15 @@ function syncAgentModelButton() {
       : `已选模型：${names.join("、") || "未选择"}`;
   const model = getAgentComposerModel();
   const parameters = agentParameters.sync(model);
+  if (agentInput) agentInput.placeholder = generatorModelPolicy.getPromptPlaceholder(models, parameters);
+  const cost = parameters ? getCost(parameters) : null;
+  const costLabel = Number.isFinite(cost) && cost > 0 ? formatCredit(cost) : null;
+  if (agentCreditValue) agentCreditValue.textContent = costLabel ?? "—";
+  if (agentSendButton) {
+    const label = costLabel ? `发送；本次预计消耗 ${costLabel} 积分` : "发送；本次消耗待估算";
+    agentSendButton.title = label;
+    agentSendButton.setAttribute("aria-label", label);
+  }
   const agentManaged = agentModels.getMode() === "agent";
   if (agentModelBtn) {
     agentModelBtn.disabled = false;

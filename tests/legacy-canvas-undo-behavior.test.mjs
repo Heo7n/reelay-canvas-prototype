@@ -389,6 +389,60 @@ test("node controls preserve the live prompt editor and media across content ren
   assert.equal(node.prompt, "外部更新后的提示词");
 });
 
+test("mode guidance updates the live node editor without becoming prompt content or resetting reading state", (t) => {
+  const h = createHarness(t);
+  const guidance = h.window.REELAY_MODEL_CATALOG.find((model) => model.id === "seedance-2-5")
+    .capabilities.omniReferenceTaskType.promptPlaceholders;
+  assert.ok(guidance?.auto && guidance?.edit && guidance?.extend, "the model catalog supplies each visible task's guidance");
+  const node = h.node("mode-guidance", { expanded: true, model: "seedance-2-5", prompt: "" });
+  const canvas = h.canvas("guidance", [node]);
+  h.install(canvas);
+  const element = h.window.document.querySelector('[data-id="mode-guidance"]');
+  const input = element.querySelector("[data-node-prompt-input]");
+  assert.equal(input.placeholder, guidance.auto, "initial rendering resolves the default task");
+  h.window.handleAction(node, "omni-reference-task-type", "edit");
+  assert.equal(element.querySelector("[data-node-prompt-input]"), input);
+  assert.equal(input.placeholder, guidance.edit);
+  assert.equal(input.value, "");
+  assert.equal(node.prompt, "");
+  assert.equal(canvas.undoStack.length, 1, "guidance adds no separate content command");
+  assert.equal(h.window.getGenerationAvailability(node).canGenerate, false, "placeholder text cannot enable generation");
+
+  const prompt = "镜头缓慢推进，保持光影连续。".repeat(120);
+  input.value = prompt;
+  input.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  input.setSelectionRange(8, 28, "backward");
+  input.scrollTop = 640;
+  input.focus();
+  const valueDescriptor = Object.getOwnPropertyDescriptor(h.window.HTMLTextAreaElement.prototype, "value");
+  let valueWrites = 0;
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get() { return valueDescriptor.get.call(this); },
+    set(value) { valueWrites += 1; valueDescriptor.set.call(this, value); },
+  });
+  function assertEditor(expectedPlaceholder) {
+    assert.equal(element.querySelector("[data-node-prompt-input]"), input);
+    assert.equal(input.placeholder, expectedPlaceholder);
+    assert.equal(input.value, prompt);
+    assert.equal(node.prompt, prompt);
+    assert.equal(input.scrollTop, 640);
+    assert.deepEqual([input.selectionStart, input.selectionEnd, input.selectionDirection], [8, 28, "backward"]);
+    assert.equal(h.window.document.activeElement, input);
+    assert.equal(valueWrites, 0, "metadata updates must not rewrite the live value and discard native text undo");
+  }
+  element.querySelector('[data-action="omni-reference-task-type"][data-value="extend"]').click();
+  assertEditor(guidance.extend);
+  h.window.undoLastAction();
+  assertEditor(guidance.edit);
+  h.window.handleAction(node, "model", "kling-video-3");
+  assertEditor("描述你想生成的内容，或输入 @ 引用");
+  h.window.undoLastAction();
+  assertEditor(guidance.edit);
+  h.window.render();
+  assertEditor(guidance.edit);
+});
+
 test("prompt scrolling follows editing focus instead of interrupting canvas navigation on hover", (t) => {
   const h = createHarness(t);
   const node = h.node("scroll-editor", { expanded: true });
@@ -1982,6 +2036,145 @@ function agentParameterControls(h) {
   };
   return { trigger, menu, click, mode, model, open };
 }
+
+test("Agent send estimate follows the generation model and parameters and recovers from unknown costs", (t) => {
+  const h = createHarness(t);
+  h.window.setAgentOpen(true);
+  const controls = agentParameterControls(h);
+  const { document } = h.window;
+  const amount = document.querySelector("#agentCreditValue");
+  const send = document.querySelector(".agent-send");
+  const assertEstimate = (cost) => {
+    assert.equal(amount.textContent, cost === null ? "—" : String(cost));
+    const label = cost === null ? "发送；本次消耗待估算" : `发送；本次预计消耗 ${cost} 积分`;
+    assert.equal(send.getAttribute("aria-label"), label);
+    assert.equal(send.title, label);
+  };
+
+  assert.equal(h.window.getAgentComposerModel().id, "seedance-2");
+  assertEstimate(12);
+  controls.open();
+  const duration = controls.menu.querySelector("[data-duration-range]");
+  duration.value = "8";
+  duration.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assertEstimate(24);
+  controls.click("quality", "1080p");
+  assertEstimate(36);
+
+  controls.model("seedance-2-5");
+  assertEstimate(24);
+  controls.open();
+  controls.click("omni-reference-task-type", "edit");
+  assertEstimate(null);
+  controls.click("omni-reference-task-type", "auto");
+  assertEstimate(24);
+
+  controls.model("gpt-image-2");
+  assertEstimate(5);
+  controls.open();
+  controls.click("resolution", "4K");
+  assertEstimate(9);
+  controls.click("quality", "高");
+  assertEstimate(17);
+  controls.mode("agent");
+  assertEstimate(null);
+  controls.mode("generation");
+  assertEstimate(17);
+  controls.model("seedance-2");
+  assertEstimate(36);
+});
+
+test("Agent send estimate is independent of account balance and simulated messages do not charge or change canvases", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("one", [h.node("shared-id")]);
+  const second = h.canvas("two", [h.node("shared-id", { model: "seedance-2-5" })]);
+  h.install(first, second);
+  h.window.setAgentOpen(true);
+  const { document } = h.window;
+  const snapshot = plain(h.window.createCanvasDocumentSnapshot());
+  const canvases = plain([first, second]);
+  const amount = document.querySelector("#agentCreditValue");
+  const send = document.querySelector(".agent-send");
+  const estimate = { amount: amount.textContent, label: send.getAttribute("aria-label") };
+
+  h.window.chargeCredits(27);
+  assert.equal(h.state.account.credits, 2973);
+  assert.equal(h.state.account.consumedCredits, 27);
+  assert.equal(document.querySelector("#profileCreditValue").textContent, "2,973");
+  assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
+
+  const account = plain(h.state.account);
+  const conversation = h.window.getConversation();
+  const messageCount = conversation.messages.length;
+  const input = document.querySelector("#agentInput");
+  input.value = "生成一个森林中的视频镜头";
+  send.click();
+  assert.equal(conversation.messages.length, messageCount + 2, "the local user message and example reply remain available");
+  assert.equal(conversation.messages[messageCount].content, "生成一个森林中的视频镜头");
+  assert.equal(input.value, "");
+  assert.deepEqual(plain(h.state.account), account);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.deepEqual(plain([first, second]), canvases);
+  assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
+});
+
+test("Agent task and model switches update guidance while preserving the original input and canvas content", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("agent-guidance", [h.node("unrelated")]));
+  h.window.setAgentOpen(true);
+  const input = h.window.document.querySelector("#agentInput");
+  const controls = agentParameterControls(h);
+  const guidance = h.window.REELAY_MODEL_CATALOG.find((model) => model.id === "seedance-2-5")
+    .capabilities.omniReferenceTaskType.promptPlaceholders;
+  assert.ok(guidance?.auto && guidance?.edit && guidance?.extend);
+  const generic = "描述你想生成的内容，或输入 @ 引用";
+  assert.equal(input.placeholder, generic);
+  const snapshot = plain(h.window.createCanvasDocumentSnapshot());
+  controls.model("seedance-2-5");
+  assert.equal(input.placeholder, guidance.auto);
+  controls.open();
+  controls.click("omni-reference-task-type", "edit");
+  assert.equal(input.placeholder, guidance.edit);
+  assert.equal(input.value, "");
+  h.window.sendAgentMessage();
+  assert.equal(input.value, "", "mode guidance is not message content");
+
+  const prompt = "继续修改画面并保留其余镜头。".repeat(80);
+  input.value = prompt;
+  input.setSelectionRange(7, 20, "backward");
+  input.scrollTop = 480;
+  const valueDescriptor = Object.getOwnPropertyDescriptor(h.window.HTMLTextAreaElement.prototype, "value");
+  let valueWrites = 0;
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get() { return valueDescriptor.get.call(this); },
+    set(value) { valueWrites += 1; valueDescriptor.set.call(this, value); },
+  });
+  function assertEditor(expectedPlaceholder) {
+    assert.equal(h.window.document.querySelector("#agentInput"), input);
+    assert.equal(input.placeholder, expectedPlaceholder);
+    assert.equal(input.value, prompt);
+    assert.equal(input.scrollTop, 480);
+    assert.deepEqual([input.selectionStart, input.selectionEnd, input.selectionDirection], [7, 20, "backward"]);
+    assert.equal(valueWrites, 0);
+  }
+  controls.click("omni-reference-task-type", "extend");
+  assertEditor(guidance.extend);
+  controls.model("gpt-image-2");
+  assertEditor(generic);
+  controls.model("seedance-2-5");
+  assertEditor(guidance.extend);
+  controls.mode("agent");
+  assertEditor(generic);
+  controls.mode("generation");
+  assertEditor(guidance.extend);
+  input.focus();
+  h.window.syncAgentComposerControls();
+  assert.equal(h.window.document.activeElement, input, "an incidental control sync must retain editing focus");
+  assertEditor(guidance.extend);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.equal(h.state.undoStack.length, 0);
+});
 
 test("Agent video parameter clicks update the summary and constraints without touching canvas content or undo", (t) => {
   const h = createHarness(t);

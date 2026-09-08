@@ -2,6 +2,22 @@
 
 本文只保留下一位开发者真正需要的当前状态。产品细节、规划和工程规则分别以 `current-product-spec.md`、`product-expansion-plan.md`、`engineering-guardrails.md` 与 ADR 为准；阅读路径见 `development-workflow.md`。
 
+## 2026-09-08 多会话发布集成
+
+- 在独立 `codex/integration-20260908` worktree 从远端 `main` 的 `e0638a7` 集成主页 / 登录 / 项目页 `154674c`、画布与媒体加载 `4e85533`、节点与 Agent 输入区 `d721b88`。主体预览修复 `9fce2e5` 与 `f966305` 为相同补丁，仅保留一份实现；原工作区和共享预览服务保持原状。
+- 合并保留管理员预填与按项目 / 画布归属的创建提示词交接、渐进资产初始化及权限校验、媒体缩略图到原图的切换、Seedance 2.5 模式说明 / 动态占位、Agent 单次积分估算。48 个经典脚本依赖顺序和测试入口已合并，开发入口不恢复手写缓存版本参数。
+- 最终代码通过 `npm run check` 1000 项（539 legacy / 274 shell / 180 server / 7 setup）、隔离 PostgreSQL 29 项、账号与静态体验两套构建及 `git diff --cached --check`。静态体验浏览器已验收首页提示词仅创建一个待生成节点、模型模式说明和按参数估算积分，控制台无 error / warn；各切片的主题 / 响应式验收记录仍见下文。
+- 本次发布不执行云库 migration / seed，也不复制 Dev / Test 数据。公网候选、promotion 和最终域名证据以本次 PR 的发布记录为准；本段的集成验收不代表部署已经完成。
+
+## 2026-09-08 节点与对话框提交交接
+
+- `f8b9f5a` 后的补充：Agent 添加入口由 32px 调为 36px，与节点参考区一致；发送旁从账户余额改为复用节点 `getCost` 的单次预计消耗，随当前模型 / 参数更新。Agent 自动规划或缺少参考视频时长时显示“— / 待估算”，个人余额仍由 `syncCreditDisplay` 独立更新；发送维持本地模拟且不新增扣费。后续合并须保留这一费用语义，不能恢复发送区展示余额的旧逻辑。
+- 本批在实际分支 `codex/entity-library-design`、worktree `f859/0707` 上完成，父提交为 `9fce2e5`。统一节点与 Agent 输入区、积分发送区、模型 / 参数 / 添加菜单的主题和文字层级；Seedance 2.5 三模式名称居中，仅在“模式”标题旁提供一个说明入口，说明跟随父面板等宽对齐并避让视口。
+- 模式说明区分上传、生成和续写时长；节点与 Agent 生成模式共用 `data/model-catalog.js` 的动态占位。全模态最终只保留“基于图片、视频或音频参考生成新视频”，不恢复两行“若需要……”；编辑 / 延长保留操作引导。更新只改 placeholder，原文、输入框身份、选区、滚动与原生文字撤销保持。
+- `index.html` 与 `styles.css` 移除固定 `?v=`，修复 Vite 将旧源码视为 immutable 导致预览显示滞后；生产构建仍生成内容哈希。合并其他分支的新增 script / favicon 时保留双方入口与脚本顺序，不恢复手工版本值；新帮助 controller 及其测试入口必须一并保留。
+- 本轮 `npm run check` 通过；此前已实测节点与 Agent 三模式、深浅主题、说明对齐及边界，5174 完整路由与 5177 静态体验均已更新。最后一次文案仅删除全模态两行占位，本次提交前再次通过完整检查；未执行公网发布、数据迁移或 seed。
+- 后续同步先重新执行 `npm run worktrees` 核对现场。本次只读盘点时，`codex/canvas-development` 在 `e0638a7`、`codex/canvas-agent-refinement` 在 `4e85533`，两者干净；`codex/home-login-development` 和 `codex/canvas-dialog-refinement` 尚有未提交内容。主要交集是 `app.js`、`index.html`、`package.json`、共享测试与文档，需按功能合并，不整文件覆盖；参数说明 / 占位逻辑与新增媒体加载模块均须保留。主体预览修复 `9fce2e5` 与另一分支的 `f966305` 已核对 stable patch-id 相同，避免重复移植。以上为盘点快照，不代表其他任务已经合并，也不能据此推断远端或公网状态。
+
 ## 当前定位
 
 - 2026-09-08 管理员入口与两站 Favicon 已上线：账号 <https://reelay-canvas-prototype.vercel.app/app/login?demo=admin>（炭黑），体验 <https://reelay-experience.vercel.app/app>（紫色）。构建源 `c23b338`；两个实际部署、独立上传边界和 HTTP / UI 证据见 `vercel-supabase-preview.md` 的当日记录。林静的 3 份正式 main 画布已深比通过；另保留的历史 deployment-smoke 源/副本均是原有无效测试文档，不能计作可用画布。

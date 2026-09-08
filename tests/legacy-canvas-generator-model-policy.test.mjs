@@ -73,3 +73,27 @@ test("runtime model policy never lets legacy fields or results redefine a node c
   assert.equal(policy.normalizeModelState(catalog, runtimeNode).id, "image-a");
   assert.equal(runtimeNode.mode, "image");
 });
+
+test("prompt guidance follows the resolved model and task without modifying generator state", () => {
+  const promptPlaceholders = { auto: "参考引导\n选择素材", edit: "编辑引导", extend: "延长引导" };
+  const modeCatalog = [{
+    id: "guided-video", type: "video",
+    defaults: { omniReferenceTaskType: "auto" },
+    capabilities: { omniReferenceTaskType: {
+      values: ["auto", "edit", "extend"], promptPlaceholders,
+    } },
+  }, ...catalog];
+  const node = { kind: "generator", mode: "video", model: "guided-video", prompt: "保留原文" };
+  assert.equal(policy.getPromptPlaceholder(modeCatalog, node), promptPlaceholders.auto);
+  assert.equal(node.omniReferenceTaskType, undefined, "guidance must not normalize or persist parameters");
+  for (const taskType of ["edit", "extend", "auto"]) {
+    node.omniReferenceTaskType = taskType;
+    assert.equal(policy.getPromptPlaceholder(modeCatalog, node), promptPlaceholders[taskType]);
+  }
+  assert.equal(node.prompt, "保留原文");
+  const generic = "描述你想生成的内容，或输入 @ 引用";
+  node.model = "kling-video";
+  assert.equal(policy.getPromptPlaceholder(modeCatalog, node), generic, "another model ignores stale task state");
+  assert.equal(policy.getPromptPlaceholder(modeCatalog, null), generic, "Agent planning has no generator configuration");
+  assert.equal(policy.getPromptPlaceholder(modeCatalog, { ...node, mode: "image", model: "image-a" }), generic);
+});

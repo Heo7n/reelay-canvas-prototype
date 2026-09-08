@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
     <link id="appFavicon" rel="icon" type="image/svg+xml" href="./assets/favicon-account.svg" />
-    <link rel="stylesheet" href="./styles.css?v=20260907-asset-integration-112" />
-    <link rel="stylesheet" href="./styles/canvas-connections.css?v=20260827-connection-confirm-46" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles/canvas-connections.css" />
   </head>
   <body>
     <main class="app-shell">
@@ -530,8 +530,8 @@
                   <i data-lucide="volume-2" aria-hidden="true"></i>
                 </button>
                 <div class="agent-composer-spacer control-spacer"></div>
-                <button class="agent-send generate-button" type="button" title="发送；当前可用积分 3,000" aria-label="发送；当前可用积分 3,000">
-                  <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span id="agentCreditValue">3,000</span></span>
+                <button class="agent-send generate-button" type="button" title="发送；本次消耗待估算" aria-label="发送；本次消耗待估算">
+                  <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span id="agentCreditValue">—</span></span>
                   <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></span>
                 </button>
               </div>
@@ -545,52 +545,53 @@
     <div class="entity-use-detail-portal" id="entityUseDetailPortal" aria-hidden="true" inert hidden></div>
     <div class="entity-use-picker-portal" id="entityUsePickerPortal" aria-hidden="true" inert hidden></div>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
-    <script src="./data/model-catalog.js?v=20260907-model-capability-copy-95"></script>
-    <script src="./src/config/prototype-config.js?v=20260907-asset-integration-112"></script>
-    <script src="./src/legacy-canvas/canvas-connections.js?v=20260827-connection-confirm-46"></script>
-    <script src="./src/legacy-canvas/canvas-connection-interaction.js?v=20260824-node-body-target-1"></script>
-    <script src="./src/legacy-canvas/canvas-connection-feedback-motion.js?v=20260827-connection-confirm-46"></script>
-    <script src="./src/legacy-canvas/canvas-connection-feedback-controller.js?v=20260827-connection-confirm-46"></script>
-    <script src="./src/legacy-canvas/canvas-connection-renderer.js?v=20260827-connection-confirm-46"></script>
-    <script src="./src/legacy-canvas/canvas-layer-reconciler.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-node-prompt-view.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-generator-model-policy.js?v=20260901-entity-use-43"></script>
-    <script src="./src/legacy-canvas/canvas-popover-placement.js?v=20260824-node-controls-2"></script>
-    <script src="./src/legacy-canvas/canvas-spatial-selection.js?v=20260831-exact-group-selection-42"></script>
-    <script src="./src/legacy-canvas/canvas-node-interaction.js?v=20260818-progressive-split-3"></script>
-    <script src="./src/legacy-canvas/canvas-node-placement.js?v=20260827-aspect-layout-41"></script>
-    <script src="./src/legacy-canvas/canvas-node-editor-layout.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-node-layout-transition.js?v=20260827-aspect-layout-41"></script>
-    <script src="./src/legacy-canvas/canvas-node-pointer-controller.js?v=20260824-selection-frame-drag-33"></script>
-    <script src="./src/legacy-canvas/canvas-node-drag-controller.js?v=20260905-content-commands-1"></script>
-    <script src="./src/legacy-canvas/canvas-group-interaction-controller.js?v=20260824-group-frame-24"></script>
-    <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js?v=20260818-progressive-split-7"></script>
-    <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js?v=20260903-agent-vertical-74"></script>
-    <script src="./src/legacy-canvas/canvas-agent-panel-geometry.js?v=20260903-agent-vertical-74"></script>
-    <script src="./src/legacy-canvas/canvas-agent-parameters.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-agent-models.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-agent-history.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-model.js?v=20260903-entity-preview-filename-70"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-view.js?v=20260907-asset-integration-112"></script>
-    <script src="./src/legacy-canvas/canvas-asset-library-menu-controller.js?v=20260907-asset-integration-112"></script>
-    <script src="./src/legacy-canvas/canvas-entity-editor-model.js?v=20260903-entity-preview-filename-70"></script>
-    <script src="./src/legacy-canvas/canvas-media-preview.js?v=20260908-progressive-preview-1"></script>
-    <script src="./src/legacy-canvas/canvas-entity-editor-view.js?v=20260907-confirm-dialog-105"></script>
-    <script src="./src/legacy-canvas/canvas-entity-editor-controller.js?v=20260907-entity-exit-106"></script>
-    <script src="./src/legacy-canvas/canvas-entity-use-model.js?v=20260901-entity-use-43"></script>
-    <script src="./src/legacy-canvas/canvas-entity-use-view.js?v=20260907-entity-picker-stable-108"></script>
-    <script src="./src/legacy-canvas/canvas-entity-use-controller.js?v=20260907-entity-picker-stable-108"></script>
-    <script src="./src/legacy-canvas/canvas-media-toolbar-view.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-media-image-view.js?v=20260908-adaptive-media-1"></script>
-    <script src="./src/legacy-canvas/canvas-runtime-store.js?v=20260826-canvas-runtime-store-38"></script>
-    <script src="./src/legacy-canvas/canvas-node-task-runner.js?v=20260905-node-task-runner-1"></script>
-    <script src="./src/legacy-canvas/canvas-content-commands.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-command-executor.js?v=20260905-content-commands-1"></script>
-    <script src="./src/legacy-canvas/canvas-document-codec.js?v=20260907-canvas-integration-1"></script>
-    <script src="./src/legacy-canvas/canvas-persistence-coordinator.js?v=20260826-persistence-coordinator-37"></script>
-    <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js?v=20260903-entity-preview-filename-70"></script>
-    <script src="./src/legacy-canvas/canvas-entity-asset-coordinator.js?v=20260901-platform-space-27"></script>
-    <script src="./src/legacy-canvas/canvas-asset-space-switcher.js?v=20260907-entity-exit-107"></script>
-    <script src="./app.js?v=20260907-asset-integration-112"></script>
+    <script src="./data/model-catalog.js"></script>
+    <script src="./src/config/prototype-config.js"></script>
+    <script src="./src/legacy-canvas/canvas-connections.js"></script>
+    <script src="./src/legacy-canvas/canvas-connection-interaction.js"></script>
+    <script src="./src/legacy-canvas/canvas-connection-feedback-motion.js"></script>
+    <script src="./src/legacy-canvas/canvas-connection-feedback-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-connection-renderer.js"></script>
+    <script src="./src/legacy-canvas/canvas-layer-reconciler.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-prompt-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-generator-model-policy.js"></script>
+    <script src="./src/legacy-canvas/canvas-popover-placement.js"></script>
+    <script src="./src/legacy-canvas/canvas-parameter-help-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-spatial-selection.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-interaction.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-placement.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-editor-layout.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-layout-transition.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-pointer-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-drag-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-group-interaction-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-panel-geometry.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-parameters.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-models.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-history.js"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-model.js"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-menu-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-model.js"></script>
+    <script src="./src/legacy-canvas/canvas-media-preview.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-editor-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-use-model.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-use-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-use-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-media-toolbar-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-media-image-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-runtime-store.js"></script>
+    <script src="./src/legacy-canvas/canvas-node-task-runner.js"></script>
+    <script src="./src/legacy-canvas/canvas-content-commands.js"></script>
+    <script src="./src/legacy-canvas/canvas-command-executor.js"></script>
+    <script src="./src/legacy-canvas/canvas-document-codec.js"></script>
+    <script src="./src/legacy-canvas/canvas-persistence-coordinator.js"></script>
+    <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-asset-coordinator.js"></script>
+    <script src="./src/legacy-canvas/canvas-asset-space-switcher.js"></script>
+    <script src="./app.js"></script>
   </body>
 </html>

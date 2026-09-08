@@ -50,6 +50,8 @@ npm run dev:shell -- --host 127.0.0.1 --port 5173 --strictPort
 
 入口为 <http://127.0.0.1:5173/app/login>；现有会话可直接回到原项目 URL。主演示账号为 `creator@reelay.test / reelay-demo`，完整账号列表见 [当前交接](agent-handoff.md)。`--strictPort` 防止地址悄悄切换。Vite 把 `/api` 代理到 `127.0.0.1:5175`，只启动前端不能替代 API 和数据库。
 
+旧画布源码入口 `index.html` 与 `styles.css` 的脚本、样式引用保持无手工版本查询参数。Vite 会把带 `?v=` 的资源当成已版本化资源并返回一年 `immutable` 缓存，继续沿用同一版本值会让本地预览停留在旧代码；无查询参数的源码请求使用 `no-cache`，刷新时重新验证。正式构建仍由 `copy-legacy-canvas.mjs` 生成带内容哈希的 JS / CSS 文件，产物缓存策略不受影响。
+
 ### 只恢复当前 API
 
 确认 `5175` 没有现有服务、主目录 `.env.shared-development.local` 已配置 `Reelay_Dev` 后，在另一个 PowerShell 终端执行：

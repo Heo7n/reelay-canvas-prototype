@@ -40,7 +40,7 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 - Vercel rewrite 的 `apiPath` 内部参数在 API 入口统一移除；同时兼容保留原请求路径和只提供 `/api` 目标路径的运行时，业务查询仍执行原有严格校验。
 - `api/index.ts` 是 Vercel 的无状态 API 入口；`src/server/start.ts`
   只服务本地常驻进程。两者复用同一个 `buildServer` 和 PostgreSQL store。
-- `npm run build` 生成 React 应用壳，并把迁移期旧画布的 45 个同步经典脚本按原顺序合为一个 JS、样式入口及导入合为一个 CSS，输出到 `dist/shell`。产物文件名包含内容哈希，Vercel 对这些公开静态文件使用一年 immutable 缓存；开发入口仍保留分文件结构。构建验证经典全局绑定与样式顺序，不把鉴权 API 或私有媒体放进公共缓存。
+- `npm run build` 生成 React 应用壳，并把迁移期旧画布的 48 个同步经典脚本按原顺序合为一个 JS、样式入口及导入合为一个 CSS，输出到 `dist/shell`。产物文件名包含内容哈希，Vercel 对这些公开静态文件使用一年 immutable 缓存；开发入口仍保留分文件结构。构建验证经典全局绑定与样式顺序，不把鉴权 API 或私有媒体放进公共缓存。
 - 进入项目不再为未展开的资产库创建媒体预览或预读全库原图；当前三主体 12 图约 `23.33 MiB` 的全量下载不应由纯项目导航触发。目录权限检查、实际使用媒体时的尺寸读取和离开前保存保持原有边界。
 - Vercel CDN 直接提供 `dist/shell` 静态产物，`/api/*` 交给同一个 Fastify
   Function；前端与 API 仍然同源，不增加第二套鉴权。

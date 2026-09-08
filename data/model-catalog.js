@@ -74,6 +74,21 @@
             edit: "视频编辑",
             extend: "视频延长",
           },
+          // Seedance 2.5 (2026-09-08): https://docs.byteplus.com/en/docs/ModelArk/2607688
+          // Non-edit video inputs: 2–30s each; edit: 4–30s each. Up to 10 videos / 30s total.
+          // auto recommends 4–30s inputs because the prompt can be recognized as an edit task.
+          // Generated / extended output: 4–30s; editing essentially retains the input duration.
+          descriptions: {
+            auto: "生成 4–30 秒视频，可用图片、视频或音频参考。\n参考视频每段 2–30 秒，建议至少 4 秒。",
+            edit: "上传 4–30 秒视频，用文字修改画面或声音。\n支持局部编辑，输出基本保持原时长。",
+            extend: "上传 2–30 秒视频，向前或向后续写。\n可指定 4–30 秒续写时长。",
+          },
+          // Prompt guidance: https://docs.volcengine.com/docs/82379/2607689?lang=zh
+          promptPlaceholders: {
+            auto: "基于图片、视频或音频参考生成新视频",
+            edit: "传入已有视频，提示词带关键词：修改、替换、增加、删除等更改视频内容的描述，支持时间戳局部编辑，支持额外输入参考图引导编辑。",
+            extend: "传入已有视频，提示词带关键词：向前/向后延长、续写……可指定 4–30 秒续写时长。",
+          },
           constraints: {
             reference: {},
             edit: {

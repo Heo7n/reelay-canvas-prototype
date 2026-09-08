@@ -2,6 +2,7 @@
   "use strict";
 
   const generatorModes = new Set(["image", "video"]);
+  const defaultPromptPlaceholder = "描述你想生成的内容，或输入 @ 引用";
 
   function normalizeMode(value) {
     return generatorModes.has(value) ? value : null;
@@ -33,6 +34,18 @@
     return Boolean(model?.type === "video" && model.brand === "seedance");
   }
 
+  function getPromptPlaceholder(catalog, node) {
+    const model = resolveModel(catalog, node);
+    const capability = model?.capabilities?.omniReferenceTaskType;
+    const taskType = capability?.values?.includes(node?.omniReferenceTaskType)
+      ? node.omniReferenceTaskType
+      : model?.defaults?.omniReferenceTaskType;
+    const placeholder = capability?.promptPlaceholders?.[taskType];
+    return typeof placeholder === "string" && placeholder.trim()
+      ? placeholder
+      : defaultPromptPlaceholder;
+  }
+
   function normalizeModelState(catalog, node) {
     const mode = getNodeModeContract(node);
     if (!mode) return null;
@@ -47,6 +60,7 @@
     canUseModel,
     getCompatibleModels,
     getNodeModeContract,
+    getPromptPlaceholder,
     normalizeMode,
     normalizeModelState,
     resolveModel,
