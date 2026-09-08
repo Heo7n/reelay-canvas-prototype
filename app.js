@@ -3,7 +3,6 @@ const topBar = document.querySelector(".top-bar");
 const leftRail = document.querySelector(".left-rail");
 const topActions = document.querySelector("#topActions");
 const shell = document.querySelector("#canvasShell");
-const appFavicon = document.querySelector("#appFavicon");
 const canvasGrid = document.querySelector("#canvasGrid");
 const stage = document.querySelector("#canvasStage");
 const nodeLayer = document.querySelector("#nodeLayer");
@@ -139,34 +138,6 @@ const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)")
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
 const homeLaunchIntentKey = "reelay-home-launch-intent";
-
-function syncFaviconContrast() {
-  if (!appFavicon) return;
-  const source = new Image();
-  source.onload = () => {
-    const canvas = document.createElement("canvas");
-    const size = 64;
-    canvas.width = size;
-    canvas.height = size;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.clearRect(0, 0, size, size);
-    context.beginPath();
-    context.arc(size / 2, size / 2, 28, 0, Math.PI * 2);
-    context.fillStyle = "#ffffff";
-    context.fill();
-    context.lineWidth = 4;
-    context.strokeStyle = "#15171b";
-    context.stroke();
-    context.drawImage(source, 10, 10, 44, 44);
-    try {
-      appFavicon.href = canvas.toDataURL("image/png");
-    } catch {
-      appFavicon.href = "./assets/reelay-logo.png";
-    }
-  };
-  source.src = "./assets/reelay-logo.png";
-}
 
 const models = window.REELAY_MODEL_CATALOG || [];
 const prototypeConfig = window.REELAY_PROTOTYPE_CONFIG || {};
@@ -11076,7 +11047,6 @@ syncAgentComposerControls();
 syncAgentPromptOptimizationControl();
 syncCreditDisplay();
 applyTheme(state.themeMode);
-syncFaviconContrast();
 initializeCanvases();
 applyTransform();
 consumeHomeLaunchIntent();

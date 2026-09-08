@@ -172,8 +172,8 @@ test("experience home launch consumes its context prompt once without touching s
 
 test("closed library catalog registration loads no media; using an asset hydrates only that node", async (t) => {
   const h = createHarness(t, { trackMetadataImages: true });
-  assert.deepEqual(h.metadataImages.map((image) => image.url), ["./assets/reelay-logo.png"],
-    "startup loads its favicon but must not probe any media in the demo library");
+  assert.deepEqual(h.metadataImages.map((image) => image.url), [],
+    "startup uses its static favicon and must not probe any media in the demo library");
   h.metadataImages.length = 0;
   h.install(h.canvas("on-demand-media"));
   const assets = Array.from({ length: 12 }, (_, index) => ({

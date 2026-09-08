@@ -1,0 +1,12 @@
+# Local credentials, snapshots and media stores must never enter deployment input.
+.env
+.env.*
+.reelay-data/
+.codex/
+.git/
+.vercel/
+node_modules/
+dist/
+coverage/
+*.log
+*.tmp

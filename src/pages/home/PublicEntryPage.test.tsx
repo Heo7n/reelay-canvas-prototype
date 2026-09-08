@@ -15,8 +15,8 @@ const actor = { id: "review-actor", account: "creator@reelay.test", displayName:
 const workspace = { id: "review-workspace", kind: "organization", name: "评审工作室", currentUserRole: "owner" };
 let routers: ReturnType<typeof createMemoryRouter>[] = [];
 
-function setup(initialEntry = "/app") {
-  let signedIn = false;
+function setup(initialEntry = "/app", initiallySignedIn = false) {
+  let signedIn = initiallySignedIn;
   const services = {
     sessionGateway: {
       getCurrent: vi.fn(async () => ({ actor: signedIn ? actor : null })),
@@ -47,6 +47,69 @@ afterEach(() => {
 });
 
 describe("guest home and login navigation", () => {
+  it("keeps the admin demo link through dismissal and reopening and waits for an explicit login", async () => {
+    const { router, services } = setup("/app/login?demo=admin");
+    let dialog = await screen.findByRole("dialog", { name: "欢迎登录" });
+    expect(within(dialog).getByLabelText("账号")).toHaveValue("linjing@reelay.test");
+    expect(within(dialog).getByLabelText("密码", { exact: true })).toHaveValue("reelay-demo");
+    expect(services.sessionGateway.signInWithPassword).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭登录" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(router.state.location.pathname + router.state.location.search).toBe("/app?demo=admin");
+    fireEvent.click(screen.getByRole("button", { name: "注册/登录" }));
+    dialog = await screen.findByRole("dialog", { name: "欢迎登录" });
+    expect(router.state.location.pathname + router.state.location.search).toBe("/app/login?demo=admin");
+    expect(within(dialog).getByLabelText("账号")).toHaveValue("linjing@reelay.test");
+    expect(services.sessionGateway.signInWithPassword).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "登录" }));
+    await waitFor(() => expect(services.sessionGateway.signInWithPassword).toHaveBeenCalledExactlyOnceWith({
+      account: "linjing@reelay.test", password: "reelay-demo",
+    }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/app/w/review-workspace"));
+  });
+
+  it.each([
+    "",
+    "?demo=unknown",
+    "?demo=admin&demo=admin",
+    "?demo=admin&demo=creator",
+  ])("uses the main account for an absent, unknown, or ambiguous preset: %s", async (search) => {
+    const { services } = setup(`/app/login${search}`);
+    const dialog = await screen.findByRole("dialog", { name: "欢迎登录" });
+    expect(within(dialog).getByLabelText("账号")).toHaveValue("creator@reelay.test");
+    expect(services.sessionGateway.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("ignores credentials in the URL and preserves manually edited credentials after a failed admin login", async () => {
+    const { router, services } = setup("/app/login?demo=admin&account=other%40reelay.test&password=from-url");
+    vi.mocked(services.sessionGateway.signInWithPassword).mockRejectedValue(new ApplicationError("authentication_required", "账号或密码不正确。"));
+    const dialog = await screen.findByRole("dialog", { name: "欢迎登录" });
+    const account = within(dialog).getByLabelText("账号");
+    const password = within(dialog).getByLabelText("密码", { exact: true });
+    expect(account).toHaveValue("linjing@reelay.test");
+    expect(password).toHaveValue("reelay-demo");
+    fireEvent.change(account, { target: { value: "manual@reelay.test" } });
+    fireEvent.change(password, { target: { value: "manual-password" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "登录" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("账号或密码不正确。");
+    expect(services.sessionGateway.signInWithPassword).toHaveBeenCalledExactlyOnceWith({
+      account: "manual@reelay.test", password: "manual-password",
+    });
+    expect(account).toHaveValue("manual@reelay.test");
+    expect(password).toHaveValue("manual-password");
+    expect(router.state.location.pathname).toBe("/app/login");
+  });
+
+  it("keeps an existing session when an admin demo link is opened", async () => {
+    const { router, services } = setup("/app/login?demo=admin", true);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/app/w/review-workspace"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(services.sessionGateway.signInWithPassword).not.toHaveBeenCalled();
+    expect(services.sessionGateway.signOut).not.toHaveBeenCalled();
+  });
+
   it("keeps the draft and opening control when the login dialog closes", async () => {
     const { router, services } = setup();
     const prompt = await screen.findByRole("textbox", { name: "描述你的创作需求" });
@@ -78,7 +141,7 @@ describe("guest home and login navigation", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/app/w/review-workspace"));
     await screen.findByRole("heading", { name: "最近项目" });
     expect(await screen.findByRole("textbox", { name: "描述你的创作需求" })).toHaveValue("规划一个森林故事");
-    expect(readGuestCreationDraft()).toBe("");
+    await waitFor(() => expect(readGuestCreationDraft()).toBe(""));
     expect(services.projectRepository.create).not.toHaveBeenCalled();
     expect(services.sessionGateway.signInWithPassword).toHaveBeenCalledWith({ account: "creator@reelay.test", password: "reelay-demo" });
   });
@@ -95,7 +158,7 @@ describe("guest home and login navigation", () => {
     expect(within(dialog).getByLabelText("密码", { exact: true })).toHaveValue("incorrect");
     fireEvent.click(within(dialog).getByRole("button", { name: "关闭登录" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(readGuestCreationDraft()).toBe("");
+    await waitFor(() => expect(readGuestCreationDraft()).toBe(""));
     expect(screen.getByRole("textbox", { name: "描述你的创作需求" })).toHaveValue("失败后保留的想法");
   });
 
