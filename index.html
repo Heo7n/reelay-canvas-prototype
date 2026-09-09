@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="dark" data-prompt-editor-src="./assets/prompt-editor.js">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -488,11 +488,17 @@
             </section>
 
             <div class="agent-composer-stage prompt-composer-layout">
-              <textarea class="prompt-input" id="agentInput" aria-label="给 Reelay Agent 的消息" placeholder="描述你想生成的内容，或输入 @ 引用"></textarea>
+              <div class="prompt-input" id="agentInput" aria-label="给 Reelay Agent 的消息" data-placeholder="描述你想生成的内容，或输入 @ 引用"></div>
               <div class="agent-composer-topbar">
                 <button class="agent-add-button asset-drop" id="agentAddBtn" type="button" title="添加附件" aria-label="添加附件">
                   <i data-lucide="plus" aria-hidden="true"></i>
                 </button>
+                <div class="agent-reference-shelf asset-shelf" id="agentReferenceShelf" role="group" aria-label="参考素材，拖动可排序" hidden></div>
+                <div class="agent-reference-menu hidden" id="agentReferenceMenu" role="menu" aria-label="添加参考素材">
+                  <button type="button" role="menuitem" data-agent-reference-source="local"><i data-lucide="upload" aria-hidden="true"></i>本地上传</button>
+                  <button type="button" role="menuitem" data-agent-reference-source="library"><i data-lucide="folder-open" aria-hidden="true"></i>从资产库添加</button>
+                  <button type="button" role="menuitem" data-agent-reference-source="canvas"><i data-lucide="scan" aria-hidden="true"></i>添加画布选中素材</button>
+                </div>
                 <div class="agent-composer-top-actions">
                   <button class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn" type="button" title="输入提示词后优化" aria-label="提示词优化" aria-busy="false" disabled>
                     <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
@@ -545,6 +551,7 @@
     <div class="entity-use-detail-portal" id="entityUseDetailPortal" aria-hidden="true" inert hidden></div>
     <div class="entity-use-picker-portal" id="entityUsePickerPortal" aria-hidden="true" inert hidden></div>
     <input id="localAssetInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
+    <input id="agentReferenceInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
     <script src="./data/model-catalog.js"></script>
     <script src="./src/config/prototype-config.js"></script>
     <script src="./src/legacy-canvas/canvas-connections.js"></script>
@@ -557,6 +564,12 @@
     <script src="./src/legacy-canvas/canvas-generator-model-policy.js"></script>
     <script src="./src/legacy-canvas/canvas-popover-placement.js"></script>
     <script src="./src/legacy-canvas/canvas-parameter-help-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-reference-order.js"></script>
+    <script src="./src/legacy-canvas/canvas-prompt-document.js"></script>
+    <script src="./src/legacy-canvas/canvas-prompt-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-reference-strip-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-references.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-composer-view.js"></script>
     <script src="./src/legacy-canvas/canvas-spatial-selection.js"></script>
     <script src="./src/legacy-canvas/canvas-node-interaction.js"></script>
     <script src="./src/legacy-canvas/canvas-node-placement.js"></script>
@@ -581,6 +594,7 @@
     <script src="./src/legacy-canvas/canvas-entity-use-view.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-use-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-audio-player.js"></script>
     <script src="./src/legacy-canvas/canvas-runtime-store.js"></script>
     <script src="./src/legacy-canvas/canvas-node-task-runner.js"></script>
     <script src="./src/legacy-canvas/canvas-content-commands.js"></script>

@@ -123,11 +123,16 @@
     }
     node.audioEnabled = candidate.audioEnabled === true;
     node.assetValidationEnabled = candidate.assetValidationEnabled === true;
-    node.prompt = boundedString(candidate.prompt, "", 20_000);
+    node.prompt = candidate.prompt && typeof candidate.prompt === "object" && !Array.isArray(candidate.prompt)
+      ? root.REELAY_CANVAS_PROMPT_DOCUMENT.normalize(candidate.prompt)
+      : boundedString(candidate.prompt, "", 20_000);
     node.preview = candidate.preview === true;
     node.name = boundedString(candidate.name, "", 300);
     node.generatedAsset = generatedAsset?.type === node.mediaKind ? generatedAsset : null;
     node.assets = assets;
+    if (Array.isArray(candidate.referenceOrder)) {
+      node.referenceOrder = candidate.referenceOrder.filter((key) => typeof key === "string");
+    }
     node.activeAssetId = activeAssetId && assets.some((asset) => asset.id === activeAssetId)
       ? activeAssetId
       : assets[0]?.id || null;
@@ -208,6 +213,22 @@
     const nodes = Array.isArray(candidate.nodes) ? candidate.nodes.map(serializeNode).filter(Boolean) : [];
     const nodeIds = new Set(nodes.map((node) => node.id));
     const connections = serializeConnections(candidate.connections, nodeIds);
+    const incomingReferenceKeys = new Map();
+    for (const connection of connections) {
+      const keys = incomingReferenceKeys.get(connection.targetNodeId) || [];
+      keys.push(`connection:${connection.id}`);
+      incomingReferenceKeys.set(connection.targetNodeId, keys);
+    }
+    for (const node of nodes) {
+      if (!Array.isArray(node.referenceOrder)) continue;
+      const validKeys = new Set([
+        ...node.assets.map((asset) => `asset:${asset.id}`),
+        ...(incomingReferenceKeys.get(node.id) || []),
+      ]);
+      // The snapshot owns only this node's surviving references. In particular,
+      // deleted, outgoing and cross-canvas connection keys cannot accumulate.
+      node.referenceOrder = node.referenceOrder.filter((key) => validKeys.delete(key));
+    }
     const groups = Array.isArray(candidate.groups)
       ? candidate.groups.map((group) => serializeGroup(group, nodeIds)).filter(Boolean)
       : [];

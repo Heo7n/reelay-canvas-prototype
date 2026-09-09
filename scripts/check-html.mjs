@@ -9,6 +9,8 @@ const pageContracts = [
     requiredScripts: [
       "./data/model-catalog.js",
       "./src/config/prototype-config.js",
+      "./src/legacy-canvas/canvas-prompt-document.js",
+      "./src/legacy-canvas/canvas-prompt-controller.js",
       "./src/legacy-canvas/canvas-document-codec.js",
       "./app.js",
     ],
@@ -29,13 +31,20 @@ for (const contract of pageContracts) {
   const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
   assert.deepEqual([...new Set(duplicateIds)], [], `${contract.htmlFile}: duplicate ids: ${duplicateIds.join(", ")}`);
 
-  const localReferences = [...html.matchAll(/\b(?:src|href)="([^"]+)"/g)]
+  const localReferences = [...html.matchAll(/\s(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1])
     .filter((reference) => !/^(?:[a-z]+:|#)/i.test(reference));
 
   for (const reference of localReferences) {
     const cleanPath = reference.split(/[?#]/, 1)[0];
     await access(new URL(cleanPath, root));
+  }
+
+  // The editor is a lazy dev endpoint and a hashed build output, not a
+  // checked-in script. Do not confuse its data attribute with a native src.
+  assert.match(html, /\sdata-prompt-editor-src="\.\/assets\/prompt-editor\.js"/);
+  for (const source of ["src/prompt-editor/index.js", "scripts/build-prompt-editor.mjs", "src/dev/prompt-editor-plugin.ts"]) {
+    await access(new URL(source, root));
   }
 
   let previousIndex = -1;

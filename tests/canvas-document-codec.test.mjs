@@ -3,11 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-const [codecSource, connectionsSource] = await Promise.all([
+const [codecSource, connectionsSource, promptSource] = await Promise.all([
   readFile(new URL("../src/legacy-canvas/canvas-document-codec.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-connections.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/legacy-canvas/canvas-prompt-document.js", import.meta.url), "utf8"),
 ]);
 const context = vm.createContext({});
+new vm.Script(promptSource, { filename: "canvas-prompt-document.js" }).runInContext(context);
 new vm.Script(codecSource, { filename: "canvas-document-codec.js" }).runInContext(context);
 new vm.Script(connectionsSource, { filename: "canvas-connections.js" }).runInContext(context);
 const codec = context.REELAY_CANVAS_DOCUMENT_CODEC;
@@ -512,4 +514,91 @@ test("legacy generator type aliases migrate once to mediaKind without entering r
   assert.equal(persistedNode.mediaKind, "video");
   assert.equal(Object.hasOwn(persistedNode, "mode"), false);
   assert.equal(Object.hasOwn(persistedNode, "lockedMode"), false);
+});
+
+test("reference order round trips only the generator's own assets and surviving incoming connections", () => {
+  const generator = {
+    id: "generator", kind: "generator", mode: "video", prompt: "keep my words",
+    assets: [{ id: "local", type: "image", url: "/local.png", width: 1080 }, { id: "invalid", type: "unknown" }],
+    generatedAsset: { id: "result", type: "video", url: "/result.mp4" },
+    referenceOrder: ["asset:local", "connection:incoming", "asset:local", "connection:deleted", "connection:outgoing", "asset:foreign", "asset:result", "asset:invalid", "connection:other-canvas"],
+  };
+  const state = { activeCanvasId: "canvas", canvases: [
+    { id: "canvas", nodes: [generator, { id: "source", kind: "asset", assets: [{ id: "foreign", type: "image" }] }, { id: "target", kind: "generator" }], connections: [
+      { id: "incoming", sourceNodeId: "source", targetNodeId: "generator" },
+      { id: "outgoing", sourceNodeId: "generator", targetNodeId: "target" },
+      { id: "deleted", sourceNodeId: "missing", targetNodeId: "generator" },
+    ] },
+    { id: "second", nodes: [{ id: "generator", kind: "generator" }, { id: "source", kind: "asset" }], connections: [{ id: "other-canvas", sourceNodeId: "source", targetNodeId: "generator" }] },
+  ] };
+  const before = plain(state);
+  const snapshot = codec.createSnapshot(state);
+  assert.deepEqual(plain(snapshot.canvases[0].nodes[0].referenceOrder), ["asset:local", "connection:incoming"]);
+  const restored = codec.restoreSnapshot(plain(snapshot)).canvases[0].nodes[0];
+  assert.deepEqual(plain(restored.referenceOrder), ["asset:local", "connection:incoming"]);
+  assert.equal(restored.prompt, "keep my words");
+  assert.equal(restored.assets[0].width, 1080);
+  assert.deepEqual(plain(state), before);
+  assert.equal(state.canvases[0].nodes[0], generator);
+  state.canvases[0].connections = [];
+  generator.assets = [];
+  assert.deepEqual(plain(codec.createSnapshot(state).canvases[0].nodes[0].referenceOrder), []);
+});
+
+test("legacy and malformed reference-order fields remain absent, while malicious arrays are scoped and deduplicated", () => {
+  for (const value of [undefined, null, {}, "asset:one", 42]) {
+    const candidate = { id: "generator", kind: "generator", assets: [{ id: "one", type: "image" }] };
+    if (value !== undefined) candidate.referenceOrder = value;
+    const snapshot = codec.createSnapshot({ canvases: [{ id: "canvas", nodes: [candidate] }] });
+    assert.equal(Object.hasOwn(snapshot.canvases[0].nodes[0], "referenceOrder"), false);
+    assert.equal(Object.hasOwn(codec.restoreSnapshot(plain(snapshot)).canvases[0].nodes[0], "referenceOrder"), false);
+  }
+  const snapshot = codec.createSnapshot({ canvases: [{ id: "canvas", nodes: [
+    { id: "generator", kind: "generator", assets: [{ id: "one", type: "image" }], referenceOrder: [null, {}, "asset:one", "asset:one", "asset:missing", "__proto__", "connection:missing"] },
+    { id: "asset-node", kind: "asset", assets: [{ id: "two", type: "image" }], referenceOrder: ["asset:two"] },
+  ] }] });
+  assert.deepEqual(plain(snapshot.canvases[0].nodes[0].referenceOrder), ["asset:one"]);
+  assert.equal(Object.hasOwn(snapshot.canvases[0].nodes[1], "referenceOrder"), false);
+});
+
+test("structured prompts round trip current and missing reference identities without persisting editor UI", () => {
+  const prompt = { version: 1, content: [
+    { type: "text", text: "让" },
+    { type: "reference", key: "asset:portrait", mediaType: "image", fallbackLabel: "图片1" },
+    { type: "text", text: "跟随" },
+    { type: "reference", key: "connection:removed", mediaType: "video", fallbackLabel: "视频1" },
+  ] };
+  const state = { canvases: [{ id: "canvas", nodes: [{
+    id: "generator", kind: "generator", prompt, promptEditor: { html: "<div>unsafe</div>" },
+    assets: [{ id: "portrait", type: "image", url: "/portrait.png" }],
+    referenceOrder: ["asset:portrait", "connection:removed"],
+  }] }] };
+  const snapshot = codec.createSnapshot(state);
+  const node = snapshot.canvases[0].nodes[0];
+  assert.deepEqual(plain(node.prompt), prompt);
+  assert.deepEqual(plain(node.referenceOrder), ["asset:portrait"]);
+  assert.equal(Object.hasOwn(node, "promptEditor"), false);
+  const restored = codec.restoreSnapshot(plain(snapshot));
+  assert.deepEqual(plain(restored.canvases[0].nodes[0].prompt), prompt);
+  assert.deepEqual(plain(codec.createSnapshot(restored)), plain(snapshot));
+  prompt.content[0].text = "later";
+  assert.equal(node.prompt.content[0].text, "让");
+});
+
+test("structured import canonicalizes only prompt fragments, preserves legacy strings and enforces bounded content", () => {
+  const create = (prompt) => codec.createSnapshot({ canvases: [{ id: "canvas", nodes: [{ id: "generator", kind: "generator", prompt }] }] }).canvases[0].nodes[0].prompt;
+  const input = { version: 1, html: "<script>untrusted</script>", selection: [0, 2], content: [
+    { type: "text", text: "一\r\n", marks: ["bold"] }, { type: "text", text: "二" },
+    { type: "reference", key: "connection:unavailable", mediaType: "audio", fallbackLabel: "音频1", src: "javascript:bad" },
+    { type: "reference", key: "asset:", mediaType: "image" }, { type: "html", html: "<img src='bad'>" },
+  ] };
+  assert.deepEqual(plain(create(input)), { version: 1, content: [
+    { type: "text", text: "一\n二" },
+    { type: "reference", key: "connection:unavailable", mediaType: "audio", fallbackLabel: "音频1" },
+  ] });
+  assert.equal(create("@image1\r\nlegacy"), "@image1\r\nlegacy");
+  assert.equal(create("x".repeat(20_010)).length, 20_000);
+  assert.equal(create({ version: 1, content: [{ type: "text", text: "x".repeat(20_010) }] }).content[0].text.length, 20_000);
+  assert.deepEqual(plain(create({ version: 2, content: [] })), { version: 1, content: [] });
+  for (const value of [undefined, null, 42, [], true]) assert.equal(create(value), "");
 });
