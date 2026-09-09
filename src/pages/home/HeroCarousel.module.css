@@ -13,43 +13,36 @@
 .track {
   position: relative;
   aspect-ratio: 400 / 81;
+  --card-width: 36%;
+  --card-step: 35cqw;
+  --side-scale: .833333;
 }
 
 .card {
   position: absolute;
   top: 50%;
-  left: 0;
-  width: 30%;
+  left: 50%;
+  width: var(--card-width);
   aspect-ratio: 16 / 9;
   padding: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 14px;
-  background: var(--workspace-surface, #191a1d);
+  border-radius: 16px;
+  background: #191a1d;
   color: #fff;
   cursor: pointer;
-  transform: translateY(-50%);
+  transform: translate(calc(-50% + var(--card-offset) * var(--card-step)), -50%) scale(var(--side-scale));
 }
 
-.left {
-  z-index: 1;
-}
-
-.right {
-  z-index: 1;
-  left: 70%;
+.track[data-moving] .card {
+  transition: transform var(--carousel-duration) cubic-bezier(.22, .68, .24, 1), box-shadow var(--carousel-duration) ease;
 }
 
 .active {
-  z-index: 3;
-  left: 32%;
-  width: 36%;
-  border-radius: 16px;
+  transform: translate(calc(-50% + var(--card-offset) * var(--card-step)), -50%) scale(1);
   box-shadow: 0 8px 20px rgb(14 14 18 / 12%);
 }
 
-.artwork { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 360ms ease; }
-.visibleArtwork { opacity: 1; }
 .card img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
 .shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 46%, rgb(10 13 15 / 8%) 62%, rgb(10 13 15 / 68%) 100%); }
 .caption { position: absolute; right: 20px; bottom: 20px; left: 20px; display: grid; gap: 5px; text-align: center; text-shadow: 0 2px 10px rgb(0 0 0 / 30%); }
@@ -84,22 +77,15 @@
 .segments button:focus-visible { outline: 2px solid var(--workspace-text, #171719); outline-offset: 1px; }
 
 @container (max-width: 680px) {
-  .track { aspect-ratio: 200 / 81; }
-  .card { width: 60%; }
-  .left { left: -48%; }
-  .right { left: 88%; }
-  .active { left: 14%; width: 72%; }
+  .track { aspect-ratio: 200 / 81; --card-width: 72%; --card-step: 68cqw; }
   .caption { right: 16px; bottom: 18px; left: 16px; gap: 3px; }
   .title { font-size: 20px; }
-  .card:not(.active) .caption { display: none; }
+  .card:not(.active) .caption { opacity: 0; }
+  .track[data-moving] .caption { transition: opacity var(--carousel-duration) ease; }
 }
 
 @container (max-width: 400px) {
-  .track { aspect-ratio: 800 / 387; }
-  .card { width: 70%; }
-  .left { left: -65%; }
-  .right { left: 95%; }
-  .active { left: 7%; width: 86%; }
+  .track { aspect-ratio: 800 / 387; --card-width: 86%; --card-step: 80cqw; --side-scale: .813953; }
   .caption { right: 12px; bottom: 14px; left: 12px; }
   .title { font-size: 18px; }
   .arrow { width: 34px; height: 34px; }
@@ -108,5 +94,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .artwork, .segments span { transition: none; }
+  .track[data-moving] .card, .track[data-moving] .caption, .segments span { transition: none; }
 }

@@ -29,8 +29,13 @@ export interface OrganizationRouteData {
 }
 
 export interface OrganizationMembersRouteData {
-  members: OrganizationMember[];
+  members: Promise<OrganizationMembersResult>;
 }
+
+export type OrganizationMembersResult =
+  | { status: "ready"; members: OrganizationMember[] }
+  | { status: "redirect"; to: string }
+  | { status: "error" };
 
 export interface LoginActionData {
   error: string;
@@ -130,6 +135,30 @@ async function loadWorkspaceData(
   };
 }
 
+async function loadOrganizationMembers(
+  services: ApplicationServices,
+  args: LoaderFunctionArgs,
+  workspaceId: string,
+): Promise<OrganizationMembersResult> {
+  try {
+    return { status: "ready", members: await services.organizationRepository.listMembers(workspaceId) };
+  } catch (error) {
+    if (isApplicationError(error, "authentication_required")) {
+      return { status: "redirect", to: loginRedirect(args.request).headers.get("Location")! };
+    }
+    if (isApplicationError(error) && (error.code === "forbidden" || error.code === "not_found")) {
+      try {
+        const context = await getSessionContext(services);
+        if (!context.actor) return { status: "redirect", to: loginRedirect(args.request).headers.get("Location")! };
+        const workspace = selectDefaultWorkspace(context.workspaces);
+        return { status: "redirect", to: workspace ? routePaths.workspaceHome(workspace.id) : routePaths.noWorkspace() };
+      } catch { /* Keep a failed recovery request local and retryable too. */ }
+    }
+    // Resolve a scoped result, including early failures before the lazy view mounts.
+    return { status: "error" };
+  }
+}
+
 export function createRouteHandlers(services: ApplicationServices) {
   return {
     rootLoader: async () => {
@@ -203,27 +232,10 @@ export function createRouteHandlers(services: ApplicationServices) {
 
     workspaceLoader: (args: LoaderFunctionArgs) => loadWorkspaceData(services, args),
 
-    organizationLoader: async (args: LoaderFunctionArgs): Promise<OrganizationMembersRouteData> => {
+    organizationLoader: (args: LoaderFunctionArgs): OrganizationMembersRouteData => {
       const workspaceId = args.params.workspaceId;
       if (!workspaceId) throw new Response("Workspace not found", { status: 404 });
-      try {
-        return {
-          members: await services.organizationRepository.listMembers(workspaceId),
-        };
-      } catch (error) {
-        if (isApplicationError(error, "authentication_required")) {
-          throw loginRedirect(args.request);
-        }
-        if (isApplicationError(error) && (error.code === "forbidden" || error.code === "not_found")) {
-          const sessionContext = await getSessionContext(services);
-          if (!sessionContext.actor) throw loginRedirect(args.request);
-          const defaultWorkspace = selectDefaultWorkspace(sessionContext.workspaces);
-          throw redirect(defaultWorkspace
-            ? routePaths.workspaceHome(defaultWorkspace.id)
-            : routePaths.noWorkspace());
-        }
-        throw error;
-      }
+      return { members: loadOrganizationMembers(services, args, workspaceId) };
     },
 
     workspaceAction: async ({ params, request }: ActionFunctionArgs): Promise<WorkspaceActionData | Response> => {
