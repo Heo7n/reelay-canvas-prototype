@@ -4,7 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 
 const context = vm.createContext({});
-for (const file of ["canvas-command-executor.js", "canvas-content-commands.js", "canvas-node-task-runner.js"]) {
+for (const file of ["canvas-prompt-document.js", "canvas-command-executor.js", "canvas-content-commands.js", "canvas-node-task-runner.js"]) {
   vm.runInContext(await readFile(new URL(`../src/legacy-canvas/${file}`, import.meta.url), "utf8"), context);
 }
 const policy = context.REELAY_CANVAS_CONTENT_COMMANDS;
@@ -372,4 +372,101 @@ test("basic content types reject invalid coordinates, dimensions, switches and t
   const current = group("g"), h = harness([], [current]);
   assert.equal(h.execute([patch("groups", current, { width: 0 })]).error.code, "invalid-content-field");
   assert.equal(h.execute([patch("groups", current, { nodeIds: [42] })]).error.code, "invalid-content-field");
+});
+
+test("reference ordering undo restores only order and keeps prompt, media identity and later metadata", () => {
+  const asset = { id: "asset-1", duration: 8 };
+  const first = node("a", { prompt: "original", assets: [asset], referenceOrder: ["connection:linked", "asset:asset-1"] });
+  const h = harness([first]);
+  const assets = first.assets;
+  assert.equal(h.execute([patch("nodes", first, { referenceOrder: ["asset:asset-1", "connection:linked"] })]).ok, true);
+  assert.deepEqual(Object.keys(h.canvas.undoStack[0].command.changes[0].before.fields), ["referenceOrder"]);
+  first.prompt = "edited after reorder";
+  first.x = 250;
+  asset.duration = 16;
+  first.assets.push({ id: "added-later" });
+  assert.equal(h.undo().ok, true);
+  assert.deepEqual(plain(first.referenceOrder), ["connection:linked", "asset:asset-1"]);
+  assert.equal(h.canvas.nodes[0], first);
+  assert.equal(first.assets, assets);
+  assert.equal(first.assets[0], asset);
+  assert.equal(first.assets[0].duration, 16);
+  assert.equal(first.assets[1].id, "added-later");
+  assert.equal(first.prompt, "edited after reorder");
+  assert.equal(first.x, 250);
+  assert.equal(h.canvas.undoStack.length, 0);
+});
+
+test("the first reference-order edit undoes to field absence without restoring any node snapshot", () => {
+  const first = node("a", { assets: [{ id: "one" }] });
+  const h = harness([first]);
+  assert.equal(h.execute([patch("nodes", first, { referenceOrder: ["asset:one"] })]).ok, true);
+  assert.equal(h.undo().ok, true);
+  assert.equal(Object.hasOwn(first, "referenceOrder"), false);
+  assert.equal(h.canvas.nodes[0], first);
+});
+
+test("reference-order content commands reject malformed and duplicate keys atomically", () => {
+  for (const referenceOrder of [null, "asset:one", {}, [12], ["asset:"], ["node:one"], ["asset: one"], ["asset:one "], ["asset:one", "asset:one"], [`connection:${"x".repeat(201)}`]]) {
+    const first = node("a"), h = harness([first]);
+    const result = h.execute([patch("nodes", first, { referenceOrder })]);
+    assert.equal(result.error.code, "invalid-content-field");
+    assert.equal(Object.hasOwn(first, "referenceOrder"), false);
+    assert.equal(h.canvas.undoStack.length, 0);
+    assert.equal(h.effects.length, 0);
+  }
+});
+
+test("structured prompt edits and undo affect only the prompt field and preserve missing atom identities", () => {
+  const first = node("a", { prompt: "legacy words", assets: [{ id: "portrait" }], x: 10 });
+  const asset = first.assets[0];
+  const h = harness([first]);
+  const prompt = { version: 1, content: [
+    { type: "text", text: "让" },
+    { type: "reference", key: "asset:portrait", mediaType: "image", fallbackLabel: "图片1" },
+    { type: "text", text: "跟随" },
+    { type: "reference", key: "connection:removed", mediaType: "video", fallbackLabel: "视频2" },
+  ] };
+  assert.equal(h.execute([patch("nodes", first, { prompt })]).ok, true);
+  assert.deepEqual(plain(first.prompt), prompt);
+  assert.deepEqual(Object.keys(h.canvas.undoStack[0].command.changes[0].after.fields), ["prompt"]);
+  prompt.content[0].text = "later caller change";
+  assert.equal(first.prompt.content[0].text, "让");
+  first.x = 300;
+  asset.duration = 8;
+  assert.equal(h.undo().ok, true);
+  assert.equal(first.prompt, "legacy words");
+  assert.equal(first.x, 300);
+  assert.equal(first.assets[0], asset);
+  assert.equal(first.assets[0].duration, 8);
+  assert.equal(h.canvas.nodes[0], first);
+});
+
+test("malformed structured prompt commands reject atomically instead of silently normalizing edits", () => {
+  const atom = { type: "reference", key: "asset:portrait", mediaType: "image", fallbackLabel: "图片1" };
+  const valid = { version: 1, content: [atom] };
+  for (const prompt of [null, [], {}, { ...valid, html: "untrusted" }, { version: 2, content: [] },
+    { version: 1, content: [{ ...atom, thumbnail: "/x.png" }] },
+    { version: 1, content: [{ ...atom, key: "asset:" }] },
+    { version: 1, content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] },
+    { version: 1, content: [{ type: "text", text: "" }] },
+    { version: 1, content: Array.from({ length: 513 }, () => atom) }, "x".repeat(20_001)]) {
+    const first = node("a", { prompt: "original" }), h = harness([first]);
+    const result = h.execute([patch("nodes", first, { prompt, name: "would change" })]);
+    assert.equal(result.error.code, "invalid-content-field");
+    assert.equal(first.prompt, "original");
+    assert.equal(first.name, "a");
+    assert.equal(h.canvas.undoStack.length, 0);
+    assert.equal(h.effects.length, 0);
+  }
+});
+
+test("structured prompt field history supports later text edits without retaining a second legacy prompt", () => {
+  const initial = { version: 1, content: [{ type: "reference", key: "asset:missing", mediaType: "audio", fallbackLabel: "音频1" }] };
+  const first = node("a", { prompt: initial }), h = harness([first]);
+  const later = { version: 1, content: [...initial.content, { type: "text", text: "配音" }] };
+  assert.equal(h.execute([patch("nodes", first, { prompt: later })]).ok, true);
+  assert.equal(h.undo().ok, true);
+  assert.deepEqual(plain(first.prompt), initial);
+  assert.equal(Object.hasOwn(first, "promptDoc"), false);
 });

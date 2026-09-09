@@ -4,7 +4,7 @@
   const NODE_FIELDS = Object.freeze([
     "name", "prompt", "model", "workflow", "omniReferenceTaskType", "aspect",
     "resolution", "quality", "duration", "outputFormat", "count", "audioEnabled",
-    "assetValidationEnabled", "x", "y", "z", "groupId",
+    "assetValidationEnabled", "referenceOrder", "x", "y", "z", "groupId",
   ]);
   const GROUP_FIELDS = Object.freeze(["name", "x", "y", "width", "height", "z", "nodeIds"]);
   const FIELD_SETS = { nodes: new Set(NODE_FIELDS), groups: new Set(GROUP_FIELDS) };
@@ -88,6 +88,17 @@
   }
 
   function validFieldValue(field, value) {
+    if (field === "prompt") return typeof value === "string"
+      ? value.length <= 20_000 : root.REELAY_CANVAS_PROMPT_DOCUMENT?.isDocument(value) === true;
+    if (field === "referenceOrder") {
+      return Array.isArray(value) && new Set(value).size === value.length && value.every((key) => {
+        if (typeof key !== "string") return false;
+        const separator = key.indexOf(":");
+        const kind = key.slice(0, separator);
+        const id = key.slice(separator + 1);
+        return (kind === "asset" || kind === "connection") && id && id === id.trim() && id.length <= 200;
+      });
+    }
     if (field === "nodeIds") return Array.isArray(value) && value.every((id) => typeof id === "string" && id.trim());
     if (field === "groupId") return value === null || (typeof value === "string" && Boolean(value.trim()));
     if (BOOLEAN_FIELDS.has(field)) return typeof value === "boolean";

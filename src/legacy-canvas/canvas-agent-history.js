@@ -1,7 +1,8 @@
 (function (root) {
   "use strict";
 
-  function createController({ list, seed, escapeHtml, refreshIcons, onSelect, onRename, requestDelete }) {
+  function createController({ list, seed, escapeHtml, refreshIcons, onSelect, onRename, requestDelete,
+    onBeforeSelect = () => {}, onDelete = () => {}, hasDraft = () => false }) {
     const conversations = structuredClone(seed);
     let activeId = conversations[0]?.id;
     let editingId = null;
@@ -62,7 +63,8 @@
     function deleteConversation(id) {
       const index = conversations.findIndex((item) => item.id === id);
       if (index < 0) return;
-      conversations.splice(index, 1);
+      const [removed] = conversations.splice(index, 1);
+      onDelete(removed);
       const next = conversations[Math.min(index, conversations.length - 1)] || newConversation();
       if (activeId === id) select(next.id, { closeMenu: false });
       else render();
@@ -90,6 +92,7 @@
     function select(id, { closeMenu = true } = {}) {
       const conversation = getConversation(id);
       if (!conversation) return;
+      onBeforeSelect(getConversation(), conversation);
       close();
       activeId = id;
       render();
@@ -98,7 +101,7 @@
 
     function startNew() {
       close();
-      const empty = conversations.find((item) => !item.messages.length && item.title === "新对话");
+      const empty = conversations.find((item) => !item.messages.length && item.title === "新对话" && !hasDraft(item));
       select((empty || newConversation()).id);
     }
 

@@ -413,7 +413,7 @@
 
   const layoutRules = {
     defaultRatio: 16 / 9,
-    audioRatio: 16 / 9,
+    audioRatio: 5 / 2,
     landscapeWidth: 620,
     squareSize: 460,
     portraitHeight: 520,

@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 import { canvasLayoutTunerPlugin } from "./src/dev/canvas-layout-tuner-plugin";
+import { promptEditorPlugin } from "./src/dev/prompt-editor-plugin";
 
 function siteFavicon(experience: boolean): Plugin {
   return {
@@ -42,7 +43,7 @@ function shellHistoryFallback() {
 export default defineConfig(({ mode }) => ({
   base: "/",
   define: { "import.meta.env.VITE_REELAY_EXPERIENCE": JSON.stringify(mode === "experience" ? "true" : "false") },
-  plugins: [siteFavicon(mode === "experience"), react(), shellHistoryFallback(), canvasLayoutTunerPlugin()],
+  plugins: [siteFavicon(mode === "experience"), react(), shellHistoryFallback(), canvasLayoutTunerPlugin(), promptEditorPlugin()],
   server: {
     proxy: mode === "experience" ? undefined : {
       "/api": `http://127.0.0.1:${developmentApiPort}`,

@@ -43,10 +43,10 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 .generator-node .entity-drop,
 .generator-node .asset-drop {
   position: absolute;
-  top: 22px;
+  top: 16px;
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: var(--reference-cell-size);
+  height: var(--reference-cell-size);
   padding: 0;
   border: 1px solid var(--node-panel-line);
   border-radius: 8px;
@@ -69,7 +69,7 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 }
 
 .generator-node .asset-shelf {
-  left: 64px;
+  left: calc(16px + var(--reference-cell-size) + var(--reference-cell-gap));
 }
 
 .generator-node .prompt-panel.has-entity-entry .entity-drop {
@@ -77,22 +77,11 @@ html[data-theme="light"] .entity-use-picker-backdrop {
 }
 
 .generator-node .prompt-panel.has-entity-entry .asset-drop {
-  left: 60px;
+  left: calc(16px + var(--reference-cell-size) + var(--reference-cell-gap));
 }
 
 .generator-node .prompt-panel.has-entity-entry .asset-shelf {
-  left: 108px;
-}
-
-.generator-node .prompt-panel.has-entity-entry .entity-drop::after {
-  position: absolute;
-  left: 40px;
-  top: 8px;
-  width: 1px;
-  height: 20px;
-  background: var(--node-panel-line);
-  content: "";
-  pointer-events: none;
+  left: calc(16px + 2 * (var(--reference-cell-size) + var(--reference-cell-gap)));
 }
 
 .generator-node .entity-drop:hover,
