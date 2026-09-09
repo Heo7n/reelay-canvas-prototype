@@ -23,6 +23,44 @@ const codec = context.REELAY_CANVAS_DOCUMENT_CODEC as LegacyCodec;
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
 describe("CanvasDocument v1 cross-runtime contract", () => {
+  it("preserves structured prompt identity and reference order in the shared API contract", () => {
+    const prompt = { version: 1, content: [
+      { type: "text", text: "让" },
+      { type: "reference", key: "asset:portrait", mediaType: "image", fallbackLabel: "图片1" },
+      { type: "reference", key: "connection:removed", mediaType: "video", fallbackLabel: "视频1" },
+    ] };
+    const input = { kind: "reelay-legacy-canvas", version: 1, canvases: [{ id: "canvas", nodes: [
+      { id: "target", kind: "generator", prompt, assets: [{ id: "portrait", type: "image", url: "/portrait.png" }],
+        referenceOrder: ["connection:incoming", "asset:portrait", "asset:portrait", "connection:removed", "asset:foreign"] },
+      { id: "source", kind: "asset", assets: [{ id: "foreign", type: "video", url: "/video.mp4" }] },
+    ], connections: [{ id: "incoming", sourceNodeId: "source", targetNodeId: "target" }] }] };
+    const document = canonicalizeLegacyCanvasDocumentV1(input);
+    expect(document?.canvases[0].nodes[0].prompt).toEqual(prompt);
+    expect(document?.canvases[0].nodes[0].referenceOrder).toEqual(["connection:incoming", "asset:portrait"]);
+    expect(canonicalizeLegacyCanvasDocumentV1(document)).toEqual(document);
+    expect(input.canvases[0].nodes[0].prompt).toEqual(prompt);
+  });
+
+  it.each([
+    { input: "旧提示词\r\n@图片1", expected: "旧提示词\r\n@图片1" },
+    { input: "x".repeat(20_001), expected: "x".repeat(20_000) },
+    { input: { version: 1, editorHtml: "untrusted", content: [
+      { type: "text", text: "一\r\n", marks: ["bold"] }, { type: "text", text: "二" },
+      { type: "reference", key: "asset:", mediaType: "image", fallbackLabel: "图片1" },
+      { type: "reference", key: "connection:missing", mediaType: "audio", fallbackLabel: " 音频1\n " },
+    ] }, expected: { version: 1, content: [
+      { type: "text", text: "一\n二" },
+      { type: "reference", key: "connection:missing", mediaType: "audio", fallbackLabel: "音频1" },
+    ] } },
+    { input: { version: 1, content: [{ type: "text", text: "x".repeat(19_999) + "😀" }] },
+      expected: { version: 1, content: [{ type: "text", text: "x".repeat(19_999) }] } },
+    { input: null, expected: "" },
+  ])("normalizes supported prompt content without persisting editor state", ({ input, expected }) => {
+    const document = canonicalizeLegacyCanvasDocumentV1({ kind: "reelay-legacy-canvas", version: 1,
+      canvases: [{ id: "canvas", nodes: [{ id: "node", kind: "generator", prompt: input }] }] });
+    expect(document?.canvases[0].nodes[0].prompt).toEqual(expected);
+  });
+
   it("keeps the TypeScript boundary canonicalizer in parity with the legacy codec", () => {
     const input = {
       kind: "reelay-legacy-canvas",

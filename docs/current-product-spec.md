@@ -666,6 +666,7 @@ src/legacy-canvas
 - 节点任务：`canvas-node-task-runner.js` 独占生成与提示词优化的运行记录、timer、取消和完成判定，不再由根 `state` 保存任务 Map。任务记录项目 / 画布 / 节点 / task 归属、启动时的实际节点身份以及不可变输入；`app.js` 保留模拟扣费、结果字段写入、撤销与保存适配。Agent 对话任务尚未进入该 runner。
 - 主体使用：`canvas-entity-use-controller.js` 独占选择器 / 详情状态、焦点、背景隔离与监听器生命周期；确认时仍按打开的项目 / 画布 / 节点重新验证，不使用全局浮层状态修复内容。
 - 节点媒体类型：图片 / 视频类型在创建时确定，CanvasDocument 与任务快照以 `mediaKind` 为统一表达。当前 legacy 节点对象内部仍使用 `mode`；codec 将规范文档的 `mediaKind` 转为运行时适配值，保存时再输出 `mediaKind`，不维护两个可独立变化的类型。旧文档的 `mode / lockedMode / generatedAsset.type` 仅用于 v1 兼容读取；新文档不写节点 `mode / lockedMode`，首次生成成功不再写类型锁。正式 Node 对象的字段迁移尚未完成。
+- 共享 API 的提示词引用契约：2026-09-09 增量兼容 `prompt: string | { version: 1, content }`。结构化内容只含 text 与 reference，引用保存稳定 `asset:<id>` / `connection:<id>`、媒体类型及 fallbackLabel；沿用 20,000 逻辑长度上限，引用原子计 1，并限制为 2,048 片段 / 512 引用。移除素材后的引用 key 不在持久化时清理或按同号重绑；`referenceOrder` 独立按节点当前素材及入站连线过滤、去重。GET 与 PUT 共用同一无 DOM 模型归一化，保持旧字符串兼容。这是后端协议支持；主目录的字符串画布编辑器尚未接入 `@` UI，完整候选在 `f859/0707` / `5174`，不以这次同步宣称所有预览已支持结构化编辑。
 - Agent：`agentOpen`、`agentWidth`、`agentTopInset`、`agentBottomInset`；模型与模式状态由 `canvas-agent-models.js` 独占；会话集合、当前会话与行内编辑状态由 `canvas-agent-history.js` 独占；尺寸偏好与模型选择都是当前页面会话状态，不应写入 CanvasDocument 或直接复制到正式 Conversation schema。
 - 资产库 UI：`librarySection`、`librarySpace`、`libraryFolderId`、`librarySearch`、`libraryFilter`、`libraryDisplay`、多选 / 菜单 / 重命名 / 移动 / 预览状态，以及按空间与分栏记忆的搜索和筛选；个人 Media 与 Entity 由宿主 repository 投影进页面 store，Folder 和 organization / platform placement 仍由页面内存 store 持有。这些 UI 状态和资产实体都不写入 CanvasDocument。
 - 主题：`themeMode`。

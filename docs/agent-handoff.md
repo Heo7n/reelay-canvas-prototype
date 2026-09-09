@@ -2,6 +2,14 @@
 
 本文只保留下一位开发者真正需要的当前状态。产品细节、规划和工程规则分别以 `current-product-spec.md`、`product-expansion-plan.md`、`engineering-guardrails.md` 与 ADR 为准；阅读路径见 `development-workflow.md`。
 
+## 2026-09-09 共享 API 的提示词引用兼容同步
+
+- 主目录仍为 `D:\Software\codePro\0707` / `codex/canvas-development`，本轮开始于干净的 `e2eba75`。仅从 `f859/0707` 同步无 DOM 的 `canvas-prompt-document.js` 与 TypeScript 文档契约，并增量补充服务契约 / HTTP 往返测试；未覆盖主页、画布 UI、连接池或共享入口配置。按用户要求，此兼容同步与 f859 的完整界面改动分别形成提交。
+- 修复 `5175` 旧契约在 GET / PUT 时把对象 `prompt` 变成空字符串的问题。共享 API 现在保留 `prompt: string | PromptDocument v1`，归一化文本和引用片段，保留已移除素材的引用 key；`referenceOrder` 按当前节点的素材与入站连线校验、去重。仅保存协议兼容，不更改数据库 schema 或执行 migration / seed。
+- 完整的 `@` 编辑器、节点 / Agent 接入和参考素材视觉仍在 `C:\Users\Ho\.codex\worktrees\f859\0707` 的 `codex/entity-library-design`，通过 `5174` 验收。主目录旧画布 UI 还未集成引用编辑器；不要用仍只有字符串 codec 的旧前端编辑同一份含引用的画布，其读取 / 再保存仍可能丢失引用正文。后续按功能完整合并 UI，而不是把这次 API 兼容同步视为整轮功能已集成。
+- `5175` 继续用原 `npm run dev:server:shared` 入口和忽略配置 `.env.shared-development.local`，读取既有共享开发数据；后端文件更新需要重启原进程。服务重启与 `5174` 浏览器持久化验收由节点 / 对话框任务负责，不复制或输出凭据，不切换数据源。
+- 此兼容同步在主目录通过 `npm run check` 1025 项（539 legacy / 283 shell / 195 server / 8 setup）与 `git diff --check`。新增服务检查覆盖对象提示词、已失效引用、顺序去重、旧字符串和长度界限，以及实际 Fastify PUT→GET→PUT 的内容 / revision 往返；这些测试只使用内存适配器，不读写共享开发库。
+
 ## 2026-09-08 画布文档优先与连接复用
 
 - 本轮从已发布的 PR #23 / `f068def` 开始，活动分支 `codex/canvas-loading-priority`，目录 `ead8/0707`。先取文档，成功后再并行读取三个目录；文档失败或旧作用域不会启动目录。渐进握手、权限和晚到目录不覆盖保存状态的边界保留。

@@ -518,6 +518,33 @@ describe("organization project access API", () => {
     expect(unsupportedInnerVersion.json().error.code).toBe("unsupported_canvas_document");
   });
 
+  it("round trips structured prompts through PUT and GET without losing references or their order", async () => {
+    const cookie = await login(app, "creator@reelay.test");
+    const url = "/api/projects/project-perfume-tvc/canvases/main/document";
+    const prompt = { version: 1, content: [
+      { type: "text", text: "让" },
+      { type: "reference", key: "asset:portrait", mediaType: "image", fallbackLabel: "图片1" },
+      { type: "reference", key: "connection:removed", mediaType: "video", fallbackLabel: "视频1" },
+    ] };
+    const content = { kind: "reelay-legacy-canvas", version: 1, canvases: [{ id: "canvas", nodes: [{
+      id: "node", kind: "generator", prompt, referenceOrder: ["asset:portrait"],
+      assets: [{ id: "portrait", type: "image", url: "/portrait.png" }],
+    }] }] };
+    const written = await app.inject({ method: "PUT", url, headers: { cookie },
+      payload: { schemaVersion: 1, expectedRevision: 0, content } });
+    expect(written.statusCode).toBe(201);
+    expect(written.json().document.content.canvases[0].nodes[0].prompt).toEqual(prompt);
+    const loaded = await app.inject({ method: "GET", url, headers: { cookie } });
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.json().document).toEqual(written.json().document);
+    expect(loaded.json().document.content.canvases[0].nodes[0].referenceOrder).toEqual(["asset:portrait"]);
+    const updated = await app.inject({ method: "PUT", url, headers: { cookie },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: loaded.json().document.content } });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().document.content.canvases[0].nodes[0].prompt).toEqual(prompt);
+    expect(updated.json().document.revision).toBe(2);
+  });
+
   it("canonicalizes stored v1 documents and fails closed for unsupported or corrupt stored content", async () => {
     const cookie = await login(app, "creator@reelay.test");
     const baseInput = {
