@@ -184,6 +184,25 @@ async function sendStoredObject(
       .send();
   }
 
+  // Remote audio/video and large originals must not buffer through the Function response limit.
+  // Both content routes authorize the current actor before reaching this point.
+  // A non-cacheable, short-lived redirect lets Storage serve byte ranges directly.
+  const directDownload = asset.mediaKind === "audio" || asset.mediaKind === "video"
+    || metadata.byteSize > 4 * 1024 * 1024;
+  if (directDownload && objectStore.createSignedDownload) {
+    const download = await objectStore.createSignedDownload(asset.objectKey, 300);
+    if (!download
+      || download.objectKey !== metadata.objectKey
+      || download.contentType !== metadata.contentType
+      || download.byteSize !== metadata.byteSize
+      || download.checksumSha256 !== metadata.checksumSha256
+      || download.etag !== metadata.etag) return unavailableObject(reply);
+    return reply.header("Cache-Control", "private, no-store")
+      .header("Vary", "Cookie")
+      .header("Referrer-Policy", "no-referrer")
+      .redirect(download.url, 307);
+  }
+
   const object = await objectStore.getObject(asset.objectKey, range ? { range } : undefined);
   const expectedLength = range ? range.end - range.start + 1 : metadata.byteSize;
   if (
@@ -266,6 +285,8 @@ export async function registerAssetRoutes(
 ): Promise<void> {
   const previews = new ImagePreviewService(dependencies.objectStore);
   const maxUploadBytes = dependencies.maxUploadBytes ?? MAX_UPLOAD_BYTES;
+  const maxIntentBytes = dependencies.objectStore.createSignedUpload
+    ? Math.max(maxUploadBytes, 50 * 1024 * 1024) : maxUploadBytes;
   if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes <= 0 || maxUploadBytes > MAX_UPLOAD_BYTES) {
     throw new Error("Asset upload byte limit is invalid.");
   }
@@ -285,9 +306,9 @@ export async function registerAssetRoutes(
     if (!params.success || !body.success) {
       return reply.code(400).send({ error: { code: "invalid_request", message: "上传文件信息无效。" } });
     }
-    if (body.data.byteSize > maxUploadBytes) {
+    if (body.data.byteSize > maxIntentBytes) {
       return reply.code(413).send({
-        error: { code: "asset_too_large", message: `当前环境单个素材最大支持 ${maxUploadBytes / (1024 * 1024)} MB。` },
+        error: { code: "asset_too_large", message: `当前环境单个素材最大支持 ${maxIntentBytes / (1024 * 1024)} MB。` },
       });
     }
     if (!CONTENT_TYPES_BY_KIND[body.data.mediaKind].has(body.data.contentType)) {
@@ -303,13 +324,22 @@ export async function registerAssetRoutes(
       });
       const encodedWorkspaceId = encodeURIComponent(params.data.workspaceId);
       const encodedUploadId = encodeURIComponent(intent.id);
+      if (body.data.byteSize > maxUploadBytes && intent.status !== "finalized"
+        && Date.now() >= Date.parse(intent.expiresAt)) {
+        throw new AssetUploadConflictError("expired");
+      }
+      const upload = body.data.byteSize > maxUploadBytes && dependencies.objectStore.createSignedUpload
+        ? await dependencies.objectStore.createSignedUpload({
+          objectKey: intent.objectKey, contentType: intent.expectedContentType,
+          checksumSha256: intent.expectedChecksumSha256,
+        })
+        : {
+          url: `/api/workspaces/${encodedWorkspaceId}/media-upload-intents/${encodedUploadId}/content`,
+          method: "PUT", headers: { "Content-Type": "application/octet-stream" },
+        };
       return reply.code(201).send({
         uploadIntent: { id: intent.id, expiresAt: intent.expiresAt },
-        upload: {
-          url: `/api/workspaces/${encodedWorkspaceId}/media-upload-intents/${encodedUploadId}/content`,
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-        },
+        upload,
       });
     } catch (error) {
       if (error instanceof AssetWorkspaceUnavailableError) {
@@ -391,9 +421,21 @@ export async function registerAssetRoutes(
           uploadIntentId: params.data.uploadId,
         });
         if (!intent) throw new AssetUploadIntentUnavailableError();
-        const stored = await dependencies.objectStore.headObject(intent.objectKey);
+        if (intent.status !== "finalized" && Date.now() >= Date.parse(intent.expiresAt)) {
+          throw new AssetUploadConflictError("expired");
+        }
+        // Direct uploads carry client-supplied metadata. Before publishing one,
+        // read and hash the real bytes; HEAD alone is not evidence of integrity.
+        const stored = intent.status === "pending"
+          ? await dependencies.objectStore.getObject(intent.objectKey)
+          : await dependencies.objectStore.headObject(intent.objectKey);
         if (!stored) throw new AssetUploadConflictError("not_uploaded");
         if (intent.status === "pending") {
+          if (!("body" in stored) || !(stored.body instanceof Uint8Array)
+            || stored.body.byteLength !== intent.expectedByteSize
+            || createHash("sha256").update(stored.body).digest("hex") !== intent.expectedChecksumSha256) {
+            throw new AssetUploadConflictError("metadata_mismatch");
+          }
           intent = await dependencies.assetStore.recordUpload({
             actorId: actor.id,
             workspaceId: params.data.workspaceId,

@@ -2,9 +2,12 @@ import { createHash } from "node:crypto";
 
 import { ObjectKeyConflictError } from "../application/ObjectStore";
 import type {
+  CreateSignedObjectUploadInput,
   GetObjectOptions,
   ObjectStore,
   PutObjectInput,
+  SignedObjectDownload,
+  SignedObjectUpload,
   StoredObject,
   StoredObjectMetadata,
 } from "../application/ObjectStore";
@@ -197,6 +200,63 @@ export class SupabaseObjectStore implements ObjectStore {
     const deleted = await readJson(response);
     if (!Array.isArray(deleted)) throw storageError(response.status);
     return deleted.some((entry) => record(entry).name === key);
+  }
+
+  async createSignedDownload(objectKey: string, expiresInSeconds: number): Promise<SignedObjectDownload | null> {
+    const key = normalizeObjectKey(objectKey);
+    if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 1 || expiresInSeconds > 300) {
+      throw new RangeError("Object download expiry must be between 1 and 300 seconds.");
+    }
+    const info = await this.info(key);
+    if (!info) return null;
+    const path = `/object/sign/${this.objectPath(key)}`;
+    const response = await this.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expiresIn: expiresInSeconds }),
+    });
+    if (!response.ok) {
+      if (await errorKind(response) === "missing") return null;
+      throw storageError(response.status);
+    }
+    const data = record(await readJson(response));
+    // Supabase returns a storage-relative path. Pin it to the exact requested
+    // private object so a malformed provider response cannot become a redirect.
+    if (typeof data.signedURL !== "string" || !data.signedURL.startsWith(`${path}?`)) {
+      throw storageError(response.status);
+    }
+    const url = new URL(`${this.baseUrl}${data.signedURL}`);
+    if (url.pathname !== `/storage/v1${path}` || !url.searchParams.get("token") || url.hash) {
+      throw storageError(response.status);
+    }
+    return { ...info.metadata, url: url.toString() };
+  }
+
+  async createSignedUpload(input: CreateSignedObjectUploadInput): Promise<SignedObjectUpload> {
+    const key = normalizeObjectKey(input.objectKey);
+    const contentType = input.contentType.trim();
+    if (!contentType || /[\r\n]/.test(contentType) || !/^[0-9a-f]{64}$/.test(input.checksumSha256)) {
+      throw new Error("Object upload metadata is invalid.");
+    }
+    await this.assertPrivateBucket();
+    const path = `/object/upload/sign/${this.objectPath(key)}`;
+    const response = await this.request(path, { method: "POST", headers: { "x-upsert": "false" } });
+    if (!response.ok) throw storageError(response.status);
+    const data = record(await readJson(response));
+    if (typeof data.url !== "string" || !data.url.startsWith(`${path}?`)) throw storageError(response.status);
+    const url = new URL(`${this.baseUrl}${data.url}`);
+    if (url.pathname !== `/storage/v1${path}` || !url.searchParams.get("token") || url.hash) {
+      throw storageError(response.status);
+    }
+    return {
+      url: url.toString(), method: "PUT",
+      headers: {
+        "Content-Type": contentType,
+        "cache-control": "max-age=3600",
+        "x-upsert": "false",
+        "x-metadata": Buffer.from(JSON.stringify({ reelayObjectStore: 1, checksumSha256: input.checksumSha256 })).toString("base64"),
+      },
+    };
   }
 
   private async info(key: string): Promise<ObjectInfo | null> {

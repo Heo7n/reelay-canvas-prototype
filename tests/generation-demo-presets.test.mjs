@@ -5,7 +5,7 @@ import test from "node:test";
 
 const context = vm.createContext({});
 context.window = context;
-for (const file of ["data/model-catalog.js", "src/config/prototype-config.js", "src/legacy-canvas/canvas-prompt-document.js", "src/dev/generation-demo-presets.js"]) {
+for (const file of ["data/model-catalog.js", "src/config/prototype-config.js", "src/legacy-canvas/canvas-prompt-document.js", "src/config/generation-demo-presets.js"]) {
   vm.runInContext(await readFile(new URL(`../${file}`, import.meta.url), "utf8"), context);
 }
 const models = context.REELAY_MODEL_CATALOG;

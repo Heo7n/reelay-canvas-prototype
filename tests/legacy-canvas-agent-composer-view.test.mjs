@@ -171,6 +171,27 @@ test("composer consumes file/library drops locally and rejects stale or busy tra
   assert.equal(bubbledDrops, 1);
 });
 
+test("media drops are claimed before the nested editor can insert their plain-text fallback", (t) => {
+  const f = fixture(t);
+  let editorDrops = 0;
+  f.prompt.addEventListener("drop", (event) => {
+    editorDrops++;
+    f.prompt.value += event.dataTransfer.getData("text/plain");
+  });
+  const library = { types: ["application/reelay-assets", "text/plain"], files: [], getData: () => "asset-one\nasset-two" };
+  f.drag("dragover", f.prompt, library);
+  assert.equal(f.drag("drop", f.prompt, library).defaultPrevented, true);
+  assert.equal(editorDrops, 0);
+  assert.equal(f.prompt.value, "保留我的提示词");
+  assert.equal(f.calls.at(-1).action, "drop-library");
+  f.busy = true;
+  f.drag("drop", f.prompt, library);
+  assert.equal(editorDrops, 0, "a rejected media transfer must not leak IDs either");
+  const text = { types: ["text/plain"], files: [], getData: () => "普通文字" };
+  assert.equal(f.drag("drop", f.prompt, text).defaultPrevented, false);
+  assert.equal(editorDrops, 1, "ordinary text drops still reach the editor");
+});
+
 test("Agent hides and disables only generation top actions while retaining the same prompt element", (t) => {
   const f = fixture(t);
   f.prompt.focus(); f.prompt.setSelectionRange(1, 3);

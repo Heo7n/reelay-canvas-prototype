@@ -4,8 +4,6 @@ export function generationSimulatorTags(pathname: string): HtmlTagDescriptor[] {
   if (pathname !== "/index.html") return [];
   return [
     { tag: "link", attrs: { rel: "stylesheet", href: "/src/dev/generation-simulator.css" }, injectTo: "head" },
-    { tag: "script", attrs: { src: "/src/dev/generation-demo-presets.js", defer: true }, injectTo: "head" },
-    { tag: "script", attrs: { src: "/src/dev/generation-history-presets.js", defer: true }, injectTo: "head" },
     { tag: "script", attrs: { src: "/src/dev/generation-simulator.js", defer: true }, injectTo: "head" },
   ];
 }

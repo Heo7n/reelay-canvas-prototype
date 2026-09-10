@@ -4,11 +4,12 @@
   function createController({ document, container, chatContainer, getScope, isGenerationMode, isEditable,
     captureInput, clearDraft, restoreDraft, hasDraft, charge, refund, makeResult, capturePlacementTarget,
     placeResult, locateResult, showMessage, escapeHtml, assetPreview, renderPrompt, sanitizeUrl,
-    placeAnchoredPopover, refreshIcons, getDemoPresets = () => [], preparePreviewInput = () => null }) {
+    placeAnchoredPopover, refreshIcons, getDemoPresets = () => [], preparePreviewInput = () => null,
+    createPreviewHistory = null }) {
     const window = document.defaultView;
     let disposed = false;
     let sending = false;
-    let previewInitializer = null;
+    let previewInitializer = createPreviewHistory;
     let previewHandled = false;
     const placementTargets = new WeakMap();
     let recordView;

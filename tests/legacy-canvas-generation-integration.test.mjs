@@ -18,7 +18,7 @@ const promptEditorSource = await buildPromptEditor(fileURLToPath(root));
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 // Run the shipped entry/modules. Only scheduling and unsupported browser/media APIs are replaced.
-function harness(t, { hosted = false } = {}) {
+function harness(t, { hosted = false, publicHistory = false } = {}) {
   const dom = new JSDOM(html, { url: "http://reelay.test/index.html", runScripts: "outside-only", pretendToBeVisual: true });
   const { window } = dom;
   const hostWindow = { postMessage() {} };
@@ -59,6 +59,8 @@ function harness(t, { hosted = false } = {}) {
   window.HTMLDialogElement.prototype.close = function () { this.open = false; };
   window.eval(promptEditorSource);
   for (const { path, source } of sources) {
+    // Most task tests use an empty history fixture; publicHistory exercises the complete shipped entry.
+    if (!publicHistory && path === "./src/config/generation-history-presets.js") continue;
     window.eval(source + (path === "./app.js"
       ? "\nwindow.generationIntegration = { state, agentGeneration, agentModels, agentParameters, agentReferences, agentHistory, canvasRuntimeStore, promptEditors };"
       : ""));
@@ -126,7 +128,7 @@ function withReferences(h) {
 }
 
 async function enablePreviewHistory(h) {
-  for (const path of ["src/dev/generation-demo-presets.js", "src/dev/generation-history-presets.js"]) {
+  for (const path of ["src/config/generation-demo-presets.js", "src/config/generation-history-presets.js"]) {
     h.window.eval(await readFile(new URL(path, root), "utf8"));
   }
   let capabilities;
@@ -139,7 +141,7 @@ async function enablePreviewHistory(h) {
   return { capabilities, initialize };
 }
 
-test("development default history renders four scoped states from real presets without debit, delivery or draft changes", async (t) => {
+test("shared default history renders four scoped states from real presets without debit, delivery or draft changes", async (t) => {
   const h = harness(t);
   const current = plain(h.window.createCanvasDocumentSnapshot());
   const account = plain(h.state.account);
@@ -209,10 +211,9 @@ test("existing records or a user draft permanently skip automatic example histor
 });
 
 test("hosted preview waits through host:init and hydrates examples only when the formal document becomes editable", async (t) => {
-  const h = harness(t, { hosted: true });
+  const h = harness(t, { hosted: true, publicHistory: true });
   h.window.setAgentOpen(false);
-  const { initialize } = await enablePreviewHistory(h);
-  assert.equal(initialize(), true);
+  assert.equal(h.document.querySelector("#reelay-generation-simulator"), null);
   assert.equal(h.service.list().length, 0, "the initial iframe loading scope cannot consume preview initialization");
   const content = plain(h.window.createCanvasDocumentSnapshot());
   const context = { protocolVersion: 1, projectId: "formal-project", projectName: "正式项目", workspaceId: "workspace-a",
@@ -234,7 +235,10 @@ test("hosted preview waits through host:init and hydrates examples only when the
   assert.equal(h.state.account.credits, 3000); assert.equal(h.state.account.consumedCredits, 0);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot().canvases), content.canvases);
   assert.equal(h.state.activeCanvasId, content.activeCanvasId);
-  assert.equal(initialize(), false);
+  h.agentGeneration.render();
+  assert.equal(h.service.list().length, 4);
+  h.agentHistory.startNew();
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
 });
 
 test("generation send freezes prompt/reference inputs, charges 24 and creates one record without role messages", (t) => {
@@ -633,6 +637,31 @@ test("ordinary renders and panel resize retain the generated media element and p
   assert.equal(media.currentTime, 4);
 });
 
+test("dropping multiple library assets onto the real prompt editor adds references without inserting IDs", (t) => {
+  const h = harness(t);
+  h.draft("保持我的提示词");
+  const assets = ["one", "two"].map((id) => ({ id: `drop-${id}`, type: "image",
+    name: id, url: `https://example.test/${id}.png`, width: 600, height: 800 }));
+  h.window.registerLibraryAssets(assets, "personal");
+  h.window.switchAssetLibraryContext({ space: "personal", section: "media" });
+  const payload = { version: 1, projectId: h.state.projectId, canvasId: h.state.activeCanvasId,
+    space: "personal", assetIds: assets.map((asset) => asset.id) };
+  const transfer = { types: ["application/x-reelay-asset", "text/plain"], files: [],
+    getData: (type) => type === "application/x-reelay-asset" ? JSON.stringify(payload) : payload.assetIds.join("\n") };
+  const editor = h.document.querySelector("#agentComposer [contenteditable=true]");
+  assert.ok(editor);
+  for (const type of ["dragover", "drop"]) {
+    const event = new h.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    editor.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+  }
+  assert.deepEqual(plain(h.agentReferences.getAssets().map((asset) => asset.url)), assets.map((asset) => asset.url));
+  assert.equal(h.editor().getText(), "保持我的提示词");
+  assert.equal(h.service.list().length, 0);
+  assert.equal(h.state.account.credits, 3000);
+});
+
 test("library media preview adds to the Agent reference destination while preserving the prompt draft", (t) => {
   const h = harness(t);
   h.draft("保留这段尚未发送的提示词");
@@ -715,7 +744,7 @@ test("selection reference action is unavailable for empty generators and cannot 
 
 test("development presets fill mixed-media and twelve-reference drafts without sending or overriding unapproved drafts", async (t) => {
   const h = harness(t);
-  h.window.eval(await readFile(new URL("src/dev/generation-demo-presets.js", root), "utf8"));
+  h.window.eval(await readFile(new URL("src/config/generation-demo-presets.js", root), "utf8"));
   let capabilities;
   h.window.addEventListener("reelay:generation-ready", (event) => { capabilities = event.detail; }, { once: true });
   h.window.dispatchEvent(new h.window.CustomEvent("reelay:generation-connect"));

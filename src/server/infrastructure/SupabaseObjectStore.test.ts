@@ -36,6 +36,14 @@ function storageFixture() {
     if (url.pathname === `/storage/v1/bucket/${BUCKET}`) {
       return Response.json({ id: BUCKET, public: publicBucket });
     }
+    if (url.pathname.startsWith(`/storage/v1/object/upload/sign/${BUCKET}/`)) {
+      return Response.json({ url: `${url.pathname.replace("/storage/v1", "")}?token=test-upload-only` });
+    }
+    if (url.pathname.startsWith(`/storage/v1/object/sign/${BUCKET}/`)) {
+      const key = decodeURIComponent(url.pathname.split(`/object/sign/${BUCKET}/`)[1]);
+      if (!objects.has(key)) return Response.json({ code: "NoSuchKey" }, { status: 404 });
+      return Response.json({ signedURL: `${url.pathname.replace("/storage/v1", "")}?token=test-signed-object` });
+    }
     const key = decodeURIComponent(url.pathname.replace(/^\/storage\/v1\/object\/(?:info\/authenticated\/|authenticated\/)?[^/]+\/?/, ""));
     if (init.method === "POST") {
       if (objects.has(key)) {
@@ -82,6 +90,66 @@ function storageFixture() {
 }
 
 describe("SupabaseObjectStore", () => {
+  it("issues exact-path upload-only grants with immutable metadata and no server secrets", async () => {
+    const fixture = storageFixture();
+    const checksumSha256 = createHash("sha256").update(INPUT.body).digest("hex");
+    const grant = await fixture.store().createSignedUpload({ ...INPUT, checksumSha256 });
+    expect(grant.url).toBe(`${URL_ORIGIN}/storage/v1/object/upload/sign/${BUCKET}/${INPUT.objectKey}?token=test-upload-only`);
+    expect(grant.method).toBe("PUT");
+    expect(grant.headers["Content-Type"]).toBe(INPUT.contentType);
+    expect(grant.headers["x-upsert"]).toBe("false");
+    expect(JSON.parse(Buffer.from(grant.headers["x-metadata"], "base64").toString("utf8"))).toEqual({ reelayObjectStore: 1, checksumSha256 });
+    expect(JSON.stringify(grant)).not.toContain(SECRET);
+    expect(fixture.requests.at(-1)?.headers.get("x-upsert")).toBe("false");
+    expect(fixture.objects.size).toBe(0);
+    fixture.makePublic();
+    await expect(fixture.store().createSignedUpload({ ...INPUT, checksumSha256 })).rejects.toThrow(/private bucket/);
+    const other = storageFixture();
+    other.override((url) => url.pathname.includes("/object/upload/sign/")
+      ? Response.json({ url: "https://other.test/media?token=private" }) : undefined);
+    await expect(other.store().createSignedUpload({ ...INPUT, checksumSha256 })).rejects.toThrow(/request failed/);
+  });
+
+  it("signs a short-lived exact private object without downloading its bytes", async () => {
+    const fixture = storageFixture();
+    const store = fixture.store();
+    const input = { ...INPUT, objectKey: "workspace/video #1%.mp4", contentType: "video/mp4" };
+    const metadata = await store.putObject(input);
+    fixture.requests.length = 0;
+    const signed = await store.createSignedDownload(input.objectKey, 300);
+    expect(signed).toEqual({
+      ...metadata,
+      url: `${URL_ORIGIN}/storage/v1/object/sign/${BUCKET}/workspace/video%20%231%25.mp4?token=test-signed-object`,
+    });
+    expect(fixture.requests).toHaveLength(2);
+    expect(fixture.requests[0].url).toContain("/object/info/authenticated/");
+    expect(fixture.requests[1].init.method).toBe("POST");
+    expect(JSON.parse(String(fixture.requests[1].init.body))).toEqual({ expiresIn: 300 });
+    expect(signed?.url).not.toContain(SECRET);
+    await expect(store.createSignedDownload("missing", 300)).resolves.toBeNull();
+    for (const ttl of [0, 301, 1.5, NaN]) {
+      await expect(store.createSignedDownload(input.objectKey, ttl)).rejects.toThrow(/expiry/);
+    }
+  });
+
+  it("rejects signing from a public bucket, unknown objects, or an unexpected provider URL", async () => {
+    const fixture = storageFixture();
+    await fixture.store().putObject(INPUT);
+    fixture.makePublic();
+    await expect(fixture.store().createSignedDownload(INPUT.objectKey, 300)).rejects.toThrow(/private bucket/);
+    const valid = storageFixture();
+    const store = valid.store();
+    await store.putObject(INPUT);
+    for (const signedURL of [
+      "https://other.example/media?token=secret", "//other.example/media?token=secret",
+      `/object/sign/${BUCKET}/another.png?token=secret`,
+      `/object/sign/${BUCKET}/${INPUT.objectKey}?missing=token`,
+    ]) {
+      valid.override((url) => url.pathname.includes("/object/sign/") ? Response.json({ signedURL }) : undefined);
+      await expect(store.createSignedDownload(INPUT.objectKey, 300)).rejects.toThrow("Supabase object storage request failed (HTTP 200).");
+    }
+  });
+
   it("publishes immutable bytes and persistent checksum metadata in one request and reopens across instances", async () => {
     const fixture = storageFixture();
     const metadata = await fixture.store().putObject(INPUT);

@@ -159,12 +159,6 @@
     if (next === capabilities) return;
     if (typeof unsubscribe === "function") unsubscribe();
     capabilities = next;
-    if (typeof next.initializePreviewHistory === "function" && view.REELAY_GENERATION_HISTORY_PRESETS) {
-      next.initializePreviewHistory(({ presets: historyPresets, prepareInput }) => view.REELAY_GENERATION_HISTORY_PRESETS.create({
-        presets: historyPresets, prepareInput, media: view.REELAY_PROTOTYPE_CONFIG?.assetLibrarySeed?.media || [],
-        simulationAssets: view.REELAY_PROTOTYPE_CONFIG?.simulationAssets || {}, now: Date.now(),
-      }));
-    }
     nextConfigured = false;
     outcome.value = "success";
     reasonGroup.hidden = true;
