@@ -28,7 +28,7 @@ const generationModules = await Promise.all([
   "src/legacy-canvas/canvas-reference-thumbnails.js",
   "src/legacy-canvas/canvas-agent-composer-resize.js",
   "src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js",
-  "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-record-view.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
+  "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-reference-preview.js", "src/legacy-canvas/canvas-generation-record-view.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
   "src/legacy-canvas/canvas-agent-result-placement.js",
 ].map((path) => readFile(new URL(path, root), "utf8")));
 const [selectionEntityModel, entityMediaImport] = await Promise.all([

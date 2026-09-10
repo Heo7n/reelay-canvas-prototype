@@ -158,6 +158,13 @@ test("shared default history renders four scoped states from real presets withou
   assert.ok(tasks.every((task) => task.isPreview && task.scope.canvasId === h.first.id && !task.addedNodeId));
   assert.equal(h.document.querySelectorAll(".generation-record").length, 4);
   assert.equal(h.document.querySelectorAll(".generation-record-refund").length, 2);
+  for (const task of tasks) {
+    const locate = h.record(task).querySelector('[data-generation-action="locate"]');
+    assert.equal(locate.hidden, task.status !== "succeeded");
+    assert.equal(locate.getAttribute("aria-disabled"), "true");
+    assert.equal(locate.title, "演示记录暂无画布节点");
+    locate.click();
+  }
   assert.equal(records.scrollTop, 0);
   assert.deepEqual(plain(h.state.account), account);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), current);
