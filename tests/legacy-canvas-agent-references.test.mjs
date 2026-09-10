@@ -176,7 +176,12 @@ test("all three media kinds use the shared hover preview outside canvas nodes wi
       assert.equal(element.autoplay, false);
       assert.equal(element.preload, "metadata");
     }
-    assert.equal(preview.querySelector(".reference-preview-label").textContent, `${{ image: "图片", video: "视频", audio: "音频" }[type]}1 · ${type} 参考`);
+    const label = `${{ image: "图片", video: "视频", audio: "音频" }[type]}1 · ${type} 参考`;
+    assert.equal(preview.getAttribute("aria-label"), `${label}预览`);
+    if (type === "image") {
+      assert.equal(preview.querySelector(".reference-preview-label"), null);
+      assert.equal(element.alt, label);
+    } else assert.equal(preview.querySelector(".reference-preview-label").textContent, label);
   }
 });
 

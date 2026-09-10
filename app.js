@@ -1,7 +1,10 @@
 const appShell = document.querySelector(".app-shell");
 const promptDocument = window.REELAY_CANVAS_PROMPT_DOCUMENT;
 const promptEditors = window.REELAY_CANVAS_PROMPTS.createController({ document, showMessage: showActionToast });
+const referenceThumbnails = window.REELAY_CANVAS_REFERENCE_THUMBNAILS.createController({ document, sanitizeUrl: sanitizeRuntimeMediaUrl });
 let agentPromptReady = false;
+let agentGeneration = null;
+let agentComposerResize = null;
 const topBar = document.querySelector(".top-bar");
 const leftRail = document.querySelector(".left-rail");
 const topActions = document.querySelector("#topActions");
@@ -486,6 +489,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     } else {
       showActionToast("当前项目为只读，可浏览但不能修改");
     }
+    agentGeneration?.render();
   },
   onNotice(notice) {
     const messages = {
@@ -768,8 +772,8 @@ const panelWidthRules = Object.freeze({
   edgeInset: 8,
   assetMin: 380,
   assetMax: 780,
-  agentMin: 340,
-  agentMax: 640,
+  agentMin: 480,
+  agentMax: 880,
   canvasCorridor: 280,
 });
 
@@ -1834,14 +1838,14 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
   return node;
 }
 
-function defaultAssetNode(x, y, asset) {
+function defaultAssetNode(x, y, asset, { z } = {}) {
   return {
     id: crypto.randomUUID(),
     kind: "asset",
     x,
     y,
     mode: asset.type,
-    z: nextZ(),
+    z: Number.isFinite(z) ? z : nextZ(),
     assets: [asset],
     activeAssetId: asset.id,
     expanded: false,
@@ -2286,10 +2290,10 @@ function getMediaSize(ratio) {
   };
 }
 
-function getNodeLayout(node) {
+function getNodeLayout(node, scale = state.scale) {
   const ratio = getMediaRatio(node);
   const { mediaWidth, mediaHeight } = getMediaSize(ratio);
-  const toolbarScale = 1 / state.scale;
+  const toolbarScale = 1 / scale;
 
   if (node.kind === "asset") {
     return {
@@ -2306,7 +2310,7 @@ function getNodeLayout(node) {
   const boundary = getNodePopoverBoundary();
   const availableWidth = boundary.right - boundary.left;
   const { panelWidth, promptScale, panelGap } = canvasNodeEditorLayout.getEditorLayout({
-    scale: state.scale,
+    scale,
     availableWidth,
     mode: getNodeGenerationMode(node),
     rules: layoutRules,
@@ -2397,8 +2401,8 @@ function getNodeBounds(node) {
   return getNodeVisualBounds(node);
 }
 
-function getNodeVisualBounds(node) {
-  const { x, y, layout } = getNodePresentation(node);
+function getNodeVisualBounds(node, presentation = getNodePresentation(node)) {
+  const { x, y, layout } = presentation;
   const mediaLeft = x + (layout.nodeWidth - layout.mediaWidth) / 2;
   let left = mediaLeft;
   let right = mediaLeft + layout.mediaWidth;
@@ -3415,10 +3419,7 @@ function assetPreview(asset) {
     return `<img src="${safeUrl}" alt="" draggable="false" />`;
   }
   if (asset.type === "video") {
-    return `
-      <video src="${safeUrl}" muted playsinline preload="metadata" draggable="false"></video>
-      <span class="video-play">▶</span>
-    `;
+    return window.REELAY_CANVAS_REFERENCE_THUMBNAILS.renderVideo(asset, { sanitizeUrl: sanitizeRuntimeMediaUrl, escapeHtml });
   }
   return `
     <span class="audio-wave" aria-hidden="true">
@@ -4969,6 +4970,8 @@ function renderSelectionToolbar() {
     selectedNodes.some((node) => Boolean(node.groupId)),
   );
   selectionToolbar.classList.remove("hidden");
+  const addToConversation = selectionToolbar.querySelector('[data-selection-action="add-conversation"]');
+  if (addToConversation) addToConversation.disabled = !getAgentSelectedCanvasAssets().length;
   const toolbarWidth = selectionToolbar.offsetWidth || 260;
   const toolbarHeight = selectionToolbar.offsetHeight || 42;
   const viewportPadding = 12;
@@ -7414,7 +7417,8 @@ function mountAgentPrompt(conversation = getConversation()) {
 }
 
 function renderAgentMessages(conversation = getConversation()) {
-  agentComposerView.renderMessages(conversation);
+  if (agentModels.getMode() !== "generation") agentComposerView.renderMessages(conversation);
+  agentGeneration?.render();
 }
 
 const agentHistory = window.REELAY_AGENT_HISTORY.createController({
@@ -7422,12 +7426,15 @@ const agentHistory = window.REELAY_AGENT_HISTORY.createController({
   seed: seedAgentConversations,
   escapeHtml,
   refreshIcons,
-  hasDraft: (conversation) => Boolean(promptDocument.toText(conversation.draftPrompt).trim() || agentReferences.hasDraft(conversation)
+  hasDraft: (conversation) => Boolean(agentGeneration?.hasRecords(conversation.id) || promptDocument.toText(conversation.draftPrompt).trim() || agentReferences.hasDraft(conversation)
     || (conversation === getConversation() && getAgentPromptText().trim())),
   onBeforeSelect(previous) {
     if (previous) promptEditors.unmount(previous);
   },
-  onDelete: (conversation) => { promptEditors.release(conversation); agentReferences.releaseConversation(conversation); },
+  onDelete: (conversation) => {
+    agentGeneration?.removeConversation(conversation.id);
+    promptEditors.release(conversation); agentReferences.releaseConversation(conversation);
+  },
   onSelect(conversation, { closeMenu }) {
     cancelAgentPromptOptimization();
     agentComposerView.close();
@@ -7447,6 +7454,10 @@ const agentHistory = window.REELAY_AGENT_HISTORY.createController({
     }
   },
   requestDelete({ conversation, onConfirm }) {
+    if (agentGeneration?.hasPending(conversation.id)) {
+      showActionToast("此对话仍有生成任务，请等待完成或先取消生成");
+      return;
+    }
     setAgentHistoryOpen(false);
     agentHistoryBtn?.focus();
     showConfirmDialog({
@@ -7529,6 +7540,124 @@ const agentComposerView = window.REELAY_CANVAS_AGENT_COMPOSER_VIEW.createControl
   placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
 });
 
+const agentResultPlacement = window.REELAY_AGENT_RESULT_PLACEMENT.createController({
+  getProjectId: () => state.projectId,
+  getCanvas: (canvasId) => canvasRuntimeStore.getCanvas(canvasId),
+  isEditable: () => isCanvasMutationAllowed(),
+  isAccessible: () => ["standalone", "editable", "readonly"].includes(canvasPersistence.getAccessMode()),
+  getViewport() {
+    const viewport = getAvailableCanvasPlacementViewport();
+    return { left: viewport.centerX - viewport.viewportWidth / 2, top: viewport.centerY - viewport.viewportHeight / 2,
+      right: viewport.centerX + viewport.viewportWidth / 2, bottom: viewport.centerY + viewport.viewportHeight / 2 };
+  },
+  getNodeBounds: (node, canvas) => getNodeVisualBounds(node,
+    { x: node.x, y: node.y, layout: getNodeLayout(node, canvas.scale) }),
+  getNodeMedia: getEditableMedia,
+  createNode: (asset) => defaultAssetNode(0, 0, cloneAsset(asset, "generation"), { z: 0 }),
+  commitNode(canvas, node) {
+    node.z = ++canvas.zCounter;
+    canvas.nodes.push(node);
+    pushCanvasUndoAction(canvas, { type: "create", nodeIds: [node.id] });
+    scheduleCanvasDocumentSave(0);
+    if (canvas === getActiveCanvas()) render();
+  },
+  focusNode(canvas, node) {
+    if (canvas !== getActiveCanvas()) switchCanvas(canvas.id);
+    setSelection([node.id], node.id);
+    applyFitBounds(getNodeBounds(node));
+    render();
+  },
+});
+
+agentGeneration = window.REELAY_AGENT_GENERATION.createController({
+  document, container: document.querySelector("#agentGenerationRecords"), chatContainer: agentMessages,
+  getScope: () => ({ projectId: state.projectId, conversationId: agentHistory.getActiveId(), canvasId: state.activeCanvasId }),
+  isGenerationMode: () => agentModels.getMode() === "generation",
+  isEditable: () => !state.agentPromptOptimizationTask && requireCanvasMutation({ notify: false }),
+  hasDraft: () => Boolean(getAgentPromptText().trim() || agentReferences.getAssets().length),
+  captureInput: captureAgentGenerationInput,
+  clearDraft() {
+    agentReferences.takeForMessage();
+    const conversation = getConversation();
+    conversation.draftPrompt = "";
+    promptEditors.get(conversation)?.setDocument("", { resetHistory: true, notify: false });
+    syncAgentPromptOptimizationControl();
+  },
+  restoreDraft(input, { replace = false } = {}) {
+    if (!models.some((model) => model.id === input.modelId)) { showActionToast("原模型当前不可用"); return false; }
+    if (!agentReferences.restoreAssets(input.references, agentReferences.captureScope(), { replace })) return false;
+    agentModels.setGenerationModel(input.modelId);
+    agentParameters.restore(agentModels.getModel(), input.parameters);
+    const conversation = getConversation();
+    conversation.draftPrompt = promptDocument.normalize(input.promptDocument || input.prompt);
+    promptEditors.get(conversation)?.setDocument(conversation.draftPrompt, { resetHistory: true, notify: false });
+    mountAgentPrompt(conversation); syncAgentModelButton(); syncAgentPromptOptimizationControl(); focusAgentPrompt();
+    return true;
+  },
+  charge(amount) { if (!hasEnoughCredits(amount)) return false; chargeCredits(amount); return true; },
+  refund(amount) {
+    state.account.credits += amount;
+    state.account.consumedCredits = Math.max(0, state.account.consumedCredits - amount);
+    syncCreditDisplay(); return true;
+  },
+  makeResult: (task) => ({
+    ...simulationAssets[task.input.mediaType], id: crypto.randomUUID(),
+    displayName: task.input.mediaType === "image" ? "模拟生成图片" : "模拟生成视频",
+    source: "generation", generationTaskId: task.id,
+  }),
+  capturePlacementTarget: agentResultPlacement.capture,
+  placeResult: agentResultPlacement.place,
+  locateResult: agentResultPlacement.locate,
+  showMessage: showActionToast, escapeHtml, assetPreview: agentReferenceThumbnail,
+  renderPrompt: (input) => agentComposerView.renderPrompt({ ...input, content: input.prompt }),
+  getDemoPresets: () => window.REELAY_GENERATION_DEMO_PRESETS?.create({ models, media: assetLibrarySeed.media }) || [],
+  preparePreviewInput(input) {
+    const model = models.find((entry) => entry.id === input.modelId);
+    if (!model) return null;
+    const parameters = normalizeNodeParameters({ ...input.parameters, kind: "generator", model: model.id, mode: model.type });
+    const references = input.references || [];
+    const resolved = promptDocument.resolve(input.promptDocument || input.prompt, references.map((asset) => ({ key: `asset:${asset.id}`, asset })));
+    const cost = getCost(parameters);
+    if (!resolved.valid || !Number.isFinite(cost) || cost <= 0) return null;
+    const { beforeAspect, aspect, afterAspect } = getParamLabelParts(parameters);
+    return { prompt: resolved.text, promptDocument: resolved.document, references, referenceSnapshot: resolved.media,
+      parameters, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
+      parameterSummary: `${beforeAspect}${aspect}${afterAspect}` };
+  },
+  sanitizeUrl: sanitizeRuntimeMediaUrl, placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover, refreshIcons,
+});
+
+agentComposerResize = window.REELAY_CANVAS_AGENT_COMPOSER_RESIZE.createController({
+  document, panel: agentPanel, composer: agentComposer, stage: agentComposer.querySelector(".agent-composer-stage"),
+  onResizeStart: () => { closeAgentPopovers(); agentGeneration.close(); },
+});
+
+function captureAgentGenerationInput() {
+  const conversation = getConversation();
+  const resolved = promptDocument.resolve(conversation.draftPrompt, agentReferences.getEntries());
+  if (!resolved.text.trim() && !agentReferences.getAssets().length) return null;
+  const parameters = getAgentGenerationParameters();
+  const model = getAgentComposerModel();
+  if (!parameters || !model) return null;
+  const issue = getPromptReferenceIssue(conversation.draftPrompt, agentReferences.getEntries())
+    || getOmniReferenceTaskTypeIssue(parameters);
+  if (issue) {
+    showActionToast(issue);
+    const invalid = resolved.missing[0] || resolved.mismatched[0];
+    if (invalid) promptEditors.get(conversation)?.revealReference(invalid.key);
+    return null;
+  }
+  const cost = getCost(parameters);
+  if (!Number.isFinite(cost) || cost <= 0) { showActionToast("当前模型参数或积分配置不可用"); return null; }
+  const { beforeAspect, aspect, afterAspect } = getParamLabelParts(parameters);
+  return {
+    prompt: resolved.text, promptDocument: resolved.document,
+    references: agentReferences.getAssets(), referenceSnapshot: resolved.media,
+    parameters, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
+    parameterSummary: `${beforeAspect}${aspect}${afterAspect}`,
+  };
+}
+
 function getAgentSelectedCanvasAssets() {
   return state.nodes.filter((node) => state.selectedIds.has(node.id)).map(getEditableMedia)
     .filter((asset) => asset && ["image", "video", "audio"].includes(asset.type) && sanitizeRuntimeMediaUrl(asset.url));
@@ -7542,7 +7671,7 @@ function agentReferenceThumbnail(asset) {
   if (asset.type === "image") return assetPreview({ ...asset,
     url: sanitizeRuntimeMediaUrl(asset.thumbnailUrl) || libraryImagePreviewUrl(asset.url, "image") });
   if (asset.type === "audio") return '<svg class="agent-reference-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg>';
-  return '<svg class="agent-reference-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8 6 4-6 4Z"/></svg>';
+  return window.REELAY_CANVAS_REFERENCE_THUMBNAILS.renderVideo(asset, { sanitizeUrl: sanitizeRuntimeMediaUrl, escapeHtml });
 }
 
 function setAgentReferenceMenuOpen(open) {
@@ -7679,6 +7808,7 @@ function startAgentPromptOptimization() {
 
 function sendAgentMessage() {
   if (state.agentPromptOptimizationTask) return;
+  if (agentModels.getMode() === "generation") return agentGeneration.submit();
   const conversation = getConversation();
   const resolved = promptDocument.resolve(conversation.draftPrompt, agentReferences.getEntries());
   const content = resolved.text.trim();
@@ -7742,6 +7872,7 @@ function syncAgentComposerControls() {
   });
   syncAgentModelButton();
   syncAgentPromptOptimizationControl();
+  if (agentGeneration) renderAgentMessages();
 }
 
 function setAgentComposerMode(mode, { focusInput = false } = {}) {
@@ -7891,13 +8022,15 @@ function setAgentOpen(open) {
   }
   if (!open) {
     promptEditors.unmount(getConversation());
+    agentComposerResize?.close();
+    agentGeneration?.close();
     agentComposerView.close();
     agentReferences.close();
     cancelAgentPromptOptimization();
     closeAgentPopovers();
     setAgentAdvancedOpen(false);
   }
-  if (open) mountAgentPrompt();
+  if (open) { mountAgentPrompt(); agentComposerResize?.sync(); }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
   syncPromptPanelLayouts();
   if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => focusAgentPrompt());
@@ -10299,7 +10432,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     const id = itemCard.dataset.libraryEntity || itemCard.dataset.libraryMedia;
     if (state.librarySelectionMode) toggleAssetLibrarySelection(id);
     else if (kind === "entity") openEntityEditorEdit(id);
-    else openAssetLibraryPreview(kind, id);
+    else openAssetLibraryPreview(id);
   }
 });
 assetLibraryUploadInput?.addEventListener("change", (event) => {
@@ -10660,6 +10793,16 @@ selectionToolbar?.addEventListener("click", (event) => {
   }
   if (action === "add-library") {
     addSelectedMediaToLibrary();
+    return;
+  }
+  if (action === "add-conversation") {
+    const assets = getAgentSelectedCanvasAssets();
+    if (!assets.length) return;
+    if (state.agentPromptOptimizationTask) { showActionToast("提示词优化完成后可添加参考素材"); return; }
+    setAgentOpen(true);
+    const added = addAgentReferenceAssets(assets);
+    showActionToast(added ? `已添加 ${added} 个参考素材` : "所选素材已在对话参考区");
+    focusAgentPrompt();
     return;
   }
   if (action === "delete") {
@@ -11095,6 +11238,7 @@ window.addEventListener("pagehide", (event) => {
   if (!event.persisted) {
     assetLibraryItemMenu.dispose();
     canvasNodeTasks.dispose();
+    agentComposerResize?.dispose();
   }
   flushCanvasDocumentSave();
 });

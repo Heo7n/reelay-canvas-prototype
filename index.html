@@ -377,6 +377,11 @@
             <span>保存到素材</span>
             <span class="toolbar-tip">保存到项目素材</span>
           </button>
+          <button class="icon-toolbar-button text-button" type="button" data-selection-action="add-conversation" aria-label="添加到对话">
+            <i data-lucide="message-square-plus" aria-hidden="true"></i>
+            <span>添加到对话</span>
+            <span class="toolbar-tip">将所选媒体加入对话参考</span>
+          </button>
           <div class="toolbar-menu-wrap selection-download-control" data-toolbar-menu="download">
             <button class="icon-toolbar-button text-button selection-download-trigger" type="button" data-selection-action="toggle-download" aria-label="下载" aria-haspopup="menu" aria-expanded="false">
               <i data-lucide="download" aria-hidden="true"></i>
@@ -463,6 +468,7 @@
           </div>
 
           <div class="agent-messages" id="agentMessages"></div>
+          <div class="agent-messages" id="agentGenerationRecords" aria-label="生成记录" hidden></div>
 
           <div class="agent-composer prompt-composer-surface" id="agentComposer">
             <section class="agent-advanced-settings hidden" id="agentAdvancedSettings" aria-label="高级设置" aria-hidden="true">
@@ -568,8 +574,15 @@
     <script src="./src/legacy-canvas/canvas-prompt-document.js"></script>
     <script src="./src/legacy-canvas/canvas-prompt-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-reference-strip-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-reference-thumbnails.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-references.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-composer-view.js"></script>
+    <script src="./src/infrastructure/generation/simulated-generation-executor.js"></script>
+    <script src="./src/application/generation-task-service.js"></script>
+    <script src="./src/legacy-canvas/canvas-generation-media.js"></script>
+    <script src="./src/legacy-canvas/canvas-generation-record-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-generation-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-result-placement.js"></script>
     <script src="./src/legacy-canvas/canvas-spatial-selection.js"></script>
     <script src="./src/legacy-canvas/canvas-node-interaction.js"></script>
     <script src="./src/legacy-canvas/canvas-node-placement.js"></script>
@@ -583,6 +596,7 @@
     <script src="./src/legacy-canvas/canvas-agent-panel-geometry.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-parameters.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-models.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-composer-resize.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-history.js"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-model.js"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-view.js"></script>

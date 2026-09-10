@@ -22,6 +22,13 @@ const referenceStripController = await readFile(new URL("src/legacy-canvas/canva
 const audioPlayer = await readFile(new URL("src/legacy-canvas/canvas-audio-player.js", root), "utf8");
 const agentComposerView = await readFile(new URL("src/legacy-canvas/canvas-agent-composer-view.js", root), "utf8");
 const agentReferences = await readFile(new URL("src/legacy-canvas/canvas-agent-references.js", root), "utf8");
+const generationModules = await Promise.all([
+  "src/legacy-canvas/canvas-reference-thumbnails.js",
+  "src/legacy-canvas/canvas-agent-composer-resize.js",
+  "src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js",
+  "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-record-view.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
+  "src/legacy-canvas/canvas-agent-result-placement.js",
+].map((path) => readFile(new URL(path, root), "utf8")));
 const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
@@ -77,6 +84,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   });
   t.after(() => dom.window.close());
   const { window } = dom;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
   const postedMessages = [];
   const hostWindow = { postMessage(message) { postedMessages.push(message); } };
   Object.defineProperty(window, "parent", { configurable: true, value: hostWindow });
@@ -149,7 +157,9 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(agentParameters);
   window.eval(agentModels);
   window.eval(assetSpaceSwitcher);
+  for (const source of generationModules) window.eval(source);
   window.eval(`${app}\nwindow.__readonlyPromptEditors = promptEditors;`);
+  assert.equal(window.document.querySelector("#agentDock").style.getPropertyValue("--agent-width"), "560px");
 
   const injectionProbe = window.document.createElement("div");
   injectionProbe.innerHTML = window.assetMediaContent({
@@ -565,6 +575,9 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.querySelectorAll(".agent-message.user").length, userMessageCount);
 
   writeAgentPrompt("第一行\n第二行");
+  window.sendAgentMessage();
+  assert.equal(getAgentEditor().getText(), "第一行\n第二行", "read-only access cannot submit a charged generation");
+  window.setAgentComposerMode("agent");
   const enter = new window.KeyboardEvent("keydown", {
     bubbles: true,
     cancelable: true,
@@ -576,11 +589,13 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.querySelectorAll(".agent-message.user").length, userMessageCount + 1);
   assert.equal(window.getConversation().messages.at(-2).promptDocument.version, 1);
   assert.equal(window.getConversation().messages.at(-2).content, "第一行\n第二行");
+  window.setAgentComposerMode("generation");
   assert.equal(postedMessages.some((message) => message.type === "canvas:save"), false);
 
   const assetWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--asset-panel-width"));
   const agentWidth = Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue("--agent-width"));
   const assetResizeHandle = window.document.querySelector("#assetLibraryResizeHandle");
+  assert.ok(assetWidth >= 380); assert.ok(agentWidth >= 480);
   assert.ok(assetWidth + agentWidth <= window.innerWidth - 280 - 16);
   assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), assetWidth);
   assert.ok(Number(assetResizeHandle.getAttribute("aria-valuemax")) >= assetWidth);
@@ -611,6 +626,59 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(Number(assetResizeHandle.getAttribute("aria-valuenow")), keyboardAssetWidth);
   window.document.querySelector("#assetLibraryCloseBtn")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+  const panelWidth = (name) => Number.parseFloat(window.document.querySelector(".app-shell").style.getPropertyValue(name));
+  const resizeViewport = (width) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    window.dispatchEvent(new window.Event("resize"));
+  };
+  const dragAgentWidth = (change) => {
+    window.document.querySelector("#agentResizeHandle").dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 900 }));
+    window.dispatchEvent(new window.MouseEvent("pointermove", { bubbles: true, clientX: 900 - change }));
+    window.dispatchEvent(new window.MouseEvent("pointerup", { bubbles: true, clientX: 900 - change }));
+  };
+  const assertDualWidths = (asset, agent) => {
+    assert.equal(window.document.querySelector("#assetLibraryPanel").classList.contains("hidden"), false);
+    assert.equal(agentDock.classList.contains("open"), true);
+    assert.equal(panelWidth("--asset-panel-width"), asset);
+    assert.equal(panelWidth("--agent-width"), agent);
+    assert.ok(asset >= 380 && agent >= 480);
+    assert.ok(asset + agent <= window.innerWidth - 280 - 16);
+  };
+  window.setAgentOpen(true);
+  dragAgentWidth(2000); assert.equal(panelWidth("--agent-width"), 880);
+  dragAgentWidth(-2000); assert.equal(panelWidth("--agent-width"), 480);
+  window.setAgentOpen(false);
+
+  resizeViewport(2000);
+  window.setAssetLibraryWidth(780);
+  window.openAssetLibrary();
+  window.setAgentWidth(880);
+  window.setAgentOpen(true);
+  assertDualWidths(780, 880);
+  agentCloseBtn.focus(); resizeViewport(1600);
+  assertDualWidths(424, 880);
+  assetResizeHandle.focus(); resizeViewport(1500);
+  assertDualWidths(724, 480);
+  resizeViewport(1156);
+  assertDualWidths(380, 480);
+  agentCloseBtn.focus(); resizeViewport(1155);
+  assert.equal(window.document.querySelector("#assetLibraryPanel").classList.contains("hidden"), true);
+  assert.equal(agentDock.classList.contains("open"), true);
+  window.openAssetLibrary();
+  assert.equal(agentDock.classList.contains("open"), false);
+  assert.equal(window.document.querySelector("#assetLibraryPanel").classList.contains("hidden"), false);
+  window.setAgentOpen(true);
+  assert.equal(window.document.querySelector("#assetLibraryPanel").classList.contains("hidden"), true);
+
+  resizeViewport(460);
+  assert.equal(panelWidth("--agent-width"), 444, "small screens clamp the minimum to the available viewport");
+  dragAgentWidth(1000); assert.equal(panelWidth("--agent-width"), 444);
+  window.setAgentOpen(false);
+  resizeViewport(1440);
+  window.setAssetLibraryWidth(550);
+  window.setAgentWidth(560);
+  assert.equal(postedMessages.some((message) => message.type === "canvas:save"), false);
 
   const originalInnerWidth = window.innerWidth;
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });

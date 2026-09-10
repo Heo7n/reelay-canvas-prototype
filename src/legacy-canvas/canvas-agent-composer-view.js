@@ -302,7 +302,7 @@
     addButton.setAttribute("aria-haspopup", "menu");
     setMenuOpen(false);
 
-    return Object.freeze({ setMenuOpen, syncMode, renderMessages, close, dispose });
+    return Object.freeze({ setMenuOpen, syncMode, renderMessages, renderPrompt: messageBodyMarkup, close, dispose });
   }
 
   global.REELAY_CANVAS_AGENT_COMPOSER_VIEW = Object.freeze({ createController });

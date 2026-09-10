@@ -285,6 +285,23 @@
       return assets;
     }
 
+    function restoreAssets(assets, scope = captureScope(), { replace = false } = {}) {
+      if (!current(scope, true)) return false;
+      const record = recordFor(scope, true);
+      if (!record || (!replace && record.assets.length)) return false;
+      const restored = Array.from(assets || []).map((asset) => ({ ...asset, url: sanitizeUrl(asset?.url) }));
+      if (restored.some((asset) => !asset.id || !asset.url || !MEDIA_TYPES.has(asset.type))
+        || new Set(restored.map((asset) => asset.id)).size !== restored.length) return false;
+      // Same-conversation history restores original ids so inline @ keys remain valid.
+      for (const stop of record.probes.values()) stop();
+      record.probes.clear();
+      record.assets = restored;
+      refreshOwnership(record);
+      changed(scope);
+      for (const asset of restored) probeMetadata(record, asset, scope);
+      return true;
+    }
+
     function chooseFiles() {
       const scope = captureScope();
       if (!current(scope, true)) return false;
@@ -391,7 +408,7 @@
     shelf.addEventListener("click", onRemove);
     view.addEventListener("pagehide", onPageHide);
     refresh();
-    return Object.freeze({ refresh, captureScope, chooseFiles, addFiles, addAssets, getAssets, getEntries, hasDraft, takeForMessage,
+    return Object.freeze({ refresh, captureScope, chooseFiles, addFiles, addAssets, restoreAssets, getAssets, getEntries, hasDraft, takeForMessage,
       releaseConversation, close, dispose });
   }
 

@@ -69,7 +69,7 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
   t.after(() => window.canvasTest?.promptEditors.destroy());
   for (const { path, source } of scripts) {
     window.eval(source + (path === "./app.js"
-      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasGroupInteractionController, canvasCommandExecutor, canvasContentCommands, canvasEntityUse, canvasNodeTasks, canvasPersistence, agentReferences, promptEditors };"
+      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasGroupInteractionController, canvasCommandExecutor, canvasContentCommands, canvasEntityUse, canvasNodeTasks, canvasPersistence, agentReferences, agentGeneration, promptEditors };"
       : ""));
   }
   const { state, canvasRuntimeStore, canvasNodeDragController } = window.canvasTest;
@@ -2377,7 +2377,7 @@ test("Agent send estimate follows the generation model and parameters and recove
   assertEstimate(36);
 });
 
-test("Agent send estimate is independent of account balance and simulated messages do not charge or change canvases", (t) => {
+test("generation send estimate remains independent of balance while each task charges without changing canvases", (t) => {
   const h = createHarness(t);
   const first = h.canvas("one", [h.node("shared-id")]);
   const second = h.canvas("two", [h.node("shared-id", { model: "seedance-2-5" })]);
@@ -2399,13 +2399,18 @@ test("Agent send estimate is independent of account balance and simulated messag
   const account = plain(h.state.account);
   const conversation = h.window.getConversation();
   const messageCount = conversation.messages.length;
+  const cost = h.window.getCost(h.window.getAgentGenerationParameters());
   const input = document.querySelector("#agentInput .prompt-editor-content");
   h.setText(input, "生成一个森林中的视频镜头");
   send.click();
-  assert.equal(conversation.messages.length, messageCount + 2, "the local user message and example reply remain available");
-  assert.equal(conversation.messages[messageCount].content, "生成一个森林中的视频镜头");
+  assert.equal(conversation.messages.length, messageCount, "generation records do not append Agent role messages");
+  const task = h.window.canvasTest.agentGeneration.service.list().at(-1);
+  assert.ok(task);
+  assert.equal(task.input.prompt, "生成一个森林中的视频镜头");
+  assert.equal(task.charged, cost);
   assert.equal(h.getText(input), "");
-  assert.deepEqual(plain(h.state.account), account);
+  assert.equal(h.state.account.credits, account.credits - cost);
+  assert.equal(h.state.account.consumedCredits, account.consumedCredits + cost);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
   assert.deepEqual(plain([first, second]), canvases);
   assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
@@ -2517,7 +2522,7 @@ test("Agent mode removes generation tools and cancels optimization without rewri
   assert.equal(h.state.undoStack.length, 0);
 });
 
-test("generation references accept all media types and send a previewable attachment-only message without canvas or credit writes", (t) => {
+test("Agent references accept all media types and send a previewable attachment-only message without canvas or credit writes", (t) => {
   const h = createHarness(t);
   const first = h.canvas("reference-one", [h.node("shared-id")]);
   const second = h.canvas("reference-two", [h.node("shared-id")]);
@@ -2550,6 +2555,7 @@ test("generation references accept all media types and send a previewable attach
   assert.deepEqual(plain(references.getAssets()), draft, "mode switches preserve the current conversation's references");
   controls.mode("generation");
   assert.deepEqual(plain(references.getAssets()), draft);
+  controls.mode("agent");
 
   const conversation = h.window.getConversation();
   const before = conversation.messages.length;
@@ -2580,7 +2586,7 @@ test("generation references accept all media types and send a previewable attach
   assert.deepEqual(plain([first, second]), canvases);
 });
 
-test("Agent @ insertion freezes mixed-media references in its message and send resets editor history", (t) => {
+test("generation @ insertion freezes mixed-media task inputs and send resets editor history", (t) => {
   const h = createHarness(t);
   h.install(h.canvas("agent-mentions", [h.node("unrelated")]));
   h.window.setAgentOpen(true);
@@ -2599,6 +2605,7 @@ test("Agent @ insertion freezes mixed-media references in its message and send r
   const beforeMessages = conversation.messages.length;
   const beforeCanvas = plain(h.window.createCanvasDocumentSnapshot());
   const beforeAccount = plain(h.state.account);
+  const expectedCost = h.window.getCost(h.window.getAgentGenerationParameters());
   ui.type("@"); ui.key("Enter");
   assert.equal(conversation.messages.length, beforeMessages, "mention Enter must not send the Agent message");
   ui.type("参考@视频1"); ui.key("Enter");
@@ -2606,9 +2613,11 @@ test("Agent @ insertion freezes mixed-media references in its message and send r
   assert.equal(ui.editor.getDocument().content.filter((part) => part.type === "reference").length, 3);
   assert.equal(ui.editor.getText(), "让图片1参考视频1，使用音频1");
   ui.key("Enter");
-  assert.equal(conversation.messages.length, beforeMessages + 2);
-  const sent = conversation.messages[beforeMessages];
-  assert.equal(sent.content, "让图片1参考视频1，使用音频1");
+  assert.equal(conversation.messages.length, beforeMessages, "generation tasks must not append Agent role messages");
+  const task = h.window.canvasTest.agentGeneration.service.list().at(-1);
+  assert.ok(task);
+  const sent = task.input;
+  assert.equal(sent.prompt, "让图片1参考视频1，使用音频1");
   assert.deepEqual(plain(sent.promptDocument.content.filter((part) => part.type === "reference").map((part) => part.key)), plain(entries.map((entry) => entry.key)));
   assert.deepEqual(plain(sent.referenceSnapshot.map((entry) => entry.label)), ["图片1", "视频1", "音频1"]);
   assert.equal(Object.isFrozen(sent.referenceSnapshot[1].asset), true);
@@ -2616,13 +2625,14 @@ test("Agent @ insertion freezes mixed-media references in its message and send r
   assert.equal(ui.editor.getText(), "");
   assert.equal(ui.editor.undo(), false, "sending starts an empty editing history rather than restoring stale attachment mentions");
   assert.equal(ui.editor.getText(), "");
-  const message = [...document.querySelectorAll(".agent-message.user")].at(-1);
-  assert.equal(message.querySelectorAll(".agent-message-body [data-reference-key]").length, 3);
+  const message = document.querySelector(`.generation-record[data-generation-task-id="${task.id}"]`);
+  assert.equal(message.querySelectorAll(".generation-record-prompt [data-reference-key]").length, 3);
   references.addAssets([{ id: "new", type: "image", name: "新人物", url: "/new.png" }]);
   h.setText(input, "新草稿");
   assert.equal(sent.referenceSnapshot[0].asset.url, "/portrait.png");
-  assert.equal(sent.content, "让图片1参考视频1，使用音频1");
-  assert.deepEqual(plain(h.state.account), beforeAccount);
+  assert.equal(sent.prompt, "让图片1参考视频1，使用音频1");
+  assert.equal(h.state.account.credits, beforeAccount.credits - expectedCost);
+  assert.equal(h.state.account.consumedCredits, beforeAccount.consumedCredits + expectedCost);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), beforeCanvas);
 });
 

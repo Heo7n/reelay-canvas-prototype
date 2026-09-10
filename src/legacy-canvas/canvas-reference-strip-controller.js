@@ -154,8 +154,10 @@
         media.textContent = asset.type === "text" ? (asset.text || "文本参考") : "暂无可预览内容";
       }
       preview.setAttribute("aria-label", `${label}预览`);
+      const imageOnly = media.tagName === "IMG";
+      preview.classList.toggle("reference-image-preview", imageOnly);
       releaseMedia();
-      preview.replaceChildren(media, caption);
+      preview.replaceChildren(...(imageOnly ? [media] : [media, caption]));
       card.setAttribute("aria-controls", preview.id); card.setAttribute("aria-expanded", "true");
       document.body.append(preview);
       positionPreview(); ensureFrame();
