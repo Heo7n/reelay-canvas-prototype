@@ -1,14 +1,14 @@
-import { useRef, useState } from "react";
-import { EllipsisVertical, Pencil, UsersRound } from "lucide-react";
-import { Link, useFetcher } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Ellipsis, UsersRound } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type { ProjectSummary } from "../../domain/project/project";
 import { routePaths } from "../../app/routes";
-import type { WorkspaceActionData } from "../../app/route-data";
 import { resolveProjectCoverUrl } from "../projects/project-cover";
 import styles from "./ProjectCard.module.css";
 import { ProjectDeleteDialog } from "./ProjectDeleteDialog";
 import { useProjectMenu } from "./ProjectMenuProvider";
+import { ProjectNameEditor } from "./ProjectNameEditor";
 
 interface ProjectCardProps {
   onNotice: (message: string) => void;
@@ -17,23 +17,17 @@ interface ProjectCardProps {
 
 function formatUpdatedAt(value: string): string {
   const updated = new Date(value);
-  const now = new Date();
-  const sameDay = updated.toDateString() === now.toDateString();
-  if (sameDay) return `今天 ${updated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
-
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (updated.toDateString() === yesterday.toDateString()) {
-    return `昨天 ${updated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
-  }
-  return updated.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+  const year = updated.getFullYear();
+  const month = String(updated.getMonth() + 1).padStart(2, "0");
+  const day = String(updated.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function ProjectCard({ onNotice, project }: ProjectCardProps) {
-  const fetcher = useFetcher<WorkspaceActionData>();
   const [renaming, setRenaming] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const cancelRename = useRef(false);
+  const titleRef = useRef<HTMLButtonElement>(null);
+  const restoreTitleFocus = useRef(false);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const coverUrl = resolveProjectCoverUrl(project.coverAssetId);
   const canEdit = project.currentUserRole !== "view";
@@ -41,8 +35,19 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   const canDelete = project.accessKind === "private" || canAdminister;
   const { closeMenu, menuOpen, toggleMenu } = useProjectMenu(project.id);
 
+  const finishRename = useCallback((restoreFocus: boolean): void => {
+    restoreTitleFocus.current = restoreFocus;
+    setRenaming(false);
+  }, []);
+
+  useEffect(() => {
+    if (!renaming && restoreTitleFocus.current) {
+      restoreTitleFocus.current = false;
+      titleRef.current?.focus();
+    }
+  }, [renaming]);
+
   function startRename(): void {
-    cancelRename.current = false;
     closeMenu();
     setRenaming(true);
   }
@@ -55,118 +60,80 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
   return (
     <>
       <article className={styles.card}>
-      <Link className={styles.visualLink} to={routePaths.canvas(project.workspaceId, project.id, "main")} aria-label={`打开项目 ${project.name}`}>
-        {coverUrl ? (
-          <img src={coverUrl} alt="" />
-        ) : (
-          <span className={styles.semanticCover} data-project-seed={project.id.length % 4} aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-        )}
-      </Link>
+        <Link className={styles.visualLink} to={routePaths.canvas(project.workspaceId, project.id, "main")} aria-label={`打开项目 ${project.name}`}>
+          <img src={coverUrl} alt="" decoding="async" loading="lazy" width={1280} height={720} />
+        </Link>
 
-      <details
-        className={styles.menuDetails}
-        data-project-menu-id={project.id}
-        open={menuOpen}
-      >
-        <summary
-          className={styles.menuTrigger}
-          aria-label={`打开 ${project.name} 的项目菜单`}
-          onClick={(event) => {
-            event.preventDefault();
-            toggleMenu(event.currentTarget);
-          }}
-        >
-          <EllipsisVertical aria-hidden="true" />
-        </summary>
-        <div className={styles.menu} role="menu">
-          <Link role="menuitem" to={routePaths.canvas(project.workspaceId, project.id, "main")}>打开</Link>
-          {canEdit ? <button type="button" role="menuitem" onClick={startRename}>重命名</button> : null}
-          {canEdit ? <button type="button" role="menuitem" onClick={() => showPrototypeNotice("封面上传将在项目持久化阶段接入。")}>修改封面</button> : null}
-          {canAdminister && project.accessKind === "private" ? (
-            <button type="button" role="menuitem" onClick={() => showPrototypeNotice("转为协作项目后可添加组织成员并分配权限，暂未接入。")}>转为协作项目</button>
-          ) : null}
-          {canDelete ? (
-            <button
-              ref={deleteTriggerRef}
-              className={styles.danger}
-              type="button"
-              role="menuitem"
-              aria-haspopup="dialog"
-              onClick={() => {
-                closeMenu();
-                setDeleteDialogOpen(true);
-              }}
-            >
-              删除项目
-            </button>
-          ) : canEdit && project.accessKind === "collaborative" ? (
-            <button
-              className={styles.danger}
-              type="button"
-              role="menuitem"
-              aria-label="删除项目（仅项目管理员可用）"
-              title="仅项目管理员可删除"
-              disabled
-            >
-              删除项目
-            </button>
-          ) : null}
-        </div>
-      </details>
-
-      <div className={styles.info}>
-        {renaming ? (
-          <fetcher.Form
-            method="post"
-            action={routePaths.workspaceHome(project.workspaceId)}
-            className={styles.renameForm}
-            onSubmit={() => setRenaming(false)}
-          >
-            <input type="hidden" name="intent" value="rename" />
-            <input type="hidden" name="projectId" value={project.id} />
-            <input
-              name="name"
-              defaultValue={project.name}
-              maxLength={100}
-              autoFocus
-              aria-label="项目名称"
-              onBlur={(event) => {
-                if (cancelRename.current) {
-                  cancelRename.current = false;
-                  return;
-                }
-                event.currentTarget.form?.requestSubmit();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  cancelRename.current = true;
-                  setRenaming(false);
-                }
-              }}
-            />
-          </fetcher.Form>
-        ) : (
+        <div className={styles.info}>
           <div className={styles.titleRow}>
-            <Link to={routePaths.canvas(project.workspaceId, project.id, "main")}>{project.name}</Link>
-            {canEdit ? (
-              <button type="button" className={styles.quickRename} onClick={startRename} aria-label={`重命名 ${project.name}`}>
-                <Pencil aria-hidden="true" />
+            {renaming ? (
+              <ProjectNameEditor project={project} onClose={finishRename} />
+            ) : canEdit ? (
+              <button ref={titleRef} type="button" className={styles.projectName} onClick={startRename}
+                aria-label={`重命名 ${project.name}`} title={project.name}>
+                {project.name}
               </button>
-            ) : null}
+            ) : (
+              <Link className={styles.projectName} to={routePaths.canvas(project.workspaceId, project.id, "main")} title={project.name}>
+                {project.name}
+              </Link>
+            )}
+            <details
+              className={styles.menuDetails}
+              data-project-menu-id={project.id}
+              open={menuOpen}
+            >
+              <summary
+                className={styles.menuTrigger}
+                aria-label={`打开 ${project.name} 的项目菜单`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  toggleMenu(event.currentTarget);
+                }}
+              >
+                <Ellipsis aria-hidden="true" />
+              </summary>
+              <div className={styles.menu} role="menu">
+                <Link role="menuitem" to={routePaths.canvas(project.workspaceId, project.id, "main")}>打开</Link>
+                {canEdit ? <button type="button" role="menuitem" onClick={startRename}>重命名</button> : null}
+                {canEdit ? <button type="button" role="menuitem" onClick={() => showPrototypeNotice("封面上传将在项目持久化阶段接入。")}>修改封面</button> : null}
+                {canAdminister && project.accessKind === "private" ? (
+                  <button type="button" role="menuitem" onClick={() => showPrototypeNotice("转为协作项目后可添加组织成员并分配权限，暂未接入。")}>转为协作项目</button>
+                ) : null}
+                {canDelete ? (
+                  <button
+                    ref={deleteTriggerRef}
+                    className={styles.danger}
+                    type="button"
+                    role="menuitem"
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      closeMenu();
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    删除项目
+                  </button>
+                ) : canEdit && project.accessKind === "collaborative" ? (
+                  <button
+                    className={styles.danger}
+                    type="button"
+                    role="menuitem"
+                    aria-label="删除项目（仅项目管理员可用）"
+                    title="仅项目管理员可删除"
+                    disabled
+                  >
+                    删除项目
+                  </button>
+                ) : null}
+              </div>
+            </details>
           </div>
-        )}
-
-        <div className={styles.metaRow}>
-          <time dateTime={project.updatedAt}>{formatUpdatedAt(project.updatedAt)}</time>
-          {project.accessKind === "collaborative" ? <UsersRound aria-label="协作项目" /> : null}
+          <div className={styles.metaRow}>
+            {project.accessKind === "collaborative" ? <span className={styles.collaboration} role="img" aria-label="协作项目" title="协作项目"><UsersRound aria-hidden="true" /></span> : null}
+            <time dateTime={project.updatedAt}>{formatUpdatedAt(project.updatedAt)}</time>
+          </div>
         </div>
-        {fetcher.data?.error ? <span className={styles.srOnly} role="alert">{fetcher.data.error}</span> : null}
-      </div>
       </article>
       <ProjectDeleteDialog
         open={deleteDialogOpen}

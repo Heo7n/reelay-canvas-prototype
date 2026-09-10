@@ -5,16 +5,17 @@ import type { ProjectAssetReferenceStore } from "./application/ProjectAssetRefer
 import type { WorkspaceMediaAssetStore } from "./application/WorkspaceMediaAssetStore";
 import { createPostgresPool } from "./db/config";
 import { createDemoSeed } from "./demo-fixtures";
-import { FileSystemObjectStore } from "./infrastructure/FileSystemObjectStore";
 import { InMemoryCollaborationStore } from "./infrastructure/InMemoryCollaborationStore";
 import { PostgresAssetStore } from "./infrastructure/PostgresAssetStore";
 import { PostgresCollaborationStore } from "./infrastructure/PostgresCollaborationStore";
 import { PostgresEntityStore } from "./infrastructure/PostgresEntityStore";
-import { getObjectStoreRoot } from "./object-store-config";
+import { SupabaseObjectStore } from "./infrastructure/SupabaseObjectStore";
+import { createRuntimeObjectStore } from "./runtime-object-store-config";
 
 export interface ServerDependencies {
   assetStore?: WorkspaceMediaAssetStore & ProjectAssetReferenceStore;
   entityStore?: EntityStore;
+  maxAssetUploadBytes?: number;
   objectStore?: ObjectStore;
   store: CollaborationStore;
 }
@@ -28,12 +29,16 @@ export function createServerDependencies(environment: NodeJS.ProcessEnv = proces
     return { store: new InMemoryCollaborationStore(createDemoSeed()) };
   }
   if (storage === "postgresql") {
-    const pool = createPostgresPool();
+    // Validate both storage destinations before allocating database resources.
+    const objectStore = createRuntimeObjectStore(environment);
+    const pool = createPostgresPool(undefined, environment);
     return {
       store: new PostgresCollaborationStore(pool),
       assetStore: new PostgresAssetStore(pool),
       entityStore: new PostgresEntityStore(pool),
-      objectStore: new FileSystemObjectStore(getObjectStoreRoot(environment)),
+      objectStore,
+      // Match the shared development bucket before issuing an upload intent.
+      maxAssetUploadBytes: objectStore instanceof SupabaseObjectStore ? 50 * 1024 * 1024 : undefined,
     };
   }
   throw new Error(`Unsupported REELAY_STORAGE value: ${storage}`);

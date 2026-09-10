@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router-dom";
 
 import { ApplicationError } from "../application/shared/ApplicationError";
@@ -6,6 +6,16 @@ import type { ProjectSummary } from "../domain/project/project";
 import type { Workspace } from "../domain/workspace/workspace";
 import { createRouteHandlers } from "./route-data";
 import type { ApplicationServices } from "./services";
+import { publishProjectLaunchIntent } from "../pages/home/launch-intent";
+import { prepareCreationDraftReturn, saveGuestCreationDraft } from "../pages/home/guest-creation-draft";
+
+vi.mock("../pages/home/launch-intent", () => ({ publishProjectLaunchIntent: vi.fn() }));
+vi.mock("../pages/home/guest-creation-draft", () => ({ prepareCreationDraftReturn: vi.fn(), saveGuestCreationDraft: vi.fn() }));
+afterEach(() => {
+  vi.mocked(publishProjectLaunchIntent).mockClear();
+  vi.mocked(prepareCreationDraftReturn).mockClear();
+  vi.mocked(saveGuestCreationDraft).mockClear();
+});
 
 const actor = {
   account: "creator@reelay.test",
@@ -245,11 +255,38 @@ describe("application route data", () => {
       ),
     );
 
-    expect(data.members).toEqual(members);
+    expect(await data.members).toEqual({ status: "ready", members });
     expect(services.organizationRepository.listMembers).toHaveBeenCalledWith("workspace-organization");
     expect(services.workspaceContextGateway.load).not.toHaveBeenCalled();
     expect(services.projectRepository.listByWorkspace).not.toHaveBeenCalled();
   });
+
+  it("returns organization routing data before the member request completes", async () => {
+    const services = createServices();
+    let finish!: (value: typeof members) => void;
+    vi.mocked(services.organizationRepository.listMembers).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const data = createRouteHandlers(services).organizationLoader(loaderArgs(
+      "http://reelay.local/app/w/workspace-organization/organization", { workspaceId: "workspace-organization" },
+    ));
+    expect(data).not.toBeInstanceOf(Promise);
+    expect(data.members).toBeInstanceOf(Promise);
+    finish(members);
+    expect(await data.members).toEqual({ status: "ready", members });
+  });
+
+  it.each(["authentication_required", "forbidden", "request_failed"] as const)(
+    "settles an early %s member failure without an unhandled rejection", async (code) => {
+      const services = createServices();
+      vi.mocked(services.organizationRepository.listMembers).mockRejectedValueOnce(new ApplicationError(code, "Unavailable"));
+      const data = createRouteHandlers(services).organizationLoader(loaderArgs(
+        "http://reelay.local/app/w/workspace-organization/organization", { workspaceId: "workspace-organization" },
+      ));
+      const result = await data.members;
+      if (code === "request_failed") expect(result).toEqual({ status: "error" });
+      else if (code === "forbidden") expect(result).toEqual({ status: "redirect", to: "/w/workspace-organization" });
+      else expect(result).toEqual({ status: "redirect", to: expect.stringContaining("/login?returnTo=") });
+    },
+  );
 
   it("uses the route workspace as the authority for project mutations", async () => {
     const services = createServices();
@@ -265,6 +302,76 @@ describe("application route data", () => {
     expect(services.projectRepository.create).toHaveBeenCalledWith("workspace-organization", { name: "未命名项目" });
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).headers.get("Location")).toBe("/w/workspace-organization/projects/project-created/canvases/main");
+    expect(publishProjectLaunchIntent).toHaveBeenCalledWith({
+      workspaceId: "workspace-organization", projectId: "project-created", canvasId: "main",
+    }, "");
+  });
+
+  it("publishes the prompt for the created project only after creation succeeds", async () => {
+    const services = createServices();
+    let finishCreate!: (project: ProjectSummary) => void;
+    vi.mocked(services.projectRepository.create).mockImplementationOnce(() => new Promise((resolve) => {
+      finishCreate = resolve;
+    }));
+    const prompt = "  海边的建筑空间，清晨柔和的光线。  ";
+    const result = createRouteHandlers(services).workspaceAction(actionArgs(
+      "http://reelay.local/app/w/workspace-organization",
+      { intent: "create", prompt, workspaceId: "untrusted-workspace" },
+      { workspaceId: "workspace-organization" },
+    ));
+    await vi.waitFor(() => expect(services.projectRepository.create).toHaveBeenCalledOnce());
+    expect(publishProjectLaunchIntent).not.toHaveBeenCalled();
+    finishCreate({ ...projects[0]!, id: "new-project" });
+    const response = await result;
+    expect((response as Response).headers.get("Location")).toBe("/w/workspace-organization/projects/new-project/canvases/main");
+    expect(publishProjectLaunchIntent).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: "workspace-organization", projectId: "new-project", canvasId: "main",
+    }, prompt.trim());
+  });
+
+  it("does not publish a prompt when project creation fails", async () => {
+    const services = createServices();
+    vi.mocked(services.projectRepository.create).mockRejectedValueOnce(new Error("Network unavailable"));
+    const response = await createRouteHandlers(services).workspaceAction(actionArgs(
+      "http://reelay.local/app/w/workspace-organization", { intent: "create", prompt: "未创建成功的需求" },
+      { workspaceId: "workspace-organization" },
+    ));
+    expect(response).toEqual({ error: "项目操作失败，请稍后重试。" });
+    expect(publishProjectLaunchIntent).not.toHaveBeenCalled();
+    expect(saveGuestCreationDraft).not.toHaveBeenCalled();
+  });
+
+  it("preserves a failed homepage creation draft for its original workspace when authentication expires", async () => {
+    const services = createServices();
+    vi.mocked(services.projectRepository.create).mockRejectedValueOnce(new ApplicationError("authentication_required", "Session expired"));
+    await expectRedirect(createRouteHandlers(services).workspaceAction(actionArgs(
+      "http://reelay.local/app/w/workspace-organization?index", { intent: "create", prompt: "  未提交的镜头描述  " },
+      { workspaceId: "workspace-organization" },
+    )), "/login?returnTo=%2Fw%2Fworkspace-organization");
+    expect(saveGuestCreationDraft).toHaveBeenCalledExactlyOnceWith("  未提交的镜头描述  ", "workspace-organization");
+    expect(publishProjectLaunchIntent).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a project-list action as a homepage input draft on session expiry", async () => {
+    const services = createServices();
+    vi.mocked(services.projectRepository.create).mockRejectedValueOnce(new ApplicationError("authentication_required", "Session expired"));
+    await expectRedirect(createRouteHandlers(services).workspaceAction(actionArgs(
+      "http://reelay.local/app/w/workspace-organization/projects", { intent: "create", prompt: "不来自主页" },
+      { workspaceId: "workspace-organization" },
+    )), "/login?returnTo=%2Fw%2Fworkspace-organization%2Fprojects");
+    expect(saveGuestCreationDraft).not.toHaveBeenCalled();
+    expect(publishProjectLaunchIntent).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized prompts before creating a project or publishing a handoff", async () => {
+    const services = createServices();
+    const response = await createRouteHandlers(services).workspaceAction(actionArgs(
+      "http://reelay.local/app/w/workspace-organization", { intent: "create", prompt: "图".repeat(601) },
+      { workspaceId: "workspace-organization" },
+    ));
+    expect(response).toEqual({ error: "创作描述最多 600 字。" });
+    expect(services.projectRepository.create).not.toHaveBeenCalled();
+    expect(publishProjectLaunchIntent).not.toHaveBeenCalled();
   });
 
   it("moves an admin project to trash through the current workspace route", async () => {

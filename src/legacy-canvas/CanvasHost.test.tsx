@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render as renderTestingLibrary, screen, waitFor } from "@testing-library/react";
-import { useState, type ReactElement } from "react";
+import { StrictMode, useState, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationError } from "../application/shared/ApplicationError";
@@ -99,6 +99,296 @@ function dispatchCanvasMessage(frame: HTMLIFrameElement, data: unknown): void {
     source: frame.contentWindow,
   }));
 }
+
+function dispatchProgressiveReady(frame: HTMLIFrameElement, instanceId = canvasInstanceId): void {
+  window.dispatchEvent(new MessageEvent("message", {
+    origin: window.location.origin, source: frame.contentWindow,
+    data: { source: "reelay-legacy-canvas", type: "canvas:capabilities", protocolVersion: 1,
+      instanceId, capabilities: { progressiveAssetLoading: true } },
+  }));
+  dispatchCanvasMessage(frame, { ...readyMessage, instanceId });
+}
+
+function pendingResult<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+const progressiveContext = {
+  ...editableContext,
+  capabilities: { ...editableContext.capabilities, assetPersistence: true, entityPersistence: true },
+};
+
+describe("CanvasHost progressive asset loading", () => {
+  it.each([document, null])("starts catalogs only after a successful document read, including empty canvases: %j", async (loadedDocument) => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const catalog = pendingResult<[]>();
+    const saved = pendingResult<CanvasDocument>();
+    const listProjectAssets = vi.fn(() => catalog.promise);
+    const listPersonalAssets = vi.fn(() => catalog.promise);
+    const listPersonal = vi.fn(() => catalog.promise);
+    const save = vi.fn(() => saved.promise);
+    render(<CanvasHost
+      repository={{ getCanvasDocument: vi.fn(() => initialDocument.promise), save }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+
+    await act(async () => initialDocument.resolve(loadedDocument));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:document", document: loadedDocument }), window.location.origin);
+    expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", projectAssets: "loading", workspaceCatalog: "loading" });
+
+    act(() => {
+      dispatchCanvasMessage(frame, dirtyMessage(true));
+      dispatchCanvasMessage(frame, saveMessage("while-catalogs-load", canvasInstanceId, loadedDocument?.revision ?? 0));
+    });
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saving");
+    await act(async () => catalog.resolve([]));
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:init")).toHaveLength(1);
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:document")).toHaveLength(1);
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saving");
+    await act(async () => saved.resolve({ ...document, revision: (loadedDocument?.revision ?? 0) + 1 }));
+  });
+
+  it.each([new Error("offline"), new ApplicationError("not_found", "missing")])("does not read catalogs after document failure and keeps retry document-first: %s", async (error) => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const retriedDocument = pendingResult<CanvasDocument | null>();
+    const getCanvasDocument = vi.fn().mockReturnValueOnce(initialDocument.promise).mockReturnValueOnce(retriedDocument.promise);
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    render(<CanvasHost repository={{ ...repository, getCanvasDocument }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    await act(async () => initialDocument.reject(error));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
+    expect(getCanvasDocument).toHaveBeenCalledTimes(2);
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    await act(async () => retriedDocument.resolve(document));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+  });
+
+  it.each([
+    { field: "project", nextContext: { ...progressiveContext, projectId: "project-2" } },
+    { field: "canvas", nextContext: { ...progressiveContext, canvasId: "second" } },
+    { field: "workspace", nextContext: { ...progressiveContext, workspaceId: "organization-2" } },
+  ])("does not start obsolete catalogs when a document resolves after changing $field", async ({ nextContext }) => {
+    const previous = pendingResult<CanvasDocument | null>();
+    const current = pendingResult<CanvasDocument | null>();
+    const documents = { ...repository, getCanvasDocument: vi.fn().mockReturnValueOnce(previous.promise).mockReturnValueOnce(current.promise) };
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    const mediaAssetRepository = { listProjectAssets, listPersonalAssets } as never;
+    const entityRepository = { listPersonal } as never;
+    const ui = (context: typeof progressiveContext) => <CanvasHost repository={documents}
+      mediaAssetRepository={mediaAssetRepository} entityRepository={entityRepository} context={context} />;
+    const view = render(ui(progressiveContext));
+    view.rerender(routed(ui(nextContext)));
+    await act(async () => previous.resolve(document));
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    await act(async () => current.resolve({ ...document, projectId: nextContext.projectId, id: nextContext.canvasId }));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith(nextContext.projectId);
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith(nextContext.workspaceId);
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith(nextContext.workspaceId);
+  });
+
+  it("does not start catalogs when the host unmounts before its document arrives", async () => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    const view = render(<CanvasHost repository={{ ...repository, getCanvasDocument: () => initialDocument.promise }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    view.unmount();
+    await act(async () => initialDocument.resolve(document));
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+  });
+
+  it("starts only the live effect's catalogs when StrictMode replays a shared document read", async () => {
+    const initialDocument = pendingResult<CanvasDocument | null>();
+    const getCanvasDocument = vi.fn(() => initialDocument.promise);
+    const listProjectAssets = vi.fn(async () => []);
+    const listPersonalAssets = vi.fn(async () => []);
+    const listPersonal = vi.fn(async () => []);
+    renderTestingLibrary(<StrictMode>{routed(<CanvasHost repository={{ ...repository, getCanvasDocument }}
+      mediaAssetRepository={{ listProjectAssets, listPersonalAssets } as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />)}</StrictMode>);
+    expect(getCanvasDocument).toHaveBeenCalledTimes(2);
+    expect(listProjectAssets).not.toHaveBeenCalled();
+    expect(listPersonalAssets).not.toHaveBeenCalled();
+    expect(listPersonal).not.toHaveBeenCalled();
+    await act(async () => initialDocument.resolve(document));
+    expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
+    expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+  });
+
+  it("rejects late discovery from a replaced project and only sends the current scope to its new instance", async () => {
+    const oldProject = pendingResult<[]>();
+    const oldPersonal = pendingResult<[]>();
+    const oldEntities = pendingResult<[]>();
+    const mediaAssetRepository = { listProjectAssets: vi.fn().mockReturnValueOnce(oldProject.promise).mockResolvedValue([]),
+      listPersonalAssets: vi.fn().mockReturnValueOnce(oldPersonal.promise).mockResolvedValue([]) } as never;
+    const entityRepository = { listPersonal: vi.fn().mockReturnValueOnce(oldEntities.promise).mockResolvedValue([]) } as never;
+    const documents = { ...repository, getCanvasDocument: vi.fn(async (projectId: string) => ({ ...document, projectId })) };
+    const ui = (projectId: string) => <CanvasHost repository={documents} mediaAssetRepository={mediaAssetRepository}
+      entityRepository={entityRepository} context={{ ...progressiveContext, projectId }} />;
+    const view = render(ui("project-1"));
+    const oldFrame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    act(() => dispatchProgressiveReady(oldFrame));
+    view.rerender(routed(ui("project-2")));
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame, "replacement"));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:document", document: expect.objectContaining({ projectId: "project-2" }) }), window.location.origin));
+    await waitFor(() => expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", instanceId: "replacement", workspaceCatalog: "ready" }));
+    const count = postMessage.mock.calls.length;
+    await act(async () => { oldProject.resolve([]); oldPersonal.resolve([]); oldEntities.resolve([]); });
+    expect(postMessage.mock.calls).toHaveLength(count);
+  });
+
+  it.each([true, false])("initializes before catalogs only for a negotiated iframe: %s", async (progressive) => {
+    const project = pendingResult<[]>();
+    const personal = pendingResult<[]>();
+    const entities = pendingResult<[]>();
+    render(<CanvasHost repository={{ ...repository, getCanvasDocument: vi.fn(async () => document) }}
+      mediaAssetRepository={{ listProjectAssets: () => project.promise, listPersonalAssets: () => personal.promise } as never}
+      entityRepository={{ listPersonal: () => entities.promise } as never} context={progressiveContext} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => progressive ? dispatchProgressiveReady(frame) : dispatchCanvasMessage(frame, readyMessage));
+    if (progressive) {
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:document", document }), window.location.origin));
+      expect(postMessage.mock.calls[0]![0]).toMatchObject({ type: "host:init",
+        context: { capabilities: { progressiveAssetLoading: true, assetPersistence: false, entityPersistence: false } } });
+      expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", projectAssets: "loading", workspaceCatalog: "loading" });
+    } else expect(postMessage).not.toHaveBeenCalled();
+
+    await act(async () => { project.resolve([]); await project.promise; });
+    if (progressive) {
+      expect(postMessage.mock.calls.at(-2)![0]).toMatchObject({ type: "host:project-assets", projectAssets: [] });
+      expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", projectAssets: "ready", workspaceCatalog: "loading" });
+    } else expect(postMessage).not.toHaveBeenCalled();
+    await act(async () => { personal.resolve([]); entities.resolve([]); await Promise.all([personal.promise, entities.promise]); });
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const types = postMessage.mock.calls.map(([message]) => message.type);
+    expect(types.filter((type) => type === "host:init")).toHaveLength(1);
+    expect(types.filter((type) => type === "host:document")).toHaveLength(1);
+    if (progressive) {
+      expect(types.at(-2)).toBe("host:workspace-asset-catalog");
+      expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", projectAssets: "ready", workspaceCatalog: "ready" });
+    } else expect(types).not.toContain("host:asset-availability");
+    const count = postMessage.mock.calls.length;
+    act(() => dispatchProgressiveReady(frame));
+    expect(postMessage.mock.calls).toHaveLength(count);
+  });
+
+  it("keeps failed catalogs unavailable without sending a writable empty replacement", async () => {
+    const project = pendingResult<[]>();
+    const personal = pendingResult<[]>();
+    const createUploadIntent = vi.fn();
+    render(<CanvasHost repository={{ ...repository, getCanvasDocument: vi.fn(async () => document) }}
+      mediaAssetRepository={{ listProjectAssets: () => project.promise, listPersonalAssets: () => personal.promise, createUploadIntent } as never}
+      entityRepository={{ listPersonal: async () => [] } as never} context={progressiveContext} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:document" }), window.location.origin));
+    await act(async () => { project.reject(new Error("offline")); personal.reject(new Error("offline")); });
+    expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", projectAssets: "unavailable", workspaceCatalog: "unavailable" });
+    expect(postMessage.mock.calls.some(([message]) => ["host:project-assets", "host:workspace-asset-catalog"].includes(message.type))).toBe(false);
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:document")).toHaveLength(1);
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:create-media-upload", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "unavailable", idempotencyKey: "unavailable", target: "personal",
+      mediaKind: "image", displayName: "file.png", contentType: "image/png", byteSize: 42, checksumSha256: "a".repeat(64) }));
+    expect(createUploadIntent).not.toHaveBeenCalled();
+    expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-command-error", code: "unsupported" });
+  });
+
+  it("blocks even project uploads until personal discovery settles, then never replays the initial catalogs", async () => {
+    const personal = pendingResult<[]>();
+    const asset = { id: "new-asset", workspaceId: "organization-1", objectVersion: 1, mediaKind: "image", displayName: "file.png",
+      contentType: "image/png", byteSize: 42, checksumSha256: "a".repeat(64) };
+    const projectAsset = { referenceId: "new-reference", assetId: asset.id, assetVersion: 1, mediaKind: asset.mediaKind,
+      displayName: asset.displayName, contentType: asset.contentType, byteSize: asset.byteSize, checksumSha256: asset.checksumSha256,
+      contentUrl: "/api/workspaces/organization-1/media-assets/new-asset/content" };
+    const createUploadIntent = vi.fn(async () => ({ uploadIntent: { id: "upload", expiresAt: "2026-09-08T00:00:00Z" },
+      upload: { url: "/api/upload", method: "PUT", headers: {} } }));
+    render(<CanvasHost repository={{ ...repository, getCanvasDocument: vi.fn(async () => document) }}
+      mediaAssetRepository={{ listProjectAssets: async () => [], listPersonalAssets: () => personal.promise, createUploadIntent,
+        finalizeUpload: async () => asset, attachToProject: async () => projectAsset } as never}
+      entityRepository={{ listPersonal: async () => [] } as never} context={progressiveContext} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:project-assets" }), window.location.origin));
+    const upload = { source: "reelay-legacy-canvas", type: "canvas:create-media-upload", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "upload", idempotencyKey: "upload", target: "project",
+      mediaKind: "image", displayName: "file.png", contentType: "image/png", byteSize: 42, checksumSha256: "a".repeat(64) };
+    act(() => dispatchCanvasMessage(frame, upload));
+    expect(createUploadIntent).not.toHaveBeenCalled();
+    await act(async () => { personal.resolve([]); await personal.promise; });
+    act(() => dispatchCanvasMessage(frame, upload));
+    await waitFor(() => expect(createUploadIntent).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-upload-grant" }), window.location.origin));
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:finalize-media-upload", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "upload", uploadId: "upload" }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-upload-result", projectAsset }), window.location.origin));
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:workspace-asset-catalog")).toHaveLength(1);
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:document")).toHaveLength(1);
+    act(() => dispatchProgressiveReady(frame, "after-upload"));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog",
+      instanceId: "after-upload", assets: [expect.objectContaining({ assetId: "new-asset" })] }), window.location.origin));
+  });
+
+  it("delivers an in-flight entity result when project discovery finishes without rebinding its handler", async () => {
+    const project = pendingResult<[]>();
+    const updateResult = pendingResult<unknown>();
+    const update = vi.fn(() => updateResult.promise);
+    render(<CanvasHost repository={{ ...repository, getCanvasDocument: vi.fn(async () => document) }}
+      mediaAssetRepository={{ listProjectAssets: () => project.promise, listPersonalAssets: async () => [] } as never}
+      entityRepository={{ listPersonal: async () => [], update } as never} context={progressiveContext} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:update-entity", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "entity-update", entityId: "entity", expectedVersion: 1,
+      name: "主体", description: "", assetIds: ["asset"], coverAssetId: "asset" }));
+    expect(update).toHaveBeenCalledTimes(1);
+    await act(async () => { project.resolve([]); await project.promise; });
+    await act(async () => { updateResult.resolve({ id: "entity", name: "主体", description: "", mediaRefs: [{ assetId: "asset", order: 0 }],
+      coverAssetId: "asset", version: 2 }); await updateResult.promise; });
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:entity-command-result", requestId: "entity-update" }), window.location.origin);
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:workspace-asset-catalog")).toHaveLength(1);
+  });
+});
 
 function saveMessage(
   requestId: string,
@@ -546,7 +836,7 @@ describe("CanvasHost", () => {
         type: "host:media-upload-result",
         requestId: "request-personal",
         target: "personal",
-        workspaceAsset: expect.objectContaining({ assetId: "asset-personal" }),
+        workspaceAsset: expect.objectContaining({ assetId: "asset-personal", createdAt: finalizedAsset.createdAt }),
       }),
       window.location.origin,
     ));
@@ -621,7 +911,7 @@ describe("CanvasHost", () => {
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "host:workspace-asset-catalog",
-        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "before.png" })],
+        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "before.png", createdAt: personalAsset.createdAt })],
       }),
       window.location.origin,
     ));
@@ -657,7 +947,7 @@ describe("CanvasHost", () => {
       expect.objectContaining({
         type: "host:media-rename-result",
         requestId: "media-rename-1",
-        workspaceAsset: expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" }),
+        workspaceAsset: expect.objectContaining({ assetId: "asset-rename", displayName: "after.png", createdAt: personalAsset.createdAt }),
       }),
       window.location.origin,
     ));
@@ -676,7 +966,7 @@ describe("CanvasHost", () => {
       expect.objectContaining({
         type: "host:workspace-asset-catalog",
         instanceId: "canvas-instance-2",
-        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" })],
+        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "after.png", createdAt: personalAsset.createdAt })],
       }),
       window.location.origin,
     );
@@ -933,7 +1223,7 @@ describe("CanvasHost", () => {
     ));
   });
 
-  it("waits for an old same-route save before hydrating a new iframe instance", async () => {
+  it.each([false, true])("waits for an old same-route save before hydrating a new iframe instance (progressive: %s)", async (progressive) => {
     const replacementInstanceId = "canvas-instance-2";
     const savedDocument = { ...document, revision: 3 };
     let resolveOldSave: (value: typeof savedDocument) => void = () => undefined;
@@ -948,7 +1238,7 @@ describe("CanvasHost", () => {
     );
     const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
-    dispatchCanvasMessage(frame, readyMessage);
+    act(() => progressive ? dispatchProgressiveReady(frame) : dispatchCanvasMessage(frame, readyMessage));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "host:document", document }),
       window.location.origin,
@@ -958,7 +1248,7 @@ describe("CanvasHost", () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saving");
 
-    act(() => dispatchCanvasMessage(frame, {
+    act(() => progressive ? dispatchProgressiveReady(frame, replacementInstanceId) : dispatchCanvasMessage(frame, {
       ...readyMessage,
       instanceId: replacementInstanceId,
     }));
@@ -977,6 +1267,9 @@ describe("CanvasHost", () => {
       window.location.origin,
     );
     expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved");
+    if (progressive) expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:asset-availability", instanceId: replacementInstanceId,
+    }), window.location.origin);
 
     act(() => {
       dispatchCanvasMessage(frame, dirtyMessage(false, replacementInstanceId));
@@ -985,7 +1278,7 @@ describe("CanvasHost", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/w/organization-1"));
   });
 
-  it("refetches the authoritative document before replacing an iframe after an old save error", async () => {
+  it.each([false, true])("refetches the authoritative document before replacing an iframe after an old save error (progressive: %s)", async (progressive) => {
     const replacementInstanceId = "canvas-instance-2";
     const refreshedDocument = { ...document, revision: 4, content: { refreshed: true } };
     let rejectOldSave: (reason: unknown) => void = () => undefined;
@@ -1003,7 +1296,7 @@ describe("CanvasHost", () => {
     );
     const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
-    dispatchCanvasMessage(frame, readyMessage);
+    act(() => progressive ? dispatchProgressiveReady(frame) : dispatchCanvasMessage(frame, readyMessage));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "host:document", document }),
       window.location.origin,
@@ -1011,7 +1304,7 @@ describe("CanvasHost", () => {
     act(() => dispatchCanvasMessage(frame, saveMessage("save-that-conflicts")));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
 
-    act(() => dispatchCanvasMessage(frame, {
+    act(() => progressive ? dispatchProgressiveReady(frame, replacementInstanceId) : dispatchCanvasMessage(frame, {
       ...readyMessage,
       instanceId: replacementInstanceId,
     }));
@@ -1030,6 +1323,9 @@ describe("CanvasHost", () => {
       window.location.origin,
     );
     expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved");
+    if (progressive) expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:asset-availability", instanceId: replacementInstanceId,
+    }), window.location.origin);
   });
 
   it("does not deliver an old scope save completion to a replacement iframe", async () => {
@@ -1347,5 +1643,83 @@ describe("CanvasHost", () => {
     }));
 
     expect(onOpenAccountSettings).toHaveBeenNthCalledWith(2, "profile");
+  });
+
+  it.each([true, false])("updates the routed theme without reloading or saving the canvas when writable=%s", async (writable) => {
+    const getCanvasDocument = vi.fn(async () => document);
+    const save = vi.fn();
+    const themeRepository = { getCanvasDocument, save };
+    const onThemeChange = vi.fn();
+    function RoutedThemeHost() {
+      const [theme, setTheme] = useState<"light" | "dark">("light");
+      return <CanvasHost
+        repository={themeRepository}
+        context={{ ...editableContext, theme, writable }}
+        onThemeChange={(nextTheme) => {
+          onThemeChange(nextTheme);
+          setTheme(nextTheme);
+        }}
+      />;
+    }
+    render(<RoutedThemeHost />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchCanvasMessage(frame, readyMessage));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:document" }), window.location.origin,
+    ));
+    postMessage.mockClear();
+
+    for (const theme of ["dark", "light"] as const) {
+      act(() => dispatchCanvasMessage(frame, {
+        source: "reelay-legacy-canvas", type: "canvas:theme-change", protocolVersion: 1,
+        instanceId: canvasInstanceId, theme,
+      }));
+      expect(onThemeChange).toHaveBeenLastCalledWith(theme);
+      expect(screen.getByTitle("Reelay 项目画布")).toBe(frame);
+      expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved");
+    }
+    expect(onThemeChange).toHaveBeenCalledTimes(2);
+    expect(getCanvasDocument).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it("ignores foreign, invalid, not-ready, and stale-instance theme changes", async () => {
+    const onThemeChange = vi.fn();
+    const getCanvasDocument = vi.fn(async () => document);
+    const save = vi.fn();
+    render(<CanvasHost
+      repository={{ getCanvasDocument, save }}
+      context={editableContext}
+      onThemeChange={onThemeChange}
+    />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const message = {
+      source: "reelay-legacy-canvas", type: "canvas:theme-change", protocolVersion: 1,
+      instanceId: canvasInstanceId, theme: "dark",
+    };
+    const send = (data: unknown, origin = window.location.origin, source: MessageEventSource | null = frame.contentWindow) => {
+      window.dispatchEvent(new MessageEvent("message", { data, origin, source }));
+    };
+    act(() => send(message));
+    expect(onThemeChange).not.toHaveBeenCalled();
+    act(() => send(readyMessage));
+    await waitFor(() => expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved"));
+
+    act(() => {
+      send(message, "https://foreign.example");
+      send(message, window.location.origin, window);
+      send({ ...message, source: "foreign" });
+      send({ ...message, theme: "system" });
+      send({ ...message, protocolVersion: 2 });
+      send({ ...readyMessage, instanceId: "canvas-instance-2" });
+      send(message);
+    });
+    expect(onThemeChange).not.toHaveBeenCalled();
+    act(() => send({ ...message, instanceId: "canvas-instance-2", theme: "light" }));
+    expect(onThemeChange).toHaveBeenCalledExactlyOnceWith("light");
+    expect(getCanvasDocument).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
   });
 });

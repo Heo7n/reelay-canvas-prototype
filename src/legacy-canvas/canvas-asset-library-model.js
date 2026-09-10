@@ -433,7 +433,7 @@
       const folderId = options.folderId == null ? null : String(options.folderId);
       if (hasFolderFilter) validateFolder(folderId, space, kind);
       const requestedMediaKind = options.mediaKind || options.type || "all";
-      return [...placementsByKey.values()]
+      const items = [...placementsByKey.values()]
         .filter((placement) => placement.space === space && placement.item.kind === kind)
         .filter((placement) => !hasFolderFilter || placement.folderId === folderId)
         .map((placement) => ({ placement, record: requireRecord(placement.item) }))
@@ -451,6 +451,19 @@
           kind,
           placement: cloneValue(placement),
         }));
+      if (kind === "media" && options.sort === "recent") {
+        const timestamp = (item) => {
+          if (item.createdAt == null || item.createdAt === "") return -Infinity;
+          const value = typeof item.createdAt === "number" ? item.createdAt : Date.parse(item.createdAt);
+          return Number.isFinite(value) ? value : -Infinity;
+        };
+        items.sort((left, right) => {
+          const leftTime = timestamp(left);
+          const rightTime = timestamp(right);
+          return leftTime === rightTime ? 0 : leftTime > rightTime ? -1 : 1;
+        });
+      }
+      return items;
     }
 
     function getMedia(item) {
@@ -469,6 +482,29 @@
       const entity = getEntity(item);
       if (!entity) return [];
       return entity.mediaRefs.map((ref) => cloneValue(mediaById.get(ref.mediaId))).filter(Boolean);
+    }
+
+    function listEntityMedia({ entityId, space = "personal", query = "", mediaKind = "all" } = {}) {
+      const resolvedSpace = resolveSpace(space);
+      const id = String(entityId || "").trim();
+      const entity = id ? getEntity({ kind: "entity", id }) : null;
+      if (!entity || resolvedSpace === "platform" || !hasPlacementInternal({ kind: "entity", id: entity.id }, resolvedSpace)) {
+        return { entity: null, status: "unavailable", allItems: [], items: [], unavailableCount: 0 };
+      }
+      // A subject is a reference collection, independent of each media placement's folder.
+      const allItems = entity.mediaRefs.map(({ mediaId }) => {
+        const record = mediaById.get(mediaId);
+        const placement = placementsByKey.get(placementKey({ kind: "media", id: mediaId }, resolvedSpace));
+        return record && placement ? { ...cloneValue(record), kind: "media", placement: cloneValue(placement) } : null;
+      }).filter(Boolean);
+      return {
+        entity,
+        status: "ready",
+        allItems,
+        items: allItems.filter((item) => mediaKind === "all" || item.mediaKind === mediaKind)
+          .filter((item) => matchesSearch([item.name, item.displayName, item.mediaKind, item.type, item.description, item.tags], query)),
+        unavailableCount: entity.mediaRefs.length - allItems.length,
+      };
     }
 
     function listAllMedia() {
@@ -975,6 +1011,7 @@
       getMedia,
       getEntity,
       getEntityMedia,
+      listEntityMedia,
       listAllMedia,
       hasPlacement,
       snapshot,

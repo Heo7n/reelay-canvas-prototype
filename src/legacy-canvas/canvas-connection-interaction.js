@@ -42,6 +42,14 @@
     portMinOutside: 17,
   });
 
+  const AGGREGATE_PORT_GEOMETRY = Object.freeze({
+    minVisualSize: 32,
+    maxVisualSize: 40,
+    minHitSize: 44,
+    frameHitGap: 6,
+    maxOffset: 44,
+  });
+
   function finite(value, fallback) {
     return Number.isFinite(value) ? value : fallback;
   }
@@ -105,6 +113,30 @@
       snapExitPadding: PORT_GEOMETRY.snapExitPadding,
       portOffset: PORT_GEOMETRY.portOffset * scale,
       portMinOutside: PORT_GEOMETRY.portMinOutside * scale,
+    };
+  }
+
+  function getAggregatePortGeometry(canvasScale) {
+    const scaled = getScaledPortGeometry(canvasScale);
+    const visualSize = clamp(
+      scaled.portMinOutside * 2,
+      AGGREGATE_PORT_GEOMETRY.minVisualSize,
+      AGGREGATE_PORT_GEOMETRY.maxVisualSize,
+    );
+    const hitSize = Math.max(AGGREGATE_PORT_GEOMETRY.minHitSize, visualSize);
+    return {
+      ...scaled,
+      // Aggregate chrome is in screen space; keep its disk and complete hit target outside the frame.
+      portOffset: clamp(
+        scaled.portOffset,
+        hitSize / 2 + AGGREGATE_PORT_GEOMETRY.frameHitGap,
+        AGGREGATE_PORT_GEOMETRY.maxOffset,
+      ),
+      portMinOutside: visualSize / 2,
+      visualSize,
+      hitSize,
+      markWidth: visualSize * 0.52,
+      markHeight: 2,
     };
   }
 
@@ -510,6 +542,7 @@
     clampPointerToPort,
     createInteractionState,
     findHoveredPort,
+    getAggregatePortGeometry,
     getScaledPortGeometry,
     isPointInPortField,
     resolveConnectionDirection,

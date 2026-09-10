@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 
-const [modelSource, viewSource, controllerSource] = await Promise.all([
+const [modelSource, viewSource, controllerSource, mediaPreviewSource] = await Promise.all([
   readFile(new URL("../src/legacy-canvas/canvas-entity-editor-model.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-entity-editor-view.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-entity-editor-controller.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/legacy-canvas/canvas-media-preview.js", import.meta.url), "utf8"),
 ]);
 
 const media = [
@@ -42,6 +43,7 @@ function createHarness(overrides = {}) {
   `, { runScripts: "outside-only", url: "https://reelay.test/index.html" });
   const { window } = dom;
   window.eval(modelSource);
+  window.eval(mediaPreviewSource);
   window.eval(viewSource);
   window.eval(controllerSource);
 
@@ -82,6 +84,7 @@ function createHarness(overrides = {}) {
     persistFiles,
     renameMedia,
     saveEntity,
+    getMediaSaveNotice: overrides.getMediaSaveNotice,
     confirmDiscard: async () => {
       calls.confirms += 1;
       return overrides.confirmDiscard ? overrides.confirmDiscard() : confirmResult;
@@ -134,6 +137,98 @@ async function flushAsync() {
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+test("save receives live scope guard and stable keys for unchanged create retries", async () => {
+  const attempts = [];
+  let valid = true;
+  const h = createHarness({ saveEntity: async (payload, context) => {
+    attempts.push({ payload, context });
+    throw new Error("暂时无法保存");
+  }, getMediaSaveNotice: (items) => `${items.length} 个素材将在确认时入库` });
+  h.controller.open({ mode: "create", initialMedia: [media[0], media[1]], isContextValid: () => valid });
+  assert.match(h.host.textContent, /2 个素材将在确认时入库/);
+  h.click('[data-entity-editor-media-remove="turnaround"]');
+  assert.match(h.host.textContent, /1 个素材将在确认时入库/);
+  h.input('[data-entity-editor-name]', "角色");
+  await h.controller.submit();
+  await h.controller.submit();
+  assert.equal(attempts[0].context.idempotencyKey, attempts[1].context.idempotencyKey);
+  assert.equal(attempts[0].context.isContextValid(), true);
+  h.input('[data-entity-editor-name]', "另一个角色");
+  await h.controller.submit();
+  assert.notEqual(attempts[2].context.idempotencyKey, attempts[0].context.idempotencyKey);
+  valid = false;
+  assert.equal(attempts[2].context.isContextValid(), false);
+  valid = true;
+  h.controller.open({ mode: "create", initialMedia: [media[0]] });
+  assert.equal(attempts[2].context.isContextValid(), false, "replacement drafts invalidate the captured save scope");
+  h.controller.destroy();
+});
+
+test("selection prefill is a clean draft with ordered media, image cover, notice and cancel focus", async () => {
+  const h = createHarness();
+  let restored = 0;
+  const initialMedia = [media[2], media[0], media[1]];
+  h.controller.open({ mode: "create", initialMedia, sourceNotice: "已带入 3 个素材；已跳过 1 个节点",
+    returnFocus: () => { restored += 1; } });
+  const draft = h.controller.getDraftState();
+  assert.equal(draft.dirty, false);
+  assert.equal(draft.name, "");
+  assert.equal(draft.coverMediaId, "portrait");
+  assert.equal(draft.selectedPreviewId, "portrait");
+  assert.deepEqual(Array.from(draft.mediaRefs, ({ mediaId }) => mediaId), ["voice", "portrait", "turnaround"]);
+  assert.match(h.host.querySelector('[role="status"]').textContent, /已跳过 1 个节点/);
+  assert.equal(await h.controller.requestClose(), true);
+  assert.equal(h.calls.confirms, 0);
+  assert.equal(h.calls.savePayloads.length, 0);
+  assert.equal(restored, 1);
+  h.controller.destroy();
+});
+
+test("selection draft saves only after naming and preserves edits after a failed save", async () => {
+  let fail = true;
+  const payloads = [];
+  const h = createHarness({ saveEntity: async (payload) => {
+    payloads.push(payload);
+    if (fail) throw new Error("保存失败，请重试");
+    return { id: "new-subject", ...payload, version: 1 };
+  } });
+  h.controller.open({ mode: "create", initialMedia: [media[0], media[1]] });
+  await h.controller.submit();
+  assert.equal(payloads.length, 0);
+  h.input('[data-entity-editor-name]', "角色参考");
+  await h.controller.submit();
+  assert.equal(h.controller.isOpen(), true);
+  assert.equal(h.controller.getDraftState().name, "角色参考");
+  assert.equal(h.calls.saved.length, 0);
+  fail = false;
+  await h.controller.submit();
+  assert.equal(h.controller.isOpen(), false);
+  assert.deepEqual(Array.from(payloads[1].mediaRefs, ({ mediaId }) => mediaId), ["portrait", "turnaround"]);
+  assert.equal(h.calls.saved.length, 1);
+  h.controller.destroy();
+});
+
+test("selection context is checked before save and before presenting its async result", async () => {
+  let valid = true;
+  let resolveSave;
+  let saves = 0;
+  const h = createHarness({ saveEntity: () => { saves += 1; return new Promise((resolve) => { resolveSave = resolve; }); } });
+  h.controller.open({ mode: "create", initialMedia: [media[0]], isContextValid: () => valid });
+  h.input('[data-entity-editor-name]', "角色");
+  valid = false;
+  await h.controller.submit();
+  assert.equal(saves, 0);
+  assert.match(h.calls.errors[0].message, /画布或权限已变化/);
+  valid = true;
+  const pending = h.controller.submit();
+  valid = false;
+  resolveSave({ id: "saved-in-original-scope", version: 1 });
+  await pending;
+  assert.equal(h.calls.saved.length, 0);
+  assert.equal(h.controller.isOpen(), false);
+  h.controller.destroy();
+});
 
 function mockExitAnimations(harness) {
   const animations = [];
@@ -613,4 +708,164 @@ test("save failure reports the error without closing or discarding the dirty dra
   assert.equal(harness.controller.getDraftState().description, "待重试描述");
   assert.equal(harness.host.querySelector("[data-entity-editor-submit]")?.disabled, false);
   harness.controller.destroy();
+});
+
+function deferredOperation() {
+  let resolve;
+  let reject;
+  const promise = new Promise((accept, fail) => { resolve = accept; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+function beginTestRename(harness, name) {
+  const previewName = harness.host.querySelector('[data-entity-editor-preview-name="portrait"]');
+  assert.ok(previewName);
+  previewName.dispatchEvent(new harness.window.MouseEvent("dblclick", { bubbles: true }));
+  const input = harness.input('[data-entity-editor-preview-rename="portrait"]', name);
+  input.dispatchEvent(new harness.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+}
+
+function beginTestUpload(harness, fileName) {
+  const file = new harness.window.File(["image"], fileName, { type: "image/png" });
+  Object.defineProperty(harness.uploadInput, "files", { configurable: true, value: [file] });
+  harness.uploadInput.dispatchEvent(new harness.window.Event("change", { bubbles: true }));
+}
+
+test("invalidated selection context blocks rename submission from Enter and focusout", async (t) => {
+  for (const trigger of ["enter", "focusout"]) {
+    await t.test(trigger, async () => {
+      let valid = true;
+      const harness = createHarness();
+      try {
+        harness.controller.open({ mode: "edit", entity: editEntity, media, isContextValid: () => valid });
+        harness.host.querySelector('[data-entity-editor-preview-name="portrait"]')
+          .dispatchEvent(new harness.window.MouseEvent("dblclick", { bubbles: true }));
+        const input = harness.input('[data-entity-editor-preview-rename="portrait"]', "不得保存");
+        valid = false;
+        input.dispatchEvent(trigger === "enter"
+          ? new harness.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })
+          : new harness.window.FocusEvent("focusout", { bubbles: true }));
+        await flushAsync();
+
+        assert.equal(harness.calls.renamedMedia.length, 0);
+        assert.equal(harness.controller.getDraftState()?.filteredMedia.find((item) => item.id === "portrait")?.displayName, "角色正面.png");
+      } finally { harness.controller.destroy(); }
+    });
+  }
+});
+
+test("pending rename completion cannot change a draft after its canvas context expires", async (t) => {
+  for (const outcome of ["resolve", "reject"]) {
+    await t.test(outcome, async () => {
+      let valid = true;
+      const pending = deferredOperation();
+      const harness = createHarness({ renameMedia: () => pending.promise });
+      try {
+        harness.controller.open({ mode: "edit", entity: editEntity, media, isContextValid: () => valid });
+        beginTestRename(harness, "陈旧改名");
+        assert.equal(harness.host.querySelector("[data-entity-editor-preview-rename]")?.disabled, true);
+        assert.equal(await harness.controller.requestClose(), false);
+        valid = false;
+        if (outcome === "resolve") pending.resolve({ displayName: "陈旧改名.png" });
+        else pending.reject(new Error("旧作用域重命名失败"));
+        await flushAsync();
+
+        assert.notEqual(harness.controller.getDraftState()?.filteredMedia.find((item) => item.id === "portrait")?.displayName, "陈旧改名.png");
+        assert.equal(harness.calls.errors.length, 0);
+        assert.equal(await harness.controller.requestClose(), true);
+      } finally { harness.controller.destroy(); }
+    });
+  }
+});
+
+test("pending upload completion cannot add media after its canvas context expires", async (t) => {
+  for (const outcome of ["resolve", "reject"]) {
+    await t.test(outcome, async () => {
+      let valid = true;
+      const pending = deferredOperation();
+      const harness = createHarness({ persistFiles: () => pending.promise });
+      try {
+        harness.controller.open({ mode: "create", initialMedia: [media[0]], isContextValid: () => valid });
+        beginTestUpload(harness, "old.png");
+        assert.equal(harness.host.querySelector("[data-entity-editor]")?.dataset.entityEditorBusy, "true");
+        valid = false;
+        if (outcome === "resolve") pending.resolve([{ id: "late-upload", mediaKind: "image", displayName: "old.png", url: "/old.png" }]);
+        else pending.reject(new Error("旧作用域上传失败"));
+        await flushAsync();
+
+        assert.equal(harness.controller.getDraftState()?.mediaRefs.some((ref) => ref.mediaId === "late-upload") ?? false, false);
+        assert.equal(harness.calls.errors.length, 0);
+        assert.notEqual(harness.host.querySelector("[data-entity-editor]")?.dataset.entityEditorBusy, "true");
+      } finally { harness.controller.destroy(); }
+    });
+  }
+});
+
+test("late rename completion preserves a replacement draft and its own pending rename", async (t) => {
+  for (const outcome of ["resolve", "reject"]) {
+    await t.test(outcome, async () => {
+      const oldOperation = deferredOperation();
+      const currentOperation = deferredOperation();
+      const received = [];
+      const harness = createHarness({ renameMedia: (payload) => {
+        received.push(payload);
+        return received.length === 1 ? oldOperation.promise : currentOperation.promise;
+      } });
+      try {
+        harness.controller.open({ mode: "edit", entity: editEntity, media });
+        beginTestRename(harness, "上一主体名称");
+        harness.controller.open({ mode: "edit", entity: { ...editEntity, id: "replacement", name: "新草稿" }, media });
+        beginTestRename(harness, "本次名称");
+        assert.equal(received.length, 2);
+        if (outcome === "resolve") oldOperation.resolve({ displayName: "上一主体名称.png" });
+        else oldOperation.reject(new Error("上一主体重命名失败"));
+        await flushAsync();
+
+        assert.equal(harness.controller.getDraftState().entityId, "replacement");
+        assert.equal(harness.controller.getDraftState().filteredMedia.find((item) => item.id === "portrait").displayName, "角色正面.png");
+        assert.equal(harness.host.querySelector("[data-entity-editor-preview-rename]")?.disabled, true);
+        assert.equal(harness.host.querySelector("[data-entity-editor-preview-rename]")?.value, "本次名称");
+        assert.equal(await harness.controller.requestClose(), false);
+        assert.equal(harness.calls.errors.length, 0);
+        currentOperation.resolve({ displayName: "本次名称.png" });
+        await flushAsync();
+        assert.equal(harness.controller.getDraftState().filteredMedia.find((item) => item.id === "portrait").displayName, "本次名称.png");
+        assert.equal(harness.host.querySelector("[data-entity-editor-preview-rename]"), null);
+      } finally { harness.controller.destroy(); }
+    });
+  }
+});
+
+test("late upload completion preserves a replacement draft and its own pending upload", async (t) => {
+  for (const outcome of ["resolve", "reject"]) {
+    await t.test(outcome, async () => {
+      const oldOperation = deferredOperation();
+      const currentOperation = deferredOperation();
+      const received = [];
+      const harness = createHarness({ persistFiles: (files) => {
+        received.push(files);
+        return received.length === 1 ? oldOperation.promise : currentOperation.promise;
+      } });
+      try {
+        harness.controller.open({ mode: "create", initialMedia: [media[0]] });
+        beginTestUpload(harness, "old.png");
+        harness.controller.open({ mode: "create", initialMedia: [media[2]] });
+        harness.input("[data-entity-editor-name]", "新草稿");
+        beginTestUpload(harness, "current.png");
+        assert.equal(received.length, 2);
+        if (outcome === "resolve") oldOperation.resolve([{ id: "old-upload", mediaKind: "image", displayName: "old.png", url: "/old.png" }]);
+        else oldOperation.reject(new Error("上一主体上传失败"));
+        await flushAsync();
+
+        assert.equal(harness.controller.getDraftState().name, "新草稿");
+        assert.deepEqual(JSON.parse(JSON.stringify(harness.controller.getDraftState().mediaRefs)), [{ mediaId: "voice", order: 0 }]);
+        assert.equal(harness.host.querySelector("[data-entity-editor]")?.dataset.entityEditorBusy, "true");
+        assert.equal(harness.calls.errors.length, 0);
+        currentOperation.resolve([{ id: "current-upload", mediaKind: "image", displayName: "current.png", url: "/current.png" }]);
+        await flushAsync();
+        assert.deepEqual(JSON.parse(JSON.stringify(harness.controller.getDraftState().mediaRefs)), [{ mediaId: "voice", order: 0 }, { mediaId: "current-upload", order: 1 }]);
+        assert.equal(harness.host.querySelector("[data-entity-editor]")?.dataset.entityEditorBusy, "false");
+      } finally { harness.controller.destroy(); }
+    });
+  }
 });

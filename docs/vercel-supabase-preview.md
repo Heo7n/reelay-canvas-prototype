@@ -5,6 +5,20 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 
 公开地址：<https://reelay-canvas-prototype.vercel.app>
 
+## 2026-09-08 管理员入口与 Favicon
+
+管理员分享入口为 <https://reelay-canvas-prototype.vercel.app/app/login?demo=admin>，预填既有林静账号，仍需点击登录。参数只选择预填值，不会切换已有会话；省略或无效参数继续预填主账号。账号版使用炭黑 Reelay SVG Favicon，独立体验版使用紫色版本，React 壳和旧画布入口均在构建时选择并输出带哈希的文件。
+
+本次仅在 Reelay_Test 为林静补充主账号示例快照：5 个独立个人项目、12 份独立素材、3 个主体，保留名称、封面和主体内部顺序。管理员原有项目与权限保留，主账号记录未覆盖；这不是持续同步，也没有向 Reelay_Dev 写入这些副本。若多人使用同一管理员账号，保存的操作会共同作用于这个账号。
+
+账号部署构建源为 `c23b338d26882bbdcc3c368dfa2f4ab70e196578`，部署 ID 为 `dpl_85s2c5V5CniTCA5H3wSyZ8UmukgW`，候选地址 <https://reelay-canvas-prototype-pylxpf1pb-heos-projects-560eccff.vercel.app>。从该提交的独立 Git 导出目录部署；上传 dry-run 为 431 文件、55,726,493 字节，不含本机环境文件、数据快照或 ObjectStore。候选构建 Ready 后已 promotion 至账号主域。
+
+验证：完整 `npm run check` 853 项、账号构建与静态体验构建通过；PR #22 的 `quality / postgres` 通过。账号候选已真实使用预填值登录林静，进入复制的香水画布，展示 12 素材与玄翎、幽影、白汐三个主体，控制台无 error。HTTP 深比核对 5 项目、3 份正式 `main` 画布的规范化内容、主体字段与内部顺序、12 素材元数据及 Range 206、三张 WebP 封面和画布持久素材引用；两个入口的 Favicon 与实际构建源 SVG 字节一致。额外保留的历史 `deployment-smoke` 文档在源和副本中均是既有不合法测试结构、返回 422，不能计为可加载画布；本次未改写或清理它。
+
+一次性复制、映射、事务和验证证据保存在忽略目录 `.reelay-data/admin-demo/`，不随 Git 或公网静态文件发布。后续发布仍分别验证构建源、候选、promotion 与实际主域。
+
+体验版同源提交已独立发布至 <https://reelay-experience.vercel.app/app>，部署 ID 为 `dpl_GFNZLswTFcRptfveNZ5jt5VM9mNR`，候选地址 <https://reelay-experience-zxje1md7k-heos-projects-560eccff.vercel.app>。部署实际工作目录固定为 `dist/experience`，显式指定该目录生成的静态 `vercel.json`，不继承根目录的 API functions 配置。最终公网两个 HTML 入口及紫色 SVG 均为 200；两 SVG 的 SHA-256 均为 `b5d103b02392ed4ba5cace240e2707f3d9c2a8a58cb0b940bd53e6aa52b53f16`，与体验源码一致；release 记录同一构建源、12 assets 和 `ephemeral-experience`，`/api/health` 为 404。账号主域已解析到上述账号部署，登录预填表单、两个炭黑 Favicon 和 PostgreSQL health 均再次确认。
+
 2026-09-07 公网 Supabase 项目 `yacgzkkttwtyxkfxiwyn` 已从 `0009` 补迁移至 `0013`，私有桶 `reelay-assets`、Production Storage 环境变量与三主体 12 图的数据迁移已完成。下文部署 ID 保留首次资产发布的历史证据；后续登录与导航加载发布见 [PR #18](https://github.com/Heo7n/reelay-canvas-prototype/pull/18)，更新发布以对应 PR 的构建源、部署 ID、promotion 与主域验收记录为准。
 
 图片列表通过已有内容接口的固定 `?preview=library` 获取最长边 512px、质量 76 的 WebP，原图 URL 和数据库记录不变。派生对象以原图 key、checksum 与固定转换版本确定身份，持久保存于同一私有桶；旋转修正、首帧和元数据清除由 sharp 执行，输入最多 64MP，每服务实例最多同时生成两张。响应 `private, no-cache`，ETag 的 304 也必须先通过当前个人 / 项目权限检查；失败不缓存。现有 12 图本地实测从原图共 24,465,474 字节降至缩略图 298,966 字节（减少 98.78%）；大图、下载、画布消费继续读取原图。首次生成需要读取原图，后续发布验收可通过授权接口预备现有缩略图；不执行数据迁移或 seed。
@@ -26,7 +40,7 @@ PostgreSQL 保存会话、组织、项目、联系资料和画布文档。
 - Vercel rewrite 的 `apiPath` 内部参数在 API 入口统一移除；同时兼容保留原请求路径和只提供 `/api` 目标路径的运行时，业务查询仍执行原有严格校验。
 - `api/index.ts` 是 Vercel 的无状态 API 入口；`src/server/start.ts`
   只服务本地常驻进程。两者复用同一个 `buildServer` 和 PostgreSQL store。
-- `npm run build` 生成 React 应用壳，并把迁移期旧画布的 45 个同步经典脚本按原顺序合为一个 JS、样式入口及导入合为一个 CSS，输出到 `dist/shell`。产物文件名包含内容哈希，Vercel 对这些公开静态文件使用一年 immutable 缓存；开发入口仍保留分文件结构。构建验证经典全局绑定与样式顺序，不把鉴权 API 或私有媒体放进公共缓存。
+- `npm run build` 生成 React 应用壳，并把迁移期旧画布的 48 个同步经典脚本按原顺序合为一个 JS、样式入口及导入合为一个 CSS，输出到 `dist/shell`。产物文件名包含内容哈希，Vercel 对这些公开静态文件使用一年 immutable 缓存；开发入口仍保留分文件结构。构建验证经典全局绑定与样式顺序，不把鉴权 API 或私有媒体放进公共缓存。
 - 进入项目不再为未展开的资产库创建媒体预览或预读全库原图；当前三主体 12 图约 `23.33 MiB` 的全量下载不应由纯项目导航触发。目录权限检查、实际使用媒体时的尺寸读取和离开前保存保持原有边界。
 - Vercel CDN 直接提供 `dist/shell` 静态产物，`/api/*` 交给同一个 Fastify
   Function；前端与 API 仍然同源，不增加第二套鉴权。

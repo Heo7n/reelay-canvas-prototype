@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 import { fileURLToPath } from "node:url";
+import { webcrypto } from "node:crypto";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -69,7 +70,7 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
   t.after(() => window.canvasTest?.promptEditors.destroy());
   for (const { path, source } of scripts) {
     window.eval(source + (path === "./app.js"
-      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasGroupInteractionController, canvasCommandExecutor, canvasContentCommands, canvasEntityUse, canvasNodeTasks, canvasPersistence, agentReferences, agentGeneration, promptEditors };"
+      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasGroupInteractionController, canvasCommandExecutor, canvasContentCommands, canvasEntityUse, canvasEntityEditor, assetLibraryStore, canvasNodeTasks, canvasPersistence, agentReferences, agentGeneration, promptEditors };"
       : ""));
   }
   const { state, canvasRuntimeStore, canvasNodeDragController } = window.canvasTest;
@@ -165,6 +166,305 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
     editorFor, setText, getText, selectText, selection, promptText };
 }
 
+test("selection layout menu is mutually exclusive, closes for stale selection, and does not mutate content", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("one"), h.node("two", { x: 500 }), h.node("three", { y: 700 })];
+  const canvas = h.canvas("selection-layout-menu", nodes);
+  h.install(canvas);
+  h.window.setSelection(["one", "two"]);
+  h.window.render();
+  const { document } = h.window;
+  const trigger = document.querySelector('[data-selection-action="toggle-layout"]');
+  const menu = document.querySelector("#selectionLayoutMenu");
+  const download = document.querySelector('[data-selection-action="toggle-download"]');
+  const assertOpen = (open) => {
+    assert.equal(menu.classList.contains("hidden"), !open);
+    assert.equal(trigger.getAttribute("aria-expanded"), String(open));
+    assert.equal(trigger.classList.contains("active"), open);
+  };
+  const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  trigger.click();
+  assertOpen(true);
+  assert.equal(document.activeElement, menu.querySelector("button"), "keyboard activation focuses the first layout");
+  assert.deepEqual([...menu.querySelectorAll("button")].map((button) => button.textContent.trim()), ["宫格布局", "水平布局", "垂直布局"]);
+  download.click();
+  assertOpen(false);
+  assert.equal(document.querySelector("#selectionDownloadMenu").classList.contains("hidden"), false);
+  trigger.click();
+  assertOpen(true);
+  assert.equal(document.querySelector("#selectionDownloadMenu").classList.contains("hidden"), true);
+  document.body.click();
+  assertOpen(false);
+  trigger.click();
+  h.window.setSelection(["two", "one"]);
+  h.window.render();
+  assertOpen(true);
+  h.window.setSelection(["one", "three"]);
+  menu.querySelector('[data-sort-layout="horizontal"]').click();
+  assertOpen(false);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before, "stale menu actions cannot target the replacement selection");
+  trigger.click();
+  nodes[0] = h.node("one");
+  h.window.render();
+  assertOpen(false);
+  assert.equal(canvas.undoStack.length, 0);
+});
+
+test("selection layout options move only selected nodes with one-step undo", async (t) => {
+  for (const mode of ["grid", "horizontal", "vertical"]) {
+    await t.test(mode, (t) => {
+      const h = createHarness(t);
+      const nodes = [h.node("one", { x: 300, y: 430 }), h.node("two", { x: 800, y: 80 }), h.node("outside", { x: 2500, y: 1200 })];
+      const canvas = h.canvas("selection-layout", nodes, [], [{ id: "link", sourceNodeId: "one", targetNodeId: "two" }]);
+      h.install(canvas);
+      h.window.setSelection(["one", "two"]);
+      h.window.render();
+      const before = nodes.map(({ x, y }) => ({ x, y }));
+      const outside = plain(nodes[2]);
+      const links = canvas.connections;
+      const { document } = h.window;
+      document.querySelector('[data-selection-action="toggle-layout"]').click();
+      document.querySelector(`[data-sort-layout="${mode}"]`).click();
+      assert.equal(canvas.undoStack.length, 1);
+      assert.deepEqual(plain(nodes[2]), outside);
+      assert.equal(canvas.connections, links);
+      assert.equal(document.querySelector("#selectionLayoutMenu").classList.contains("hidden"), true);
+      if (mode === "horizontal") assert.equal(nodes[0].y, nodes[1].y);
+      if (mode === "vertical") assert.equal(nodes[0].x, nodes[1].x);
+      h.window.undoLastAction();
+      assert.deepEqual(nodes.map(({ x, y }) => ({ x, y })), before);
+    });
+  }
+});
+
+test("selection layout refuses partial groups and arranges complete group selections without breaking membership", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("one", { x: 250, y: 130, groupId: "group" }), h.node("two", { x: 700, y: 430, groupId: "group" }), h.node("free", { x: 1600, y: 40 })];
+  const frame = group("group", ["one", "two"], { x: 200, y: 80, width: 1500, height: 1000 });
+  const canvas = h.canvas("selection-layout-group", nodes, [frame]);
+  h.install(canvas);
+  const { document } = h.window;
+  const trigger = document.querySelector('[data-selection-action="toggle-layout"]');
+  const menu = document.querySelector("#selectionLayoutMenu");
+  h.window.setSelection(["one", "free"]);
+  h.window.render();
+  trigger.click();
+  assert.equal(trigger.getAttribute("aria-disabled"), "true");
+  assert.equal(menu.classList.contains("hidden"), true);
+  assert.match(document.querySelector("#selectionLayoutTip").textContent, /完整分组/);
+  h.window.sortSelectedNodes("horizontal");
+  assert.equal(canvas.undoStack.length, 0);
+
+  h.window.setSelection(["one", "two"]);
+  h.window.render();
+  assert.equal(trigger.getAttribute("aria-disabled"), "false");
+  const original = plain({ nodes, frame });
+  trigger.click();
+  menu.querySelector('[data-sort-layout="horizontal"]').click();
+  assert.equal(nodes[0].y, nodes[1].y);
+  assert.equal(frame.width, original.frame.width);
+  assert.equal(frame.height, original.frame.height);
+  assert.deepEqual(plain(frame.nodeIds), ["one", "two"]);
+  assert.equal(nodes[0].groupId, "group");
+  assert.deepEqual(plain(nodes[2]), original.nodes[2]);
+  h.window.undoLastAction();
+  assert.deepEqual(plain({ nodes, frame }), original);
+
+  h.window.setSelection(["one", "two", "free"]);
+  h.window.render();
+  trigger.click();
+  menu.querySelector('[data-sort-layout="vertical"]').click();
+  assert.equal(nodes[1].x - nodes[0].x, original.nodes[1].x - original.nodes[0].x);
+  assert.equal(nodes[1].y - nodes[0].y, original.nodes[1].y - original.nodes[0].y);
+  assert.equal(nodes[0].x - frame.x, original.nodes[0].x - original.frame.x);
+  assert.equal(nodes[0].y - frame.y, original.nodes[0].y - original.frame.y);
+  assert.equal(frame.width, original.frame.width);
+  assert.equal(frame.height, original.frame.height);
+});
+
+test("selection layout closes and disables when the real host revokes editing", (t) => {
+  const h = createHarness(t);
+  const canvas = h.canvas("selection-layout-readonly", [h.node("one"), h.node("two", { x: 900 })]);
+  h.install(canvas);
+  h.window.setSelection(["one", "two"]);
+  h.window.render();
+  const { document } = h.window;
+  const trigger = document.querySelector('[data-selection-action="toggle-layout"]');
+  trigger.click();
+  const before = plain(h.window.createCanvasDocumentSnapshot());
+  const host = { postMessage() {} };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
+  });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: canvas.id, writable: false } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: false });
+  assert.equal(trigger.disabled, true);
+  assert.equal(document.querySelector("#selectionLayoutMenu").classList.contains("hidden"), true);
+  h.window.sortSelectedNodes("horizontal");
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), before);
+  assert.equal(canvas.undoStack.length, 0);
+});
+
+test("selection toolbar creates a reviewed Entity without changing selected nodes or canvas history", async (t) => {
+  const h = createHarness(t);
+  const image = { id: "selection-image", type: "image", name: "角色.png", url: "https://example.test/character.png" };
+  const audio = { id: "selection-audio", type: "audio", name: "角色.mp3", url: "https://example.test/character.mp3" };
+  const first = h.canvas("source", [
+    h.node("first", { kind: "asset", x: 0, y: 0, assets: [image], activeAssetId: image.id }),
+    h.node("duplicate", { kind: "asset", x: 400, y: 0, assets: [image], activeAssetId: image.id }),
+    h.node("audio", { kind: "asset", x: 0, y: 400, assets: [audio], activeAssetId: audio.id }),
+    h.node("empty", { x: 400, y: 400 }),
+  ]);
+  h.install(first, h.canvas("other"));
+  h.state.selectedIds = new Set(first.nodes.map(({ id }) => id));
+  h.window.render();
+  const { document } = h.window;
+  const { canvasEntityEditor: editor, assetLibraryStore: store } = h.window.canvasTest;
+  const button = document.querySelector('[data-selection-action="create-entity"]');
+  const snapshot = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  const entityCount = store.listItems({ space: "personal", kind: "entity" }).length;
+  assert.equal(button.getAttribute("aria-disabled"), "false");
+  h.state.action = { type: "marquee", pointerId: 1, moved: true };
+  h.window.renderSelectionToolbar();
+  assert.equal(document.querySelector('#selectionToolbar').classList.contains('hidden'), true);
+  h.window.finishPointerInteraction({ type: "pointercancel", pointerId: 1, clientX: 0, clientY: 0 });
+  assert.equal(document.querySelector('#selectionToolbar').classList.contains('hidden'), false);
+  button.click();
+  assert.equal(editor.isOpen(), true);
+  assert.deepEqual(Array.from(editor.getDraftState().mediaRefs, ({ mediaId }) => mediaId), [image.id, audio.id]);
+  assert.equal(store.listItems({ space: "personal", kind: "entity" }).length, entityCount);
+  assert.equal(await editor.requestClose(), true);
+  assert.equal(document.activeElement, button);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
+  button.click();
+  const name = document.querySelector('[data-entity-editor-name]');
+  name.value = "角色参考";
+  name.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  await editor.submit();
+  assert.equal(editor.isOpen(), false);
+  const created = store.listItems({ space: "personal", kind: "entity" }).find((entity) => entity.name === "角色参考");
+  assert.ok(created);
+  assert.deepEqual(Array.from(created.mediaRefs, ({ mediaId }) => mediaId), [image.id, audio.id]);
+  assert.equal(created.coverMediaId, image.id);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.equal(first.undoStack.length, 0);
+  assert.equal(h.state.selectedIds.size, 4);
+  assert.equal(h.state.librarySection, "entity");
+  assert.equal(h.state.librarySpace, "personal");
+});
+
+test("selection entity cannot save into a replacement canvas with the same identifiers", async (t) => {
+  const h = createHarness(t);
+  const asset = { id: "scope-image", type: "image", url: "https://example.test/a.png" };
+  const nodes = [h.node("one", { generatedAsset: asset }), h.node("two", { generatedAsset: asset })];
+  h.install(h.canvas("same-canvas", nodes));
+  h.state.selectedIds = new Set(nodes.map(({ id }) => id));
+  h.window.openSelectionEntityEditor();
+  const input = h.window.document.querySelector('[data-entity-editor-name]');
+  input.value = "不可串画布";
+  input.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  h.install(h.canvas("same-canvas", nodes.map((node) => ({ ...node }))));
+  await h.window.canvasTest.canvasEntityEditor.submit();
+  assert.equal(h.window.canvasTest.assetLibraryStore.listItems({ space: "personal", kind: "entity" })
+    .some((entity) => entity.name === "不可串画布"), false);
+});
+
+test("standalone selection save uses canonical local media and adds personal visibility", async (t) => {
+  const h = createHarness(t);
+  const store = h.window.canvasTest.assetLibraryStore;
+  const organizationMedia = { id: "organization-source", type: "image", name: "组织素材", url: "https://example.test/shared.png" };
+  store.registerMedia({ media: organizationMedia, space: "organization" });
+  const entity = await h.window.saveEntityEditorDraft({ mode: "create", name: "本地主体", description: "",
+    mediaRefs: [{ mediaId: "duplicate-a", order: 0 }, { mediaId: "duplicate-b", order: 1 }], coverMediaId: "duplicate-b" }, {
+    media: [{ ...organizationMedia, id: "duplicate-a" }, { ...organizationMedia, id: "duplicate-b" }],
+  });
+  assert.deepEqual(Array.from(entity.mediaRefs, ({ mediaId }) => mediaId), [organizationMedia.id]);
+  assert.equal(entity.coverMediaId, organizationMedia.id);
+  assert.equal(store.hasPlacement({ kind: "media", id: organizationMedia.id }, "personal"), true);
+});
+
+test("hosted selection imports unsaved media on confirmation, maps cover and retries without duplicate uploads", async (t) => {
+  const h = createHarness(t);
+  const posted = [];
+  let failEntity = true;
+  let sourceReads = 0;
+  let uploads = 0;
+  const host = { postMessage(message) {
+    posted.push(message);
+    if (message.type === "canvas:create-media-upload") queueMicrotask(() => dispatch({
+      type: "host:media-upload-grant", instanceId: message.instanceId, requestId: message.requestId,
+      uploadIntent: { id: "new-upload" }, upload: { method: "PUT", url: "/api/upload/new", headers: {} },
+    }));
+    if (message.type === "canvas:finalize-media-upload") queueMicrotask(() => {
+      const request = posted.find((item) => item.type === "canvas:create-media-upload");
+      dispatch({ type: "host:media-upload-result", instanceId: message.instanceId, requestId: message.requestId,
+        uploadId: "new-upload", target: "personal", workspaceAsset: {
+          assetId: "imported-image", assetVersion: 1, mediaKind: "image", displayName: request.displayName,
+          contentType: request.contentType, byteSize: request.byteSize, checksumSha256: request.checksumSha256,
+          contentUrl: "/api/workspaces/workspace/media-assets/imported-image/content", createdAt: "2026-09-10T09:00:00Z",
+        } });
+    });
+    if (message.type === "canvas:create-entity") queueMicrotask(() => dispatch(failEntity
+      ? { type: "host:asset-command-error", instanceId: message.instanceId, requestId: message.requestId, code: "network" }
+      : { type: "host:entity-command-result", instanceId: message.instanceId, requestId: message.requestId,
+        entity: { id: "saved-entity", name: message.name, description: message.description, version: 1,
+          mediaRefs: message.assetIds.map((assetId, order) => ({ assetId, order })), coverAssetId: message.coverAssetId } }));
+  } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  Object.defineProperty(h.window.crypto, "subtle", { value: webcrypto.subtle });
+  h.window.Blob = Blob;
+  h.window.fetch = async (url, options) => {
+    if (options?.method === "PUT") { uploads += 1; return new Response(null, { status: 200 }); }
+    sourceReads += 1;
+    return new Response(new Uint8Array([137, 80, 78, 71, 1, 2, 3]), { headers: { "content-type": "image/png" } });
+  };
+  const dispatch = (data) => h.window.dispatchEvent(new h.window.MessageEvent("message", {
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  }));
+  dispatch({ type: "host:init", context: { protocolVersion: 1, workspaceId: "workspace", projectId: h.state.projectId,
+    canvasId: "main", writable: true, capabilities: { assetPersistence: true, entityPersistence: true } } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  h.state.hostCapabilities.workspaceCatalog = "ready";
+  const original = { id: "existing-image", workspaceAssetId: "existing-image", type: "image", url: "/existing.png" };
+  h.window.registerHostWorkspaceAssetCatalog({ assets: [{ assetId: original.id, assetVersion: 1,
+    mediaKind: "image", displayName: "已有.png", contentType: "image/png", byteSize: 20, checksumSha256: "a".repeat(64),
+    contentUrl: "/api/workspaces/workspace/media-assets/existing-image/content" }], entities: [] });
+  const pending = { id: "local-image", type: "image", name: "新图.png", url: "/assets/local-image.png" };
+  const canvas = h.canvas("main", [h.node("one", { kind: "asset", y: 0, assets: [pending] }),
+    h.node("two", { kind: "asset", y: 100, assets: [original] }),
+    h.node("three", { kind: "asset", y: 200, assets: [{ ...pending, id: "same-file-other-node" }] })]);
+  h.install(canvas);
+  h.state.selectedIds = new Set(canvas.nodes.map((node) => node.id));
+  const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  h.window.openSelectionEntityEditor();
+  const { canvasEntityEditor: editor, assetLibraryStore: store } = h.window.canvasTest;
+  assert.equal(editor.getDraftState().mediaRefs.length, 3);
+  assert.equal(sourceReads, 0, "opening the draft does not fetch or persist media");
+  assert.match(h.window.document.querySelector("#canvasEntityEditorHost").textContent, /2 个新素材.*默认目录/);
+  await editor.requestClose();
+  assert.equal(uploads, 0);
+  h.window.openSelectionEntityEditor();
+  const name = h.window.document.querySelector('[data-entity-editor-name]');
+  name.value = "新角色";
+  name.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  await editor.submit();
+  assert.equal(editor.isOpen(), true, "save failure retains the reviewed draft");
+  assert.equal(uploads, 1, "byte-identical unsaved media share one personal record");
+  assert.ok(store.getMedia({ kind: "media", id: "imported-image" }), "successful import survives Entity save failure");
+  const request = posted.find((message) => message.type === "canvas:create-entity");
+  assert.deepEqual(Array.from(request.assetIds), ["imported-image", "existing-image"]);
+  assert.equal(request.coverAssetId, "imported-image");
+  failEntity = false;
+  await editor.submit();
+  assert.equal(editor.isOpen(), false);
+  assert.equal(uploads, 1);
+  assert.equal(posted.filter((message) => message.type === "canvas:create-entity")[1].idempotencyKey, request.idempotencyKey);
+  assert.equal(store.listItems({ space: "personal", kind: "media", folderId: null }).filter((asset) => asset.id === "imported-image").length, 1);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+  assert.equal(canvas.undoStack.length, 0);
+});
+
 test("experience restores uploaded media by catalog identity after canonical document reload", (t) => {
   const h = createHarness(t);
   h.state.hostCapabilities.transientMediaUpload = true;
@@ -189,7 +489,7 @@ test("experience restores uploaded media by catalog identity after canonical doc
     "http://reelay.test/api/workspaces/workspace-one/media-assets/asset-one/content?preview=library");
 });
 
-test("experience home launch consumes its context prompt once without touching session storage", (t) => {
+for (const experience of [false, true]) test(`home launch consumes its context prompt once after hydration with experience=${experience}`, (t) => {
   const h = createHarness(t);
   h.install(h.canvas("empty"));
   h.window.sessionStorage.setItem("reelay-home-launch-intent", "internal pending prompt");
@@ -198,19 +498,124 @@ test("experience home launch consumes its context prompt once without touching s
   const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
     origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
   });
-  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: "experience-project", canvasId: "main",
-    writable: true, capabilities: { transientMediaUpload: true }, launchPrompt: "experience prompt" } });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: "new-project", canvasId: "main",
+    writable: true, capabilities: { transientMediaUpload: experience }, launchPrompt: "context prompt" } });
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+  assert.equal(h.state.nodes.length, 0);
   dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: true });
   assert.equal(h.state.nodes.length, 1);
-  assert.equal(h.state.nodes[0].prompt, "experience prompt");
+  assert.equal(h.state.nodes[0].prompt, "context prompt");
   assert.equal(h.window.consumeHomeLaunchIntent(), false);
   assert.equal(h.window.sessionStorage.getItem("reelay-home-launch-intent"), "internal pending prompt");
 });
 
+test("home launch cannot mutate a read-only document or cross into another project context", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("empty"));
+  const host = { postMessage() {} };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
+  });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, workspaceId: "workspace", projectId: "read-only-project",
+    canvasId: "main", writable: false, launchPrompt: "不能写入的需求" } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: false });
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+  assert.equal(h.state.nodes.length, 0);
+  dispatch({ type: "host:init", context: { protocolVersion: 1, workspaceId: "workspace", projectId: "other-project",
+    canvasId: "main", writable: true } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: true });
+  assert.equal(h.state.nodes.length, 0);
+  assert.equal(h.window.consumeHomeLaunchIntent(), false);
+});
+
+test("progressive asset arrival preserves the editable document, running task, save, undo and focused prompt", (t) => {
+  const h = createHarness(t);
+  const editing = h.node("editing", { expanded: true, assets: [{ id: "local", librarySourceId: "memory-file",
+    type: "image", name: "local.png", url: "" }], activeAssetId: "local" });
+  const running = h.node("running");
+  h.install(h.canvas("working", [editing, running]));
+  const posted = [];
+  const host = { postMessage(message) { posted.push(message); } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.dispatchEvent(new h.window.MessageEvent("message", {
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  }));
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: "main", writable: true,
+    capabilities: { progressiveAssetLoading: true, transientMediaUpload: true, assetPersistence: false, entityPersistence: false } } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  h.window.canvasTest.canvasPersistence.post("canvas:ready");
+  const instanceId = posted.findLast((message) => message.type === "canvas:ready").instanceId;
+  const availability = (projectAssets, workspaceCatalog) => dispatch({ type: "host:asset-availability", instanceId, projectAssets, workspaceCatalog });
+  availability("loading", "loading");
+  assert.equal(h.window.isCanvasMutationAllowed(), true);
+  assert.equal(h.window.canPersistLibraryMedia(), false);
+  h.window.openAssetLibrary();
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /正在加载个人资产/);
+  assert.equal(h.window.isAssetLibraryMutable(), false);
+  h.window.closeAssetLibrary();
+
+  assert.equal(h.window.startSimulatedGeneration(running), true);
+  const task = h.scheduledTask();
+  h.moveNode(editing.id, 30, 15);
+  h.window.flushCanvasDocumentSave();
+  const undoStack = h.state.canvases[0].undoStack;
+  const undoCount = undoStack.length;
+  const input = h.window.document.querySelector('[data-id="editing"] [data-node-prompt-input] .prompt-editor-content');
+  input.focus();
+  h.selectText(input, 2, 6);
+  const before = JSON.stringify(h.window.canvasTest.canvasPersistence.getState());
+  const credits = JSON.stringify(h.state.account);
+  const media = { assetId: "memory-file", assetVersion: 1, mediaKind: "image", displayName: "local.png",
+    contentType: "image/png", byteSize: 42, checksumSha256: "a".repeat(64), contentUrl: "blob:http://reelay.test/current" };
+  dispatch({ type: "host:workspace-asset-catalog", instanceId, requestId: "personal-ready", assets: [media], entities: [] });
+  availability("loading", "ready");
+  assert.equal(h.window.canPersistLibraryMedia(), false, "project discovery has not yet settled");
+  assert.equal(h.window.canPersistLibraryEntities(), true);
+  dispatch({ type: "host:project-assets", instanceId, requestId: "project-ready", projectAssets: [{ ...media, referenceId: "reference" }] });
+  availability("ready", "ready");
+  assert.equal(h.window.canPersistLibraryMedia(), true);
+  assert.equal(editing.assets[0].url, "blob:http://reelay.test/current");
+  assert.equal(h.state.activeCanvasId, "working");
+  assert.equal(h.state.nodes[0], editing);
+  assert.equal(h.state.canvases[0].undoStack, undoStack);
+  assert.equal(undoStack.length, undoCount);
+  assert.equal(JSON.stringify(h.window.canvasTest.canvasPersistence.getState()), before);
+  assert.equal(running.generating, true);
+  assert.equal(h.timers.has(task.timeoutId), true);
+  assert.equal(JSON.stringify(h.state.account), credits);
+  assert.equal(h.window.document.activeElement, input);
+  assert.equal(h.window.document.querySelector('[data-id="editing"] [data-node-prompt-input] .prompt-editor-content'), input);
+  assert.deepEqual(h.selection(input), [2, 6, "forward"]);
+});
+
+test("progressive personal catalog failure exposes unavailable state without writable placeholder data", (t) => {
+  const h = createHarness(t);
+  const posted = [];
+  const host = { postMessage(message) { posted.push(message); } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.dispatchEvent(new h.window.MessageEvent("message", {
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  }));
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: "main", writable: true,
+    capabilities: { progressiveAssetLoading: true } } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  h.window.canvasTest.canvasPersistence.post("canvas:ready");
+  const instanceId = posted.findLast((message) => message.type === "canvas:ready").instanceId;
+  dispatch({ type: "host:asset-availability", instanceId, projectAssets: "ready", workspaceCatalog: "unavailable" });
+  h.window.openAssetLibrary();
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /个人资产暂时无法加载/);
+  assert.equal(h.window.isAssetLibraryMutable(), false);
+  assert.equal(h.window.canPersistLibraryMedia(), false);
+  assert.equal(h.window.canPersistLibraryEntities(), false);
+  assert.equal(h.window.isCanvasMutationAllowed(), true);
+  assert.equal(h.state.hostCapabilities.assetPersistence, true, "project-local file uploads can remain available after personal discovery fails");
+});
+
 test("closed library catalog registration loads no media; using an asset hydrates only that node", async (t) => {
   const h = createHarness(t, { trackMetadataImages: true });
-  assert.deepEqual(h.metadataImages.map((image) => image.url), ["./assets/reelay-logo.png"],
-    "startup loads its favicon but must not probe any media in the demo library");
+  assert.deepEqual(h.metadataImages.map((image) => image.url), [],
+    "startup uses its static favicon and must not probe any media in the demo library");
   h.metadataImages.length = 0;
   h.install(h.canvas("on-demand-media"));
   const assets = Array.from({ length: 12 }, (_, index) => ({
@@ -1109,6 +1514,273 @@ test("library drag rejects malformed, stale-scope, hidden-media and readonly dro
   const event = library.dispatch("dragstart", library.card("drag-image"), blocked);
   assert.equal(event.defaultPrevented, true);
   assert.equal(blocked.types.length, 0);
+});
+
+test("captured media clicks keep the single-node toolbar while real outside presses dismiss it", (t) => {
+  const h = createHarness(t);
+  const image = h.node("image", { kind: "asset", assets: [{ id: "img", type: "image", url: "/assets/image.png" }] });
+  const video = h.node("video", { kind: "asset", x: 500, assets: [{ id: "vid", type: "video", url: "/assets/video.mp4" }] });
+  h.install(h.canvas("toolbar", [image, video]));
+  const { document, MouseEvent } = h.window;
+  const shell = document.querySelector("#canvasShell");
+  const pointer = (type, extra = {}) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 100, clientY: 100, ...extra });
+    Object.defineProperty(event, "pointerId", { value: 7 });
+    return event;
+  };
+  function capturedClick(id, extra = {}) {
+    document.querySelector(`[data-id="${id}"] .media-frame`).dispatchEvent(pointer("pointerdown", extra));
+    shell.dispatchEvent(pointer("pointerup", extra));
+    shell.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+  }
+  for (const id of ["image", "video"]) {
+    capturedClick(id);
+    assert.equal(h.state.mediaToolbarNodeId, id);
+    assert.equal(document.querySelector('[data-canvas-tool="organize"]').getAttribute("aria-disabled"), "false", "finished pointer gestures restore the current organizer availability");
+    assert.ok(document.querySelector(`[data-id="${id}"] [data-media-toolbar]`));
+    const toolbar = document.querySelector(`[data-id="${id}"] [data-media-toolbar]`);
+    toolbar.dispatchEvent(pointer("pointerdown"));
+    toolbar.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    assert.equal(h.state.mediaToolbarNodeId, id, "toolbar interaction does not dismiss itself");
+  }
+  capturedClick("image", { shiftKey: true });
+  assert.equal(h.state.selectedIds.size, 2);
+  assert.equal(document.querySelector("[data-media-toolbar]"), null);
+  h.window.clearSelection();
+  capturedClick("image");
+  shell.dispatchEvent(pointer("pointerdown"));
+  assert.equal(h.state.mediaToolbarNodeId, null, "real canvas background press dismisses before capture");
+  shell.dispatchEvent(pointer("pointerup"));
+  capturedClick("video");
+  document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
+  assert.equal(h.state.mediaToolbarNodeId, null, "keyboard activation outside still dismisses");
+});
+
+test("group toolbar backing never starts a group drag and layout state follows the visible menu", (t) => {
+  const h = createHarness(t);
+  const first = h.canvas("group-toolbar", [h.node("member", { groupId: "group" })], [group("group", ["member"])]);
+  h.install(first);
+  h.window.setActiveGroup("group");
+  h.window.render();
+  const { document, MouseEvent } = h.window;
+  const snapshot = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  const pointer = (type, clientX = 100) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY: 100 });
+    Object.defineProperty(event, "pointerId", { value: 9 });
+    return event;
+  };
+  const toolbar = document.querySelector(".group-toolbar");
+  toolbar.dispatchEvent(pointer("pointerdown"));
+  assert.equal(h.state.action, null, "the backing is a control surface, not a group drag target");
+  h.window.dispatchEvent(pointer("pointermove", 180));
+  h.window.dispatchEvent(pointer("pointerup", 180));
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.equal(first.undoStack.length, 0);
+
+  const trigger = () => document.querySelector('[data-group-action="toggle-layout"]');
+  assert.equal(trigger().getAttribute("aria-expanded"), "false");
+  trigger().click();
+  const menu = document.getElementById(trigger().getAttribute("aria-controls"));
+  assert.equal(trigger().getAttribute("aria-expanded"), "true");
+  assert.equal(trigger().classList.contains("active"), true);
+  assert.equal(menu.classList.contains("hidden"), false);
+  assert.equal(menu.getAttribute("role"), "menu");
+  assert.equal(menu.querySelectorAll('[role="menuitem"]').length, 3);
+  document.body.click();
+  assert.equal(trigger().getAttribute("aria-expanded"), "false");
+  assert.equal(trigger().classList.contains("active"), false);
+  assert.equal(document.querySelector(".group-layout-menu").classList.contains("hidden"), true);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
+  document.querySelector(".group-frame").dispatchEvent(pointer("pointerdown"));
+  assert.equal(h.state.action?.type, "group-drag-candidate", "the actual group frame still supports dragging");
+  h.window.dispatchEvent(pointer("pointerup"));
+});
+
+test("viewport minimap exposes its open state through toggle and outside dismissal", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("viewport-toolbar", [h.node("node")]));
+  const { document } = h.window;
+  const button = document.querySelector('[data-canvas-tool="minimap"]');
+  const panel = document.querySelector("#minimapPanel");
+  const snapshot = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  const assertOpen = (open) => {
+    assert.equal(button.classList.contains("active"), open);
+    assert.equal(button.getAttribute("aria-expanded"), String(open));
+    assert.equal(panel.classList.contains("hidden"), !open);
+  };
+  button.click();
+  assertOpen(true);
+  button.click();
+  assertOpen(false);
+  button.click();
+  document.body.click();
+  assertOpen(false);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.equal(h.state.canvases[0].undoStack.length, 0);
+});
+
+test("toolbar top-layer Escape closes the current group, media or selection popup and focuses its live trigger", (t) => {
+  const h = createHarness(t);
+  const nodes = ["one", "two"].map((id) => h.node(id, {
+    kind: "asset", assets: [{ id: `${id}-media`, type: "image", url: `/assets/${id}.png` }],
+    ...(id === "one" ? { groupId: "group" } : {}),
+  }));
+  const canvas = h.canvas("toolbar-popovers", nodes, [group("group", ["one"])]);
+  h.install(canvas);
+  const { document, HTMLElement, Element } = h.window;
+  const opened = new WeakSet();
+  const nativeMatches = Element.prototype.matches;
+  const nativeRect = Element.prototype.getBoundingClientRect;
+  const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height });
+  Element.prototype.matches = function (selector) {
+    return selector === ":popover-open" ? opened.has(this) : nativeMatches.call(this, selector);
+  };
+  Element.prototype.getBoundingClientRect = function () {
+    if (this.id === "canvasShell") return rect(0, 0, 800, 600);
+    if (this.hasAttribute("data-toolbar-popover")) return rect(0, 0, 190, 150);
+    if (this.matches("button[aria-expanded]")) return rect(300, 150, 32, 32);
+    return nativeRect.call(this);
+  };
+  HTMLElement.prototype.showPopover = function () { opened.add(this); };
+  HTMLElement.prototype.hidePopover = function () { opened.delete(this); };
+  const escape = () => document.activeElement.dispatchEvent(new h.window.KeyboardEvent("keydown", {
+    key: "Escape", bubbles: true, cancelable: true,
+  }));
+  const snapshot = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  h.window.setActiveGroup("group");
+  h.window.render();
+  document.querySelector('[data-group-action="toggle-layout"]').click();
+  let popup = document.querySelector('[data-toolbar-popover="group"]');
+  assert.equal(opened.has(popup), true);
+  popup.querySelector("button").focus();
+  escape();
+  assert.equal(canvas.groups[0].layoutMenuOpen, false);
+  assert.equal(document.activeElement, document.querySelector('[data-group-action="toggle-layout"]'));
+  assert.equal(opened.has(popup), false);
+
+  h.window.setSelection(["one"], "one");
+  h.state.mediaToolbarNodeId = "one";
+  h.window.render();
+  document.querySelector('[data-media-tool="toggle-more"]').click();
+  popup = document.querySelector('[data-toolbar-popover="media"]');
+  assert.ok(popup);
+  assert.equal(opened.has(popup), true);
+  popup.querySelector("button").focus();
+  escape();
+  assert.equal(nodes[0].mediaMenuOpen, false);
+  assert.equal(h.state.mediaToolbarNodeId, "one");
+  assert.equal(document.activeElement, document.querySelector('[data-media-tool="toggle-more"]'));
+  assert.equal(opened.has(popup), false);
+
+  h.window.setSelection(["one", "two"]);
+  h.window.render();
+  document.querySelector('[data-selection-action="toggle-download"]').click();
+  popup = document.querySelector('[data-toolbar-popover="selection"]');
+  assert.equal(opened.has(popup), true);
+  popup.querySelector("button").focus();
+  escape();
+  assert.equal(popup.classList.contains("hidden"), true);
+  assert.equal(opened.has(popup), false);
+  assert.equal(document.activeElement, document.querySelector('[data-selection-action="toggle-download"]'));
+  document.querySelector('[data-selection-action="toggle-layout"]').click();
+  popup = document.querySelector('[data-toolbar-popover="selection-layout"]');
+  assert.equal(opened.has(popup), true);
+  popup.querySelector("button").focus();
+  escape();
+  assert.equal(popup.classList.contains("hidden"), true);
+  assert.equal(opened.has(popup), false);
+  assert.equal(document.activeElement, document.querySelector('[data-selection-action="toggle-layout"]'));
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
+  assert.equal(canvas.undoStack.length, 0);
+});
+
+test("whole-canvas arrange previews without serializing coordinates, then keeps one undoable command", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("source", { x: 500, y: 420 }), h.node("target", { x: 100, y: 40, expanded: true }), h.node("outside", { x: 100, y: 900 })];
+  const first = h.canvas("arrange", nodes, [], [{ id: "edge", sourceNodeId: "source", targetNodeId: "target" }]);
+  const other = h.canvas("other", [h.node("other-node")]);
+  h.install(first, other);
+  h.window.setSelection(["source"]);
+  h.window.render();
+  const before = nodes.map((node) => ({ x: node.x, y: node.y }));
+  const serialized = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  const otherBefore = plain(other);
+  const links = first.connections;
+  const credits = plain(h.state.account);
+  const { document } = h.window;
+  document.querySelector('[data-canvas-tool="organize"]').click();
+  assert.equal(first.undoStack.length, 0);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), serialized, "autosave reads only original content while reviewing");
+  assert.notEqual(h.window.getNodePresentation(nodes[0]).x, nodes[0].x);
+  assert.equal(Number.parseFloat(document.querySelector('[data-id="source"]').style.left), h.window.getNodePresentation(nodes[0]).x);
+  const preview = nodes.map((node) => ({ x: h.window.getNodePresentation(node).x, y: h.window.getNodePresentation(node).y }));
+  document.querySelector('[data-arrange-decision="keep"]').click();
+  assert.equal(first.undoStack.length, 1);
+  assert.deepEqual(nodes.map(({ x, y }) => ({ x, y })), preview);
+  assert.ok(nodes[0].x < nodes[1].x);
+  assert.deepEqual(plain(other), otherBefore);
+  assert.equal(first.connections, links);
+  assert.deepEqual(plain(h.state.account), credits);
+  document.querySelector('[data-canvas-tool="organize"]').click();
+  assert.equal(document.querySelector('#canvasArrangeMenu').classList.contains('hidden'), true);
+  assert.equal(first.undoStack.length, 1);
+  const result = { id: "late-result", type: "image", url: "/assets/completed.png" };
+  nodes[1].generatedAsset = result;
+  h.window.undoLastAction();
+  assert.deepEqual(nodes.map(({ x, y }) => ({ x, y })), before);
+  assert.equal(nodes[1].generatedAsset, result);
+});
+
+test("arrange restores the original group and node presentation without content or history writes", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("one", { x: 250, y: 130, groupId: "group" }), h.node("two", { x: 700, y: 430, groupId: "group" }), h.node("free", { x: 20, y: 40 })];
+  const frame = group("group", ["one", "two"], { x: 200, y: 80 });
+  const canvas = h.canvas("arrange-group", nodes, [frame]);
+  h.install(canvas);
+  h.window.setSelection(["one", "free"]);
+  h.window.render();
+  const before = plain({ nodes, frame });
+  const { document } = h.window;
+  document.querySelector('[data-canvas-tool="organize"]').click();
+  const positions = nodes.map(h.window.getNodePresentation);
+  const framePreview = h.window.getGroupBounds(frame);
+  assert.equal(positions[1].x - positions[0].x, before.nodes[1].x - before.nodes[0].x);
+  assert.equal(positions[1].y - positions[0].y, before.nodes[1].y - before.nodes[0].y);
+  assert.equal(positions[0].x - framePreview.left, before.nodes[0].x - before.frame.x);
+  assert.equal(framePreview.width, before.frame.width);
+  assert.equal(framePreview.height, before.frame.height);
+  assert.deepEqual(plain({ nodes, frame }), before);
+  document.querySelector('[data-arrange-decision="restore"]').click();
+  assert.deepEqual(plain({ nodes, frame }), before);
+  assert.equal(canvas.undoStack.length, 0);
+  for (const node of nodes) {
+    assert.equal(h.window.getNodePresentation(node).x, node.x);
+    assert.equal(Number.parseFloat(document.querySelector(`[data-id="${node.id}"]`).style.left), node.x);
+  }
+  assert.equal(h.window.getGroupBounds(frame).left, frame.x);
+});
+
+test("preview undo does not consume existing history and a same-ID replacement cannot receive its plan", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("one", { x: 50, y: 70 }), h.node("two", { x: 400, y: 450 })];
+  const canvas = h.canvas("arrange-stale", nodes);
+  h.install(canvas);
+  h.window.commitNodeFields(nodes[0], { ...nodes[0], name: "已命名" }, ["name"], "node-name");
+  h.window.render();
+  assert.equal(canvas.undoStack.length, 1);
+  const { document } = h.window;
+  document.querySelector('[data-canvas-tool="organize"]').click();
+  document.querySelector('#canvasArrangeMenu').dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert.equal(canvas.undoStack.length, 1);
+  assert.equal(nodes[0].name, "已命名");
+  assert.equal(document.querySelector('#canvasArrangeMenu').classList.contains('hidden'), true);
+  document.querySelector('[data-canvas-tool="organize"]').click();
+  const replacement = h.canvas(canvas.id, nodes.map((node) => ({ ...node })));
+  h.install(replacement);
+  document.querySelector('[data-arrange-decision="keep"]').click();
+  assert.equal(replacement.undoStack.length, 0);
+  assert.equal(replacement.nodes[1].x, 400);
+  assert.equal(nodes[1].x, 400);
 });
 
 test("media toolbar defaults to icons while preserving explicit saved label choices", (t) => {
@@ -2377,6 +3049,36 @@ test("Agent send estimate follows the generation model and parameters and recove
   assertEstimate(36);
 });
 
+test("canvas credit widget compacts large balances without overstating them and retains exact accessible values", (t) => {
+  const h = createHarness(t);
+  const { document } = h.window;
+  assert.equal(h.state.account.credits, 3000);
+  assert.equal(h.state.account.consumedCredits, 0);
+  assert.equal(document.querySelector("#railCreditValue").textContent, "3000");
+  for (const [balance, compact, exact] of [
+    [0, "0", "0"],
+    [9999, "9999", "9,999"],
+    [10000, "1万", "10,000"],
+    [12876, "1.2万", "12,876"],
+    [999999, "99.9万", "999,999"],
+    [99999999, "9999万", "99,999,999"],
+    [100000000, "1亿", "100,000,000"],
+    [129999999, "1.2亿", "129,999,999"],
+  ]) {
+    h.state.account.credits = balance;
+    h.window.syncCreditDisplay();
+    assert.equal(document.querySelector("#railCreditValue").textContent, compact);
+    assert.equal(document.querySelector("#railCreditTip").textContent, `可用积分：${exact}`);
+    assert.equal(document.querySelector("#profileCreditValue").textContent, exact);
+    assert.equal(document.querySelector("#canvasCreditsBtn").getAttribute("aria-label"), `查看我的积分，当前可用 ${exact}`);
+    assert.equal(document.querySelector("#profileCreditsBtn").getAttribute("aria-label"), `查看我的积分，当前 ${exact}`);
+  }
+  const refreshed = createHarness(t);
+  assert.equal(refreshed.state.account.credits, 3000);
+  assert.equal(refreshed.state.account.consumedCredits, 0);
+  assert.equal(refreshed.window.document.querySelector("#railCreditValue").textContent, "3000");
+});
+
 test("generation send estimate remains independent of balance while each task charges without changing canvases", (t) => {
   const h = createHarness(t);
   const first = h.canvas("one", [h.node("shared-id")]);
@@ -2394,6 +3096,8 @@ test("generation send estimate remains independent of balance while each task ch
   assert.equal(h.state.account.credits, 2973);
   assert.equal(h.state.account.consumedCredits, 27);
   assert.equal(document.querySelector("#profileCreditValue").textContent, "2,973");
+  assert.equal(document.querySelector("#railCreditValue").textContent, "2973");
+  assert.equal(document.querySelector("#railCreditTip").textContent, "可用积分：2,973");
   assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
 
   const account = plain(h.state.account);

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reelay Canvas</title>
-    <link id="appFavicon" rel="icon" type="image/png" href="./assets/reelay-logo.png" />
+    <link id="appFavicon" rel="icon" type="image/svg+xml" href="./assets/favicon-account.svg" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./styles/canvas-connections.css" />
   </head>
@@ -164,6 +164,11 @@
             </div>
           </div>
         </div>
+        <button class="canvas-credit-widget" id="canvasCreditsBtn" type="button" aria-label="查看我的积分，当前可用 3,000">
+          <img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" />
+          <span class="rail-credit-value" id="railCreditValue" aria-hidden="true">3000</span>
+          <span class="rail-button-tip" id="railCreditTip" aria-hidden="true">可用积分：3,000</span>
+        </button>
       </aside>
       <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库" aria-hidden="true" inert>
         <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起资产库" aria-label="收起资产库" aria-controls="assetLibraryPanel">
@@ -226,6 +231,7 @@
               </div>
               <div class="asset-library-command-slot" id="assetLibraryCommandBar"></div>
             </div>
+            <div id="assetLibraryEntityFilter" hidden></div>
             <div class="asset-library-grid" id="assetLibraryGrid" role="tabpanel" aria-labelledby="assetLibraryMediaTab"></div>
           </section>
         </div>
@@ -367,6 +373,23 @@
           </button>
         </div>
         <div class="selection-toolbar hidden" id="selectionToolbar" role="toolbar" aria-label="多选节点操作">
+          <div class="toolbar-menu-wrap selection-layout-control">
+            <button class="icon-toolbar-button selection-layout-trigger" type="button" data-selection-action="toggle-layout" data-canvas-mutation aria-label="布局" aria-haspopup="menu" aria-expanded="false" aria-controls="selectionLayoutMenu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="7" rx="1.2"/><rect x="3" y="13" width="7" height="8" rx="1.2"/><rect x="14" y="13" width="7" height="8" rx="1.2"/></svg>
+              <span class="toolbar-tip" id="selectionLayoutTip">布局</span>
+            </button>
+            <div class="toolbar-dropdown hidden" id="selectionLayoutMenu" role="menu" aria-label="布局" popover="manual" data-toolbar-popover="selection-layout">
+              <button type="button" role="menuitem" data-sort-layout="grid" data-canvas-mutation><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
+              <button type="button" role="menuitem" data-sort-layout="horizontal" data-canvas-mutation><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
+              <button type="button" role="menuitem" data-sort-layout="vertical" data-canvas-mutation><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
+            </div>
+          </div>
+          <span class="selection-toolbar-divider" aria-hidden="true"></span>
+          <button class="icon-toolbar-button text-button selection-toolbar-entity" type="button" data-selection-action="create-entity" aria-label="新建主体" aria-describedby="selectionEntityTip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 21a6 6 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+            <span>新建主体</span>
+            <span class="toolbar-tip" id="selectionEntityTip">用选中素材新建主体</span>
+          </button>
           <button class="icon-toolbar-button text-button selection-toolbar-group" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
             <i data-lucide="combine" aria-hidden="true"></i>
             <span>打组</span>
@@ -389,7 +412,7 @@
               <i class="selection-download-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
               <span class="toolbar-tip">下载选项</span>
             </button>
-            <div class="toolbar-dropdown hidden toolbar-dropdown-right" id="selectionDownloadMenu" role="menu">
+            <div class="toolbar-dropdown hidden toolbar-dropdown-right" id="selectionDownloadMenu" role="menu" popover="manual" data-toolbar-popover="selection">
               <button type="button" data-download-action="batch"><i data-lucide="download" aria-hidden="true"></i><span>批量下载</span></button>
               <button type="button" data-download-action="archive"><i data-lucide="archive" aria-hidden="true"></i><span>打包下载</span></button>
             </div>
@@ -413,7 +436,7 @@
             <div class="minimap-surface" id="minimapSurface" aria-label="画布小地图"></div>
           </div>
           <div class="canvas-tool-row">
-            <button class="canvas-tool-button" type="button" data-canvas-tool="minimap" aria-label="小地图">
+            <button class="canvas-tool-button" type="button" data-canvas-tool="minimap" aria-label="小地图" aria-controls="minimapPanel" aria-expanded="false">
               <i data-lucide="map" aria-hidden="true"></i>
               <span class="canvas-tool-tip">小地图</span>
             </button>
@@ -421,10 +444,19 @@
               <i data-lucide="scan" aria-hidden="true"></i>
               <span class="canvas-tool-tip">适应视图</span>
             </button>
-            <button class="canvas-tool-button canvas-tool-button-upcoming" type="button" data-canvas-tool="organize" aria-label="整理画布，即将支持" aria-disabled="true" disabled>
-              <i data-lucide="layout-grid" aria-hidden="true"></i>
-              <span class="canvas-tool-tip">整理画布 · 即将支持</span>
-            </button>
+            <div class="toolbar-menu-wrap canvas-organize-control">
+              <button class="canvas-tool-button" type="button" data-canvas-tool="organize" aria-label="整理画布" aria-haspopup="dialog" aria-controls="canvasArrangeMenu" aria-expanded="false" aria-disabled="true">
+                <i data-lucide="layout-grid" aria-hidden="true"></i>
+                <span class="canvas-tool-tip">整理画布</span>
+              </button>
+              <section class="canvas-arrange-menu hidden" id="canvasArrangeMenu" role="dialog" aria-labelledby="canvasArrangeQuestion" popover="manual" data-toolbar-popover="organize" data-toolbar-placement="top">
+                <p class="canvas-arrange-question" id="canvasArrangeQuestion">是否保留此次整理结果？</p>
+                <div class="canvas-arrange-actions">
+                  <button type="button" data-arrange-decision="restore">还原</button>
+                  <button type="button" data-arrange-decision="keep">保留</button>
+                </div>
+              </section>
+            </div>
             <label class="canvas-zoom-control" aria-label="放大/缩小画布">
               <input id="zoomSlider" type="range" min="20" max="200" step="1" value="100" aria-label="放大/缩小画布，20% 到 200%" />
               <span class="canvas-zoom-value" id="zoomValueTip" aria-hidden="true">100%</span>
@@ -569,6 +601,7 @@
     <script src="./src/legacy-canvas/canvas-node-prompt-view.js"></script>
     <script src="./src/legacy-canvas/canvas-generator-model-policy.js"></script>
     <script src="./src/legacy-canvas/canvas-popover-placement.js"></script>
+    <script src="./src/legacy-canvas/canvas-toolbar-menu-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-parameter-help-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-reference-order.js"></script>
     <script src="./src/legacy-canvas/canvas-prompt-document.js"></script>
@@ -602,16 +635,23 @@
     <script src="./src/legacy-canvas/canvas-asset-library-view.js"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-menu-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-editor-model.js"></script>
+    <script src="./src/legacy-canvas/canvas-selection-entity-model.js"></script>
+    <script src="./src/legacy-canvas/canvas-entity-media-import.js"></script>
+    <script src="./src/legacy-canvas/canvas-media-preview.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-editor-view.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-editor-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-use-model.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-use-view.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-use-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-media-toolbar-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-media-image-view.js"></script>
     <script src="./src/legacy-canvas/canvas-audio-player.js"></script>
     <script src="./src/legacy-canvas/canvas-runtime-store.js"></script>
     <script src="./src/legacy-canvas/canvas-node-task-runner.js"></script>
     <script src="./src/legacy-canvas/canvas-content-commands.js"></script>
+    <script src="./src/legacy-canvas/canvas-arrange-layout.js"></script>
+    <script src="./src/legacy-canvas/canvas-arrange-scope.js"></script>
+    <script src="./src/legacy-canvas/canvas-arrange-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-command-executor.js"></script>
     <script src="./src/legacy-canvas/canvas-document-codec.js"></script>
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js"></script>

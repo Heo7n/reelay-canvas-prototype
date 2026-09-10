@@ -10,6 +10,7 @@
   background: var(--workspace-bg, #f8f8f7);
 }
 
+.accountOnly { justify-content: flex-end; }
 .account { display: flex; align-items: center; }
 .profile { position: relative; }
 .profile summary { list-style: none; }

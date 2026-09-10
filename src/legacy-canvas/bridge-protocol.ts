@@ -17,6 +17,7 @@ const legacyCanvasCapabilitiesSchema = z
     assetPersistence: z.boolean().optional(),
     entityPersistence: z.boolean().optional(),
     transientMediaUpload: z.boolean().optional(),
+    progressiveAssetLoading: z.boolean().optional(),
   })
   .strict();
 
@@ -79,6 +80,7 @@ export const bridgeWorkspaceAssetSchema = z.object({
   byteSize: z.number().int().positive().max(64 * 1024 * 1024),
   checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
   contentUrl: z.string().trim().min(1).max(2_048),
+  createdAt: z.string().datetime({ offset: true }).optional(),
 }).strict();
 
 export const bridgeWorkspaceEntitySchema = z.object({
@@ -159,6 +161,15 @@ export const hostProjectAssetsMessageSchema = z.object({
   requestId: bridgeRequestIdSchema,
   instanceId: canvasInstanceIdSchema,
   projectAssets: z.array(bridgeProjectAssetSchema).max(10_000),
+}).strict();
+
+export const hostAssetAvailabilityMessageSchema = z.object({
+  source: z.literal("reelay-shell"),
+  type: z.literal("host:asset-availability"),
+  protocolVersion: z.literal(1),
+  instanceId: canvasInstanceIdSchema,
+  projectAssets: z.enum(["loading", "ready", "unavailable"]),
+  workspaceCatalog: z.enum(["loading", "ready", "unavailable"]),
 }).strict();
 
 export const hostWorkspaceAssetCatalogMessageSchema = z.object({
@@ -253,6 +264,13 @@ export const hostAssetCommandErrorMessageSchema = z.object({
 export const canvasMessageSchema = z.discriminatedUnion("type", [
   z.object({
     source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:capabilities"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    capabilities: z.object({ progressiveAssetLoading: z.literal(true) }).strict(),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:import-transient-media"),
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
@@ -302,6 +320,13 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
     section: legacyAccountSectionSchema.optional().default("profile"),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:theme-change"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    theme: z.enum(["light", "dark"]),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

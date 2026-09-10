@@ -1,0 +1,98 @@
+.hero {
+  container-type: inline-size;
+  width: min(100%, 1600px);
+  margin-inline: auto;
+}
+
+.viewport {
+  position: relative;
+  overflow: hidden;
+  padding: 4px 0 14px;
+}
+
+.track {
+  position: relative;
+  aspect-ratio: 400 / 81;
+  --card-width: 36%;
+  --card-step: 35cqw;
+  --side-scale: .833333;
+}
+
+.card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--card-width);
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  background: #191a1d;
+  color: #fff;
+  cursor: pointer;
+  transform: translate(calc(-50% + var(--card-offset) * var(--card-step)), -50%) scale(var(--side-scale));
+}
+
+.track[data-moving] .card {
+  transition: transform var(--carousel-duration) cubic-bezier(.22, .68, .24, 1), box-shadow var(--carousel-duration) ease;
+}
+
+.active {
+  transform: translate(calc(-50% + var(--card-offset) * var(--card-step)), -50%) scale(1);
+  box-shadow: 0 8px 20px rgb(14 14 18 / 12%);
+}
+
+.card img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 46%, rgb(10 13 15 / 8%) 62%, rgb(10 13 15 / 68%) 100%); }
+.caption { position: absolute; right: 20px; bottom: 20px; left: 20px; display: grid; gap: 5px; text-align: center; text-shadow: 0 2px 10px rgb(0 0 0 / 30%); }
+.title { display: block; font-size: clamp(18px, 1.6cqw, 25px); font-weight: 550; line-height: 1.4; letter-spacing: .06em; }
+.description { display: block; color: rgb(255 255 255 / 88%); font-size: clamp(12px, 1cqw, 14px); font-weight: 400; line-height: 1.6; letter-spacing: .02em; }
+
+.arrow {
+  position: absolute;
+  z-index: 5;
+  top: calc(50% - 5px);
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 10px;
+  background: rgb(20 21 23 / 42%);
+  color: #fff;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.arrow:hover { background: rgb(20 21 23 / 70%); }
+.arrowLeft { left: 10px; }
+.arrowRight { right: 10px; }
+.arrow svg { width: 18px; height: 18px; }
+.segments { display: flex; justify-content: center; gap: 5px; margin-top: -4px; }
+.segments button { display: grid; width: 32px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.segments span { width: 20px; height: 3px; border-radius: 3px; background: var(--workspace-border-strong, rgb(23 23 25 / 19%)); transition: width 180ms ease, background 180ms ease; }
+.segments .activeSegment span { width: 28px; background: var(--workspace-muted, #77777d); }
+.arrow:focus-visible, .card:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+.segments button:focus-visible { outline: 2px solid var(--workspace-text, #171719); outline-offset: 1px; }
+
+@container (max-width: 680px) {
+  .track { aspect-ratio: 200 / 81; --card-width: 72%; --card-step: 68cqw; }
+  .caption { right: 16px; bottom: 18px; left: 16px; gap: 3px; }
+  .title { font-size: 20px; }
+  .card:not(.active) .caption { opacity: 0; }
+  .track[data-moving] .caption { transition: opacity var(--carousel-duration) ease; }
+}
+
+@container (max-width: 400px) {
+  .track { aspect-ratio: 800 / 387; --card-width: 86%; --card-step: 80cqw; --side-scale: .813953; }
+  .caption { right: 12px; bottom: 14px; left: 12px; }
+  .title { font-size: 18px; }
+  .arrow { width: 34px; height: 34px; }
+  .arrowLeft { left: 0; }
+  .arrowRight { right: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track[data-moving] .card, .track[data-moving] .caption, .segments span { transition: none; }
+}

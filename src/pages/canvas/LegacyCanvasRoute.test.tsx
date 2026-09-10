@@ -10,10 +10,10 @@ import type { EntityRepository } from "../../application/assets/EntityRepository
 import type { CanvasDocumentRepository } from "../../application/canvases/CanvasDocumentRepository";
 import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
 import { LegacyCanvasRoute } from "./LegacyCanvasRoute";
-import { takeExperienceLaunchIntent } from "../home/launch-intent";
+import { takeProjectLaunchIntent } from "../home/launch-intent";
 
-const hostContexts = vi.hoisted(() => [] as Array<{ canvasId?: string; launchPrompt?: string }>);
-vi.mock("../home/launch-intent", () => ({ takeExperienceLaunchIntent: vi.fn(() => "") }));
+const hostContexts = vi.hoisted(() => [] as Array<{ projectId?: string; canvasId?: string; launchPrompt?: string; theme?: string }>);
+vi.mock("../home/launch-intent", () => ({ takeProjectLaunchIntent: vi.fn(() => "") }));
 
 vi.mock("../../app/useWorkspaceRouteData", () => ({
   useWorkspaceRouteData: () => ({
@@ -39,17 +39,23 @@ vi.mock("../../app/useWorkspaceRouteData", () => ({
       name: "品牌故事",
       updatedAt: "2026-08-01T00:00:00.000Z",
       workspaceId: "workspace-1",
+    }, {
+      accessKind: "shared", coverAssetId: null, currentUserRole: "view", id: "read-only-project",
+      name: "只读项目", updatedAt: "2026-08-01T00:00:00.000Z", workspaceId: "workspace-1",
+    }, {
+      accessKind: "private", coverAssetId: null, currentUserRole: "admin", id: "project-2",
+      name: "另一个项目", updatedAt: "2026-08-01T00:00:00.000Z", workspaceId: "workspace-1",
     }],
   }),
 }));
 
-vi.mock("../../shared/theme/theme", () => ({ readTheme: () => "light" }));
-
 vi.mock("../../legacy-canvas/CanvasHost", () => ({
-  CanvasHost: ({ context, onCreateProject, onOpenAccountSettings, onLaunchPromptConsumed }: {
+  CanvasHost: ({ context, onCreateProject, onOpenAccountSettings, onLaunchPromptConsumed, onThemeChange }: {
     context: {
+      projectId?: string;
       canvasId?: string;
       launchPrompt?: string;
+      theme?: string;
       capabilities?: {
         accountSections?: boolean;
         projectSwitcher?: boolean;
@@ -61,6 +67,7 @@ vi.mock("../../legacy-canvas/CanvasHost", () => ({
     onCreateProject?: () => void;
     onOpenAccountSettings: (section: "profile" | "credits") => void;
     onLaunchPromptConsumed?: () => void;
+    onThemeChange: (theme: "light" | "dark") => void;
   }) => {
     hostContexts.push(context);
     return (
@@ -85,6 +92,8 @@ vi.mock("../../legacy-canvas/CanvasHost", () => ({
       <button type="button" onClick={onLaunchPromptConsumed}>完成画布初始化</button>
       <button type="button" onClick={() => onOpenAccountSettings("profile")}>打开个人主页</button>
       <button type="button" onClick={() => onOpenAccountSettings("credits")}>打开我的积分</button>
+      <button type="button" onClick={() => onThemeChange("light")}>画布切浅色</button>
+      <button type="button" onClick={() => onThemeChange("dark")}>画布切深色</button>
     </div>
     );
   },
@@ -99,47 +108,91 @@ vi.mock("../../features/account/AccountSettingsDialog", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  window.localStorage.removeItem("reelay-theme-mode");
+  delete document.documentElement.dataset.theme;
+  document.documentElement.style.removeProperty("color-scheme");
   hostContexts.length = 0;
-  vi.mocked(takeExperienceLaunchIntent).mockReset().mockReturnValue("");
+  vi.mocked(takeProjectLaunchIntent).mockReset().mockReturnValue("");
 });
 
-function renderExperienceRoute() {
+function renderCanvasRoute(experience = true, projectId = "project-1") {
   const router = createMemoryRouter([{
     path: "/w/:workspaceId/projects/:projectId/canvases/:canvasId",
     element: <LegacyCanvasRoute
       canvasDocumentRepository={{ getCanvasDocument: vi.fn(), save: vi.fn() }}
       mediaAssetRepository={{} as MediaAssetRepository}
       entityRepository={{} as EntityRepository}
-      transientMediaRepository={{ importFile: vi.fn() }}
+      transientMediaRepository={experience ? { importFile: vi.fn() } : undefined}
     />,
-  }], { initialEntries: ["/w/workspace-1/projects/project-1/canvases/main"] });
+  }], { initialEntries: [`/w/workspace-1/projects/${projectId}/canvases/main`] });
   render(<StrictMode><RouterProvider router={router} /></StrictMode>);
   return router;
 }
 
 describe("LegacyCanvasRoute", () => {
-  it("reads an experience intent once under StrictMode and clears it when the host initializes", () => {
-    vi.mocked(takeExperienceLaunchIntent).mockReturnValueOnce("一支香水广告");
-    renderExperienceRoute();
+  it.each(["light", "dark"] as const)("keeps the shell and account dialog on the canvas-selected %s theme", (theme) => {
+    window.localStorage.setItem("reelay-theme-mode", theme === "light" ? "dark" : "light");
+    renderCanvasRoute();
+    fireEvent.click(screen.getByRole("button", { name: theme === "light" ? "画布切浅色" : "画布切深色" }));
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(document.documentElement.style.colorScheme).toBe(theme);
+    expect(window.localStorage.getItem("reelay-theme-mode")).toBe(theme);
+    fireEvent.click(screen.getByRole("button", { name: "打开我的积分" }));
+    expect(screen.getByTestId("initial-account-section")).toHaveTextContent("credits");
+    expect(hostContexts.at(-1)?.theme).toBe(theme);
+    expect(document.documentElement.dataset.theme).toBe(theme);
+  });
+
+  it("keeps the current canvas theme when preference storage is blocked", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    renderCanvasRoute();
+    fireEvent.click(screen.getByRole("button", { name: "画布切深色" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开我的积分" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(hostContexts.at(-1)?.theme).toBe("dark");
+  });
+
+  it.each([true, false])("reads a matching intent once under StrictMode with experience=%s and clears it when the host initializes", (experience) => {
+    vi.mocked(takeProjectLaunchIntent).mockReturnValueOnce("一支香水广告");
+    renderCanvasRoute(experience);
     expect(screen.getByTestId("launch-prompt")).toHaveTextContent("一支香水广告");
-    expect(takeExperienceLaunchIntent).toHaveBeenCalledTimes(1);
+    expect(takeProjectLaunchIntent).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: "workspace-1", projectId: "project-1", canvasId: "main",
+    });
     fireEvent.click(screen.getByRole("button", { name: "完成画布初始化" }));
     expect(screen.getByTestId("launch-prompt")).toBeEmptyDOMElement();
     fireEvent.click(screen.getByRole("button", { name: "打开我的积分" }));
-    expect(takeExperienceLaunchIntent).toHaveBeenCalledTimes(1);
+    expect(takeProjectLaunchIntent).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("launch-prompt")).toBeEmptyDOMElement();
   });
 
   it("does not carry an unconsumed prompt into a different canvas, including its first render", async () => {
-    vi.mocked(takeExperienceLaunchIntent).mockReturnValueOnce("一支香水广告");
-    const router = renderExperienceRoute();
+    vi.mocked(takeProjectLaunchIntent).mockReturnValueOnce("一支香水广告");
+    const router = renderCanvasRoute();
     expect(screen.getByTestId("launch-prompt")).toHaveTextContent("一支香水广告");
     await act(async () => router.navigate("/w/workspace-1/projects/project-1/canvases/second"));
-    expect(takeExperienceLaunchIntent).toHaveBeenCalledTimes(2);
+    expect(takeProjectLaunchIntent).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId("launch-prompt")).toBeEmptyDOMElement();
     const nextCanvasContexts = hostContexts.filter((context) => context.canvasId === "second");
     expect(nextCanvasContexts.length).toBeGreaterThan(0);
     expect(nextCanvasContexts.every((context) => context.launchPrompt === "")).toBe(true);
+  });
+
+  it("does not expose an unconsumed prompt to a different project, including its first render", async () => {
+    vi.mocked(takeProjectLaunchIntent).mockReturnValueOnce("只属于第一个项目");
+    const router = renderCanvasRoute(false);
+    await act(async () => router.navigate("/w/workspace-1/projects/project-2/canvases/main"));
+    const otherProjectContexts = hostContexts.filter((context) => context.projectId === "project-2");
+    expect(otherProjectContexts.length).toBeGreaterThan(0);
+    expect(otherProjectContexts.every((context) => context.launchPrompt === "")).toBe(true);
+  });
+
+  it("never claims or sends a handoff for a read-only project", () => {
+    renderCanvasRoute(false, "read-only-project");
+    expect(takeProjectLaunchIntent).not.toHaveBeenCalled();
+    expect(screen.getByTestId("launch-prompt")).toBeEmptyDOMElement();
   });
 
   it("preserves the account section requested by the legacy canvas", () => {

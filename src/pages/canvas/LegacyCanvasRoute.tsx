@@ -11,9 +11,9 @@ import {
   type AccountSection,
 } from "../../features/account/AccountSettingsDialog";
 import { resolveProjectCoverUrl } from "../../shared/projects/project-cover";
-import { readTheme } from "../../shared/theme/theme";
+import { useTheme } from "../../shared/theme/theme";
 import type { TransientMediaRepository } from "../../application/assets/TransientMediaRepository";
-import { takeExperienceLaunchIntent } from "../home/launch-intent";
+import { takeProjectLaunchIntent } from "../home/launch-intent";
 
 interface LegacyCanvasRouteProps {
   transientMediaRepository?: TransientMediaRepository;
@@ -23,28 +23,30 @@ interface LegacyCanvasRouteProps {
 }
 
 export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, mediaAssetRepository, transientMediaRepository }: LegacyCanvasRouteProps) {
+  const { theme, setTheme } = useTheme();
   const launchScopeRef = useRef<string | undefined>(undefined);
   const [launchIntent, setLaunchIntent] = useState<{ scope: string; prompt: string } | null>(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [accountSettingsSection, setAccountSettingsSection] = useState<AccountSection>("profile");
   const { workspaceId, projectId, canvasId } = useParams();
+  const { actor, currentWorkspace, projects } = useWorkspaceRouteData();
+  const project = projects.find((candidate) => candidate.id === projectId);
+  const writable = Boolean(project && project.currentUserRole !== "view");
   const launchScope = workspaceId && projectId && canvasId
     ? JSON.stringify([workspaceId, projectId, canvasId])
     : undefined;
   useEffect(() => {
-    if (transientMediaRepository && launchScope && launchScopeRef.current !== launchScope) {
+    if (writable && workspaceId && projectId && canvasId && launchScope && launchScopeRef.current !== launchScope) {
       launchScopeRef.current = launchScope;
-      setLaunchIntent({ scope: launchScope, prompt: takeExperienceLaunchIntent() });
+      setLaunchIntent({ scope: launchScope, prompt: takeProjectLaunchIntent({ workspaceId, projectId, canvasId }) });
     }
-  }, [launchScope, transientMediaRepository]);
+  }, [canvasId, launchScope, projectId, workspaceId, writable]);
   const consumeLaunchPrompt = useCallback(() => {
     setLaunchIntent((current) => current && current.scope === launchScope && current.prompt
       ? { ...current, prompt: "" }
       : current);
   }, [launchScope]);
-  const launchPrompt = launchIntent && launchIntent.scope === launchScope ? launchIntent.prompt : "";
-  const { actor, currentWorkspace, projects } = useWorkspaceRouteData();
-  const project = projects.find((candidate) => candidate.id === projectId);
+  const launchPrompt = writable && launchIntent && launchIntent.scope === launchScope ? launchIntent.prompt : "";
   const submit = useSubmit();
   const logout = useCallback(() => {
     submit(null, { action: routePaths.logout(), method: "post" });
@@ -75,10 +77,11 @@ export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, 
         onLogout={logout}
         onCreateProject={createProject}
         onOpenAccountSettings={openAccountSettings}
+        onThemeChange={setTheme}
         onLaunchPromptConsumed={consumeLaunchPrompt}
         context={{
           protocolVersion: 1,
-          ...(transientMediaRepository ? { launchPrompt } : {}),
+          launchPrompt,
           capabilities: { accountSections: true, projectSwitcher: true, assetPersistence: true, entityPersistence: true,
             ...(transientMediaRepository ? { transientMediaUpload: true } : {}),
           },
@@ -91,7 +94,7 @@ export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, 
             coverUrl: resolveProjectCoverUrl(candidate.coverAssetId),
           })),
           canvasId,
-          theme: readTheme(),
+          theme,
           writable: project.currentUserRole !== "view",
           actor: {
             account: actor.account,

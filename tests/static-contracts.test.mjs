@@ -765,7 +765,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
   const generatedAssetSource = sourceBetween(
     appSource,
     "function createGeneratedAsset(parameterSnapshot)",
-    "function generatorMediaContent(node)",
+    "function generatorMediaContent(",
   );
   assert.match(generatedAssetSource, /Number\.isFinite\(parameterSnapshot\.outputDuration\)/);
   assert.match(generatedAssetSource, /generated\.duration = parameterSnapshot\.outputDuration/);
@@ -832,16 +832,12 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
   assert.ok(functionStart >= 0 && functionEnd > functionStart);
   const functionSource = appSource.slice(functionStart, functionEnd);
   const node = {};
-  const removedKeys = [];
   const scheduledDelays = [];
-  let storedPrompt = "  Create a quiet product shot  ";
   let createdNodeCount = 0;
   let renderCount = 0;
   const consumeLaunchIntent = Function(
     "isCanvasMutationAllowed",
-    "state",
-    "sessionStorage",
-    "homeLaunchIntentKey",
+    "hostLaunchPrompt",
     "addNodeAt",
     "window",
     "render",
@@ -849,12 +845,7 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
     `${functionSource}; return consumeHomeLaunchIntent;`,
   )(
     () => true,
-    { hostCapabilities: { transientMediaUpload: false } },
-    {
-      getItem: () => storedPrompt,
-      removeItem: (key) => { removedKeys.push(key); storedPrompt = null; },
-    },
-    "reelay-home-launch-intent",
+    "Create a quiet product shot",
     () => { createdNodeCount += 1; return node; },
     { innerWidth: 1440, innerHeight: 900 },
     () => { renderCount += 1; },
@@ -866,7 +857,6 @@ test("a home launch intent becomes the first real persisted canvas mutation", ()
   assert.equal(createdNodeCount, 1);
   assert.equal(node.prompt, "Create a quiet product shot");
   assert.equal(node.expanded, true);
-  assert.deepEqual(removedKeys, ["reelay-home-launch-intent"]);
   assert.equal(renderCount, 1);
   assert.deepEqual(scheduledDelays, [0]);
 });
@@ -1320,7 +1310,7 @@ test("aspect changes preserve node identity and isolate the prompt workspace fro
   );
   assert.match(
     appSource,
-    /function syncNodeVisualLayout[\s\S]*?element\.style\.top = `\$\{node\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY/,
+    /function syncNodeVisualLayout[\s\S]*?const base = canvasArrange\.getNodePosition\(node\) \|\| node;[\s\S]*?element\.style\.top = `\$\{base\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY\(\$\{\(y - base\.y\)/,
   );
   assert.match(appSource, /promptPanel\.style\.top = `\$\{canonicalLayout\.mediaHeight \+ canonicalLayout\.panelGap\}px`/);
   assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?left:\s*50%[\s\S]*?translate:\s*-50% 0/);
@@ -1352,18 +1342,21 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.doesNotMatch(appCss, /--multi-selection-shadow-near|--multi-selection-shadow-far|--multi-selection-highlight/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-hover[\s\S]*?cursor:\s*grab/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-pressed[\s\S]*?cursor:\s*grabbing/);
-  assert.match(appCss, /\.selection-toolbar \.icon-toolbar-button\s*\{[\s\S]*?background:\s*transparent/);
-  assert.match(appSource, /--multi-selection-port-scale[\s\S]*?--multi-selection-port-offset[\s\S]*?portField\.portOffset[\s\S]*?--multi-selection-port-visual-size[\s\S]*?portField\.portMinOutside \* 2/);
+  assert.match(appCss, /\.icon-toolbar-button\s*\{[^}]*background:\s*transparent/);
+  assert.match(appSource, /function syncSelectionOverlayProjection\(\)[\s\S]*?getAggregatePortGeometry\(state\.scale\)[\s\S]*?--multi-selection-port-offset[\s\S]*?portField\.portOffset[\s\S]*?--multi-selection-port-visual-size[\s\S]*?portField\.visualSize/);
+  assert.match(appSource, /id: "selection:output"[\s\S]*?options: canvasConnectionInteraction\.getAggregatePortGeometry\(state\.scale\)/);
+  assert.doesNotMatch(appSource, /--multi-selection-port-scale/);
   assert.match(appSource, /function syncSelectionOverlayProjection[\s\S]*?--multi-selection-surface-radius[\s\S]*?selectionSurfaceRadiusWorld \* state\.scale/);
   assert.match(appSource, /function applyTheme[\s\S]*?--node-media-radius[\s\S]*?syncSelectionOverlayProjection\(\)[\s\S]*?renderSelectionToolbar\(\)/);
   assert.match(appSource, /\[multiSelectionSurface, multiSelectionChrome\]\.forEach[\s\S]*?screenRect\.left[\s\S]*?screenRect\.height/);
   assert.match(appSource, /multiSelectionSurface\.classList\.add\("hidden"\)[\s\S]*?multiSelectionChrome\.classList\.add\("hidden"\)/);
   assert.match(appSource, /function getExactSelectionGroup\(selectedNodes = getSelectedNodes\(\)\)[\s\S]*?canvasSpatialSelection\.getExactSelectionGroup\(selectedNodes, state\.groups\)/);
   assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getExactSelectionGroup\(selectedNodes\)[\s\S]*?multiSelectionChrome\.classList\.remove\("hidden"\)[\s\S]*?multiSelectionSurface\.classList\.toggle\("hidden", Boolean\(exactSelectionGroup\)\)/);
-  assert.match(appCss, /\.multi-selection-port\s*\{[\s\S]*?left:\s*calc\(100% \+ var\(--multi-selection-port-offset,[\s\S]*?width:\s*max\(44px, var\(--multi-selection-port-visual-size/);
+  assert.match(appCss, /\.multi-selection-port\s*\{[\s\S]*?left:\s*calc\(100% \+ var\(--multi-selection-port-offset,[\s\S]*?width:\s*var\(--multi-selection-port-hit-size, 44px\)/);
   assert.doesNotMatch(appCss, /--multi-selection-frame-border-width/);
-  assert.match(appCss, /\.multi-selection-port::before\s*\{[\s\S]*?width:\s*var\(--connection-port-size\)[\s\S]*?border:\s*var\(--connection-port-stroke\)[\s\S]*?scale:\s*var\(--multi-selection-port-scale/);
-  assert.match(appCss, /\.multi-selection-port-mark\s*\{[\s\S]*?width:\s*var\(--connection-port-mark-width\)[\s\S]*?height:\s*var\(--connection-port-mark-height\)[\s\S]*?scale:\s*var\(--multi-selection-port-scale/);
+  assert.match(appCss, /\.multi-selection-port::before\s*\{[\s\S]*?width:\s*var\(--multi-selection-port-visual-size,[\s\S]*?border:\s*1\.5px solid var\(--multi-selection-port-stroke-color\)/);
+  assert.match(appCss, /\.multi-selection-port-mark\s*\{[\s\S]*?width:\s*var\(--multi-selection-port-mark-width,[\s\S]*?height:\s*var\(--multi-selection-port-mark-height,/);
+  assert.doesNotMatch(appCss, /--multi-selection-port-scale/);
   assert.match(html, /class="icon-toolbar-button text-button selection-download-trigger"[\s\S]*?aria-expanded="false"/);
   assert.equal((html.match(/data-selection-action="toggle-download"/g) || []).length, 1);
   assert.doesNotMatch(html, /selection-download-main|selection-download-toggle|download-default/);
@@ -1567,7 +1560,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
-  assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-disabled="true"[^>]*disabled>[\s\S]*?data-lucide="layout-grid"[\s\S]*?id="zoomSlider"/);
+  assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-controls="canvasArrangeMenu"[\s\S]*?data-toolbar-popover="organize"[\s\S]*?id="zoomSlider"/);
   assert.doesNotMatch(html, /class="rail-button canvas-switch-trigger"[^>]*title=|id="railProfileBtn"[^>]*title=/);
   assert.match(html, /class="agent-dock collapsed"[\s\S]*?class="agent-launcher"/);
   assert.match(html, /id="projectMenu"[^>]*role="dialog"[\s\S]*?id="projectMenuSearch"[^>]*placeholder="搜索项目"[\s\S]*?id="projectMenuList"[\s\S]*?data-project-action="create"[\s\S]*?>新建项目</);

@@ -2,7 +2,7 @@
 
 Reelay 产品预演版是一套可执行的产品行为蓝本：已确认规则可运行，前端交互真实，后端服务可模拟。当前已有账户密码演示登录、个人 / 协作项目、项目权限、画布保存与个人素材 / 主体管理；未确认规则和后续规划见 `docs/product-expansion-plan.md`，已实现边界见 `docs/current-product-spec.md`。
 
-当前没有真实生成接口、正式账号生命周期或积分账本。十个固定 `.test` 演示账号、会话、组织、项目和画布文档，以及个人 Media / Entity 元数据已保存到 PostgreSQL；本地媒体二进制由 filesystem ObjectStore 保留，尚不构成完整云端素材服务。登录、主页和项目库使用 React 路由，`index.html` 为迁移期画布 iframe。
+当前没有真实生成接口、正式账号生命周期或积分账本。十个固定 `.test` 演示账号、会话、组织、项目和画布文档，以及个人 Media / Entity 元数据已保存到 PostgreSQL；本机日常 API 已连接独立 `Reelay_Dev` 云开发库，原始媒体保存在同项目私有 Supabase Storage。家里电脑尚待安装和接续验收。登录、主页和项目库使用 React 路由，`index.html` 为迁移期画布 iframe。
 
 本地 `main` 是已验证的集成基线，主工作目录可以检出当前活动的 `codex/<具体任务>` 分支。开始前运行 `npm run worktrees`，确认实际分支、目录和相对主线进度；新切片从已验证基线建立分支，同一切片的连续调整复用活动分支。`codex/archive/*` 仅用于历史与未定稿草稿取回，不整体覆盖主线。保留的旧 worktree 可能含 Git 未跟踪的本机媒体，不能因为代码已合入就删除目录。本地集成、远端 `origin/main` 和公网部署分别核验，不能从其中一个推断其他状态。
 
@@ -37,7 +37,8 @@ Reelay 产品预演版是一套可执行的产品行为蓝本：已确认规则�
 │  ├─ shared/                       品牌、账户栏、项目卡与主题等共享 UI
 │  └─ server/                       最小共享服务、演示会话与项目 API
 └─ docs/
-   ├─ local-development.md          首次初始化、日常启动与本机数据位置
+   ├─ local-development.md          日常共享预览、独立测试与保留源数据位置
+   ├─ cross-device-development.md   云开发库迁移记录与两台 Windows 接续步骤
    ├─ development-workflow.md       按任务范围选读文档与运行检查
    ├─ current-product-spec.md       当前产品与实现说明
    ├─ product-expansion-plan.md     其他页面与产品架构规划
@@ -48,10 +49,13 @@ Reelay 产品预演版是一套可执行的产品行为蓝本：已确认规则�
 
 ## 本地运行当前主链路
 
-启动步骤、本机 API / ObjectStore 的实际位置统一见 [本地开发说明](docs/local-development.md)。
+启动步骤、本机 API 和云开发库的实际位置统一见 [本地开发说明](docs/local-development.md)。
 
-- **首次初始化或换电脑**：准备 Node.js 24 和 Docker Desktop，按说明安装锁定依赖并执行本地初始化。当前 seed 包含十个演示账号、示例项目、9 张图片、2 条本地 MP3，以及“雾森信使 / 曜石勘探体”两个主体；文件随仓库同步，元数据和对象内容仍需在本机建立。
-- **继续既有环境**：先核对活动分支、已运行服务和既有 ObjectStore 路径，再复用或启动所需服务。`db:setup` 是初始化入口，不是每天启动或每次拉取后默认执行的命令；有 schema 或夹具变化时，按本地开发说明选择对应步骤。
+本机已完成独立共享开发库迁移与 HTTP 验证，家里电脑尚待接入；状态、迁移证据和安装步骤见 [跨电脑开发](docs/cross-device-development.md)。现有 15 个项目、6 份画布、3 个主体与 42 个 Media 已保留，当前个人素材列表为 20 项，历史 Media 及文件也保留。
+
+- **当前机器继续开发**：核对活动分支与服务；API 使用根目录的 `npm run dev:server:shared`，前端使用 `npm run dev:shell -- --host 127.0.0.1 --port 5173 --strictPort`。复用已经确认正确的进程，缺配置不改用本机默认库。
+- **家里电脑首次接入**：准备 Git、Node.js 24 与锁定依赖，取得同一代码分支，单独配置忽略文件 `.env.shared-development.local` 连接现有 `Reelay_Dev`，再按文档验收。无需日常 Docker，不迁聊天或 Cookie，不运行 `db:setup`、seed 或旧库导入。
+- **独立本机测试**：Docker、migration 和 seed 只用于明确隔离的测试环境。当前 v4 夹具为 12 张原图，组成幽影（5 张）、白汐（3 张）、玄翎（4 张）；它不能代替已迁移的用户数据。旧 Docker 源库与两个 ObjectStore 目录保留，不再日常写入或用于覆盖云库。
 
 完整路由预览为 `http://127.0.0.1:5173/app/login`，主演示账号为 `creator@reelay.test / reelay-demo`。演示会话通过 HttpOnly Cookie 维持；固定账号不代表正式账号系统。公网初始化与资产限制另见 [公网预览说明](docs/vercel-supabase-preview.md)。
 
@@ -90,7 +94,7 @@ git diff --check
 
 - 模块拆分：登录、主页、项目库和 HTTP adapter 已离开 `app.js`；旧画布已提取 runtime store、保存协调器、节点 task runner、主体使用控制器和内容事务模块。离散节点参数、命名、组关系与既有局部布局已完成本批治理，其余内容入口仍按产品功能逐步迁移。
 - 工程工具链：迁移期旧画布继续保留 JavaScript、配置、结构检查与真实序列化 / 只读行为测试；React 壳使用 TypeScript、Vite 与 Vitest，主要页面按 route 拆包，并通过 `npm run check` 一起验证。格式化、lint 和浏览器端到端测试在出现对应代码量与稳定主链路后再引入。
-- 数据层：会话、Workspace、Membership、Project、CanvasDocument 及个人 Media / Entity 元数据已通过 PostgreSQL 持久化，本地媒体二进制由 filesystem ObjectStore 持久保存。CanvasDocument 仍是迁移快照；撤销历史、生成任务、生成历史和积分账本未持久化，公网私有对象存储尚未接入。
+- 数据层：会话、Workspace、Membership、Project、CanvasDocument 及个人 Media / Entity 元数据已通过 PostgreSQL 持久化，本机日常 API 现使用独立云开发库和私有 Storage；本地 filesystem adapter 保留供独立测试。共享开发单素材上限为 50 MiB，filesystem 为 64 MiB；公网演示站使用分离的数据库与私有 Storage，上限仍为 4 MiB。CanvasDocument 仍是迁移快照；撤销历史、生成任务、生成历史和积分账本未持久化。
 - 依赖治理：React 壳通过包管理器使用 Lucide；旧静态画布使用仓库内的最小图标路径子集，不依赖外部 CDN 或完整 vendor 包。
 - 版本管理：已建立 Git 基线和 Agent 接力约束，后续功能应通过独立分支和小范围提交推进。
 

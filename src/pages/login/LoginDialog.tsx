@@ -10,11 +10,12 @@ import styles from "./LoginDialog.module.css";
 
 interface LoginDialogProps {
   action: string;
+  defaultAccount?: string;
   onClose: () => void;
   onBeforeSubmit?: () => void;
 }
 
-export function LoginDialog({ action, onClose, onBeforeSubmit }: LoginDialogProps) {
+export function LoginDialog({ action, defaultAccount = "creator@reelay.test", onClose, onBeforeSubmit }: LoginDialogProps) {
   const actionData = useActionData<LoginActionData>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -96,7 +97,7 @@ export function LoginDialog({ action, onClose, onBeforeSubmit }: LoginDialogProp
                     ref={accountRef}
                     name="account"
                     type="text"
-                    defaultValue="creator@reelay.test"
+                    defaultValue={defaultAccount}
                     placeholder="请输入账号"
                     autoComplete="username"
                     spellCheck={false}

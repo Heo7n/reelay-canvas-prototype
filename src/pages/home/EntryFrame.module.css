@@ -1,0 +1,52 @@
+.frame { --entry-sidebar-width: 200px; --entry-viewport-offset: 0px; display: grid; grid-template-columns: var(--entry-sidebar-width) minmax(0, 1fr); min-height: calc(100dvh - var(--entry-viewport-offset)); background-image: var(--workspace-grain); background-attachment: fixed; }
+:global(.experience-content) .frame { --entry-viewport-offset: 28px; }
+.collapsed { --entry-sidebar-width: 64px; }
+.sidebar { position: sticky; top: 0; display: flex; height: calc(100dvh - var(--entry-viewport-offset)); min-height: 320px; flex-direction: column; padding: 0 10px 20px; border-right: 1px solid var(--workspace-border); background: transparent; }
+.brandRow { display: flex; height: 80px; flex: 0 0 80px; align-items: center; justify-content: space-between; gap: 8px; }
+/* Crop the asset's actual ink (x 229–1690, y 431–648), centering it inside the row. */
+.brand > span { width: 128px; height: 28px; }
+.brand > span > img { width: 168px; top: -33.2px; left: -20px; }
+.collapseToggle { position: relative; display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--workspace-muted); cursor: pointer; }
+.collapseToggle:hover, .collapseToggle:focus-visible { background: var(--workspace-hover); color: var(--workspace-text); }
+.brandSymbol { position: relative; display: block; width: 26px; height: 26px; overflow: hidden; }
+.brandSymbol img { position: absolute; width: 204px; max-width: none; top: -43.58px; left: -24.24px; mix-blend-mode: multiply; }
+:global(html[data-theme="dark"]) .brandSymbol img { filter: invert(1); mix-blend-mode: screen; }
+.expandIcon { position: absolute; opacity: 0; }
+.collapseToggle:hover .brandSymbol, .collapseToggle:focus-visible .brandSymbol { opacity: 0; }
+.collapseToggle:hover .expandIcon, .collapseToggle:focus-visible .expandIcon { opacity: 1; }
+.sidebar svg { width: 20px; height: 20px; flex: 0 0 20px; stroke-width: 1.7; }
+.navigation { display: grid; gap: 6px; margin-top: 12px; }
+.organizationNavigation { display: grid; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--workspace-border); }
+.navigation a, .sidebarFooter a { display: flex; width: 100%; min-height: 44px; align-items: center; gap: 12px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--workspace-muted); font: inherit; font-size: 14px; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.navigation a:hover, .sidebarFooter a:hover { background: var(--workspace-hover); color: var(--workspace-text); }
+.navigation .active { background: var(--workspace-hover); color: var(--workspace-text); font-weight: 550; }
+.sidebarFooter { display: grid; gap: 4px; margin-top: auto; padding-top: 32px; }
+.sidebarFooter a { font-size: 13px; }
+.sidebarFooter svg { width: 18px; height: 18px; }
+.body { display: flex; min-width: 0; flex-direction: column; }
+.topbar { position: sticky; top: 0; z-index: 30; height: 80px; flex-shrink: 0; background-color: var(--workspace-bg); background-image: var(--workspace-grain); background-attachment: fixed; }
+.topbar > header { height: 80px; padding: 0 32px; background: transparent; }
+.topbar.compactTopbar, .topbar.compactTopbar > header { height: 64px; }
+.skipLink { position: fixed; z-index: 100; top: 12px; left: 12px; padding: 12px 18px; border-radius: 8px; background: var(--workspace-text); color: var(--workspace-bg); transform: translateY(-150%); }
+.skipLink:focus { transform: none; }
+.sidebar a:focus-visible, .sidebar button:focus-visible { outline: 2px solid var(--workspace-text); outline-offset: 3px; }
+.collapsed .sidebar { padding-inline: 9px; }
+.collapsed .brandRow { justify-content: center; }
+.collapsed .brand { display: none; }
+.collapsed .collapseToggle { width: 44px; height: 44px; flex-basis: 44px; }
+.collapsed .navigation span, .collapsed .sidebarFooter span { display: none; }
+.collapsed .navigation a, .collapsed .sidebarFooter a { width: 44px; justify-self: center; justify-content: center; padding-inline: 0; }
+@media (max-width: 600px) {
+  .frame { --entry-sidebar-width: 60px; }
+  .sidebar, .collapsed .sidebar { padding: 0 8px 14px; }
+  .brandRow { height: 72px; flex-basis: 72px; justify-content: center; }
+  .brand, .collapsed .brand { display: inline-flex; }
+  .brand > span { width: 26px; height: 26px; }
+  .brand > span > img { width: 204px; top: -43.58px; left: -24.24px; }
+  .collapseToggle { display: none; }
+  .navigation span, .sidebarFooter span { display: none; }
+  .navigation a, .sidebarFooter a { justify-content: center; padding-inline: 0; }
+  .navigation { margin-top: 12px; }
+  .topbar, .topbar > header { height: 72px; }
+  .topbar > header { padding-inline: 16px; }
+}

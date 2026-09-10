@@ -43,6 +43,20 @@ function editDraft(overrides = {}) {
   });
 }
 
+test("unpersisted media renames are draft edits and cancellation restores their original names", () => {
+  const draft = createDraft({ initialMediaRefs: ["portrait"] });
+  draft.renameMedia("portrait", "新角色.png", { staged: true });
+  assert.equal(draft.isDirty(), true);
+  draft.renameMedia("portrait", "角色正面.png", { staged: true });
+  assert.equal(draft.isDirty(), false);
+  draft.renameMedia("portrait", "新角色.png", { staged: true });
+  draft.cancel();
+  assert.equal(draft.listMedia()[0].displayName, "角色正面.png");
+  assert.equal(draft.isDirty(), false);
+  draft.renameMedia("portrait", "已经同步的名称.png");
+  assert.equal(draft.isDirty(), false, "persisted global renames are separate from Entity draft edits");
+});
+
 test("creates an empty draft with the fixed creation title and isolated initial state", () => {
   assert.ok(Object.isFrozen(model));
   assert.deepEqual(plain(Object.keys(model)), ["createCanvasEntityEditorDraft"]);
@@ -68,6 +82,22 @@ test("creates an empty draft with the fixed creation title and isolated initial 
   });
   draft.setName("新主体");
   assert.equal(draft.getTitle(), "新建主体");
+});
+
+test("seeded creation uses ordered references as a clean baseline and still requires a name", () => {
+  const refs = ["voice", "portrait", "voice"];
+  const draft = createDraft({ initialMediaRefs: refs, initialCoverMediaId: "portrait" });
+  assert.deepEqual(plain(draft.getState().mediaRefs), [{ mediaId: "voice", order: 0 }, { mediaId: "portrait", order: 1 }]);
+  assert.equal(draft.getState().selectedPreviewId, "portrait");
+  assert.equal(draft.isDirty(), false);
+  refs.push("turnaround");
+  assert.equal(draft.getState().mediaRefs.length, 2);
+  assert.equal(draft.getState().valid, false);
+  draft.setName("角色参考");
+  assert.equal(draft.getState().valid, true);
+  assert.equal(draft.isDirty(), true);
+  assert.throws(() => createDraft({ initialMediaRefs: ["unknown"] }), /missing Media/);
+  assert.throws(() => createDraft({ initialMediaRefs: ["voice"], initialCoverMediaId: "voice" }), /must be an image/);
 });
 
 test("opens an edit draft with the current Entity name, normalized reference order, and preview", () => {

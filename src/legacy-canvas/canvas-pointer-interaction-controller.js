@@ -102,6 +102,7 @@
         options.clearSelection();
         options.collapseGeneratorPanels();
       }
+      options.setAction(null);
       options.render();
     }
 

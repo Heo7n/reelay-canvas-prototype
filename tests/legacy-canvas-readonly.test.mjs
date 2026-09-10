@@ -16,6 +16,8 @@ const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-hist
 const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
 const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
 const assetLibraryMenuController = await readFile(new URL("src/legacy-canvas/canvas-asset-library-menu-controller.js", root), "utf8");
+const arrangeModules = await Promise.all(["layout", "scope", "controller"].map((name) => readFile(new URL(`src/legacy-canvas/canvas-arrange-${name}.js`, root), "utf8")));
+const toolbarMenuController = await readFile(new URL("src/legacy-canvas/canvas-toolbar-menu-controller.js", root), "utf8");
 const parameterHelpController = await readFile(new URL("src/legacy-canvas/canvas-parameter-help-controller.js", root), "utf8");
 const referenceOrder = await readFile(new URL("src/legacy-canvas/canvas-reference-order.js", root), "utf8");
 const referenceStripController = await readFile(new URL("src/legacy-canvas/canvas-reference-strip-controller.js", root), "utf8");
@@ -29,6 +31,10 @@ const generationModules = await Promise.all([
   "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-record-view.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
   "src/legacy-canvas/canvas-agent-result-placement.js",
 ].map((path) => readFile(new URL(path, root), "utf8")));
+const [selectionEntityModel, entityMediaImport] = await Promise.all([
+  readFile(new URL("src/legacy-canvas/canvas-selection-entity-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-media-import.js", root), "utf8"),
+]);
 const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
@@ -71,9 +77,11 @@ const [html, catalog, config, connections, connectionInteraction, connectionFeed
   readFile(new URL("app.js", root), "utf8"),
 ]);
 
-const [nodeEditorLayout, nodePromptView] = await Promise.all([
+const [nodeEditorLayout, nodePromptView, mediaImageView, mediaPreview] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-node-editor-layout.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-node-prompt-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-image-view.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-media-preview.js", root), "utf8"),
 ]);
 
 test("a hosted canvas enforces read-only access, preserves viewport controls, and saves guarded menu renames", (t) => {
@@ -117,6 +125,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(layerReconciler);
   window.eval(generatorModelPolicy);
   window.eval(popoverPlacement);
+  window.eval(toolbarMenuController);
+  arrangeModules.forEach((source) => window.eval(source));
   window.eval(parameterHelpController);
   window.eval(referenceOrder);
   window.eval(referenceStripController);
@@ -145,6 +155,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(entityUseView);
   window.eval(entityUseController);
   window.eval(mediaToolbarView);
+  window.eval(mediaImageView);
+  window.eval(mediaPreview);
   window.eval(runtimeStore);
   window.eval(nodeTaskRunner);
   window.eval(contentCommands);
@@ -153,6 +165,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(persistenceCoordinator);
   window.eval(mediaAssetCoordinator);
   window.eval(entityAssetCoordinator);
+  window.eval(selectionEntityModel);
+  window.eval(entityMediaImport);
   window.eval(agentHistory);
   window.eval(agentParameters);
   window.eval(agentModels);
@@ -254,6 +268,26 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-label"), "个人：林静");
   assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-expanded"), "false");
   assert.equal(window.document.querySelector("#profileCreditValue").textContent, "3,000");
+  assert.equal(window.document.documentElement.dataset.theme, "light", "initial theme comes from the hosted context");
+  assert.equal(postedMessages.filter((message) => message.type === "canvas:theme-change").length, 0, "host initialization does not echo a theme change");
+  const documentBeforeTheme = JSON.stringify(window.createCanvasDocumentSnapshot());
+  const storageSetItem = window.Storage.prototype.setItem;
+  window.Storage.prototype.setItem = () => { throw new Error("storage blocked"); };
+  try {
+    window.applyTheme("dark");
+    assert.equal(window.document.documentElement.dataset.theme, "dark");
+    assert.equal(postedMessages.at(-1).type, "canvas:theme-change");
+    assert.equal(postedMessages.at(-1).theme, "dark");
+    const messageCount = postedMessages.length;
+    window.applyTheme("dark");
+    assert.equal(postedMessages.length, messageCount, "unchanged themes are not echoed");
+    window.applyTheme("light");
+    assert.equal(postedMessages.at(-1).theme, "light");
+  } finally {
+    window.Storage.prototype.setItem = storageSetItem;
+  }
+  assert.equal(JSON.stringify(window.createCanvasDocumentSnapshot()), documentBeforeTheme);
+  assert.equal(window.document.querySelector("#railCreditValue").textContent, "3000");
   assert.equal(
     window.document.querySelector("[data-profile-action='credits']").getAttribute("aria-label"),
     "查看我的积分，当前 3,000",
@@ -284,6 +318,16 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   assert.equal(postedMessages.at(-1).type, "canvas:open-account");
   assert.equal(postedMessages.at(-1).section, "credits");
+
+  const creditWidget = window.document.querySelector("#canvasCreditsBtn");
+  assert.equal(creditWidget.getAttribute("aria-label"), "查看我的积分，当前可用 3,000");
+  assert.equal(creditWidget.closest("#railProfileBtn"), null);
+  const messagesBeforeCreditWidget = postedMessages.length;
+  creditWidget.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(postedMessages.length, messagesBeforeCreditWidget + 1);
+  assert.equal(postedMessages.at(-1).type, "canvas:open-account");
+  assert.equal(postedMessages.at(-1).section, "credits");
+  assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-expanded"), "false");
 
   window.document.querySelector("[data-profile-action='account']")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

@@ -132,14 +132,15 @@ function parseByteRange(value: string | undefined, byteSize: number): ByteRange 
 function setStoredObjectHeaders(reply: FastifyReply, metadata: StoredObjectMetadata): FastifyReply {
   return reply
     .header("Accept-Ranges", "bytes")
-    .header("Cache-Control", "private, no-store")
+    .header("Cache-Control", "private, no-cache")
+    .header("Vary", "Cookie")
     .header("Content-Type", metadata.contentType)
     .header("ETag", `"${metadata.etag}"`)
     .header("X-Content-Type-Options", "nosniff");
 }
 
 function unavailableObject(reply: FastifyReply) {
-  return reply.code(503).send({
+  return reply.header("Cache-Control", "private, no-store").code(503).send({
     error: { code: "asset_content_unavailable", message: "素材内容暂时不可用。" },
   });
 }
@@ -148,20 +149,42 @@ async function sendStoredObject(
   request: FastifyRequest,
   reply: FastifyReply,
   objectStore: ObjectStore,
-  objectKey: string,
+  asset: WorkspaceMediaAsset,
 ) {
-  const metadata = await objectStore.headObject(objectKey);
-  if (!metadata) return unavailableObject(reply);
-  const range = parseByteRange(request.headers.range, metadata.byteSize);
+  // The authorized, immutable asset record already contains the representation
+  // identity and length. Revalidation must not download that same object again.
+  const metadata: StoredObjectMetadata = {
+    objectKey: asset.objectKey,
+    contentType: asset.contentType,
+    byteSize: asset.byteSize,
+    checksumSha256: asset.checksumSha256,
+    etag: asset.checksumSha256,
+  };
+  const etag = `"${metadata.etag}"`;
+  const unchanged = request.headers["if-none-match"]?.split(",").some((value) => {
+    const token = value.trim();
+    return token === "*" || token.replace(/^W\//, "") === etag;
+  });
+  if (unchanged) return setStoredObjectHeaders(reply, metadata).code(304).send();
+  if (request.method === "HEAD") {
+    return setStoredObjectHeaders(reply, metadata)
+      .header("Content-Length", String(metadata.byteSize)).send();
+  }
+  // Only a matching strong validator can safely resume an earlier byte range.
+  const ifRange = request.headers["if-range"];
+  const rangeHeader = ifRange !== undefined && (typeof ifRange !== "string" || ifRange.trim() !== etag)
+    ? undefined : request.headers.range;
+  const range = parseByteRange(rangeHeader, metadata.byteSize);
 
   if (range === "invalid") {
     return setStoredObjectHeaders(reply, metadata)
       .code(416)
+      .header("Cache-Control", "private, no-store")
       .header("Content-Range", `bytes */${metadata.byteSize}`)
       .send();
   }
 
-  const object = await objectStore.getObject(objectKey, range ? { range } : undefined);
+  const object = await objectStore.getObject(asset.objectKey, range ? { range } : undefined);
   const expectedLength = range ? range.end - range.start + 1 : metadata.byteSize;
   if (
     !object
@@ -209,11 +232,11 @@ async function sendAssetContent(
 ) {
   const query = AssetContentQuerySchema.safeParse(request.query);
   if (!query.success) return reply.code(400).send({ error: { code: "invalid_request", message: "素材预览参数无效。" } });
-  if (!query.data.preview) return sendStoredObject(request, reply, objectStore, asset.objectKey);
+  if (!query.data.preview) return sendStoredObject(request, reply, objectStore, asset);
   if (asset.mediaKind !== "image") {
     return reply.code(415).send({ error: { code: "preview_unsupported", message: "此素材不支持图片缩略预览。" } });
   }
-  const etag = previews.etag(asset);
+  const etag = previews.etag(asset, query.data.preview);
   const unchanged = request.headers["if-none-match"]?.split(",").some((value) => {
     const token = value.trim();
     return token === "*" || token.replace(/^W\//, "") === etag.replace(/^W\//, "");
@@ -221,7 +244,7 @@ async function sendAssetContent(
   reply.header("Cache-Control", "private, no-cache").header("Vary", "Cookie").header("ETag", etag);
   if (unchanged) return reply.code(304).send();
   try {
-    const preview = await previews.getPreview(asset);
+    const preview = await previews.getPreview(asset, query.data.preview);
     return reply
       .type("image/webp")
       .header("Content-Length", String(preview.body.byteLength))
@@ -455,25 +478,30 @@ export async function registerAssetRoutes(
     }
   });
 
-  app.get("/api/workspaces/:workspaceId/media-assets/:assetId/content", async (request, reply) => {
-    const actor = await requireActor(request, reply, dependencies.sessions);
-    if (!actor) return reply;
-    const params = WorkspaceAssetItemParamsSchema.safeParse(request.params);
-    if (!params.success) return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
-    try {
-      const asset = await dependencies.assetStore.getPersonalAsset({
-        actorId: actor.id,
-        workspaceId: params.data.workspaceId,
-        assetId: params.data.assetId,
-      });
-      if (!asset) return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
-      return sendAssetContent(request, reply, dependencies.objectStore, previews, asset);
-    } catch (error) {
-      if (error instanceof AssetWorkspaceUnavailableError) {
-        return reply.code(404).send({ error: { code: "workspace_not_found", message: "工作空间不存在。" } });
+  app.route({
+    method: ["GET", "HEAD"],
+    url: "/api/workspaces/:workspaceId/media-assets/:assetId/content",
+    handler: async (request, reply) => {
+      reply.header("Cache-Control", "private, no-store").header("Vary", "Cookie");
+      const actor = await requireActor(request, reply, dependencies.sessions);
+      if (!actor) return reply;
+      const params = WorkspaceAssetItemParamsSchema.safeParse(request.params);
+      if (!params.success) return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
+      try {
+        const asset = await dependencies.assetStore.getPersonalAsset({
+          actorId: actor.id,
+          workspaceId: params.data.workspaceId,
+          assetId: params.data.assetId,
+        });
+        if (!asset) return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
+        return sendAssetContent(request, reply, dependencies.objectStore, previews, asset);
+      } catch (error) {
+        if (error instanceof AssetWorkspaceUnavailableError) {
+          return reply.code(404).send({ error: { code: "workspace_not_found", message: "工作空间不存在。" } });
+        }
+        throw error;
       }
-      throw error;
-    }
+    },
   });
 
   app.get("/api/projects/:projectId/asset-references", async (request, reply) => {
@@ -526,9 +554,11 @@ export async function registerAssetRoutes(
     }
   });
 
-  app.get(
-    "/api/projects/:projectId/asset-references/:referenceId/content",
-    async (request, reply) => {
+  app.route({
+    method: ["GET", "HEAD"],
+    url: "/api/projects/:projectId/asset-references/:referenceId/content",
+    handler: async (request, reply) => {
+      reply.header("Cache-Control", "private, no-store").header("Vary", "Cookie");
       const actor = await requireActor(request, reply, dependencies.sessions);
       if (!actor) return reply;
       const params = ProjectAssetContentParamsSchema.safeParse(request.params);
@@ -548,5 +578,5 @@ export async function registerAssetRoutes(
         throw error;
       }
     },
-  );
+  });
 }

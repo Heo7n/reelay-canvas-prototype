@@ -526,6 +526,7 @@ sequenceDiagram
 - 在已有 WorkspaceMediaAsset + personal placement + ProjectAssetReference + personal Entity 切片上继续补齐 Folder、organization placement、Entity 删除 / 恢复、Node 级稳定引用与 GenerationResult 晋升；公网部署改用私有对象存储，不复用本地 filesystem adapter。
 - 生成任务与积分预占原子提交；成功只结算一次，失败 / 取消只释放或退款一次；重试复用幂等键且不得重复扣费。
 - 真实生成结果先登记为 GenerationResult，由用户或产品规则显式提升为 WorkspaceMediaAsset。
+- 当前画布多选创建主体已支持确认时将允许的临时媒体导入个人默认目录，并提供跨目录关联素材视图（详见产品规范 §7.6）；这不替代后续正式 GenerationResult 晋升命令，仍需补齐结果身份、来源和持久引用边界。
 
 #### Phase 1：核心工作台
 

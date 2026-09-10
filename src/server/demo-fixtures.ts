@@ -167,7 +167,7 @@ export function createDemoSeed(): DemoSeed {
         createdByActorId: "actor-tianmaochao",
         name: "品牌故事片脚本",
         updatedAt: "2026-07-18T09:00:00.000Z",
-        coverAssetId: null,
+        coverAssetId: "demo-cover-brand-story",
       },
       {
         id: "project-personal-concept",
@@ -176,7 +176,7 @@ export function createDemoSeed(): DemoSeed {
         createdByActorId: "actor-tianmaochao",
         name: "个人概念短片",
         updatedAt: "2026-07-17T08:00:00.000Z",
-        coverAssetId: null,
+        coverAssetId: "demo-cover-concept",
       },
       {
         id: "project-city-emotion",

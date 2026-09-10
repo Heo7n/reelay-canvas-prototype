@@ -33,7 +33,101 @@ function storedPreview(key: string, body: Uint8Array): StoredObject {
   return { objectKey: key, body, contentType: "image/webp", byteSize: body.byteLength, checksumSha256: digest(body), etag: digest(body) };
 }
 
+function pngChunk(kind: string, data: Buffer): Buffer {
+  const chunk = Buffer.alloc(data.length + 12);
+  chunk.writeUInt32BE(data.length, 0);
+  chunk.write(kind, 4, 4, "ascii");
+  data.copy(chunk, 8);
+  chunk.writeUInt32BE(crc32(chunk.subarray(4, chunk.length - 4)), chunk.length - 4);
+  return chunk;
+}
+
+async function apng(): Promise<Buffer> {
+  const first = await png(12, 12);
+  const second = await sharp({ create: { width: 12, height: 12, channels: 4, background: "red" } }).png().toBuffer();
+  const chunks = (body: Buffer, kind: string) => {
+    const found: Buffer[] = [];
+    for (let offset = 8; offset + 12 <= body.length;) {
+      const length = body.readUInt32BE(offset);
+      if (body.toString("ascii", offset + 4, offset + 8) === kind) found.push(body.subarray(offset + 8, offset + 8 + length));
+      offset += 12 + length;
+    }
+    return found;
+  };
+  const control = Buffer.alloc(8);
+  control.writeUInt32BE(2, 0);
+  const frame = (sequence: number) => {
+    const data = Buffer.alloc(26);
+    data.writeUInt32BE(sequence, 0);
+    data.writeUInt32BE(12, 4);
+    data.writeUInt32BE(12, 8);
+    data.writeUInt16BE(1, 20);
+    data.writeUInt16BE(10, 22);
+    return pngChunk("fcTL", data);
+  };
+  const secondData = Buffer.concat([Buffer.from([0, 0, 0, 2]), ...chunks(second, "IDAT")]);
+  return Buffer.concat([
+    first.subarray(0, 8), pngChunk("IHDR", chunks(first, "IHDR")[0]),
+    pngChunk("acTL", control), frame(0), pngChunk("IDAT", Buffer.concat(chunks(first, "IDAT"))),
+    frame(1), pngChunk("fdAT", secondData), pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 describe("ImagePreviewService", () => {
+  it("canvas variants certify static sources in a separate persistent cache and reuse proven JPEG library previews", async () => {
+    const store = new InMemoryObjectStore();
+    const service = new ImagePreviewService(store);
+    const asset = await original(store, await png());
+    const library = await service.getPreview(asset);
+    const read = vi.spyOn(store, "getObject");
+    const canvas = await service.getPreview(asset, "canvas");
+    expect(canvas.objectKey).not.toBe(library.objectKey);
+    expect(service.etag(asset, "canvas")).not.toBe(service.etag(asset));
+    expect(read.mock.calls.some(([key]) => key === asset.objectKey)).toBe(true);
+    expect(await sharp(canvas.body).metadata()).toMatchObject({ width: 512, height: 341, format: "webp" });
+    read.mockClear();
+    await expect(new ImagePreviewService(store).getPreview(asset, "canvas")).resolves.toEqual(canvas);
+    expect(read.mock.calls).toEqual([[canvas.objectKey]]);
+
+    const jpeg = await original(store, await sharp(await png()).jpeg().toBuffer(), "image/jpeg", "workspace/static-jpeg");
+    const jpegLibrary = await service.getPreview(jpeg);
+    read.mockClear();
+    expect(service.etag(jpeg, "canvas")).toBe(service.etag(jpeg));
+    await expect(service.getPreview(jpeg, "canvas")).resolves.toEqual(jpegLibrary);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("renamed GIF, animated WebP and APNG cannot reuse a static first-frame library preview on the canvas", async () => {
+    const pixels = Buffer.concat([Buffer.alloc(12 * 12 * 3, Buffer.from([255, 0, 0])), Buffer.alloc(12 * 12 * 3, Buffer.from([0, 0, 255]))]);
+    const raw = { width: 12, height: 24, channels: 3 as const, pageHeight: 12 };
+    const gif = await sharp(pixels, { raw }).gif({ delay: [100, 100], loop: 0 }).toBuffer();
+    const webp = await sharp(pixels, { raw }).webp({ delay: [100, 100], loop: 0 }).toBuffer();
+    const store = new InMemoryObjectStore();
+    const service = new ImagePreviewService(store);
+    for (const [index, [body, contentType]] of ([
+      [gif, "image/gif"], [webp, "image/webp"], [await apng(), "image/png"],
+    ] as const).entries()) {
+      const asset = { ...await original(store, body, contentType, `workspace/animation-${index}`), displayName: "角色动效" };
+      const library = await service.getPreview(asset);
+      expect((await sharp(library.body).metadata()).pages ?? 1).toBe(1);
+      const write = vi.spyOn(store, "putObject");
+      await expect(service.getPreview(asset, "canvas")).rejects.toBeInstanceOf(ImagePreviewUnsupportedError);
+      expect(write).not.toHaveBeenCalled();
+      write.mockRestore();
+      expect((await store.getObject(asset.objectKey))?.body).toEqual(new Uint8Array(body));
+    }
+  });
+
+  it("canvas previews reject an AVIF image sequence brand even when its first image is decodable", async () => {
+    const store = new InMemoryObjectStore();
+    const sequence = await sharp(await png(32, 16)).avif().toBuffer();
+    // An avis-compatible ftyp is the container-level animation contract;
+    // decoders that inspect only its primary image must not flatten it.
+    sequence.write("avis", 8, 4, "ascii");
+    const asset = await original(store, sequence, "image/avif");
+    await expect(new ImagePreviewService(store).getPreview(asset, "canvas")).rejects.toBeInstanceOf(ImagePreviewUnsupportedError);
+  });
+
   it("creates a bounded real WebP, preserves the original, and serves persistent cache without re-reading the original", async () => {
     const store = new InMemoryObjectStore();
     const body = await png();
@@ -186,7 +280,7 @@ describe("ImagePreviewService", () => {
   it("does not overwrite an invalid immutable cache and validates its dimensions, metadata and bytes", async () => {
     const store = new InMemoryObjectStore();
     const asset = await original(store, await png());
-    const service = new ImagePreviewService(store);
+    const service = new ImagePreviewService(store, { maxCacheBytes: 0 });
     const good = await service.getPreview(asset);
     const read = vi.spyOn(store, "getObject");
     const write = vi.spyOn(store, "putObject");
@@ -218,5 +312,118 @@ describe("ImagePreviewService", () => {
     expect(preview.body).toEqual(new Uint8Array(winnerBody));
     expect(write).toHaveBeenCalledTimes(1);
     expect((await store.getObject(asset.objectKey))?.checksumSha256).toBe(asset.checksumSha256);
+  });
+});
+
+describe("ImagePreviewService memory cache", () => {
+  it("reuses validated derived bytes without Storage reads and isolates callers, variants and storage buffers", async () => {
+    const store = new InMemoryObjectStore();
+    const asset = await original(store, await png());
+    const persisted = await new ImagePreviewService(store, { maxCacheBytes: 0 }).getPreview(asset);
+    const read = vi.spyOn(store, "getObject").mockResolvedValueOnce(persisted);
+    const service = new ImagePreviewService(store);
+    const first = await service.getPreview(asset);
+    const expectedBody = Uint8Array.from(first.body);
+    persisted.body.fill(0);
+    first.body.fill(1);
+    first.contentType = "image/png";
+    read.mockClear();
+    const cached = await service.getPreview(asset);
+    expect(cached.body).toEqual(expectedBody);
+    expect(cached.contentType).toBe("image/webp");
+    expect(cached.checksumSha256).toBe(digest(cached.body));
+    expect(read).not.toHaveBeenCalled();
+    cached.body.fill(2);
+    expect((await service.getPreview(asset)).body).toEqual(expectedBody);
+
+    const canvas = await service.getPreview(asset, "canvas");
+    expect(canvas.objectKey).not.toBe(cached.objectKey);
+    expect(read.mock.calls.some(([key]) => key === asset.objectKey)).toBe(true);
+    read.mockClear();
+    await service.getPreview(asset, "canvas");
+    await service.getPreview(asset);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it.each(["entries", "bytes"] as const)("evicts the least recently used derived image at its %s limit", async (limit) => {
+    const store = new InMemoryObjectStore();
+    const body = await png(64, 32);
+    const assets = await Promise.all([0, 1, 2].map((index) => original(store, body, "image/png", `workspace/lru-${index}`)));
+    const seed = new ImagePreviewService(store, { maxCacheBytes: 0 });
+    const previews = await Promise.all(assets.map((asset) => seed.getPreview(asset)));
+    expect(new Set(previews.map((preview) => preview.body.byteLength)).size).toBe(1);
+    const service = new ImagePreviewService(store, limit === "entries"
+      ? { maxCacheEntries: 2 }
+      : { maxCacheBytes: previews[0].body.byteLength * 2 });
+    await service.getPreview(assets[0]);
+    await service.getPreview(assets[1]);
+    await service.getPreview(assets[0]);
+    await service.getPreview(assets[2]);
+    const read = vi.spyOn(store, "getObject");
+    await service.getPreview(assets[0]);
+    await service.getPreview(assets[2]);
+    expect(read).not.toHaveBeenCalled();
+    await service.getPreview(assets[1]);
+    expect(read.mock.calls).toEqual([[previews[1].objectKey]]);
+  });
+
+  it("renews idle expiry on a hit, then reloads the persistent preview at the expiry boundary", async () => {
+    const store = new InMemoryObjectStore();
+    const asset = await original(store, await png(64, 32));
+    let now = 0;
+    const service = new ImagePreviewService(store, { cacheIdleTtlMs: 100, now: () => now });
+    const preview = await service.getPreview(asset);
+    const read = vi.spyOn(store, "getObject");
+    now = 99;
+    await service.getPreview(asset);
+    now = 150;
+    await service.getPreview(asset);
+    expect(read).not.toHaveBeenCalled();
+    now = 250;
+    await service.getPreview(asset);
+    expect(read.mock.calls).toEqual([[preview.objectKey]]);
+  });
+
+  it("returns oversized previews without caching them or evicting a smaller valid entry", async () => {
+    const store = new InMemoryObjectStore();
+    const smallAsset = await original(store, await png(4, 4), "image/png", "workspace/small");
+    const largeAsset = await original(store, await png(), "image/png", "workspace/large");
+    const seed = new ImagePreviewService(store, { maxCacheBytes: 0 });
+    const small = await seed.getPreview(smallAsset);
+    const large = await seed.getPreview(largeAsset);
+    expect(large.body.byteLength).toBeGreaterThan(small.body.byteLength);
+    const service = new ImagePreviewService(store, { maxCacheBytes: small.body.byteLength });
+    await service.getPreview(smallAsset);
+    const read = vi.spyOn(store, "getObject");
+    await expect(service.getPreview(largeAsset)).resolves.toEqual(large);
+    await expect(service.getPreview(largeAsset)).resolves.toEqual(large);
+    await expect(service.getPreview(smallAsset)).resolves.toEqual(small);
+    expect(read.mock.calls).toEqual([[large.objectKey], [large.objectKey]]);
+  });
+
+  it("does not cache invalid content or failures and caches the next validated retry", async () => {
+    const store = new InMemoryObjectStore();
+    const asset = await original(store, await png(64, 32));
+    const preview = await new ImagePreviewService(store, { maxCacheBytes: 0 }).getPreview(asset);
+    const service = new ImagePreviewService(store);
+    const read = vi.spyOn(store, "getObject")
+      .mockRejectedValueOnce(new Error("storage unavailable"))
+      .mockResolvedValueOnce({ ...preview, checksumSha256: "f".repeat(64) });
+    await expect(service.getPreview(asset)).rejects.toBeInstanceOf(ImagePreviewUnavailableError);
+    await expect(service.getPreview(asset)).rejects.toBeInstanceOf(ImagePreviewUnavailableError);
+    await expect(service.getPreview(asset)).resolves.toEqual(preview);
+    expect(read).toHaveBeenCalledTimes(3);
+    await expect(service.getPreview(asset)).resolves.toEqual(preview);
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(["maxCacheBytes", "maxCacheEntries", "cacheIdleTtlMs"] as const)("supports disabling %s without changing returned content", async (option) => {
+    const store = new InMemoryObjectStore();
+    const asset = await original(store, await png(4, 4));
+    const service = new ImagePreviewService(store, { [option]: 0 });
+    const preview = await service.getPreview(asset);
+    const read = vi.spyOn(store, "getObject");
+    await expect(service.getPreview(asset)).resolves.toEqual(preview);
+    expect(read.mock.calls).toEqual([[preview.objectKey]]);
   });
 });

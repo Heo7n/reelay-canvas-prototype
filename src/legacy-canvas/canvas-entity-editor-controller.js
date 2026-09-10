@@ -20,6 +20,8 @@
     const persistFiles = requireFunction(options.persistFiles, "persistFiles");
     const renameMedia = requireFunction(options.renameMedia, "renameMedia");
     const saveEntity = requireFunction(options.saveEntity, "saveEntity");
+    const getMediaSaveNotice = typeof options.getMediaSaveNotice === "function" ? options.getMediaSaveNotice : () => "";
+    const makeIdempotencyKey = typeof options.makeIdempotencyKey === "function" ? options.makeIdempotencyKey : () => root.crypto.randomUUID();
     const confirmDiscard = typeof options.confirmDiscard === "function" ? options.confirmDiscard : () => true;
     const onVisibilityChange = typeof options.onVisibilityChange === "function" ? options.onVisibilityChange : () => undefined;
     const onExitStart = typeof options.onExitStart === "function" ? options.onExitStart : () => undefined;
@@ -50,13 +52,17 @@
     let permissions = { ...basePermissions };
     let closeRequest = null;
     let exitSession = null;
+    let sourceNotice = "";
+    let returnFocus = null;
+    let isContextValid = () => true;
+    let createKeys = new Map();
 
     function isBusy() {
       return submitting || uploading || mediaRenameBusy || Boolean(closeRequest) || Boolean(exitSession);
     }
 
     function canEditDraft() {
-      return Boolean(draft) && permissions.mutable && !isBusy();
+      return Boolean(draft) && permissions.mutable && !isBusy() && isContextValid();
     }
 
     function clearErrors(...names) {
@@ -83,12 +89,13 @@
       }
       const state = draft.getState();
       const media = currentMedia();
-      host.innerHTML = view.renderEntityEditor({
+      const markup = view.renderEntityEditor({
         ...state,
         entity: { id: entityId, name: state.name, description: state.description, coverMediaId: state.coverMediaId },
         media,
         previewMedia: media.find((item) => item.id === state.selectedPreviewId) || null,
-        mutable: permissions.mutable,
+        mutable: permissions.mutable && isContextValid(),
+        sourceNotice: [sourceNotice, getMediaSaveNotice(media, { mode })].filter(Boolean).join(" "),
         canAddFromLibrary: permissions.canAddFromLibrary,
         canUpload: permissions.canUpload,
         submitting,
@@ -98,6 +105,7 @@
         mediaRenameValue,
         errors,
       });
+      root.REELAY_CANVAS_MEDIA_PREVIEW.renderPreservingMedia(host, markup, "[data-entity-editor-preview]");
       setHostVisibility(host, true);
       refreshIcons();
       if (focus) {
@@ -141,6 +149,7 @@
         renderEditor({ focus: "[data-entity-editor-preview-name]" });
         return false;
       }
+      if (!canEditDraft()) return false;
       const baseName = String(input?.value ?? mediaRenameValue).trim();
       if (!baseName) {
         onError(new Error("文件名称不能为空"));
@@ -163,11 +172,19 @@
       }
 
       mediaRenameBusy = true;
+      const renamingDraft = draft;
+      const renameContextValid = isContextValid;
       mediaRenameValue = baseName;
       renderEditor();
       try {
         const updated = await renameMedia({ mediaId, displayName, media: current });
-        draft?.renameMedia(mediaId, updated?.displayName || updated?.name || displayName);
+        if (draft !== renamingDraft) return false;
+        if (!renameContextValid()) {
+          mediaRenameBusy = false;
+          renderEditor();
+          return false;
+        }
+        draft.renameMedia(mediaId, updated?.displayName || updated?.name || displayName, { staged: updated?.staged === true });
         renamingMediaId = null;
         mediaRenameValue = "";
         mediaRenameExtension = "";
@@ -175,8 +192,9 @@
         if (draft) renderEditor({ focus: "[data-entity-editor-preview-name]" });
         return true;
       } catch (error) {
+        if (draft !== renamingDraft) return false;
         mediaRenameBusy = false;
-        onError(error);
+        if (renameContextValid()) onError(error);
         if (draft) renderEditor({ focus: "[data-entity-editor-preview-rename]" });
         return false;
       }
@@ -261,6 +279,9 @@
 
     function finishClose() {
       const closedEntityId = entityId;
+      const restoreFocus = returnFocus;
+      returnFocus = null;
+      sourceNotice = "";
       const animations = exitSession?.animations || [];
       exitSession = null;
       closeRequest = null;
@@ -277,6 +298,7 @@
       closePicker();
       renderEditor();
       onVisibilityChange(false, { entityId: closedEntityId });
+      restoreFocus?.();
     }
 
     async function exitEditor(expectedDraft) {
@@ -324,6 +346,10 @@
     }
 
     async function submit() {
+      if (draft && !isContextValid()) {
+        onError(new Error("画布或权限已变化，请返回画布后重新选择素材"));
+        return;
+      }
       if (!canEditDraft()) return;
       let payload;
       try {
@@ -337,9 +363,21 @@
       submitting = true;
       renderEditor();
       const savingDraft = draft;
+      const saveContextValid = isContextValid;
       try {
-        const entity = await saveEntity({ mode, entityId, ...payload });
+        const signature = JSON.stringify(payload);
+        if (mode === "create" && !createKeys.has(signature)) createKeys.set(signature, makeIdempotencyKey());
+        const entity = await saveEntity({ mode, entityId, ...payload }, {
+          media: currentMedia(),
+          isContextValid: () => draft === savingDraft && saveContextValid(),
+          idempotencyKey: mode === "create" ? createKeys.get(signature) : undefined,
+        });
         if (draft !== savingDraft) return;
+        if (!isContextValid()) {
+          finishClose();
+          return;
+        }
+        entityId = entity.id;
         onSaved(entity);
         await exitEditor(savingDraft);
       } catch (error) {
@@ -366,11 +404,20 @@
         canAddFromLibrary: basePermissions.canAddFromLibrary && input.canAddFromLibrary !== false,
         canUpload: basePermissions.canUpload && input.canUpload !== false,
       };
+      sourceNotice = String(input.sourceNotice || "");
+      returnFocus = typeof input.returnFocus === "function" ? input.returnFocus : null;
+      isContextValid = typeof input.isContextValid === "function" ? input.isContextValid : () => true;
+      createKeys = new Map();
       const draftOptions = {
         mode,
         entity: input.entity,
         media: Array.isArray(input.media) ? input.media : [],
       };
+      if (mode === "create" && Array.isArray(input.initialMedia)) {
+        draftOptions.media = input.initialMedia;
+        draftOptions.initialMediaRefs = input.initialMedia.map((media) => media.id);
+        draftOptions.initialCoverMediaId = input.initialMedia.find((media) => (media.mediaKind || media.type) === "image")?.id || null;
+      }
       if (Object.prototype.hasOwnProperty.call(input, "expectedVersion")) {
         draftOptions.expectedVersion = input.expectedVersion;
       }
@@ -551,6 +598,7 @@
         return;
       }
       if (event.target.closest("[data-entity-picker-confirm]")) {
+        if (!canEditDraft()) return;
         const selected = pickerMedia.filter((item) => pickerSelectedIds.has(String(item.id)));
         if (selected.length) {
           draft.addMediaBatch(selected);
@@ -566,20 +614,24 @@
       uploadInput.value = "";
       if (!canEditDraft() || !permissions.canUpload || files.length === 0) return;
       uploading = true;
+      const uploadingDraft = draft;
+      const uploadContextValid = isContextValid;
       renderEditor();
       void Promise.resolve(persistFiles(files)).then(
         (media) => {
+          if (draft !== uploadingDraft) return;
           uploading = false;
           if (!draft) return;
-          if (Array.isArray(media) && media.length) {
+          if (uploadContextValid() && Array.isArray(media) && media.length) {
             draft.addUploadedMedia(media);
             clearErrors("media", "coverMediaId");
           }
           renderEditor();
         },
         (error) => {
+          if (draft !== uploadingDraft) return;
           uploading = false;
-          onError(error);
+          if (uploadContextValid()) onError(error);
           if (draft) renderEditor();
         },
       );

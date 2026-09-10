@@ -20,6 +20,26 @@ const workspaceAsset = {
 };
 const flushTasks = () => new Promise((resolve) => setImmediate(resolve));
 
+test("asset availability requires negotiation and a trusted current instance, and duplicate states have no effects", () => {
+  let negotiated = false;
+  const updates = [];
+  const { dispatch } = harness({ usesProgressiveAssetLoading: () => negotiated,
+    onAvailability: (state) => updates.push(JSON.parse(JSON.stringify(state))) });
+  const message = { source: "reelay-shell", type: "host:asset-availability", protocolVersion: 1,
+    instanceId: "instance-1", projectAssets: "ready", workspaceCatalog: "loading" };
+  assert.equal(dispatch(message), false, "an older host has not negotiated this extension");
+  negotiated = true;
+  assert.equal(dispatch({ ...message, instanceId: "old" }), false);
+  assert.equal(dispatch(message, { origin: "https://other.test" }), false);
+  assert.equal(dispatch(message, { source: {} }), false);
+  assert.equal(dispatch({ ...message, workspaceCatalog: true }), false);
+  assert.equal(dispatch(message), true);
+  assert.equal(dispatch(message), true);
+  assert.deepEqual(updates, [{ projectAssets: "ready", workspaceCatalog: "loading" }]);
+  assert.equal(dispatch({ ...message, workspaceCatalog: "unavailable" }), true);
+  assert.deepEqual(updates.at(-1), { projectAssets: "ready", workspaceCatalog: "unavailable" });
+});
+
 function harness(options = {}) {
   const parent = {};
   const posted = [];
@@ -131,6 +151,37 @@ test("keeps personal-only uploads out of the project result path", async () => {
     target: "personal", workspaceAsset,
   }), true);
   assert.deepEqual(JSON.parse(JSON.stringify(await result)), workspaceAsset);
+});
+
+test("caller-owned upload idempotency keys survive retries while request IDs stay unique", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  const file = { name: "cover.png", type: "image/png", size: 42 };
+  const metadata = { mediaKind: "image", target: "personal", idempotencyKey: " entity-import-stable-key " };
+  const first = coordinator.persistFile(file, metadata);
+  await flushTasks();
+  const firstRequest = posted.at(-1);
+  assert.equal(firstRequest.idempotencyKey, "entity-import-stable-key");
+  const rejected = assert.rejects(first, /资产命令执行失败/);
+  dispatch({ source: "reelay-shell", type: "host:asset-command-error", protocolVersion: 1,
+    instanceId: "instance-1", requestId: firstRequest.requestId, code: "network" });
+  await rejected;
+  const retry = coordinator.persistFile(file, metadata);
+  await flushTasks();
+  const retryRequest = posted.at(-1);
+  assert.equal(retryRequest.idempotencyKey, firstRequest.idempotencyKey);
+  assert.notEqual(retryRequest.requestId, firstRequest.requestId);
+  const retryRejected = assert.rejects(retry, /资产协调器已停止/);
+  coordinator.dispose();
+  await retryRejected;
+});
+
+test("invalid supplied upload idempotency keys are rejected before posting commands", async () => {
+  const { coordinator, posted } = harness();
+  for (const idempotencyKey of ["", "  ", "x".repeat(201), 12, {}]) {
+    await assert.rejects(coordinator.persistFile({ name: "cover.png", type: "image/png", size: 42 },
+      { mediaKind: "image", idempotencyKey }), /幂等标识无效/);
+  }
+  assert.equal(posted.length, 0);
 });
 
 test("correlates personal Media rename results by request, instance, and asset", async () => {
