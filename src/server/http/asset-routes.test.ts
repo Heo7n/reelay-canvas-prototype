@@ -48,6 +48,88 @@ describe("asset persistence routes", () => {
 
   afterEach(async () => app.close());
 
+  it.each([
+    { mediaKind: "video", contentType: "video/mp4", byteSize: 16, signed: true },
+    { mediaKind: "audio", contentType: "audio/mpeg", byteSize: 16, signed: true },
+    { mediaKind: "image", contentType: "image/png", byteSize: 4 * 1024 * 1024 + 1, signed: true },
+    { mediaKind: "image", contentType: "image/png", byteSize: 16, signed: false },
+  ])("delivers $mediaKind ($byteSize bytes) through the authorized remote capability only when needed", async ({ mediaKind, contentType, byteSize, signed }) => {
+    const session = await login(app, "creator@reelay.test");
+    const body = Buffer.alloc(byteSize, 1);
+    const checksumSha256 = createHash("sha256").update(body).digest("hex");
+    const created = await app.inject({
+      method: "POST", url: "/api/workspaces/workspace-organization-reelay/media-upload-intents",
+      headers: { cookie: session },
+      payload: { idempotencyKey: "signed-media-0001", mediaKind, displayName: "媒体", contentType, byteSize, checksumSha256 },
+    });
+    expect(created.statusCode).toBe(201);
+    const uploaded = await app.inject({
+      method: "PUT", url: created.json().upload.url,
+      headers: { cookie: session, "content-type": "application/octet-stream" }, payload: body,
+    });
+    expect(uploaded.statusCode).toBe(200);
+    const finalized = await app.inject({
+      method: "POST", url: `/api/workspaces/workspace-organization-reelay/media-upload-intents/${created.json().uploadIntent.id}/finalize`,
+      headers: { cookie: session },
+    });
+    expect(finalized.statusCode).toBe(200);
+    const assetId = finalized.json().asset.id;
+    const personalUrl = `/api/workspaces/workspace-organization-reelay/media-assets/${assetId}/content`;
+    const attached = await app.inject({
+      method: "PUT", url: `/api/projects/project-scifi-trailer/asset-references/${assetId}`, headers: { cookie: session },
+    });
+    expect(attached.statusCode).toBe(200);
+    const projectUrl = attached.json().projectAsset.contentUrl;
+    const directUrl = "https://storage.example/object/sign/private/media?token=short-lived";
+    const createSignedDownload = vi.fn(async (key: string, _ttl: number) => {
+      const metadata = await objectStore.headObject(key);
+      return metadata ? { ...metadata, url: directUrl } : null;
+    });
+    Object.assign(objectStore, { createSignedDownload });
+    const getObject = vi.spyOn(objectStore, "getObject");
+    const outsider = await login(app, "chenxi@reelay.test");
+    for (const url of [personalUrl, projectUrl]) {
+      for (const headers of [{}, { cookie: outsider }]) {
+        const denied = await app.inject({ method: "GET", url, headers });
+        expect([401, 404]).toContain(denied.statusCode);
+        expect(denied.headers.location).toBeUndefined();
+      }
+    }
+    expect(createSignedDownload).not.toHaveBeenCalled();
+    for (const url of [personalUrl, projectUrl]) {
+      const response = await app.inject({ method: "GET", url, headers: { cookie: session, range: "bytes=2-5" } });
+      if (signed) {
+        expect(response.statusCode).toBe(307);
+        expect(response.headers.location).toBe(directUrl);
+        expect(response.headers["cache-control"]).toBe("private, no-store");
+        expect(response.headers.vary).toBe("Cookie");
+        expect(response.headers["referrer-policy"]).toBe("no-referrer");
+        expect(createSignedDownload).toHaveBeenLastCalledWith(expect.any(String), 300);
+        expect(getObject).not.toHaveBeenCalled();
+      } else {
+        expect(response.statusCode).toBe(206);
+        expect(response.rawPayload).toEqual(body.subarray(2, 6));
+        expect(createSignedDownload).not.toHaveBeenCalled();
+      }
+    }
+    createSignedDownload.mockClear();
+    const head = await app.inject({ method: "HEAD", url: personalUrl, headers: { cookie: session } });
+    expect(head.statusCode).toBe(200);
+    expect(head.headers["content-length"]).toBe(String(byteSize));
+    const unchanged = await app.inject({ method: "GET", url: personalUrl, headers: { cookie: session, "if-none-match": `"${checksumSha256}"` } });
+    expect(unchanged.statusCode).toBe(304);
+    expect(createSignedDownload).not.toHaveBeenCalled();
+    if (signed) {
+      createSignedDownload.mockImplementationOnce(async (key) => {
+        const metadata = await objectStore.headObject(key);
+        return metadata ? { ...metadata, byteSize: byteSize + 1, url: directUrl } : null;
+      });
+      const invalid = await app.inject({ method: "GET", url: personalUrl, headers: { cookie: session } });
+      expect(invalid.statusCode).toBe(503);
+      expect(invalid.headers.location).toBeUndefined();
+    }
+  });
+
   it("uploads, finalizes, renames, attaches, lists, ranges, and repeats the complete story idempotently", async () => {
     const session = await login(app, "creator@reelay.test");
     const body = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
@@ -383,5 +465,64 @@ it("rejects uploads beyond the deployment limit before creating an intent or acc
       headers: { cookie: session, "content-type": "application/octet-stream" }, payload: Buffer.alloc(4 * 1024 * 1024 + 1),
     });
     expect(oversized.statusCode).toBe(413);
+  } finally { await app.close(); }
+});
+
+it("authorizes signed large uploads and publishes only after verifying actual bytes, with idempotent finalize", async () => {
+  const seed = createDemoSeed();
+  const store = new InMemoryCollaborationStore(seed);
+  const assetStore = new InMemoryAssetStore({
+    workspaceMemberships: seed.memberships.map(({ workspaceId, actorId }) => ({ workspaceId, actorId })), projects: [],
+  });
+  const objectStore = new InMemoryObjectStore();
+  const signedUpload = vi.fn(async (_input: { objectKey: string; contentType: string; checksumSha256: string }) => ({
+    url: "https://project.supabase.co/storage/v1/object/upload/sign/private/file?token=upload",
+    method: "PUT" as const, headers: { "Content-Type": "video/mp4", "x-metadata": "verified-after-upload" },
+  }));
+  Object.assign(objectStore, { createSignedUpload: signedUpload });
+  const app = await buildServer({ store, assetStore, objectStore, maxAssetUploadBytes: 4 * 1024 * 1024 });
+  try {
+    const session = await login(app, "creator@reelay.test");
+    const body = Buffer.alloc(5 * 1024 * 1024, 7);
+    const checksumSha256 = createHash("sha256").update(body).digest("hex");
+    const payload = { idempotencyKey: "cloud-direct-upload", mediaKind: "video", displayName: "large.mp4", contentType: "video/mp4", byteSize: body.byteLength, checksumSha256 };
+    const base = "/api/workspaces/workspace-organization-reelay/media-upload-intents";
+    const unauthenticated = await app.inject({ method: "POST", url: base, payload });
+    expect(unauthenticated.statusCode).toBe(401);
+    const forbidden = await app.inject({ method: "POST", url: "/api/workspaces/workspace-other/media-upload-intents", payload, headers: { cookie: session } });
+    expect(forbidden.statusCode).toBe(404);
+    expect(signedUpload).not.toHaveBeenCalled();
+    const oversize = await app.inject({ method: "POST", url: base, headers: { cookie: session }, payload: { ...payload, byteSize: 50 * 1024 * 1024 + 1 } });
+    expect(oversize.statusCode).toBe(413);
+    const created = await app.inject({ method: "POST", url: base, headers: { cookie: session }, payload });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().upload.url).toContain("/object/upload/sign/");
+    const intentId = created.json().uploadIntent.id;
+    const finalizeUrl = `${base}/${intentId}/finalize`;
+    const pending = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: session } });
+    expect(pending.statusCode).toBe(409);
+    const oversizedProxy = await app.inject({ method: "PUT", url: `${base}/${intentId}/content`, headers: { cookie: session, "content-type": "application/octet-stream" }, payload: body });
+    expect(oversizedProxy.statusCode).toBe(413);
+    const uploadInput = signedUpload.mock.calls[0][0];
+    await objectStore.putObject({ ...uploadInput, body });
+    const getObject = vi.spyOn(objectStore, "getObject");
+    const validObject = await objectStore.getObject(uploadInput.objectKey);
+    // Even a forged HEAD/metadata digest cannot hide changed uploaded bytes.
+    getObject.mockResolvedValueOnce({ ...validObject!, body: new Uint8Array(body.byteLength).fill(9) });
+    const corrupt = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: session } });
+    expect(corrupt.statusCode).toBe(409);
+    expect(corrupt.json().error.code).toBe("asset_upload_metadata_mismatch");
+    const before = await app.inject({ method: "GET", url: "/api/workspaces/workspace-organization-reelay/media-assets", headers: { cookie: session } });
+    expect(before.json().assets).toEqual([]);
+    const finalized = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: session } });
+    expect(finalized.statusCode).toBe(200);
+    expect(finalized.json().asset.checksumSha256).toBe(checksumSha256);
+    getObject.mockClear();
+    const repeated = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: session } });
+    expect(repeated.json().asset.id).toBe(finalized.json().asset.id);
+    expect(getObject).not.toHaveBeenCalled();
+    const outsider = await login(app, "chenxi@reelay.test");
+    const denied = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: outsider } });
+    expect(denied.statusCode).toBe(404);
   } finally { await app.close(); }
 });

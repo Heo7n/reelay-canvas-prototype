@@ -165,17 +165,26 @@
         || typeof message.upload.headers !== "object" || Array.isArray(message.upload.headers)
         || !Object.values(message.upload.headers).every((value) => typeof value === "string")) return false;
       let uploadUrl;
+      let credentials = "same-origin";
       try {
         const baseUrl = new URL(getBaseUrl());
         uploadUrl = new URL(message.upload.url, baseUrl);
-        if (uploadUrl.origin !== baseUrl.origin) throw new Error("Cross-origin upload grants are not enabled.");
+        if (uploadUrl.origin !== baseUrl.origin) {
+          const signedStorageUpload = uploadUrl.protocol === "https:" && !uploadUrl.username && !uploadUrl.password
+            && !uploadUrl.port && /^[a-z0-9-]+\.supabase\.co$/.test(uploadUrl.hostname)
+            && uploadUrl.pathname.startsWith("/storage/v1/object/upload/sign/")
+            && uploadUrl.pathname.endsWith(`/uploads/${encodeURIComponent(message.uploadIntent.id)}`)
+            && uploadUrl.searchParams.has("token") && !uploadUrl.hash;
+          if (!signedStorageUpload) throw new Error("Cross-origin upload grant is not an approved storage upload.");
+          credentials = "omit";
+        }
       } catch (error) {
         finish(message.requestId, commandError("invalid", error?.message || "上传地址无效"));
         return true;
       }
       operation.stage = "uploading";
       operation.uploadId = message.uploadIntent.id;
-      void Promise.resolve(uploadFile({ url: uploadUrl.href, method: "PUT", headers: { ...message.upload.headers }, file: operation.file })).then(
+      void Promise.resolve(uploadFile({ url: uploadUrl.href, method: "PUT", headers: { ...message.upload.headers }, credentials, file: operation.file })).then(
         () => {
           if (!pending.has(message.requestId)) return;
           operation.stage = "finalize";

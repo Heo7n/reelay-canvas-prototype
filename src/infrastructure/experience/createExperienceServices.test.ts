@@ -45,7 +45,7 @@ describe("experience application services", () => {
     for (const project of context.projects) {
       expect(await services.canvasDocumentRepository.getCanvasDocument(project.id, "main")).toBeNull();
     }
-    expect(await services.mediaAssetRepository.listPersonalAssets(workspaceId)).toHaveLength(12);
+    expect(await services.mediaAssetRepository.listPersonalAssets(workspaceId)).toHaveLength(16);
     expect(await services.entityRepository.listPersonal(workspaceId)).toHaveLength(3);
     expect(await services.sessionGateway.signInWithPassword({ account: "real@private.example", password: "never-used" })).toEqual(session);
     expect(JSON.stringify(context)).not.toMatch(/Hoo|creator@reelay\.test|actor-tianmaochao|workspace-organization-reelay/);

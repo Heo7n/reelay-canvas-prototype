@@ -4,6 +4,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { build } from "vite";
 import { DEMO_ASSET_FIXTURES } from "../src/config/entity-demo-fixtures.ts";
+import { DEMO_MEDIA_FIXTURES } from "../src/config/media-demo-fixtures.ts";
 import { buildLegacyCanvas } from "./copy-legacy-canvas.mjs";
 
 const root = process.cwd();
@@ -29,6 +30,18 @@ for (const asset of DEMO_ASSET_FIXTURES) {
     .toFile(path.join(output, "assets", "experience-preview", asset.fileName.replace(/\.[^.]+$/, ".webp")));
 }
 
+await mkdir(path.join(output, "assets", "experience-media"), { recursive: true });
+for (const asset of DEMO_MEDIA_FIXTURES) {
+  if (!/^[a-z0-9-]+-[a-f0-9]{8}\.(webm|mp3)$/.test(asset.fileName)) throw new Error("Unexpected experience media path.");
+  const source = path.join(root, "assets", "experience-media", asset.fileName);
+  const bytes = await readFile(source);
+  if (bytes.byteLength !== asset.goldenByteSize
+    || createHash("sha256").update(bytes).digest("hex") !== asset.goldenChecksumSha256) {
+    throw new Error(`Experience media differs from its published checksum: ${asset.fileName}`);
+  }
+  await copyFile(source, path.join(output, "assets", "experience-media", asset.fileName));
+}
+
 await writeFile(path.join(output, "vercel.json"), JSON.stringify({
   framework: null,
   buildCommand: null,
@@ -42,7 +55,7 @@ await writeFile(path.join(output, "vercel.json"), JSON.stringify({
 }, null, 2));
 await writeFile(path.join(output, "experience-release.json"), JSON.stringify({
   runtime: "ephemeral-experience",
-  assets: DEMO_ASSET_FIXTURES.length,
+  assets: DEMO_ASSET_FIXTURES.length + DEMO_MEDIA_FIXTURES.length,
   releaseCommit: process.env.REELAY_RELEASE_COMMIT || null,
 }));
 for (const name of await readdir(path.join(output, "assets"))) {
@@ -57,4 +70,4 @@ for (const forbidden of ["api", ".env", "node_modules", "src/server"]) {
     throw new Error(`Server-only content entered the static experience: ${forbidden}`);
   }
 }
-console.log(`Static experience ready: ${DEMO_ASSET_FIXTURES.length} originals and thumbnails; no API or database.`);
+console.log(`Static experience ready: ${DEMO_ASSET_FIXTURES.length} images and thumbnails, ${DEMO_MEDIA_FIXTURES.length} audio/video examples; no API or database.`);

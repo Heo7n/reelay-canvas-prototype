@@ -292,8 +292,9 @@
       [addButton, "click", onAddClick, false], [menu, "click", onMenuClick, false],
       [document, "pointerdown", onOutsidePointer, true], [document, "keydown", onKeyDown, true],
       [document, "focusin", onFocusIn, false], [composer, "dragenter", onDragOver, false],
-      [composer, "dragover", onDragOver, false], [composer, "dragleave", onDragLeave, false],
-      [composer, "drop", onDrop, false], [view, "dragend", clearDrop, false],
+      // Claim media before the nested rich-text editor consumes its text/plain fallback.
+      [composer, "dragover", onDragOver, true], [composer, "dragleave", onDragLeave, false],
+      [composer, "drop", onDrop, true], [view, "dragend", clearDrop, false],
       [document, "dragstart", clearDrop, true], [document, "drop", onOutsideDrop, true],
       [view, "blur", close, false], [view, "pagehide", onPageHide, false],
     ];

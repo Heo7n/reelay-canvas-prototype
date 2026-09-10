@@ -47,8 +47,8 @@ describe("ExperienceAssetStore", () => {
     expect(imported.asset.contentUrl).toMatch(/^blob:/);
     expect(imported.asset.checksumSha256).toBe("9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a");
     expect(imported.projectAsset).toBeNull();
-    expect(await first.media.listPersonalAssets(workspaceId)).toHaveLength(13);
-    expect(await second.media.listPersonalAssets(workspaceId)).toHaveLength(12);
+    expect(await first.media.listPersonalAssets(workspaceId)).toHaveLength(17);
+    expect(await second.media.listPersonalAssets(workspaceId)).toHaveLength(16);
     const assetId = `experience-${DEMO_ASSET_FIXTURES[0]!.staticMediaId}`;
     await first.media.renamePersonalAsset(workspaceId, assetId, " 新名称 ");
     const original = (await first.entities.listPersonal(workspaceId))[0]!;
@@ -139,7 +139,7 @@ describe("ExperienceAssetStore", () => {
       contentType: "image/png", byteSize: 4, checksumSha256: "a".repeat(64),
     })).rejects.toMatchObject({ serviceCode: "transient_upload_required" });
     expect(createUrl).not.toHaveBeenCalled();
-    expect(await instance.media.listPersonalAssets(workspaceId)).toHaveLength(12);
+    expect(await instance.media.listPersonalAssets(workspaceId)).toHaveLength(16);
   });
 
   it("reserves the shared byte budget before hashing concurrent uploads", async () => {
@@ -153,7 +153,7 @@ describe("ExperienceAssetStore", () => {
     expect(createUrl).not.toHaveBeenCalled();
     pending.forEach((resolve) => resolve(new ArrayBuffer(32)));
     await Promise.all(imports);
-    expect(await instance.media.listPersonalAssets(workspaceId)).toHaveLength(44);
+    expect(await instance.media.listPersonalAssets(workspaceId)).toHaveLength(48);
     instance.reset();
     const next = instance.importFile(upload({ body }));
     pending[pending.length - 1]!(new ArrayBuffer(32));
@@ -175,7 +175,7 @@ describe("ExperienceAssetStore", () => {
     finish(new ArrayBuffer(32));
     await expect(beforeDelete).rejects.toMatchObject({ code: "not_found" });
     expect(createUrl).not.toHaveBeenCalled();
-    expect(await instance.media.listPersonalAssets(workspaceId)).toHaveLength(12);
+    expect(await instance.media.listPersonalAssets(workspaceId)).toHaveLength(16);
   });
 
   it("owns upload bytes and metadata before yielding to an asynchronous digest", async () => {

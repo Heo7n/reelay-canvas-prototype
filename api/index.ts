@@ -22,7 +22,7 @@ let appPromise: ReturnType<typeof createApp> | undefined;
 async function createApp() {
   const app = await buildServer({
     logger: true, secureCookies: true, store, assetStore, entityStore, objectStore,
-    // Both requests and responses must fit Vercel's 4.5 MB function payload limit.
+    // Proxied PUT bodies stay below Vercel's limit; larger uploads use private signed Storage URLs.
     maxAssetUploadBytes: 4 * 1024 * 1024,
   });
   await app.ready();

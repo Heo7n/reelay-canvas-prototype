@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { DEMO_ASSET_FIXTURES, DEMO_ENTITY_FIXTURES } from "../../config/entity-demo-fixtures";
+import { DEMO_MEDIA_FIXTURES } from "../../config/media-demo-fixtures";
 import { createExperienceAssetFixtures } from "./experience-fixtures";
 
 describe("published experience asset fixtures", () => {
-  it("projects only the selected three characters and twelve original images", () => {
+  it("projects the selected characters, twelve images and four audio/video examples", () => {
     const snapshot = createExperienceAssetFixtures("workspace-experience");
-    expect(snapshot.media).toHaveLength(12);
+    expect(snapshot.media).toHaveLength(16);
     expect(snapshot.entities.map((entity) => [entity.name, entity.mediaRefs.length])).toEqual([
       ["幽影", 5], ["白汐", 3], ["玄翎", 4],
     ]);
     expect(new Set(snapshot.entities.flatMap((entity) => entity.mediaRefs.map((ref) => ref.assetId))))
-      .toEqual(new Set(snapshot.media.map((asset) => asset.id)));
+      .toEqual(new Set(snapshot.media.filter((asset) => asset.mediaKind === "image").map((asset) => asset.id)));
     for (const [index, fixture] of DEMO_ASSET_FIXTURES.entries()) {
       expect(snapshot.media[index]).toMatchObject({
         id: `experience-${fixture.staticMediaId}`,
@@ -20,6 +21,16 @@ describe("published experience asset fixtures", () => {
         byteSize: fixture.goldenByteSize,
         checksumSha256: fixture.goldenChecksumSha256,
         contentUrl: `/assets/home/${fixture.fileName}`,
+      });
+    }
+    for (const fixture of DEMO_MEDIA_FIXTURES) {
+      expect(snapshot.media.find((asset) => asset.id === `experience-media-${fixture.key}`)).toMatchObject({
+        mediaKind: fixture.mediaKind,
+        displayName: fixture.displayName,
+        contentType: fixture.contentType,
+        byteSize: fixture.goldenByteSize,
+        checksumSha256: fixture.goldenChecksumSha256,
+        contentUrl: `/assets/experience-media/${fixture.fileName}`,
       });
     }
     for (const entity of snapshot.entities) {
@@ -37,7 +48,7 @@ describe("published experience asset fixtures", () => {
       ...DEMO_ENTITY_FIXTURES.map((fixture) => fixture.staticEntityId),
     ]);
     const hostIds = [...snapshot.media.map((asset) => asset.id), ...snapshot.entities.map((entity) => entity.id)];
-    expect(new Set(hostIds).size).toBe(15);
+    expect(new Set(hostIds).size).toBe(19);
     expect(hostIds.every((id) => id.startsWith("experience-") && !staticIds.has(id))).toBe(true);
     const mediaIds = new Set(snapshot.media.map((asset) => asset.id));
     for (const entity of snapshot.entities) {
@@ -45,7 +56,8 @@ describe("published experience asset fixtures", () => {
       expect(mediaIds.has(entity.coverAssetId!)).toBe(true);
       expect(entity.mediaRefs.some((ref) => ref.assetId === entity.coverAssetId)).toBe(true);
     }
-    expect(new Set(snapshot.entities.flatMap((entity) => entity.mediaRefs.map((ref) => ref.assetId)))).toEqual(mediaIds);
+    expect(new Set(snapshot.entities.flatMap((entity) => entity.mediaRefs.map((ref) => ref.assetId))))
+      .toEqual(new Set(snapshot.media.filter((asset) => asset.mediaKind === "image").map((asset) => asset.id)));
   });
 
   it("creates independent records and nested references for every page", () => {

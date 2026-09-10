@@ -539,8 +539,8 @@ const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAs
     const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   },
-  uploadFile: async ({ url, method, headers, file }) => {
-    const response = await fetch(url, { method, headers, body: file, credentials: "include" });
+  uploadFile: async ({ url, method, headers, credentials, file }) => {
+    const response = await fetch(url, { method, headers, body: file, credentials, redirect: "error" });
     if (!response.ok) throw new Error(`媒体上传失败（${response.status}）`);
   },
   useTransientUpload: () => state.hostCapabilities.transientMediaUpload,
@@ -7842,6 +7842,9 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
   showMessage: showActionToast, escapeHtml, assetPreview: agentReferenceThumbnail,
   renderPrompt: (input) => agentComposerView.renderPrompt({ ...input, content: input.prompt }),
   getDemoPresets: () => window.REELAY_GENERATION_DEMO_PRESETS?.create({ models, media: assetLibrarySeed.media }) || [],
+  createPreviewHistory: window.REELAY_GENERATION_HISTORY_PRESETS && (({ presets, prepareInput }) =>
+    window.REELAY_GENERATION_HISTORY_PRESETS.create({ presets, prepareInput,
+      media: assetLibrarySeed.media, simulationAssets, now: Date.now() })),
   preparePreviewInput(input) {
     const model = models.find((entry) => entry.id === input.modelId);
     if (!model) return null;

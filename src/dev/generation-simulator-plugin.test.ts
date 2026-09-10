@@ -42,14 +42,14 @@ afterEach(() => { window.dispatchEvent(new Event("pagehide")); document.body.rep
 describe("generation simulator development boundary", () => {
   it("injects only into the served canvas and leaves built entries unreferenced", () => {
     expect(generationSimulatorPlugin().apply).toBe("serve");
-    expect(generationSimulatorTags("/index.html")).toHaveLength(4);
+    expect(generationSimulatorTags("/index.html")).toHaveLength(2);
     expect(generationSimulatorTags("/app-shell.html")).toEqual([]);
     expect(generationSimulatorTags("/app/projects/example")).toEqual([]);
     for (const name of ["index.html", "app-shell.html"]) {
-      expect(readFileSync(path.resolve(name), "utf8")).not.toMatch(/generation-(?:simulator|history-presets)/);
+      expect(readFileSync(path.resolve(name), "utf8")).not.toMatch(/generation-simulator/);
     }
     expect(generationSimulatorTags("/index.html").map((tag) => tag.attrs?.src || tag.attrs?.href))
-      .toEqual(["/src/dev/generation-simulator.css", "/src/dev/generation-demo-presets.js", "/src/dev/generation-history-presets.js", "/src/dev/generation-simulator.js"]);
+      .toEqual(["/src/dev/generation-simulator.css", "/src/dev/generation-simulator.js"]);
   });
 
   it("connects through capabilities, starts closed, and is hidden outside generation mode", async () => {
@@ -67,13 +67,13 @@ describe("generation simulator development boundary", () => {
     expect(panel.hidden).toBe(true);
   });
 
-  it("registers default records only when the serve-only history adapter is available", () => {
+  it("leaves default history initialization to the shared product entry", () => {
     const create = vi.fn(() => []);
     Object.assign(window, { REELAY_GENERATION_HISTORY_PRESETS: { create } });
     const { capabilities, ready, panel } = setup();
-    expect(capabilities.initializePreviewHistory).toHaveBeenCalledTimes(1);
+    expect(capabilities.initializePreviewHistory).not.toHaveBeenCalled();
     ready();
-    expect(capabilities.initializePreviewHistory).toHaveBeenCalledTimes(1);
+    expect(capabilities.initializePreviewHistory).not.toHaveBeenCalled();
     expect(panel.textContent).toContain("默认记录为展示示例，不影响当前积分或画布");
     expect(capabilities.setNextScenario).not.toHaveBeenCalled();
     expect(document.querySelector(".generation-record")).toBeNull();

@@ -115,6 +115,7 @@ test("coordinates checksum, same-origin upload grant, finalize and correlated re
   }), true);
   await flushTasks();
   assert.equal(uploads[0].url, "https://reelay.test/api/uploads/upload-1");
+  assert.equal(uploads[0].credentials, "same-origin");
   assert.equal(posted.at(-1).type, "canvas:finalize-media-upload");
   dispatch({
     source: "reelay-shell", type: "host:media-upload-result", protocolVersion: 1,
@@ -122,6 +123,36 @@ test("coordinates checksum, same-origin upload grant, finalize and correlated re
   });
   assert.deepEqual(JSON.parse(JSON.stringify(await result)), projectAsset);
   assert.equal(coordinator.getPendingCount(), 0);
+});
+
+test("accepts only trusted signed Storage grants for this upload and never sends account cookies to Storage", async () => {
+  const validUrl = "https://project.supabase.co/storage/v1/object/upload/sign/private/workspaces/workspace-1/uploads/upload-1?token=short-lived";
+  for (const url of [validUrl, validUrl.replace("https:", "http:"), validUrl.replace("project.supabase.co", "project.supabase.co.evil.test"),
+    validUrl.replace("upload-1?", "upload-other?"), validUrl.replace("?token=short-lived", ""), validUrl.replace("/upload/sign/", "/public/")]) {
+    const { coordinator, dispatch, posted, uploads } = harness();
+    const result = coordinator.persistFile({ name: "clip.mp4", type: "video/mp4", size: 5 * 1024 * 1024 }, { mediaKind: "video" });
+    const expectedFailure = url === validUrl ? null : assert.rejects(result, /Cross-origin upload grant/);
+    await flushTasks();
+    const create = posted[0];
+    const grant = { source: "reelay-shell", type: "host:media-upload-grant", protocolVersion: 1,
+      requestId: create.requestId, instanceId: "instance-1", uploadIntent: { id: "upload-1", expiresAt: "2026-09-10T12:00:00.000Z" },
+      upload: { url, method: "PUT", headers: { "Content-Type": "video/mp4" } } };
+    assert.equal(dispatch(grant, { origin: "https://other.test" }), false);
+    assert.equal(uploads.length, 0);
+    assert.equal(dispatch(grant), true);
+    await flushTasks();
+    if (expectedFailure) {
+      await expectedFailure;
+      assert.equal(uploads.length, 0);
+    } else {
+      assert.equal(uploads[0].credentials, "omit");
+      assert.equal(uploads[0].url, validUrl);
+      assert.equal(posted.at(-1).type, "canvas:finalize-media-upload");
+      dispatch({ source: "reelay-shell", type: "host:media-upload-result", protocolVersion: 1,
+        requestId: create.requestId, instanceId: "instance-1", uploadId: "upload-1", target: "project", projectAsset });
+      await result;
+    }
+  }
 });
 
 test("keeps personal-only uploads out of the project result path", async () => {
