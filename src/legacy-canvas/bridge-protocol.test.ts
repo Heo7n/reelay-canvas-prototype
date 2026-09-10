@@ -211,6 +211,35 @@ describe("legacy canvas bridge", () => {
     });
   });
 
+  it.each(["light", "dark"])("accepts a versioned canvas theme change to %s", (theme) => {
+    const message = {
+      source: "reelay-legacy-canvas",
+      type: "canvas:theme-change",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      theme,
+    };
+    expect(parseCanvasMessage(message)).toEqual(message);
+  });
+
+  it("rejects invalid themes, unversioned messages, and extra theme fields", () => {
+    const message = {
+      source: "reelay-legacy-canvas",
+      type: "canvas:theme-change",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      theme: "light",
+    };
+    for (const theme of ["system", "LIGHT", "", null, undefined, 1]) {
+      expect(parseCanvasMessage({ ...message, theme })).toBeNull();
+    }
+    expect(parseCanvasMessage({ ...message, protocolVersion: undefined })).toBeNull();
+    expect(parseCanvasMessage({ ...message, protocolVersion: 2 })).toBeNull();
+    expect(parseCanvasMessage({ ...message, source: "foreign" })).toBeNull();
+    expect(parseCanvasMessage({ ...message, instanceId: "" })).toBeNull();
+    expect(parseCanvasMessage({ ...message, unexpected: true })).toBeNull();
+  });
+
   it("strictly validates scoped asset upload requests and correlated host responses", () => {
     const create = parseCanvasMessage({
       source: "reelay-legacy-canvas",

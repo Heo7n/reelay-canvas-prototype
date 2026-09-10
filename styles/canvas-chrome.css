@@ -80,6 +80,7 @@ html[data-theme="light"] {
 .project-home-button:focus-visible,
 .project-switch-button:focus-visible,
 .left-rail .rail-button:focus-visible,
+.canvas-credit-widget:focus-visible,
 .canvas-tool-button:focus-visible,
 .canvas-zoom-control:focus-within {
   outline: 2px solid var(--canvas-chrome-focus);
@@ -475,6 +476,53 @@ html[data-theme="light"] {
   font-weight: 560;
 }
 
+.canvas-credit-widget {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 48px;
+  width: max-content;
+  height: 24px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--floating-text);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.canvas-credit-widget:hover {
+  color: var(--text);
+}
+
+.canvas-credit-widget:active,
+.canvas-credit-widget:focus-visible {
+  background: color-mix(in srgb, #8fa6d2 20%, transparent);
+  color: var(--text);
+}
+
+.canvas-credit-widget .credit-semantic-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  object-fit: contain;
+}
+
+.rail-credit-value {
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
 .rail-button-tip,
 .left-rail .asset-lib-tooltip {
   position: absolute;
@@ -500,6 +548,8 @@ html[data-theme="light"] {
 
 .left-rail .rail-button:hover > .rail-button-tip,
 .left-rail .rail-button:focus-visible > .rail-button-tip,
+.canvas-credit-widget:hover > .rail-button-tip,
+.canvas-credit-widget:focus-visible > .rail-button-tip,
 .left-rail .profile-anchor:hover > .profile-button-tip,
 .left-rail .avatar-button:focus-visible + .profile-button-tip {
   opacity: 1;

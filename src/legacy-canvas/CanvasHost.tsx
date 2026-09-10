@@ -35,6 +35,7 @@ interface CanvasHostProps {
   onCreateProject?: () => void;
   onLogout?: () => void;
   onOpenAccountSettings?: (section: LegacyAccountSection) => void;
+  onThemeChange?: (theme: LegacyCanvasContext["theme"]) => void;
   onLaunchPromptConsumed?: () => void;
   repository: CanvasDocumentRepository;
   mediaAssetRepository?: MediaAssetRepository;
@@ -77,7 +78,7 @@ function bridgeWorkspaceEntity(entity: WorkspaceEntity) {
   };
 }
 
-export function CanvasHost({ context, entityRepository, mediaAssetRepository, transientMediaRepository, onCreateProject, onLogout, onOpenAccountSettings, onLaunchPromptConsumed, repository }: CanvasHostProps) {
+export function CanvasHost({ context, entityRepository, mediaAssetRepository, transientMediaRepository, onCreateProject, onLogout, onOpenAccountSettings, onThemeChange, onLaunchPromptConsumed, repository }: CanvasHostProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -889,6 +890,10 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         onOpenAccountSettings?.(message.section);
         return;
       }
+      if (message.type === "canvas:theme-change") {
+        onThemeChange?.(message.theme);
+        return;
+      }
       if (message.type !== "canvas:save") return;
 
       if (!safeContext.writable) {
@@ -988,7 +993,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
       active = false;
       window.removeEventListener("message", handleMessage);
     };
-  }, [authorizedProjectIds, entityRepository, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.capabilities?.transientMediaUpload, safeContext.projectId, safeContext.workspaceId, safeContext.writable, transientMediaRepository]);
+  }, [authorizedProjectIds, entityRepository, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, onThemeChange, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.capabilities?.transientMediaUpload, safeContext.projectId, safeContext.workspaceId, safeContext.writable, transientMediaRepository]);
 
   return (
     <section

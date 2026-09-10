@@ -248,6 +248,26 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-label"), "个人：林静");
   assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-expanded"), "false");
   assert.equal(window.document.querySelector("#profileCreditValue").textContent, "3,000");
+  assert.equal(window.document.documentElement.dataset.theme, "light", "initial theme comes from the hosted context");
+  assert.equal(postedMessages.filter((message) => message.type === "canvas:theme-change").length, 0, "host initialization does not echo a theme change");
+  const documentBeforeTheme = JSON.stringify(window.createCanvasDocumentSnapshot());
+  const storageSetItem = window.Storage.prototype.setItem;
+  window.Storage.prototype.setItem = () => { throw new Error("storage blocked"); };
+  try {
+    window.applyTheme("dark");
+    assert.equal(window.document.documentElement.dataset.theme, "dark");
+    assert.equal(postedMessages.at(-1).type, "canvas:theme-change");
+    assert.equal(postedMessages.at(-1).theme, "dark");
+    const messageCount = postedMessages.length;
+    window.applyTheme("dark");
+    assert.equal(postedMessages.length, messageCount, "unchanged themes are not echoed");
+    window.applyTheme("light");
+    assert.equal(postedMessages.at(-1).theme, "light");
+  } finally {
+    window.Storage.prototype.setItem = storageSetItem;
+  }
+  assert.equal(JSON.stringify(window.createCanvasDocumentSnapshot()), documentBeforeTheme);
+  assert.equal(window.document.querySelector("#railCreditValue").textContent, "3000");
   assert.equal(
     window.document.querySelector("[data-profile-action='credits']").getAttribute("aria-label"),
     "查看我的积分，当前 3,000",
@@ -278,6 +298,16 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   assert.equal(postedMessages.at(-1).type, "canvas:open-account");
   assert.equal(postedMessages.at(-1).section, "credits");
+
+  const creditWidget = window.document.querySelector("#canvasCreditsBtn");
+  assert.equal(creditWidget.getAttribute("aria-label"), "查看我的积分，当前可用 3,000");
+  assert.equal(creditWidget.closest("#railProfileBtn"), null);
+  const messagesBeforeCreditWidget = postedMessages.length;
+  creditWidget.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(postedMessages.length, messagesBeforeCreditWidget + 1);
+  assert.equal(postedMessages.at(-1).type, "canvas:open-account");
+  assert.equal(postedMessages.at(-1).section, "credits");
+  assert.equal(window.document.querySelector("#railProfileBtn").getAttribute("aria-expanded"), "false");
 
   window.document.querySelector("[data-profile-action='account']")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

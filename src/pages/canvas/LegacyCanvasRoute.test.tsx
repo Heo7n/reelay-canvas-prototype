@@ -12,7 +12,7 @@ import type { MediaAssetRepository } from "../../application/assets/MediaAssetRe
 import { LegacyCanvasRoute } from "./LegacyCanvasRoute";
 import { takeProjectLaunchIntent } from "../home/launch-intent";
 
-const hostContexts = vi.hoisted(() => [] as Array<{ projectId?: string; canvasId?: string; launchPrompt?: string }>);
+const hostContexts = vi.hoisted(() => [] as Array<{ projectId?: string; canvasId?: string; launchPrompt?: string; theme?: string }>);
 vi.mock("../home/launch-intent", () => ({ takeProjectLaunchIntent: vi.fn(() => "") }));
 
 vi.mock("../../app/useWorkspaceRouteData", () => ({
@@ -49,14 +49,13 @@ vi.mock("../../app/useWorkspaceRouteData", () => ({
   }),
 }));
 
-vi.mock("../../shared/theme/theme", () => ({ readTheme: () => "light" }));
-
 vi.mock("../../legacy-canvas/CanvasHost", () => ({
-  CanvasHost: ({ context, onCreateProject, onOpenAccountSettings, onLaunchPromptConsumed }: {
+  CanvasHost: ({ context, onCreateProject, onOpenAccountSettings, onLaunchPromptConsumed, onThemeChange }: {
     context: {
       projectId?: string;
       canvasId?: string;
       launchPrompt?: string;
+      theme?: string;
       capabilities?: {
         accountSections?: boolean;
         projectSwitcher?: boolean;
@@ -68,6 +67,7 @@ vi.mock("../../legacy-canvas/CanvasHost", () => ({
     onCreateProject?: () => void;
     onOpenAccountSettings: (section: "profile" | "credits") => void;
     onLaunchPromptConsumed?: () => void;
+    onThemeChange: (theme: "light" | "dark") => void;
   }) => {
     hostContexts.push(context);
     return (
@@ -92,6 +92,8 @@ vi.mock("../../legacy-canvas/CanvasHost", () => ({
       <button type="button" onClick={onLaunchPromptConsumed}>完成画布初始化</button>
       <button type="button" onClick={() => onOpenAccountSettings("profile")}>打开个人主页</button>
       <button type="button" onClick={() => onOpenAccountSettings("credits")}>打开我的积分</button>
+      <button type="button" onClick={() => onThemeChange("light")}>画布切浅色</button>
+      <button type="button" onClick={() => onThemeChange("dark")}>画布切深色</button>
     </div>
     );
   },
@@ -106,6 +108,10 @@ vi.mock("../../features/account/AccountSettingsDialog", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  window.localStorage.removeItem("reelay-theme-mode");
+  delete document.documentElement.dataset.theme;
+  document.documentElement.style.removeProperty("color-scheme");
   hostContexts.length = 0;
   vi.mocked(takeProjectLaunchIntent).mockReset().mockReturnValue("");
 });
@@ -125,6 +131,29 @@ function renderCanvasRoute(experience = true, projectId = "project-1") {
 }
 
 describe("LegacyCanvasRoute", () => {
+  it.each(["light", "dark"] as const)("keeps the shell and account dialog on the canvas-selected %s theme", (theme) => {
+    window.localStorage.setItem("reelay-theme-mode", theme === "light" ? "dark" : "light");
+    renderCanvasRoute();
+    fireEvent.click(screen.getByRole("button", { name: theme === "light" ? "画布切浅色" : "画布切深色" }));
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(document.documentElement.style.colorScheme).toBe(theme);
+    expect(window.localStorage.getItem("reelay-theme-mode")).toBe(theme);
+    fireEvent.click(screen.getByRole("button", { name: "打开我的积分" }));
+    expect(screen.getByTestId("initial-account-section")).toHaveTextContent("credits");
+    expect(hostContexts.at(-1)?.theme).toBe(theme);
+    expect(document.documentElement.dataset.theme).toBe(theme);
+  });
+
+  it("keeps the current canvas theme when preference storage is blocked", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    renderCanvasRoute();
+    fireEvent.click(screen.getByRole("button", { name: "画布切深色" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开我的积分" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(hostContexts.at(-1)?.theme).toBe("dark");
+  });
+
   it.each([true, false])("reads a matching intent once under StrictMode with experience=%s and clears it when the host initializes", (experience) => {
     vi.mocked(takeProjectLaunchIntent).mockReturnValueOnce("一支香水广告");
     renderCanvasRoute(experience);

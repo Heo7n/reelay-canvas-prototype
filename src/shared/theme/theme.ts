@@ -17,7 +17,7 @@ export function applyTheme(theme: ThemeMode): void {
   document.documentElement.style.colorScheme = theme;
 }
 
-export function useTheme(): { theme: ThemeMode; toggleTheme: () => void } {
+export function useTheme(): { theme: ThemeMode; setTheme: (theme: ThemeMode) => void; toggleTheme: () => void } {
   const [theme, setTheme] = useState<ThemeMode>(readTheme);
 
   useEffect(() => {
@@ -31,6 +31,7 @@ export function useTheme(): { theme: ThemeMode; toggleTheme: () => void } {
 
   return {
     theme,
+    setTheme,
     toggleTheme: () => setTheme((current) => (current === "light" ? "dark" : "light")),
   };
 }

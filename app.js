@@ -87,6 +87,9 @@ const themeModeIcon = document.querySelector("#themeModeIcon");
 const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
 const profileCreditValue = document.querySelector("#profileCreditValue");
+const railCreditValue = document.querySelector("#railCreditValue");
+const railCreditTip = document.querySelector("#railCreditTip");
+const canvasCreditsBtn = document.querySelector("#canvasCreditsBtn");
 const profileAvatar = document.querySelector("#profileAvatar");
 const profileName = document.querySelector("#profileName");
 const profileEmail = document.querySelector("#profileEmail");
@@ -431,6 +434,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   getExpectedSource: () => window.parent,
   onAccessChange: applyCanvasAccessMode,
   onContext(context) {
+    if (context.theme === "light" || context.theme === "dark") applyTheme(context.theme, { notifyHost: false });
     canvasNodeTasks.cancelScope({}, "context-replaced");
     state.projectId = String(context.projectId || state.projectId);
     state.projectName = String(context.projectName || state.projectName);
@@ -2958,7 +2962,19 @@ function formatCredit(value) {
 }
 
 function syncCreditDisplay() {
-  const credits = new Intl.NumberFormat("zh-CN").format(Math.max(0, Math.round(state.account.credits || 0)));
+  const balance = Math.max(0, Math.round(state.account.credits || 0));
+  const credits = new Intl.NumberFormat("zh-CN").format(balance);
+  if (railCreditValue) {
+    const unit = balance >= 100_000_000 ? 100_000_000 : 10_000;
+    const compact = new Intl.NumberFormat("zh-CN", {
+      useGrouping: false,
+      maximumFractionDigits: balance / unit < 100 ? 1 : 0,
+      roundingMode: "trunc",
+    }).format(balance / unit);
+    railCreditValue.textContent = balance < 10_000 ? String(balance) : `${compact}${unit === 10_000 ? "万" : "亿"}`;
+  }
+  if (railCreditTip) railCreditTip.textContent = `可用积分：${credits}`;
+  canvasCreditsBtn?.setAttribute("aria-label", `查看我的积分，当前可用 ${credits}`);
   if (profileCreditValue) {
     profileCreditValue.textContent = credits;
     profileCreditValue.closest("[data-profile-action='credits']")
@@ -7819,6 +7835,7 @@ function showThemeSwitchFeedback() {
 
 function applyTheme(mode = state.themeMode, options = {}) {
   const nextMode = normalizeThemeMode(mode);
+  const changed = nextMode !== state.themeMode;
   state.themeMode = nextMode;
   try {
     localStorage.setItem("reelay-theme-mode", nextMode);
@@ -7854,6 +7871,7 @@ function applyTheme(mode = state.themeMode, options = {}) {
   }
   refreshIcons();
   if (options.flash) showThemeSwitchFeedback();
+  if (changed && options.notifyHost !== false) canvasPersistence.post("canvas:theme-change", { theme: nextMode });
 }
 
 function setAgentWidth(width) {
@@ -10563,6 +10581,11 @@ profileShortcutSheet?.addEventListener("pointerenter", () => {
 });
 
 profileShortcutSheet?.addEventListener("pointerleave", scheduleProfileShortcutClose);
+
+canvasCreditsBtn?.addEventListener("click", () => {
+  closeProfileMenu();
+  requestHostAccountSettings("credits");
+});
 
 profileMenu?.addEventListener("click", (event) => {
   const helpTrigger = event.target.closest(".profile-help-trigger");

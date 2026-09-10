@@ -2482,6 +2482,36 @@ test("Agent send estimate follows the generation model and parameters and recove
   assertEstimate(36);
 });
 
+test("canvas credit widget compacts large balances without overstating them and retains exact accessible values", (t) => {
+  const h = createHarness(t);
+  const { document } = h.window;
+  assert.equal(h.state.account.credits, 3000);
+  assert.equal(h.state.account.consumedCredits, 0);
+  assert.equal(document.querySelector("#railCreditValue").textContent, "3000");
+  for (const [balance, compact, exact] of [
+    [0, "0", "0"],
+    [9999, "9999", "9,999"],
+    [10000, "1万", "10,000"],
+    [12876, "1.2万", "12,876"],
+    [999999, "99.9万", "999,999"],
+    [99999999, "9999万", "99,999,999"],
+    [100000000, "1亿", "100,000,000"],
+    [129999999, "1.2亿", "129,999,999"],
+  ]) {
+    h.state.account.credits = balance;
+    h.window.syncCreditDisplay();
+    assert.equal(document.querySelector("#railCreditValue").textContent, compact);
+    assert.equal(document.querySelector("#railCreditTip").textContent, `可用积分：${exact}`);
+    assert.equal(document.querySelector("#profileCreditValue").textContent, exact);
+    assert.equal(document.querySelector("#canvasCreditsBtn").getAttribute("aria-label"), `查看我的积分，当前可用 ${exact}`);
+    assert.equal(document.querySelector("#profileCreditsBtn").getAttribute("aria-label"), `查看我的积分，当前 ${exact}`);
+  }
+  const refreshed = createHarness(t);
+  assert.equal(refreshed.state.account.credits, 3000);
+  assert.equal(refreshed.state.account.consumedCredits, 0);
+  assert.equal(refreshed.window.document.querySelector("#railCreditValue").textContent, "3000");
+});
+
 test("Agent send estimate is independent of account balance and simulated messages do not charge or change canvases", (t) => {
   const h = createHarness(t);
   const first = h.canvas("one", [h.node("shared-id")]);
@@ -2499,6 +2529,8 @@ test("Agent send estimate is independent of account balance and simulated messag
   assert.equal(h.state.account.credits, 2973);
   assert.equal(h.state.account.consumedCredits, 27);
   assert.equal(document.querySelector("#profileCreditValue").textContent, "2,973");
+  assert.equal(document.querySelector("#railCreditValue").textContent, "2973");
+  assert.equal(document.querySelector("#railCreditTip").textContent, "可用积分：2,973");
   assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
 
   const account = plain(h.state.account);

@@ -1644,4 +1644,82 @@ describe("CanvasHost", () => {
 
     expect(onOpenAccountSettings).toHaveBeenNthCalledWith(2, "profile");
   });
+
+  it.each([true, false])("updates the routed theme without reloading or saving the canvas when writable=%s", async (writable) => {
+    const getCanvasDocument = vi.fn(async () => document);
+    const save = vi.fn();
+    const themeRepository = { getCanvasDocument, save };
+    const onThemeChange = vi.fn();
+    function RoutedThemeHost() {
+      const [theme, setTheme] = useState<"light" | "dark">("light");
+      return <CanvasHost
+        repository={themeRepository}
+        context={{ ...editableContext, theme, writable }}
+        onThemeChange={(nextTheme) => {
+          onThemeChange(nextTheme);
+          setTheme(nextTheme);
+        }}
+      />;
+    }
+    render(<RoutedThemeHost />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchCanvasMessage(frame, readyMessage));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "host:document" }), window.location.origin,
+    ));
+    postMessage.mockClear();
+
+    for (const theme of ["dark", "light"] as const) {
+      act(() => dispatchCanvasMessage(frame, {
+        source: "reelay-legacy-canvas", type: "canvas:theme-change", protocolVersion: 1,
+        instanceId: canvasInstanceId, theme,
+      }));
+      expect(onThemeChange).toHaveBeenLastCalledWith(theme);
+      expect(screen.getByTitle("Reelay 项目画布")).toBe(frame);
+      expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved");
+    }
+    expect(onThemeChange).toHaveBeenCalledTimes(2);
+    expect(getCanvasDocument).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it("ignores foreign, invalid, not-ready, and stale-instance theme changes", async () => {
+    const onThemeChange = vi.fn();
+    const getCanvasDocument = vi.fn(async () => document);
+    const save = vi.fn();
+    render(<CanvasHost
+      repository={{ getCanvasDocument, save }}
+      context={editableContext}
+      onThemeChange={onThemeChange}
+    />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const message = {
+      source: "reelay-legacy-canvas", type: "canvas:theme-change", protocolVersion: 1,
+      instanceId: canvasInstanceId, theme: "dark",
+    };
+    const send = (data: unknown, origin = window.location.origin, source: MessageEventSource | null = frame.contentWindow) => {
+      window.dispatchEvent(new MessageEvent("message", { data, origin, source }));
+    };
+    act(() => send(message));
+    expect(onThemeChange).not.toHaveBeenCalled();
+    act(() => send(readyMessage));
+    await waitFor(() => expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved"));
+
+    act(() => {
+      send(message, "https://foreign.example");
+      send(message, window.location.origin, window);
+      send({ ...message, source: "foreign" });
+      send({ ...message, theme: "system" });
+      send({ ...message, protocolVersion: 2 });
+      send({ ...readyMessage, instanceId: "canvas-instance-2" });
+      send(message);
+    });
+    expect(onThemeChange).not.toHaveBeenCalled();
+    act(() => send({ ...message, instanceId: "canvas-instance-2", theme: "light" }));
+    expect(onThemeChange).toHaveBeenCalledExactlyOnceWith("light");
+    expect(getCanvasDocument).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+  });
 });

@@ -322,6 +322,13 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:theme-change"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    theme: z.enum(["light", "dark"]),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:save"),
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
