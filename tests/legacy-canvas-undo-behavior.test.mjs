@@ -166,6 +166,146 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
     editorFor, setText, getText, selectText, selection, promptText };
 }
 
+test("selection layout menu is mutually exclusive, closes for stale selection, and does not mutate content", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("one"), h.node("two", { x: 500 }), h.node("three", { y: 700 })];
+  const canvas = h.canvas("selection-layout-menu", nodes);
+  h.install(canvas);
+  h.window.setSelection(["one", "two"]);
+  h.window.render();
+  const { document } = h.window;
+  const trigger = document.querySelector('[data-selection-action="toggle-layout"]');
+  const menu = document.querySelector("#selectionLayoutMenu");
+  const download = document.querySelector('[data-selection-action="toggle-download"]');
+  const assertOpen = (open) => {
+    assert.equal(menu.classList.contains("hidden"), !open);
+    assert.equal(trigger.getAttribute("aria-expanded"), String(open));
+    assert.equal(trigger.classList.contains("active"), open);
+  };
+  const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  trigger.click();
+  assertOpen(true);
+  assert.equal(document.activeElement, menu.querySelector("button"), "keyboard activation focuses the first layout");
+  assert.deepEqual([...menu.querySelectorAll("button")].map((button) => button.textContent.trim()), ["宫格布局", "水平布局", "垂直布局"]);
+  download.click();
+  assertOpen(false);
+  assert.equal(document.querySelector("#selectionDownloadMenu").classList.contains("hidden"), false);
+  trigger.click();
+  assertOpen(true);
+  assert.equal(document.querySelector("#selectionDownloadMenu").classList.contains("hidden"), true);
+  document.body.click();
+  assertOpen(false);
+  trigger.click();
+  h.window.setSelection(["two", "one"]);
+  h.window.render();
+  assertOpen(true);
+  h.window.setSelection(["one", "three"]);
+  menu.querySelector('[data-sort-layout="horizontal"]').click();
+  assertOpen(false);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before, "stale menu actions cannot target the replacement selection");
+  trigger.click();
+  nodes[0] = h.node("one");
+  h.window.render();
+  assertOpen(false);
+  assert.equal(canvas.undoStack.length, 0);
+});
+
+test("selection layout options move only selected nodes with one-step undo", async (t) => {
+  for (const mode of ["grid", "horizontal", "vertical"]) {
+    await t.test(mode, (t) => {
+      const h = createHarness(t);
+      const nodes = [h.node("one", { x: 300, y: 430 }), h.node("two", { x: 800, y: 80 }), h.node("outside", { x: 2500, y: 1200 })];
+      const canvas = h.canvas("selection-layout", nodes, [], [{ id: "link", sourceNodeId: "one", targetNodeId: "two" }]);
+      h.install(canvas);
+      h.window.setSelection(["one", "two"]);
+      h.window.render();
+      const before = nodes.map(({ x, y }) => ({ x, y }));
+      const outside = plain(nodes[2]);
+      const links = canvas.connections;
+      const { document } = h.window;
+      document.querySelector('[data-selection-action="toggle-layout"]').click();
+      document.querySelector(`[data-sort-layout="${mode}"]`).click();
+      assert.equal(canvas.undoStack.length, 1);
+      assert.deepEqual(plain(nodes[2]), outside);
+      assert.equal(canvas.connections, links);
+      assert.equal(document.querySelector("#selectionLayoutMenu").classList.contains("hidden"), true);
+      if (mode === "horizontal") assert.equal(nodes[0].y, nodes[1].y);
+      if (mode === "vertical") assert.equal(nodes[0].x, nodes[1].x);
+      h.window.undoLastAction();
+      assert.deepEqual(nodes.map(({ x, y }) => ({ x, y })), before);
+    });
+  }
+});
+
+test("selection layout refuses partial groups and arranges complete group selections without breaking membership", (t) => {
+  const h = createHarness(t);
+  const nodes = [h.node("one", { x: 250, y: 130, groupId: "group" }), h.node("two", { x: 700, y: 430, groupId: "group" }), h.node("free", { x: 1600, y: 40 })];
+  const frame = group("group", ["one", "two"], { x: 200, y: 80, width: 1500, height: 1000 });
+  const canvas = h.canvas("selection-layout-group", nodes, [frame]);
+  h.install(canvas);
+  const { document } = h.window;
+  const trigger = document.querySelector('[data-selection-action="toggle-layout"]');
+  const menu = document.querySelector("#selectionLayoutMenu");
+  h.window.setSelection(["one", "free"]);
+  h.window.render();
+  trigger.click();
+  assert.equal(trigger.getAttribute("aria-disabled"), "true");
+  assert.equal(menu.classList.contains("hidden"), true);
+  assert.match(document.querySelector("#selectionLayoutTip").textContent, /完整分组/);
+  h.window.sortSelectedNodes("horizontal");
+  assert.equal(canvas.undoStack.length, 0);
+
+  h.window.setSelection(["one", "two"]);
+  h.window.render();
+  assert.equal(trigger.getAttribute("aria-disabled"), "false");
+  const original = plain({ nodes, frame });
+  trigger.click();
+  menu.querySelector('[data-sort-layout="horizontal"]').click();
+  assert.equal(nodes[0].y, nodes[1].y);
+  assert.equal(frame.width, original.frame.width);
+  assert.equal(frame.height, original.frame.height);
+  assert.deepEqual(plain(frame.nodeIds), ["one", "two"]);
+  assert.equal(nodes[0].groupId, "group");
+  assert.deepEqual(plain(nodes[2]), original.nodes[2]);
+  h.window.undoLastAction();
+  assert.deepEqual(plain({ nodes, frame }), original);
+
+  h.window.setSelection(["one", "two", "free"]);
+  h.window.render();
+  trigger.click();
+  menu.querySelector('[data-sort-layout="vertical"]').click();
+  assert.equal(nodes[1].x - nodes[0].x, original.nodes[1].x - original.nodes[0].x);
+  assert.equal(nodes[1].y - nodes[0].y, original.nodes[1].y - original.nodes[0].y);
+  assert.equal(nodes[0].x - frame.x, original.nodes[0].x - original.frame.x);
+  assert.equal(nodes[0].y - frame.y, original.nodes[0].y - original.frame.y);
+  assert.equal(frame.width, original.frame.width);
+  assert.equal(frame.height, original.frame.height);
+});
+
+test("selection layout closes and disables when the real host revokes editing", (t) => {
+  const h = createHarness(t);
+  const canvas = h.canvas("selection-layout-readonly", [h.node("one"), h.node("two", { x: 900 })]);
+  h.install(canvas);
+  h.window.setSelection(["one", "two"]);
+  h.window.render();
+  const { document } = h.window;
+  const trigger = document.querySelector('[data-selection-action="toggle-layout"]');
+  trigger.click();
+  const before = plain(h.window.createCanvasDocumentSnapshot());
+  const host = { postMessage() {} };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: host });
+  const dispatch = (data) => h.window.canvasTest.canvasPersistence.handleHostMessage({
+    origin: h.window.location.origin, source: host, data: { source: "reelay-shell", ...data },
+  });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId: h.state.projectId, canvasId: canvas.id, writable: false } });
+  dispatch({ type: "host:document", protocolVersion: 1, document: null, writable: false });
+  assert.equal(trigger.disabled, true);
+  assert.equal(document.querySelector("#selectionLayoutMenu").classList.contains("hidden"), true);
+  h.window.sortSelectedNodes("horizontal");
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), before);
+  assert.equal(canvas.undoStack.length, 0);
+});
+
 test("selection toolbar creates a reviewed Entity without changing selected nodes or canvas history", async (t) => {
   const h = createHarness(t);
   const image = { id: "selection-image", type: "image", name: "角色.png", url: "https://example.test/character.png" };
@@ -1542,47 +1682,56 @@ test("toolbar top-layer Escape closes the current group, media or selection popu
   assert.equal(popup.classList.contains("hidden"), true);
   assert.equal(opened.has(popup), false);
   assert.equal(document.activeElement, document.querySelector('[data-selection-action="toggle-download"]'));
+  document.querySelector('[data-selection-action="toggle-layout"]').click();
+  popup = document.querySelector('[data-toolbar-popover="selection-layout"]');
+  assert.equal(opened.has(popup), true);
+  popup.querySelector("button").focus();
+  escape();
+  assert.equal(popup.classList.contains("hidden"), true);
+  assert.equal(opened.has(popup), false);
+  assert.equal(document.activeElement, document.querySelector('[data-selection-action="toggle-layout"]'));
   assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
   assert.equal(canvas.undoStack.length, 0);
 });
 
-test("organize current selection preserves outside content, live media/tasks and one-step undo", (t) => {
+test("whole-canvas arrange previews without serializing coordinates, then keeps one undoable command", (t) => {
   const h = createHarness(t);
   const nodes = [h.node("source", { x: 500, y: 420 }), h.node("target", { x: 100, y: 40, expanded: true }), h.node("outside", { x: 100, y: 900 })];
   const first = h.canvas("arrange", nodes, [], [{ id: "edge", sourceNodeId: "source", targetNodeId: "target" }]);
   const other = h.canvas("other", [h.node("other-node")]);
   h.install(first, other);
-  h.window.setSelection(["source", "target"]);
+  h.window.setSelection(["source"]);
   h.window.render();
   const before = nodes.map((node) => ({ x: node.x, y: node.y }));
-  const outside = plain(nodes[2]);
+  const serialized = JSON.stringify(h.window.createCanvasDocumentSnapshot());
   const otherBefore = plain(other);
   const links = first.connections;
   const credits = plain(h.state.account);
   const { document } = h.window;
   document.querySelector('[data-canvas-tool="organize"]').click();
-  assert.equal(document.querySelector('[data-arrange-scope="current"]').getAttribute("aria-pressed"), "true");
-  document.querySelector('[data-arrange-action="auto"]').click();
+  assert.equal(first.undoStack.length, 0);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), serialized, "autosave reads only original content while reviewing");
+  assert.notEqual(h.window.getNodePresentation(nodes[0]).x, nodes[0].x);
+  assert.equal(Number.parseFloat(document.querySelector('[data-id="source"]').style.left), h.window.getNodePresentation(nodes[0]).x);
+  const preview = nodes.map((node) => ({ x: h.window.getNodePresentation(node).x, y: h.window.getNodePresentation(node).y }));
+  document.querySelector('[data-arrange-decision="keep"]').click();
   assert.equal(first.undoStack.length, 1);
-  assert.ok(nodes[0].x < nodes[1].x, "the upstream node is laid out before its downstream node");
-  assert.deepEqual(plain(nodes[2]), outside);
+  assert.deepEqual(nodes.map(({ x, y }) => ({ x, y })), preview);
+  assert.ok(nodes[0].x < nodes[1].x);
   assert.deepEqual(plain(other), otherBefore);
   assert.equal(first.connections, links);
   assert.deepEqual(plain(h.state.account), credits);
-  assert.ok(first.undoStack[0].command.changes.every((change) => Object.keys(change.after.fields).every((field) => ["x", "y"].includes(field))));
   document.querySelector('[data-canvas-tool="organize"]').click();
-  document.querySelector('[data-arrange-action="auto"]').click();
-  assert.equal(first.undoStack.length, 1, "identical arrangement is not another command");
+  assert.equal(document.querySelector('#canvasArrangeMenu').classList.contains('hidden'), true);
+  assert.equal(first.undoStack.length, 1);
   const result = { id: "late-result", type: "image", url: "/assets/completed.png" };
   nodes[1].generatedAsset = result;
-  nodes[1].status = "completed";
   h.window.undoLastAction();
-  assert.deepEqual(nodes.map((node) => ({ x: node.x, y: node.y })), before);
-  assert.equal(nodes[1].generatedAsset, result, "undoing positions cannot roll back a later task result");
-  assert.equal(nodes[1].status, "completed");
+  assert.deepEqual(nodes.map(({ x, y }) => ({ x, y })), before);
+  assert.equal(nodes[1].generatedAsset, result);
 });
 
-test("organize all moves a partly selected group rigidly and preserves its size and membership", (t) => {
+test("arrange restores the original group and node presentation without content or history writes", (t) => {
   const h = createHarness(t);
   const nodes = [h.node("one", { x: 250, y: 130, groupId: "group" }), h.node("two", { x: 700, y: 430, groupId: "group" }), h.node("free", { x: 20, y: 40 })];
   const frame = group("group", ["one", "two"], { x: 200, y: 80 });
@@ -1593,45 +1742,45 @@ test("organize all moves a partly selected group rigidly and preserves its size 
   const before = plain({ nodes, frame });
   const { document } = h.window;
   document.querySelector('[data-canvas-tool="organize"]').click();
-  assert.match(document.querySelector('[data-arrange-status]').textContent, /完整分组/);
-  document.querySelector('[data-arrange-scope="all"]').click();
-  document.querySelector('[data-arrange-action="vertical"]').click();
-  assert.equal(canvas.undoStack.length, 1);
-  assert.equal(nodes[1].x - nodes[0].x, before.nodes[1].x - before.nodes[0].x);
-  assert.equal(nodes[1].y - nodes[0].y, before.nodes[1].y - before.nodes[0].y);
-  assert.equal(nodes[0].x - frame.x, before.nodes[0].x - before.frame.x);
-  assert.equal(nodes[0].y - frame.y, before.nodes[0].y - before.frame.y);
-  assert.equal(frame.width, before.frame.width);
-  assert.equal(frame.height, before.frame.height);
-  assert.deepEqual(plain(frame.nodeIds), before.frame.nodeIds);
-  h.window.undoLastAction();
+  const positions = nodes.map(h.window.getNodePresentation);
+  const framePreview = h.window.getGroupBounds(frame);
+  assert.equal(positions[1].x - positions[0].x, before.nodes[1].x - before.nodes[0].x);
+  assert.equal(positions[1].y - positions[0].y, before.nodes[1].y - before.nodes[0].y);
+  assert.equal(positions[0].x - framePreview.left, before.nodes[0].x - before.frame.x);
+  assert.equal(framePreview.width, before.frame.width);
+  assert.equal(framePreview.height, before.frame.height);
   assert.deepEqual(plain({ nodes, frame }), before);
+  document.querySelector('[data-arrange-decision="restore"]').click();
+  assert.deepEqual(plain({ nodes, frame }), before);
+  assert.equal(canvas.undoStack.length, 0);
+  for (const node of nodes) {
+    assert.equal(h.window.getNodePresentation(node).x, node.x);
+    assert.equal(Number.parseFloat(document.querySelector(`[data-id="${node.id}"]`).style.left), node.x);
+  }
+  assert.equal(h.window.getGroupBounds(frame).left, frame.x);
 });
 
-test("organize active group fits expanded node footprints and restores its frame with one undo", (t) => {
+test("preview undo does not consume existing history and a same-ID replacement cannot receive its plan", (t) => {
   const h = createHarness(t);
-  const nodes = [h.node("one", { x: 50, y: 70, groupId: "group", expanded: true }), h.node("two", { x: 60, y: 80, groupId: "group", ratio: "9:16" })];
-  const frame = group("group", ["one", "two"], { width: 850, height: 500 });
-  const canvas = h.canvas("arrange-inside", nodes, [frame]);
+  const nodes = [h.node("one", { x: 50, y: 70 }), h.node("two", { x: 400, y: 450 })];
+  const canvas = h.canvas("arrange-stale", nodes);
   h.install(canvas);
-  h.window.setActiveGroup("group");
-  nodes[0].expanded = true;
+  h.window.commitNodeFields(nodes[0], { ...nodes[0], name: "已命名" }, ["name"], "node-name");
   h.window.render();
-  const before = plain({ nodes, frame });
+  assert.equal(canvas.undoStack.length, 1);
   const { document } = h.window;
   document.querySelector('[data-canvas-tool="organize"]').click();
-  assert.equal(document.querySelector('[data-arrange-scope="current"]').textContent, "当前分组");
-  document.querySelector('[data-arrange-action="vertical"]').click();
+  document.querySelector('#canvasArrangeMenu').dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
   assert.equal(canvas.undoStack.length, 1);
-  const boxes = nodes.map(h.window.getArrangementNodeBounds);
-  assert.ok(boxes[1].top > boxes[0].bottom, "expanded prompt and title footprints do not collide");
-  assert.ok(frame.height > before.frame.height);
-  for (const box of boxes) {
-    assert.ok(box.left >= frame.x && box.top >= frame.y);
-    assert.ok(box.right <= frame.x + frame.width && box.bottom <= frame.y + frame.height);
-  }
-  h.window.undoLastAction();
-  assert.deepEqual(plain({ nodes, frame }), before);
+  assert.equal(nodes[0].name, "已命名");
+  assert.equal(document.querySelector('#canvasArrangeMenu').classList.contains('hidden'), true);
+  document.querySelector('[data-canvas-tool="organize"]').click();
+  const replacement = h.canvas(canvas.id, nodes.map((node) => ({ ...node })));
+  h.install(replacement);
+  document.querySelector('[data-arrange-decision="keep"]').click();
+  assert.equal(replacement.undoStack.length, 0);
+  assert.equal(replacement.nodes[1].x, 400);
+  assert.equal(nodes[1].x, 400);
 });
 
 test("media toolbar defaults to icons while preserving explicit saved label choices", (t) => {

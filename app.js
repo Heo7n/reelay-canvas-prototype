@@ -113,6 +113,9 @@ let themeFeedbackTimer = null;
 let selectionSurfaceRadiusWorld = 20;
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
 const selectionDownloadTrigger = document.querySelector(".selection-download-trigger");
+const selectionLayoutMenu = document.querySelector("#selectionLayoutMenu");
+const selectionLayoutTrigger = document.querySelector(".selection-layout-trigger");
+let selectionLayoutSession = null;
 const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
 const agentPanel = document.querySelector("#agentPanel");
@@ -214,6 +217,10 @@ const canvasToolbarMenus = window.REELAY_CANVAS_TOOLBAR_MENU_CONTROLLER.create({
     if (menu.dataset.toolbarPopover === "selection") {
       setSelectionDownloadMenuOpen(false);
       return selectionDownloadTrigger;
+    }
+    if (menu.dataset.toolbarPopover === "selection-layout") {
+      setSelectionLayoutMenuOpen(false);
+      return selectionLayoutTrigger;
     }
     if (menu.dataset.toolbarPopover === "organize") {
       canvasArrange.close();
@@ -727,21 +734,14 @@ const canvasArrange = window.REELAY_CANVAS_ARRANGE_CONTROLLER.create({
     canvas: getActiveCanvas(), nodes: state.nodes, groups: state.groups, connections: state.connections,
     selectedIds: state.selectedIds, activeGroupId: state.activeGroupId,
     canMutate: isCanvasMutationAllowed(), interactionBusy: Boolean(state.action),
-    getNodeBounds: getArrangementNodeBounds, getGroupBounds, groupPadding: groupFrameRules,
+    getNodeBounds: getArrangementNodeBounds, getGroupBounds: (group) => getGroupBounds(group, true), groupPadding: groupFrameRules,
     planArrangement: window.REELAY_CANVAS_ARRANGE_LAYOUT.planArrangement,
   }),
   describeScope: window.REELAY_CANVAS_ARRANGE_SCOPE.describeScope,
   prepareArrangement: window.REELAY_CANVAS_ARRANGE_SCOPE.prepareArrangement,
   beforeArrange: () => canvasNodeLayoutTransition.finishAll(),
-  commit(plan) {
-    const changes = plan.positions.map((position) => canvasContentCommands.buildFieldChange(
-      "nodes", state.nodes.find((node) => node.id === position.id), position, ["x", "y"],
-    ));
-    changes.push(...plan.groupPositions.map((position) => canvasContentCommands.buildFieldChange(
-      "groups", getGroupById(position.id), position, Object.keys(position).filter((key) => key !== "id"),
-    )));
-    return executeCanvasContentCommand("canvas-layout", changes);
-  },
+  commit: commitArrangementPlan,
+  onPreviewChange: renderCanvasView,
   onComplete(plan) {
     render();
     const bounds = [
@@ -757,7 +757,6 @@ const canvasArrange = window.REELAY_CANVAS_ARRANGE_CONTROLLER.create({
       // so positioning the result cannot change its geometry or introduce overlaps.
       applyFitBounds({ left, top, right, bottom, width: right - left, height: bottom - top }, { minScale: state.scale, maxScale: state.scale });
     }
-    showActionToast("已整理，可撤销恢复原位置");
   },
   notify: showActionToast,
   onOpenChange: () => canvasToolbarMenus.sync(),
@@ -771,6 +770,7 @@ function syncCanvasAccessUi() {
   const mode = canvasPersistence.getAccessMode();
   appShell?.setAttribute("data-canvas-access", mode);
   const locked = !isCanvasMutationAllowed();
+  if (locked) setSelectionLayoutMenuOpen(false);
   document.querySelectorAll("[data-canvas-mutation]").forEach((control) => {
     if (!(control instanceof HTMLButtonElement || control instanceof HTMLInputElement)) return;
     if (locked) {
@@ -1364,8 +1364,9 @@ function syncNodeVisualLayout(
   const canonicalLayout = getNodeLayout(node);
   canvasMediaImageView.syncImages(element, { scale: state.scale, displayWidth: canonicalLayout.mediaWidth });
   const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
-  element.style.left = `${node.x}px`;
-  element.style.top = `${node.y}px`;
+  const base = canvasArrange.getNodePosition(node) || node;
+  element.style.left = `${base.x}px`;
+  element.style.top = `${base.y}px`;
   element.style.width = `${canonicalLayout.nodeWidth}px`;
   element.style.height = `${canonicalLayout.nodeHeight}px`;
   element.classList.toggle("node-layout-transitioning", isTransitioning);
@@ -1373,7 +1374,7 @@ function syncNodeVisualLayout(
   if (mediaFrame) {
     mediaFrame.style.width = `${layout.mediaWidth}px`;
     mediaFrame.style.height = `${layout.mediaHeight}px`;
-    mediaFrame.style.transform = `translateY(${(y - node.y).toFixed(3)}px)`;
+    mediaFrame.style.transform = `translateY(${(y - base.y).toFixed(3)}px)`;
   }
   const mediaToolbar = element.querySelector("[data-media-toolbar]");
   if (mediaToolbar) {
@@ -2443,6 +2444,8 @@ function getNodeLayoutTransitionId(node) {
 
 function getNodePresentation(node) {
   const layout = getNodeLayout(node);
+  const preview = canvasArrange.getNodePosition(node);
+  if (preview) return { x: preview.x, y: preview.y, layout };
   const transition = canvasNodeLayoutTransition.get(getNodeLayoutTransitionId(node));
   if (!transition) return { x: node.x, y: node.y, layout };
   return {
@@ -2619,8 +2622,9 @@ function normalizeGroupFrame(group) {
   };
 }
 
-function getGroupBounds(group) {
-  const normalized = normalizeGroupFrame(group);
+function getGroupBounds(group, canonical = false) {
+  const preview = canonical ? null : canvasArrange.getGroupPosition(group);
+  const normalized = normalizeGroupFrame(preview ? { ...group, ...preview } : group);
   if (!normalized) return null;
   return {
     left: normalized.x,
@@ -5138,6 +5142,11 @@ function getSelectionVisualBounds() {
 function renderSelectionToolbar() {
   if (!selectionToolbar || !multiSelectionSurface || !multiSelectionChrome) return;
   const selectedNodes = getSelectedNodes();
+  if (selectionLayoutSession && !isSelectionLayoutSessionCurrent()) setSelectionLayoutMenuOpen(false);
+  const layoutIssue = getSelectionLayoutIssue(selectedNodes);
+  selectionLayoutTrigger?.setAttribute("aria-disabled", String(Boolean(layoutIssue) || !isCanvasMutationAllowed()));
+  const layoutTip = selectionToolbar.querySelector("#selectionLayoutTip");
+  if (layoutTip) layoutTip.textContent = layoutIssue || "布局";
   const exactSelectionGroup = getExactSelectionGroup(selectedNodes);
   const bounds = getSelectionVisualBounds();
   const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
@@ -5153,6 +5162,7 @@ function renderSelectionToolbar() {
     multiSelectionPort?.removeAttribute("style");
     selectionToolbar.classList.add("hidden");
     setSelectionDownloadMenuOpen(false);
+    setSelectionLayoutMenuOpen(false);
     return;
   }
 
@@ -5176,6 +5186,7 @@ function renderSelectionToolbar() {
   if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
   if (isSelectionConnecting || state.action?.type === "marquee") {
     selectionToolbar.classList.add("hidden");
+    setSelectionLayoutMenuOpen(false);
     return;
   }
 
@@ -5801,6 +5812,16 @@ function pushCanvasUndoAction(canvas, action) {
   undoStack.push(action);
   if (undoStack.length > 50) undoStack.shift();
   canvas.undoStack = undoStack;
+}
+
+function commitArrangementPlan(plan) {
+  const changes = plan.positions.map((position) => canvasContentCommands.buildFieldChange(
+    "nodes", state.nodes.find((node) => node.id === position.id), position, ["x", "y"],
+  ));
+  changes.push(...plan.groupPositions.map((position) => canvasContentCommands.buildFieldChange(
+    "groups", getGroupById(position.id), position, Object.keys(position).filter((key) => key !== "id"),
+  )));
+  return executeCanvasContentCommand("canvas-layout", changes);
 }
 
 function executeCanvasContentCommand(type, changes, { recordUndo = true } = {}) {
@@ -8619,9 +8640,28 @@ function commitNodeArrangement(nodes, layout) {
 
 function sortSelectedNodes(layout = "grid") {
   if (!requireCanvasMutation()) return;
+  if (!["grid", "horizontal", "vertical"].includes(layout)) return;
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return;
-  if (!commitNodeArrangement(selectedNodes, layout)) return;
+  const issue = getSelectionLayoutIssue(selectedNodes);
+  if (issue) { showActionToast(issue); return; }
+  canvasNodeLayoutTransition.finishAll();
+  const plan = window.REELAY_CANVAS_ARRANGE_SCOPE.prepareArrangement({
+    nodes: state.nodes,
+    groups: state.groups,
+    connections: state.connections,
+    selectedIds: state.selectedIds,
+    activeGroupId: getExactSelectionGroup(selectedNodes)?.id || null,
+    scope: "current",
+    getNodeBounds: getArrangementNodeBounds,
+    getGroupBounds: (group) => getGroupBounds(group, true),
+    groupPadding: groupFrameRules,
+    planArrangement: window.REELAY_CANVAS_ARRANGE_LAYOUT.planArrangement,
+    mode: layout,
+  });
+  if (!plan.ok) { showActionToast(plan.reason); return; }
+  if (!plan.changed) return;
+  if (!commitArrangementPlan(plan).ok) return;
   render();
 }
 
@@ -9512,6 +9552,12 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     setSelectionDownloadMenuOpen(false);
     selectionDownloadTrigger?.focus({ preventScroll: true });
+    return;
+  }
+  if (event.key === "Escape" && !selectionLayoutMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    setSelectionLayoutMenuOpen(false);
+    selectionLayoutTrigger?.focus({ preventScroll: true });
     return;
   }
   if (event.key === "Escape") {
@@ -10907,10 +10953,40 @@ profileMenu?.addEventListener("click", (event) => {
 
 function setSelectionDownloadMenuOpen(open) {
   const nextOpen = Boolean(open && selectionDownloadMenu && selectionDownloadTrigger);
+  if (nextOpen) setSelectionLayoutMenuOpen(false);
   selectionDownloadMenu?.classList.toggle("hidden", !nextOpen);
   selectionDownloadTrigger?.setAttribute("aria-expanded", String(nextOpen));
   selectionDownloadTrigger?.classList.toggle("active", nextOpen);
   canvasToolbarMenus.sync();
+}
+
+function getSelectionLayoutIssue(selectedNodes = getSelectedNodes()) {
+  if (selectedNodes.length < 2) return "请选择至少两个节点后再布局";
+  const selectedIds = new Set(selectedNodes.map((node) => node.id));
+  const partialGroup = state.groups.some((group) => group.nodeIds.some((id) => selectedIds.has(id))
+    && group.nodeIds.some((id) => !selectedIds.has(id)));
+  return partialGroup ? "请选择完整分组后再布局" : "";
+}
+
+function isSelectionLayoutSessionCurrent() {
+  if (!selectionLayoutSession || selectionLayoutSession.canvas !== getActiveCanvas()) return false;
+  const selectedNodes = getSelectedNodes();
+  return selectedNodes.length === selectionLayoutSession.nodes.size
+    && selectedNodes.every((node) => selectionLayoutSession.nodes.has(node));
+}
+
+function setSelectionLayoutMenuOpen(open, { focus = false } = {}) {
+  if (open && !requireCanvasMutation()) return;
+  const issue = open && getSelectionLayoutIssue();
+  if (issue) { showActionToast(issue); return; }
+  const nextOpen = Boolean(open && selectionLayoutMenu && selectionLayoutTrigger);
+  if (nextOpen) setSelectionDownloadMenuOpen(false);
+  selectionLayoutSession = nextOpen ? { canvas: getActiveCanvas(), nodes: new Set(getSelectedNodes()) } : null;
+  selectionLayoutMenu?.classList.toggle("hidden", !nextOpen);
+  selectionLayoutTrigger?.setAttribute("aria-expanded", String(nextOpen));
+  selectionLayoutTrigger?.classList.toggle("active", nextOpen);
+  canvasToolbarMenus.sync();
+  if (nextOpen && focus) selectionLayoutMenu.querySelector("button")?.focus({ preventScroll: true });
 }
 
 selectionToolbar?.addEventListener("pointerdown", (event) => {
@@ -10936,6 +11012,9 @@ selectionToolbar?.addEventListener("click", (event) => {
   event.stopPropagation();
   const layout = event.target.closest("[data-sort-layout]")?.dataset.sortLayout;
   if (layout) {
+    const current = isSelectionLayoutSessionCurrent();
+    setSelectionLayoutMenuOpen(false);
+    if (!current) return;
     sortSelectedNodes(layout);
     return;
   }
@@ -10946,6 +11025,11 @@ selectionToolbar?.addEventListener("click", (event) => {
     return;
   }
   const action = event.target.closest("[data-selection-action]")?.dataset.selectionAction;
+  if (action === "toggle-layout") {
+    setSelectionLayoutMenuOpen(selectionLayoutMenu?.classList.contains("hidden"), { focus: event.detail === 0 });
+    return;
+  }
+  if (action && action !== "toggle-download") setSelectionLayoutMenuOpen(false);
   if (action === "create-entity") {
     openSelectionEntityEditor();
     return;
@@ -10980,6 +11064,7 @@ canvasToolButtons.forEach((button) => {
       closeCanvasPanel();
       closeCanvasCreateMenus();
       setSelectionDownloadMenuOpen(false);
+      setSelectionLayoutMenuOpen(false);
       closeGroupLayoutMenus();
       canvasArrange.toggle({ focus: event.detail === 0 });
       return;
@@ -11368,6 +11453,7 @@ document.addEventListener("click", (event) => {
   }
   if (!target?.closest("#selectionToolbar")) {
     setSelectionDownloadMenuOpen(false);
+    setSelectionLayoutMenuOpen(false);
   }
   if (!target?.closest(".group-frame")) {
     closeGroupLayoutMenus();
@@ -11405,6 +11491,7 @@ window.addEventListener("resize", () => {
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
+  canvasArrange.close();
   if (!event.persisted) {
     assetLibraryItemMenu.dispose();
     canvasToolbarMenus.dispose();

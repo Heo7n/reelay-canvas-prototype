@@ -1,101 +1,42 @@
 .canvas-arrange-menu {
-  width: 292px;
-  padding: 12px;
+  width: 252px;
+  padding: 16px;
   border: 1px solid var(--toolbar-border);
-  border-radius: var(--toolbar-radius);
+  border-radius: 16px;
   background: var(--toolbar-bg);
   color: var(--toolbar-text);
   box-shadow: var(--canvas-popover-shadow);
 }
 
-.canvas-arrange-heading {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 12px;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.canvas-arrange-heading strong {
+.canvas-arrange-question {
+  margin: 0 0 18px;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
-.canvas-arrange-heading > span {
-  color: var(--muted);
+.canvas-arrange-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .canvas-arrange-menu button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 8px;
+  min-width: 66px;
+  height: 38px;
+  padding: 0 14px;
   border: 0;
-  border-radius: var(--toolbar-button-radius);
-  background: transparent;
+  border-radius: 10px;
+  background: var(--toolbar-hover);
   color: var(--toolbar-text);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
 
-.canvas-arrange-scope {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px;
-  padding: 3px;
-  margin-bottom: 8px;
-  border: 1px solid var(--toolbar-border);
-  border-radius: 10px;
-}
-
-.canvas-arrange-menu .canvas-arrange-auto {
-  justify-content: flex-start;
-  width: 100%;
-  min-height: 58px;
-  gap: 10px;
-  text-align: left;
-}
-
-.canvas-arrange-auto > span {
-  display: grid;
-  gap: 4px;
-  font-weight: 600;
-}
-
-.canvas-arrange-auto small {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 400;
-}
-
-.canvas-arrange-modes {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3px;
-  margin-top: 3px;
-}
-
-.canvas-arrange-menu svg {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  stroke-width: 1.8;
-}
-
-.canvas-arrange-menu .canvas-arrange-auto > svg {
-  width: 20px;
-  height: 20px;
-}
-
-.canvas-arrange-status {
-  padding-top: 10px;
-  margin: 10px 0 0;
-  border-top: 1px solid var(--toolbar-border);
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.65;
+.canvas-arrange-menu [data-arrange-decision="keep"] {
+  background: var(--toolbar-active);
+  color: var(--text);
 }

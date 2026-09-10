@@ -1310,7 +1310,7 @@ test("aspect changes preserve node identity and isolate the prompt workspace fro
   );
   assert.match(
     appSource,
-    /function syncNodeVisualLayout[\s\S]*?element\.style\.top = `\$\{node\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY/,
+    /function syncNodeVisualLayout[\s\S]*?const base = canvasArrange\.getNodePosition\(node\) \|\| node;[\s\S]*?element\.style\.top = `\$\{base\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY\(\$\{\(y - base\.y\)/,
   );
   assert.match(appSource, /promptPanel\.style\.top = `\$\{canonicalLayout\.mediaHeight \+ canonicalLayout\.panelGap\}px`/);
   assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?left:\s*50%[\s\S]*?translate:\s*-50% 0/);

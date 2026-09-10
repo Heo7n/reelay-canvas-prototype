@@ -77,7 +77,9 @@
         const placement = placeAnchoredPopover({
           anchor, floating: menu.getBoundingClientRect(),
           boundary: { left: 0, top: 0, right: view.innerWidth, bottom: view.innerHeight },
-          placements: ["bottom-end", "top-end", "bottom-start", "top-start"],
+          placements: menu.dataset.toolbarPlacement === "top"
+            ? ["top", "bottom"]
+            : ["bottom-end", "top-end", "bottom-start", "top-start"],
           gap: 8, padding: 8,
         });
         menu.style.left = `${placement.left}px`;
