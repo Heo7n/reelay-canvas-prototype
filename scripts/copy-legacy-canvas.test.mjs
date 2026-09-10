@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createContext, Script } from "node:vm";
 import { JSDOM } from "jsdom";
 import { build, loadConfigFromFile } from "vite";
-import { buildLegacyCanvas, bundleClassicScripts } from "./copy-legacy-canvas.mjs";
+import { buildLegacyCanvas, bundleClassicScripts, generationPreviewAssets } from "./copy-legacy-canvas.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -58,6 +58,13 @@ test("builds the real entry with content hashes, complete references and unchang
   const output = await temporaryDirectory(t);
   const before = await readFile(path.join(root, "index.html"), "utf8");
   const result = await buildLegacyCanvas(root, output);
+  const definitions = await Promise.all(["data/model-catalog.js", "src/config/prototype-config.js", "src/config/generation-demo-presets.js"]
+    .map(async (name) => ({ name, source: await readFile(path.join(root, name), "utf8") })));
+  const previewAssets = generationPreviewAssets(definitions);
+  assert.equal(previewAssets.length, 12);
+  for (const reference of previewAssets) {
+    assert.deepEqual(await readFile(path.join(output, reference)), await readFile(path.join(root, reference)));
+  }
   const html = await readFile(path.join(output, "index.html"), "utf8");
   assert.match(result.faviconReference, /favicon-account-[a-f0-9]+\.svg$/);
   assert.ok(html.includes(`href="${result.faviconReference}"`));

@@ -91,6 +91,27 @@ export function bundleClassicScripts(scripts) {
   return source;
 }
 
+export function generationPreviewAssets(scripts) {
+  const context = {};
+  context.window = context;
+  for (const name of ["data/model-catalog.js", "src/config/prototype-config.js", "src/config/generation-demo-presets.js"]) {
+    const script = scripts.find((entry) => entry.name === name);
+    if (!script) throw new Error(`Missing generation preview definition: ${name}`);
+    new Script(script.source, { filename: name }).runInNewContext(context);
+  }
+  const presets = context.REELAY_GENERATION_DEMO_PRESETS.create({
+    models: context.REELAY_MODEL_CATALOG, media: context.REELAY_PROTOTYPE_CONFIG.assetLibrarySeed.media,
+  });
+  return [...new Set(presets.flatMap((preset) => preset.input.references.map((asset) => asset.url)))]
+    .filter((url) => !/^(?:https?:|\/\/)/.test(url))
+    .map((url) => {
+      if (!/^\.\/assets\/home\/[a-z0-9-]+\.(?:png|jpg|webp)$/.test(url)) {
+        throw new Error(`Unexpected published preview asset: ${url}`);
+      }
+      return url;
+    });
+}
+
 // The current styles contain no asset URLs, namespace rules, or conditional
 // imports. Fail closed if that contract changes rather than relocating URLs.
 async function flattenStyles(root, reference, ancestors = []) {
@@ -166,9 +187,19 @@ export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(wo
     await cp(path.join(workspaceRoot, relativePath), path.join(outputRoot, relativePath), { recursive: true });
   }
 
+  // Runtime presets contain media URLs, which are invisible to HTML/Vite asset scanning.
+  // Ship exactly their local dependencies in both account and experience builds.
+  const previewReferences = generationPreviewAssets(scripts);
+  for (const reference of previewReferences) {
+    const destination = localPath(outputRoot, reference);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await copyFile(localPath(workspaceRoot, reference), destination);
+  }
+
   const references = [...html.matchAll(/\s(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1]).filter((reference) => !/^(?:[a-z]+:|#|\/\/)/i.test(reference));
   if (editorReference) references.push(editorReference);
+  references.push(...previewReferences);
   await Promise.all(references.map((reference) => access(localPath(outputRoot, reference))));
   await writeFile(path.join(outputRoot, "index.html"), html);
   return { scriptCount: scripts.length, referenceCount: references.length, scriptReference, styleReference, faviconReference, editorReference };
