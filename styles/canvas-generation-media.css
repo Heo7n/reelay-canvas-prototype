@@ -1,0 +1,109 @@
+.generation-media-player {
+  position: relative;
+  container-type: inline-size;
+  container-name: generation-media;
+  overflow: hidden;
+  isolation: isolate;
+}
+.generation-media-player > video {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.generation-media-overlay { position: absolute; inset: 0; pointer-events: none; color: #fff; }
+.generation-media-overlay [hidden] { display: none !important; }
+.generation-media-overlay button {
+  display: grid; place-items: center;
+  flex: 0 0 28px; width: 28px; height: 30px; padding: 0;
+  border: 0; border-radius: 6px;
+  color: inherit; background: transparent;
+  cursor: pointer; pointer-events: auto;
+  transition: background 140ms ease, transform 140ms ease;
+}
+.generation-media-overlay button svg { display: block; width: 16px; height: 16px; }
+.generation-media-toggle:is([aria-label="播放生成视频"], [aria-label="重新播放生成视频"]) svg { fill: currentColor; stroke-width: 1.4; }
+.generation-media-overlay button:hover { background: rgb(255 255 255 / 12%); }
+.generation-media-overlay button:focus-visible,
+.generation-media-seek:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.generation-media-overlay .generation-media-center {
+  position: absolute; left: 50%; top: 50%;
+  width: 58px; height: 58px;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid rgb(255 255 255 / 88%); border-radius: 50%;
+  background: rgb(28 31 35 / 34%);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 8%);
+  backdrop-filter: blur(6px);
+}
+.generation-media-overlay .generation-media-center svg { width: 23px; height: 23px; margin-left: 2px; fill: currentColor; stroke-width: 1.5; }
+.generation-media-overlay .generation-media-center:hover { background: rgb(28 31 35 / 48%); transform: translate(-50%, -50%) scale(1.04); }
+.generation-media-player.is-buffering .generation-media-center svg { opacity: 0; }
+.generation-media-player.is-buffering .generation-media-center::after {
+  content: ""; position: absolute; width: 21px; height: 21px;
+  border: 2px solid rgb(255 255 255 / 28%); border-top-color: #fff; border-radius: 50%;
+  animation: generation-media-buffer 900ms linear infinite;
+}
+@keyframes generation-media-buffer { to { transform: rotate(360deg); } }
+.generation-media-resolution {
+  position: absolute; top: 10px; right: 10px;
+  padding: 3px 8px; border-radius: 5px;
+  color: rgb(255 255 255 / 94%); background: rgb(30 33 38 / 36%);
+  font-size: 12px; font-weight: 400; line-height: 18px;
+  font-variant-numeric: tabular-nums; backdrop-filter: blur(4px);
+}
+.generation-media-controls {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 42px; padding: 5px 10px; box-sizing: border-box;
+  color: rgb(255 255 255 / 96%); background: rgb(31 34 39 / 44%);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+.generation-media-time { flex: 0 0 auto; white-space: nowrap; font-size: 13px; font-weight: 400; line-height: 20px; font-variant-numeric: tabular-nums; }
+.generation-media-seek {
+  flex: 1 1 auto; width: 0; min-width: 24px; height: 24px; padding: 0; margin: 0 2px;
+  border: 0; border-radius: 4px; appearance: none; background: transparent; color: #fff; cursor: pointer;
+}
+.generation-media-seek::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 3px;
+  background: linear-gradient(to right, #fff 0 var(--generation-media-progress, 0%), rgb(255 255 255 / 40%) var(--generation-media-progress, 0%) 100%);
+}
+.generation-media-seek::-webkit-slider-thumb { appearance: none; width: 10px; height: 10px; margin-top: -3.5px; border: 0; border-radius: 50%; background: #fff; }
+.generation-media-seek::-moz-range-track { height: 3px; border-radius: 3px; background: rgb(255 255 255 / 40%); }
+.generation-media-seek::-moz-range-progress { height: 3px; border-radius: 3px; background: #fff; }
+.generation-media-seek::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; background: #fff; }
+.generation-media-seek:disabled { opacity: .45; cursor: default; }
+.generation-media-notice {
+  position: absolute; left: 12px; right: 12px; top: 18%;
+  width: fit-content; max-width: calc(100% - 24px); margin: auto;
+  padding: 5px 9px; border-radius: 6px;
+  color: #fff; background: rgb(31 34 39 / 60%);
+  font-size: 12px; line-height: 18px; text-align: center;
+}
+.generation-media-player:fullscreen {
+  width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important;
+  border-radius: 0; background: #101112;
+}
+.generation-media-player:fullscreen > video { width: 100%; height: 100%; object-fit: contain; }
+.generation-media-player:fullscreen .generation-media-controls { padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+@container generation-media (max-width: 300px) {
+  .generation-media-controls { display: grid; grid-template-columns: 28px minmax(0, 1fr) 28px 28px; gap: 0 4px; padding: 3px 7px; }
+  .generation-media-controls:has(.generation-media-fullscreen[hidden]) { grid-template-columns: 28px minmax(0, 1fr) 28px; }
+  .generation-media-seek { grid-column: 1 / -1; grid-row: 1; width: 100%; box-sizing: border-box; margin: 0; height: 16px; }
+  .generation-media-toggle { grid-column: 1; grid-row: 2; }
+  .generation-media-time { grid-column: 2; grid-row: 2; font-size: 12px; }
+  .generation-media-volume { grid-column: 3; grid-row: 2; }
+  .generation-media-fullscreen { grid-column: 4; grid-row: 2; }
+  .generation-media-overlay .generation-media-center { width: 46px; height: 46px; }
+  .generation-media-resolution { top: 7px; right: 7px; font-size: 11px; padding: 2px 6px; }
+}
+@container generation-media (max-width: 220px) {
+  .generation-media-controls { grid-template-columns: 24px minmax(0, 1fr) 24px 24px; gap: 0 2px; padding-inline: 5px; }
+  .generation-media-controls:has(.generation-media-fullscreen[hidden]) { grid-template-columns: 24px minmax(0, 1fr) 24px; }
+  .generation-media-overlay .generation-media-controls button { width: 24px; }
+  .generation-media-time { white-space: normal; font-size: 11px; line-height: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .generation-media-overlay button { transition: none; }
+  .generation-media-player.is-buffering .generation-media-center::after { animation: none; }
+}

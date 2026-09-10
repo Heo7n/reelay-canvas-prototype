@@ -11,7 +11,7 @@ import {
   type AccountSection,
 } from "../../features/account/AccountSettingsDialog";
 import { resolveProjectCoverUrl } from "../../shared/projects/project-cover";
-import { readTheme } from "../../shared/theme/theme";
+import { useTheme } from "../../shared/theme/theme";
 import type { TransientMediaRepository } from "../../application/assets/TransientMediaRepository";
 import { takeProjectLaunchIntent } from "../home/launch-intent";
 
@@ -23,6 +23,7 @@ interface LegacyCanvasRouteProps {
 }
 
 export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, mediaAssetRepository, transientMediaRepository }: LegacyCanvasRouteProps) {
+  const { theme, setTheme } = useTheme();
   const launchScopeRef = useRef<string | undefined>(undefined);
   const [launchIntent, setLaunchIntent] = useState<{ scope: string; prompt: string } | null>(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
@@ -76,6 +77,7 @@ export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, 
         onLogout={logout}
         onCreateProject={createProject}
         onOpenAccountSettings={openAccountSettings}
+        onThemeChange={setTheme}
         onLaunchPromptConsumed={consumeLaunchPrompt}
         context={{
           protocolVersion: 1,
@@ -92,7 +94,7 @@ export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, 
             coverUrl: resolveProjectCoverUrl(candidate.coverAssetId),
           })),
           canvasId,
-          theme: readTheme(),
+          theme,
           writable: project.currentUserRole !== "view",
           actor: {
             account: actor.account,

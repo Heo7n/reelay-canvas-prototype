@@ -841,6 +841,77 @@ html[data-theme="light"] .asset-library-panel {
   color: var(--danger, #ff5d67);
 }
 
+#assetLibraryEntityFilter {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 14px 8px;
+}
+
+.asset-library-entity-filter {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  padding: 3px 5px 3px 10px;
+  gap: 8px;
+  align-items: center;
+  border-radius: 8px;
+  background: var(--asset-panel-subtle);
+  color: var(--text);
+}
+
+.asset-library-entity-filter-label {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 7px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.asset-library-entity-filter-label > span,
+.asset-library-entity-filter-label > small {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.asset-library-entity-filter-label > strong {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+
+.asset-library-entity-filter > button {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  place-items: center;
+}
+
+.asset-library-entity-filter > button:hover {
+  background: var(--asset-panel-hover);
+  color: var(--text);
+}
+
+.asset-library-entity-filter > button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+.asset-library-entity-filter > button svg {
+  width: 14px;
+  height: 14px;
+}
+
 .asset-library-grid {
   display: grid;
   min-height: 0;

@@ -1,9 +1,10 @@
-import { CircleHelp, GalleryVerticalEnd, Home, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Building2, CircleHelp, GalleryVerticalEnd, Home, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useLayoutEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { routePaths } from "../../app/routes";
 import { Brand } from "../../shared/ui/Brand";
+import { organizationNavigationState } from "../../shared/navigation/organization-navigation";
 import wordmarkUrl from "../../../assets/home/reelay-wordmark.png";
 import styles from "./EntryFrame.module.css";
 import pageStyles from "./WorkspacePages.module.css";
@@ -11,15 +12,15 @@ import pageStyles from "./WorkspacePages.module.css";
 const preferenceKey = "reelay-entry-sidebar-collapsed";
 
 interface EntryFrameProps {
-  activePage: "home" | "projects";
+  activePage: "home" | "projects" | "organization";
   children: ReactNode;
   header: ReactNode;
   workspaceId?: string;
 }
 
-// Only home and project pages share this frame. Canvas and organization routes
-// keep their own navigation and available viewport.
+// Workspace browsing shares one frame; the canvas keeps its full editing viewport.
 export function EntryFrame({ activePage, children, header, workspaceId }: EntryFrameProps) {
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => {
     try { return window.localStorage.getItem(preferenceKey) !== "false"; } catch { return true; }
   });
@@ -58,6 +59,13 @@ export function EntryFrame({ activePage, children, header, workspaceId }: EntryF
               <GalleryVerticalEnd aria-hidden="true" /><span>项目</span>
             </Link>
           ) : null}
+          {workspaceId ? (
+            <div className={styles.organizationNavigation}>
+              <Link className={activePage === "organization" ? styles.active : ""} to={routePaths.organization(workspaceId)} state={organizationNavigationState(workspaceId, location)} replace={activePage === "organization"} aria-current={activePage === "organization" ? "page" : undefined} aria-label="组织中心" title="组织中心">
+                <Building2 aria-hidden="true" /><span>组织中心</span>
+              </Link>
+            </div>
+          ) : null}
         </nav>
         <div className={styles.sidebarFooter}>
           <a href="https://reelay.tech.jetsentv.com/manual" target="_blank" rel="noopener noreferrer" title="使用帮助" aria-label="使用帮助">
@@ -66,7 +74,7 @@ export function EntryFrame({ activePage, children, header, workspaceId }: EntryF
         </div>
       </aside>
       <div className={styles.body}>
-        <div className={`${styles.topbar} ${activePage === "projects" ? styles.compactTopbar : ""}`}>{header}</div>
+        <div className={`${styles.topbar} ${activePage !== "home" ? styles.compactTopbar : ""}`}>{header}</div>
         {children}
       </div>
     </div>

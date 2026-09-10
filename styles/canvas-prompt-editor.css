@@ -1,0 +1,83 @@
+.prompt-editor {
+  min-width: 0;
+}
+
+.prompt-editor-content {
+  position: relative;
+  min-height: 2.2em;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  caret-color: var(--text);
+}
+
+.prompt-editor-content p { margin: 0; }
+.prompt-editor-content .ProseMirror-trailingBreak { display: inline; }
+.prompt-editor-content[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  inset: 0;
+  color: var(--muted);
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.prompt-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 2px;
+  padding: 1px 5px 1px 3px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: inherit;
+  font-size: .9em;
+  font-weight: 450;
+  line-height: 1.35;
+  vertical-align: baseline;
+  white-space: nowrap;
+  cursor: default;
+  user-select: all;
+}
+
+.prompt-reference-thumb { display: inline-flex; width: 15px; height: 15px; flex: 0 0 15px; align-items: center; justify-content: center; overflow: hidden; border-radius: 3px; }
+.prompt-reference-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.prompt-reference-thumb svg { width: 14px; height: 14px; }
+.prompt-reference-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.prompt-reference.ProseMirror-selectednode { outline: 2px solid color-mix(in srgb, var(--empty-pill-accent, #7289aa) 68%, var(--text)); outline-offset: 1px; }
+.prompt-reference.is-missing { color: var(--muted); border-style: dashed; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text) 20%, transparent); }
+
+.prompt-reference-menu {
+  position: fixed;
+  z-index: 16000;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--agent-input-bg, var(--surface));
+  box-shadow: 0 8px 28px rgb(0 0 0 / 16%);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+.prompt-reference-menu-title { flex: 0 0 auto; padding: 5px 7px 7px; color: var(--muted); font-size: 11px; font-weight: 500; }
+.prompt-reference-menu-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; position: relative; }
+.prompt-reference-menu-row { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 5px 7px; box-sizing: border-box; border-radius: 7px; cursor: pointer; }
+.prompt-reference-menu-row.is-active { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.prompt-reference-menu-row .prompt-reference { display: contents; pointer-events: none; }
+.prompt-reference-menu-row .prompt-reference-thumb { width: 30px; height: 30px; flex-basis: 30px; border-radius: 6px; background: color-mix(in srgb, var(--text) 4%, transparent); }
+.prompt-reference-menu-row .prompt-reference-thumb svg { width: 18px; height: 18px; }
+.prompt-reference-menu-row .prompt-reference-label { flex: 0 0 auto; font-size: 12px; }
+.prompt-reference-menu-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.prompt-reference-menu-empty { padding: 14px 7px 18px; color: var(--muted); font-size: 12px; }

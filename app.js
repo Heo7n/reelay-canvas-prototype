@@ -1,4 +1,10 @@
 const appShell = document.querySelector(".app-shell");
+const promptDocument = window.REELAY_CANVAS_PROMPT_DOCUMENT;
+const promptEditors = window.REELAY_CANVAS_PROMPTS.createController({ document, showMessage: showActionToast });
+const referenceThumbnails = window.REELAY_CANVAS_REFERENCE_THUMBNAILS.createController({ document, sanitizeUrl: sanitizeRuntimeMediaUrl });
+let agentPromptReady = false;
+let agentGeneration = null;
+let agentComposerResize = null;
 const topBar = document.querySelector(".top-bar");
 const leftRail = document.querySelector(".left-rail");
 const topActions = document.querySelector("#topActions");
@@ -43,6 +49,8 @@ const profileShortcutSheet = profileHelpFlyout?.querySelector("#profileShortcutS
 const assetLibraryPanel = document.querySelector("#assetLibraryPanel");
 const assetLibraryCloseBtn = document.querySelector("#assetLibraryCloseBtn");
 const assetLibraryGrid = document.querySelector("#assetLibraryGrid");
+const assetLibraryEntityFilter = document.querySelector("#assetLibraryEntityFilter");
+let renderedAssetLibraryEntityFilter = "";
 const assetLibraryCount = document.querySelector("#assetLibraryCount");
 const assetLibrarySearchInput = document.querySelector("#assetLibrarySearchInput");
 const assetLibraryPlatformCommandAnchor = document.querySelector("#assetLibraryPlatformCommandAnchor");
@@ -84,6 +92,9 @@ const themeModeIcon = document.querySelector("#themeModeIcon");
 const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
 const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
 const profileCreditValue = document.querySelector("#profileCreditValue");
+const railCreditValue = document.querySelector("#railCreditValue");
+const railCreditTip = document.querySelector("#railCreditTip");
+const canvasCreditsBtn = document.querySelector("#canvasCreditsBtn");
 const profileAvatar = document.querySelector("#profileAvatar");
 const profileName = document.querySelector("#profileName");
 const profileEmail = document.querySelector("#profileEmail");
@@ -105,6 +116,9 @@ let themeFeedbackTimer = null;
 let selectionSurfaceRadiusWorld = 20;
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
 const selectionDownloadTrigger = document.querySelector(".selection-download-trigger");
+const selectionLayoutMenu = document.querySelector("#selectionLayoutMenu");
+const selectionLayoutTrigger = document.querySelector(".selection-layout-trigger");
+let selectionLayoutSession = null;
 const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
 const agentPanel = document.querySelector("#agentPanel");
@@ -122,6 +136,8 @@ const agentComposer = document.querySelector("#agentComposer");
 const agentInput = document.querySelector("#agentInput");
 const agentSendButton = document.querySelector(".agent-send");
 const agentAddBtn = document.querySelector("#agentAddBtn");
+const agentReferenceShelf = document.querySelector("#agentReferenceShelf");
+const agentReferenceMenu = document.querySelector("#agentReferenceMenu");
 const agentPromptOptimizationBtn = document.querySelector("#agentPromptOptimizationBtn");
 const agentAdvancedBtn = document.querySelector("#agentAdvancedBtn");
 const agentAdvancedSettings = document.querySelector("#agentAdvancedSettings");
@@ -163,12 +179,57 @@ window.REELAY_CANVAS_PARAMETER_HELP.createController({
   document,
   placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
 });
+const canvasReferenceOrder = window.REELAY_CANVAS_REFERENCE_ORDER;
+window.REELAY_CANVAS_REFERENCE_STRIP.createController({
+  document,
+  root: nodeLayer,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+  getContext: getNodeReferenceContext,
+  onMove: moveNodeReference,
+  isSpaceDown: () => state.isSpaceDown,
+});
 const assetLibraryItemMenu = window.REELAY_CANVAS_ASSET_LIBRARY_MENU_CONTROLLER.create({
   grid: assetLibraryGrid,
   placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
   onDismiss() {
     state.libraryMenuTarget = null;
     renderAssetLibrary();
+  },
+});
+const canvasToolbarMenus = window.REELAY_CANVAS_TOOLBAR_MENU_CONTROLLER.create({
+  root: shell,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+  getScope: getActiveCanvas,
+  getOwner(menu) {
+    if (menu.dataset.toolbarPopover === "group") return getGroupById(menu.closest("[data-group-id]")?.dataset.groupId);
+    if (menu.dataset.toolbarPopover === "media") return state.nodes.find((node) => node.id === menu.closest("[data-id]")?.dataset.id);
+    return getActiveCanvas();
+  },
+  onDismiss({ menu, scope, owner }) {
+    if (scope !== getActiveCanvas()) return null;
+    if (menu.dataset.toolbarPopover === "group" && owner?.layoutMenuOpen) {
+      owner.layoutMenuOpen = false;
+      render();
+      return nodeLayer.querySelector(`[data-group-id="${owner.id}"] [data-group-action="toggle-layout"]`);
+    }
+    if (menu.dataset.toolbarPopover === "media" && owner?.mediaMenuOpen) {
+      owner.mediaMenuOpen = false;
+      render();
+      return nodeLayer.querySelector(`[data-id="${owner.id}"] [data-media-tool="toggle-more"]`);
+    }
+    if (menu.dataset.toolbarPopover === "selection") {
+      setSelectionDownloadMenuOpen(false);
+      return selectionDownloadTrigger;
+    }
+    if (menu.dataset.toolbarPopover === "selection-layout") {
+      setSelectionLayoutMenuOpen(false);
+      return selectionLayoutTrigger;
+    }
+    if (menu.dataset.toolbarPopover === "organize") {
+      canvasArrange.close();
+      return document.querySelector('[data-canvas-tool="organize"]');
+    }
+    return null;
   },
 });
 
@@ -278,10 +339,11 @@ const state = {
   libraryFilter: "all",
   librarySpace: "personal",
   libraryFolderId: null,
+  libraryEntityFilter: null,
   libraryDirectoryMenuOpen: false,
   libraryDirectoryRootExpanded: true,
   libraryExpandedFolderIds: new Set(),
-  libraryTargetNodeId: null,
+  libraryTarget: null,
   libraryDisplay: "grid",
   librarySelectionMode: false,
   librarySelectedIds: new Set(),
@@ -417,6 +479,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   getExpectedSource: () => window.parent,
   onAccessChange: applyCanvasAccessMode,
   onContext(context) {
+    if (context.theme === "light" || context.theme === "dark") applyTheme(context.theme, { notifyHost: false });
     canvasNodeTasks.cancelScope({}, "context-replaced");
     state.projectId = String(context.projectId || state.projectId);
     state.projectName = String(context.projectName || state.projectName);
@@ -453,6 +516,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     } else {
       showActionToast("当前项目为只读，可浏览但不能修改");
     }
+    agentGeneration?.render();
   },
   onNotice(notice) {
     const messages = {
@@ -486,6 +550,7 @@ const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAs
     state.hostCapabilities.entityPersistence = workspaceCatalog === "ready";
     state.hostCapabilities.workspaceCatalog = workspaceCatalog;
     renderAssetLibrary();
+    renderSelectionToolbar();
     canvasEntityUse.refresh({ renderPicker: true });
   },
   onProjectAssets: (assets) => {
@@ -551,26 +616,45 @@ const canvasEntityUse = canvasEntityUseControllerFactory.createCanvasEntityUseCo
   refreshIcons,
 });
 let reopenAssetLibraryAfterEntityEditor = false;
+const canvasEntityMediaImport = window.REELAY_CANVAS_ENTITY_MEDIA_IMPORT.createEntityMediaImport({
+  getPersonalMedia: getPersonalEntityMedia,
+  getBaseUrl: () => window.location.href,
+  getScopeKey: () => JSON.stringify([hostLaunchScope, state.identity.account]),
+  persistFile: async (file, metadata) => workspaceAssetToLibraryMedia(await canvasMediaAssets.persistFile(file, metadata)),
+  onImported(media) {
+    assetLibraryStore.registerMedia({ media, space: "personal", folderId: null });
+    hostPersonalMediaIds.add(media.id);
+    renderAssetLibrary();
+    renderSelectionToolbar();
+  },
+});
 const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntityEditorController({
   host: canvasEntityEditorHost,
   pickerHost: canvasEntityPickerHost,
   uploadInput: canvasEntityEditorUploadInput,
   model: canvasEntityEditorModel,
   view: canvasEntityEditorView,
-  getAvailableMedia: () => assetLibraryStore
-    .listItems({ space: "personal", kind: "media" })
-    .filter((media) => window.parent === window || hostPersonalMediaIds.has(media.id)),
+  getAvailableMedia: getPersonalEntityMedia,
+  getMediaSaveNotice(media, { mode }) {
+    if (mode !== "create" || !media.length) return "";
+    const count = media.filter((asset) => !canvasEntityMediaImport.resolvePersonalMedia(asset)).length;
+    return count
+      ? `${count} 个新素材将在创建时加入个人素材库默认目录，已有素材保留原位置。`
+      : "素材已在个人素材库，创建主体不会移动或复制原素材。";
+  },
   persistFiles: persistEntityEditorFiles,
-  renameMedia: async ({ mediaId, displayName }) => {
+  renameMedia: async ({ mediaId, displayName, media }) => {
+    const existing = canvasEntityMediaImport.resolvePersonalMedia(media);
+    if (!existing) return { id: mediaId, displayName, staged: true };
     if (window.parent === window) {
       return assetLibraryStore.renameItem({
-        item: { kind: "media", id: mediaId },
+        item: { kind: "media", id: existing.id },
         name: displayName,
         space: "personal",
       });
     }
     if (!canPersistLibraryMedia()) throw new Error("当前项目尚未接入素材持久化");
-    const workspaceAsset = await canvasMediaAssets.renameMedia(mediaId, displayName);
+    const workspaceAsset = await canvasMediaAssets.renameMedia(existing.id, displayName);
     const updated = assetLibraryStore.syncPersistedMedia(workspaceAssetToLibraryMedia(workspaceAsset));
     renderAssetLibrary();
     return updated;
@@ -630,8 +714,9 @@ const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler
     getSignature: getNodeRenderSignature,
     createElement: createNodeElement,
     updateElement(element, node) {
-      if (node.kind !== "generator") return false;
-      createGeneratorNodeElement(node, element);
+      if (node.kind === "asset") createAssetNodeElement(node, element);
+      else if (node.kind === "generator") createGeneratorNodeElement(node, element);
+      else return false;
       return true;
     },
     syncElement: syncCanvasNodeElement,
@@ -643,6 +728,43 @@ const canvasLayerReconciler = canvasLayerReconcilerFactory.createLayerReconciler
   },
 });
 if (!canvasLayerReconciler) throw new Error("Canvas layer reconciler could not initialize.");
+const canvasAudioPlayer = window.REELAY_CANVAS_AUDIO_PLAYER.createController({
+  document, root: nodeLayer, isSpaceDown: () => state.isSpaceDown,
+});
+const canvasArrange = window.REELAY_CANVAS_ARRANGE_CONTROLLER.create({
+  button: document.querySelector('[data-canvas-tool="organize"]'),
+  menu: document.querySelector("#canvasArrangeMenu"),
+  getContext: () => ({
+    canvas: getActiveCanvas(), nodes: state.nodes, groups: state.groups, connections: state.connections,
+    selectedIds: state.selectedIds, activeGroupId: state.activeGroupId,
+    canMutate: isCanvasMutationAllowed(), interactionBusy: Boolean(state.action),
+    getNodeBounds: getArrangementNodeBounds, getGroupBounds: (group) => getGroupBounds(group, true), groupPadding: groupFrameRules,
+    planArrangement: window.REELAY_CANVAS_ARRANGE_LAYOUT.planArrangement,
+  }),
+  describeScope: window.REELAY_CANVAS_ARRANGE_SCOPE.describeScope,
+  prepareArrangement: window.REELAY_CANVAS_ARRANGE_SCOPE.prepareArrangement,
+  beforeArrange: () => canvasNodeLayoutTransition.finishAll(),
+  commit: commitArrangementPlan,
+  onPreviewChange: renderCanvasView,
+  onComplete(plan) {
+    render();
+    const bounds = [
+      ...plan.affectedNodeIds.map((id) => getArrangementNodeBounds(state.nodes.find((node) => node.id === id))),
+      ...plan.groupPositions.map((position) => getGroupBounds(getGroupById(position.id))),
+    ];
+    if (bounds.length) {
+      const left = Math.min(...bounds.map((item) => item.left));
+      const top = Math.min(...bounds.map((item) => item.top));
+      const right = Math.max(...bounds.map((item) => item.right));
+      const bottom = Math.max(...bounds.map((item) => item.bottom));
+      // Prompt footprints depend on zoom. Preserve the scale used by the plan
+      // so positioning the result cannot change its geometry or introduce overlaps.
+      applyFitBounds({ left, top, right, bottom, width: right - left, height: bottom - top }, { minScale: state.scale, maxScale: state.scale });
+    }
+  },
+  notify: showActionToast,
+  onOpenChange: () => canvasToolbarMenus.sync(),
+});
 
 function isCanvasMutationAllowed() {
   return canvasPersistence.canMutate();
@@ -652,6 +774,7 @@ function syncCanvasAccessUi() {
   const mode = canvasPersistence.getAccessMode();
   appShell?.setAttribute("data-canvas-access", mode);
   const locked = !isCanvasMutationAllowed();
+  if (locked) setSelectionLayoutMenuOpen(false);
   document.querySelectorAll("[data-canvas-mutation]").forEach((control) => {
     if (!(control instanceof HTMLButtonElement || control instanceof HTMLInputElement)) return;
     if (locked) {
@@ -665,10 +788,10 @@ function syncCanvasAccessUi() {
     }
   });
   nodeLayer.querySelectorAll("[data-node-prompt-input]").forEach((input) => {
-    if (!(input instanceof HTMLTextAreaElement)) return;
-    input.readOnly = locked;
     input.setAttribute("aria-readonly", String(locked));
   });
+  promptEditors.refresh();
+  canvasArrange.sync();
   if (emptyCreateMain) {
     const readonly = mode === "readonly";
     emptyCreateMain.textContent = readonly ? "画布暂无内容" : "双击画布";
@@ -740,8 +863,8 @@ const panelWidthRules = Object.freeze({
   edgeInset: 8,
   assetMin: 380,
   assetMax: 780,
-  agentMin: 340,
-  agentMax: 640,
+  agentMin: 480,
+  agentMax: 880,
   canvasCorridor: 280,
 });
 
@@ -955,7 +1078,7 @@ function resetActiveCanvasSession(canvas) {
   state.connectionDrop = null;
   state.activeGroupId = null;
   state.mediaToolbarNodeId = null;
-  state.libraryTargetNodeId = null;
+  if (state.libraryTarget?.kind === "node") closeAssetLibrary({ restoreFocus: false });
   closeCanvasPanel();
   closeMediaToolbarState();
   applyTransform();
@@ -1076,7 +1199,7 @@ function hydrateCanvasDocumentSnapshot(content) {
   };
   normalizeNodeParameters(Object.assign(hydratedPreset, { kind: "generator" }));
   state.lastPreset = presetFrom(hydratedPreset);
-  state.libraryTargetNodeId = null;
+  if (state.libraryTarget) closeAssetLibrary({ restoreFocus: false });
   clearAssetLibrarySelection();
   resetActiveCanvasSession(getActiveCanvas());
   return true;
@@ -1186,14 +1309,18 @@ function showZoomValueTip() {
   }, 900);
 }
 
-function syncSelectionOverlayProjection(
-  portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale),
-) {
-  shell.style.setProperty("--multi-selection-port-scale", state.scale.toFixed(4));
+function syncSelectionOverlayProjection() {
+  const portField = canvasConnectionInteraction.getAggregatePortGeometry(state.scale);
   shell.style.setProperty("--multi-selection-port-offset", `${portField.portOffset.toFixed(2)}px`);
   shell.style.setProperty(
     "--multi-selection-port-visual-size",
-    `${(portField.portMinOutside * 2).toFixed(2)}px`,
+    `${portField.visualSize.toFixed(2)}px`,
+  );
+  shell.style.setProperty("--multi-selection-port-hit-size", `${portField.hitSize.toFixed(2)}px`);
+  shell.style.setProperty("--multi-selection-port-mark-width", `${portField.markWidth.toFixed(2)}px`);
+  shell.style.setProperty(
+    "--multi-selection-port-mark-height",
+    `${portField.markHeight.toFixed(2)}px`,
   );
   shell.style.setProperty(
     "--multi-selection-surface-radius",
@@ -1208,7 +1335,7 @@ function applyTransform() {
   const groupUiScale = (groupScreenScale / state.scale).toFixed(4);
   const portField = canvasConnectionInteraction.getScaledPortGeometry(state.scale);
   shell.style.setProperty("--connection-feedback-scale", inverseCanvasScale);
-  syncSelectionOverlayProjection(portField);
+  syncSelectionOverlayProjection();
   shell.style.setProperty("--group-ui-scale", groupUiScale);
   shell.style.setProperty("--group-interaction-scale", inverseCanvasScale);
   shell.style.setProperty(
@@ -1228,6 +1355,7 @@ function applyTransform() {
   renderSelectionToolbar();
   renderMinimap();
   scheduleCanvasDocumentSave();
+  canvasToolbarMenus.sync();
 }
 
 function syncNodeVisualLayout(
@@ -1240,8 +1368,9 @@ function syncNodeVisualLayout(
   const canonicalLayout = getNodeLayout(node);
   canvasMediaImageView.syncImages(element, { scale: state.scale, displayWidth: canonicalLayout.mediaWidth });
   const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
-  element.style.left = `${node.x}px`;
-  element.style.top = `${node.y}px`;
+  const base = canvasArrange.getNodePosition(node) || node;
+  element.style.left = `${base.x}px`;
+  element.style.top = `${base.y}px`;
   element.style.width = `${canonicalLayout.nodeWidth}px`;
   element.style.height = `${canonicalLayout.nodeHeight}px`;
   element.classList.toggle("node-layout-transitioning", isTransitioning);
@@ -1249,7 +1378,7 @@ function syncNodeVisualLayout(
   if (mediaFrame) {
     mediaFrame.style.width = `${layout.mediaWidth}px`;
     mediaFrame.style.height = `${layout.mediaHeight}px`;
-    mediaFrame.style.transform = `translateY(${(y - node.y).toFixed(3)}px)`;
+    mediaFrame.style.transform = `translateY(${(y - base.y).toFixed(3)}px)`;
   }
   const mediaToolbar = element.querySelector("[data-media-toolbar]");
   if (mediaToolbar) {
@@ -1295,6 +1424,7 @@ function renderNodeLayoutTransitionFrame(transitionIds = []) {
   renderConnections();
   renderSelectionToolbar();
   renderMinimap();
+  canvasToolbarMenus.sync();
 }
 
 function syncPromptPanelContentHeight(node, element) {
@@ -1660,7 +1790,8 @@ function applyFitBounds(bounds, options = {}) {
     frame.availableHeight / Math.max(bounds.height, 1),
   );
   const minScale = Number.isFinite(options.minScale) ? options.minScale : canvasScaleLimits.min;
-  const nextScale = clamp(Math.max(fitScale, minScale), canvasScaleLimits.min, canvasScaleLimits.max);
+  const maxScale = Number.isFinite(options.maxScale) ? clamp(options.maxScale, canvasScaleLimits.min, canvasScaleLimits.max) : canvasScaleLimits.max;
+  const nextScale = clamp(Math.max(fitScale, minScale), canvasScaleLimits.min, maxScale);
 
   state.scale = nextScale;
   state.tx = frame.leftInset + frame.padding + (frame.availableWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale;
@@ -1807,14 +1938,14 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
   return node;
 }
 
-function defaultAssetNode(x, y, asset) {
+function defaultAssetNode(x, y, asset, { z } = {}) {
   return {
     id: crypto.randomUUID(),
     kind: "asset",
     x,
     y,
     mode: asset.type,
-    z: nextZ(),
+    z: Number.isFinite(z) ? z : nextZ(),
     assets: [asset],
     activeAssetId: asset.id,
     expanded: false,
@@ -1909,17 +2040,104 @@ function getOmniReferenceTaskTypeLabel(node, value = node?.omniReferenceTaskType
   return typeof label === "string" && label ? label : String(value ?? "");
 }
 
-function getReferenceVideoAssets(node) {
+function getNodeReferenceEntries(node) {
   if (!node || node.kind !== "generator") return [];
-  const directAssets = (Array.isArray(node.assets) ? node.assets : [])
-    .map((asset) => ({ asset, sourceNodeId: null }));
-  const linkedAssets = getIncomingConnections(node.id)
-    .map((connection) => {
-      const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
-      return source ? { asset: getEditableMedia(source), sourceNodeId: source.id } : null;
-    })
-    .filter(Boolean);
-  return [...directAssets, ...linkedAssets].flatMap(({ asset, sourceNodeId }) => {
+  const linked = getIncomingConnections(node.id).flatMap((connection) => {
+    const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
+    const asset = source && getEditableMedia(source);
+    return asset ? [{ key: `connection:${connection.id}`, connectionId: connection.id,
+      sourceNodeId: source.id, asset, label: getMediaTitle(source, asset) || getAssetDisplayName(asset) }] : [];
+  });
+  const direct = (node.assets || []).map((asset) => ({
+    key: `asset:${asset.id}`, sourceNodeId: null, asset, label: getAssetDisplayName(asset),
+  }));
+  return canvasReferenceOrder.orderEntries([...linked, ...direct], node.referenceOrder);
+}
+
+function getNodePromptText(node) {
+  return promptDocument.toText(node?.prompt, getNodeReferenceEntries(node));
+}
+
+function samePrompt(left, right) {
+  return JSON.stringify(promptDocument.normalize(left)) === JSON.stringify(promptDocument.normalize(right));
+}
+
+function getPromptEditorReferences(entries) {
+  return promptDocument.referenceIndex(entries).map((entry) => ({
+    ...entry,
+    asset: { ...entry.asset, url: sanitizeRuntimeMediaUrl(entry.asset.url),
+      thumbnailUrl: sanitizeRuntimeMediaUrl(entry.asset.thumbnailUrl) || (entry.mediaType === "image" ? libraryImagePreviewUrl(entry.asset.url, "image") : "") },
+  }));
+}
+
+function mountNodePrompt(node, input, element) {
+  const projectId = state.projectId;
+  const canvasId = state.activeCanvasId;
+  promptEditors.mount(node, input, {
+    scope: JSON.stringify([projectId, canvasId, node.id]),
+    readDocument: () => node.prompt,
+    getReferences: () => getPromptEditorReferences(getNodeReferenceEntries(node)),
+    isCurrent: () => state.projectId === projectId && state.activeCanvasId === canvasId && state.nodes.includes(node),
+    isEditable: () => isCanvasMutationAllowed() && !node.generating && !node.promptOptimizing,
+    getPlaceholder: () => generatorModelPolicy.getPromptPlaceholder(models, node),
+    onChange(value, { origin, historyAction } = {}) {
+      node.prompt = value;
+      const canvas = canvasRuntimeStore.getCanvas(canvasId);
+      if (historyAction && canvas) {
+        if (origin === "undo") canvas.undoStack = canvas.undoStack.filter((action) => action !== historyAction);
+        else if (origin === "redo" && !canvas.undoStack.includes(historyAction)) pushCanvasUndoAction(canvas, historyAction);
+      }
+      syncPromptPanelContentHeight(node, element);
+      syncPromptOptimizationButton(element.querySelector(".prompt-optimization-button"), node);
+      syncGenerateButton(element.querySelector(".generate-button"), node);
+      scheduleCanvasDocumentSave();
+    },
+    onReady: () => syncPromptPanelContentHeight(node, element),
+    onSubmit: () => startSimulatedGeneration(node),
+  });
+}
+
+function getPromptReferenceIssue(prompt, entries) {
+  const resolved = promptDocument.resolve(prompt, entries);
+  if (resolved.missing.length) return "提示词里有已移除或暂不可用的参考素材，请重新引用或删除对应引用块";
+  if (resolved.mismatched.length) return "参考素材类型已变化，请重新选择对应引用";
+  return "";
+}
+
+function getNodeReferenceContext(card) {
+  const nodeId = card.closest(".canvas-node[data-id]")?.dataset.id;
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node || node.kind !== "generator") return null;
+  return {
+    scope: JSON.stringify([state.projectId, state.activeCanvasId]), node, nodeId,
+    canReorder: !card.classList.contains("prompt-reference") && isCanvasMutationAllowed() && !node.generating && !node.promptOptimizing,
+    entries: getNodeReferenceEntries(node).map((entry) => ({
+      ...entry, asset: { ...entry.asset, url: sanitizeRuntimeMediaUrl(entry.asset.url) },
+    })),
+  };
+}
+
+function moveNodeReference(context, { sourceKey, targetKey, placement }) {
+  const node = context?.node;
+  if (!node || context.scope !== JSON.stringify([state.projectId, state.activeCanvasId])
+    || !state.nodes.includes(node) || node.id !== context.nodeId || node.kind !== "generator"
+    || !isCanvasMutationAllowed() || node.generating || node.promptOptimizing) return false;
+  const keys = getNodeReferenceEntries(node).map((entry) => entry.key);
+  if (keys.length !== context.entries.length || keys.some((key, index) => key !== context.entries[index].key)) return false;
+  const referenceOrder = canvasReferenceOrder.move(keys, sourceKey, targetKey, placement);
+  if (referenceOrder === keys) return false;
+  const element = [...nodeLayer.children].find((item) => item.dataset.id === node.id);
+  const scrollLeft = element?.querySelector(".asset-shelf")?.scrollLeft || 0;
+  const result = commitNodeFields(node, { ...node, referenceOrder }, ["referenceOrder"], "node-reference-order");
+  if (!result.ok) return false;
+  render();
+  const shelf = element?.querySelector(".asset-shelf");
+  if (shelf) shelf.scrollLeft = scrollLeft;
+  return true;
+}
+
+function getReferenceVideoAssets(node) {
+  return getNodeReferenceEntries(node).flatMap(({ asset, sourceNodeId }) => {
     const url = typeof asset?.url === "string" ? asset.url.trim() : "";
     if (asset?.type !== "video" || !url) return [];
     const duration = Number(asset.duration);
@@ -2064,10 +2282,10 @@ function getCost(node) {
 }
 
 function getGenerationAvailability(node) {
-  const taskTypeIssue = getOmniReferenceTaskTypeIssue(node);
+  const taskTypeIssue = getPromptReferenceIssue(node.prompt, getNodeReferenceEntries(node)) || getOmniReferenceTaskTypeIssue(node);
   const cost = getCost(node);
   const hasValidPrice = Number.isFinite(cost) && cost > 0;
-  const hasPrompt = Boolean(node.prompt.trim());
+  const hasPrompt = Boolean(getNodePromptText(node).trim());
   const canGenerate = hasPrompt && !node.generating && !node.promptOptimizing && hasValidPrice && !taskTypeIssue;
   return {
     cost,
@@ -2172,10 +2390,10 @@ function getMediaSize(ratio) {
   };
 }
 
-function getNodeLayout(node) {
+function getNodeLayout(node, scale = state.scale) {
   const ratio = getMediaRatio(node);
   const { mediaWidth, mediaHeight } = getMediaSize(ratio);
-  const toolbarScale = 1 / state.scale;
+  const toolbarScale = 1 / scale;
 
   if (node.kind === "asset") {
     return {
@@ -2192,7 +2410,7 @@ function getNodeLayout(node) {
   const boundary = getNodePopoverBoundary();
   const availableWidth = boundary.right - boundary.left;
   const { panelWidth, promptScale, panelGap } = canvasNodeEditorLayout.getEditorLayout({
-    scale: state.scale,
+    scale,
     availableWidth,
     mode: getNodeGenerationMode(node),
     rules: layoutRules,
@@ -2230,6 +2448,8 @@ function getNodeLayoutTransitionId(node) {
 
 function getNodePresentation(node) {
   const layout = getNodeLayout(node);
+  const preview = canvasArrange.getNodePosition(node);
+  if (preview) return { x: preview.x, y: preview.y, layout };
   const transition = canvasNodeLayoutTransition.get(getNodeLayoutTransitionId(node));
   if (!transition) return { x: node.x, y: node.y, layout };
   return {
@@ -2283,8 +2503,25 @@ function getNodeBounds(node) {
   return getNodeVisualBounds(node);
 }
 
-function getNodeVisualBounds(node) {
-  const { x, y, layout } = getNodePresentation(node);
+function getArrangementNodeBounds(node) {
+  const layout = getNodeLayout(node);
+  const mediaLeft = node.x + (layout.nodeWidth - layout.mediaWidth) / 2;
+  let left = mediaLeft;
+  let right = mediaLeft + layout.mediaWidth;
+  let bottom = node.y + layout.mediaHeight;
+  if (node.kind === "generator" && node.expanded) {
+    const promptWidth = layout.panelWidth * layout.promptScale;
+    const promptLeft = node.x + (layout.nodeWidth - promptWidth) / 2;
+    left = Math.min(left, promptLeft);
+    right = Math.max(right, promptLeft + promptWidth);
+    bottom += layout.panelGap + layout.panelHeight * layout.promptScale;
+  }
+  const top = node.y - 28;
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function getNodeVisualBounds(node, presentation = getNodePresentation(node)) {
+  const { x, y, layout } = presentation;
   const mediaLeft = x + (layout.nodeWidth - layout.mediaWidth) / 2;
   let left = mediaLeft;
   let right = mediaLeft + layout.mediaWidth;
@@ -2389,8 +2626,9 @@ function normalizeGroupFrame(group) {
   };
 }
 
-function getGroupBounds(group) {
-  const normalized = normalizeGroupFrame(group);
+function getGroupBounds(group, canonical = false) {
+  const preview = canonical ? null : canvasArrange.getGroupPosition(group);
+  const normalized = normalizeGroupFrame(preview ? { ...group, ...preview } : group);
   if (!normalized) return null;
   return {
     left: normalized.x,
@@ -2515,9 +2753,12 @@ function renderMinimap() {
 }
 
 function setCanvasPanel(panel) {
+  canvasArrange.close();
   state.canvasPanel = state.canvasPanel === panel ? null : panel;
   canvasToolButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.canvasTool === state.canvasPanel);
+    const isOpen = button.dataset.canvasTool === state.canvasPanel;
+    button.classList.toggle("active", isOpen);
+    if (button.dataset.canvasTool === "minimap") button.setAttribute("aria-expanded", String(isOpen));
   });
   canvasToolPopovers.forEach((popover) => {
     popover.classList.toggle("hidden", popover.dataset.canvasPopover !== state.canvasPanel);
@@ -2526,9 +2767,13 @@ function setCanvasPanel(panel) {
 }
 
 function closeCanvasPanel() {
+  canvasArrange.close();
   if (!state.canvasPanel) return;
   state.canvasPanel = null;
-  canvasToolButtons.forEach((button) => button.classList.remove("active"));
+  canvasToolButtons.forEach((button) => {
+    button.classList.remove("active");
+    if (button.dataset.canvasTool === "minimap") button.setAttribute("aria-expanded", "false");
+  });
   canvasToolPopovers.forEach((popover) => popover.classList.add("hidden"));
 }
 
@@ -2579,6 +2824,7 @@ function applyPreset(node, preset) {
 
 function cloneNode(source) {
   const assets = (source.assets || []).map((asset) => ({ ...asset, id: crypto.randomUUID() }));
+  const assetIds = new Map((source.assets || []).map((asset, index) => [asset.id, assets[index].id]));
   const activeAssetIndex = (source.assets || []).findIndex((asset) => asset.id === source.activeAssetId);
   const clone = {
     ...source,
@@ -2586,6 +2832,8 @@ function cloneNode(source) {
     x: source.x,
     y: source.y,
     assets,
+    prompt: typeof source.prompt === "string" ? source.prompt : promptDocument.remap(source.prompt, { assetIds }),
+    ...(source.referenceOrder ? { referenceOrder: canvasReferenceOrder.remap(source.referenceOrder, { assetIds }) } : {}),
     activeAssetId: assets[activeAssetIndex]?.id || assets[0]?.id || null,
     generatedAsset: source.generatedAsset ? { ...source.generatedAsset, id: crypto.randomUUID() } : null,
     generating: false,
@@ -2851,7 +3099,19 @@ function formatCredit(value) {
 }
 
 function syncCreditDisplay() {
-  const credits = new Intl.NumberFormat("zh-CN").format(Math.max(0, Math.round(state.account.credits || 0)));
+  const balance = Math.max(0, Math.round(state.account.credits || 0));
+  const credits = new Intl.NumberFormat("zh-CN").format(balance);
+  if (railCreditValue) {
+    const unit = balance >= 100_000_000 ? 100_000_000 : 10_000;
+    const compact = new Intl.NumberFormat("zh-CN", {
+      useGrouping: false,
+      maximumFractionDigits: balance / unit < 100 ? 1 : 0,
+      roundingMode: "trunc",
+    }).format(balance / unit);
+    railCreditValue.textContent = balance < 10_000 ? String(balance) : `${compact}${unit === 10_000 ? "万" : "亿"}`;
+  }
+  if (railCreditTip) railCreditTip.textContent = `可用积分：${credits}`;
+  canvasCreditsBtn?.setAttribute("aria-label", `查看我的积分，当前可用 ${credits}`);
   if (profileCreditValue) {
     profileCreditValue.textContent = credits;
     profileCreditValue.closest("[data-profile-action='credits']")
@@ -2969,7 +3229,7 @@ function getMediaTitle(node, asset = getActiveAsset(node)) {
 function getMediaSpec(node, asset = getActiveAsset(node)) {
   if (node.kind === "asset") {
     if (!asset) return "";
-    if (asset.type === "audio") return formatDuration(asset.duration);
+    if (asset.type === "audio") return "";
     return formatMediaSize(asset.width, asset.height);
   }
 
@@ -3300,10 +3560,7 @@ function assetPreview(asset) {
     return canvasMediaImageView.renderImage({ ...asset, url: sanitizeRuntimeMediaUrl(asset.url) }, { thumbnail: true });
   }
   if (asset.type === "video") {
-    return `
-      <video src="${safeUrl}" muted playsinline preload="metadata" draggable="false"></video>
-      <span class="video-play">▶</span>
-    `;
+    return window.REELAY_CANVAS_REFERENCE_THUMBNAILS.renderVideo(asset, { sanitizeUrl: sanitizeRuntimeMediaUrl, escapeHtml });
   }
   return `
     <span class="audio-wave" aria-hidden="true">
@@ -3423,6 +3680,7 @@ function switchAssetLibraryContext({ space = state.librarySpace, section = state
     ? "media"
     : section === "entity" ? "entity" : "media";
   state.libraryFolderId = null;
+  state.libraryEntityFilter = null;
   state.libraryDirectoryMenuOpen = false;
   state.libraryDirectoryRootExpanded = true;
   state.libraryExpandedFolderIds.clear();
@@ -3430,6 +3688,35 @@ function switchAssetLibraryContext({ space = state.librarySpace, section = state
   clearAssetLibrarySelection();
   restoreAssetLibraryContext();
   renderAssetLibrary();
+}
+
+function viewEntityRelatedMedia(entityId, space = state.librarySpace) {
+  const collection = assetLibraryStore.listEntityMedia({ entityId, space });
+  if (collection.status !== "ready") {
+    showActionToast("该主体已不可用");
+    return;
+  }
+  if (state.librarySection !== "media" || state.librarySpace !== space) {
+    switchAssetLibraryContext({ space, section: "media" });
+  }
+  canvasEntityUse.closeDetail();
+  clearAssetLibrarySelection();
+  state.libraryRenameTarget = null;
+  state.libraryDirectoryMenuOpen = false;
+  state.libraryEntityFilter = { entityId: collection.entity.id, space };
+  state.librarySearch = "";
+  state.libraryFilter = "all";
+  rememberAssetLibraryContext();
+  renderAssetLibrary();
+  assetLibraryGrid.scrollTop = 0;
+  assetLibraryEntityFilter?.querySelector("button")?.focus({ preventScroll: true });
+}
+
+function clearEntityRelatedMediaFilter() {
+  state.libraryEntityFilter = null;
+  clearAssetLibrarySelection();
+  renderAssetLibrary();
+  assetLibraryMediaTab?.focus({ preventScroll: true });
 }
 
 function isAssetLibraryMutable() {
@@ -3521,6 +3808,7 @@ function selectAssetLibraryDirectory(folderId) {
     if (!folder || folder.space !== state.librarySpace || folder.kind !== state.librarySection) return;
   }
   state.libraryFolderId = normalizedFolderId;
+  state.libraryEntityFilter = null;
   state.libraryDirectoryMenuOpen = false;
   state.libraryRenameTarget = null;
   clearAssetLibrarySelection();
@@ -3541,10 +3829,19 @@ function getVisibleAssetLibraryContent() {
   const kind = state.librarySection;
   const query = state.librarySearch;
   const mediaKind = kind === "media" ? state.libraryFilter : "all";
+  if (kind === "media" && state.libraryEntityFilter?.space === state.librarySpace) {
+    const entityFilter = assetLibraryStore.listEntityMedia({
+      ...state.libraryEntityFilter,
+      query,
+      mediaKind,
+    });
+    return { folders: [], allItems: entityFilter.allItems, items: entityFilter.items, entityFilter };
+  }
   const flatPlatformResults = state.librarySpace === "platform";
   const itemScope = {
     space: state.librarySpace,
     kind,
+    ...(kind === "media" && !flatPlatformResults ? { sort: "recent" } : {}),
     ...(flatPlatformResults ? {} : { folderId: state.libraryFolderId }),
   };
   const folders = flatPlatformResults ? [] : assetLibraryStore.listFolders({
@@ -3579,7 +3876,7 @@ function renderAssetLibrary() {
   const folder = getAssetLibraryFolder();
   const folderPath = getAssetLibraryFolderPath();
   const allFolders = getAssetLibraryFolders();
-  const { folders, allItems, items } = getVisibleAssetLibraryContent();
+  const { folders, allItems, items, entityFilter } = getVisibleAssetLibraryContent();
   const selectedCount = state.librarySelectedIds.size;
   const reviewableSelection = selectedCount === 0 || getSelectedAssetLibraryRefs().every((ref) => {
     if (ref.kind !== "media") return true;
@@ -3633,9 +3930,17 @@ function renderAssetLibrary() {
     assetLibrarySearchInput.value = state.librarySearch;
   }
   if (assetLibrarySearchInput) assetLibrarySearchInput.placeholder = "搜索";
+  if (assetLibraryEntityFilter) {
+    assetLibraryEntityFilter.hidden = !entityFilter;
+    const filterMarkup = entityFilter ? canvasAssetLibraryView.renderEntityMediaFilter(entityFilter) : "";
+    if (renderedAssetLibraryEntityFilter !== filterMarkup) {
+      assetLibraryEntityFilter.innerHTML = filterMarkup;
+      renderedAssetLibraryEntityFilter = filterMarkup;
+    }
+  }
   if (assetLibraryDirectoryName) {
-    assetLibraryDirectoryName.textContent = folder?.name || "默认目录";
-    assetLibraryDirectoryName.title = ["默认目录", ...folderPath.map((entry) => entry.name)].join(" / ");
+    assetLibraryDirectoryName.textContent = entityFilter ? "跨目录" : folder?.name || "默认目录";
+    assetLibraryDirectoryName.title = entityFilter ? "选择目录将清除主体筛选" : ["默认目录", ...folderPath.map((entry) => entry.name)].join(" / ");
   }
   if (assetLibraryDirectoryButton) {
     assetLibraryDirectoryButton.disabled = !canManageFolders;
@@ -3645,9 +3950,9 @@ function renderAssetLibrary() {
   if (assetLibraryCreateFolderBtn) {
     const currentLevel = folderPath.length + 1;
     const atMaximumDepth = currentLevel >= canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS;
-    assetLibraryCreateFolderBtn.hidden = !canManageFolders;
-    assetLibraryCreateFolderBtn.disabled = !canManageFolders || atMaximumDepth;
-    assetLibraryCreateFolderBtn.setAttribute("aria-disabled", (!canManageFolders || atMaximumDepth) ? "true" : "false");
+    assetLibraryCreateFolderBtn.hidden = !canManageFolders || Boolean(entityFilter);
+    assetLibraryCreateFolderBtn.disabled = !canManageFolders || atMaximumDepth || Boolean(entityFilter);
+    assetLibraryCreateFolderBtn.setAttribute("aria-disabled", (!canManageFolders || atMaximumDepth || entityFilter) ? "true" : "false");
     assetLibraryCreateFolderBtn.title = atMaximumDepth
       ? `最多支持 ${canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS} 层目录`
       : "在当前目录中新建文件夹";
@@ -3671,6 +3976,7 @@ function renderAssetLibrary() {
       section,
       canCreateEntity,
       canUploadMedia,
+      entityFilter: Boolean(entityFilter),
       allowedBatchActions: platformResults
         ? ["add-canvas", "save-personal"]
         : undefined,
@@ -3741,6 +4047,7 @@ function renderAssetLibrary() {
     mutable,
     canCreateEntity,
     canUploadMedia,
+    entityFilterStatus: entityFilter?.status,
   }));
 
   if (assetLibraryCount) {
@@ -3994,7 +4301,8 @@ function openAssetLibraryPreview(id) {
   }
   if (assetLibraryPreviewUse) {
     assetLibraryPreviewUse.hidden = false;
-    assetLibraryPreviewUse.querySelector("span").textContent = state.libraryTargetNodeId ? "引用到当前节点" : "添加到画布";
+    assetLibraryPreviewUse.querySelector("span").textContent = state.libraryTarget?.kind === "agent"
+      ? "加入对话参考" : state.libraryTarget?.kind === "node" ? "引用到当前节点" : "添加到画布";
   }
   refreshIcons();
   if (!assetLibraryPreviewDialog.open) assetLibraryPreviewDialog.showModal();
@@ -4033,7 +4341,7 @@ function focusNarrowViewportPanel(mode) {
     return;
   }
   if (mode === "agent" && !agentDock?.contains(activeElement)) {
-    agentInput?.focus();
+    focusAgentPrompt();
   }
 }
 
@@ -4053,12 +4361,14 @@ function syncNarrowViewportIsolation({ focusPanel = false } = {}) {
   if (focusPanel) focusNarrowViewportPanel(mode);
 }
 
-function openAssetLibrary(targetNodeId = null, { focus = false } = {}) {
+function openAssetLibrary(targetNodeId = null, { focus = false, agentScope = null } = {}) {
   if (state.agentOpen && !canShowAssetAndAgent()) setAgentOpen(false);
-  state.libraryTargetNodeId = targetNodeId;
-  if (targetNodeId) {
+  state.libraryTarget = agentScope ? { kind: "agent", scope: agentScope }
+    : targetNodeId ? { kind: "node", nodeId: targetNodeId } : null;
+  if (state.libraryTarget) {
     state.librarySection = "media";
     state.libraryFolderId = null;
+    state.libraryEntityFilter = null;
   }
   assetLibraryPanel?.classList.remove("hidden");
   if (assetLibraryPanel) {
@@ -4088,7 +4398,8 @@ function closeAssetLibrary({ restoreFocus = true } = {}) {
   assetLibraryItemMenu.dispose();
   const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
   canvasEntityUse.closeDetail();
-  state.libraryTargetNodeId = null;
+  state.libraryTarget = null;
+  state.libraryEntityFilter = null;
   state.libraryDirectoryMenuOpen = false;
   state.libraryRenameTarget = null;
   clearAssetLibrarySelection();
@@ -4181,7 +4492,15 @@ function addLibraryAssetsToCanvas(sourceAssets, clientX, clientY) {
 function useLibraryAsset(assetId, clientX, clientY) {
   const sourceAsset = findLibraryAsset(assetId);
   if (!sourceAsset) return;
-  const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId);
+  if (state.libraryTarget?.kind === "agent") {
+    const scope = state.libraryTarget.scope;
+    const added = addAgentReferenceAssets([sourceAsset], scope);
+    closeAssetLibrary({ restoreFocus: false });
+    if (added) setAgentOpen(true);
+    return;
+  }
+  const targetNode = state.nodes.find((node) => node.id === state.libraryTarget?.nodeId);
+  if (state.libraryTarget?.kind === "node" && !targetNode) return;
   if (targetNode?.kind === "generator") {
     addAssetToGeneratorNode(targetNode, sourceAsset);
     closeAssetLibrary();
@@ -4257,14 +4576,6 @@ function hydrateAssetMetadata(asset, nodeId) {
   });
 }
 
-function audioWaveformBars(repeat = 1) {
-  const heights = [6, 14, 18, 24, 36, 20, 12, 22, 18, 28, 8, 20, 16, 24, 18, 26, 10, 72, 118, 96, 34, 108, 72, 18, 88, 22, 28, 18, 16, 26, 10, 58, 28, 12, 8];
-  return Array.from({ length: repeat })
-    .flatMap(() => heights)
-    .map((height, index) => `<i style="--h: ${height}px; --d: ${index * 36}ms"></i>`)
-    .join("");
-}
-
 function createGenerationParameterSnapshot(node) {
   const taskTypeCapability = getOmniReferenceTaskTypeCapability(node);
   const taskTypeConstraint = getOmniReferenceTaskTypeConstraint(node);
@@ -4276,7 +4587,9 @@ function createGenerationParameterSnapshot(node) {
   const snapshot = {
     mediaKind: getNodeGenerationMode(node),
     model: node.model,
-    prompt: node.prompt,
+    prompt: getNodePromptText(node),
+    promptDocument: promptDocument.normalize(node.prompt),
+    referenceSnapshot: promptDocument.resolve(node.prompt, getNodeReferenceEntries(node)),
     aspect: requestAspect,
     resolution: node.resolution,
     quality: node.quality,
@@ -4287,7 +4600,8 @@ function createGenerationParameterSnapshot(node) {
     workflow: node.workflow,
     audioEnabled: node.audioEnabled,
     assetValidationEnabled: node.assetValidationEnabled,
-    assetIds: (node.assets || []).map((asset) => asset.id),
+    assetIds: getNodeReferenceEntries(node).filter((entry) => !entry.connectionId).map((entry) => entry.asset.id),
+    referenceOrder: getNodeReferenceEntries(node).map((entry) => entry.key),
     referenceVideos: referenceVideos.map(({ assetId, sourceNodeId, url, duration }) => ({
       assetId,
       sourceNodeId,
@@ -4405,25 +4719,7 @@ function assetMediaContent(asset, displayWidth) {
   }
 
   if (asset.type === "audio") {
-    return `
-      <div class="media-content audio">
-        <div class="audio-waveform" data-audio-waveform data-wheel-scope="local" aria-hidden="true">
-          <div class="audio-track" data-audio-track>
-            ${audioWaveformBars(3)}
-          </div>
-          <span class="audio-playhead"></span>
-        </div>
-        <div class="audio-controls">
-          <button class="audio-play-button" data-audio-toggle="true" type="button" title="播放/暂停">
-            <i data-lucide="play" aria-hidden="true"></i>
-          </button>
-          <div class="audio-progress" data-audio-progress role="slider" aria-label="音频进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-            <span class="audio-progress-fill" data-audio-progress-fill></span>
-          </div>
-        </div>
-        ${safeUrl ? `<audio class="frame-audio" src="${safeUrl}" preload="metadata"></audio>` : ""}
-      </div>
-    `;
+    return window.REELAY_CANVAS_AUDIO_PLAYER.render({ safeUrl, duration: asset.duration });
   }
 
   return `
@@ -4435,39 +4731,26 @@ function assetMediaContent(asset, displayWidth) {
 }
 
 function assetShelf(node) {
-  const assets = (node.assets || [])
-    .map(
-      (asset) => `
-        <div class="asset-card ${asset.type} ${node.activeAssetId === asset.id ? "active" : ""}" data-action="focus-asset" data-value="${asset.id}" role="button" tabindex="0">
-          <div class="asset-thumb">${assetPreview(asset)}</div>
-          <div class="asset-meta">
-            <span>${escapeHtml(getAssetDisplayName(asset))}</span>
-            <small>${assetTypeLabel(asset.type)}</small>
-          </div>
-        <button class="asset-remove" data-action="remove-material" data-value="${asset.id}" data-canvas-mutation type="button" title="移除">×</button>
-        </div>
-      `,
-    )
-    .join("");
-  const linkedReferences = getIncomingConnections(node.id)
-    .map((connection) => {
-      const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
-      const asset = source ? getEditableMedia(source) : null;
-      if (!source || !asset) return "";
-      return `
-        <div class="asset-card linked-reference ${asset.type}" data-action="focus-linked-source" data-value="${connection.id}" role="button" tabindex="0">
-          <div class="asset-thumb">${assetPreview(asset)}</div>
-          <div class="asset-meta">
-            <span>${escapeHtml(getMediaTitle(source, asset) || getAssetDisplayName(asset))}</span>
-            <small><i data-lucide="link-2" aria-hidden="true"></i>画布引用 · ${assetTypeLabel(asset.type)}</small>
-          </div>
-          <button class="asset-remove" data-action="remove-linked-source" data-value="${connection.id}" data-canvas-mutation type="button" title="断开连接" aria-label="断开连接">×</button>
-        </div>
-      `;
-    })
-    .join("");
-  if (!assets && !linkedReferences) return "";
-  return `<div class="asset-shelf">${linkedReferences}${assets}</div>`;
+  const entries = promptDocument.referenceIndex(getNodeReferenceEntries(node));
+  if (!entries.length) return "";
+  const locked = node.generating || node.promptOptimizing || !isCanvasMutationAllowed();
+  const cards = entries.map(({ key, asset, connectionId, label, ordinal, name }) => {
+    const linked = Boolean(connectionId);
+    const removeLabel = linked ? "断开连接" : "移除参考";
+    return `
+      <div class="asset-card ${escapeHtml(asset.type)} ${linked ? "linked-reference" : node.activeAssetId === asset.id ? "active" : ""}"
+        data-reference-key="${escapeHtml(key)}" data-reference-locked="${locked}"
+        data-action="${linked ? "focus-linked-source" : "focus-asset"}" data-value="${escapeHtml(connectionId || asset.id)}"
+        role="button" tabindex="0" aria-label="${escapeHtml(label)}：${escapeHtml(name)}，${linked ? "画布引用，" : ""}${assetTypeLabel(asset.type)}"
+        aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight">
+        <div class="asset-thumb">${assetPreview(asset)}</div>
+        <span class="reference-number" aria-hidden="true" title="${escapeHtml(label)}">${ordinal}</span>
+        <button class="asset-remove" data-reference-remove data-action="${linked ? "remove-linked-source" : "remove-material"}"
+          data-value="${escapeHtml(connectionId || asset.id)}" data-canvas-mutation type="button" ${locked ? "disabled" : ""}
+          title="${removeLabel}" aria-label="${removeLabel} ${escapeHtml(name)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+      </div>`;
+  }).join("");
+  return `<div class="asset-shelf" role="group" aria-label="参考素材，拖动可排序">${cards}</div>`;
 }
 
 async function addFilesToGeneratorNode(node, files) {
@@ -4589,6 +4872,9 @@ function renderCanvasView() {
   if (state.activeGroupId && !getGroupById(state.activeGroupId)) state.activeGroupId = null;
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
+  promptEditors.prune();
+  if (agentPromptReady && state.agentOpen) mountAgentPrompt();
+  canvasAudioPlayer.sync();
   shell.classList.toggle("group-editing", Boolean(state.activeGroupId));
   renderGroupResizeOverlay();
   renderConnections();
@@ -4601,6 +4887,7 @@ function renderCanvasView() {
   syncCanvasAccessUi();
   scheduleGroupChromeLayout();
   requestAnimationFrame(syncPromptPanelLayouts);
+  canvasToolbarMenus.sync();
 }
 
 function getNodeRenderSignature(node) {
@@ -4665,12 +4952,14 @@ function scheduleGroupChromeLayout() {
     const toolbarRect = toolbar.getBoundingClientRect();
     const overlap = titleRect.right + 6 > toolbarRect.left
       && toolbarRect.right + 6 > titleRect.left;
-    if (!overlap) return;
-    const liftScreen = titleRect.height + 6;
-    frame.style.setProperty(
-      "--group-toolbar-lift",
-      `${(liftScreen / state.scale).toFixed(2)}px`,
-    );
+    if (overlap) {
+      const liftScreen = titleRect.height + 6;
+      frame.style.setProperty(
+        "--group-toolbar-lift",
+        `${(liftScreen / state.scale).toFixed(2)}px`,
+      );
+    }
+    canvasToolbarMenus.sync();
   });
 }
 
@@ -4691,17 +4980,17 @@ function createGroupFrameElement(group) {
   el.dataset.groupId = group.id;
   el.innerHTML = `
     <div class="group-title">${escapeHtml(group.name || "新建组")}</div>
-    <div class="group-toolbar">
+    <div class="group-toolbar" role="group" aria-label="分组操作">
       <div class="toolbar-menu-wrap">
-      <button class="icon-toolbar-button" type="button" data-group-action="toggle-layout" data-canvas-mutation aria-label="布局">
+      <button class="icon-toolbar-button ${group.layoutMenuOpen ? "active" : ""}" type="button" data-group-action="toggle-layout" data-canvas-mutation aria-label="布局" aria-haspopup="menu" aria-expanded="${Boolean(group.layoutMenuOpen)}" aria-controls="group-layout-menu-${escapeHtml(group.id)}">
           <i data-lucide="layout-grid" aria-hidden="true"></i>
           <i data-lucide="chevron-down" aria-hidden="true"></i>
           <span class="toolbar-tip">布局</span>
         </button>
-        <div class="toolbar-dropdown group-layout-menu ${group.layoutMenuOpen ? "" : "hidden"}">
-          <button type="button" data-group-layout="grid" data-canvas-mutation><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
-          <button type="button" data-group-layout="horizontal" data-canvas-mutation><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
-          <button type="button" data-group-layout="vertical" data-canvas-mutation><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
+        <div class="toolbar-dropdown group-layout-menu ${group.layoutMenuOpen ? "" : "hidden"}" id="group-layout-menu-${escapeHtml(group.id)}" role="menu" aria-label="分组布局" popover="manual" data-toolbar-popover="group">
+          <button type="button" role="menuitem" data-group-layout="grid" data-canvas-mutation><i data-lucide="grid-3x3" aria-hidden="true"></i><span>宫格布局</span></button>
+          <button type="button" role="menuitem" data-group-layout="horizontal" data-canvas-mutation><i data-lucide="align-horizontal-space-around" aria-hidden="true"></i><span>水平布局</span></button>
+          <button type="button" role="menuitem" data-group-layout="vertical" data-canvas-mutation><i data-lucide="align-vertical-space-around" aria-hidden="true"></i><span>垂直布局</span></button>
         </div>
       </div>
       <button class="icon-toolbar-button primary" type="button" data-group-action="run" data-canvas-mutation aria-label="整组执行">
@@ -4735,7 +5024,7 @@ function bindGroupFrameEvents(el) {
 
     if (event.button !== 0) return;
     event.stopPropagation();
-    if (event.target.closest("button, .toolbar-dropdown")) {
+    if (event.target.closest(".group-toolbar, button, .toolbar-dropdown")) {
       setActiveGroup(liveGroup.id);
       return;
     }
@@ -4854,6 +5143,11 @@ function getSelectionVisualBounds() {
 function renderSelectionToolbar() {
   if (!selectionToolbar || !multiSelectionSurface || !multiSelectionChrome) return;
   const selectedNodes = getSelectedNodes();
+  if (selectionLayoutSession && !isSelectionLayoutSessionCurrent()) setSelectionLayoutMenuOpen(false);
+  const layoutIssue = getSelectionLayoutIssue(selectedNodes);
+  selectionLayoutTrigger?.setAttribute("aria-disabled", String(Boolean(layoutIssue) || !isCanvasMutationAllowed()));
+  const layoutTip = selectionToolbar.querySelector("#selectionLayoutTip");
+  if (layoutTip) layoutTip.textContent = layoutIssue || "布局";
   const exactSelectionGroup = getExactSelectionGroup(selectedNodes);
   const bounds = getSelectionVisualBounds();
   const screenRect = canvasSpatialSelection.getSelectionScreenRect(bounds, state, 0);
@@ -4869,6 +5163,7 @@ function renderSelectionToolbar() {
     multiSelectionPort?.removeAttribute("style");
     selectionToolbar.classList.add("hidden");
     setSelectionDownloadMenuOpen(false);
+    setSelectionLayoutMenuOpen(false);
     return;
   }
 
@@ -4890,8 +5185,9 @@ function renderSelectionToolbar() {
   multiSelectionSurface.classList.toggle("hidden", Boolean(exactSelectionGroup));
   multiSelectionChrome.classList.toggle("is-connecting", isSelectionConnecting);
   if (!isSelectionConnecting) multiSelectionPort?.removeAttribute("style");
-  if (isSelectionConnecting) {
+  if (isSelectionConnecting || state.action?.type === "marquee") {
     selectionToolbar.classList.add("hidden");
+    setSelectionLayoutMenuOpen(false);
     return;
   }
 
@@ -4899,7 +5195,14 @@ function renderSelectionToolbar() {
     "group-unavailable",
     selectedNodes.some((node) => Boolean(node.groupId)),
   );
+  const entityPlan = getSelectionEntityPlan();
+  const entityButton = selectionToolbar.querySelector('[data-selection-action="create-entity"]');
+  entityButton?.setAttribute("aria-disabled", String(Boolean(entityPlan.reason)));
+  const entityTip = selectionToolbar.querySelector("#selectionEntityTip");
+  if (entityTip) entityTip.textContent = entityPlan.reason || `用 ${entityPlan.media.length} 个素材新建主体，保存到个人空间`;
   selectionToolbar.classList.remove("hidden");
+  const addToConversation = selectionToolbar.querySelector('[data-selection-action="add-conversation"]');
+  if (addToConversation) addToConversation.disabled = !getAgentSelectedCanvasAssets().length;
   const toolbarWidth = selectionToolbar.offsetWidth || 260;
   const toolbarHeight = selectionToolbar.offsetHeight || 42;
   const viewportPadding = 12;
@@ -4925,11 +5228,11 @@ function createNodeElement(node) {
   return node.kind === "asset" ? createAssetNodeElement(node) : createGeneratorNodeElement(node);
 }
 
-function createAssetNodeElement(node) {
+function createAssetNodeElement(node, existingElement = null) {
   const layout = getNodeLayout(node);
   const asset = getActiveAsset(node);
   const selected = state.selectedIds.has(node.id);
-  const el = document.createElement("article");
+  const el = existingElement || document.createElement("article");
   el.className = `canvas-node generator-node asset-node ${asset?.type || "media"}-source ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
   el.style.left = `${node.x}px`;
   el.style.top = `${node.y}px`;
@@ -4937,17 +5240,17 @@ function createAssetNodeElement(node) {
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
 
-  el.innerHTML = `
+  const { retainedMedia } = canvasNodePromptView.renderContents(el, `
     <section class="media-frame source-frame ${asset ? `has-asset ${asset.type}-asset` : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
       ${assetMediaContent(asset, layout.mediaWidth)}
       ${nodePortMarkup(node)}
     </section>
-  `;
+  `);
 
   canvasMediaImageView.syncImages(el, { scale: state.scale, displayWidth: layout.mediaWidth });
-  bindNodeEvents(el, node);
+  bindNodeEvents(el, node, { bindRoot: !existingElement, bindMedia: !retainedMedia });
   return el;
 }
 
@@ -4988,7 +5291,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
         ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
-        <textarea class="prompt-input" data-node-prompt-input placeholder="${escapeHtml(generatorModelPolicy.getPromptPlaceholder(models, node))}" ${promptInputDisabled}>${escapeHtml(node.prompt)}</textarea>
+        <div class="prompt-input" data-node-prompt-input aria-label="提示词" data-placeholder="${escapeHtml(generatorModelPolicy.getPromptPlaceholder(models, node))}" aria-readonly="${Boolean(promptInputDisabled)}"></div>
         <div class="control-bar">
           <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" aria-label="${escapeHtml(model?.name || "暂无可用模型")}" title="${escapeHtml(model?.name || "暂无可用模型")}" ${generationInputsDisabled}>
             ${modelIconMarkup(model, "model-chip-glyph")}
@@ -5000,7 +5303,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
           </button>
           <div class="control-spacer"></div>
           ${isVideoNode ? `
-            <button class="control-chip composer-tool-button prompt-optimization-button ${node.promptOptimizing ? "is-processing" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" title="${node.promptOptimizing ? "正在优化提示词" : node.prompt.trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="${node.promptOptimizing ? "正在优化提示词" : "提示词优化"}" aria-busy="${node.promptOptimizing}" ${node.generating || node.promptOptimizing || !node.prompt.trim() ? "disabled" : ""}>
+            <button class="control-chip composer-tool-button prompt-optimization-button ${node.promptOptimizing ? "is-processing" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" title="${node.promptOptimizing ? "正在优化提示词" : getNodePromptText(node).trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="${node.promptOptimizing ? "正在优化提示词" : "提示词优化"}" aria-busy="${node.promptOptimizing}" ${node.generating || node.promptOptimizing || !getNodePromptText(node).trim() ? "disabled" : ""}>
               <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
               <span class="prompt-optimization-spinner" aria-hidden="true"></span>
             </button>
@@ -5034,23 +5337,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
   canvasMediaImageView.syncImages(el, { scale: state.scale, displayWidth: layout.mediaWidth });
   bindNodeEvents(el, node, { bindRoot: !existingElement, bindMedia: !retainedMedia });
   const promptInput = el.querySelector(".prompt-input");
-  if (!retainedInput) promptInput?.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || event.isComposing) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.blur();
-  });
-  if (!retainedInput) promptInput?.addEventListener("input", (event) => {
-    if (!requireCanvasMutation()) {
-      event.currentTarget.value = node.prompt;
-      return;
-    }
-    node.prompt = event.currentTarget.value;
-    syncPromptPanelContentHeight(node, el);
-    syncPromptOptimizationButton(el.querySelector(".prompt-optimization-button"), node);
-    syncGenerateButton(el.querySelector(".generate-button"), node);
-    scheduleCanvasDocumentSave();
-  });
+  if (promptInput) mountNodePrompt(node, promptInput, el);
 
   const durationRange = el.querySelector("[data-duration-range]");
   const durationNumber = el.querySelector("[data-duration-number]");
@@ -5112,7 +5399,6 @@ function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
   }
   if (!bindMedia) return;
   bindMediaTitleEvents(el, node);
-  bindAudioEvents(el);
   bindMediaToolbarEvents(el, node);
   el.querySelectorAll("[data-node-port-zone]").forEach((zone) => {
     const side = zone.dataset.nodePortZone;
@@ -5461,177 +5747,6 @@ function bindMediaTitleEvents(el, node) {
   title.addEventListener("blur", () => finish(true));
 }
 
-function bindAudioEvents(el) {
-  const audio = el.querySelector(".frame-audio");
-  const button = el.querySelector("[data-audio-toggle]");
-  const audioContent = el.querySelector(".media-content.audio");
-  const waveform = el.querySelector("[data-audio-waveform]");
-  const track = el.querySelector("[data-audio-track]");
-  const progress = el.querySelector("[data-audio-progress]");
-  const progressFill = el.querySelector("[data-audio-progress-fill]");
-  if (!audio || !button || !audioContent) return;
-
-  let animationFrameId = null;
-  let progressSeekTarget = null;
-  let waveformDragState = null;
-
-  const getProgress = () => {
-    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
-    return duration ? clamp(audio.currentTime / duration, 0, 1) : 0;
-  };
-
-  const updateAudioProgress = () => {
-    const value = getProgress();
-    if (waveform && track) {
-      const maxOffset = Math.max(0, track.scrollWidth - waveform.clientWidth);
-      track.style.setProperty("--audio-offset", `${(-value * maxOffset).toFixed(2)}px`);
-    }
-    if (progressFill) {
-      progressFill.style.width = `${(value * 100).toFixed(2)}%`;
-    }
-    progress?.setAttribute("aria-valuenow", String(Math.round(value * 100)));
-  };
-
-  const stopProgressLoop = () => {
-    if (animationFrameId) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
-    updateAudioProgress();
-  };
-
-  const startProgressLoop = () => {
-    stopProgressLoop();
-    const tick = () => {
-      updateAudioProgress();
-      if (!audio.paused && !audio.ended) {
-        animationFrameId = requestAnimationFrame(tick);
-      }
-    };
-    tick();
-  };
-
-  const setPlaying = (playing) => {
-    audioContent.classList.toggle("playing", playing);
-    button.innerHTML = `<i data-lucide="${playing ? "pause" : "play"}" aria-hidden="true"></i>`;
-    refreshIcons();
-  };
-
-  const setAudioProgress = (value) => {
-    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
-    if (!duration) return;
-    audio.currentTime = clamp(value, 0, 1) * duration;
-    updateAudioProgress();
-  };
-
-  const seekProgressFromPointer = (event, target) => {
-    if (!target) return;
-    const rect = target.getBoundingClientRect();
-    const value = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-    setAudioProgress(value);
-  };
-
-  const beginProgressSeek = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    progressSeekTarget = progress;
-    seekProgressFromPointer(event, progress);
-    progress?.setPointerCapture?.(event.pointerId);
-  };
-
-  const moveProgressSeek = (event) => {
-    if (!progressSeekTarget) return;
-    event.preventDefault();
-    seekProgressFromPointer(event, progressSeekTarget);
-  };
-
-  const endProgressSeek = (event) => {
-    if (!progressSeekTarget) return;
-    progressSeekTarget.releasePointerCapture?.(event.pointerId);
-    progressSeekTarget = null;
-  };
-
-  const beginWaveformDrag = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
-    if (!duration || !waveform) return;
-    const rawScrollableWidth = track ? track.scrollWidth - waveform.clientWidth : 0;
-    const scrollableWidth = Math.max(waveform.clientWidth || 1, rawScrollableWidth);
-    waveformDragState = {
-      startX: event.clientX,
-      startOffset: getProgress() * scrollableWidth,
-      scrollableWidth,
-    };
-    audioContent.classList.add("scrubbing");
-    waveform.setPointerCapture?.(event.pointerId);
-  };
-
-  const moveWaveformDrag = (event) => {
-    if (!waveformDragState) return;
-    event.preventDefault();
-    const deltaX = event.clientX - waveformDragState.startX;
-    const nextOffset = waveformDragState.startOffset - deltaX;
-    setAudioProgress(nextOffset / waveformDragState.scrollableWidth);
-  };
-
-  const endWaveformDrag = (event) => {
-    if (!waveformDragState) return;
-    waveform?.releasePointerCapture?.(event.pointerId);
-    waveformDragState = null;
-    audioContent.classList.remove("scrubbing");
-  };
-
-  button.addEventListener("pointerdown", (event) => {
-    event.stopPropagation();
-  });
-  button.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (audio.paused) {
-      if (audio.ended) audio.currentTime = 0;
-      audio.play().catch(() => setPlaying(false));
-    } else {
-      audio.pause();
-    }
-  });
-  waveform?.addEventListener("pointerdown", beginWaveformDrag);
-  waveform?.addEventListener("pointermove", moveWaveformDrag);
-  waveform?.addEventListener("pointerup", endWaveformDrag);
-  waveform?.addEventListener("pointercancel", endWaveformDrag);
-  progress?.addEventListener("pointerdown", beginProgressSeek);
-  progress?.addEventListener("pointermove", moveProgressSeek);
-  progress?.addEventListener("pointerup", endProgressSeek);
-  progress?.addEventListener("pointercancel", endProgressSeek);
-  progress?.addEventListener("keydown", (event) => {
-    const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
-    if (!duration) return;
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      event.preventDefault();
-      const direction = event.key === "ArrowRight" ? 1 : -1;
-      audio.currentTime = clamp(audio.currentTime + direction * 5, 0, duration);
-      updateAudioProgress();
-    }
-  });
-  audio.addEventListener("loadedmetadata", updateAudioProgress);
-  audio.addEventListener("timeupdate", updateAudioProgress);
-  audio.addEventListener("seeked", updateAudioProgress);
-  audio.addEventListener("play", () => {
-    setPlaying(true);
-    startProgressLoop();
-  });
-  audio.addEventListener("pause", () => {
-    setPlaying(false);
-    stopProgressLoop();
-  });
-  audio.addEventListener("ended", () => {
-    setPlaying(false);
-    audio.currentTime = 0;
-    stopProgressLoop();
-  });
-  updateAudioProgress();
-}
-
 function resolveCanvasNodeTaskTarget({ projectId, canvasId, nodeId }) {
   if (projectId !== state.projectId) return null;
   return canvasRuntimeStore.getCanvas(canvasId)?.nodes.find((node) => node.id === nodeId) || null;
@@ -5681,12 +5796,35 @@ function buildOptimizedPrompt(prompt) {
   return `${normalized}${separator}${guidance}`;
 }
 
+function optimizePromptDocument(value) {
+  if (typeof value === "string") return buildOptimizedPrompt(value);
+  const normalized = promptDocument.optimize(value, (text) => text.replace(/[\t ]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n"));
+  const content = normalized.content.map((item) => ({ ...item }));
+  if (content[0]?.type === "text") content[0].text = content[0].text.trimStart();
+  if (content.at(-1)?.type === "text") content.at(-1).text = content.at(-1).text.trimEnd();
+  const doc = promptDocument.normalize({ version: 1, content });
+  const text = promptDocument.toText(doc);
+  const optimized = buildOptimizedPrompt(text);
+  const suffix = optimized.slice(text.length);
+  return promptDocument.normalize({ version: 1, content: [...doc.content, { type: "text", text: suffix }] });
+}
+
 function pushCanvasUndoAction(canvas, action) {
   if (!canvas || !action) return;
   const undoStack = Array.isArray(canvas.undoStack) ? canvas.undoStack : [];
   undoStack.push(action);
   if (undoStack.length > 50) undoStack.shift();
   canvas.undoStack = undoStack;
+}
+
+function commitArrangementPlan(plan) {
+  const changes = plan.positions.map((position) => canvasContentCommands.buildFieldChange(
+    "nodes", state.nodes.find((node) => node.id === position.id), position, ["x", "y"],
+  ));
+  changes.push(...plan.groupPositions.map((position) => canvasContentCommands.buildFieldChange(
+    "groups", getGroupById(position.id), position, Object.keys(position).filter((key) => key !== "id"),
+  )));
+  return executeCanvasContentCommand("canvas-layout", changes);
 }
 
 function executeCanvasContentCommand(type, changes, { recordUndo = true } = {}) {
@@ -5727,16 +5865,20 @@ function completePromptOptimization(task, node) {
   const { sourcePrompt } = task.inputs;
 
   node.promptOptimizing = false;
-  if (node.prompt === sourcePrompt) {
-    const optimizedPrompt = buildOptimizedPrompt(sourcePrompt);
-    if (optimizedPrompt && optimizedPrompt !== node.prompt) {
+  if (samePrompt(node.prompt, sourcePrompt)) {
+    const optimizedPrompt = optimizePromptDocument(sourcePrompt);
+    if (!samePrompt(optimizedPrompt, node.prompt)) {
+      const beforeHistory = promptEditors.replace(node, optimizedPrompt);
       node.prompt = optimizedPrompt;
-      pushCanvasUndoAction(canvas, {
+      const action = {
         type: "prompt-update",
         nodeId: node.id,
         before: sourcePrompt,
         after: optimizedPrompt,
-      });
+        beforeHistory,
+      };
+      promptEditors.linkHistory(node, action);
+      pushCanvasUndoAction(canvas, action);
     }
   }
 
@@ -5753,7 +5895,7 @@ function startPromptOptimization(node) {
     || node.promptOptimizing
   ) return false;
   const sourcePrompt = node.prompt;
-  if (!sourcePrompt.trim()) return false;
+  if (!promptDocument.toText(sourcePrompt).trim()) return false;
   const canvas = getActiveCanvas();
   if (!canvas || !canvas.nodes.includes(node)) return false;
 
@@ -5776,6 +5918,8 @@ function commitGenerationUndoBoundary(canvas, nodeId) {
     ),
   );
   canvas.undoStack = nextUndoStack;
+  const node = canvas.nodes.find((item) => item.id === nodeId);
+  if (node) promptEditors.clearHistory(node);
 }
 
 function completeSimulatedGeneration(task, node) {
@@ -5826,7 +5970,7 @@ function syncGenerateButton(button, node) {
 
 function syncPromptOptimizationButton(button, node) {
   if (!button || !node) return;
-  const hasPrompt = Boolean(node.prompt.trim());
+  const hasPrompt = Boolean(getNodePromptText(node).trim());
   const disabled = node.generating || node.promptOptimizing || !hasPrompt;
   button.disabled = disabled;
   button.title = node.promptOptimizing
@@ -5843,7 +5987,7 @@ function startSimulatedGeneration(node, options = {}) {
   const { charge = true } = options;
   if (node.generating || node.promptOptimizing) return false;
   normalizeNodeParameters(node);
-  if (!node.prompt.trim()) {
+  if (!getNodePromptText(node).trim()) {
     showConfirmDialog({
       title: "缺少提示词",
       body: "请先填写提示词，再执行生成。",
@@ -5853,7 +5997,7 @@ function startSimulatedGeneration(node, options = {}) {
     return false;
   }
 
-  const taskTypeIssue = getOmniReferenceTaskTypeIssue(node);
+  const taskTypeIssue = getPromptReferenceIssue(node.prompt, getNodeReferenceEntries(node)) || getOmniReferenceTaskTypeIssue(node);
   if (taskTypeIssue) {
     showConfirmDialog({
       title: "任务参数不完整",
@@ -6347,7 +6491,7 @@ function handleAction(node, action, value) {
       if (node.advancedSettingsExpanded) node.panel = null;
       break;
     case "generate":
-      if (!node.prompt.trim() || node.generating) return;
+      if (!getNodePromptText(node).trim() || node.generating) return;
       startSimulatedGeneration(node);
       break;
     case "prompt-optimization":
@@ -6725,7 +6869,7 @@ function beginSelectionConnectionDrag(event) {
     nodeId: "__selection__",
     side: "right",
     anchor,
-    options: canvasConnectionInteraction.getScaledPortGeometry(state.scale),
+    options: canvasConnectionInteraction.getAggregatePortGeometry(state.scale),
   }])[0];
   if (!originPort) return;
 
@@ -7082,6 +7226,8 @@ function consumeHomeLaunchIntent() {
 function cloneNodeState(node) {
   return {
     ...node,
+    prompt: typeof node.prompt === "string" ? node.prompt : promptDocument.normalize(node.prompt),
+    ...(node.referenceOrder ? { referenceOrder: [...node.referenceOrder] } : {}),
     assets: (node.assets || []).map((asset) => ({ ...asset })),
     generatedAsset: node.generatedAsset ? { ...node.generatedAsset } : null,
   };
@@ -7106,6 +7252,9 @@ function cloneGroupState(group) {
 function cloneCanvasContent(source) {
   const nodeIdMap = new Map(source.nodes.map((node) => [node.id, crypto.randomUUID()]));
   const groupIdMap = new Map(source.groups.map((group) => [group.id, crypto.randomUUID()]));
+  const connectionIdMap = new Map((source.connections || []).filter((connection) =>
+    nodeIdMap.has(connection.sourceNodeId) && nodeIdMap.has(connection.targetNodeId)
+  ).map((connection) => [connection.id, crypto.randomUUID()]));
   const nodes = source.nodes.map((sourceNode) => {
     const node = cloneNodeState(sourceNode);
     const assetIdMap = new Map();
@@ -7116,6 +7265,10 @@ function cloneCanvasContent(source) {
       return { ...asset, id };
     });
     node.activeAssetId = assetIdMap.get(sourceNode.activeAssetId) || node.assets[0]?.id || null;
+    if (sourceNode.referenceOrder) node.referenceOrder = canvasReferenceOrder.remap(sourceNode.referenceOrder, {
+      assetIds: assetIdMap, connectionIds: connectionIdMap,
+    });
+    node.prompt = typeof sourceNode.prompt === "string" ? sourceNode.prompt : promptDocument.remap(sourceNode.prompt, { assetIds: assetIdMap, connectionIds: connectionIdMap });
     node.generatedAsset = sourceNode.generatedAsset
       ? { ...sourceNode.generatedAsset, id: crypto.randomUUID() }
       : null;
@@ -7139,7 +7292,7 @@ function cloneCanvasContent(source) {
   }));
   const connections = (source.connections || []).map((connection) => ({
     ...cloneConnectionState(connection),
-    id: crypto.randomUUID(),
+    id: connectionIdMap.get(connection.id),
     sourceNodeId: nodeIdMap.get(connection.sourceNodeId),
     targetNodeId: nodeIdMap.get(connection.targetNodeId),
   })).filter((connection) => connection.sourceNodeId && connection.targetNodeId);
@@ -7264,7 +7417,7 @@ function undoLastAction() {
       showActionToast("提示词正在优化，完成后可撤销");
       return;
     }
-    if (action.type === "prompt-update" && liveNode && liveNode.prompt !== action.after) {
+    if (action.type === "prompt-update" && liveNode && !samePrompt(liveNode.prompt, action.after)) {
       showActionToast("提示词已变化，已跳过这次优化撤销");
       return;
     }
@@ -7357,6 +7510,7 @@ function undoLastAction() {
     const node = state.nodes.find((item) => item.id === action.nodeId);
     if (node) {
       node.prompt = action.before;
+      promptEditors.restore(node, action.beforeHistory);
       setSelection([node.id], node.id);
     }
   }
@@ -7465,28 +7619,37 @@ function getConversation(id) {
   return agentHistory.getConversation(id) || agentHistory.getConversation();
 }
 
-function renderAgentMessages(conversation = getConversation()) {
-  if (!agentMessages) return;
-  if (!conversation.messages.length) {
-    agentMessages.replaceChildren();
-    return;
-  }
+function getAgentPromptText() {
+  return promptDocument.toText(getConversation()?.draftPrompt, agentReferences.getEntries());
+}
 
-  agentMessages.innerHTML = `
-    <div class="agent-message-list">
-      ${conversation.messages
-        .map(
-          (message) => `
-            <div class="agent-message ${message.role}">
-              <div class="agent-message-role">${message.role === "user" ? "你" : "Reelay Agent"}</div>
-              <div class="agent-message-body">${escapePlainText(message.content)}</div>
-            </div>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-  agentMessages.scrollTop = agentMessages.scrollHeight;
+function focusAgentPrompt() {
+  promptEditors.focus(getConversation());
+}
+
+function mountAgentPrompt(conversation = getConversation()) {
+  if (!conversation || !agentInput || !state.agentOpen) return;
+  const projectId = state.projectId;
+  promptEditors.mount(conversation, agentInput, {
+    scope: JSON.stringify([projectId, conversation.id]),
+    readDocument: () => conversation.draftPrompt || "",
+    getReferences: () => getPromptEditorReferences(agentReferences.getEntries()),
+    isCurrent: () => state.projectId === projectId && getConversation() === conversation,
+    isEditable: () => !state.agentPromptOptimizationTask,
+    isMentionEnabled: () => agentModels.getMode() === "generation",
+    getPlaceholder: () => agentInput.dataset.placeholder || "描述你想生成的内容，或输入 @ 引用",
+    submitOnEnter: true,
+    onChange(value) {
+      conversation.draftPrompt = value;
+      syncAgentPromptOptimizationControl();
+    },
+    onSubmit: sendAgentMessage,
+  });
+}
+
+function renderAgentMessages(conversation = getConversation()) {
+  if (agentModels.getMode() !== "generation") agentComposerView.renderMessages(conversation);
+  agentGeneration?.render();
 }
 
 const agentHistory = window.REELAY_AGENT_HISTORY.createController({
@@ -7494,8 +7657,22 @@ const agentHistory = window.REELAY_AGENT_HISTORY.createController({
   seed: seedAgentConversations,
   escapeHtml,
   refreshIcons,
+  hasDraft: (conversation) => Boolean(agentGeneration?.hasRecords(conversation.id) || promptDocument.toText(conversation.draftPrompt).trim() || agentReferences.hasDraft(conversation)
+    || (conversation === getConversation() && getAgentPromptText().trim())),
+  onBeforeSelect(previous) {
+    if (previous) promptEditors.unmount(previous);
+  },
+  onDelete: (conversation) => {
+    agentGeneration?.removeConversation(conversation.id);
+    promptEditors.release(conversation); agentReferences.releaseConversation(conversation);
+  },
   onSelect(conversation, { closeMenu }) {
     cancelAgentPromptOptimization();
+    agentComposerView.close();
+    agentReferences.refresh();
+    mountAgentPrompt(conversation);
+    syncAgentPromptOptimizationControl();
+    syncAgentModelButton();
     agentConversationTitle.textContent = conversation.title;
     agentConversationTitle.title = conversation.title;
     renderAgentMessages(conversation);
@@ -7508,6 +7685,10 @@ const agentHistory = window.REELAY_AGENT_HISTORY.createController({
     }
   },
   requestDelete({ conversation, onConfirm }) {
+    if (agentGeneration?.hasPending(conversation.id)) {
+      showActionToast("此对话仍有生成任务，请等待完成或先取消生成");
+      return;
+    }
     setAgentHistoryOpen(false);
     agentHistoryBtn?.focus();
     showConfirmDialog({
@@ -7527,6 +7708,7 @@ const agentParameters = window.REELAY_AGENT_PARAMETERS.createController({
   normalize: normalizeNodeParameters,
   renderPanel: (parameters) => paramPanel(parameters, { canvas: false }),
   beforeOpen() {
+    setAgentReferenceMenuOpen(false);
     setAgentHistoryOpen(false);
     setAgentModeMenuOpen(false);
     setAgentModelMenuOpen(false);
@@ -7551,6 +7733,7 @@ const agentModels = window.REELAY_AGENT_MODELS.createController({
   modelIconMarkup,
   refreshIcons,
   beforeOpen() {
+    setAgentReferenceMenuOpen(false);
     agentParameters.setOpen(false);
     setAgentHistoryOpen(false);
     setAgentModeMenuOpen(false);
@@ -7559,10 +7742,178 @@ const agentModels = window.REELAY_AGENT_MODELS.createController({
   onChange: syncAgentComposerControls,
 });
 
+const agentReferences = window.REELAY_CANVAS_AGENT_REFERENCES.createController({
+  document, root: agentComposer, shelf: agentReferenceShelf, fileInput: document.querySelector("#agentReferenceInput"),
+  getScope: () => ({ projectId: state.projectId, conversation: getConversation() }),
+  isEditable: () => !state.agentPromptOptimizationTask,
+  sanitizeUrl: sanitizeRuntimeMediaUrl, getAssetType, getAssetLabel: getAssetDisplayName,
+  assetPreview: agentReferenceThumbnail, escapeHtml, referenceOrder: canvasReferenceOrder,
+  referenceStrip: window.REELAY_CANVAS_REFERENCE_STRIP,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+  showMessage: showActionToast,
+  onChange: () => { syncAgentModelButton(); syncAgentPromptOptimizationControl(); },
+});
+
+const agentComposerView = window.REELAY_CANVAS_AGENT_COMPOSER_VIEW.createController({
+  document, composer: agentComposer, addButton: agentAddBtn, menu: agentReferenceMenu, messages: agentMessages,
+  getScope: () => ({ projectId: state.projectId, conversation: getConversation() }),
+  isBusy: () => Boolean(state.agentPromptOptimizationTask),
+  getSelectedAssets: getAgentSelectedCanvasAssets,
+  onChooseFiles: () => agentReferences.chooseFiles(),
+  onLibrary: (scope) => openAssetLibrary(null, { focus: true, agentScope: scope }),
+  onAddSelected: addAgentReferenceAssets,
+  onDropFiles: (files, scope) => agentReferences.addFiles(files, scope),
+  onDropLibrary: (dataTransfer, scope) => addAgentReferenceAssets(getDraggedLibraryAssets({ dataTransfer }), scope),
+  hasLibraryDrag: (dataTransfer) => hasDraggedLibraryAsset({ dataTransfer }),
+  closeOtherPopovers: () => { closeAgentPopovers(); setAgentAdvancedOpen(false); },
+  escapeHtml, getAssetLabel: getAssetDisplayName, assetPreview: agentReferenceThumbnail,
+  sanitizeUrl: sanitizeRuntimeMediaUrl, referenceStrip: window.REELAY_CANVAS_REFERENCE_STRIP,
+  placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
+});
+
+const agentResultPlacement = window.REELAY_AGENT_RESULT_PLACEMENT.createController({
+  getProjectId: () => state.projectId,
+  getCanvas: (canvasId) => canvasRuntimeStore.getCanvas(canvasId),
+  isEditable: () => isCanvasMutationAllowed(),
+  isAccessible: () => ["standalone", "editable", "readonly"].includes(canvasPersistence.getAccessMode()),
+  getViewport() {
+    const viewport = getAvailableCanvasPlacementViewport();
+    return { left: viewport.centerX - viewport.viewportWidth / 2, top: viewport.centerY - viewport.viewportHeight / 2,
+      right: viewport.centerX + viewport.viewportWidth / 2, bottom: viewport.centerY + viewport.viewportHeight / 2 };
+  },
+  getNodeBounds: (node, canvas) => getNodeVisualBounds(node,
+    { x: node.x, y: node.y, layout: getNodeLayout(node, canvas.scale) }),
+  getNodeMedia: getEditableMedia,
+  createNode: (asset) => defaultAssetNode(0, 0, cloneAsset(asset, "generation"), { z: 0 }),
+  commitNode(canvas, node) {
+    node.z = ++canvas.zCounter;
+    canvas.nodes.push(node);
+    pushCanvasUndoAction(canvas, { type: "create", nodeIds: [node.id] });
+    scheduleCanvasDocumentSave(0);
+    if (canvas === getActiveCanvas()) render();
+  },
+  focusNode(canvas, node) {
+    if (canvas !== getActiveCanvas()) switchCanvas(canvas.id);
+    setSelection([node.id], node.id);
+    applyFitBounds(getNodeBounds(node));
+    render();
+  },
+});
+
+agentGeneration = window.REELAY_AGENT_GENERATION.createController({
+  document, container: document.querySelector("#agentGenerationRecords"), chatContainer: agentMessages,
+  getScope: () => ({ projectId: state.projectId, conversationId: agentHistory.getActiveId(), canvasId: state.activeCanvasId }),
+  isGenerationMode: () => agentModels.getMode() === "generation",
+  isEditable: () => !state.agentPromptOptimizationTask && requireCanvasMutation({ notify: false }),
+  hasDraft: () => Boolean(getAgentPromptText().trim() || agentReferences.getAssets().length),
+  captureInput: captureAgentGenerationInput,
+  clearDraft() {
+    agentReferences.takeForMessage();
+    const conversation = getConversation();
+    conversation.draftPrompt = "";
+    promptEditors.get(conversation)?.setDocument("", { resetHistory: true, notify: false });
+    syncAgentPromptOptimizationControl();
+  },
+  restoreDraft(input, { replace = false } = {}) {
+    if (!models.some((model) => model.id === input.modelId)) { showActionToast("原模型当前不可用"); return false; }
+    if (!agentReferences.restoreAssets(input.references, agentReferences.captureScope(), { replace })) return false;
+    agentModels.setGenerationModel(input.modelId);
+    agentParameters.restore(agentModels.getModel(), input.parameters);
+    const conversation = getConversation();
+    conversation.draftPrompt = promptDocument.normalize(input.promptDocument || input.prompt);
+    promptEditors.get(conversation)?.setDocument(conversation.draftPrompt, { resetHistory: true, notify: false });
+    mountAgentPrompt(conversation); syncAgentModelButton(); syncAgentPromptOptimizationControl(); focusAgentPrompt();
+    return true;
+  },
+  charge(amount) { if (!hasEnoughCredits(amount)) return false; chargeCredits(amount); return true; },
+  refund(amount) {
+    state.account.credits += amount;
+    state.account.consumedCredits = Math.max(0, state.account.consumedCredits - amount);
+    syncCreditDisplay(); return true;
+  },
+  makeResult: (task) => ({
+    ...simulationAssets[task.input.mediaType], id: crypto.randomUUID(),
+    displayName: task.input.mediaType === "image" ? "模拟生成图片" : "模拟生成视频",
+    source: "generation", generationTaskId: task.id,
+  }),
+  capturePlacementTarget: agentResultPlacement.capture,
+  placeResult: agentResultPlacement.place,
+  locateResult: agentResultPlacement.locate,
+  showMessage: showActionToast, escapeHtml, assetPreview: agentReferenceThumbnail,
+  renderPrompt: (input) => agentComposerView.renderPrompt({ ...input, content: input.prompt }),
+  getDemoPresets: () => window.REELAY_GENERATION_DEMO_PRESETS?.create({ models, media: assetLibrarySeed.media }) || [],
+  preparePreviewInput(input) {
+    const model = models.find((entry) => entry.id === input.modelId);
+    if (!model) return null;
+    const parameters = normalizeNodeParameters({ ...input.parameters, kind: "generator", model: model.id, mode: model.type });
+    const references = input.references || [];
+    const resolved = promptDocument.resolve(input.promptDocument || input.prompt, references.map((asset) => ({ key: `asset:${asset.id}`, asset })));
+    const cost = getCost(parameters);
+    if (!resolved.valid || !Number.isFinite(cost) || cost <= 0) return null;
+    const { beforeAspect, aspect, afterAspect } = getParamLabelParts(parameters);
+    return { prompt: resolved.text, promptDocument: resolved.document, references, referenceSnapshot: resolved.media,
+      parameters, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
+      parameterSummary: `${beforeAspect}${aspect}${afterAspect}` };
+  },
+  sanitizeUrl: sanitizeRuntimeMediaUrl, placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover, refreshIcons,
+});
+
+agentComposerResize = window.REELAY_CANVAS_AGENT_COMPOSER_RESIZE.createController({
+  document, panel: agentPanel, composer: agentComposer, stage: agentComposer.querySelector(".agent-composer-stage"),
+  onResizeStart: () => { closeAgentPopovers(); agentGeneration.close(); },
+});
+
+function captureAgentGenerationInput() {
+  const conversation = getConversation();
+  const resolved = promptDocument.resolve(conversation.draftPrompt, agentReferences.getEntries());
+  if (!resolved.text.trim() && !agentReferences.getAssets().length) return null;
+  const parameters = getAgentGenerationParameters();
+  const model = getAgentComposerModel();
+  if (!parameters || !model) return null;
+  const issue = getPromptReferenceIssue(conversation.draftPrompt, agentReferences.getEntries())
+    || getOmniReferenceTaskTypeIssue(parameters);
+  if (issue) {
+    showActionToast(issue);
+    const invalid = resolved.missing[0] || resolved.mismatched[0];
+    if (invalid) promptEditors.get(conversation)?.revealReference(invalid.key);
+    return null;
+  }
+  const cost = getCost(parameters);
+  if (!Number.isFinite(cost) || cost <= 0) { showActionToast("当前模型参数或积分配置不可用"); return null; }
+  const { beforeAspect, aspect, afterAspect } = getParamLabelParts(parameters);
+  return {
+    prompt: resolved.text, promptDocument: resolved.document,
+    references: agentReferences.getAssets(), referenceSnapshot: resolved.media,
+    parameters, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
+    parameterSummary: `${beforeAspect}${aspect}${afterAspect}`,
+  };
+}
+
+function getAgentSelectedCanvasAssets() {
+  return state.nodes.filter((node) => state.selectedIds.has(node.id)).map(getEditableMedia)
+    .filter((asset) => asset && ["image", "video", "audio"].includes(asset.type) && sanitizeRuntimeMediaUrl(asset.url));
+}
+
+function addAgentReferenceAssets(assets, scope = agentReferences.captureScope()) {
+  return agentReferences.addAssets(assets.map((asset) => ({ ...asset, type: asset.type || asset.mediaKind })), scope).length;
+}
+
+function agentReferenceThumbnail(asset) {
+  if (asset.type === "image") return assetPreview({ ...asset,
+    url: sanitizeRuntimeMediaUrl(asset.thumbnailUrl) || libraryImagePreviewUrl(asset.url, "image") });
+  if (asset.type === "audio") return '<svg class="agent-reference-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg>';
+  return window.REELAY_CANVAS_REFERENCE_THUMBNAILS.renderVideo(asset, { sanitizeUrl: sanitizeRuntimeMediaUrl, escapeHtml });
+}
+
+function setAgentReferenceMenuOpen(open) {
+  return agentComposerView.setMenuOpen(open);
+}
+
 function setAgentHistoryOpen(open, { focus = false } = {}) {
   const shouldOpen = Boolean(open);
   if (!shouldOpen) agentHistory.close();
   if (shouldOpen) {
+    setAgentReferenceMenuOpen(false);
     agentParameters.setOpen(false);
     setAgentModeMenuOpen(false);
     setAgentModelMenuOpen(false);
@@ -7575,6 +7926,7 @@ function setAgentHistoryOpen(open, { focus = false } = {}) {
 function setAgentModeMenuOpen(open, { focus = false } = {}) {
   const shouldOpen = Boolean(open);
   if (shouldOpen) {
+    setAgentReferenceMenuOpen(false);
     agentParameters.setOpen(false);
     setAgentHistoryOpen(false);
     setAgentModelMenuOpen(false);
@@ -7592,6 +7944,7 @@ function setAgentModelMenuOpen(open, options = {}) {
 }
 
 function closeAgentPopovers() {
+  setAgentReferenceMenuOpen(false);
   agentParameters.setOpen(false);
   setAgentHistoryOpen(false);
   setAgentModeMenuOpen(false);
@@ -7599,7 +7952,7 @@ function closeAgentPopovers() {
 }
 
 function setAgentAdvancedOpen(open) {
-  const shouldOpen = Boolean(open);
+  const shouldOpen = Boolean(open && agentModels.getMode() === "generation");
   if (shouldOpen) closeAgentPopovers();
   state.agentAdvancedSettingsExpanded = shouldOpen;
   agentAdvancedSettings?.classList.toggle("hidden", !shouldOpen);
@@ -7617,9 +7970,12 @@ function setAgentAssetValidationEnabled(enabled) {
 
 function syncAgentPromptOptimizationControl() {
   const busy = Boolean(state.agentPromptOptimizationTask);
-  const hasPrompt = Boolean(agentInput?.value.trim());
+  const hasPrompt = Boolean(getAgentPromptText().trim());
+  const generation = agentModels.getMode() === "generation";
+  agentReferences.refresh();
+  if (agentAddBtn) agentAddBtn.disabled = busy;
   if (agentPromptOptimizationBtn) {
-    agentPromptOptimizationBtn.disabled = busy || !hasPrompt;
+    agentPromptOptimizationBtn.disabled = !generation || busy || !hasPrompt;
     agentPromptOptimizationBtn.classList.toggle("is-processing", busy);
     agentPromptOptimizationBtn.setAttribute("aria-busy", String(busy));
     agentPromptOptimizationBtn.setAttribute("aria-label", busy ? "正在优化提示词" : "提示词优化");
@@ -7630,10 +7986,11 @@ function syncAgentPromptOptimizationControl() {
         : "输入提示词后优化";
   }
   if (agentInput) {
-    agentInput.readOnly = busy;
+    promptEditors.get(getConversation())?.refresh();
     agentInput.setAttribute("aria-busy", String(busy));
     agentInput.setAttribute("aria-readonly", String(busy));
   }
+  if (agentAdvancedBtn) agentAdvancedBtn.disabled = !generation || busy;
   if (agentSendButton) {
     agentSendButton.disabled = busy;
     agentSendButton.classList.toggle("disabled", busy);
@@ -7651,19 +8008,23 @@ function cancelAgentPromptOptimization() {
 function completeAgentPromptOptimization() {
   const task = state.agentPromptOptimizationTask;
   if (!task) return;
-  const optimizedPrompt = buildOptimizedPrompt(task.sourcePrompt);
-  state.agentPromptOptimizationTask = null;
-  if (agentInput && optimizedPrompt) agentInput.value = optimizedPrompt;
-  syncAgentPromptOptimizationControl();
-  if (agentInput) {
-    agentInput.focus();
-    agentInput.setSelectionRange(agentInput.value.length, agentInput.value.length);
+  const conversation = getConversation();
+  if (task.conversationId !== conversation.id || !samePrompt(conversation.draftPrompt, task.sourcePrompt)) {
+    cancelAgentPromptOptimization();
+    return;
   }
+  const optimizedPrompt = optimizePromptDocument(task.sourcePrompt);
+  state.agentPromptOptimizationTask = null;
+  conversation.draftPrompt = optimizedPrompt;
+  promptEditors.replace(conversation, optimizedPrompt);
+  syncAgentPromptOptimizationControl();
+  focusAgentPrompt();
 }
 
 function startAgentPromptOptimization() {
-  const sourcePrompt = agentInput?.value.trim();
-  if (!sourcePrompt || state.agentPromptOptimizationTask) return;
+  if (agentModels.getMode() !== "generation") return;
+  const sourcePrompt = getConversation().draftPrompt || "";
+  if (!promptDocument.toText(sourcePrompt).trim() || state.agentPromptOptimizationTask) return;
   const task = {
     conversationId: agentHistory.getActiveId(),
     sourcePrompt,
@@ -7678,15 +8039,25 @@ function startAgentPromptOptimization() {
 
 function sendAgentMessage() {
   if (state.agentPromptOptimizationTask) return;
-  const content = agentInput?.value.trim();
-  if (!content) return;
+  if (agentModels.getMode() === "generation") return agentGeneration.submit();
   const conversation = getConversation();
-  conversation.messages.push({ role: "user", content });
+  const resolved = promptDocument.resolve(conversation.draftPrompt, agentReferences.getEntries());
+  const content = resolved.text.trim();
+  if (!content && !agentReferences.getAssets().length) return;
+  if (!resolved.valid) {
+    showActionToast(getPromptReferenceIssue(conversation.draftPrompt, agentReferences.getEntries()));
+    promptEditors.get(conversation)?.revealReference((resolved.missing[0] || resolved.mismatched[0])?.key);
+    return;
+  }
+  const references = agentReferences.takeForMessage();
+  conversation.messages.push({ role: "user", content: content || "", references,
+    promptDocument: resolved.document, referenceSnapshot: resolved.media });
   conversation.messages.push({
     role: "agent",
     content: "我已收到。后续可以把这条需求拆成画布节点、素材输入和生成参数。",
   });
-  agentInput.value = "";
+  conversation.draftPrompt = "";
+  promptEditors.get(conversation)?.setDocument("", { resetHistory: true, notify: false });
   syncAgentPromptOptimizationControl();
   renderAgentMessages(conversation);
 }
@@ -7715,6 +8086,10 @@ function getAgentComposerParameterMarkup(model) {
 
 function syncAgentComposerControls() {
   const mode = agentModels.getMode();
+  const generation = mode === "generation";
+  agentComposerView.syncMode(mode);
+  if (!generation) { cancelAgentPromptOptimization(); setAgentAdvancedOpen(false); }
+  agentReferences.close();
   const definition = agentComposerModes[mode];
   if (agentModeBtn) {
     agentModeBtn.innerHTML = `<i data-agent-mode-icon data-lucide="${definition.icon}" aria-hidden="true"></i><span class="control-chip-label" data-agent-mode-label>${definition.label}</span>`;
@@ -7727,13 +8102,21 @@ function syncAgentComposerControls() {
     button.setAttribute("aria-checked", String(active));
   });
   syncAgentModelButton();
+  syncAgentPromptOptimizationControl();
+  if (agentGeneration) renderAgentMessages();
 }
 
 function setAgentComposerMode(mode, { focusInput = false } = {}) {
+  if (agentModels.getMode() !== mode) cancelAgentPromptOptimization();
   agentModels.setMode(mode);
   setAgentModeMenuOpen(false);
   syncAgentComposerControls();
-  if (focusInput) agentInput?.focus();
+  if (focusInput) focusAgentPrompt();
+}
+
+function getAgentGenerationParameters() {
+  const parameters = agentParameters.sync(getAgentComposerModel());
+  return parameters ? { ...parameters, assets: agentReferences.getAssets() } : null;
 }
 
 function syncAgentModelButton() {
@@ -7745,8 +8128,9 @@ function syncAgentModelButton() {
       : `已选模型：${names.join("、") || "未选择"}`;
   const model = getAgentComposerModel();
   const parameters = agentParameters.sync(model);
-  if (agentInput) agentInput.placeholder = generatorModelPolicy.getPromptPlaceholder(models, parameters);
-  const cost = parameters ? getCost(parameters) : null;
+  if (agentInput) agentInput.dataset.placeholder = generatorModelPolicy.getPromptPlaceholder(models, parameters);
+  mountAgentPrompt();
+  const cost = parameters ? getCost(getAgentGenerationParameters()) : null;
   const costLabel = Number.isFinite(cost) && cost > 0 ? formatCredit(cost) : null;
   if (agentCreditValue) agentCreditValue.textContent = costLabel ?? "—";
   if (agentSendButton) {
@@ -7792,6 +8176,7 @@ function showThemeSwitchFeedback() {
 
 function applyTheme(mode = state.themeMode, options = {}) {
   const nextMode = normalizeThemeMode(mode);
+  const changed = nextMode !== state.themeMode;
   state.themeMode = nextMode;
   try {
     localStorage.setItem("reelay-theme-mode", nextMode);
@@ -7827,6 +8212,7 @@ function applyTheme(mode = state.themeMode, options = {}) {
   }
   refreshIcons();
   if (options.flash) showThemeSwitchFeedback();
+  if (changed && options.notifyHost !== false) canvasPersistence.post("canvas:theme-change", { theme: nextMode });
 }
 
 function setAgentWidth(width) {
@@ -7868,13 +8254,19 @@ function setAgentOpen(open) {
     agentLauncher.setAttribute("aria-expanded", String(open));
   }
   if (!open) {
+    promptEditors.unmount(getConversation());
+    agentComposerResize?.close();
+    agentGeneration?.close();
+    agentComposerView.close();
+    agentReferences.close();
     cancelAgentPromptOptimization();
     closeAgentPopovers();
     setAgentAdvancedOpen(false);
   }
+  if (open) { mountAgentPrompt(); agentComposerResize?.sync(); }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
   syncPromptPanelLayouts();
-  if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => agentInput?.focus());
+  if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => focusAgentPrompt());
   if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
 }
 
@@ -8381,9 +8773,28 @@ function commitNodeArrangement(nodes, layout) {
 
 function sortSelectedNodes(layout = "grid") {
   if (!requireCanvasMutation()) return;
+  if (!["grid", "horizontal", "vertical"].includes(layout)) return;
   const selectedNodes = getSelectedNodes();
   if (selectedNodes.length < 2) return;
-  if (!commitNodeArrangement(selectedNodes, layout)) return;
+  const issue = getSelectionLayoutIssue(selectedNodes);
+  if (issue) { showActionToast(issue); return; }
+  canvasNodeLayoutTransition.finishAll();
+  const plan = window.REELAY_CANVAS_ARRANGE_SCOPE.prepareArrangement({
+    nodes: state.nodes,
+    groups: state.groups,
+    connections: state.connections,
+    selectedIds: state.selectedIds,
+    activeGroupId: getExactSelectionGroup(selectedNodes)?.id || null,
+    scope: "current",
+    getNodeBounds: getArrangementNodeBounds,
+    getGroupBounds: (group) => getGroupBounds(group, true),
+    groupPadding: groupFrameRules,
+    planArrangement: window.REELAY_CANVAS_ARRANGE_LAYOUT.planArrangement,
+    mode: layout,
+  });
+  if (!plan.ok) { showActionToast(plan.reason); return; }
+  if (!plan.changed) return;
+  if (!commitArrangementPlan(plan).ok) return;
   render();
 }
 
@@ -8494,7 +8905,7 @@ function requestRunGroup(group) {
     return;
   }
 
-  const missingPrompts = generators.filter((node) => !node.prompt.trim());
+  const missingPrompts = generators.filter((node) => !getNodePromptText(node).trim());
   if (missingPrompts.length) {
     showConfirmDialog({
       title: "缺少提示词",
@@ -8629,7 +9040,7 @@ function shouldBypassCanvasWheel(target, { zooming = false } = {}) {
     if (target.closest("[data-wheel-scope='local'], .panel-popover, .material-panel, .asset-shelf")) return true;
     const prompt = target.closest("[data-node-prompt-input]");
     if (prompt) {
-      return !zooming && prompt === document.activeElement && prompt.scrollHeight > prompt.clientHeight + 1;
+      return !zooming && prompt.contains(document.activeElement) && prompt.scrollHeight > prompt.clientHeight + 1;
     }
     return Boolean(target.closest("button, input, textarea, select, [contenteditable='true'], [role='slider']"));
   }
@@ -9004,7 +9415,7 @@ function handlePointerMove(event) {
 }
 
 function finishPointerInteraction(event) {
-  canvasPointerDispatchController.finish(event);
+  if (canvasPointerDispatchController.finish(event)) canvasArrange.sync();
   syncSelectionFramePointerFeedback(event);
 }
 
@@ -9202,7 +9613,7 @@ shell.addEventListener(
   "wheel",
   (event) => {
     const shouldBypass = shouldBypassCanvasWheel(event.target, { zooming: event.ctrlKey || event.metaKey });
-    if (!shouldBypass && document.activeElement?.matches("[data-node-prompt-input]")) {
+    if (!shouldBypass && document.activeElement?.closest("[data-node-prompt-input]")) {
       document.activeElement.blur();
     }
     if (event.ctrlKey || event.metaKey) {
@@ -9274,6 +9685,12 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     setSelectionDownloadMenuOpen(false);
     selectionDownloadTrigger?.focus({ preventScroll: true });
+    return;
+  }
+  if (event.key === "Escape" && !selectionLayoutMenu?.classList.contains("hidden")) {
+    event.preventDefault();
+    setSelectionLayoutMenuOpen(false);
+    selectionLayoutTrigger?.focus({ preventScroll: true });
     return;
   }
   if (event.key === "Escape") {
@@ -9518,13 +9935,17 @@ function createAssetLibraryFolder() {
 
 function libraryImagePreviewUrl(contentUrl, mediaKind) {
   if (mediaKind !== "image") return "";
-  const previewUrl = new URL(contentUrl);
-  if (previewUrl.protocol === "blob:") return previewUrl.href;
+  const safeUrl = sanitizeRuntimeMediaUrl(contentUrl);
+  if (!safeUrl) return "";
+  const previewUrl = new URL(safeUrl, window.location.href);
+  if (previewUrl.protocol === "blob:" || previewUrl.origin !== window.location.origin) return safeUrl;
   if (state.hostCapabilities.transientMediaUpload) {
     const fixture = previewUrl.pathname.match(/^\/assets\/home\/(entity-(?:umbra|baixi|xuanling)-[^/]+-v4)\.(?:png|jpe?g)$/i);
     if (fixture) return new URL(`/assets/experience-preview/${fixture[1]}.webp`, previewUrl).href;
-    return previewUrl.href;
+    return safeUrl;
   }
+  const supportsPreview = /^\/api\/(?:projects\/[^/]+\/asset-references|workspaces\/[^/]+\/media-assets)\/[^/]+\/content$/.test(previewUrl.pathname);
+  if (!supportsPreview) return safeUrl;
   previewUrl.searchParams.set("preview", "library");
   return previewUrl.href;
 }
@@ -9570,6 +9991,7 @@ function workspaceAssetToLibraryMedia(workspaceAsset) {
     contentType: workspaceAsset.contentType,
     byteSize: workspaceAsset.byteSize,
     checksumSha256: workspaceAsset.checksumSha256,
+    ...(workspaceAsset.createdAt ? { createdAt: workspaceAsset.createdAt } : {}),
     url,
     thumbnailUrl: libraryImagePreviewUrl(contentUrl, workspaceAsset.mediaKind),
     source: "workspace",
@@ -9587,6 +10009,7 @@ function registerHostWorkspaceAssetCatalog({ assets = [], entities = [] } = {}) 
     media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
     restoreTransientCanvasMedia(media);
     renderAssetLibrary();
+    renderSelectionToolbar();
   } catch (error) {
     showActionToast(error?.message || "个人资产目录同步失败");
   }
@@ -9654,23 +10077,40 @@ async function persistEntityEditorFiles(files) {
   return registered;
 }
 
-async function saveEntityEditorDraft(payload) {
+async function saveEntityEditorDraft(payload, { media = [], isContextValid = () => true, idempotencyKey } = {}) {
+  if (!isContextValid()) throw new Error("画布或权限已变化，请重新选择素材");
   if (window.parent !== window) {
     if (!canPersistLibraryEntities()) {
       throw new Error("当前项目尚未接入主体持久化");
     }
-    return payload.mode === "edit"
-      ? canvasEntityAssets.updateEntity(payload)
-      : canvasEntityAssets.createEntity(payload);
+    if (payload.mode === "edit") return canvasEntityAssets.updateEntity(payload);
+    const prepared = await canvasEntityMediaImport.prepareMedia(media, { isContextValid });
+    if (!isContextValid()) throw new Error("画布或权限已变化，请重新选择素材");
+    const mediaIds = [...new Set(payload.mediaRefs.map(({ mediaId }) => prepared.idMap.get(mediaId) || mediaId))];
+    return canvasEntityAssets.createEntity({
+      ...payload,
+      idempotencyKey,
+      mediaRefs: mediaIds.map((mediaId, order) => ({ mediaId, order })),
+      coverMediaId: prepared.idMap.get(payload.coverMediaId) || payload.coverMediaId,
+    });
   }
   if (payload.mode === "create") {
+    const registeredIds = new Map();
+    for (const asset of media) {
+      const existing = canvasEntityMediaImport.resolvePersonalMedia(asset);
+      const registered = existing || assetLibraryStore.registerMedia({
+        media: { ...asset, createdAt: asset.createdAt || new Date().toISOString() }, space: "personal", folderId: null,
+      }).media;
+      registeredIds.set(asset.id, registered.id);
+    }
+    const mediaIds = [...new Set(payload.mediaRefs.map(({ mediaId }) => registeredIds.get(mediaId) || mediaId))];
     return assetLibraryStore.registerPersistedEntity({
       entity: {
         id: crypto.randomUUID(),
         name: payload.name,
         description: payload.description,
-        mediaRefs: payload.mediaRefs,
-        coverMediaId: payload.coverMediaId,
+        mediaRefs: mediaIds.map((mediaId, order) => ({ mediaId, order })),
+        coverMediaId: registeredIds.get(payload.coverMediaId) || payload.coverMediaId,
         version: 1,
       },
     }).entity;
@@ -9690,7 +10130,7 @@ function confirmEntityEditorDiscard() {
   return new Promise((resolve) => {
     showConfirmDialog({
       title: "放弃未保存的修改？",
-      body: "主体名称、描述和素材调整都不会保留。",
+      body: "主体名称、描述和素材调整都不会保留，已入库的素材仍保留在个人素材库。",
       cancelText: "继续编辑",
       confirmText: "放弃修改",
       danger: true,
@@ -9777,6 +10217,57 @@ function openEntityEditorCreate() {
     mutable: true,
     canAddFromLibrary: true,
     canUpload: canPersistLibraryMedia(),
+  });
+}
+
+function getPersonalEntityMedia() {
+  return assetLibraryStore.listItems({ space: "personal", kind: "media" })
+    .filter((media) => window.parent === window || hostPersonalMediaIds.has(media.id));
+}
+
+function getSelectionEntityPlan() {
+  return window.REELAY_CANVAS_SELECTION_ENTITY_MODEL.createSelectionEntityPlan({
+    nodes: getSelectedNodes(),
+    personalMedia: getPersonalEntityMedia(),
+    canImportMedia: (media) => canPersistLibraryMedia()
+      && window.REELAY_CANVAS_ENTITY_MEDIA_IMPORT.inspectImportSource(media, { baseUrl: window.location.href }).allowed,
+    hosted: window.parent !== window,
+    canCreate: isCanvasMutationAllowed() && canPersistLibraryEntities(),
+    catalogStatus: getPersonalCatalogStatus(),
+  });
+}
+
+function openSelectionEntityEditor() {
+  const plan = getSelectionEntityPlan();
+  if (plan.reason) {
+    showActionToast(plan.reason);
+    return;
+  }
+  if (canvasEntityEditor.isOpen()) return;
+  const projectId = state.projectId;
+  const canvas = getActiveCanvas();
+  const isContextValid = () => state.projectId === projectId && getActiveCanvas() === canvas
+    && isCanvasMutationAllowed() && canPersistLibraryEntities();
+  reopenAssetLibraryAfterEntityEditor = false;
+  setSelectionDownloadMenuOpen(false);
+  canvasEntityEditor.open({
+    mode: "create",
+    initialMedia: plan.media,
+    sourceNotice: [
+      `来自 ${plan.selectedCount} 个选中节点，初始带入 ${plan.media.length} 个素材`,
+      plan.duplicateCount ? `已合并 ${plan.duplicateCount} 个重复素材` : "",
+      plan.emptyCount ? `已跳过 ${plan.emptyCount} 个暂无可用素材的节点` : "",
+      plan.unavailableCount ? `已跳过 ${plan.unavailableCount} 个无法导入个人素材库的素材` : "",
+    ].filter(Boolean).join("；") + "。",
+    mutable: true,
+    canAddFromLibrary: true,
+    canUpload: canPersistLibraryMedia(),
+    isContextValid,
+    returnFocus: () => {
+      if (isContextValid() && !isAssetLibraryOpen()) {
+        selectionToolbar.querySelector('[data-selection-action="create-entity"]')?.focus({ preventScroll: true });
+      }
+    },
   });
 }
 
@@ -9916,9 +10407,11 @@ function addPlatformMediaToCanvas(items) {
     if (!media) throw new Error(`平台素材已不可用：${item.id}`);
     return media;
   });
+  if (state.libraryTarget?.kind === "agent") return addAgentReferenceAssets(assets, state.libraryTarget.scope);
   if (!requireCanvasMutation()) return 0;
 
-  const targetNode = state.nodes.find((node) => node.id === state.libraryTargetNodeId);
+  const targetNode = state.nodes.find((node) => node.id === state.libraryTarget?.nodeId);
+  if (state.libraryTarget?.kind === "node" && !targetNode) return 0;
   let addedCount;
   if (targetNode?.kind === "generator") {
     addedCount = addAssetsToGeneratorNode(targetNode, assets).length;
@@ -10080,6 +10573,10 @@ assetLibrarySearchInput?.addEventListener("input", (event) => {
   renderAssetLibrary();
 });
 assetLibraryPanel?.addEventListener("click", (event) => {
+  if (event.target.closest("[data-library-clear-entity-filter]")) {
+    clearEntityRelatedMediaFilter();
+    return;
+  }
   const section = event.target.closest("#assetLibrarySectionTabs [data-library-section]")?.dataset.librarySection;
   if (section) {
     switchAssetLibraryContext({ section });
@@ -10242,6 +10739,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
       || card?.dataset.libraryMedia;
     if (!id) return;
     if (kind === "folder") runAssetLibraryFolderAction(itemAction, id);
+    else if (kind === "entity" && itemAction === "view-media") viewEntityRelatedMedia(id);
     else if (kind === "entity" && itemAction === "edit") openEntityEditorEdit(id);
     else if (itemAction === "rename") startAssetLibraryRename(kind, id);
     else runAssetLibraryAction(itemAction, [getAssetLibraryItemRef(id, kind)]);
@@ -10267,7 +10765,7 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     const id = itemCard.dataset.libraryEntity || itemCard.dataset.libraryMedia;
     if (state.librarySelectionMode) toggleAssetLibrarySelection(id);
     else if (kind === "entity") openEntityEditorEdit(id);
-    else openAssetLibraryPreview(kind, id);
+    else openAssetLibraryPreview(id);
   }
 });
 assetLibraryUploadInput?.addEventListener("change", (event) => {
@@ -10527,6 +11025,11 @@ profileShortcutSheet?.addEventListener("pointerenter", () => {
 
 profileShortcutSheet?.addEventListener("pointerleave", scheduleProfileShortcutClose);
 
+canvasCreditsBtn?.addEventListener("click", () => {
+  closeProfileMenu();
+  requestHostAccountSettings("credits");
+});
+
 profileMenu?.addEventListener("click", (event) => {
   const helpTrigger = event.target.closest(".profile-help-trigger");
   if (helpTrigger) {
@@ -10583,9 +11086,40 @@ profileMenu?.addEventListener("click", (event) => {
 
 function setSelectionDownloadMenuOpen(open) {
   const nextOpen = Boolean(open && selectionDownloadMenu && selectionDownloadTrigger);
+  if (nextOpen) setSelectionLayoutMenuOpen(false);
   selectionDownloadMenu?.classList.toggle("hidden", !nextOpen);
   selectionDownloadTrigger?.setAttribute("aria-expanded", String(nextOpen));
   selectionDownloadTrigger?.classList.toggle("active", nextOpen);
+  canvasToolbarMenus.sync();
+}
+
+function getSelectionLayoutIssue(selectedNodes = getSelectedNodes()) {
+  if (selectedNodes.length < 2) return "请选择至少两个节点后再布局";
+  const selectedIds = new Set(selectedNodes.map((node) => node.id));
+  const partialGroup = state.groups.some((group) => group.nodeIds.some((id) => selectedIds.has(id))
+    && group.nodeIds.some((id) => !selectedIds.has(id)));
+  return partialGroup ? "请选择完整分组后再布局" : "";
+}
+
+function isSelectionLayoutSessionCurrent() {
+  if (!selectionLayoutSession || selectionLayoutSession.canvas !== getActiveCanvas()) return false;
+  const selectedNodes = getSelectedNodes();
+  return selectedNodes.length === selectionLayoutSession.nodes.size
+    && selectedNodes.every((node) => selectionLayoutSession.nodes.has(node));
+}
+
+function setSelectionLayoutMenuOpen(open, { focus = false } = {}) {
+  if (open && !requireCanvasMutation()) return;
+  const issue = open && getSelectionLayoutIssue();
+  if (issue) { showActionToast(issue); return; }
+  const nextOpen = Boolean(open && selectionLayoutMenu && selectionLayoutTrigger);
+  if (nextOpen) setSelectionDownloadMenuOpen(false);
+  selectionLayoutSession = nextOpen ? { canvas: getActiveCanvas(), nodes: new Set(getSelectedNodes()) } : null;
+  selectionLayoutMenu?.classList.toggle("hidden", !nextOpen);
+  selectionLayoutTrigger?.setAttribute("aria-expanded", String(nextOpen));
+  selectionLayoutTrigger?.classList.toggle("active", nextOpen);
+  canvasToolbarMenus.sync();
+  if (nextOpen && focus) selectionLayoutMenu.querySelector("button")?.focus({ preventScroll: true });
 }
 
 selectionToolbar?.addEventListener("pointerdown", (event) => {
@@ -10611,6 +11145,9 @@ selectionToolbar?.addEventListener("click", (event) => {
   event.stopPropagation();
   const layout = event.target.closest("[data-sort-layout]")?.dataset.sortLayout;
   if (layout) {
+    const current = isSelectionLayoutSessionCurrent();
+    setSelectionLayoutMenuOpen(false);
+    if (!current) return;
     sortSelectedNodes(layout);
     return;
   }
@@ -10621,6 +11158,15 @@ selectionToolbar?.addEventListener("click", (event) => {
     return;
   }
   const action = event.target.closest("[data-selection-action]")?.dataset.selectionAction;
+  if (action === "toggle-layout") {
+    setSelectionLayoutMenuOpen(selectionLayoutMenu?.classList.contains("hidden"), { focus: event.detail === 0 });
+    return;
+  }
+  if (action && action !== "toggle-download") setSelectionLayoutMenuOpen(false);
+  if (action === "create-entity") {
+    openSelectionEntityEditor();
+    return;
+  }
   if (action === "group") {
     if (getSelectedNodes().some((node) => Boolean(node.groupId))) return;
     groupSelectedNodes();
@@ -10628,6 +11174,16 @@ selectionToolbar?.addEventListener("click", (event) => {
   }
   if (action === "add-library") {
     addSelectedMediaToLibrary();
+    return;
+  }
+  if (action === "add-conversation") {
+    const assets = getAgentSelectedCanvasAssets();
+    if (!assets.length) return;
+    if (state.agentPromptOptimizationTask) { showActionToast("提示词优化完成后可添加参考素材"); return; }
+    setAgentOpen(true);
+    const added = addAgentReferenceAssets(assets);
+    showActionToast(added ? `已添加 ${added} 个参考素材` : "所选素材已在对话参考区");
+    focusAgentPrompt();
     return;
   }
   if (action === "delete") {
@@ -10646,6 +11202,16 @@ canvasTools?.addEventListener("pointerdown", (event) => {
 canvasToolButtons.forEach((button) => {
   button.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (button.dataset.canvasTool === "organize") {
+      if (button.getAttribute("aria-expanded") === "true") { canvasArrange.close(); return; }
+      closeCanvasPanel();
+      closeCanvasCreateMenus();
+      setSelectionDownloadMenuOpen(false);
+      setSelectionLayoutMenuOpen(false);
+      closeGroupLayoutMenus();
+      canvasArrange.toggle({ focus: event.detail === 0 });
+      return;
+    }
     if (button.dataset.canvasTool === "fit") {
       fitCanvasToContent();
       return;
@@ -10831,7 +11397,7 @@ agentCloseBtn?.addEventListener("click", () => setAgentOpen(false));
 document.querySelectorAll("#agentNewChatBtn, #agentHistoryNewChatBtn").forEach((button) => {
   button.addEventListener("click", () => {
     agentHistory.startNew();
-    agentInput?.focus();
+    focusAgentPrompt();
   });
 });
 agentHistoryBtn?.addEventListener("click", (event) => {
@@ -10842,17 +11408,6 @@ agentHistoryMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
 });
 agentSendButton?.addEventListener("click", sendAgentMessage);
-agentInput?.addEventListener("input", syncAgentPromptOptimizationControl);
-agentInput?.addEventListener("keydown", (event) => {
-  if (event.isComposing) return;
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    sendAgentMessage();
-  }
-});
-agentAddBtn?.addEventListener("click", () => {
-  showActionToast("附件能力将在 Agent 任务接入后开放");
-});
 agentPromptOptimizationBtn?.addEventListener("click", startAgentPromptOptimization);
 agentAdvancedBtn?.addEventListener("click", () => {
   setAgentAdvancedOpen(!state.agentAdvancedSettingsExpanded);
@@ -10998,6 +11553,13 @@ document.addEventListener("focusin", (event) => {
   }
 });
 
+// Dismiss from the original hit target, before canvas pointer capture retargets click.
+document.addEventListener("pointerdown", (event) => {
+  if (event.button === 0 && !event.target?.closest(".media-edit-toolbar, .media-frame")) {
+    if (closeMediaToolbarState()) render();
+  }
+}, true);
+
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   const eventPath = typeof event.composedPath === "function" ? event.composedPath() : [];
@@ -11034,11 +11596,12 @@ document.addEventListener("click", (event) => {
   }
   if (!target?.closest("#selectionToolbar")) {
     setSelectionDownloadMenuOpen(false);
+    setSelectionLayoutMenuOpen(false);
   }
   if (!target?.closest(".group-frame")) {
     closeGroupLayoutMenus();
   }
-  if (!target?.closest(".media-edit-toolbar, .media-frame")) {
+  if (event.detail === 0 && !target?.closest(".media-edit-toolbar, .media-frame")) {
     if (closeMediaToolbarState()) {
       render();
     }
@@ -11071,9 +11634,12 @@ window.addEventListener("resize", () => {
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
+  canvasArrange.close();
   if (!event.persisted) {
     assetLibraryItemMenu.dispose();
+    canvasToolbarMenus.dispose();
     canvasNodeTasks.dispose();
+    agentComposerResize?.dispose();
   }
   flushCanvasDocumentSave();
 });
@@ -11085,6 +11651,7 @@ setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
 setAgentWidth(state.agentWidth);
 reconcileAgentVerticalInsets("top");
 setAgentOpen(false);
+agentPromptReady = true;
 agentHistory.select(agentHistory.getActiveId());
 setAgentAdvancedOpen(state.agentAdvancedSettingsExpanded);
 setAgentAssetValidationEnabled(state.agentAssetValidationEnabled);

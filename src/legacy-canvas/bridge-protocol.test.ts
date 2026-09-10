@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bridgeWorkspaceAssetSchema,
   hostDocumentMessageSchema,
   hostAssetCommandErrorMessageSchema,
   hostAssetAvailabilityMessageSchema,
@@ -68,6 +69,15 @@ describe("legacy canvas bridge", () => {
     checksumSha256: projectAsset.checksumSha256,
     contentUrl: "/api/workspaces/org-1/media-assets/asset-1/content",
   };
+  it("preserves optional workspace media creation timestamps without inventing dates for older catalogs", () => {
+    expect(bridgeWorkspaceAssetSchema.parse(workspaceAsset)).toEqual(workspaceAsset);
+    for (const createdAt of ["2026-09-01T00:00:00.000Z", "2026-09-01T08:00:00+08:00"]) {
+      expect(bridgeWorkspaceAssetSchema.parse({ ...workspaceAsset, createdAt }).createdAt).toBe(createdAt);
+    }
+    for (const createdAt of [null, "", "yesterday", "2026-09-01", 1_788_220_800_000]) {
+      expect(bridgeWorkspaceAssetSchema.safeParse({ ...workspaceAsset, createdAt }).success).toBe(false);
+    }
+  });
   it("accepts versioned host context and a separate opaque document message", () => {
     const context = {
       protocolVersion: 1 as const,
@@ -209,6 +219,35 @@ describe("legacy canvas bridge", () => {
       instanceId: "canvas-instance-1",
       section: "credits",
     });
+  });
+
+  it.each(["light", "dark"])("accepts a versioned canvas theme change to %s", (theme) => {
+    const message = {
+      source: "reelay-legacy-canvas",
+      type: "canvas:theme-change",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      theme,
+    };
+    expect(parseCanvasMessage(message)).toEqual(message);
+  });
+
+  it("rejects invalid themes, unversioned messages, and extra theme fields", () => {
+    const message = {
+      source: "reelay-legacy-canvas",
+      type: "canvas:theme-change",
+      protocolVersion: 1,
+      instanceId: "canvas-instance-1",
+      theme: "light",
+    };
+    for (const theme of ["system", "LIGHT", "", null, undefined, 1]) {
+      expect(parseCanvasMessage({ ...message, theme })).toBeNull();
+    }
+    expect(parseCanvasMessage({ ...message, protocolVersion: undefined })).toBeNull();
+    expect(parseCanvasMessage({ ...message, protocolVersion: 2 })).toBeNull();
+    expect(parseCanvasMessage({ ...message, source: "foreign" })).toBeNull();
+    expect(parseCanvasMessage({ ...message, instanceId: "" })).toBeNull();
+    expect(parseCanvasMessage({ ...message, unexpected: true })).toBeNull();
   });
 
   it("strictly validates scoped asset upload requests and correlated host responses", () => {

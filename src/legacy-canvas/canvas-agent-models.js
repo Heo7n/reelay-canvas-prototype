@@ -148,7 +148,14 @@
     observer?.observe(boundary);
     observer?.observe(trigger);
 
-    return { getMode: () => mode, getModel, getPreferredModels, setMode, setOpen, isOpen };
+    function setGenerationModel(id) {
+      if (!catalog.some((model) => model.id === id)) return false;
+      generationId = id;
+      onChange();
+      return true;
+    }
+
+    return { getMode: () => mode, getModel, getPreferredModels, setMode, setOpen, isOpen, setGenerationModel };
   }
 
   root.REELAY_AGENT_MODELS = Object.freeze({ createController });

@@ -38,6 +38,12 @@ test("a missing file setting cannot be satisfied by inherited credentials", () =
   }
 });
 
+test("the dedicated file can opt out of retaining an idle connection", () => {
+  const environment = createSharedServerEnvironment({ REELAY_DB_POOL_MIN: "9" }, { ...configuration, REELAY_DB_POOL_MIN: "0" });
+  assert.equal(environment.REELAY_DB_POOL_MIN, "0");
+  assert.equal(createSharedServerEnvironment({ REELAY_DB_POOL_MIN: "9" }, configuration).REELAY_DB_POOL_MIN, undefined);
+});
+
 test("a mismatched project and environment overrides fail before starting a server", () => {
   assert.throws(() => createSharedServerEnvironment({}, { ...configuration, REELAY_SHARED_PROJECT_REF: "otherproject" }), /must match/);
   assert.throws(() => createSharedServerEnvironment({}, {

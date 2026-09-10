@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import ts from "typescript";
+import { buildPromptEditor } from "./build-prompt-editor.mjs";
 
 function localPath(root, reference) {
   if (/^(?:[a-z]+:|\/\/)/i.test(reference)) throw new Error(`Expected a local resource: ${reference}`);
@@ -122,6 +123,16 @@ async function writeHashed(outputRoot, extension, source, name = "legacy-canvas"
 
 export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(workspaceRoot, "dist", "shell"), { experience = false } = {}) {
   let html = await readFile(path.join(workspaceRoot, "index.html"), "utf8");
+  let editorReference;
+  if (/\sdata-prompt-editor-src=/.test(html)) {
+    if (!html.includes('data-prompt-editor-src="./assets/prompt-editor.js"')) throw new Error("Unsupported prompt editor entry.");
+    const editorSource = await buildPromptEditor(workspaceRoot);
+    const editorHash = createHash("sha256").update(editorSource).digest("hex").slice(0, 16);
+    editorReference = `./assets/prompt-editor-${editorHash}.js`;
+    await mkdir(path.join(outputRoot, "assets"), { recursive: true });
+    await writeFile(localPath(outputRoot, editorReference), editorSource);
+    html = html.replace('data-prompt-editor-src="./assets/prompt-editor.js"', `data-prompt-editor-src="${editorReference}"`);
+  }
   const scriptTags = [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi)];
   const scripts = await Promise.all(scriptTags.map(async ([tag]) => {
     const match = tag.match(/^<script src="([^"]+)"><\/script>$/);
@@ -155,11 +166,12 @@ export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(wo
     await cp(path.join(workspaceRoot, relativePath), path.join(outputRoot, relativePath), { recursive: true });
   }
 
-  const references = [...html.matchAll(/\b(?:src|href)="([^"]+)"/g)]
+  const references = [...html.matchAll(/\s(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1]).filter((reference) => !/^(?:[a-z]+:|#|\/\/)/i.test(reference));
+  if (editorReference) references.push(editorReference);
   await Promise.all(references.map((reference) => access(localPath(outputRoot, reference))));
   await writeFile(path.join(outputRoot, "index.html"), html);
-  return { scriptCount: scripts.length, referenceCount: references.length, scriptReference, styleReference, faviconReference };
+  return { scriptCount: scripts.length, referenceCount: references.length, scriptReference, styleReference, faviconReference, editorReference };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

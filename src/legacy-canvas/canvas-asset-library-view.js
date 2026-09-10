@@ -26,6 +26,7 @@
 
   const ENTITY_ACTIONS = Object.freeze([
     { id: "edit", icon: "pencil-line", label: "编辑" },
+    { id: "view-media", icon: "images", label: "查看关联素材" },
     { id: "rename", icon: "pencil", label: "重命名" },
     { id: "move", icon: "folder-input", label: "移动" },
     { id: "share-organization", icon: "users", label: "复制到组织空间", personalOnly: true },
@@ -201,6 +202,8 @@
         `
       : space === "platform"
         ? ""
+        : options.entityFilter
+          ? `<button class="asset-library-primary-command" type="button" aria-label="返回素材库" title="返回素材库" data-library-clear-entity-filter="true">${icon("chevron-left")}<span>返回</span></button>`
         : !mutable
           ? `
             <button class="asset-library-readonly-command" type="button" disabled aria-disabled="true">
@@ -467,19 +470,20 @@
       : icon("image");
   }
 
-  function getItemActions({ kind, space, mediaKind = null, allowedActions = null }) {
+  function getItemActions({ kind, space, mediaKind = null, allowedActions = null, mutable = true }) {
     return actionsForSpace(
       kind === "folder" ? FOLDER_ACTIONS : kind === "entity" ? ENTITY_ACTIONS : ITEM_ACTIONS,
       space,
       allowedActions,
-    ).filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio");
+    ).filter((action) => mutable || (kind === "entity" && space !== "platform" && action.id === "view-media"))
+      .filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio");
   }
 
-  function renderItemMenu({ id, kind, space, mediaKind = null, allowedActions = null }) {
+  function renderItemMenu({ id, kind, space, mediaKind = null, allowedActions = null, mutable = true }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
     const itemLabel = safeKind === "folder" ? "文件夹" : safeKind === "entity" ? "主体" : "素材";
-    const actions = getItemActions({ kind, space, mediaKind, allowedActions });
+    const actions = getItemActions({ kind, space, mediaKind, allowedActions, mutable });
     return `
       <div class="asset-library-item-menu" popover="manual" role="menu" aria-label="${itemLabel}操作">
         ${actions.map((action) => `
@@ -495,7 +499,7 @@
   function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, selectable = true, space, mediaKind = null, allowedActions = null }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
-    const hasMenuActions = getItemActions({ kind, space, mediaKind, allowedActions }).length > 0;
+    const hasMenuActions = getItemActions({ kind, space, mediaKind, allowedActions, mutable }).length > 0;
     return `
       ${kind !== "folder" && selectable && (mutable || space === "platform")
         ? `
@@ -504,12 +508,12 @@
           </button>
         `
         : ""}
-      ${mutable && hasMenuActions
+      ${hasMenuActions
         ? `
           <button class="asset-library-more-button" type="button" aria-label="更多操作" aria-haspopup="menu" aria-expanded="${menuOpen}" data-library-menu-toggle="${safeId}" data-library-item-kind="${safeKind}">
             ${icon("ellipsis-vertical")}
           </button>
-          ${menuOpen ? renderItemMenu({ id, kind, space, mediaKind, allowedActions }) : ""}
+          ${menuOpen ? renderItemMenu({ id, kind, space, mediaKind, allowedActions, mutable }) : ""}
         `
         : ""}
     `;
@@ -620,11 +624,11 @@
     const name = options.name ?? entity.name ?? "未命名主体";
     const space = resolveSpace(options.space, entity);
     const mutable = canMutate(options.mutable, space);
-    const entityActions = getItemActions({ kind: "entity", space, allowedActions: options.allowedActions });
+    const entityActions = getItemActions({ kind: "entity", space, allowedActions: options.allowedActions, mutable });
     const canRename = mutable && entityActions.some((action) => action.id === "rename");
     const selectionMode = mutable && Boolean(options.selectionMode);
     const selected = mutable && Boolean(options.selected);
-    const menuOpen = mutable && entityActions.length > 0 && Boolean(options.menuOpen);
+    const menuOpen = entityActions.length > 0 && Boolean(options.menuOpen);
     const renaming = canRename && Boolean(options.renaming);
     const previews = (Array.isArray(options.mediaPreviews) ? options.mediaPreviews : [])
       .filter((preview) => preview && typeof preview === "object");
@@ -649,6 +653,16 @@
     `;
   }
 
+  function renderEntityMediaFilter({ entity = null, status = "ready", unavailableCount = 0 } = {}) {
+    const name = status === "unavailable" ? "主体已不可用" : entity?.name || "未命名主体";
+    const missingCount = Number.isFinite(Number(unavailableCount)) ? Math.max(0, Math.floor(Number(unavailableCount))) : 0;
+    const detail = missingCount ? `跨目录 · ${missingCount} 项素材不可用` : "跨目录";
+    return `<div class="asset-library-entity-filter" data-library-entity-filter="true">
+      <div class="asset-library-entity-filter-label"><span>关联主体</span><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${detail}</small></div>
+      <button type="button" data-library-clear-entity-filter="true" aria-label="清除主体筛选" title="清除主体筛选">${icon("x")}</button>
+    </div>`;
+  }
+
   function renderEmptyState(options = {}) {
     const space = normalizeSpace(options.space);
     const section = space === "platform" ? "media" : normalizeSection(options.section);
@@ -662,11 +676,21 @@
     let description;
     let action = "";
 
-    if (hasQuery) {
+    if (options.entityFilterStatus === "unavailable") {
+      iconName = "user-round";
+      title = "主体已不可用";
+      description = "该主体已删除或不在当前空间，清除主体筛选以查看素材库。";
+      action = `<button type="button" data-library-clear-entity-filter="true">清除主体筛选</button>`;
+    } else if (hasQuery) {
       iconName = "search-x";
       title = "没有匹配结果";
       description = "试试其他关键词，或清除当前搜索与筛选条件。";
       action = `<button type="button" data-library-clear-query="true" data-library-clear-filter="true">清除筛选</button>`;
+    } else if (options.entityFilterStatus) {
+      iconName = "images";
+      title = "没有可用的关联素材";
+      description = "该主体没有当前空间可访问的素材。";
+      action = `<button type="button" data-library-clear-entity-filter="true">清除主体筛选</button>`;
     } else if (space === "platform") {
       iconName = "sparkles";
       title = "暂无灵感素材";
@@ -760,6 +784,7 @@
     renderFolderCard,
     renderMediaCard,
     renderEntityCard,
+    renderEntityMediaFilter,
     renderEmptyState,
     renderMovePopover,
     syncGrid,

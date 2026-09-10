@@ -14,7 +14,7 @@ const requiredKeys = [
   "SUPABASE_SERVICE_ROLE_KEY", "REELAY_SUPABASE_STORAGE_BUCKET",
 ];
 const allowedKeys = new Set([
-  ...requiredKeys, "REELAY_DB_CA_FILE", "REELAY_DB_POOL_MAX",
+  ...requiredKeys, "REELAY_DB_CA_FILE", "REELAY_DB_POOL_MAX", "REELAY_DB_POOL_MIN",
   "REELAY_DB_CONNECT_TIMEOUT_MS", "REELAY_DB_IDLE_TIMEOUT_MS",
 ]);
 

@@ -6,6 +6,8 @@
   --usage-toolbar-width: 278px;
   display: grid;
   width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   max-width: none;
   gap: 0;
   margin: 0 auto;
@@ -210,9 +212,23 @@
 }
 
 @media (max-width: 980px) {
-  .analysisGrid { grid-template-columns: 1fr; }
-  .overviewMetricsRow { min-width: 840px; overflow-x: auto; }
-  .analysisHeading { align-items: flex-start; }
+  .analysisGrid { grid-template-columns: minmax(0, 1fr); }
+  .overviewGrid { --overview-row-height: 164px; }
+  .overviewMetricsRow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 18px; }
+  .metricDivider { display: none; }
+  .overviewHeading, .analysisHeading { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .rangeTabs { max-width: 100%; }
+  .datePopover { width: min(390px, calc(100vw - 108px)); }
+  .dateFields { grid-template-columns: minmax(0, 1fr); }
+  .dateFields > span { display: none; }
+}
+
+@media (max-width: 600px) {
+  .overviewActions { flex-wrap: wrap; gap: 6px; font-size: 11px; }
+  .overviewMetricGroup { grid-template-columns: minmax(0, 1fr); }
+  .overviewIcon { display: none; }
+  .typeCard { gap: 6px; padding-inline: 0; }
+  .panelHeading { flex-wrap: wrap; gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

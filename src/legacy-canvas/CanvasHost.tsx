@@ -35,6 +35,7 @@ interface CanvasHostProps {
   onCreateProject?: () => void;
   onLogout?: () => void;
   onOpenAccountSettings?: (section: LegacyAccountSection) => void;
+  onThemeChange?: (theme: LegacyCanvasContext["theme"]) => void;
   onLaunchPromptConsumed?: () => void;
   repository: CanvasDocumentRepository;
   mediaAssetRepository?: MediaAssetRepository;
@@ -63,6 +64,7 @@ function bridgeWorkspaceAsset(asset: PersonalMediaAsset) {
     byteSize: asset.byteSize,
     checksumSha256: asset.checksumSha256,
     contentUrl: asset.contentUrl,
+    createdAt: asset.createdAt,
   };
 }
 
@@ -77,7 +79,7 @@ function bridgeWorkspaceEntity(entity: WorkspaceEntity) {
   };
 }
 
-export function CanvasHost({ context, entityRepository, mediaAssetRepository, transientMediaRepository, onCreateProject, onLogout, onOpenAccountSettings, onLaunchPromptConsumed, repository }: CanvasHostProps) {
+export function CanvasHost({ context, entityRepository, mediaAssetRepository, transientMediaRepository, onCreateProject, onLogout, onOpenAccountSettings, onThemeChange, onLaunchPromptConsumed, repository }: CanvasHostProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -327,10 +329,57 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     setPersistenceStatus("loading");
     void repository.getCanvasDocument(safeContext.projectId, safeContext.canvasId).then(
       (document) => {
-        if (active) {
-          authoritativeDocumentNeedsRefreshRef.current = false;
-          setDocumentState({ status: "ready", document });
-          setPersistenceStatus("saved");
+        if (!active) return;
+        authoritativeDocumentNeedsRefreshRef.current = false;
+        setDocumentState({ status: "ready", document });
+        setPersistenceStatus("saved");
+        // Keep catalog reads off the document's critical path and shared connection pool.
+        // An obsolete load attempt must not start a new batch after navigation or retry.
+        if (safeContext.capabilities?.assetPersistence && mediaAssetRepository) {
+          void mediaAssetRepository.listProjectAssets(safeContext.projectId).then(
+            (assets) => {
+              if (!active) return;
+              setProjectAssets(assets);
+              setAssetPersistenceAvailable(true);
+              setProjectAssetsLoaded(true);
+            },
+            () => {
+              if (!active) return;
+              setProjectAssets([]);
+              setAssetPersistenceAvailable(false);
+              setProjectAssetsLoaded(true);
+            },
+          );
+        } else {
+          setProjectAssetsLoaded(true);
+        }
+        if (
+          safeContext.capabilities?.assetPersistence
+          && safeContext.capabilities?.entityPersistence
+          && mediaAssetRepository
+          && entityRepository
+        ) {
+          void Promise.all([
+            mediaAssetRepository.listPersonalAssets(safeContext.workspaceId),
+            entityRepository.listPersonal(safeContext.workspaceId),
+          ]).then(
+            ([assets, entities]) => {
+              if (!active) return;
+              setWorkspaceAssets(assets);
+              setWorkspaceEntities(entities);
+              setEntityPersistenceAvailable(true);
+              setWorkspaceCatalogLoaded(true);
+            },
+            () => {
+              if (!active) return;
+              setWorkspaceAssets([]);
+              setWorkspaceEntities([]);
+              setEntityPersistenceAvailable(false);
+              setWorkspaceCatalogLoaded(true);
+            },
+          );
+        } else {
+          setWorkspaceCatalogLoaded(true);
         }
       },
       (error: unknown) => {
@@ -343,52 +392,6 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         }
       },
     );
-    if (safeContext.capabilities?.assetPersistence && mediaAssetRepository) {
-      void mediaAssetRepository.listProjectAssets(safeContext.projectId).then(
-        (assets) => {
-          if (!active) return;
-          setProjectAssets(assets);
-          setAssetPersistenceAvailable(true);
-          setProjectAssetsLoaded(true);
-        },
-        () => {
-          if (!active) return;
-          setProjectAssets([]);
-          setAssetPersistenceAvailable(false);
-          setProjectAssetsLoaded(true);
-        },
-      );
-    } else {
-      setProjectAssetsLoaded(true);
-    }
-    if (
-      safeContext.capabilities?.assetPersistence
-      && safeContext.capabilities?.entityPersistence
-      && mediaAssetRepository
-      && entityRepository
-    ) {
-      void Promise.all([
-        mediaAssetRepository.listPersonalAssets(safeContext.workspaceId),
-        entityRepository.listPersonal(safeContext.workspaceId),
-      ]).then(
-        ([assets, entities]) => {
-          if (!active) return;
-          setWorkspaceAssets(assets);
-          setWorkspaceEntities(entities);
-          setEntityPersistenceAvailable(true);
-          setWorkspaceCatalogLoaded(true);
-        },
-        () => {
-          if (!active) return;
-          setWorkspaceAssets([]);
-          setWorkspaceEntities([]);
-          setEntityPersistenceAvailable(false);
-          setWorkspaceCatalogLoaded(true);
-        },
-      );
-    } else {
-      setWorkspaceCatalogLoaded(true);
-    }
     return () => {
       active = false;
       if (navigationTimeoutRef.current !== null) window.clearTimeout(navigationTimeoutRef.current);
@@ -888,6 +891,10 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         onOpenAccountSettings?.(message.section);
         return;
       }
+      if (message.type === "canvas:theme-change") {
+        onThemeChange?.(message.theme);
+        return;
+      }
       if (message.type !== "canvas:save") return;
 
       if (!safeContext.writable) {
@@ -987,7 +994,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
       active = false;
       window.removeEventListener("message", handleMessage);
     };
-  }, [authorizedProjectIds, entityRepository, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.capabilities?.transientMediaUpload, safeContext.projectId, safeContext.workspaceId, safeContext.writable, transientMediaRepository]);
+  }, [authorizedProjectIds, entityRepository, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, onThemeChange, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.capabilities?.transientMediaUpload, safeContext.projectId, safeContext.workspaceId, safeContext.writable, transientMediaRepository]);
 
   return (
     <section

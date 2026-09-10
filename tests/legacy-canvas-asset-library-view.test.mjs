@@ -21,6 +21,7 @@ test("registers the complete frozen canvas asset-library view API", () => {
       "renderDirectoryTree",
       "renderEmptyState",
       "renderEntityCard",
+      "renderEntityMediaFilter",
       "renderFolderCard",
       "renderMediaCard",
       "renderMovePopover",

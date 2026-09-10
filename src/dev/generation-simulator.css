@@ -1,0 +1,24 @@
+[data-generation-simulator] { font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--agent-panel-text, #f4f4f5); }
+[data-generation-simulator] [hidden], [data-generation-simulator][hidden] { display: none !important; }
+[data-generation-simulator] button, [data-generation-simulator] input, [data-generation-simulator] select { box-sizing: border-box; font: inherit; color: inherit; }
+[data-generation-simulator] button { cursor: pointer; }
+[data-generation-simulator] button:disabled { opacity: .4; cursor: default; }
+[data-generation-simulator] :focus-visible { outline: 2px solid var(--canvas-popover-focus-line, #888); outline-offset: 3px; }
+#reelay-generation-simulator { display: inline-flex; align-items: center; }
+#reelay-generation-simulator .generation-simulator-toggle { min-height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--agent-panel-muted, #999); padding: 4px 7px; font-size: 11px; white-space: nowrap; }
+#reelay-generation-simulator .generation-simulator-toggle:hover, #reelay-generation-simulator .generation-simulator-toggle[aria-expanded="true"] { color: var(--agent-panel-text); background: var(--agent-panel-hover); }
+#generation-simulator-panel { position: fixed; z-index: 4500; width: min(280px, calc(100vw - 16px)); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; padding: 14px; border: 1px solid var(--agent-panel-line, #555); border-radius: 14px; background: var(--canvas-popover-bg, #191a1d); box-shadow: var(--canvas-popover-shadow, 0 10px 32px #0003); }
+#generation-simulator-panel header { display: flex; align-items: center; justify-content: space-between; }
+#generation-simulator-panel strong { font-size: 13px; font-weight: 600; }
+#generation-simulator-panel header button { border: 0; background: none; font-size: 20px; line-height: 1; padding: 2px 4px; color: var(--agent-panel-muted); }
+#generation-simulator-panel p { margin: 8px 0 12px; font-size: 11px; color: var(--agent-panel-muted); }
+#generation-simulator-panel label { display: block; margin: 10px 0 6px; }
+#generation-simulator-panel select, #generation-simulator-panel input { display: block; width: 100%; min-width: 0; min-height: 32px; border: 1px solid var(--agent-panel-line, #555); border-radius: 7px; padding: 5px 7px; background: var(--agent-input-bg, #111214); }
+#generation-simulator-panel .generation-simulator-fill { width: 100%; border: 0; padding: 7px; border-radius: 7px; background: var(--agent-panel-hover, #ffffff0d); }
+#generation-simulator-panel .generation-simulator-fill:not(:disabled):hover { background: var(--canvas-popover-hover, #ffffff1a); }
+#generation-simulator-panel .generation-simulator-execution { border-top: 1px solid var(--agent-panel-line, #555); margin-top: 14px; padding-top: 2px; }
+#generation-simulator-panel .generation-simulator-confirm { padding: 8px; margin-top: 10px; border-radius: 7px; background: var(--agent-panel-hover); }
+#generation-simulator-panel .generation-simulator-confirm p { margin-top: 0; }
+#generation-simulator-panel .generation-simulator-actions { display: flex; gap: 8px; }
+#generation-simulator-panel .generation-simulator-actions button { flex: 1; border: 0; border-radius: 5px; padding: 6px 4px; background: var(--agent-panel-bg); }
+#generation-simulator-panel .generation-simulator-actions button:hover { background: var(--canvas-popover-hover); }

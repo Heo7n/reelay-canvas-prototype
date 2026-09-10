@@ -91,8 +91,17 @@ export async function registerWorkspaceProjectRoutes(
     if (!parsed.success) {
       return reply.code(400).send({ error: { code: "invalid_request", message: "工作空间标识无效。" } });
     }
-    if (!(await requireWorkspaceAccess(actor, parsed.data.workspaceId, reply, capabilities))) return reply;
-    return { members: await capabilities.listOrganizationMembers(parsed.data.workspaceId) };
+    const workspaceId = parsed.data.workspaceId;
+    if (!actor.workspaceIds.includes(workspaceId)) {
+      const workspace = await capabilities.getWorkspace(workspaceId);
+      return reply.code(workspace ? 403 : 404).send({
+        error: {
+          code: workspace ? "workspace_forbidden" : "workspace_not_found",
+          message: workspace ? "无权访问此工作空间。" : "工作空间不存在。",
+        },
+      });
+    }
+    return { members: await capabilities.listOrganizationMembers(workspaceId) };
   });
 
   app.get("/api/workspaces/:workspaceId/projects", async (request, reply) => {

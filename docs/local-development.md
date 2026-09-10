@@ -6,9 +6,32 @@
 
 ## 1. 继续当前机器的开发
 
-### 2026-09-08 画布加载候选预览
+### 当前画布任务：2026-09-09 已提交改动同步
 
-当前画布任务位于 `C:\Users\Ho\.codex\worktrees\cc38\0707`。完整路由入口为 <http://127.0.0.1:5178/app/login>，Vite 通过 `REELAY_DEV_API_PORT=5180` 连接本任务候选 API；未设置此变量时仍默认代理本机 `5175`。只允许有效数字端口，代理主机固定为 `127.0.0.1`。
+`C:/Users/Ho/.codex/worktrees/cc38/0707` 的 `codex/canvas-agent-refinement` 已整合 `b603681`、`f2f8f7c` 与 `600fb82`。沿用 `5178 → 5180`；前端、提示词编辑器与 API 均读取本工作区。Node 依赖按合并后的锁文件安装；API 更新后沿用原候选入口重启，数据和会话归属保持。
+
+启动入口与日志仍位于 `D:/Software/codePro/0707/.git/worktrees/07072`：前端使用 `REELAY_DEV_API_PORT=5180` 与 `vite.shell.config.ts --host 127.0.0.1 --port 5178 --strictPort`，API 使用 `node --import tsx canvas-candidate-api.mjs`，工作目录必须为上述 cc38 目录。`canvas-preview.json` 保存最新进程记录；恢复前重查端口和命令行。本次没有复制凭据、数据库或媒体，没有 migration / seed，也未改变其他任务的端口。
+
+### 其他任务：2026-09-08 组织中心加载预览
+
+当前组织中心迭代使用 `5176 → 5189`，前端和候选 API 都读取 `C:/Users/Ho/.codex/worktrees/ead8/0707` 的 `codex/canvas-loading-priority`，包括本轮本地阶段提交的组织中心 UI 与加载修复。`5173 → 5175` 仍由主目录提供，未合入这轮成员 API 优化；下方原 `5176 → 5175` 是本次切换前的记录。
+
+- 本机启动文件和记录目录：`D:/Software/codePro/0707/.git/worktrees/07071`。`home-login-preview.ps1` 为前端设置 `REELAY_DEV_API_PORT=5189` 后启动原 5176；`organization-preview-api.mjs` 用当前 worktree 的 `createSharedServerEnvironment` 在进程内读取主目录 `.env.shared-development.local`，仅把 PORT 改为 5189，并运行本 worktree 的 `src/server/start.ts`。不复制任何凭据；仍是同一 Reelay_Dev PostgreSQL、私有桶和现有会话。
+- 进程启动时：前端 launcher `27792` / Vite `23168`，API launcher `92048` / Node `29904`。使用前重查端口与命令行，不直接沿用 PID。`home-login-preview.json` 已记录本轮来源、端口和启动文件；stdout / stderr 与各启动文件同目录同前缀。
+- 两个启动文件均用隐藏进程运行，恢复时先核对端口，再分别运行 `node organization-preview-api.mjs` 与 `powershell -NoProfile -ExecutionPolicy Bypass -File home-login-preview.ps1`。重启前端不能更新 API；本轮没有 migration / seed、数据迁移或公网部署。
+- 若后续同步到主目录并重启共享 5175，应再把本前端 launcher 中的 `REELAY_DEV_API_PORT` 恢复到 5175，验收后停止候选 5189；不能只停止候选却保留代理指向该端口。
+
+### 2026-09-08 文档优先与连接复用
+
+本轮基于已发布的 `f068def`，优化分支为 `codex/canvas-loading-priority`，目录为 `C:\Users\Ho\.codex\worktrees\ead8\0707`。该目录的前端继续使用 `5176 → 5175`；主目录 `D:\Software\codePro\0707` 的 `codex/canvas-development` 同步本轮代码后，`5173` 与共享 API `5175` 使用同一版本。后端代码修改需要重启 `5175`，仅前端 HMR 不会更新连接池。
+
+常驻 API 默认保留一条**已经建立**的数据库连接，并启用 TCP keepalive；不预连接、不定时发 SQL。多余空闲连接仍按 60 秒释放。Vercel 默认最小连接数为 `0`、空闲超时为 10 秒。`REELAY_DB_POOL_MIN` 可显式配置 `0..REELAY_DB_POOL_MAX`，设置 `0` 可恢复全释放；共享入口只接受专用配置文件中的值。失效空闲连接由 pg 移除，API 只记录脱敏错误码，后续请求可以重新连接，不自动重试或重放 SQL。首次连接、网络中断和云端主动断连仍可能产生等待。
+
+候选通过独立 `5186 → 5189` 完成验证，使用同一 Dev 数据源，未迁移或 seed；候选端口仅用于本轮对比，不是长期入口。具体测量和局限见 [加载评估](canvas-iteration-review.md#2026-09-08-文档优先与连接生命周期)。本轮改进与既有公网发布分别处理。
+
+### 2026-09-08 较早画布加载候选预览记录
+
+以下是此前切片的独立候选记录；代码已随 PR #23 集成，不能据此推断当前进程版本。该画布任务位于 `C:\Users\Ho\.codex\worktrees\cc38\0707`。完整路由入口为 <http://127.0.0.1:5178/app/login>，Vite 通过 `REELAY_DEV_API_PORT=5180` 连接本任务候选 API；未设置此变量时仍默认代理本机 `5175`。只允许有效数字端口，代理主机固定为 `127.0.0.1`。
 
 候选 API 在 `5180` 读取本 worktree 服务端代码，通过已有主目录共享开发环境在进程内复用同一云端 PostgreSQL / Supabase Storage。没有复制凭据、数据库、ObjectStore 或依赖，没有执行 migration / seed，也没有集成主目录共享开发提交。`5175` 仍属于原共享服务，不能为重启本任务预览而停止它。下方 2026-09-05 的本机数据库表是历史环境记录，不能用于推断当前候选数据位置。
 

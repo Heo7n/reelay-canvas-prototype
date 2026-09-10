@@ -58,9 +58,20 @@ export function createPostgresPool(
   environment: NodeJS.ProcessEnv = process.env,
 ): Pool {
   const isServerless = Boolean(environment.VERCEL);
-  return new Pool({
+  const max = readPositiveInteger("REELAY_DB_POOL_MAX", environment) ?? (isServerless ? 2 : 10);
+  const configuredMin = environment.REELAY_DB_POOL_MIN?.trim();
+  const min = configuredMin ? Number(configuredMin) : (isServerless ? 0 : 1);
+  if ((configuredMin && !/^\d+$/.test(configuredMin)) || !Number.isSafeInteger(min) || min < 0 || min > max) {
+    throw new Error("REELAY_DB_POOL_MIN must be an integer between 0 and REELAY_DB_POOL_MAX.");
+  }
+  const pool = new Pool({
     ...getConnectionConfig(connectionString ?? getDatabaseUrl(environment), environment),
-    max: readPositiveInteger("REELAY_DB_POOL_MAX", environment) ?? (isServerless ? 2 : 10),
+    max,
+    // Keep one already-established connection for a persistent API; this does
+    // not preconnect or issue heartbeat queries. Serverless pools still drain.
+    min,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
     connectionTimeoutMillis: readPositiveInteger("REELAY_DB_CONNECT_TIMEOUT_MS", environment) ?? 15_000,
     // A long-lived API should reuse its bounded pool between normal UI actions;
     // discarding it after ten seconds repeatedly pays the remote TLS handshake.
@@ -68,4 +79,13 @@ export function createPostgresPool(
     allowExitOnIdle: true,
     application_name: "reelay-server",
   });
+  // pg-pool removes a broken idle client before emitting this event. Handle it
+  // so a network interruption does not crash the API; never replay SQL here.
+  pool.on("error", (error) => {
+    const code = (error as NodeJS.ErrnoException).code;
+    console.error("database_pool_idle_error", {
+      code: code && /^[A-Z0-9_]{1,64}$/.test(code) ? code : "UNKNOWN",
+    });
+  });
+  return pool;
 }

@@ -108,7 +108,16 @@
     observer?.observe(menu.parentElement);
     observer?.observe(boundary);
 
-    return { sync, setOpen, isOpen: () => !menu.hidden, getCurrent: () => current };
+    function restore(model, snapshot) {
+      if (!model || !snapshot) return false;
+      setOpen(false);
+      configurations.set(model.id, normalize({ ...snapshot, kind: "generator", mode: model.type, model: model.id }));
+      sync(model);
+      onChange();
+      return true;
+    }
+
+    return { sync, restore, setOpen, isOpen: () => !menu.hidden, getCurrent: () => current };
   }
 
   root.REELAY_AGENT_PARAMETERS = Object.freeze({ createController });

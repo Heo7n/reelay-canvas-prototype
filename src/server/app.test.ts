@@ -1,5 +1,5 @@
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { canonicalizeLegacyCanvasDocumentV1 } from "../contracts/canvas-document-v1";
 import { buildServer } from "./app";
@@ -108,10 +108,15 @@ describe("organization project access API", () => {
       kind: "organization",
       name: "不可访问的组织",
     });
-    const scopedApp = await buildServer({ store: new InMemoryCollaborationStore(seed) });
+    const scopedStore = new InMemoryCollaborationStore(seed);
+    const scopedApp = await buildServer({ store: scopedStore });
 
     try {
       const ownerCookie = await login(scopedApp, "creator@reelay.test");
+      const sessionRead = vi.spyOn(scopedStore, "getSessionActor");
+      const workspaceRead = vi.spyOn(scopedStore, "getWorkspace");
+      const membershipRead = vi.spyOn(scopedStore, "canReadWorkspace");
+      const membersRead = vi.spyOn(scopedStore, "listOrganizationMembers");
       const response = await scopedApp.inject({
         method: "GET",
         url: "/api/workspaces/workspace-organization-reelay/members",
@@ -119,6 +124,10 @@ describe("organization project access API", () => {
       });
 
       expect(response.statusCode).toBe(200);
+      expect(sessionRead).toHaveBeenCalledOnce();
+      expect(workspaceRead).not.toHaveBeenCalled();
+      expect(membershipRead).not.toHaveBeenCalled();
+      expect(membersRead).toHaveBeenCalledExactlyOnceWith("workspace-organization-reelay");
       const members = response.json().members;
       expect(members).toHaveLength(10);
       expect(members.map((member: { role: string }) => member.role)).toEqual([
@@ -168,6 +177,16 @@ describe("organization project access API", () => {
       });
       expect(forbidden.statusCode).toBe(403);
       expect(forbidden.json().error.code).toBe("workspace_forbidden");
+      expect(workspaceRead).toHaveBeenCalledExactlyOnceWith("workspace-existing-but-forbidden");
+
+      const missing = await scopedApp.inject({
+        method: "GET",
+        url: "/api/workspaces/workspace-missing/members",
+        headers: { cookie: ownerCookie },
+      });
+      expect(missing.statusCode).toBe(404);
+      expect(missing.json().error.code).toBe("workspace_not_found");
+      expect(workspaceRead).toHaveBeenLastCalledWith("workspace-missing");
 
       const anonymous = await scopedApp.inject({
         method: "GET",
@@ -175,9 +194,44 @@ describe("organization project access API", () => {
       });
       expect(anonymous.statusCode).toBe(401);
       expect(anonymous.json().error.code).toBe("session_required");
+      expect(membersRead).toHaveBeenCalledOnce();
+      expect(membershipRead).not.toHaveBeenCalled();
+      expect(workspaceRead).toHaveBeenCalledTimes(2);
     } finally {
       await scopedApp.close();
     }
+  });
+
+  it("lets ordinary members read the directory and applies the current session scope on every request", async () => {
+    const cookie = await login(app, "chenxi@reelay.test");
+    const sessionRead = vi.spyOn(store, "getSessionActor");
+    const membersRead = vi.spyOn(store, "listOrganizationMembers");
+    const request = {
+      method: "GET" as const,
+      url: "/api/workspaces/workspace-organization-reelay/members",
+      headers: { cookie },
+    };
+
+    const allowed = await app.inject(request);
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json().members).toEqual(expect.arrayContaining([
+      expect.objectContaining({ userId: "actor-chenxi", role: "member" }),
+    ]));
+    const actor = await sessionRead.mock.results[0]!.value;
+    expect(actor).not.toBeNull();
+    sessionRead.mockResolvedValueOnce({ ...actor!, workspaceIds: [] });
+
+    const removed = await app.inject(request);
+    expect(removed.statusCode).toBe(403);
+    expect(removed.json().error.code).toBe("workspace_forbidden");
+    expect(sessionRead).toHaveBeenCalledTimes(2);
+    expect(membersRead).toHaveBeenCalledOnce();
+
+    sessionRead.mockResolvedValueOnce(null);
+    const expired = await app.inject(request);
+    expect(expired.statusCode).toBe(401);
+    expect(sessionRead).toHaveBeenCalledTimes(3);
+    expect(membersRead).toHaveBeenCalledOnce();
   });
 
   it("stores optional contact details independently from the login identifier", async () => {
@@ -516,6 +570,33 @@ describe("organization project access API", () => {
     });
     expect(unsupportedInnerVersion.statusCode).toBe(400);
     expect(unsupportedInnerVersion.json().error.code).toBe("unsupported_canvas_document");
+  });
+
+  it("round trips structured prompts through PUT and GET without losing references or their order", async () => {
+    const cookie = await login(app, "creator@reelay.test");
+    const url = "/api/projects/project-perfume-tvc/canvases/main/document";
+    const prompt = { version: 1, content: [
+      { type: "text", text: "让" },
+      { type: "reference", key: "asset:portrait", mediaType: "image", fallbackLabel: "图片1" },
+      { type: "reference", key: "connection:removed", mediaType: "video", fallbackLabel: "视频1" },
+    ] };
+    const content = { kind: "reelay-legacy-canvas", version: 1, canvases: [{ id: "canvas", nodes: [{
+      id: "node", kind: "generator", prompt, referenceOrder: ["asset:portrait"],
+      assets: [{ id: "portrait", type: "image", url: "/portrait.png" }],
+    }] }] };
+    const written = await app.inject({ method: "PUT", url, headers: { cookie },
+      payload: { schemaVersion: 1, expectedRevision: 0, content } });
+    expect(written.statusCode).toBe(201);
+    expect(written.json().document.content.canvases[0].nodes[0].prompt).toEqual(prompt);
+    const loaded = await app.inject({ method: "GET", url, headers: { cookie } });
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.json().document).toEqual(written.json().document);
+    expect(loaded.json().document.content.canvases[0].nodes[0].referenceOrder).toEqual(["asset:portrait"]);
+    const updated = await app.inject({ method: "PUT", url, headers: { cookie },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: loaded.json().document.content } });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().document.content.canvases[0].nodes[0].prompt).toEqual(prompt);
+    expect(updated.json().document.revision).toBe(2);
   });
 
   it("canonicalizes stored v1 documents and fails closed for unsupported or corrupt stored content", async () => {

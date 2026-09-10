@@ -252,7 +252,7 @@ export function OrganizationUsageSection({
 
   return (
     <section className={styles.usageSection} aria-labelledby="organization-usage-title">
-      <h1 id="organization-usage-title" className={styles.visuallyHidden}>用量看板</h1>
+      <h2 id="organization-usage-title" className={styles.visuallyHidden}>用量看板</h2>
       <p className={styles.visuallyHidden}>{workspaceName}的组织用量统计</p>
 
       <header className={styles.overviewHeading}>

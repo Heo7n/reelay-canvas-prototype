@@ -1,8 +1,24 @@
+import "../legacy-canvas/canvas-prompt-document.js";
+
 export const LEGACY_CANVAS_DOCUMENT_SCHEMA_VERSION = 1 as const;
 export const LEGACY_CANVAS_DOCUMENT_KIND = "reelay-legacy-canvas" as const;
 
 type MediaKind = "image" | "video" | "audio";
 type GeneratorMediaKind = "image" | "video";
+
+export interface LegacyPromptDocumentV1 {
+  version: 1;
+  content: ({ type: "text"; text: string } | {
+    type: "reference"; key: string; mediaType: MediaKind; fallbackLabel: string;
+  })[];
+}
+
+// This model registers the same pure normalization functions in
+// the classic canvas, the application host and Node; persistence must not
+// maintain a second interpretation of reference identity or size limits.
+const promptDocumentModel = (globalThis as unknown as {
+  REELAY_CANVAS_PROMPT_DOCUMENT: { normalize(value: unknown): LegacyPromptDocumentV1 };
+}).REELAY_CANVAS_PROMPT_DOCUMENT;
 
 export interface LegacyCanvasAssetV1 {
   id: string;
@@ -40,7 +56,8 @@ export interface LegacyCanvasNodeV1 {
   omniReferenceTaskType?: string;
   audioEnabled?: boolean;
   assetValidationEnabled?: boolean;
-  prompt?: string;
+  prompt?: string | LegacyPromptDocumentV1;
+  referenceOrder?: string[];
   preview?: boolean;
   name?: string;
   generatedAsset?: LegacyCanvasAssetV1 | null;
@@ -231,7 +248,12 @@ function serializeNode(value: unknown): LegacyCanvasNodeV1 | null {
   }
   node.audioEnabled = candidate.audioEnabled === true;
   node.assetValidationEnabled = candidate.assetValidationEnabled === true;
-  node.prompt = boundedString(candidate.prompt, "", 20_000);
+  node.prompt = record(candidate.prompt)
+    ? promptDocumentModel.normalize(candidate.prompt)
+    : boundedString(candidate.prompt, "", 20_000);
+  if (Array.isArray(candidate.referenceOrder)) {
+    node.referenceOrder = candidate.referenceOrder.filter((key): key is string => typeof key === "string");
+  }
   node.preview = candidate.preview === true;
   node.name = boundedString(candidate.name, "", 300);
   node.generatedAsset = generatedAsset?.type === mediaKind ? generatedAsset : null;
@@ -296,6 +318,21 @@ function serializeCanvas(value: unknown, index: number): LegacyCanvasV1 | null {
     ? candidate.nodes.slice(0, MAX_NODES_PER_CANVAS).map(serializeNode).filter((node): node is LegacyCanvasNodeV1 => Boolean(node))
     : [];
   const nodeIds = new Set(nodes.map((node) => node.id));
+  const connections = serializeConnections(candidate.connections, nodeIds);
+  const incomingReferenceKeys = new Map<string, string[]>();
+  for (const connection of connections) {
+    const keys = incomingReferenceKeys.get(connection.targetNodeId) ?? [];
+    keys.push(`connection:${connection.id}`);
+    incomingReferenceKeys.set(connection.targetNodeId, keys);
+  }
+  for (const node of nodes) {
+    if (!node.referenceOrder) continue;
+    const validKeys = new Set([
+      ...node.assets.map((asset) => `asset:${asset.id}`),
+      ...(incomingReferenceKeys.get(node.id) ?? []),
+    ]);
+    node.referenceOrder = node.referenceOrder.filter((key) => validKeys.delete(key));
+  }
   const groups = Array.isArray(candidate.groups)
     ? candidate.groups.slice(0, MAX_GROUPS_PER_CANVAS).map((group) => serializeGroup(group, nodeIds)).filter((group): group is LegacyCanvasGroupV1 => Boolean(group))
     : [];
@@ -306,7 +343,7 @@ function serializeCanvas(value: unknown, index: number): LegacyCanvasV1 | null {
     id,
     name: boundedString(candidate.name, `画布 ${index + 1}`, 200).trim() || `画布 ${index + 1}`,
     nodes,
-    connections: serializeConnections(candidate.connections, nodeIds),
+    connections,
     groups,
     viewport: {
       tx: finiteNumber(viewport.tx, 0, -MAX_COORDINATE, MAX_COORDINATE),

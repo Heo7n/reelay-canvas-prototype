@@ -80,6 +80,42 @@ describe("workspace account menu", () => {
     });
   });
 
+  it("preserves a canvas origin when the organization entry is used from a center section", () => {
+    const canvasOrigin = "/w/workspace-organization/projects/project-one/canvases/main?layoutTune=1#selection";
+    const router = createMemoryRouter([{
+      path: "*",
+      element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} />,
+    }], {
+      initialEntries: [{
+        pathname: "/w/workspace-organization/organization/credits",
+        state: { organizationReturnTo: canvasOrigin },
+      }],
+    });
+    render(<RouterProvider router={router} />);
+
+    fireEvent.pointerEnter(screen.getByLabelText("打开账户菜单"));
+    fireEvent.click(screen.getByRole("link", { name: "进入星海视觉工作室组织信息" }));
+
+    expect(router.state.location.pathname).toBe("/w/workspace-organization/organization");
+    expect(router.state.location.state).toEqual({ organizationReturnTo: canvasOrigin });
+    expect(router.state.historyAction).toBe("REPLACE");
+    expect(screen.getByLabelText("打开账户菜单")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("does not manufacture a return source when the organization center was opened directly", () => {
+    const router = createMemoryRouter([{
+      path: "*",
+      element: <WorkspaceHeader actor={actor} currentWorkspace={workspace} />,
+    }], { initialEntries: ["/w/workspace-organization/organization/usage"] });
+    render(<RouterProvider router={router} />);
+
+    fireEvent.pointerEnter(screen.getByLabelText("打开账户菜单"));
+    fireEvent.click(screen.getByRole("link", { name: "进入星海视觉工作室组织信息" }));
+
+    expect(router.state.location.state).toEqual({});
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
   it.each([
     ["admin", "管理员"],
     ["member", "成员"],

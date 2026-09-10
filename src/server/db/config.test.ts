@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
 
 const { capturePool } = vi.hoisted(() => ({ capturePool: vi.fn() }));
-vi.mock("pg", () => ({ Pool: class { constructor(options: unknown) { capturePool(options); } } }));
+vi.mock("pg", () => ({ Pool: class extends EventEmitter { constructor(options: unknown) { super(); capturePool(options); } } }));
 import { createPostgresPool, DEFAULT_LOCAL_DATABASE_URL, getDatabaseUrl } from "./config";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -29,6 +30,37 @@ describe("Supabase database transport", () => {
     vi.stubEnv("REELAY_DB_IDLE_TIMEOUT_MS", "25000");
     createPostgresPool("postgresql://local:local@127.0.0.1:54329/reelay");
     expect(capturePool.mock.lastCall?.[0].idleTimeoutMillis).toBe(25_000);
+  });
+
+  it("keeps one established connection only for persistent processes by default", () => {
+    createPostgresPool(DEFAULT_LOCAL_DATABASE_URL, {});
+    expect(capturePool.mock.lastCall?.[0]).toMatchObject({ min: 1, keepAlive: true, keepAliveInitialDelayMillis: 10_000 });
+    createPostgresPool(DEFAULT_LOCAL_DATABASE_URL, { VERCEL: "1" });
+    expect(capturePool.mock.lastCall?.[0]).toMatchObject({ min: 0, max: 2 });
+  });
+
+  it("allows bounded minimum overrides including zero without ambient leakage", () => {
+    vi.stubEnv("REELAY_DB_POOL_MIN", "8");
+    createPostgresPool(DEFAULT_LOCAL_DATABASE_URL, { REELAY_DB_POOL_MIN: "0", REELAY_DB_POOL_MAX: "1" });
+    expect(capturePool.mock.lastCall?.[0]).toMatchObject({ min: 0, max: 1 });
+    createPostgresPool(DEFAULT_LOCAL_DATABASE_URL, { REELAY_DB_POOL_MIN: "2", REELAY_DB_POOL_MAX: "3" });
+    expect(capturePool.mock.lastCall?.[0]).toMatchObject({ min: 2, max: 3 });
+    createPostgresPool(DEFAULT_LOCAL_DATABASE_URL, {});
+    expect(capturePool.mock.lastCall?.[0].min).toBe(1);
+  });
+
+  it.each(["-1", "1.5", "bad", "2", "99999999999999999999"])("rejects invalid minimum %s", (value) => {
+    expect(() => createPostgresPool(DEFAULT_LOCAL_DATABASE_URL, { REELAY_DB_POOL_MIN: value, REELAY_DB_POOL_MAX: "1" }))
+      .toThrow(/REELAY_DB_POOL_MIN/);
+  });
+
+  it("handles idle connection failures without logging credentials or query details", () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const pool = createPostgresPool(DEFAULT_LOCAL_DATABASE_URL, {});
+    expect(() => pool.emit("error", Object.assign(new Error("private connection detail"), { code: "ECONNRESET" }))).not.toThrow();
+    expect(log).toHaveBeenLastCalledWith("database_pool_idle_error", { code: "ECONNRESET" });
+    pool.emit("error", Object.assign(new Error("private detail"), { code: "postgresql://secret" }));
+    expect(log).toHaveBeenLastCalledWith("database_pool_idle_error", { code: "UNKNOWN" });
   });
 });
 

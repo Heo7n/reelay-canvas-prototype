@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { runInNewContext } from "node:vm";
 
 const root = new URL("../", import.meta.url);
 const agentModelsSource = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
+const promptDocumentSource = await readFile(new URL("src/legacy-canvas/canvas-prompt-document.js", root), "utf8");
+const promptScope = {};
+runInNewContext(promptDocumentSource, promptScope);
+const promptDocument = promptScope.REELAY_CANVAS_PROMPT_DOCUMENT;
 const [appSource, appCss, canvasChromeCss, assetLibraryViewSource, stylesEntry, html, nodePointerSource, pointerDispatchSource, assetLibraryCss, entityEditorViewSource, entityEditorCss, entityUseModelSource, entityUseViewSource, entityUseCss, entityUseControllerSource] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("styles/app.css", root), "utf8"),
@@ -665,16 +670,16 @@ test("task type summaries, provider snapshots, and generation guards share one c
     url: "https://example.test/upstream.mp4",
     duration: 18,
   };
+  // Reference ordering is verified by the real app integration; this fixture
+  // supplies that ordered projection to the parameter/constraint contract.
+  const getNodeReferenceEntries = (node) => [
+    { key: "connection:connection-1", connectionId: "connection-1", sourceNodeId: "source-node", asset: upstreamVideo },
+    ...node.assets.map((asset) => ({ key: `asset:${asset.id}`, sourceNodeId: null, asset })),
+  ];
   const getReferenceVideoAssets = Function(
-    "getIncomingConnections",
-    "state",
-    "getEditableMedia",
+    "getNodeReferenceEntries",
     `${referenceVideoSource}; return getReferenceVideoAssets;`,
-  )(
-    () => [{ id: "connection-1", sourceNodeId: "source-node" }],
-    { nodes: [{ id: "source-node", kind: "generator", generatedAsset: upstreamVideo }] },
-    (node) => node.generatedAsset,
-  );
+  )(getNodeReferenceEntries);
   let durationReferences = null;
   const snapshotSource = sourceBetween(
     appSource,
@@ -688,6 +693,9 @@ test("task type summaries, provider snapshots, and generation guards share one c
     "getNodeGenerationMode",
     "getGenerationOutputDurationSeconds",
     "getNormalizedDurationSeconds",
+    "getNodeReferenceEntries",
+    "getNodePromptText",
+    "promptDocument",
     `${snapshotSource}; return createGenerationParameterSnapshot;`,
   )(
     (node) => node.taskTypeCapability,
@@ -699,6 +707,9 @@ test("task type summaries, provider snapshots, and generation guards share one c
       return Math.max(...referenceVideos.map(({ duration }) => duration));
     },
     (node) => Number.parseInt(node.duration, 10),
+    getNodeReferenceEntries,
+    (node) => promptDocument.toText(node.prompt, getNodeReferenceEntries(node)),
+    promptDocument,
   );
   const editSnapshot = createGenerationParameterSnapshot({
     id: "target-node",
@@ -723,19 +734,22 @@ test("task type summaries, provider snapshots, and generation guards share one c
   assert.deepEqual(editSnapshot.assetIds, ["direct-image", "direct-video"]);
   assert.deepEqual(editSnapshot.referenceVideos, [
     {
-      assetId: "direct-video",
-      sourceNodeId: null,
-      url: "https://example.test/direct.mp4",
-      duration: 6,
-    },
-    {
       assetId: "upstream-video",
       sourceNodeId: "source-node",
       url: "https://example.test/upstream.mp4",
       duration: 18,
     },
+    {
+      assetId: "direct-video",
+      sourceNodeId: null,
+      url: "https://example.test/direct.mp4",
+      duration: 6,
+    },
   ]);
   assert.equal(durationReferences.length, editSnapshot.referenceVideos.length);
+  assert.equal(editSnapshot.promptDocument.version, 1);
+  assert.equal(editSnapshot.referenceSnapshot.media.length, 3);
+  assert.deepEqual(Array.from(editSnapshot.referenceSnapshot.media, (entry) => entry.label), ["视频1", "图片1", "视频2"]);
   assert.deepEqual(editSnapshot.providerParameters, {
     vendor_task_type: "edit",
     ratio: "adaptive",
@@ -743,8 +757,10 @@ test("task type summaries, provider snapshots, and generation guards share one c
   });
   directVideo.duration = 30;
   upstreamVideo.url = "https://example.test/changed.mp4";
-  assert.equal(editSnapshot.referenceVideos[0].duration, 6);
-  assert.equal(editSnapshot.referenceVideos[1].url, "https://example.test/upstream.mp4");
+  assert.equal(editSnapshot.referenceVideos[1].duration, 6);
+  assert.equal(editSnapshot.referenceVideos[0].url, "https://example.test/upstream.mp4");
+  assert.equal(editSnapshot.referenceSnapshot.media[0].asset.url, "https://example.test/upstream.mp4");
+  assert.equal(editSnapshot.referenceSnapshot.media[2].asset.duration, 6);
 
   const generatedAssetSource = sourceBetween(
     appSource,
@@ -769,7 +785,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
     "function getGenerationAvailability(node)",
     "function getParamLabelParts(node)",
   );
-  assert.match(availabilitySource, /const taskTypeIssue = getOmniReferenceTaskTypeIssue\(node\)/);
+  assert.match(availabilitySource, /const taskTypeIssue = getPromptReferenceIssue\(node.prompt, getNodeReferenceEntries\(node\)\) \|\| getOmniReferenceTaskTypeIssue\(node\)/);
   assert.match(availabilitySource, /!taskTypeIssue/);
   assert.match(availabilitySource, /taskTypeIssue\s*\?/);
 
@@ -778,7 +794,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
     "function startSimulatedGeneration(node, options = {})",
     "function modelPanel(node)",
   );
-  const issueCheckIndex = startGenerationSource.indexOf("const taskTypeIssue = getOmniReferenceTaskTypeIssue(node)");
+  const issueCheckIndex = startGenerationSource.indexOf("const taskTypeIssue = getPromptReferenceIssue(node.prompt, getNodeReferenceEntries(node)) || getOmniReferenceTaskTypeIssue(node)");
   const pricingCheckIndex = startGenerationSource.indexOf("const cost = getCost(node)");
   assert.ok(issueCheckIndex >= 0 && pricingCheckIndex > issueCheckIndex);
   const taskTypeGuardSource = startGenerationSource.slice(issueCheckIndex, pricingCheckIndex);
@@ -902,7 +918,7 @@ test("active canvas content has one runtime owner instead of render-time mirror 
   assert.match(appSource, /function getActiveCanvas\(\) \{\s*return canvasRuntimeStore\.getActiveCanvas\(\);\s*\}/);
   assert.doesNotMatch(appSource, /saveActiveCanvasState|loadCanvasState/);
   assert.doesNotMatch(appSource, /state\.canvases\.(?:push|splice)/);
-  assert.doesNotMatch(appSource, /state\.activeCanvasId\s*=/);
+  assert.doesNotMatch(appSource, /state\.activeCanvasId\s*=(?!=)/);
   assert.doesNotMatch(
     appSource,
     /canvas\.(?:nodes|connections|groups|tx|ty|scale|zCounter|undoStack)\s*=\s*state\.|state\.(?:nodes|connections|groups|tx|ty|scale|zCounter|undoStack)\s*=\s*canvas\./,
@@ -1187,12 +1203,12 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appCss, /\.control-bar\s*\{[\s\S]*?left:\s*12px[\s\S]*?right:\s*9px[\s\S]*?bottom:\s*calc\(6px \+ var\(--prompt-advanced-height, 0px\)\)/);
   assert.match(appCss, /\.composer-tool-button\s*\{[\s\S]*?flex:\s*0 0 36px[\s\S]*?height:\s*36px/);
   assert.match(appSource, /\$\{isVideoNode \? `[\s\S]*?data-action="prompt-optimization"[\s\S]*?` : ""\}[\s\S]*?data-action="advanced-settings-toggle"/);
-  assert.match(appSource, /data-action="prompt-optimization"[\s\S]*?aria-busy="\$\{node\.promptOptimizing\}"[\s\S]*?node\.generating \|\| node\.promptOptimizing \|\| !node\.prompt\.trim\(\)/);
+  assert.match(appSource, /data-action="prompt-optimization"[\s\S]*?aria-busy="\$\{node\.promptOptimizing\}"[\s\S]*?node\.generating \|\| node\.promptOptimizing \|\| !getNodePromptText\(node\)\.trim\(\)/);
   assert.match(appSource, /class="prompt-optimization-spinner"/);
-  assert.match(appSource, /promptInput\?\.addEventListener\("input"[\s\S]*?syncPromptOptimizationButton\(el\.querySelector\("\.prompt-optimization-button"\), node\)/);
+  assert.match(appSource, /function mountNodePrompt\(node, input, element\)[\s\S]*?promptEditors\.mount\(node, input,[\s\S]*?onChange\(value, \{ origin, historyAction \} = \{\}\)[\s\S]*?node\.prompt = value;[\s\S]*?syncPromptOptimizationButton\(element\.querySelector\("\.prompt-optimization-button"\), node\)/);
   assert.match(appSource, /function syncPromptOptimizationButton\(button, node\)[\s\S]*?button\.disabled = disabled/);
   assert.match(appSource, /function startPromptOptimization\(node\)[\s\S]*?canvasNodeTasks\.start\(\{[\s\S]*?kind: "prompt-optimization"[\s\S]*?delayMs: 900/);
-  assert.match(appSource, /function completePromptOptimization\(task, node\)[\s\S]*?buildOptimizedPrompt\(sourcePrompt\)[\s\S]*?pushCanvasUndoAction\(canvas,[\s\S]*?scheduleCanvasDocumentSave\(\)/);
+  assert.match(appSource, /function completePromptOptimization\(task, node\)[\s\S]*?optimizePromptDocument\(sourcePrompt\)[\s\S]*?promptEditors\.replace\(node, optimizedPrompt\)[\s\S]*?pushCanvasUndoAction\(canvas,[\s\S]*?scheduleCanvasDocumentSave\(\)/);
   assert.match(appSource, /canvasNodeTasks\.cancelScope\(\{ projectId: state\.projectId, canvasId: activeCanvas\.id, nodeIds: selectedNodeIds \}/);
   assert.match(appSource, /canvasNodeTasks\.cancelScope\(\{ projectId: state\.projectId, canvasId \}, "canvas-deleted"\)/);
   assert.doesNotMatch(appSource, /promptOptimization:\s*(?:true|false)/);
@@ -1294,7 +1310,7 @@ test("aspect changes preserve node identity and isolate the prompt workspace fro
   );
   assert.match(
     appSource,
-    /function syncNodeVisualLayout[\s\S]*?element\.style\.top = `\$\{node\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY/,
+    /function syncNodeVisualLayout[\s\S]*?const base = canvasArrange\.getNodePosition\(node\) \|\| node;[\s\S]*?element\.style\.top = `\$\{base\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY\(\$\{\(y - base\.y\)/,
   );
   assert.match(appSource, /promptPanel\.style\.top = `\$\{canonicalLayout\.mediaHeight \+ canonicalLayout\.panelGap\}px`/);
   assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?left:\s*50%[\s\S]*?translate:\s*-50% 0/);
@@ -1326,18 +1342,21 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.doesNotMatch(appCss, /--multi-selection-shadow-near|--multi-selection-shadow-far|--multi-selection-highlight/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-hover[\s\S]*?cursor:\s*grab/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-pressed[\s\S]*?cursor:\s*grabbing/);
-  assert.match(appCss, /\.selection-toolbar \.icon-toolbar-button\s*\{[\s\S]*?background:\s*transparent/);
-  assert.match(appSource, /--multi-selection-port-scale[\s\S]*?--multi-selection-port-offset[\s\S]*?portField\.portOffset[\s\S]*?--multi-selection-port-visual-size[\s\S]*?portField\.portMinOutside \* 2/);
+  assert.match(appCss, /\.icon-toolbar-button\s*\{[^}]*background:\s*transparent/);
+  assert.match(appSource, /function syncSelectionOverlayProjection\(\)[\s\S]*?getAggregatePortGeometry\(state\.scale\)[\s\S]*?--multi-selection-port-offset[\s\S]*?portField\.portOffset[\s\S]*?--multi-selection-port-visual-size[\s\S]*?portField\.visualSize/);
+  assert.match(appSource, /id: "selection:output"[\s\S]*?options: canvasConnectionInteraction\.getAggregatePortGeometry\(state\.scale\)/);
+  assert.doesNotMatch(appSource, /--multi-selection-port-scale/);
   assert.match(appSource, /function syncSelectionOverlayProjection[\s\S]*?--multi-selection-surface-radius[\s\S]*?selectionSurfaceRadiusWorld \* state\.scale/);
   assert.match(appSource, /function applyTheme[\s\S]*?--node-media-radius[\s\S]*?syncSelectionOverlayProjection\(\)[\s\S]*?renderSelectionToolbar\(\)/);
   assert.match(appSource, /\[multiSelectionSurface, multiSelectionChrome\]\.forEach[\s\S]*?screenRect\.left[\s\S]*?screenRect\.height/);
   assert.match(appSource, /multiSelectionSurface\.classList\.add\("hidden"\)[\s\S]*?multiSelectionChrome\.classList\.add\("hidden"\)/);
   assert.match(appSource, /function getExactSelectionGroup\(selectedNodes = getSelectedNodes\(\)\)[\s\S]*?canvasSpatialSelection\.getExactSelectionGroup\(selectedNodes, state\.groups\)/);
   assert.match(appSource, /function renderSelectionToolbar\(\)[\s\S]*?getExactSelectionGroup\(selectedNodes\)[\s\S]*?multiSelectionChrome\.classList\.remove\("hidden"\)[\s\S]*?multiSelectionSurface\.classList\.toggle\("hidden", Boolean\(exactSelectionGroup\)\)/);
-  assert.match(appCss, /\.multi-selection-port\s*\{[\s\S]*?left:\s*calc\(100% \+ var\(--multi-selection-port-offset,[\s\S]*?width:\s*max\(44px, var\(--multi-selection-port-visual-size/);
+  assert.match(appCss, /\.multi-selection-port\s*\{[\s\S]*?left:\s*calc\(100% \+ var\(--multi-selection-port-offset,[\s\S]*?width:\s*var\(--multi-selection-port-hit-size, 44px\)/);
   assert.doesNotMatch(appCss, /--multi-selection-frame-border-width/);
-  assert.match(appCss, /\.multi-selection-port::before\s*\{[\s\S]*?width:\s*var\(--connection-port-size\)[\s\S]*?border:\s*var\(--connection-port-stroke\)[\s\S]*?scale:\s*var\(--multi-selection-port-scale/);
-  assert.match(appCss, /\.multi-selection-port-mark\s*\{[\s\S]*?width:\s*var\(--connection-port-mark-width\)[\s\S]*?height:\s*var\(--connection-port-mark-height\)[\s\S]*?scale:\s*var\(--multi-selection-port-scale/);
+  assert.match(appCss, /\.multi-selection-port::before\s*\{[\s\S]*?width:\s*var\(--multi-selection-port-visual-size,[\s\S]*?border:\s*1\.5px solid var\(--multi-selection-port-stroke-color\)/);
+  assert.match(appCss, /\.multi-selection-port-mark\s*\{[\s\S]*?width:\s*var\(--multi-selection-port-mark-width,[\s\S]*?height:\s*var\(--multi-selection-port-mark-height,/);
+  assert.doesNotMatch(appCss, /--multi-selection-port-scale/);
   assert.match(html, /class="icon-toolbar-button text-button selection-download-trigger"[\s\S]*?aria-expanded="false"/);
   assert.equal((html.match(/data-selection-action="toggle-download"/g) || []).length, 1);
   assert.doesNotMatch(html, /selection-download-main|selection-download-toggle|download-default/);
@@ -1406,7 +1425,8 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
 
   assert.match(appCss, /\.agent-panel\s*\{[^}]*grid-template-rows:\s*52px 1fr auto;/);
 
-  assert.match(agentMarkup, /<textarea[^>]*id="agentInput"[^>]*aria-label="给 Reelay Agent 的消息"/);
+  assert.match(agentMarkup, /<div[^>]*class="prompt-input"[^>]*id="agentInput"[^>]*aria-label="给 Reelay Agent 的消息"/);
+  assert.match(appSource, /promptEditors\.mount\(conversation, agentInput/);
   assert.match(agentMarkup, /class="agent-composer prompt-composer-surface" id="agentComposer"/);
   assert.match(agentMarkup, /class="agent-composer-stage prompt-composer-layout"/);
   assert.match(appCss, /\.agent-composer\.prompt-composer-surface\s*\{[\s\S]*?--node-panel-bg:\s*var\(--agent-panel-bg\);[\s\S]*?--node-panel-line:\s*var\(--agent-panel-line\);[\s\S]*?--node-panel-shadow:\s*none;/);
@@ -1471,7 +1491,7 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
     /class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn"[^>]*title="输入提示词后优化"[^>]*aria-label="提示词优化"[^>]*aria-busy="false" disabled>[\s\S]*?class="prompt-optimization-icon"[\s\S]*?class="prompt-optimization-spinner"/,
   );
   assert.match(appSource, /function startAgentPromptOptimization\(\)[\s\S]*?state\.agentPromptOptimizationTask = task[\s\S]*?window\.setTimeout\(\(\) => \{[\s\S]*?completeAgentPromptOptimization\(\);[\s\S]*?\}, 900\)/);
-  assert.match(appSource, /function completeAgentPromptOptimization\(\)[\s\S]*?buildOptimizedPrompt\(task\.sourcePrompt\)[\s\S]*?agentInput\.value = optimizedPrompt/);
+  assert.match(appSource, /function completeAgentPromptOptimization\(\)[\s\S]*?optimizePromptDocument\(task\.sourcePrompt\)[\s\S]*?conversation\.draftPrompt = optimizedPrompt[\s\S]*?promptEditors\.replace\(conversation, optimizedPrompt\)/);
   const agentOptimizationStart = appSource.indexOf("function syncAgentPromptOptimizationControl");
   const agentOptimizationEnd = appSource.indexOf("function sendAgentMessage", agentOptimizationStart);
   assert.ok(agentOptimizationStart >= 0 && agentOptimizationEnd > agentOptimizationStart);
@@ -1540,7 +1560,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
-  assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-disabled="true"[^>]*disabled>[\s\S]*?data-lucide="layout-grid"[\s\S]*?id="zoomSlider"/);
+  assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-controls="canvasArrangeMenu"[\s\S]*?data-toolbar-popover="organize"[\s\S]*?id="zoomSlider"/);
   assert.doesNotMatch(html, /class="rail-button canvas-switch-trigger"[^>]*title=|id="railProfileBtn"[^>]*title=/);
   assert.match(html, /class="agent-dock collapsed"[\s\S]*?class="agent-launcher"/);
   assert.match(html, /id="projectMenu"[^>]*role="dialog"[\s\S]*?id="projectMenuSearch"[^>]*placeholder="搜索项目"[\s\S]*?id="projectMenuList"[\s\S]*?data-project-action="create"[\s\S]*?>新建项目</);

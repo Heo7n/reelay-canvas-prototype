@@ -42,6 +42,23 @@ function harness() {
   return { coordinator, posted, catalogs, entities, dispatch };
 }
 
+test("create retries preserve a caller-owned idempotency key while using new request IDs", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  const payload = { name: "角色", mediaRefs: [{ mediaId: "asset-1", order: 0 }], idempotencyKey: "stable-create" };
+  const first = coordinator.createEntity(payload);
+  dispatch({ source: "reelay-shell", type: "host:asset-command-error", protocolVersion: 1,
+    instanceId: "instance-1", requestId: posted[0].requestId, code: "network" });
+  await assert.rejects(first);
+  const retry = coordinator.createEntity(payload);
+  assert.equal(posted[0].idempotencyKey, "stable-create");
+  assert.equal(posted[1].idempotencyKey, "stable-create");
+  assert.notEqual(posted[0].requestId, posted[1].requestId);
+  dispatch({ source: "reelay-shell", type: "host:entity-command-result", protocolVersion: 1,
+    instanceId: "instance-1", requestId: posted[1].requestId, entity });
+  assert.equal((await retry).id, entity.id);
+  await assert.rejects(coordinator.createEntity({ ...payload, idempotencyKey: "x".repeat(201) }));
+});
+
 test("accepts one correlated catalog and projects Entity Media references", () => {
   const { dispatch, catalogs } = harness();
   const message = {

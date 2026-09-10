@@ -1,0 +1,42 @@
+.canvas-arrange-menu {
+  width: 252px;
+  padding: 16px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 16px;
+  background: var(--toolbar-bg);
+  color: var(--toolbar-text);
+  box-shadow: var(--canvas-popover-shadow);
+}
+
+.canvas-arrange-question {
+  margin: 0 0 18px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.canvas-arrange-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.canvas-arrange-menu button {
+  min-width: 66px;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--toolbar-hover);
+  color: var(--toolbar-text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.canvas-arrange-menu [data-arrange-decision="keep"] {
+  background: var(--toolbar-active);
+  color: var(--text);
+}

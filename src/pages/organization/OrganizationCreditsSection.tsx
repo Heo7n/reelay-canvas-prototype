@@ -49,7 +49,7 @@ export function OrganizationCreditsSection({
 
   return (
     <section className={styles.section} aria-labelledby="organization-credits-title">
-      <h1 id="organization-credits-title" className={styles.srOnly}>积分管理</h1>
+      <h2 id="organization-credits-title" className={styles.srOnly}>积分管理</h2>
       <div className={styles.creditOverviewSection}>
         <h2 className={styles.creditOverviewTitle}>组织积分账户</h2>
         <div className={styles.creditBalanceOverview}>

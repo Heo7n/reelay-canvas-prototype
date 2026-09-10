@@ -153,6 +153,37 @@ test("keeps personal-only uploads out of the project result path", async () => {
   assert.deepEqual(JSON.parse(JSON.stringify(await result)), workspaceAsset);
 });
 
+test("caller-owned upload idempotency keys survive retries while request IDs stay unique", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  const file = { name: "cover.png", type: "image/png", size: 42 };
+  const metadata = { mediaKind: "image", target: "personal", idempotencyKey: " entity-import-stable-key " };
+  const first = coordinator.persistFile(file, metadata);
+  await flushTasks();
+  const firstRequest = posted.at(-1);
+  assert.equal(firstRequest.idempotencyKey, "entity-import-stable-key");
+  const rejected = assert.rejects(first, /资产命令执行失败/);
+  dispatch({ source: "reelay-shell", type: "host:asset-command-error", protocolVersion: 1,
+    instanceId: "instance-1", requestId: firstRequest.requestId, code: "network" });
+  await rejected;
+  const retry = coordinator.persistFile(file, metadata);
+  await flushTasks();
+  const retryRequest = posted.at(-1);
+  assert.equal(retryRequest.idempotencyKey, firstRequest.idempotencyKey);
+  assert.notEqual(retryRequest.requestId, firstRequest.requestId);
+  const retryRejected = assert.rejects(retry, /资产协调器已停止/);
+  coordinator.dispose();
+  await retryRejected;
+});
+
+test("invalid supplied upload idempotency keys are rejected before posting commands", async () => {
+  const { coordinator, posted } = harness();
+  for (const idempotencyKey of ["", "  ", "x".repeat(201), 12, {}]) {
+    await assert.rejects(coordinator.persistFile({ name: "cover.png", type: "image/png", size: 42 },
+      { mediaKind: "image", idempotencyKey }), /幂等标识无效/);
+  }
+  assert.equal(posted.length, 0);
+});
+
 test("correlates personal Media rename results by request, instance, and asset", async () => {
   const { coordinator, dispatch, posted } = harness();
   const result = coordinator.renameMedia(" asset-2 ", " renamed-portrait.png ");

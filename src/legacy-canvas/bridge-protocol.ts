@@ -80,6 +80,7 @@ export const bridgeWorkspaceAssetSchema = z.object({
   byteSize: z.number().int().positive().max(64 * 1024 * 1024),
   checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
   contentUrl: z.string().trim().min(1).max(2_048),
+  createdAt: z.string().datetime({ offset: true }).optional(),
 }).strict();
 
 export const bridgeWorkspaceEntitySchema = z.object({
@@ -319,6 +320,13 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
     section: legacyAccountSectionSchema.optional().default("profile"),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:theme-change"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    theme: z.enum(["light", "dark"]),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

@@ -66,27 +66,30 @@ test("builds the real entry with content hashes, complete references and unchang
   assert.equal(result.scriptCount, [...before.matchAll(/<script src=/g)].length);
   assert.equal([...html.matchAll(/<script\b/g)].length, 1);
   assert.equal([...html.matchAll(/rel="stylesheet"/g)].length, 1);
-  for (const reference of [result.scriptReference, result.styleReference]) {
+  assert.match(result.editorReference, /^\.\/assets\/prompt-editor-[a-f0-9]{16}\.js$/);
+  assert.ok(html.includes(`data-prompt-editor-src="${result.editorReference}"`));
+  for (const reference of [result.scriptReference, result.styleReference, result.editorReference]) {
     const source = await readFile(path.join(output, reference));
     const hash = createHash("sha256").update(source).digest("hex").slice(0, 16);
     assert.ok(reference.includes(`-${hash}.`));
   }
   const css = await readFile(path.join(output, result.styleReference), "utf8");
   let position = -1;
-  for (const filename of ["app.css", "canvas-chrome.css", "canvas-asset-library.css", "canvas-entity-editor.css", "canvas-entity-use.css", "canvas-connections.css"]) {
+  for (const filename of ["app.css", "canvas-chrome.css", "canvas-arrange.css", "canvas-asset-library.css", "canvas-entity-editor.css", "canvas-entity-use.css", "canvas-connections.css"]) {
     const original = await readFile(path.join(root, "styles", filename), "utf8");
     const next = css.indexOf(original);
     assert.ok(next > position, `${filename} keeps its original cascade position and exact contents`);
     position = next;
   }
   assert.doesNotMatch(css, /@import\b|\burl\s*\(/);
-  for (const [, reference] of html.matchAll(/\b(?:src|href)="([^"]+)"/g)) {
+  for (const [, reference] of html.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
     if (!/^(?:[a-z]+:|#|\/\/)/i.test(reference)) await access(path.join(output, reference.split(/[?#]/)[0]));
   }
   assert.equal(await readFile(path.join(root, "index.html"), "utf8"), before);
   const again = await buildLegacyCanvas(root, output);
   assert.equal(again.scriptReference, result.scriptReference);
   assert.equal(again.styleReference, result.styleReference);
+  assert.equal(again.editorReference, result.editorReference);
 });
 
 test("experience legacy build uses its own hashed favicon without the account icon", async (t) => {

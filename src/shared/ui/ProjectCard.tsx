@@ -61,15 +61,7 @@ export function ProjectCard({ onNotice, project }: ProjectCardProps) {
     <>
       <article className={styles.card}>
         <Link className={styles.visualLink} to={routePaths.canvas(project.workspaceId, project.id, "main")} aria-label={`打开项目 ${project.name}`}>
-          {coverUrl ? (
-            <img src={coverUrl} alt="" />
-          ) : (
-            <span className={styles.semanticCover} data-project-seed={project.id.length % 4} aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-          )}
+          <img src={coverUrl} alt="" decoding="async" loading="lazy" width={1280} height={720} />
         </Link>
 
         <div className={styles.info}>
