@@ -36,6 +36,7 @@
     popover.dataset.wheelScope = "local";
     const cards = new Map();
     const mediaPlayers = new WeakMap();
+    const referencePreview = global.REELAY_GENERATION_REFERENCE_PREVIEW.createController({ document, sanitizeUrl, refreshIcons });
     const scrollPositions = new Map();
     let scopeKey = "";
     let active = null;
@@ -114,6 +115,7 @@
       }
     }
     function dismiss() {
+      referencePreview.close();
       view.clearTimeout(showTimer); view.clearTimeout(hideTimer); showTimer = 0; hideTimer = 0;
       if (active?.gallery) settleReferenceTransition(active.gallery);
       if (active?.kind === "menu") {
@@ -214,7 +216,11 @@
       article.querySelector(".generation-record-terminal-actions").hidden = busy(task);
       const cancel = article.querySelector('[data-generation-action="cancel"]');
       cancel.hidden = !cancellable(task);
-      article.querySelector('[data-generation-action="locate"]').hidden = task.status !== "succeeded" || !task.addedNodeId;
+      const locate = article.querySelector('[data-generation-action="locate"]');
+      locate.hidden = task.status !== "succeeded";
+      locate.setAttribute("aria-disabled", String(!task.addedNodeId));
+      locate.title = task.addedNodeId ? "定位生成结果" : task.isPreview ? "演示记录暂无画布节点" : "生成结果尚未放入画布";
+      locate.setAttribute("aria-label", task.addedNodeId ? "定位画布中的生成结果" : `定位生成结果：${locate.title}`);
       return changed;
     }
     function setMediaAspect(element, ratio) {
@@ -276,11 +282,8 @@
       const width = Math.min(list.getBoundingClientRect().width || container.clientWidth || 340, view.innerWidth - 24);
       const sparse = card.entries.length <= 2;
       const tile = sparse ? 112 : 52; const gap = sparse ? 8 : 6;
-      // Geometry and CSS share these metrics: reserve surface padding/borders,
-      // and both navigation controls only when the references need pagination.
-      const allFit = card.entries.length <= 10 && card.entries.length * (tile + gap) - gap <= width - 26;
-      const navigation = allFit ? 0 : 44 + gap * 2;
-      const size = Math.max(1, Math.min(10, Math.floor((width - 26 - navigation + gap) / (tile + gap))));
+      // Navigation lives in the header; the media row uses all available width.
+      const size = Math.max(1, Math.min(10, Math.floor((width - 26 + gap) / (tile + gap))));
       return { size, tile, gap, sparse };
     }
     function settleReferenceTransition(gallery) {
@@ -306,9 +309,9 @@
       const visible = card.entries.slice(card.start, card.start + size);
       let gallery = active.gallery;
       if (!gallery) {
-        rail.innerHTML = `<div class="generation-record-reference-viewport" tabindex="-1"></div><button type="button" class="generation-record-page-button" data-reference-page="-1" aria-label="上一页素材">${icon("chevron-left")}</button><button type="button" class="generation-record-page-button" data-reference-page="1" aria-label="下一页素材">${icon("chevron-right")}</button>`;
+        rail.innerHTML = `<div class="generation-record-reference-viewport" tabindex="-1"></div>`;
         gallery = active.gallery = { rail, viewport: rail.querySelector(".generation-record-reference-viewport"),
-          previous: rail.querySelector('[data-reference-page="-1"]'), next: rail.querySelector('[data-reference-page="1"]'), animations: [] };
+          previous: popover.querySelector('[data-reference-page="-1"]'), next: popover.querySelector('[data-reference-page="1"]'), animations: [] };
       }
       settleReferenceTransition(gallery);
       const focused = document.activeElement;
@@ -321,8 +324,8 @@
       if (moveFocus) gallery.viewport.focus({ preventScroll: true });
       for (const [button, available] of [[gallery.previous, previousAvailable], [gallery.next, nextAvailable]]) {
         button.hidden = !paged; button.disabled = !available;
-        button.style.visibility = available ? "" : "hidden";
       }
+      popover.querySelector(".generation-record-reference-navigation").hidden = !paged;
       const page = document.createElement("div"); page.className = "generation-record-reference-page";
       page.innerHTML = visible.map((entry, index) => `<button type="button" class="generation-record-reference-item" data-record-popover="reference" data-reference-preview="${card.start + index}" aria-expanded="false" aria-label="${escape(`${entry.label}：${entry.name}，预览`)}"><span>${thumbnail(entry)}</span><small>${escape(entry.label)}</small></button>`).join("");
       const previousPage = gallery.page; const previousWidth = gallery.width || 0;
@@ -364,15 +367,22 @@
       const maxWidth = Math.max(120, Math.min(listRect.width || 340, view.innerWidth - 24));
       popover.style.maxWidth = `${maxWidth}px`;
       popover.style.maxHeight = `${Math.max(80, view.innerHeight - 32)}px`;
+      popover.style.setProperty("--generation-prompt-width", `${maxWidth}px`);
       const floating = popover.getBoundingClientRect();
       const isMenu = active.kind === "details";
-      const anchor = isMenu ? anchorRect : {
+      const isReference = active.kind === "reference";
+      const anchor = isMenu || isReference ? anchorRect : {
         left: listRect.left, right: listRect.right, width: listRect.width,
         top: anchorRect.top, bottom: anchorRect.bottom, height: anchorRect.height,
       };
+      const boundary = {
+        left: isReference ? Math.max(0, listRect.left - 12) : 0,
+        right: isReference ? Math.min(view.innerWidth, listRect.right + 12) : view.innerWidth,
+        top: 0, bottom: view.innerHeight,
+      };
       const placement = placeAnchoredPopover?.({ anchor, floating,
-        boundary: { left: 0, top: 0, right: view.innerWidth, bottom: view.innerHeight },
-        placements: isMenu ? ["top-end", "bottom-end"] : ["top-start", "bottom-start"], gap: 7, padding: 12,
+        boundary,
+        placements: isMenu ? ["top-end", "bottom-end"] : isReference ? ["top", "bottom"] : ["top-start", "bottom-start"], gap: 7, padding: 12,
       });
       popover.style.left = `${placement?.left ?? Math.max(12, Math.min(anchor.left, view.innerWidth - floating.width - 12))}px`;
       popover.style.top = `${placement?.top ?? Math.max(12, anchor.top - floating.height - 7)}px`;
@@ -404,7 +414,7 @@
         const card = cards.get(task.id);
         if (!card.entries.length) return dismiss();
         popover.setAttribute("aria-label", "参考素材");
-        popover.innerHTML = `<div class="generation-record-popover-title"><span>参考素材 <span class="generation-record-reference-total">(${card.entries.length})</span></span></div><div class="generation-record-reference-rail"></div>`;
+        popover.innerHTML = `<div class="generation-record-popover-title"><span>参考素材 <span class="generation-record-reference-total">(${card.entries.length})</span></span><div class="generation-record-reference-navigation" role="group" aria-label="参考素材翻页"><button type="button" class="generation-record-page-button" data-reference-page="-1" aria-label="上一页素材">${icon("chevron-left")}</button><button type="button" class="generation-record-page-button" data-reference-page="1" aria-label="下一页素材">${icon("chevron-right")}</button></div></div><div class="generation-record-reference-rail"></div>`;
         fillReferences(card, true);
       } else if (kind === "reference") {
         showMedia(entry.asset, `${entry.label} · ${entry.name}`);
@@ -425,12 +435,11 @@
       popover.className = "generation-record-popover generation-record-preview-popover";
       popover.setAttribute("role", "dialog"); popover.setAttribute("aria-label", `${label}预览`);
       const media = mediaElement(asset, label, "generation-record-preview-media");
-      const fromGallery = active.anchor.dataset.recordPopover === "references";
-      const imageOnly = media.tagName === "IMG" && active.kind === "reference" && !fromGallery;
+      const imageOnly = media.tagName === "IMG" && active.kind === "reference";
       popover.classList.toggle("reference-image-preview", imageOnly);
       if (!imageOnly) {
         const title = document.createElement("div"); title.className = "generation-record-popover-title";
-        title.innerHTML = `${fromGallery ? `<button type="button" data-record-back aria-label="返回参考素材">${icon("chevron-left")}</button>` : ""}<span>${escape(label)}</span><button type="button" data-record-close aria-label="关闭预览">${icon("x")}</button>`;
+        title.innerHTML = `<span>${escape(label)}</span><button type="button" data-record-close aria-label="关闭预览">${icon("x")}</button>`;
         popover.append(title);
       }
       popover.append(media);
@@ -498,6 +507,40 @@
       if (!anchor || !list.contains(anchor) || anchor.contains(event.relatedTarget)) return;
       view.clearTimeout(showTimer); scheduleHide();
     }
+    function turnReferencePage(direction, focusNavigation = false) {
+      const task = active?.kind === "references" && getTask(active.taskId);
+      const card = task && inScope(task) && cards.get(task.id);
+      if (!card || referencePreview.isOpen()) return false;
+      const start = card.start + direction * card.pageSize;
+      if (start < 0 || start >= card.entries.length) return false;
+      pinPopover(); card.start = start;
+      fillReferences(card, true, direction); positionPopover();
+      if (focusNavigation) {
+        const next = popover.querySelector(`[data-reference-page="${direction}"]:not(:disabled)`)
+          || popover.querySelector("[data-reference-page]:not(:disabled)");
+        next?.focus({ preventScroll: true });
+      }
+      return true;
+    }
+    function wheelReferences(event) {
+      if (active?.kind !== "references" || referencePreview.isOpen() || event.ctrlKey || event.metaKey) return;
+      const card = cards.get(active.taskId);
+      if (!card || card.entries.length <= card.pageSize || !inScope(getTask(active.taskId))) return;
+      const raw = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (!Number.isFinite(raw) || raw === 0) return;
+      event.preventDefault(); event.stopPropagation(); pinPopover();
+      const delta = raw * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientWidth : 1);
+      const time = now(); const direction = Math.sign(delta);
+      let wheel = active.wheel;
+      if (!wheel || time - wheel.last > 160 || wheel.direction !== direction) {
+        wheel = active.wheel = { total: 0, last: time, direction, turned: false };
+      }
+      wheel.last = time; wheel.total += Math.abs(delta);
+      // One page per wheel gesture; trackpad momentum must not skip several pages.
+      if (!wheel.turned && wheel.total >= 48) {
+        wheel.turned = true; turnReferencePage(direction);
+      }
+    }
     function click(event) {
       const task = taskAt(event.target);
       if (!task) return;
@@ -513,21 +556,26 @@
       const page = event.target.closest?.("[data-reference-page]");
       if (page && !page.disabled && popover.contains(page) && active?.kind === "references") {
         event.preventDefault(); event.stopPropagation();
-        pinPopover();
-        const card = cards.get(task.id); const direction = Number(page.dataset.referencePage);
-        card.start = Math.max(0, Math.min(card.entries.length - 1, card.start + direction * card.pageSize));
-        fillReferences(card, true, direction);
-        positionPopover();
-        const next = popover.querySelector(`[data-reference-page="${direction}"]:not(:disabled)`)
-          || popover.querySelector("[data-reference-page]:not(:disabled)");
-        next?.focus({ preventScroll: true });
+        turnReferencePage(Number(page.dataset.referencePage), true);
         return;
       }
       const tile = event.target.closest?.("[data-reference-preview]");
       if (tile && popover.contains(tile) && !tile.closest(".is-leaving")) {
         const card = cards.get(task.id);
         const entry = card.entries[Number(tile.dataset.referencePreview)];
-        if (entry) open("reference", card.element.querySelector(".generation-record-references"), task, true, entry.key);
+        if (entry) {
+          event.preventDefault(); event.stopPropagation(); pinPopover();
+          const expected = active;
+          referencePreview.open({ asset: entry.asset, label: `${entry.label} · ${entry.name}`, trigger: tile,
+            onClose() {
+              if (active !== expected || !inScope(task)) return;
+              positionPopover();
+              const target = popover.querySelector(`[data-reference-preview="${Number(tile.dataset.referencePreview)}"]`)
+                || popover.querySelector("[data-reference-preview]");
+              target?.focus({ preventScroll: true });
+            },
+          });
+        }
         return;
       }
       const part = event.target.closest?.(".prompt-reference[data-reference-key]");
@@ -554,22 +602,16 @@
     }
     function popoverClick(event) {
       if (event.target.closest("[data-record-close]")) { closeAndRestoreFocus(); return; }
-      if (event.target.closest("[data-record-back]")) {
-        const task = getTask(active.taskId); const anchor = active.anchor; const card = cards.get(active.taskId);
-        const index = card?.entries.findIndex((entry) => entry.key === active.referenceKey);
-        if (index >= 0) card.start = index;
-        open("references", anchor, task, true);
-        (popover.querySelector(`[data-reference-preview="${index}"]`) || popover.querySelector("[data-reference-preview]"))?.focus({ preventScroll: true });
-        return;
-      }
       click(event);
     }
     function pointerOutside(event) {
+      if (referencePreview.isOpen()) return;
       if (active?.kind === "references" && popover.contains(event.target)) { pinPopover(); return; }
       if (active?.kind === "menu" && cards.get(active.taskId)?.element.querySelector("[data-record-delete-reveal]")?.contains(event.target)) return;
       if (active && !popover.contains(event.target) && !active.anchor.contains(event.target)) dismiss();
     }
     function keydown(event) {
+      if (referencePreview.isOpen()) return;
       if (event.key === "Escape" && active) { closeAndRestoreFocus(); event.preventDefault(); }
       else if ((event.key === "Enter" || event.key === " ") && (list.contains(event.target) || popover.contains(event.target))) {
         if (event.target.matches('[role="button"]:not(button)')) { event.preventDefault(); event.target.click(); }
@@ -587,6 +629,7 @@
     list.addEventListener("focusout", blurPreview);
     list.addEventListener("click", click);
     popover.addEventListener("click", popoverClick);
+    popover.addEventListener("wheel", wheelReferences, { passive: false });
     popover.addEventListener("focusout", blurPreview);
     popover.addEventListener("pointerenter", onPopoverEnter); popover.addEventListener("pointerleave", onPopoverLeave);
     notice.addEventListener("click", scrollBottom);
@@ -601,13 +644,14 @@
       for (const media of list.querySelectorAll("video, audio")) media.pause();
     }
     function dispose() {
-      if (disposed) return; disposed = true; close(); resizeObserver?.disconnect(); releaseMedia(list); cards.clear();
+      if (disposed) return; disposed = true; close(); referencePreview.dispose(); resizeObserver?.disconnect(); releaseMedia(list); cards.clear();
       list.remove(); notice.remove();
       list.removeEventListener("pointerover", hover); list.removeEventListener("pointerout", leave);
       list.removeEventListener("focusin", focusPreview);
       list.removeEventListener("focusout", blurPreview);
       list.removeEventListener("click", click);
       popover.removeEventListener("click", popoverClick); popover.removeEventListener("pointerenter", onPopoverEnter); popover.removeEventListener("pointerleave", onPopoverLeave);
+      popover.removeEventListener("wheel", wheelReferences);
       popover.removeEventListener("focusout", blurPreview);
       notice.removeEventListener("click", scrollBottom); document.removeEventListener("pointerdown", pointerOutside);
       document.removeEventListener("keydown", keydown); document.removeEventListener("scroll", onScroll, true); view.removeEventListener("resize", onResize);
