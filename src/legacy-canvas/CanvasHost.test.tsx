@@ -836,7 +836,7 @@ describe("CanvasHost", () => {
         type: "host:media-upload-result",
         requestId: "request-personal",
         target: "personal",
-        workspaceAsset: expect.objectContaining({ assetId: "asset-personal" }),
+        workspaceAsset: expect.objectContaining({ assetId: "asset-personal", createdAt: finalizedAsset.createdAt }),
       }),
       window.location.origin,
     ));
@@ -911,7 +911,7 @@ describe("CanvasHost", () => {
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "host:workspace-asset-catalog",
-        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "before.png" })],
+        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "before.png", createdAt: personalAsset.createdAt })],
       }),
       window.location.origin,
     ));
@@ -947,7 +947,7 @@ describe("CanvasHost", () => {
       expect.objectContaining({
         type: "host:media-rename-result",
         requestId: "media-rename-1",
-        workspaceAsset: expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" }),
+        workspaceAsset: expect.objectContaining({ assetId: "asset-rename", displayName: "after.png", createdAt: personalAsset.createdAt }),
       }),
       window.location.origin,
     ));
@@ -966,7 +966,7 @@ describe("CanvasHost", () => {
       expect.objectContaining({
         type: "host:workspace-asset-catalog",
         instanceId: "canvas-instance-2",
-        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" })],
+        assets: [expect.objectContaining({ assetId: "asset-rename", displayName: "after.png", createdAt: personalAsset.createdAt })],
       }),
       window.location.origin,
     );

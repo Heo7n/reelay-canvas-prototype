@@ -615,27 +615,21 @@ html[data-theme="light"] {
   gap: 2px;
   height: var(--canvas-viewport-toolbar-height);
   padding: 2px 3px;
-  border: 1px solid var(--canvas-chrome-border);
-  border-radius: 12px;
-  background: var(--canvas-chrome-bg);
-  box-shadow: var(--canvas-chrome-shadow);
+  border: 1px solid var(--toolbar-border);
+  border-radius: var(--toolbar-radius);
+  background: var(--toolbar-bg);
+  box-shadow: var(--toolbar-shadow);
   backdrop-filter: blur(18px) saturate(120%);
 }
 
 .canvas-tool-button {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--toolbar-button-radius);
   background: transparent;
-  color: var(--muted);
+  color: var(--toolbar-text);
   box-shadow: none;
   backdrop-filter: none;
-}
-
-.canvas-tool-button:hover,
-.canvas-tool-button.active {
-  background: var(--canvas-chrome-hover);
-  color: var(--text);
 }
 
 .canvas-tool-button svg {
@@ -644,34 +638,12 @@ html[data-theme="light"] {
   stroke-width: 1.9;
 }
 
-.canvas-tool-button-upcoming,
-.canvas-tool-button-upcoming:hover,
-.canvas-tool-button-upcoming:active {
-  background: transparent;
-  color: var(--muted);
-  cursor: not-allowed;
-  opacity: 0.38;
-  transform: none;
-}
-
-.canvas-tool-tip {
-  bottom: 37px;
-  font-size: 11px;
-  font-weight: 680;
-}
-
-.canvas-tool-button:focus-visible .canvas-tool-tip,
-.canvas-tool-button:hover .canvas-tool-tip {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-
 .canvas-zoom-control {
   width: 138px;
   height: 32px;
   padding: 0 10px;
   overflow: hidden;
-  border-radius: 9px;
+  border-radius: var(--toolbar-button-radius);
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
@@ -685,7 +657,7 @@ html[data-theme="light"] {
 .canvas-zoom-control:focus-within,
 .canvas-zoom-control.value-visible {
   width: 168px;
-  background: var(--canvas-chrome-hover);
+  background: var(--toolbar-hover);
 }
 
 .canvas-zoom-control input[type="range"] {

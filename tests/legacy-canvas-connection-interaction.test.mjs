@@ -64,6 +64,46 @@ test("port fields scale with the canvas while retaining far-zoom screen floors",
   assert.equal(near.snapExitPadding, 18);
 });
 
+test("aggregate ports keep a readable screen disk and external hit target across zoom levels", () => {
+  const anchor = { x: 720, y: 360 };
+  for (const scale of [0.1, 0.2, 0.4, 0.5, 1, 2, 4]) {
+    const geometry = interaction.getAggregatePortGeometry(scale);
+    const port = interaction.buildPortRegistry([{
+      id: "selection:output",
+      nodeId: "__selection__",
+      side: "right",
+      anchor,
+      options: geometry,
+    }])[0];
+
+    assert.ok(geometry.visualSize >= 32 && geometry.visualSize <= 40, `readable disk at ${scale}`);
+    assert.ok(geometry.hitSize >= 44, `accessible target at ${scale}`);
+    assert.ok(geometry.markWidth >= 16 && geometry.markWidth <= 21, `readable mark at ${scale}`);
+    assert.equal(geometry.markHeight, 2, `crisp mark stroke at ${scale}`);
+    assert.ok(geometry.portOffset <= 44, `port stays close to selection at ${scale}`);
+    assert.ok(port.restCenter.x - geometry.hitSize / 2 >= anchor.x + 6, `hit area cannot steal frame clicks at ${scale}`);
+    assert.deepEqual(plain(port.anchor), anchor);
+    assert.equal(port.restCenter.x, anchor.x + geometry.portOffset);
+    assert.equal(port.restCenter.y, anchor.y);
+  }
+
+  const far = interaction.getAggregatePortGeometry(0.2);
+  assert.equal(far.visualSize, 32);
+  assert.equal(far.portOffset, 28);
+  assert.equal(interaction.getAggregatePortGeometry(2).visualSize, 40);
+  assert.ok(Math.abs(interaction.getScaledPortGeometry(0.2).portMinOutside - 3.4) < 1e-9);
+  assert.equal(interaction.getScaledPortGeometry(2).portMinOutside, 34);
+});
+
+test("aggregate geometry remains finite for missing and invalid scale without changing its edge anchor", () => {
+  for (const scale of [undefined, NaN, Infinity, -1, 0]) {
+    const geometry = interaction.getAggregatePortGeometry(scale);
+    assert.ok(Object.values(geometry).every(Number.isFinite));
+    assert.ok(geometry.visualSize >= 32 && geometry.visualSize <= 40);
+    assert.ok(geometry.portOffset >= geometry.hitSize / 2 + 6);
+  }
+});
+
 test("clampPointerToPort follows the pointer only inside the external half ellipse", () => {
   const rightPort = registry[1];
   assert.deepEqual(

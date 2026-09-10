@@ -16,12 +16,18 @@ const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-hist
 const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
 const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
 const assetLibraryMenuController = await readFile(new URL("src/legacy-canvas/canvas-asset-library-menu-controller.js", root), "utf8");
+const arrangeModules = await Promise.all(["layout", "scope", "controller"].map((name) => readFile(new URL(`src/legacy-canvas/canvas-arrange-${name}.js`, root), "utf8")));
+const toolbarMenuController = await readFile(new URL("src/legacy-canvas/canvas-toolbar-menu-controller.js", root), "utf8");
 const parameterHelpController = await readFile(new URL("src/legacy-canvas/canvas-parameter-help-controller.js", root), "utf8");
 const referenceOrder = await readFile(new URL("src/legacy-canvas/canvas-reference-order.js", root), "utf8");
 const referenceStripController = await readFile(new URL("src/legacy-canvas/canvas-reference-strip-controller.js", root), "utf8");
 const audioPlayer = await readFile(new URL("src/legacy-canvas/canvas-audio-player.js", root), "utf8");
 const agentComposerView = await readFile(new URL("src/legacy-canvas/canvas-agent-composer-view.js", root), "utf8");
 const agentReferences = await readFile(new URL("src/legacy-canvas/canvas-agent-references.js", root), "utf8");
+const [selectionEntityModel, entityMediaImport] = await Promise.all([
+  readFile(new URL("src/legacy-canvas/canvas-selection-entity-model.js", root), "utf8"),
+  readFile(new URL("src/legacy-canvas/canvas-entity-media-import.js", root), "utf8"),
+]);
 const [html, catalog, config, connections, connectionInteraction, connectionFeedbackMotion, connectionFeedbackController, connectionRenderer, layerReconciler, generatorModelPolicy, popoverPlacement, spatialSelection, nodeInteraction, nodePlacement, nodeLayoutTransition, nodePointerController, nodeDragController, groupInteractionController, pointerInteractionController, pointerDispatchController, agentPanelGeometry, assetLibraryModel, assetLibraryView, entityEditorModel, entityEditorView, entityEditorController, entityUseModel, entityUseView, entityUseController, mediaToolbarView, runtimeStore, nodeTaskRunner, contentCommands, commandExecutor, codec, persistenceCoordinator, mediaAssetCoordinator, entityAssetCoordinator, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("data/model-catalog.js", root), "utf8"),
@@ -111,6 +117,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(layerReconciler);
   window.eval(generatorModelPolicy);
   window.eval(popoverPlacement);
+  window.eval(toolbarMenuController);
+  arrangeModules.forEach((source) => window.eval(source));
   window.eval(parameterHelpController);
   window.eval(referenceOrder);
   window.eval(referenceStripController);
@@ -149,6 +157,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(persistenceCoordinator);
   window.eval(mediaAssetCoordinator);
   window.eval(entityAssetCoordinator);
+  window.eval(selectionEntityModel);
+  window.eval(entityMediaImport);
   window.eval(agentHistory);
   window.eval(agentParameters);
   window.eval(agentModels);

@@ -32,7 +32,7 @@ test("compact media toolbar preserves interaction selectors and scale", () => {
   assert.match(markup, /data-media-tool="crop"/);
   assert.match(markup, /data-media-tool="toggle-more"/);
   assert.match(markup, /data-media-tool="download"/);
-  assert.doesNotMatch(markup, />裁剪<\/span>/);
+  assert.doesNotMatch(markup, /<span>裁剪<\/span>/);
 });
 
 test("expanded media toolbar renders labels, overflow tools, and customization", () => {

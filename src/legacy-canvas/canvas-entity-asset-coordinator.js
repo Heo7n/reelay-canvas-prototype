@@ -133,8 +133,8 @@
 
     function createEntity(input) {
       const payload = normalizeCommandPayload(input, "create");
-      const idempotencyKey = String(makeRequestId()).trim();
-      if (!idempotencyKey) return Promise.reject(commandError("invalid", "无法创建主体幂等标识"));
+      const idempotencyKey = String(input?.idempotencyKey ?? makeRequestId()).trim();
+      if (!isNonEmptyString(idempotencyKey)) return Promise.reject(commandError("invalid", "无法创建主体幂等标识"));
       return start("canvas:create-entity", { idempotencyKey, ...payload });
     }
 

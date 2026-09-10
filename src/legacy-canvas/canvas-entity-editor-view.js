@@ -314,6 +314,7 @@
           </header>
 
           <div class="entity-editor-details-scroll">
+            ${options.sourceNotice ? `<p class="entity-editor-source-notice" role="status">${escapeHtml(options.sourceNotice)}</p>` : ""}
             <div class="entity-editor-field">
               <label for="canvasEntityEditorName">名称 <span aria-hidden="true">*</span></label>
               <input id="canvasEntityEditorName" type="text" name="name" maxlength="200" value="${escapeHtml(name)}" autocomplete="off" required aria-required="true"${safeNameError ? ' aria-invalid="true" aria-describedby="canvasEntityEditorNameError"' : ""} data-entity-editor-name="true"${editable ? "" : ' disabled aria-disabled="true"'}>

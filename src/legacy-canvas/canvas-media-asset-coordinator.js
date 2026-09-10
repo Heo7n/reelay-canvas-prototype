@@ -83,6 +83,10 @@
       const displayName = String(metadata.displayName || file?.name || "").trim();
       const contentType = String(metadata.contentType || file?.type || "").trim().toLowerCase();
       const byteSize = file?.size;
+      const requestedIdempotencyKey = metadata.idempotencyKey;
+      if (requestedIdempotencyKey != null && !isNonEmptyString(requestedIdempotencyKey)) {
+        throw commandError("invalid", "素材上传幂等标识无效");
+      }
       if (!file || !UPLOAD_TARGETS.has(target) || !MEDIA_KINDS.has(mediaKind) || !isNonEmptyString(displayName, 300)
         || !isNonEmptyString(contentType, 120) || !Number.isInteger(byteSize)
         || byteSize <= 0 || byteSize > MAX_UPLOAD_BYTES) {
@@ -103,7 +107,7 @@
       const checksumSha256 = String(await checksumFile(file)).toLowerCase();
       if (!/^[a-f\d]{64}$/.test(checksumSha256)) throw commandError("invalid", "文件校验值无效");
       const requestId = String(makeRequestId()).trim();
-      const idempotencyKey = String(makeRequestId()).trim();
+      const idempotencyKey = requestedIdempotencyKey?.trim() || String(makeRequestId()).trim();
       if (!requestId || !idempotencyKey || pending.has(requestId)) throw commandError("invalid", "无法创建唯一的上传请求");
       return new Promise((resolve, reject) => {
         const timeoutId = setTimer(() => finish(requestId, commandError("network", "资产上传请求已超时")), requestTimeoutMs);

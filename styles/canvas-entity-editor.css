@@ -89,6 +89,38 @@ html[data-theme="light"] .entity-editor-preview {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.entity-editor-source-notice {
+  margin: 0 0 12px;
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--entity-editor-raised);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-height: 760px) and (min-width: 721px) {
+  .canvas-entity-editor:has(.entity-editor-source-notice) .entity-editor-field textarea {
+    min-height: 64px;
+    height: 64px;
+  }
+}
+
+@media (max-height: 680px) and (min-width: 721px) {
+  .canvas-entity-editor:has(.entity-editor-source-notice) .entity-editor-details-scroll {
+    overflow-y: auto;
+  }
+
+  .canvas-entity-editor:has(.entity-editor-source-notice) .entity-editor-details-scroll > * {
+    flex-shrink: 0;
+  }
+
+  .canvas-entity-editor:has(.entity-editor-source-notice) .entity-editor-media-section {
+    flex: 0 0 260px;
+  }
+}
+
 .entity-editor-header {
   display: grid;
   min-height: 52px;

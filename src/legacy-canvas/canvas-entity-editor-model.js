@@ -88,7 +88,10 @@
       mediaById.set(record.id, record);
     }
 
-    const source = mode === "edit" ? inputEntity : {};
+    const source = mode === "edit" ? inputEntity : {
+      mediaRefs: options.initialMediaRefs || [],
+      coverMediaId: options.initialCoverMediaId || null,
+    };
     const initialMediaIds = normalizeMediaRefs(source.mediaRefs || []);
     for (const mediaId of initialMediaIds) {
       if (!mediaById.has(mediaId)) {
@@ -125,6 +128,7 @@
     }
 
     const draft = cloneValue(baseline);
+    const stagedNameBaselines = new Map();
     let filter = resolveFilter(options.filter);
     let selectedPreviewId = initialCoverMediaId || initialMediaIds[0] || null;
 
@@ -138,7 +142,9 @@
     }
 
     function isDirty() {
-      return JSON.stringify(persistedState()) !== JSON.stringify(persistedState(baseline));
+      return JSON.stringify(persistedState()) !== JSON.stringify(persistedState(baseline))
+        || draft.mediaIds.some((id) => stagedNameBaselines.has(id)
+          && mediaById.get(id).displayName !== (stagedNameBaselines.get(id).displayName || stagedNameBaselines.get(id).name));
     }
 
     function requireReferencedMedia(value) {
@@ -266,11 +272,14 @@
       return getState();
     }
 
-    function renameMedia(value, displayName) {
+    function renameMedia(value, displayName, { staged = false } = {}) {
       const media = requireReferencedMedia(value);
       const normalizedName = String(displayName == null ? "" : displayName).trim();
       if (!normalizedName) throw new Error("Media display name is required.");
       if (normalizedName.length > 300) throw new Error("Media display name cannot exceed 300 characters.");
+      if (staged && !stagedNameBaselines.has(media.id)) {
+        stagedNameBaselines.set(media.id, { name: media.name, displayName: media.displayName });
+      }
       media.name = normalizedName;
       media.displayName = normalizedName;
       return cloneValue(media);
@@ -308,6 +317,8 @@
     }
 
     function cancel() {
+      for (const [id, original] of stagedNameBaselines) Object.assign(mediaById.get(id), original);
+      stagedNameBaselines.clear();
       draft.name = baseline.name;
       draft.description = baseline.description;
       draft.mediaIds = [...baseline.mediaIds];

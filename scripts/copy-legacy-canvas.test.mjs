@@ -75,7 +75,7 @@ test("builds the real entry with content hashes, complete references and unchang
   }
   const css = await readFile(path.join(output, result.styleReference), "utf8");
   let position = -1;
-  for (const filename of ["app.css", "canvas-chrome.css", "canvas-asset-library.css", "canvas-entity-editor.css", "canvas-entity-use.css", "canvas-connections.css"]) {
+  for (const filename of ["app.css", "canvas-chrome.css", "canvas-arrange.css", "canvas-asset-library.css", "canvas-entity-editor.css", "canvas-entity-use.css", "canvas-connections.css"]) {
     const original = await readFile(path.join(root, "styles", filename), "utf8");
     const next = css.indexOf(original);
     assert.ok(next > position, `${filename} keeps its original cascade position and exact contents`);

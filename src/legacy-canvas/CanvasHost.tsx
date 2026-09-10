@@ -64,6 +64,7 @@ function bridgeWorkspaceAsset(asset: PersonalMediaAsset) {
     byteSize: asset.byteSize,
     checksumSha256: asset.checksumSha256,
     contentUrl: asset.contentUrl,
+    createdAt: asset.createdAt,
   };
 }
 

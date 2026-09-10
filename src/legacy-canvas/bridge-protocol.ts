@@ -80,6 +80,7 @@ export const bridgeWorkspaceAssetSchema = z.object({
   byteSize: z.number().int().positive().max(64 * 1024 * 1024),
   checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
   contentUrl: z.string().trim().min(1).max(2_048),
+  createdAt: z.string().datetime({ offset: true }).optional(),
 }).strict();
 
 export const bridgeWorkspaceEntitySchema = z.object({
