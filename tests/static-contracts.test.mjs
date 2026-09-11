@@ -36,6 +36,14 @@ function sourceBetween(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
+test("prompt optimization ships one independent suggestion service and UI workflow", () => {
+  for (const path of ["src/application/prompt-optimization-preferences.js", "src/application/prompt-optimization-service.js", "src/legacy-canvas/canvas-prompt-optimization-view.js", "src/legacy-canvas/canvas-prompt-optimization-controller.js"]) {
+    assert.equal(html.split(`src="./${path}"`).length - 1, 1, `${path} must be registered once`);
+  }
+  assert.match(stylesEntry, /canvas-prompt-optimization\.css/);
+  assert.doesNotMatch(appSource, /agentPromptOptimizationTask/);
+});
+
 test("a fresh page lifecycle retains the 3000 / 0 credit contract", () => {
   assert.match(
     appSource,
@@ -1202,13 +1210,11 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appCss, /\.prompt-input\s*\{[\s\S]*?top:\s*var\(--prompt-input-top, 73px\)[\s\S]*?bottom:\s*calc\(var\(--prompt-input-bottom, 51px\) \+ var\(--prompt-advanced-height, 0px\)\)/);
   assert.match(appCss, /\.control-bar\s*\{[\s\S]*?left:\s*12px[\s\S]*?right:\s*9px[\s\S]*?bottom:\s*calc\(6px \+ var\(--prompt-advanced-height, 0px\)\)/);
   assert.match(appCss, /\.composer-tool-button\s*\{[\s\S]*?flex:\s*0 0 36px[\s\S]*?height:\s*36px/);
-  assert.match(appSource, /\$\{isVideoNode \? `[\s\S]*?data-action="prompt-optimization"[\s\S]*?` : ""\}[\s\S]*?data-action="advanced-settings-toggle"/);
-  assert.match(appSource, /data-action="prompt-optimization"[\s\S]*?aria-busy="\$\{node\.promptOptimizing\}"[\s\S]*?node\.generating \|\| node\.promptOptimizing \|\| !getNodePromptText\(node\)\.trim\(\)/);
   assert.match(appSource, /class="prompt-optimization-spinner"/);
   assert.match(appSource, /function mountNodePrompt\(node, input, element\)[\s\S]*?promptEditors\.mount\(node, input,[\s\S]*?onChange\(value, \{ origin, historyAction \} = \{\}\)[\s\S]*?node\.prompt = value;[\s\S]*?syncPromptOptimizationButton\(element\.querySelector\("\.prompt-optimization-button"\), node\)/);
-  assert.match(appSource, /function syncPromptOptimizationButton\(button, node\)[\s\S]*?button\.disabled = disabled/);
-  assert.match(appSource, /function startPromptOptimization\(node\)[\s\S]*?canvasNodeTasks\.start\(\{[\s\S]*?kind: "prompt-optimization"[\s\S]*?delayMs: 900/);
-  assert.match(appSource, /function completePromptOptimization\(task, node\)[\s\S]*?optimizePromptDocument\(sourcePrompt\)[\s\S]*?promptEditors\.replace\(node, optimizedPrompt\)[\s\S]*?pushCanvasUndoAction\(canvas,[\s\S]*?scheduleCanvasDocumentSave\(\)/);
+  assert.match(appSource, /function syncPromptOptimizationButton\(button, node\)[\s\S]*?promptOptimization\?\.syncButton/);
+  assert.match(appSource, /function startPromptOptimization\(node\)[\s\S]*?promptOptimization\?\.activate/);
+  assert.doesNotMatch(appSource, /kind: "prompt-optimization"|function completePromptOptimization|function optimizePromptDocument/);
   assert.match(appSource, /canvasNodeTasks\.cancelScope\(\{ projectId: state\.projectId, canvasId: activeCanvas\.id, nodeIds: selectedNodeIds \}/);
   assert.match(appSource, /canvasNodeTasks\.cancelScope\(\{ projectId: state\.projectId, canvasId \}, "canvas-deleted"\)/);
   assert.doesNotMatch(appSource, /promptOptimization:\s*(?:true|false)/);
@@ -1490,8 +1496,7 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
     agentMarkup,
     /class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn"[^>]*title="输入提示词后优化"[^>]*aria-label="提示词优化"[^>]*aria-busy="false" disabled>[\s\S]*?class="prompt-optimization-icon"[\s\S]*?class="prompt-optimization-spinner"/,
   );
-  assert.match(appSource, /function startAgentPromptOptimization\(\)[\s\S]*?state\.agentPromptOptimizationTask = task[\s\S]*?window\.setTimeout\(\(\) => \{[\s\S]*?completeAgentPromptOptimization\(\);[\s\S]*?\}, 900\)/);
-  assert.match(appSource, /function completeAgentPromptOptimization\(\)[\s\S]*?optimizePromptDocument\(task\.sourcePrompt\)[\s\S]*?conversation\.draftPrompt = optimizedPrompt[\s\S]*?promptEditors\.replace\(conversation, optimizedPrompt\)/);
+  assert.match(appSource, /function startAgentPromptOptimization\(\)[\s\S]*?promptOptimization\?\.activate/);
   const agentOptimizationStart = appSource.indexOf("function syncAgentPromptOptimizationControl");
   const agentOptimizationEnd = appSource.indexOf("function sendAgentMessage", agentOptimizationStart);
   assert.ok(agentOptimizationStart >= 0 && agentOptimizationEnd > agentOptimizationStart);

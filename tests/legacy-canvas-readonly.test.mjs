@@ -25,6 +25,10 @@ const audioPlayer = await readFile(new URL("src/legacy-canvas/canvas-audio-playe
 const agentComposerView = await readFile(new URL("src/legacy-canvas/canvas-agent-composer-view.js", root), "utf8");
 const agentReferences = await readFile(new URL("src/legacy-canvas/canvas-agent-references.js", root), "utf8");
 const generationModules = await Promise.all([
+  "src/application/prompt-optimization-preferences.js",
+  "src/application/prompt-optimization-service.js",
+  "src/legacy-canvas/canvas-prompt-optimization-view.js",
+  "src/legacy-canvas/canvas-prompt-optimization-controller.js",
   "src/legacy-canvas/canvas-reference-thumbnails.js",
   "src/legacy-canvas/canvas-agent-composer-resize.js",
   "src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js",
@@ -568,9 +572,9 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   const originalSetTimeout = window.setTimeout;
   let completeAgentPromptOptimization;
   window.setTimeout = (callback, delay, ...args) => {
-    if (delay === 900) {
+    if (delay === 1800) {
       completeAgentPromptOptimization = () => callback(...args);
-      return 900;
+      return 1800;
     }
     return originalSetTimeout.call(window, callback, delay, ...args);
   };
@@ -581,28 +585,23 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   agentPromptOptimizationBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   assert.equal(agentPromptOptimizationBtn.getAttribute("aria-busy"), "true");
   assert.equal(agentPromptOptimizationBtn.classList.contains("is-processing"), true);
-  assert.equal(getAgentEditor().dom.getAttribute("contenteditable"), "false");
-  assert.equal(window.document.querySelector(".agent-send").disabled, true);
-  assert.equal(window.document.querySelector(".agent-send").classList.contains("disabled"), true);
-  const messagesWhileOptimizing = window.getConversation().messages.length;
-  writeAgentPrompt("忙碌时不应进入草稿");
-  assert.equal(getAgentEditor().getText(), "镜头");
-  getAgentEditor().dom.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
-  assert.equal(window.getConversation().messages.length, messagesWhileOptimizing);
+  assert.equal(getAgentEditor().dom.getAttribute("contenteditable"), "true");
+  assert.equal(window.document.querySelector(".agent-send").disabled, false);
+  writeAgentPrompt("处理期间保留新的草稿");
+  assert.equal(getAgentEditor().getText(), "处理期间保留新的草稿");
   assert.equal(typeof completeAgentPromptOptimization, "function");
   completeAgentPromptOptimization();
   window.setTimeout = originalSetTimeout;
-  assert.equal(getAgentEditor().getText().startsWith("镜头"), true);
-  assert.match(getAgentEditor().getText(), /镜头运动自然连贯/);
-  assert.notEqual(getAgentEditor().getText(), "镜头");
+  assert.equal(getAgentEditor().getText(), "处理期间保留新的草稿", "completion must leave the live draft untouched");
   assert.equal(agentPromptOptimizationBtn.getAttribute("aria-busy"), "false");
   assert.equal(agentPromptOptimizationBtn.classList.contains("is-processing"), false);
+  assert.equal(agentPromptOptimizationBtn.classList.contains("has-optimization"), true);
+  assert.equal(agentPromptOptimizationBtn.classList.contains("has-unread-optimization"), true);
   assert.equal(getAgentEditor().dom.getAttribute("contenteditable"), "true");
   assert.equal(window.document.querySelector(".agent-send").disabled, false);
-  assert.equal(window.document.querySelector(".agent-send").classList.contains("disabled"), false);
   assert.equal(window.document.querySelector("#agentCreditValue").textContent, creditBeforeOptimization);
   assert.equal(postedMessages.some((message) => message.type === "canvas:save"), false);
-  assert.equal(window.document.activeElement, getAgentEditor().dom);
+  assert.match(window.document.querySelector(".prompt-optimization-toast").textContent, /提示词已优化.*查看/);
 
   const userMessageCount = window.document.querySelectorAll(".agent-message.user").length;
   postedMessages.length = 0;

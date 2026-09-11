@@ -729,7 +729,7 @@ test("multi-selection adds image, video and audio references once while ignoring
   assert.equal(h.second.nodes.length, 0);
 });
 
-test("selection reference action is unavailable for empty generators and cannot alter a busy prompt", (t) => {
+test("selection reference action rejects empty generators but accepts media while optimization preserves its snapshot", (t) => {
   const h = harness(t);
   const emptyNodes = [h.window.defaultGeneratorNode(0, 0, "image"), h.window.defaultGeneratorNode(360, 0, "video")];
   h.first.nodes.push(...emptyNodes);
@@ -742,11 +742,27 @@ test("selection reference action is unavailable for empty generators and cannot 
   h.window.render();
   h.draft("正在优化的草稿");
   h.window.startAgentPromptOptimization();
-  assert.ok(h.state.agentPromptOptimizationTask);
+  assert.equal(h.document.querySelector("#agentPromptOptimizationBtn").getAttribute("aria-busy"), "true");
   h.document.querySelector('[data-selection-action="add-conversation"]').click();
-  assert.equal(h.agentReferences.getAssets().length, 0);
+  assert.equal(h.agentReferences.getAssets().length, 1);
   assert.equal(h.editor().getText(), "正在优化的草稿");
-  assert.match(h.document.querySelector(".action-toast")?.textContent || "", /提示词优化完成后/);
+  assert.equal(h.document.querySelector("#agentPromptOptimizationBtn").getAttribute("aria-busy"), "true");
+});
+
+test("sending during optimization uses the live draft and completion never refills or charges it", (t) => {
+  const h = harness(t);
+  h.draft("最初的优化输入");
+  assert.equal(h.window.startAgentPromptOptimization(), true);
+  h.draft("处理期间修改后立即发送");
+  const task = h.send(null);
+  const creditsAfterSend = plain(h.state.account);
+  assert.equal(h.editor().getText(), "");
+  h.advance(1800);
+  assert.equal(h.editor().getText(), "", "optimization must not refill the composer after sending");
+  assert.deepEqual(plain(h.state.account), creditsAfterSend, "suggestion completion is not a generation charge");
+  assert.ok(h.record(task));
+  assert.equal(h.document.querySelector("#agentPromptOptimizationBtn").classList.contains("has-optimization"), false);
+  assert.equal(h.document.querySelector("#agentPromptOptimizationBtn").disabled, true);
 });
 
 test("development presets fill mixed-media and twelve-reference drafts without sending or overriding unapproved drafts", async (t) => {

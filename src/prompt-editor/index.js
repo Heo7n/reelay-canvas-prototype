@@ -145,7 +145,7 @@ export function createEditor(options) {
       menu.addEventListener('mousedown', (event) => event.preventDefault());
       menu.addEventListener('pointerdown', (event) => event.stopPropagation());
       menu.addEventListener('wheel', (event) => event.stopPropagation());
-      document.body.append(menu);
+      (element.closest('dialog[open]') || document.body).append(menu);
     }
     menu.replaceChildren();
     const title = document.createElement('div'); title.className = 'prompt-reference-menu-title'; title.textContent = '引用参考素材';

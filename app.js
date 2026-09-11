@@ -1,6 +1,7 @@
 const appShell = document.querySelector(".app-shell");
 const promptDocument = window.REELAY_CANVAS_PROMPT_DOCUMENT;
 const promptEditors = window.REELAY_CANVAS_PROMPTS.createController({ document, showMessage: showActionToast });
+let promptOptimization = null;
 const referenceThumbnails = window.REELAY_CANVAS_REFERENCE_THUMBNAILS.createController({ document, sanitizeUrl: sanitizeRuntimeMediaUrl });
 let agentPromptReady = false;
 let agentGeneration = null;
@@ -311,7 +312,6 @@ const state = {
   canvasMoreTargetId: null,
   agentAdvancedSettingsExpanded: false,
   agentAssetValidationEnabled: false,
-  agentPromptOptimizationTask: null,
   account: {
     credits: 3000,
     consumedCredits: 0,
@@ -457,7 +457,6 @@ const canvasNodeTasks = canvasNodeTaskRunnerFactory.createCanvasNodeTaskRunner({
   onStart: applyCanvasNodeTaskStart,
   onComplete(task, node) {
     if (task.kind === "generation") completeSimulatedGeneration(task, node);
-    else completePromptOptimization(task, node);
   },
   onCancel: applyCanvasNodeTaskCancellation,
 });
@@ -606,7 +605,7 @@ const canvasEntityUse = canvasEntityUseControllerFactory.createCanvasEntityUseCo
   isTargetAvailable: (nodeId) => {
     const node = state.nodes.find((item) => item.id === nodeId);
     return Boolean(node && node.kind === "generator" && !node.generating
-      && !node.promptOptimizing && canNodeUseEntityReferences(node));
+      && canNodeUseEntityReferences(node));
   },
   isMutable: isCanvasMutationAllowed,
   requireMutation: requireCanvasMutation,
@@ -1356,6 +1355,7 @@ function applyTransform() {
   renderMinimap();
   scheduleCanvasDocumentSave();
   canvasToolbarMenus.sync();
+  promptOptimization?.refresh();
 }
 
 function syncNodeVisualLayout(
@@ -1425,6 +1425,7 @@ function renderNodeLayoutTransitionFrame(transitionIds = []) {
   renderSelectionToolbar();
   renderMinimap();
   canvasToolbarMenus.sync();
+  promptOptimization?.refresh();
 }
 
 function syncPromptPanelContentHeight(node, element) {
@@ -1918,7 +1919,6 @@ function defaultGeneratorNode(x = 440, y = 210, mode = "image") {
     workflow: "",
     omniReferenceTaskType: "",
     audioEnabled: generationMode === "video",
-    promptOptimizing: false,
     assetValidationEnabled: false,
     credits: 0,
     prompt: "",
@@ -2078,7 +2078,7 @@ function mountNodePrompt(node, input, element) {
     readDocument: () => node.prompt,
     getReferences: () => getPromptEditorReferences(getNodeReferenceEntries(node)),
     isCurrent: () => state.projectId === projectId && state.activeCanvasId === canvasId && state.nodes.includes(node),
-    isEditable: () => isCanvasMutationAllowed() && !node.generating && !node.promptOptimizing,
+    isEditable: () => isCanvasMutationAllowed() && !node.generating,
     getPlaceholder: () => generatorModelPolicy.getPromptPlaceholder(models, node),
     onChange(value, { origin, historyAction } = {}) {
       node.prompt = value;
@@ -2110,7 +2110,7 @@ function getNodeReferenceContext(card) {
   if (!node || node.kind !== "generator") return null;
   return {
     scope: JSON.stringify([state.projectId, state.activeCanvasId]), node, nodeId,
-    canReorder: !card.classList.contains("prompt-reference") && isCanvasMutationAllowed() && !node.generating && !node.promptOptimizing,
+    canReorder: !card.classList.contains("prompt-reference") && isCanvasMutationAllowed() && !node.generating,
     entries: getNodeReferenceEntries(node).map((entry) => ({
       ...entry, asset: { ...entry.asset, url: sanitizeRuntimeMediaUrl(entry.asset.url) },
     })),
@@ -2121,7 +2121,7 @@ function moveNodeReference(context, { sourceKey, targetKey, placement }) {
   const node = context?.node;
   if (!node || context.scope !== JSON.stringify([state.projectId, state.activeCanvasId])
     || !state.nodes.includes(node) || node.id !== context.nodeId || node.kind !== "generator"
-    || !isCanvasMutationAllowed() || node.generating || node.promptOptimizing) return false;
+    || !isCanvasMutationAllowed() || node.generating) return false;
   const keys = getNodeReferenceEntries(node).map((entry) => entry.key);
   if (keys.length !== context.entries.length || keys.some((key, index) => key !== context.entries[index].key)) return false;
   const referenceOrder = canvasReferenceOrder.move(keys, sourceKey, targetKey, placement);
@@ -2210,7 +2210,6 @@ function normalizeNodeParameters(node) {
   }
   const isVideoNode = expectedMode === "video";
   node.audioEnabled = isVideoNode && node.audioEnabled !== false;
-  node.promptOptimizing = isVideoNode && node.promptOptimizing === true;
   node.assetValidationEnabled = node.assetValidationEnabled === true;
   node.advancedSettingsExpanded = node.advancedSettingsExpanded === true;
 
@@ -2286,7 +2285,7 @@ function getGenerationAvailability(node) {
   const cost = getCost(node);
   const hasValidPrice = Number.isFinite(cost) && cost > 0;
   const hasPrompt = Boolean(getNodePromptText(node).trim());
-  const canGenerate = hasPrompt && !node.generating && !node.promptOptimizing && hasValidPrice && !taskTypeIssue;
+  const canGenerate = hasPrompt && !node.generating && hasValidPrice && !taskTypeIssue;
   return {
     cost,
     hasValidPrice,
@@ -2298,9 +2297,7 @@ function getGenerationAvailability(node) {
         ? taskTypeIssue
         : !hasValidPrice
         ? "当前模型暂不可计价"
-        : node.promptOptimizing
-          ? "正在优化提示词"
-          : hasPrompt
+        : hasPrompt
             ? "生成中"
             : "请输入提示词",
   };
@@ -2837,7 +2834,6 @@ function cloneNode(source) {
     activeAssetId: assets[activeAssetIndex]?.id || assets[0]?.id || null,
     generatedAsset: source.generatedAsset ? { ...source.generatedAsset, id: crypto.randomUUID() } : null,
     generating: false,
-    promptOptimizing: false,
     expanded: source.kind === "generator" ? source.expanded : false,
     panel: null,
     modelFilter: source.kind === "generator" ? source.mode : undefined,
@@ -4171,7 +4167,7 @@ function createEntityUseMediaPlan(entityIds, existingMedia, selectedSpaces) {
 function addSelectedEntitiesToGenerator({ scope, nodeId, selections }) {
   if (scope.projectId !== state.projectId || scope.canvasId !== state.activeCanvasId || !requireCanvasMutation()) return;
   const node = state.nodes.find((item) => item.id === nodeId);
-  if (!node || node.kind !== "generator" || node.generating || node.promptOptimizing || !canNodeUseEntityReferences(node)) {
+  if (!node || node.kind !== "generator" || node.generating || !canNodeUseEntityReferences(node)) {
     showActionToast("当前生成节点已不可用");
     return;
   }
@@ -4427,7 +4423,7 @@ function addAssetToGeneratorNode(node, sourceAsset) {
 
 function addAssetsToGeneratorNode(node, sourceAssets) {
   if (!requireCanvasMutation()) return [];
-  if (!node || !state.nodes.includes(node) || node.kind !== "generator" || node.generating || node.promptOptimizing || !sourceAssets.length) return [];
+  if (!node || !state.nodes.includes(node) || node.kind !== "generator" || node.generating || !sourceAssets.length) return [];
   const assets = sourceAssets.map((asset) => cloneAsset(asset, "library"));
   pushUndoAction({ type: "node-assets-add", nodeId: node.id,
     addedAssetIds: assets.map((asset) => asset.id), previousActiveAssetId: node.activeAssetId });
@@ -4733,7 +4729,7 @@ function assetMediaContent(asset, displayWidth) {
 function assetShelf(node) {
   const entries = promptDocument.referenceIndex(getNodeReferenceEntries(node));
   if (!entries.length) return "";
-  const locked = node.generating || node.promptOptimizing || !isCanvasMutationAllowed();
+  const locked = node.generating || !isCanvasMutationAllowed();
   const cards = entries.map(({ key, asset, connectionId, label, ordinal, name }) => {
     const linked = Boolean(connectionId);
     const removeLabel = linked ? "断开连接" : "移除参考";
@@ -4888,6 +4884,7 @@ function renderCanvasView() {
   scheduleGroupChromeLayout();
   requestAnimationFrame(syncPromptPanelLayouts);
   canvasToolbarMenus.sync();
+  promptOptimization?.refresh();
 }
 
 function getNodeRenderSignature(node) {
@@ -4922,6 +4919,7 @@ function syncCanvasNodeElement(element, node) {
   element.classList.toggle("grouped", Boolean(node.groupId));
   syncNodeVisualLayout(node, element);
   syncNodeAspectUi(node, element);
+  syncPromptOptimizationButton(element.querySelector(".prompt-optimization-button"), node);
 }
 
 function syncGroupFrameElement(element, group) {
@@ -5281,13 +5279,13 @@ function createGeneratorNodeElement(node, existingElement = null) {
   el.style.zIndex = String(node.z);
   el.dataset.id = node.id;
   const generationInputsDisabled = node.generating ? "disabled" : "";
-  const promptInputDisabled = node.generating || node.promptOptimizing ? "disabled" : "";
+  const promptInputDisabled = node.generating ? "disabled" : "";
   const editorOpening = node.expanded
     && !nodeLayer.querySelector(`[data-id="${node.id}"] .prompt-panel`);
 
   const promptPanel = node.expanded
     ? `
-      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${editorOpening ? "editor-opening" : ""} ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} ${node.promptOptimizing ? "prompt-is-optimizing" : ""}" style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
+      <section class="prompt-panel prompt-composer-surface prompt-composer-layout ${editorOpening ? "editor-opening" : ""} ${supportsEntityReferences ? "has-entity-entry" : ""} ${node.advancedSettingsExpanded ? "has-advanced-settings" : ""} " style="width: ${layout.panelWidth}px; height: ${layout.panelHeight}px; --prompt-scale: ${layout.promptScale}; --prompt-extra-height: ${(layout.panelHeight * (layout.promptScale - 1)).toFixed(2)}px; --prompt-composer-height: ${layout.composerHeight}px; --prompt-advanced-height: ${layout.advancedSettingsHeight}px; --prompt-input-top: ${layoutRules.promptInputTop}px; --prompt-input-bottom: ${layoutRules.promptInputBottom}px;">
         ${supportsEntityReferences ? `<button class="entity-drop" data-action="entity-picker" data-canvas-mutation type="button" aria-label="添加主体" title="添加主体" ${generationInputsDisabled}>${entityEntryIconMarkup()}</button>` : ""}
         <button class="asset-drop ${node.panel === "material" ? "active" : ""}" data-action="material-panel" data-canvas-mutation type="button" aria-label="添加参考素材" title="添加参考素材" ${generationInputsDisabled}><i data-lucide="plus" aria-hidden="true"></i></button>
         ${assetShelf(node)}
@@ -5302,12 +5300,12 @@ function createGeneratorNodeElement(node, existingElement = null) {
             ${getNodeGenerationMode(node) === "video" ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
           </button>
           <div class="control-spacer"></div>
-          ${isVideoNode ? `
-            <button class="control-chip composer-tool-button prompt-optimization-button ${node.promptOptimizing ? "is-processing" : ""}" data-action="prompt-optimization" data-canvas-mutation type="button" title="${node.promptOptimizing ? "正在优化提示词" : getNodePromptText(node).trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="${node.promptOptimizing ? "正在优化提示词" : "提示词优化"}" aria-busy="${node.promptOptimizing}" ${node.generating || node.promptOptimizing || !getNodePromptText(node).trim() ? "disabled" : ""}>
+          ${`
+            <button class="control-chip composer-tool-button prompt-optimization-button " data-action="prompt-optimization" data-canvas-mutation type="button" title="${getNodePromptText(node).trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="提示词优化" aria-busy="false" ${node.generating || !getNodePromptText(node).trim() ? "disabled" : ""}>
               <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
               <span class="prompt-optimization-spinner" aria-hidden="true"></span>
             </button>
-          ` : ""}
+          `}
           <button class="control-chip composer-tool-button advanced-settings-chip ${node.advancedSettingsExpanded ? "active" : ""}" data-action="advanced-settings-toggle" type="button" title="高级设置" aria-label="高级设置" aria-expanded="${node.advancedSettingsExpanded}" aria-controls="advanced-settings-${escapeHtml(node.id)}" ${generationInputsDisabled}>
             <svg class="advanced-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h11M4 11.5h8M4 16.5h5"/><circle cx="17" cy="15.5" r="3.1"/><path d="M17 10.8v1.2M17 19v1.2M12.3 15.5h1.2M20.5 15.5h1.2M13.7 12.2l.85.85M19.45 17.95l.85.85M20.3 12.2l-.85.85M14.55 17.95l-.85.85"/></svg>
           </button>
@@ -5338,6 +5336,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
   bindNodeEvents(el, node, { bindRoot: !existingElement, bindMedia: !retainedMedia });
   const promptInput = el.querySelector(".prompt-input");
   if (promptInput) mountNodePrompt(node, promptInput, el);
+  syncPromptOptimizationButton(el.querySelector(".prompt-optimization-button"), node);
 
   const durationRange = el.querySelector("[data-duration-range]");
   const durationNumber = el.querySelector("[data-duration-number]");
@@ -5762,8 +5761,6 @@ function applyCanvasNodeTaskStart(task, node) {
     node.expanded = false;
     canvasCommandExecutor.discardFieldHistory(task.canvasId, "nodes", node.id, ["name"]);
     node.name = "";
-  } else {
-    node.promptOptimizing = true;
   }
   node.panel = null;
   render();
@@ -5774,39 +5771,7 @@ function applyCanvasNodeTaskCancellation(task, node) {
     if (node.generationTaskId !== task.id) return;
     node.generating = false;
     delete node.generationTaskId;
-  } else {
-    node.promptOptimizing = false;
   }
-}
-
-function buildOptimizedPrompt(prompt) {
-  const normalized = String(prompt || "")
-    .trim()
-    .replace(/[\t ]+/g, " ")
-    .replace(/ *\n */g, "\n")
-    .replace(/\n{3,}/g, "\n\n");
-  if (!normalized) return "";
-
-  const chineseGuidance = "镜头运动自然连贯，主体动作清晰，光影层次细腻，画面节奏流畅。";
-  const englishGuidance = "Keep the camera movement coherent, the subject action clear, and the lighting and pacing visually refined.";
-  const mostlyLatin = (normalized.match(/[A-Za-z]/g)?.length || 0) > (normalized.match(/[\u3400-\u9fff]/g)?.length || 0) * 2;
-  const guidance = mostlyLatin ? englishGuidance : chineseGuidance;
-  if (normalized.includes(guidance)) return normalized;
-  const separator = mostlyLatin || /[。！？.!?]$/.test(normalized) ? "\n" : "。\n";
-  return `${normalized}${separator}${guidance}`;
-}
-
-function optimizePromptDocument(value) {
-  if (typeof value === "string") return buildOptimizedPrompt(value);
-  const normalized = promptDocument.optimize(value, (text) => text.replace(/[\t ]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n"));
-  const content = normalized.content.map((item) => ({ ...item }));
-  if (content[0]?.type === "text") content[0].text = content[0].text.trimStart();
-  if (content.at(-1)?.type === "text") content.at(-1).text = content.at(-1).text.trimEnd();
-  const doc = promptDocument.normalize({ version: 1, content });
-  const text = promptDocument.toText(doc);
-  const optimized = buildOptimizedPrompt(text);
-  const suffix = optimized.slice(text.length);
-  return promptDocument.normalize({ version: 1, content: [...doc.content, { type: "text", text: suffix }] });
 }
 
 function pushCanvasUndoAction(canvas, action) {
@@ -5859,52 +5824,35 @@ function commitCanvasGroups(nextGroups, { type = "group-membership", recordUndo 
   return executeCanvasContentCommand(type, changes, { recordUndo });
 }
 
-function completePromptOptimization(task, node) {
-  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
-  if (!canvas || resolveCanvasNodeTaskTarget(task) !== node || node.kind !== "generator" || !node.promptOptimizing) return;
-  const { sourcePrompt } = task.inputs;
-
-  node.promptOptimizing = false;
-  if (samePrompt(node.prompt, sourcePrompt)) {
-    const optimizedPrompt = optimizePromptDocument(sourcePrompt);
-    if (!samePrompt(optimizedPrompt, node.prompt)) {
-      const beforeHistory = promptEditors.replace(node, optimizedPrompt);
-      node.prompt = optimizedPrompt;
-      const action = {
-        type: "prompt-update",
-        nodeId: node.id,
-        before: sourcePrompt,
-        after: optimizedPrompt,
-        beforeHistory,
-      };
-      promptEditors.linkHistory(node, action);
-      pushCanvasUndoAction(canvas, action);
-    }
-  }
-
-  if (canvas.id === state.activeCanvasId) render();
-  scheduleCanvasDocumentSave();
+function mkNodeOptimizationTarget(node) {
+  const canvas = getActiveCanvas(), projectId = state.projectId;
+  const isCurrent = () => state.projectId === projectId && getActiveCanvas() === canvas
+    && canvasRuntimeStore.getCanvas(canvas?.id) === canvas && canvas?.nodes.includes(node)
+    && isCanvasMutationAllowed() && !node.generating;
+  return {
+    owner: node, isCurrent, read: () => node.prompt,
+    references: () => isCurrent() ? getPromptEditorReferences(getNodeReferenceEntries(node)) : [],
+    snapshot: () => ({ prompt: node.prompt, references: getPromptEditorReferences(getNodeReferenceEntries(node)),
+      scope: JSON.stringify([projectId, canvas.id, node.id]),
+      model: { id: node.model, name: models.find((model) => model.id === node.model)?.name,
+        type: getNodeGenerationMode(node), parameters: Object.values(getParamLabelParts(node)).join("") } }),
+    write(value) {
+      if (!isCurrent()) return false;
+      const before = promptDocument.normalize(node.prompt);
+      if (samePrompt(before, value)) return true;
+      const beforeHistory = promptEditors.replace(node, value);
+      node.prompt = value;
+      const action = { type: "prompt-update", nodeId: node.id, before, after: value, beforeHistory };
+      promptEditors.linkHistory(node, action); pushCanvasUndoAction(canvas, action);
+      render(); scheduleCanvasDocumentSave(); return true;
+    },
+    focus: () => promptEditors.focus(node),
+  };
 }
 
 function startPromptOptimization(node) {
-  if (!requireCanvasMutation()) return false;
-  if (
-    node?.kind !== "generator"
-    || getNodeGenerationMode(node) !== "video"
-    || node.generating
-    || node.promptOptimizing
-  ) return false;
-  const sourcePrompt = node.prompt;
-  if (!promptDocument.toText(sourcePrompt).trim()) return false;
-  const canvas = getActiveCanvas();
-  if (!canvas || !canvas.nodes.includes(node)) return false;
-
-  return Boolean(canvasNodeTasks.start({
-    kind: "prompt-optimization",
-    scope: { projectId: state.projectId, canvasId: canvas.id, nodeId: node.id },
-    inputs: { sourcePrompt },
-    delayMs: 900,
-  }));
+  if (!requireCanvasMutation() || node?.kind !== "generator") return false;
+  return promptOptimization?.activate(mkNodeOptimizationTarget(node), document.activeElement) || false;
 }
 
 function commitGenerationUndoBoundary(canvas, nodeId) {
@@ -5969,15 +5917,10 @@ function syncGenerateButton(button, node) {
 }
 
 function syncPromptOptimizationButton(button, node) {
-  if (!button || !node) return;
-  const hasPrompt = Boolean(getNodePromptText(node).trim());
-  const disabled = node.generating || node.promptOptimizing || !hasPrompt;
-  button.disabled = disabled;
-  button.title = node.promptOptimizing
-    ? "正在优化提示词"
-    : hasPrompt
-      ? "优化提示词"
-      : "输入提示词后优化";
+  if (!node) return;
+  promptOptimization?.syncButton(button, node, {
+    hasPrompt: Boolean(getNodePromptText(node).trim()), disabled: node.generating || !isCanvasMutationAllowed(),
+  });
 }
 
 function startSimulatedGeneration(node, options = {}) {
@@ -5985,7 +5928,7 @@ function startSimulatedGeneration(node, options = {}) {
   const canvas = getActiveCanvas();
   if (!canvas || node?.kind !== "generator" || !canvas.nodes.includes(node)) return false;
   const { charge = true } = options;
-  if (node.generating || node.promptOptimizing) return false;
+  if (node.generating) return false;
   normalizeNodeParameters(node);
   if (!getNodePromptText(node).trim()) {
     showConfirmDialog({
@@ -7236,7 +7179,6 @@ function cloneNodeState(node) {
 function cloneUndoNodeState(node) {
   const snapshot = cloneNodeState(node);
   snapshot.generating = false;
-  snapshot.promptOptimizing = false;
   delete snapshot.generationTaskId;
   return snapshot;
 }
@@ -7279,7 +7221,6 @@ function cloneCanvasContent(source) {
       delete node.groupId;
     }
     node.generating = false;
-    node.promptOptimizing = false;
     delete node.generationTaskId;
     node.panel = null;
     node.mediaMenuOpen = false;
@@ -7383,7 +7324,7 @@ function undoLastAction() {
     const lockedNode = pendingAction.command.changes.find((change) =>
       change.collection === "nodes" && change.kind === "fields"
       && Object.keys(change.after.fields).some((field) => !["x", "y", "z", "groupId"].includes(field))
-      && state.nodes.some((node) => node.id === change.id && (node.generating || node.promptOptimizing)));
+      && state.nodes.some((node) => node.id === change.id && (node.generating)));
     if (lockedNode) {
       showActionToast("节点任务进行中，完成后可撤销参数");
       return;
@@ -7410,11 +7351,6 @@ function undoLastAction() {
     if (liveNode?.generating) {
       state.undoStack.push(action);
       showActionToast("生成中的节点暂不能撤销参数");
-      return;
-    }
-    if (liveNode?.promptOptimizing) {
-      state.undoStack.push(action);
-      showActionToast("提示词正在优化，完成后可撤销");
       return;
     }
     if (action.type === "prompt-update" && liveNode && !samePrompt(liveNode.prompt, action.after)) {
@@ -7635,7 +7571,7 @@ function mountAgentPrompt(conversation = getConversation()) {
     readDocument: () => conversation.draftPrompt || "",
     getReferences: () => getPromptEditorReferences(agentReferences.getEntries()),
     isCurrent: () => state.projectId === projectId && getConversation() === conversation,
-    isEditable: () => !state.agentPromptOptimizationTask,
+    isEditable: () => true,
     isMentionEnabled: () => agentModels.getMode() === "generation",
     getPlaceholder: () => agentInput.dataset.placeholder || "描述你想生成的内容，或输入 @ 引用",
     submitOnEnter: true,
@@ -7745,7 +7681,7 @@ const agentModels = window.REELAY_AGENT_MODELS.createController({
 const agentReferences = window.REELAY_CANVAS_AGENT_REFERENCES.createController({
   document, root: agentComposer, shelf: agentReferenceShelf, fileInput: document.querySelector("#agentReferenceInput"),
   getScope: () => ({ projectId: state.projectId, conversation: getConversation() }),
-  isEditable: () => !state.agentPromptOptimizationTask,
+  isEditable: () => true,
   sanitizeUrl: sanitizeRuntimeMediaUrl, getAssetType, getAssetLabel: getAssetDisplayName,
   assetPreview: agentReferenceThumbnail, escapeHtml, referenceOrder: canvasReferenceOrder,
   referenceStrip: window.REELAY_CANVAS_REFERENCE_STRIP,
@@ -7757,7 +7693,7 @@ const agentReferences = window.REELAY_CANVAS_AGENT_REFERENCES.createController({
 const agentComposerView = window.REELAY_CANVAS_AGENT_COMPOSER_VIEW.createController({
   document, composer: agentComposer, addButton: agentAddBtn, menu: agentReferenceMenu, messages: agentMessages,
   getScope: () => ({ projectId: state.projectId, conversation: getConversation() }),
-  isBusy: () => Boolean(state.agentPromptOptimizationTask),
+  isBusy: () => false,
   getSelectedAssets: getAgentSelectedCanvasAssets,
   onChooseFiles: () => agentReferences.chooseFiles(),
   onLibrary: (scope) => openAssetLibrary(null, { focus: true, agentScope: scope }),
@@ -7804,12 +7740,13 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
   document, container: document.querySelector("#agentGenerationRecords"), chatContainer: agentMessages,
   getScope: () => ({ projectId: state.projectId, conversationId: agentHistory.getActiveId(), canvasId: state.activeCanvasId }),
   isGenerationMode: () => agentModels.getMode() === "generation",
-  isEditable: () => !state.agentPromptOptimizationTask && requireCanvasMutation({ notify: false }),
+  isEditable: () => requireCanvasMutation({ notify: false }),
   hasDraft: () => Boolean(getAgentPromptText().trim() || agentReferences.getAssets().length),
   captureInput: captureAgentGenerationInput,
   clearDraft() {
     agentReferences.takeForMessage();
     const conversation = getConversation();
+    promptOptimization?.advanceDraft(conversation);
     conversation.draftPrompt = "";
     promptEditors.get(conversation)?.setDocument("", { resetHistory: true, notify: false });
     syncAgentPromptOptimizationControl();
@@ -7972,76 +7909,45 @@ function setAgentAssetValidationEnabled(enabled) {
 }
 
 function syncAgentPromptOptimizationControl() {
-  const busy = Boolean(state.agentPromptOptimizationTask);
-  const hasPrompt = Boolean(getAgentPromptText().trim());
-  const generation = agentModels.getMode() === "generation";
-  agentReferences.refresh();
-  if (agentAddBtn) agentAddBtn.disabled = busy;
-  if (agentPromptOptimizationBtn) {
-    agentPromptOptimizationBtn.disabled = !generation || busy || !hasPrompt;
-    agentPromptOptimizationBtn.classList.toggle("is-processing", busy);
-    agentPromptOptimizationBtn.setAttribute("aria-busy", String(busy));
-    agentPromptOptimizationBtn.setAttribute("aria-label", busy ? "正在优化提示词" : "提示词优化");
-    agentPromptOptimizationBtn.title = busy
-      ? "正在优化提示词"
-      : hasPrompt
-        ? "优化提示词"
-        : "输入提示词后优化";
-  }
-  if (agentInput) {
-    promptEditors.get(getConversation())?.refresh();
-    agentInput.setAttribute("aria-busy", String(busy));
-    agentInput.setAttribute("aria-readonly", String(busy));
-  }
-  if (agentAdvancedBtn) agentAdvancedBtn.disabled = !generation || busy;
-  if (agentSendButton) {
-    agentSendButton.disabled = busy;
-    agentSendButton.classList.toggle("disabled", busy);
-    agentSendButton.setAttribute("aria-disabled", String(busy));
-  }
+  promptOptimization?.syncButton(agentPromptOptimizationBtn, promptOptimization.getDraftOwner(getConversation()), {
+    hasPrompt: Boolean(getAgentPromptText().trim()),
+    disabled: agentModels.getMode() !== "generation",
+  });
+  promptOptimization?.refresh();
 }
 
 function cancelAgentPromptOptimization() {
-  const task = state.agentPromptOptimizationTask;
-  if (task?.timeoutId) window.clearTimeout(task.timeoutId);
-  state.agentPromptOptimizationTask = null;
-  syncAgentPromptOptimizationControl();
+  promptOptimization?.close();
 }
 
-function completeAgentPromptOptimization() {
-  const task = state.agentPromptOptimizationTask;
-  if (!task) return;
-  const conversation = getConversation();
-  if (task.conversationId !== conversation.id || !samePrompt(conversation.draftPrompt, task.sourcePrompt)) {
-    cancelAgentPromptOptimization();
-    return;
-  }
-  const optimizedPrompt = optimizePromptDocument(task.sourcePrompt);
-  state.agentPromptOptimizationTask = null;
-  conversation.draftPrompt = optimizedPrompt;
-  promptEditors.replace(conversation, optimizedPrompt);
-  syncAgentPromptOptimizationControl();
-  focusAgentPrompt();
+function mkAgentOptimizationTarget() {
+  const conversation = getConversation(), projectId = state.projectId;
+  const owner = promptOptimization.getDraftOwner(conversation);
+  const canvas = getActiveCanvas();
+  const isCurrent = () => state.projectId === projectId && getActiveCanvas() === canvas
+    && getConversation() === conversation && promptOptimization.getDraftOwner(conversation) === owner
+    && agentModels.getMode() === "generation";
+  return { owner, isCurrent, read: () => conversation.draftPrompt,
+    references: () => isCurrent() ? getPromptEditorReferences(agentReferences.getEntries()) : [],
+    snapshot: () => ({ prompt: conversation.draftPrompt, references: getPromptEditorReferences(agentReferences.getEntries()),
+      scope: JSON.stringify([projectId, canvas?.id, conversation.id]), model: {
+        id: getAgentComposerModel()?.id, name: getAgentComposerModel()?.name, type: getAgentComposerModel()?.type,
+        parameters: getAgentGenerationParameters() } }),
+    write(value) {
+      if (!isCurrent()) return false;
+      conversation.draftPrompt = value; promptEditors.replace(conversation, value);
+      syncAgentPromptOptimizationControl(); return true;
+    },
+    focus: focusAgentPrompt,
+  };
 }
 
 function startAgentPromptOptimization() {
-  if (agentModels.getMode() !== "generation") return;
-  const sourcePrompt = getConversation().draftPrompt || "";
-  if (!promptDocument.toText(sourcePrompt).trim() || state.agentPromptOptimizationTask) return;
-  const task = {
-    conversationId: agentHistory.getActiveId(),
-    sourcePrompt,
-    timeoutId: 0,
-  };
-  state.agentPromptOptimizationTask = task;
-  syncAgentPromptOptimizationControl();
-  task.timeoutId = window.setTimeout(() => {
-    if (state.agentPromptOptimizationTask === task) completeAgentPromptOptimization();
-  }, 900);
+  if (agentModels.getMode() !== "generation") return false;
+  return promptOptimization?.activate(mkAgentOptimizationTarget(), agentPromptOptimizationBtn) || false;
 }
 
 function sendAgentMessage() {
-  if (state.agentPromptOptimizationTask) return;
   if (agentModels.getMode() === "generation") return agentGeneration.submit();
   const conversation = getConversation();
   const resolved = promptDocument.resolve(conversation.draftPrompt, agentReferences.getEntries());
@@ -8059,6 +7965,7 @@ function sendAgentMessage() {
     role: "agent",
     content: "我已收到。后续可以把这条需求拆成画布节点、素材输入和生成参数。",
   });
+  promptOptimization?.advanceDraft(conversation);
   conversation.draftPrompt = "";
   promptEditors.get(conversation)?.setDocument("", { resetHistory: true, notify: false });
   syncAgentPromptOptimizationControl();
@@ -11094,6 +11001,7 @@ function setSelectionDownloadMenuOpen(open) {
   selectionDownloadTrigger?.setAttribute("aria-expanded", String(nextOpen));
   selectionDownloadTrigger?.classList.toggle("active", nextOpen);
   canvasToolbarMenus.sync();
+  promptOptimization?.refresh();
 }
 
 function getSelectionLayoutIssue(selectedNodes = getSelectedNodes()) {
@@ -11182,7 +11090,6 @@ selectionToolbar?.addEventListener("click", (event) => {
   if (action === "add-conversation") {
     const assets = getAgentSelectedCanvasAssets();
     if (!assets.length) return;
-    if (state.agentPromptOptimizationTask) { showActionToast("提示词优化完成后可添加参考素材"); return; }
     setAgentOpen(true);
     const added = addAgentReferenceAssets(assets);
     showActionToast(added ? `已添加 ${added} 个参考素材` : "所选素材已在对话参考区");
@@ -11634,14 +11541,29 @@ window.addEventListener("resize", () => {
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches });
 });
 
+promptOptimization = window.REELAY_PROMPT_OPTIMIZATION.createController({
+  document, promptDocument, sanitizeUrl: sanitizeRuntimeMediaUrl,
+  getModels: () => models,
+  storage: { getItem: (key) => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) },
+  onChange(owner) {
+    document.querySelectorAll(".canvas-node").forEach((element) => {
+      const node = state.nodes.find((item) => item.id === element.dataset.id);
+      if (node === owner) syncPromptOptimizationButton(element.querySelector(".prompt-optimization-button"), node);
+    });
+    if (owner === promptOptimization?.getDraftOwner(getConversation())) syncAgentPromptOptimizationControl();
+  },
+});
+
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
   canvasArrange.close();
+  promptOptimization?.close();
   if (!event.persisted) {
     assetLibraryItemMenu.dispose();
     canvasToolbarMenus.dispose();
     canvasNodeTasks.dispose();
+    promptOptimization?.dispose();
     agentComposerResize?.dispose();
   }
   flushCanvasDocumentSave();
