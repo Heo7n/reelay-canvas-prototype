@@ -70,7 +70,7 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
   t.after(() => window.canvasTest?.promptEditors.destroy());
   for (const { path, source } of scripts) {
     window.eval(source + (path === "./app.js"
-      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasGroupInteractionController, canvasCommandExecutor, canvasContentCommands, canvasEntityUse, canvasEntityEditor, assetLibraryStore, canvasNodeTasks, canvasPersistence, agentReferences, agentGeneration, promptEditors };"
+      ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasGroupInteractionController, canvasCommandExecutor, canvasContentCommands, canvasEntityUse, canvasEntityEditor, assetLibraryStore, canvasNodeTasks, canvasPersistence, agentReferences, agentGeneration, promptEditors, promptOptimization };"
       : ""));
   }
   const { state, canvasRuntimeStore, canvasNodeDragController } = window.canvasTest;
@@ -89,6 +89,10 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
     canvasRuntimeStore.replaceCanvases(canvases, canvases[0].id);
     window.clearSelection();
     window.render();
+  }
+  function applyOptimization(owner) {
+    assert.equal(window.canvasTest.promptOptimization.open(owner), true);
+    assert.equal(window.canvasTest.promptOptimization.apply(), true);
   }
   function fireTimer(id) {
     const callback = timers.get(id);
@@ -163,7 +167,7 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
     return { timeoutId, delay: timerDelays.get(timeoutId) };
   };
   return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, timers, scheduledTask, metadataImages,
-    editorFor, setText, getText, selectText, selection, promptText };
+    editorFor, setText, getText, selectText, selection, promptText, applyOptimization };
 }
 
 test("selection layout menu is mutually exclusive, closes for stale selection, and does not mutate content", (t) => {
@@ -1033,6 +1037,8 @@ for (const undoScope of ["editor", "canvas"]) {
     h.moveNode(f.target.id, 110, 80);
     assert.equal(h.window.startPromptOptimization(f.target), true);
     h.fireTimer(h.scheduledTask().timeoutId);
+    assert.deepEqual(plain(f.target.prompt), initial, "suggestion completion must not mutate content");
+    h.applyOptimization(f.target);
     assert.notDeepEqual(plain(f.target.prompt), initial);
     assert.deepEqual(plain(f.target.prompt.content.filter((part) => part.type === "reference")), [initial.content[1]]);
     const optimized = plain(f.target.prompt);
@@ -1084,6 +1090,7 @@ for (const editorState of ["open", "closed"]) {
     h.moveNode(node.id, 100, 60);
     assert.equal(h.window.startPromptOptimization(node), true);
     h.fireTimer(h.scheduledTask().timeoutId);
+    h.applyOptimization(node);
     const submitted = plain(node.prompt);
     assert.equal(canvas.undoStack.some((action) => action.type === "prompt-update"), true);
     assert.equal(h.window.startSimulatedGeneration(node), true);
@@ -1199,7 +1206,7 @@ test("reference ordering rejects no-op, busy, stale-scope, replaced-node and cha
   rejectWithoutChange(f.context(), "connection:image-link", "connection:video-link");
   rejectWithoutChange(f.context(), "asset:local-video", "asset:local-video");
   rejectWithoutChange(f.context(), "asset:missing");
-  for (const busy of ["generating", "promptOptimizing"]) {
+  for (const busy of ["generating"]) {
     const context = f.context();
     f.target[busy] = true;
     assert.equal(f.context().canReorder, false);
@@ -1919,17 +1926,19 @@ for (const dx of [120, 1500]) {
     h.moveNode(node.id, dx, 80);
     const moved = { x: node.x, y: node.y, z: node.z, groupId: node.groupId };
     h.fireTimer(task.timeoutId);
-    assert.notEqual(node.prompt, originalPrompt);
-    assert.equal(node.promptOptimizing, false);
+    assert.equal(node.prompt, originalPrompt);
+    h.applyOptimization(node);
+    assert.notEqual(h.promptText(node.prompt), h.promptText(originalPrompt));
+    assert.ok(!node.promptOptimizing);
     assert.equal(first.undoStack.length, 2);
     h.window.undoLastAction();
     assert.equal(first.nodes[0], node, "prompt undo must preserve the live node object");
-    assert.equal(node.prompt, originalPrompt);
+    assert.equal(h.promptText(node.prompt), h.promptText(originalPrompt));
     assert.deepEqual({ x: node.x, y: node.y, z: node.z, groupId: node.groupId }, moved);
     assert.equal(first.undoStack.length, 1);
     h.window.undoLastAction();
     assert.deepEqual({ x: node.x, y: node.y }, { x: 10, y: 20 });
-    assert.equal(node.prompt, originalPrompt);
+    assert.equal(h.promptText(node.prompt), h.promptText(originalPrompt));
     assertMembership(first);
   });
 }
@@ -1942,6 +1951,7 @@ test("editing an optimized prompt retires only the superseded field undo, withou
   h.moveNode(node.id, 100, 100);
   h.window.startPromptOptimization(node);
   h.fireTimer(h.scheduledTask().timeoutId);
+  h.applyOptimization(node);
   node.expanded = true;
   h.window.render();
   const promptInput = h.window.document.querySelector('.canvas-node[data-id="video"] .prompt-editor-content');
@@ -1956,7 +1966,7 @@ test("editing an optimized prompt retires only the superseded field undo, withou
   assert.deepEqual({ x: node.x, y: node.y }, { x: 10, y: 20 });
 });
 
-test("background optimization writes and undoes only on its originating canvas", (t) => {
+test("background optimization leaves both canvases unchanged until the original owner is explicitly applied", (t) => {
   const h = createHarness(t);
   const node = h.node("shared-id");
   const first = h.canvas("one", [node]);
@@ -1968,14 +1978,15 @@ test("background optimization writes and undoes only on its originating canvas",
   h.window.switchCanvas(second.id);
   const otherCanvas = plain(second);
   h.fireTimer(task.timeoutId);
-  assert.notEqual(node.prompt, originalPrompt);
-  assert.equal(first.undoStack.length, 1);
-  assert.deepEqual(plain(second), otherCanvas);
-  h.window.undoLastAction();
-  assert.notEqual(node.prompt, originalPrompt);
-  h.window.switchCanvas(first.id);
-  h.window.undoLastAction();
   assert.equal(node.prompt, originalPrompt);
+  assert.equal(first.undoStack.length, 0);
+  assert.deepEqual(plain(second), otherCanvas);
+  assert.equal(h.window.canvasTest.promptOptimization.open(node), false);
+  h.window.switchCanvas(first.id);
+  h.applyOptimization(node);
+  assert.equal(first.undoStack.length, 1);
+  h.window.undoLastAction();
+  assert.equal(h.promptText(node.prompt), h.promptText(originalPrompt));
   assert.deepEqual(plain(second), otherCanvas);
 });
 
@@ -1989,33 +2000,76 @@ test("deleted nodes cancel optimization without resurrecting task state on undo"
   const staleCallback = h.timers.get(task.timeoutId);
   h.window.setSelection([node.id]);
   h.window.deleteSelectedNodes();
-  assert.equal(node.promptOptimizing, false);
-  assert.equal(h.timers.has(task.timeoutId), false);
+  assert.ok(!node.promptOptimizing);
+  assert.equal(h.window.canvasTest.promptOptimization.open(node), false);
   h.window.undoLastAction();
   staleCallback();
   assert.equal(first.nodes[0].prompt, node.prompt);
-  assert.equal(first.nodes[0].promptOptimizing, false);
+  assert.ok(!first.nodes[0].promptOptimizing);
   assert.equal(first.undoStack.length, 0);
 });
 
-test("optimization ignores replaced prompts and another project", (t) => {
+test("optimization preserves edits and rejects a changed project when applying", (t) => {
   const h = createHarness(t);
   const node = h.node("video");
   const first = h.canvas("one", [node]);
   h.install(first);
   h.window.startPromptOptimization(node);
-  let task = h.scheduledTask();
+  const task = h.scheduledTask();
   node.prompt = "新输入";
   h.fireTimer(task.timeoutId);
   assert.equal(node.prompt, "新输入");
   assert.equal(first.undoStack.length, 0);
-  h.window.startPromptOptimization(node);
-  task = h.scheduledTask();
+  assert.equal(h.window.canvasTest.promptOptimization.open(node), true);
+  assert.equal(h.window.canvasTest.promptOptimization.apply(), true, "stale apply starts a new suggestion instead of replacing the draft");
+  assert.equal(h.window.canvasTest.promptOptimization.get(node).status, "processing");
+  assert.notEqual(h.promptText(h.window.canvasTest.promptOptimization.get(node).source.prompt), "新输入", "the successful comparison pair remains intact during a retry");
+  const fresh = h.scheduledTask();
+  assert.equal(node.prompt, "新输入");
   h.state.projectId = "another-project";
-  h.fireTimer(task.timeoutId);
+  h.fireTimer(fresh.timeoutId);
+  assert.equal(h.window.canvasTest.promptOptimization.apply(), false);
   assert.equal(node.prompt, "新输入");
   assert.equal(first.undoStack.length, 0);
 });
+
+for (const changedPart of ["prompt", "model", "references"]) {
+  test(`node optimizer reopens the old result and captures changed ${changedPart} only on explicit regeneration`, t => {
+    const h = createHarness(t);
+    const node = h.node("video", { model: "seedance-2", expanded: true });
+    const first = h.canvas("fresh-source", [node]); h.install(first);
+    assert.equal(h.window.startPromptOptimization(node), true);
+    h.fireTimer(h.scheduledTask().timeoutId);
+    const previous = plain(h.window.canvasTest.promptOptimization.get(node));
+    if (changedPart === "prompt") {
+      h.setText(h.window.document.querySelector('.canvas-node[data-id="video"] .prompt-editor-content'), "换成另一段镜头描写");
+    } else if (changedPart === "model") {
+      h.window.handleAction(node, "model", "seedance-2-fast");
+    } else {
+      node.assets.push({ id: "new-reference", type: "image", url: "/new-reference.png", name: "新参考" });
+    }
+    h.window.render();
+    const button = h.window.document.querySelector('.canvas-node[data-id="video"] .prompt-optimization-button');
+    assert.equal(button.classList.contains("has-optimization"), true);
+    assert.equal(button.getAttribute("aria-label"), "查看提示词优化");
+    const before = plain(node.prompt), historySize = first.undoStack.length;
+    assert.equal(h.window.startPromptOptimization(node), true);
+    assert.deepEqual(plain(h.window.canvasTest.promptOptimization.get(node).source), previous.source);
+    assert.deepEqual(plain(h.window.canvasTest.promptOptimization.get(node).suggestion), previous.suggestion);
+    assert.ok(h.window.document.querySelector(".prompt-optimization-dialog").open);
+    assert.equal(h.window.canvasTest.promptOptimization.regenerate(), true);
+    const state = h.window.canvasTest.promptOptimization.get(node);
+    assert.equal(state.status, "processing");
+    assert.deepEqual(plain(state.source), previous.source);
+    h.fireTimer(h.scheduledTask().timeoutId);
+    const completed = h.window.canvasTest.promptOptimization.get(node);
+    assert.equal(h.promptText(completed.source.prompt), h.promptText(node.prompt));
+    assert.equal(completed.source.model.id, node.model);
+    if (changedPart === "references") assert.equal(completed.source.references[0].asset.id, "new-reference");
+    assert.deepEqual(plain(node.prompt), before);
+    assert.equal(first.undoStack.length, historySize);
+  });
+}
 
 test("successful generation remains a boundary for prompt undo without removing move undo", (t) => {
   const h = createHarness(t);
@@ -2026,6 +2080,7 @@ test("successful generation remains a boundary for prompt undo without removing 
   const task = h.scheduledTask();
   h.moveNode(node.id, 100, 100);
   h.fireTimer(task.timeoutId);
+  h.applyOptimization(node);
   const optimized = node.prompt;
   assert.equal(h.window.startSimulatedGeneration(node), true);
   const generation = h.scheduledTask();
@@ -2193,14 +2248,16 @@ test("a replacement node with the same id owns a distinct prompt optimization li
   first.nodes[0] = replacement;
   assert.equal(h.window.startPromptOptimization(replacement), true);
   const nextTask = h.scheduledTask();
-  assert.equal(h.timers.has(oldTask.timeoutId), false);
+  assert.equal(h.window.canvasTest.promptOptimization.open(original), false);
   oldCallback();
-  assert.equal(replacement.promptOptimizing, true);
+  assert.equal(h.window.canvasTest.promptOptimization.get(replacement).status, "processing");
   assert.equal(replacement.prompt, original.prompt);
   assert.equal(first.undoStack.length, 0);
   h.fireTimer(nextTask.timeoutId);
-  assert.equal(replacement.promptOptimizing, false);
-  assert.notEqual(replacement.prompt, original.prompt);
+  assert.ok(!replacement.promptOptimizing);
+  assert.equal(replacement.prompt, original.prompt);
+  h.applyOptimization(replacement);
+  assert.notEqual(h.promptText(replacement.prompt), h.promptText(original.prompt));
   assert.equal(first.undoStack.length, 1);
 });
 
@@ -2214,16 +2271,16 @@ test("Alt duplication of an optimizing node starts idle and never inherits the s
   h.moveNode(source.id, 500, 80, { altKey: true });
   const duplicate = first.nodes.find((node) => node.id !== source.id);
   assert.ok(duplicate);
-  assert.equal(duplicate.promptOptimizing, false);
+  assert.ok(!duplicate.promptOptimizing);
   assert.equal(duplicate.generating, false);
   assert.equal(duplicate.generationTaskId, undefined);
   assert.equal(h.window.startPromptOptimization(duplicate), true);
   const copiedTask = h.scheduledTask();
   h.fireTimer(originalTask.timeoutId);
-  assert.equal(source.promptOptimizing, false);
-  assert.equal(duplicate.promptOptimizing, true);
+  assert.ok(!source.promptOptimizing);
+  assert.equal(h.window.canvasTest.promptOptimization.get(duplicate).status, "processing");
   h.fireTimer(copiedTask.timeoutId);
-  assert.equal(duplicate.promptOptimizing, false);
+  assert.ok(!duplicate.promptOptimizing);
 });
 
 for (const kind of ["generation", "prompt-optimization"]) {
@@ -2243,9 +2300,10 @@ for (const kind of ["generation", "prompt-optimization"]) {
     const credits = plain(h.state.account);
     h.window.undoLastAction();
     assert.equal(first.nodes.length, 1);
-    assert.equal(h.timers.has(task.timeoutId), false);
+    if (kind === "generation") assert.equal(h.timers.has(task.timeoutId), false);
+    else assert.equal(h.window.canvasTest.promptOptimization.open(duplicate), false);
     assert.equal(duplicate.generating, false);
-    assert.equal(duplicate.promptOptimizing, false);
+    assert.ok(!duplicate.promptOptimizing);
     callback();
     assert.equal(first.nodes.length, 1);
     assert.equal(first.undoStack.length, 0);
@@ -2263,11 +2321,11 @@ test("document replacement cancels both kinds and queued callbacks cannot modify
   const generation = h.scheduledTask();
   h.window.startPromptOptimization(first.nodes[1]);
   const optimization = h.scheduledTask();
-  assert.equal(optimization.delay, 900);
+  assert.equal(optimization.delay, 1800);
   const stale = [generation, optimization].map((task) => h.timers.get(task.timeoutId));
   const credits = plain(h.state.account);
   assert.equal(h.window.hydrateCanvasDocumentSnapshot(snapshot), true);
-  for (const task of [generation, optimization]) assert.equal(h.timers.has(task.timeoutId), false);
+  assert.equal(h.timers.has(generation.timeoutId), false);
   const restored = plain(h.state.nodes);
   stale.forEach((callback) => callback());
   assert.deepEqual(plain(h.state.nodes), restored);
@@ -2294,7 +2352,7 @@ test("a new host project releases existing tasks before entering the new context
   }));
   assert.equal(h.state.projectId, "new-project");
   assert.ok(nodes.every((node) => !node.generating && !node.promptOptimizing));
-  for (const task of [generation, optimization]) assert.equal(h.timers.has(task.timeoutId), false);
+  assert.equal(h.timers.has(generation.timeoutId), false);
   stale.forEach((callback) => callback());
   assert.equal(nodes[0].generatedAsset, null);
   assert.equal(h.state.undoStack.length, 0);
@@ -2317,7 +2375,7 @@ test("deleting a generating node cancels its task and undo restores idle content
   h.window.undoLastAction();
   const restored = first.nodes[0];
   assert.equal(restored.generating, false);
-  assert.equal(restored.promptOptimizing, false);
+  assert.ok(!restored.promptOptimizing);
   assert.equal(restored.generationTaskId, undefined);
   callback();
   assert.equal(restored.generatedAsset, null);
@@ -2386,8 +2444,10 @@ for (const taskKind of ["generation", "prompt-optimization"]) {
       assert.equal(running.generating, false);
       assert.ok(running.generatedAsset);
     } else {
-      assert.equal(running.promptOptimizing, false);
-      assert.notEqual(running.prompt, originalPrompt);
+      assert.ok(!running.promptOptimizing);
+      assert.equal(running.prompt, originalPrompt);
+      h.applyOptimization(running);
+      assert.notEqual(h.promptText(running.prompt), h.promptText(originalPrompt));
     }
   });
 }
@@ -2453,7 +2513,7 @@ test("generated media and source asset naming undo never restores unrelated cont
   assert.equal(first.undoStack.length, 0);
 });
 
-test("parameters remain editable during optimization while undo waits for the task to finish", (t) => {
+test("parameters and their undo remain editable while optimization only prepares a suggestion", (t) => {
   const h = createHarness(t);
   const node = h.node("video");
   const first = h.canvas("one", [node]);
@@ -2465,14 +2525,11 @@ test("parameters remain editable during optimization while undo waits for the ta
   h.window.handleAction(node, "asset-validation");
   assert.equal(node.assetValidationEnabled, !originalAssetValidation);
   h.window.undoLastAction();
-  assert.equal(first.undoStack.length, 1);
-  assert.equal(node.promptOptimizing, true);
-  h.fireTimer(pending.timeoutId);
-  h.window.undoLastAction();
-  assert.equal(node.prompt, originalPrompt);
-  assert.equal(node.assetValidationEnabled, !originalAssetValidation);
-  h.window.undoLastAction();
+  assert.equal(first.undoStack.length, 0);
   assert.equal(node.assetValidationEnabled, originalAssetValidation);
+  assert.equal(h.window.canvasTest.promptOptimization.get(node).status, "processing");
+  h.fireTimer(pending.timeoutId);
+  assert.equal(node.prompt, originalPrompt);
   assert.equal(first.nodes[0], node);
   assert.equal(first.undoStack.length, 0);
 });
@@ -2861,6 +2918,7 @@ test("successful generation retires only its node input history and keeps other 
   });
   h.window.startPromptOptimization(node);
   h.fireTimer(h.scheduledTask().timeoutId);
+  h.applyOptimization(node);
   // A completed preview is needed to expose generated-media naming on a generator.
   node.preview = true;
   node.generatedAsset = { id: "previous-result", type: "video", url: "https://example.test/old.mp4", aspectRatio: 16 / 9 };
@@ -3172,7 +3230,7 @@ test("Agent task and model switches update guidance while preserving the origina
   assert.equal(h.state.undoStack.length, 0);
 });
 
-test("Agent mode removes generation tools and cancels optimization without rewriting the draft", (t) => {
+test("Agent mode hides generation tools and keeps optimization results outside the draft", (t) => {
   const h = createHarness(t);
   h.install(h.canvas("agent-tools", [h.node("unrelated")]));
   h.window.setAgentOpen(true);
@@ -3191,10 +3249,11 @@ test("Agent mode removes generation tools and cancels optimization without rewri
   advanced.click();
   assert.equal(settings.classList.contains("hidden"), false);
   optimize.click();
-  const task = h.state.agentPromptOptimizationTask;
-  assert.ok(task);
+  const owner = h.window.canvasTest.promptOptimization.getDraftOwner(h.window.getConversation());
+  const task = h.scheduledTask();
+  assert.equal(h.window.canvasTest.promptOptimization.get(owner).status, "processing");
   const staleComplete = h.timers.get(task.timeoutId);
-  assert.equal(input.getAttribute("contenteditable"), "false");
+  assert.equal(input.getAttribute("contenteditable"), "true");
 
   controls.mode("agent");
   assert.equal(optimize.hidden, true);
@@ -3204,15 +3263,14 @@ test("Agent mode removes generation tools and cancels optimization without rewri
   assert.equal(settings.getAttribute("aria-hidden"), "true");
   assert.equal(advanced.getAttribute("aria-expanded"), "false");
   assert.equal(h.state.agentAdvancedSettingsExpanded, false);
-  assert.equal(h.state.agentPromptOptimizationTask, null);
-  assert.equal(h.timers.has(task.timeoutId), false);
+  assert.equal(h.window.canvasTest.promptOptimization.open(owner), false);
   assert.equal(input.getAttribute("contenteditable"), "true");
   assert.equal(document.querySelector(".agent-send").disabled, false);
   staleComplete();
   assert.equal(h.getText(input), prompt, "a callback already queued before mode change must not optimize the Agent draft");
   h.window.startAgentPromptOptimization();
   h.window.setAgentAdvancedOpen(true);
-  assert.equal(h.state.agentPromptOptimizationTask, null, "programmatic activation follows the same mode boundary");
+  assert.equal(h.window.startAgentPromptOptimization(), false, "programmatic activation follows the same mode boundary");
   assert.equal(settings.classList.contains("hidden"), true);
 
   controls.mode("generation");
@@ -3386,9 +3444,11 @@ test("Agent structured optimization and local undo preserve references and conve
   editor.setDocument(doc, { notify: true });
   const conversation = h.window.getConversation();
   h.window.startAgentPromptOptimization();
-  const task = h.state.agentPromptOptimizationTask;
-  assert.ok(task);
+  const task = h.scheduledTask();
+  assert.equal(h.window.canvasTest.promptOptimization.get(h.window.canvasTest.promptOptimization.getDraftOwner(conversation)).status, "processing");
   h.fireTimer(task.timeoutId);
+  assert.deepEqual(plain(conversation.draftPrompt), doc);
+  h.applyOptimization(h.window.canvasTest.promptOptimization.getDraftOwner(conversation));
   assert.notDeepEqual(plain(conversation.draftPrompt), doc);
   assert.deepEqual(plain(editor.getDocument().content.filter((part) => part.type === "reference")), [doc.content[1]]);
   assert.equal(editor.undo(), true);
@@ -3400,6 +3460,60 @@ test("Agent structured optimization and local undo preserve references and conve
   assert.equal(h.editorFor(nextInput).getText(), "");
   assert.equal(h.editorFor(nextInput).undo(), false);
   assert.deepEqual(plain(conversation.draftPrompt), doc);
+});
+
+test("Agent optimization follows a draft round through edits and fill; only an accepted send advances it", t => {
+  const h = createHarness(t); h.window.setAgentOpen(true);
+  const controller = h.window.canvasTest.promptOptimization;
+  const conversation = h.window.getConversation();
+  const owner = controller.getDraftOwner(conversation);
+  const input = h.window.document.querySelector('#agentInput .prompt-editor-content');
+  h.setText(input, "当前草稿的原始提示词");
+  assert.equal(h.window.startAgentPromptOptimization(), true);
+  h.fireTimer(h.scheduledTask().timeoutId);
+  const previous = plain(controller.get(owner));
+  h.setText(input, "调整后的新提示词");
+  assert.equal(controller.getDraftOwner(conversation), owner);
+  assert.equal(h.window.startAgentPromptOptimization(), true);
+  assert.equal(h.window.document.querySelector('.prompt-optimization-dialog').open, true);
+  assert.deepEqual(plain(controller.get(owner).source), previous.source);
+  assert.equal(controller.regenerate(), true);
+  h.fireTimer(h.scheduledTask().timeoutId);
+  assert.equal(controller.apply(), true);
+  assert.equal(controller.getDraftOwner(conversation), owner);
+  assert.ok(controller.get(owner).suggestion);
+  h.window.startAgentPromptOptimization();
+  assert.equal(h.window.document.querySelector('[data-action="apply"]').textContent.trim(), "已填入");
+  assert.equal(h.window.document.querySelector('[data-action="apply"]').disabled, true);
+  controller.close();
+  h.setText(input, "");
+  assert.ok(!h.window.sendAgentMessage());
+  assert.equal(controller.getDraftOwner(conversation), owner, "rejected empty send keeps the draft and its optimization");
+  assert.ok(controller.get(owner).suggestion);
+  h.setText(input, "确认发送这一条生成任务");
+  assert.ok(h.window.sendAgentMessage());
+  const nextOwner = controller.getDraftOwner(conversation);
+  assert.notEqual(nextOwner, owner);
+  assert.equal(controller.get(nextOwner), null);
+  assert.equal(h.window.document.querySelector('#agentPromptOptimizationBtn').classList.contains('has-optimization'), false);
+});
+
+test("a sent draft's late optimization cannot populate the next composer draft", t => {
+  const h = createHarness(t); h.window.setAgentOpen(true);
+  const controller = h.window.canvasTest.promptOptimization;
+  const conversation = h.window.getConversation(), owner = controller.getDraftOwner(conversation);
+  const input = h.window.document.querySelector('#agentInput .prompt-editor-content');
+  h.setText(input, "发送中的旧原文");
+  h.window.startAgentPromptOptimization();
+  const callback = h.timers.get(h.scheduledTask().timeoutId);
+  assert.ok(h.window.sendAgentMessage());
+  const nextOwner = controller.getDraftOwner(conversation);
+  assert.notEqual(nextOwner, owner);
+  h.setText(h.window.document.querySelector('#agentInput .prompt-editor-content'), "下一条尚未发送的草稿");
+  callback();
+  assert.equal(h.window.canvasTest.promptEditors.get(conversation).getText(), "下一条尚未发送的草稿");
+  assert.equal(controller.get(nextOwner), null);
+  assert.equal(controller.open(owner), false);
 });
 
 test("Agent video edit cost uses draft video duration and removal restores an unknown estimate", (t) => {
