@@ -18,9 +18,9 @@
     dialog.className = 'prompt-optimization-dialog';
     dialog.setAttribute('aria-labelledby', 'prompt-optimization-title');
     dialog.dataset.wheelScope = 'local';
-    dialog.innerHTML = `<header class="prompt-optimization-header"><div><h2 id="prompt-optimization-title">提示词优化</h2></div><div class="prompt-optimization-header-actions"><div class="prompt-optimization-scheme-control"><button type="button" data-action="schemes" aria-haspopup="menu" aria-expanded="false" aria-controls="prompt-optimization-scheme-menu"><span data-scheme-name>平台默认</span>${icon('chevron')}</button><button type="button" class="prompt-optimization-info-button" data-action="default-info" aria-label="平台默认说明" aria-describedby="prompt-optimization-default-info">${icon('info')}</button></div><button type="button" class="prompt-optimization-icon-button" data-action="close" aria-label="关闭提示词优化">${icon('close')}</button></div></header>
+    dialog.innerHTML = `<header class="prompt-optimization-header"><div><h2 id="prompt-optimization-title">提示词优化</h2></div><div class="prompt-optimization-header-actions"><div class="prompt-optimization-scheme-control" role="group" aria-label="优化配置"><button type="button" data-action="schemes" aria-haspopup="menu" aria-expanded="false" aria-controls="prompt-optimization-scheme-menu"><span data-scheme-name>平台默认</span>${icon('chevron')}</button><button type="button" class="prompt-optimization-info-button" data-action="default-info" aria-label="平台默认说明" aria-describedby="prompt-optimization-default-info">${icon('info')}</button></div><button type="button" class="prompt-optimization-icon-button" data-action="close" aria-label="关闭提示词优化">${icon('close')}</button></div></header>
       <div class="prompt-optimization-scheme-menu" id="prompt-optimization-scheme-menu" role="menu" aria-label="优化配置方案" hidden></div>
-      <div class="prompt-optimization-info-tooltip" id="prompt-optimization-default-info" role="tooltip" hidden>平台默认会随当前生成模型自动切换对应的优化规则。</div>
+      <div class="prompt-optimization-info-tooltip" id="prompt-optimization-default-info" role="tooltip" hidden>「平台默认」会随当前生成模型自动切换对应优化规则。</div>
       <section class="prompt-optimization-configuration-panel" role="dialog" aria-label="自定义优化配置" hidden>
         <form data-configuration-form><h3 data-configuration-title>自定义优化配置</h3>
           <div class="prompt-optimization-configuration-fields"><label>方案名称<input data-configuration-name aria-label="方案名称" maxlength="40" required autocomplete="off" placeholder="给这套配置起个名字"></label><label>适配模型<select data-configuration-model aria-label="适配模型"></select></label></div>
@@ -28,6 +28,7 @@
           <div class="prompt-optimization-configuration-actions"><button type="button" data-action="cancel-configuration">取消</button><button type="submit" data-save-configuration>保存</button></div>
         </form>
       </section>
+      <div class="prompt-optimization-source-model" hidden></div>
       <div class="prompt-optimization-tabs" role="tablist" aria-label="提示词对照"><button type="button" role="tab" data-tab="source" aria-selected="false" aria-controls="prompt-optimization-source">优化前（原文）</button><button type="button" role="tab" data-tab="suggestion" aria-selected="true" aria-controls="prompt-optimization-suggestion">优化后</button></div>
       <div class="prompt-optimization-columns" data-active-tab="suggestion"><section id="prompt-optimization-source" class="prompt-optimization-column prompt-optimization-source"><div class="prompt-optimization-column-heading"><h3>优化前<span class="prompt-optimization-original">（原文）</span></h3></div><div class="prompt-optimization-scroll" data-source></div></section>
       <section id="prompt-optimization-suggestion" class="prompt-optimization-column prompt-optimization-suggestion"><div class="prompt-optimization-column-heading"><h3>优化后</h3><button type="button" data-action="copy" class="prompt-optimization-icon-button" aria-label="复制优化后">${icon('copy')}</button></div><div class="prompt-optimization-scroll" data-suggestion><div class="prompt-editor" data-editor></div></div><div class="prompt-optimization-progress" hidden><span></span>正在整理表达与创作细节…</div></section></div>
@@ -55,7 +56,9 @@
       if (!opened || query('[data-action="default-info"]').hidden) return;
       win.clearTimeout(infoTimer);
       const tooltip = query('.prompt-optimization-info-tooltip'); tooltip.hidden = false;
-      positionOverlay(tooltip, query('[data-action="default-info"]'), 280);
+      tooltip.style.width = 'max-content';
+      tooltip.style.maxWidth = `${Math.max(0, Math.min(dialog.getBoundingClientRect().width - 24, win.innerWidth - 32))}px`;
+      positionOverlay(tooltip, query('[data-action="default-info"]'), Math.ceil(tooltip.getBoundingClientRect().width));
     }
     function closeMenu({ restoreFocus = false } = {}) {
       const wasOpen = menuOpen; menuOpen = false;
@@ -242,13 +245,17 @@
       query('[data-editor]').setAttribute('aria-busy', String(processing));
       query('[data-action="copy"]').disabled = !hasSuggestion;
       const apply = query('[data-action="apply"]'); apply.disabled = processing || state.applied || (!hasSuggestion && !state.stale) || (state.stale && state.emptyInput) || state.unavailable;
-      apply.querySelector('span').textContent = state.applied ? '已填入' : state.stale ? '优化当前内容' : '填入输入框';
+      apply.querySelector('span').textContent = state.applied ? '已填入' : state.confirmAction === 'current' ? '确认优化当前内容' : state.stale ? '优化当前内容' : '填入输入框';
       const regenerate = query('[data-action="regenerate"]'); regenerate.disabled = processing || (state.stale && state.emptyInput) || state.unavailable;
+      regenerate.hidden = Boolean(state.stale);
       regenerate.querySelector('span').textContent = state.confirmAction === 'regenerate' ? '确认重新优化' : processing ? '正在优化' : state.status === 'failed' ? '重新尝试' : '重新优化';
       query('[data-action="cancel-confirm"]').hidden = !state.confirmAction;
       const notice = query('.prompt-optimization-notice');
-      notice.textContent = state.unavailable ? '原输入位置或参考素材已不可用，请返回输入区重新发起。' : state.confirmAction === 'regenerate' ? '重新优化将替换你对建议稿的修改。' : state.notice || '';
+      notice.textContent = state.unavailable ? '原输入位置或参考素材已不可用，请返回输入区重新发起。' : state.confirmAction ? '继续优化将替换尚未填入的手动修改。' : state.notice || '';
       notice.hidden = !notice.textContent;
+      const sourceModel = query('.prompt-optimization-source-model');
+      sourceModel.textContent = state.previousModelName ? `上次优化使用：${state.previousModelName}` : '';
+      sourceModel.hidden = !state.previousModelName;
       updateConfiguration();
     }
     function close() {

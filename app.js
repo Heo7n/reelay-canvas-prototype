@@ -5919,6 +5919,7 @@ function syncGenerateButton(button, node) {
 function syncPromptOptimizationButton(button, node) {
   if (!node) return;
   promptOptimization?.syncButton(button, node, {
+    model: node.model,
     hasPrompt: Boolean(getNodePromptText(node).trim()), disabled: node.generating || !isCanvasMutationAllowed(),
   });
 }
@@ -7910,6 +7911,7 @@ function setAgentAssetValidationEnabled(enabled) {
 
 function syncAgentPromptOptimizationControl() {
   promptOptimization?.syncButton(agentPromptOptimizationBtn, promptOptimization.getDraftOwner(getConversation()), {
+    model: getAgentComposerModel(),
     hasPrompt: Boolean(getAgentPromptText().trim()),
     disabled: agentModels.getMode() !== "generation",
   });

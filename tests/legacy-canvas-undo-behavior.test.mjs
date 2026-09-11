@@ -2033,6 +2033,42 @@ test("optimization preserves edits and rejects a changed project when applying",
   assert.equal(first.undoStack.length, 0);
 });
 
+for (const [model, type, supported] of [
+  ["seedance-2-5", "video", true], ["seedance-2", "video", true], ["seedance-2-fast", "video", true],
+  ["gpt-image-2", "image", false], ["seedream-5-lite", "image", false], ["kling-video-3", "video", false],
+]) {
+  test(`node prompt optimization visibility and execution follow ${model} support`, t => {
+    const h = createHarness(t);
+    const node = Object.assign(h.window.defaultGeneratorNode(10, 20, type), { id: "optimization-support", model, expanded: true, prompt: "保持主体，镜头缓慢前进" });
+    const canvas = h.canvas("optimization-support", [node]); h.install(canvas);
+    const button = h.window.document.querySelector('.canvas-node[data-id="optimization-support"] .prompt-optimization-button');
+    assert.equal(Boolean(button && !button.hidden), supported);
+    const before = plain(node.prompt), account = plain(h.state.account), historySize = canvas.undoStack.length;
+    assert.equal(h.window.startPromptOptimization(node), supported);
+    if (supported) {
+      assert.equal(h.window.canvasTest.promptOptimization.get(node).status, "processing");
+      h.fireTimer(h.scheduledTask().timeoutId);
+      assert.equal(h.window.canvasTest.promptOptimization.get(node).status, "ready");
+    } else assert.equal(h.window.canvasTest.promptOptimization.get(node), null);
+    assert.deepEqual(plain(node.prompt), before);
+    assert.deepEqual(plain(h.state.account), account);
+    assert.equal(canvas.undoStack.length, historySize);
+  });
+}
+
+test("switching a node with an existing optimization result to an unsupported model hides and closes optimization", t => {
+  const h = createHarness(t), node = h.node("supported-result", { model: "seedance-2", expanded: true });
+  h.install(h.canvas("supported-result", [node]));
+  h.window.startPromptOptimization(node); h.fireTimer(h.scheduledTask().timeoutId);
+  h.window.startPromptOptimization(node);
+  assert.ok(h.window.document.querySelector('.prompt-optimization-dialog').open);
+  h.window.handleAction(node, "model", "kling-video-3");
+  const button = h.window.document.querySelector('.canvas-node[data-id="supported-result"] .prompt-optimization-button');
+  assert.ok(!button || button.hidden);
+  assert.equal(h.window.startPromptOptimization(node), false);
+  assert.equal(h.window.document.querySelector('.prompt-optimization-dialog').open, false);
+});
+
 for (const changedPart of ["prompt", "model", "references"]) {
   test(`node optimizer reopens the old result and captures changed ${changedPart} only on explicit regeneration`, t => {
     const h = createHarness(t);
@@ -3433,6 +3469,38 @@ test("Agent modes retain reference atoms and missing references block send witho
   assert.equal(ui.editor.view.state.selection.node.attrs.key, image.key, "validation points at the missing inline atom");
 });
 
+for (const [model, supported] of [
+  ["seedance-2-5", true], ["seedance-2", true], ["seedance-2-fast", true],
+  ["gpt-image-2", false], ["seedream-5-lite", false], ["kling-video-3", false],
+]) {
+  test(`Agent prompt optimization visibility and execution follow ${model} support`, t => {
+    const h = createHarness(t); h.window.setAgentOpen(true); agentParameterControls(h).model(model);
+    const input = h.window.document.querySelector('#agentInput .prompt-editor-content'); h.setText(input, "保持主体，整理动作与镜头关系");
+    const controller = h.window.canvasTest.promptOptimization, conversation = h.window.getConversation();
+    const owner = controller.getDraftOwner(conversation), before = plain(conversation.draftPrompt), account = plain(h.state.account);
+    const button = h.window.document.querySelector('#agentPromptOptimizationBtn');
+    assert.equal(button.hidden, !supported);
+    assert.equal(h.window.startAgentPromptOptimization(), supported);
+    if (supported) {
+      assert.equal(controller.get(owner).status, "processing"); h.fireTimer(h.scheduledTask().timeoutId);
+      assert.equal(controller.get(owner).status, "ready");
+    } else assert.equal(controller.get(owner), null);
+    assert.deepEqual(plain(conversation.draftPrompt), before);
+    assert.deepEqual(plain(h.state.account), account);
+  });
+}
+
+test("an Agent result cannot keep optimization open after switching to an unsupported model", t => {
+  const h = createHarness(t); h.window.setAgentOpen(true); const controls = agentParameterControls(h); controls.model("seedance-2");
+  h.setText(h.window.document.querySelector('#agentInput .prompt-editor-content'), "先优化视频提示词");
+  h.window.startAgentPromptOptimization(); h.fireTimer(h.scheduledTask().timeoutId); h.window.startAgentPromptOptimization();
+  assert.ok(h.window.document.querySelector('.prompt-optimization-dialog').open);
+  controls.model("gpt-image-2");
+  assert.equal(h.window.document.querySelector('#agentPromptOptimizationBtn').hidden, true);
+  assert.equal(h.window.document.querySelector('.prompt-optimization-dialog').open, false);
+  assert.equal(h.window.startAgentPromptOptimization(), false);
+});
+
 test("Agent structured optimization and local undo preserve references and conversation ownership", (t) => {
   const h = createHarness(t);
   h.window.setAgentOpen(true);
@@ -3472,6 +3540,11 @@ test("Agent optimization follows a draft round through edits and fill; only an a
   assert.equal(h.window.startAgentPromptOptimization(), true);
   h.fireTimer(h.scheduledTask().timeoutId);
   const previous = plain(controller.get(owner));
+  const completedToast = h.window.document.querySelector('.prompt-optimization-toast');
+  assert.ok(completedToast, "a completed optimization offers a direct review entry");
+  assert.equal(completedToast.dataset.tone, "success");
+  assert.match(completedToast.textContent, /提示词已优化，可再次点击提示词优化按钮查看。/);
+  assert.equal(completedToast.querySelector('button').textContent, "查看");
   h.setText(input, "调整后的新提示词");
   assert.equal(controller.getDraftOwner(conversation), owner);
   assert.equal(h.window.startAgentPromptOptimization(), true);
@@ -3496,6 +3569,15 @@ test("Agent optimization follows a draft round through edits and fill; only an a
   assert.notEqual(nextOwner, owner);
   assert.equal(controller.get(nextOwner), null);
   assert.equal(h.window.document.querySelector('#agentPromptOptimizationBtn').classList.contains('has-optimization'), false);
+  const nextInput = h.window.document.querySelector('#agentInput .prompt-editor-content');
+  h.setText(nextInput, "下一条独立草稿");
+  const cancel = h.window.document.querySelector('[data-generation-action="cancel"]');
+  assert.ok(cancel, "the accepted generation can still be cancelled within its window");
+  cancel.click();
+  assert.equal(controller.getDraftOwner(conversation), nextOwner, "cancellation cannot revive the previous optimization owner");
+  assert.equal(controller.get(nextOwner), null);
+  assert.equal(controller.open(owner), false);
+  assert.equal(h.window.canvasTest.promptEditors.get(conversation).getText(), "下一条独立草稿");
 });
 
 test("a sent draft's late optimization cannot populate the next composer draft", t => {

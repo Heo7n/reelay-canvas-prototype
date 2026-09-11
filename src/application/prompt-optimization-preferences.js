@@ -9,27 +9,23 @@
   const validId = (value) => typeof value === "string" && value.length > 0 && value.length <= 150 && !/[\u0000-\u001f]/.test(value);
   const normalizedName = (value) => typeof value === "string" ? value.trim() : "";
   const validText = (value) => typeof value === "string" && value.length <= 2000;
+  const supportsModel = (model) => ["image", "video"].includes(model?.type)
+    && typeof model.optimizationInstructions === "string" && Boolean(model.optimizationInstructions.trim());
 
   function createStore({ storage, models = [], makeId } = {}) {
     const catalog = new Map();
     for (const model of models) {
-      if (!validId(model?.id) || !["image", "video"].includes(model.type) || catalog.has(model.id)) continue;
+      if (!validId(model?.id) || !supportsModel(model) || catalog.has(model.id)) continue;
       catalog.set(model.id, { id: model.id, name: model.name || model.id,
         instructions: typeof model.optimizationInstructions === "string" ? model.optimizationInstructions.slice(0, 2000) : "" });
     }
     const records = new Map();
-    const transientModels = new Map();
     const allocated = new Set([defaultId]);
     let sequence = 0, migrated = false, legacyInstructions = "";
 
-    function modelFor(value, allowTransient = true) {
+    function modelFor(value) {
       const id = typeof value === "string" ? value : value?.id;
-      let model = catalog.get(id);
-      if (!model && allowTransient && validId(value?.id) && ["image", "video"].includes(value.type)) {
-        if (!transientModels.has(id)) transientModels.set(id, { id, name: value.name || id,
-          instructions: "忠于用户意图与原语言，清楚整理表达，保持素材引用关系和既定参数，不得虚构角色或场景。" });
-        model = transientModels.get(id);
-      }
+      const model = catalog.get(id);
       if (!model) throw new Error("当前模型暂不支持优化配置。");
       return model;
     }
@@ -144,7 +140,7 @@
       return name;
     }
     function save(value, payload = {}) {
-      const model = modelFor(value), target = modelFor(payload.modelId, false);
+      const model = modelFor(value), target = modelFor(payload.modelId);
       const text = payload.customInstructions;
       if (!validText(text)) throw new Error("优化指令最多 2000 字。");
       if (!text.trim()) throw new Error("请先填写优化指令。");
@@ -169,5 +165,5 @@
     return Object.freeze({ get, select, save });
   }
 
-  root.REELAY_PROMPT_OPTIMIZATION_PREFERENCES = Object.freeze({ createStore });
+  root.REELAY_PROMPT_OPTIMIZATION_PREFERENCES = Object.freeze({ createStore, supportsModel });
 }(typeof globalThis === "object" ? globalThis : window));

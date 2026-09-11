@@ -130,10 +130,9 @@ test("storage failures fall back to memory and malformed duplicate IDs are ignor
   assert.equal(loaded.get("video").options.length, 1);
 });
 
-test("removed model objects remain viewable but cannot receive new configurations", () => {
+test("removed model objects cannot opt themselves into optimization", () => {
   const store = createStore({ models }), removed = { id: "old-video", name: "旧模型", type: "video" };
-  assert.equal(store.get(removed).modelName, "旧模型");
-  assert.equal(store.get(removed).models.length, 2);
+  assert.throws(() => store.get(removed), /模型/);
   assert.throws(() => store.save(removed, payload("旧配置", "内容", "old-video")), /模型/);
 });
 
@@ -142,7 +141,12 @@ test("actual catalog defaults exist without triggering preservation-only simulat
   vm.runInContext(await readFile(new URL("../data/model-catalog.js", import.meta.url), "utf8"), catalogContext);
   const catalog = catalogContext.REELAY_MODEL_CATALOG;
   assert.equal(new Set(catalog.map((model) => model.id)).size, catalog.length);
-  for (const model of catalog) {
+  const supported = catalog.filter(context.REELAY_PROMPT_OPTIMIZATION_PREFERENCES.supportsModel);
+  assert.deepEqual(Array.from(supported, model => model.id), ["seedance-2-5", "seedance-2", "seedance-2-fast"]);
+  const store = createStore({ models: catalog });
+  assert.equal(store.get("seedance-2").models.length, 3);
+  for (const model of catalog.filter(model => !supported.includes(model))) assert.throws(() => store.get(model), /模型/);
+  for (const model of supported) {
     assert.ok(model.optimizationInstructions.length > 20, model.id);
     assert.ok(model.optimizationInstructions.length <= 2000, model.id);
     assert.doesNotMatch(model.optimizationInstructions, /保留原文|不增加|不添加|keep (?:the )?original|do not add|简洁|精简|简短|concise|brief/i, model.id);
