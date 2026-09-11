@@ -414,6 +414,86 @@ test("empty references produce no strip and a large strip never shows more than 
   assert.equal(f.all("[data-reference-preview]").length, 10);
 });
 
+function longPromptFixture(t) {
+  const f = fixture(t);
+  f.setTasks([f.task({ id: "long-1" }), f.task({ id: "long-2" })]);
+  const prompts = f.all(".generation-record-prompt");
+  for (const prompt of prompts) {
+    Object.defineProperty(prompt, "clientHeight", { value: 60 });
+    Object.defineProperty(prompt, "scrollHeight", { value: 240 });
+  }
+  return { ...f, prompts,
+    over(target, x = 10) { target.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true, clientX: x, clientY: 20 })); },
+    move(target, x) { target.dispatchEvent(new f.window.MouseEvent("pointermove", { bubbles: true, clientX: x, clientY: 20 })); },
+  };
+}
+
+test("scrolling long messages cancels pending hover and stationary boundary events cannot reopen it", (t) => {
+  const f = longPromptFixture(t); const [first, second] = f.prompts;
+  f.over(first); f.advance(100);
+  const wheel = new f.window.WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 80 });
+  first.dispatchEvent(wheel);
+  assert.equal(wheel.defaultPrevented, false, "message scrolling remains native");
+  f.over(second); f.advance(1000);
+  assert.equal(f.query(".generation-record-popover"), null);
+  f.over(first); f.move(first, 10); f.advance(1000);
+  assert.equal(f.query(".generation-record-popover"), null, "unchanged pointer coordinates are not renewed reading intent");
+  f.move(first, 12); f.advance(299);
+  assert.equal(f.query(".generation-record-popover"), null);
+  f.advance(2); assert.ok(f.query(".generation-record-full-prompt"));
+});
+
+test("list scroll dismisses a temporary reader and movement during momentum does not rearm it", (t) => {
+  const f = longPromptFixture(t); const [first, second] = f.prompts;
+  f.over(first); f.advance(301); assert.ok(f.query(".generation-record-full-prompt"));
+  f.container.dispatchEvent(new f.window.Event("scroll"));
+  assert.equal(f.query(".generation-record-popover"), null);
+  f.advance(100); f.move(second, 20);
+  f.container.dispatchEvent(new f.window.Event("scroll"));
+  f.advance(100); f.move(second, 21); f.advance(500);
+  assert.equal(f.query(".generation-record-popover"), null, "stopping momentum never opens a reader automatically");
+  f.move(second, 22); f.advance(301);
+  assert.ok(f.query(".generation-record-full-prompt"), "movement within the same prompt rearms without a new pointerover");
+});
+
+test("scroll suppression preserves pinned reading and explicit click and keyboard activation", (t) => {
+  const f = longPromptFixture(t); const [prompt] = f.prompts;
+  f.over(prompt); f.container.dispatchEvent(new f.window.Event("scroll"));
+  prompt.dispatchEvent(new f.window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  const reader = f.query(".generation-record-full-prompt"); assert.ok(reader);
+  reader.scrollTop = 90; reader.dispatchEvent(new f.window.Event("scroll"));
+  f.container.dispatchEvent(new f.window.Event("scroll"));
+  assert.equal(f.query(".generation-record-full-prompt"), reader); assert.equal(reader.scrollTop, 90);
+  f.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  prompt.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  assert.ok(f.query(".generation-record-full-prompt"));
+  f.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  f.query('[data-record-popover="details"]').focus();
+  assert.ok(f.query(".generation-record-details-popover"), "keyboard focus does not depend on pointer movement");
+});
+
+test("unrelated scrolling and browser zoom gestures do not cancel deliberate message hover", (t) => {
+  const f = longPromptFixture(t); const [prompt] = f.prompts;
+  f.over(prompt);
+  f.query("#outside").dispatchEvent(new f.window.Event("scroll"));
+  prompt.dispatchEvent(new f.window.WheelEvent("wheel", { bubbles: true, deltaY: 80, ctrlKey: true }));
+  f.advance(301); assert.ok(f.query(".generation-record-full-prompt"));
+});
+
+test("closing or switching conversation cancels hover intent until fresh pointer movement", (t) => {
+  const f = longPromptFixture(t); const [prompt] = f.prompts;
+  f.over(prompt); f.advance(100); f.controller.close(); f.advance(500);
+  f.over(prompt); f.advance(400); assert.equal(f.query(".generation-record-popover"), null);
+  f.move(prompt, 12); f.advance(301); assert.ok(f.query(".generation-record-full-prompt"));
+  f.setScope({ projectId: "project-1", conversationId: "chat-2", canvasId: "canvas-1" });
+  f.setTasks([f.task()]);
+  const details = f.query('[data-record-popover="details"]');
+  f.over(details); f.advance(500); assert.equal(f.query(".generation-record-popover"), null);
+  f.move(details, 13); f.advance(301); assert.ok(f.query(".generation-record-details-popover"));
+  f.controller.dispose(); f.advance(1000);
+  assert.equal(f.query(".generation-record-popover"), null); assert.equal(f.timers.size, 0);
+});
+
 test("only truncated prompt opens reading panel and pinned reader survives hover elsewhere", (t) => {
   const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(2); f.setTasks([task]);
   const prompt = f.query(".generation-record-prompt"); prompt.click(); assert.equal(f.query(".generation-record-popover"), null);
@@ -597,6 +677,20 @@ function openFullPrompt(f) {
   const reader = f.query(".generation-record-full-prompt"); reader.scrollTop = 80;
   return { prompt, reader, part: reader.querySelector(".prompt-reference"), panel: f.query(".generation-record-prompt-popover") };
 }
+
+test("scrolling the full prompt cancels pending child hover without closing the pinned reader", (t) => {
+  const f = inlineReferenceFixture(t); const { reader, part } = openFullPrompt(f);
+  part.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true, clientX: 10, clientY: 20 }));
+  f.advance(100);
+  reader.dispatchEvent(new f.window.WheelEvent("wheel", { bubbles: true, deltaY: 80 }));
+  reader.scrollTop = 110; reader.dispatchEvent(new f.window.Event("scroll"));
+  part.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true, clientX: 10, clientY: 20 }));
+  f.advance(500);
+  assert.equal(f.query(".generation-record-inline-preview"), null);
+  assert.equal(f.query(".generation-record-full-prompt"), reader); assert.equal(reader.scrollTop, 110);
+  part.dispatchEvent(new f.window.MouseEvent("pointermove", { bubbles: true, clientX: 12, clientY: 20 }));
+  f.advance(301); assert.ok(f.query(".generation-record-inline-preview"));
+});
 
 test("full prompt reference hover preserves its reader and scroll while allowing entry into the child preview", (t) => {
   const f = inlineReferenceFixture(t); const { reader, part, panel } = openFullPrompt(f);

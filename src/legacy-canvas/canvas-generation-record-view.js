@@ -50,6 +50,8 @@
     let disposed = false;
     let restoringFocus = false;
     let resizeObserver;
+    const hoverPaused = new Map();
+    let pointerPosition = null;
 
     function keyOf(scope) {
       return scope?.projectId && (scope.conversationId || scope.conversation?.id)
@@ -121,6 +123,7 @@
     }
     function dismiss() {
       closeInlinePreview();
+      hoverPaused.delete(popover);
       referencePreview.close();
       view.clearTimeout(showTimer); view.clearTimeout(hideTimer); showTimer = 0; hideTimer = 0;
       if (active?.gallery) settleReferenceTransition(active.gallery);
@@ -248,7 +251,10 @@
       const wasBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 48;
       const anchor = !switched && !wasBottom ? visibleAnchor() : null;
       if (switched) {
-        if (scopeKey) scrollPositions.set(scopeKey, container.scrollTop);
+        if (scopeKey) {
+          scrollPositions.set(scopeKey, container.scrollTop);
+          hoverPaused.set(list, now());
+        }
         dismiss(); releaseMedia(list); cards.clear(); list.replaceChildren(); scopeKey = nextScope;
       }
       if (list.parentNode !== container) { container.replaceChildren(list, notice); }
@@ -529,7 +535,33 @@
         if (active === expected && !active.pinned && !inlinePopover.contains(document.activeElement) && !popover.contains(document.activeElement) && !active.anchor.contains(document.activeElement)) dismiss();
       }, 210);
     }
+    function suspendHover(surface) {
+      hoverPaused.set(surface, now());
+      view.clearTimeout(showTimer); showTimer = 0;
+      if (surface === popover) closeInlinePreview();
+      else if (active && !active.pinned) dismiss();
+    }
+    function movePointer(event) {
+      const previous = pointerPosition;
+      pointerPosition = { x: event.clientX, y: event.clientY };
+      if (!previous || event.pointerType === "touch" || (previous.x === event.clientX && previous.y === event.clientY)) return;
+      const surface = list.contains(event.target) ? list : popover.contains(event.target) ? popover : null;
+      const pausedAt = hoverPaused.get(surface);
+      // Scroll-induced boundary events are not reading intent. Re-arm only on
+      // actual movement after wheel/trackpad momentum has been quiet briefly.
+      if (pausedAt === undefined || now() - pausedAt < 160) return;
+      hoverPaused.delete(surface);
+      hover(event);
+    }
+    function wheelReading(event) {
+      if (event.ctrlKey || event.metaKey || (!event.deltaX && !event.deltaY)) return;
+      if (container.contains(event.target)) suspendHover(list);
+      else if (event.target.closest?.(".generation-record-full-prompt")) suspendHover(popover);
+    }
     function hover(event) {
+      if (!pointerPosition) pointerPosition = { x: event.clientX, y: event.clientY };
+      const surface = popover.contains(event.target) ? popover : list;
+      if (hoverPaused.has(surface)) return;
       const part = event.target.closest?.(".prompt-reference[data-reference-key]:not(.is-missing)");
       if (part && popover.contains(part) && active?.kind === "prompt") {
         if (part.contains(event.relatedTarget)) return;
@@ -696,7 +728,8 @@
       }
     }
     function onScroll(event) {
-      if (inlineActive && popover.contains(event.target)) closeInlinePreview();
+      if (event.target === container) suspendHover(list);
+      else if (popover.contains(event.target)) suspendHover(popover);
       if (event.target === container && container.scrollHeight - container.scrollTop - container.clientHeight < 48) notice.hidden = true;
       if (active && !popover.contains(event.target)) positionPopover();
     }
@@ -707,12 +740,15 @@
     list.addEventListener("focusin", focusPreview);
     list.addEventListener("focusout", blurPreview);
     list.addEventListener("click", click);
+    container.addEventListener("wheel", wheelReading, { passive: true });
+    document.addEventListener("pointermove", movePointer, { passive: true });
     popover.addEventListener("pointerover", hover); popover.addEventListener("pointerout", leave);
     popover.addEventListener("focusin", focusPreview);
     inlinePopover.addEventListener("pointerenter", inlineEnter); inlinePopover.addEventListener("pointerleave", inlineLeave);
     inlinePopover.addEventListener("click", inlineClick); inlinePopover.addEventListener("focusout", blurPreview);
     popover.addEventListener("click", popoverClick);
     popover.addEventListener("wheel", wheelReferences, { passive: false });
+    popover.addEventListener("wheel", wheelReading, { passive: true });
     popover.addEventListener("focusout", blurPreview);
     popover.addEventListener("pointerenter", onPopoverEnter); popover.addEventListener("pointerleave", onPopoverLeave);
     notice.addEventListener("click", scrollBottom);
@@ -722,6 +758,7 @@
     if (view.ResizeObserver) { resizeObserver = new view.ResizeObserver(onResize); resizeObserver.observe(container); }
 
     function close() {
+      hoverPaused.set(list, now());
       dismiss();
       // Hiding the workspace stops sound without destroying playback position.
       for (const media of list.querySelectorAll("video, audio")) media.pause();
@@ -733,12 +770,16 @@
       list.removeEventListener("focusin", focusPreview);
       list.removeEventListener("focusout", blurPreview);
       list.removeEventListener("click", click);
+      container.removeEventListener("wheel", wheelReading);
+      document.removeEventListener("pointermove", movePointer);
+      hoverPaused.clear(); pointerPosition = null;
       popover.removeEventListener("pointerover", hover); popover.removeEventListener("pointerout", leave);
       popover.removeEventListener("focusin", focusPreview);
       inlinePopover.removeEventListener("pointerenter", inlineEnter); inlinePopover.removeEventListener("pointerleave", inlineLeave);
       inlinePopover.removeEventListener("click", inlineClick); inlinePopover.removeEventListener("focusout", blurPreview);
       popover.removeEventListener("click", popoverClick); popover.removeEventListener("pointerenter", onPopoverEnter); popover.removeEventListener("pointerleave", onPopoverLeave);
       popover.removeEventListener("wheel", wheelReferences);
+      popover.removeEventListener("wheel", wheelReading);
       popover.removeEventListener("focusout", blurPreview);
       notice.removeEventListener("click", scrollBottom); document.removeEventListener("pointerdown", pointerOutside);
       document.removeEventListener("keydown", keydown); document.removeEventListener("scroll", onScroll, true); view.removeEventListener("resize", onResize);
