@@ -34,6 +34,11 @@
     popover.id = `generation-record-popover-${++nextPopover}`;
     popover.className = "generation-record-popover";
     popover.dataset.wheelScope = "local";
+    const inlinePopover = document.createElement("div");
+    inlinePopover.id = `${popover.id}-inline`;
+    inlinePopover.dataset.wheelScope = "local";
+    let inlineActive = null;
+    let inlineHideTimer = 0;
     const cards = new Map();
     const mediaPlayers = new WeakMap();
     const referencePreview = global.REELAY_GENERATION_REFERENCE_PREVIEW.createController({ document, sanitizeUrl, refreshIcons });
@@ -115,6 +120,7 @@
       }
     }
     function dismiss() {
+      closeInlinePreview();
       referencePreview.close();
       view.clearTimeout(showTimer); view.clearTimeout(hideTimer); showTimer = 0; hideTimer = 0;
       if (active?.gallery) settleReferenceTransition(active.gallery);
@@ -139,7 +145,7 @@
           <span class="generation-record-counts">${counts.map(({ type, count }) => `<span title="${count} 个${TYPES[type]}">${icon(ICONS[type])}<span>${count}</span></span>`).join("")}</span>
         </button>` : ""}
         <div class="generation-record-copy"><div class="generation-record-prompt" data-record-popover="prompt" tabindex="0" role="button" aria-label="查看完整提示词" aria-expanded="false">${promptMarkup(task.input)}</div>
-        <div class="generation-record-parameters"><strong title="${escape(task.input.modelName || task.input.modelId || "生成任务")}">${escape(task.input.modelName || task.input.modelId || "生成任务")}</strong>${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}<button type="button" class="generation-record-details-trigger" data-record-popover="details" aria-expanded="false" aria-label="任务详情" title="任务详情"><span class="generation-record-details-label">任务详情</span>${icon("info")}</button></div>
+        <div class="generation-record-parameters"><strong title="${escape(task.input.modelName || task.input.modelId || "生成任务")}">${escape(task.input.modelName || task.input.modelId || "生成任务")}</strong>${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}<button type="button" class="generation-record-details-trigger" data-record-popover="details" aria-expanded="false" aria-label="任务详情"><span class="generation-record-details-label">任务详情</span>${icon("info")}</button></div>
       </div></div></div>
       <div class="generation-record-output"></div>
       <footer class="generation-record-footer">
@@ -281,9 +287,12 @@
     function referenceLayout(card) {
       const width = Math.min(list.getBoundingClientRect().width || container.clientWidth || 340, view.innerWidth - 24);
       const sparse = card.entries.length <= 2;
-      const tile = sparse ? 112 : 52; const gap = sparse ? 8 : 6;
-      // Navigation lives in the header; the media row uses all available width.
-      const size = Math.max(1, Math.min(10, Math.floor((width - 26 + gap) / (tile + gap))));
+      const minimumTile = sparse ? 112 : 64; const gap = 8;
+      // Full pages share the message width; short galleries remain content-sized.
+      const contentWidth = Math.max(0, width - 26);
+      const size = Math.max(1, Math.min(10, Math.floor((contentWidth + gap) / (minimumTile + gap))));
+      const tile = !sparse && card.entries.length >= size
+        ? Math.min(80, Math.max(minimumTile, (contentWidth - (size - 1) * gap) / size)) : minimumTile;
       return { size, tile, gap, sparse };
     }
     function settleReferenceTransition(gallery) {
@@ -293,12 +302,12 @@
     }
     function fillReferences(card, force = false, direction = 0) {
       const { size, tile, gap, sparse } = referenceLayout(card); const total = card.entries.length;
-      if (!force && size === card.pageSize) return;
+      if (!force && size === card.pageSize && tile === card.referenceTileSize) return;
       const previousStart = Math.max(0, Math.min(card.start || 0, Math.max(0, total - 1)));
       // Reflow onto the page containing the previous leading item. Once every
       // reference fits, the first page is the only valid, reachable position.
       card.start = total <= size ? 0 : Math.floor(previousStart / size) * size;
-      card.pageSize = size;
+      card.pageSize = size; card.referenceTileSize = tile;
       const rail = active?.kind === "references" && active.taskId === card.taskId
         ? popover.querySelector(".generation-record-reference-rail") : null;
       if (!rail) return;
@@ -327,7 +336,7 @@
       }
       popover.querySelector(".generation-record-reference-navigation").hidden = !paged;
       const page = document.createElement("div"); page.className = "generation-record-reference-page";
-      page.innerHTML = visible.map((entry, index) => `<button type="button" class="generation-record-reference-item" data-record-popover="reference" data-reference-preview="${card.start + index}" aria-expanded="false" aria-label="${escape(`${entry.label}：${entry.name}，预览`)}"><span>${thumbnail(entry)}</span><small>${escape(entry.label)}</small></button>`).join("");
+      page.innerHTML = visible.map((entry, index) => `<button type="button" class="generation-record-reference-item" data-record-popover="reference" data-reference-preview="${card.start + index}" aria-expanded="false" aria-label="${escape(`${entry.label}：${entry.name}，预览`)}"><span>${thumbnail(entry)}<small>${escape(entry.label)}</small></span></button>`).join("");
       const previousPage = gallery.page; const previousWidth = gallery.width || 0;
       // A paged strip keeps its viewport even on a short final page. Only the
       // real references are rendered; empty capacity is never a placeholder tile.
@@ -358,19 +367,23 @@
       positionPopover();
     }
     function positionPopover() {
-      if (!active || !active.anchor.isConnected || !inScope(getTask(active.taskId))) return active && dismiss();
-      const anchorRect = active.anchor.getBoundingClientRect();
+      positionSurface(popover, active);
+      if (inlineActive) positionSurface(inlinePopover, inlineActive);
+    }
+    function positionSurface(surface, state) {
+      if (!state || !state.anchor.isConnected || !inScope(getTask(state.taskId))) return state && (surface === inlinePopover ? closeInlinePreview() : dismiss());
+      const anchorRect = state.anchor.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
       const listRect = list.getBoundingClientRect();
-      if (anchorRect.bottom < containerRect.top || anchorRect.top > containerRect.bottom) return dismiss();
-      if (active.kind === "menu") return;
+      if (anchorRect.bottom < containerRect.top || anchorRect.top > containerRect.bottom) return surface === inlinePopover ? closeInlinePreview() : dismiss();
+      if (state.kind === "menu") return;
       const maxWidth = Math.max(120, Math.min(listRect.width || 340, view.innerWidth - 24));
-      popover.style.maxWidth = `${maxWidth}px`;
-      popover.style.maxHeight = `${Math.max(80, view.innerHeight - 32)}px`;
-      popover.style.setProperty("--generation-prompt-width", `${maxWidth}px`);
-      const floating = popover.getBoundingClientRect();
-      const isMenu = active.kind === "details";
-      const isReference = active.kind === "reference";
+      surface.style.maxWidth = `${maxWidth}px`;
+      surface.style.maxHeight = `${Math.max(80, view.innerHeight - 32)}px`;
+      surface.style.setProperty("--generation-prompt-width", `${maxWidth}px`);
+      const floating = surface.getBoundingClientRect();
+      const isMenu = state.kind === "details";
+      const isReference = state.kind === "reference";
       const anchor = isMenu || isReference ? anchorRect : {
         left: listRect.left, right: listRect.right, width: listRect.width,
         top: anchorRect.top, bottom: anchorRect.bottom, height: anchorRect.height,
@@ -384,9 +397,9 @@
         boundary,
         placements: isMenu ? ["top-end", "bottom-end"] : isReference ? ["top", "bottom"] : ["top-start", "bottom-start"], gap: 7, padding: 12,
       });
-      popover.style.left = `${placement?.left ?? Math.max(12, Math.min(anchor.left, view.innerWidth - floating.width - 12))}px`;
-      popover.style.top = `${placement?.top ?? Math.max(12, anchor.top - floating.height - 7)}px`;
-      popover.dataset.placement = placement?.placement || "top-start";
+      surface.style.left = `${placement?.left ?? Math.max(12, Math.min(anchor.left, view.innerWidth - floating.width - 12))}px`;
+      surface.style.top = `${placement?.top ?? Math.max(12, anchor.top - floating.height - 7)}px`;
+      surface.dataset.placement = placement?.placement || "top-start";
     }
     function open(kind, anchor, task, pinned = false, referenceKey = "") {
       if (!task || !inScope(task)) return;
@@ -430,23 +443,67 @@
       document.body.append(popover); refreshIcons(popover); positionPopover();
     }
     function showMedia(asset, label) {
-      if (!active) return;
-      releaseMedia(popover); popover.replaceChildren();
-      popover.className = "generation-record-popover generation-record-preview-popover";
-      popover.setAttribute("role", "dialog"); popover.setAttribute("aria-label", `${label}预览`);
+      if (active) fillMedia(popover, asset, label, active.kind === "reference");
+    }
+    function fillMedia(surface, asset, label, reference = true) {
+      releaseMedia(surface); surface.replaceChildren();
+      surface.className = "generation-record-popover generation-record-preview-popover";
+      if (surface === inlinePopover) surface.classList.add("generation-record-inline-preview");
+      surface.setAttribute("role", "dialog"); surface.setAttribute("aria-label", `${label}预览`);
       const media = mediaElement(asset, label, "generation-record-preview-media");
-      const imageOnly = media.tagName === "IMG" && active.kind === "reference";
-      popover.classList.toggle("reference-image-preview", imageOnly);
-      if (!imageOnly) {
+      const imageOnly = media.tagName === "IMG" && reference;
+      surface.classList.toggle("reference-image-preview", imageOnly);
+      surface.classList.toggle("generation-record-reference-media-preview", reference);
+      if (!reference) {
         const title = document.createElement("div"); title.className = "generation-record-popover-title";
         title.innerHTML = `<span>${escape(label)}</span><button type="button" data-record-close aria-label="关闭预览">${icon("x")}</button>`;
-        popover.append(title);
+        surface.append(title);
       }
-      popover.append(media);
+      surface.append(media);
       if (media.tagName === "IMG") media.addEventListener("load", () => {
-        if (popover.contains(media)) positionPopover();
+        if (surface.contains(media)) positionPopover();
       }, { once: true });
-      refreshIcons(popover); positionPopover();
+      refreshIcons(surface); positionPopover();
+    }
+    function closeInlinePreview(restoreFocus = false) {
+      view.clearTimeout(inlineHideTimer); inlineHideTimer = 0;
+      const anchor = inlineActive?.anchor;
+      inlineActive = null;
+      anchor?.setAttribute("aria-expanded", "false"); anchor?.removeAttribute("aria-controls");
+      releaseMedia(inlinePopover); inlinePopover.replaceChildren(); inlinePopover.remove();
+      if (restoreFocus && anchor?.isConnected) {
+        restoringFocus = true;
+        try { anchor.focus({ preventScroll: true }); } finally { restoringFocus = false; }
+      }
+    }
+    function openInlinePreview(anchor, pinned = false) {
+      if (active?.kind !== "prompt" || !popover.contains(anchor) || !inScope(getTask(active.taskId))) return;
+      view.clearTimeout(showTimer); view.clearTimeout(hideTimer); view.clearTimeout(inlineHideTimer);
+      if (inlineActive?.anchor === anchor) { inlineActive.pinned ||= pinned; return; }
+      const entry = cards.get(active.taskId)?.entries.find((item) => item.key === anchor.dataset.referenceKey);
+      if (!entry || anchor.classList.contains("is-missing")) return;
+      closeInlinePreview();
+      inlineActive = { kind: "reference", anchor, taskId: active.taskId, pinned };
+      anchor.setAttribute("aria-expanded", "true"); anchor.setAttribute("aria-controls", inlinePopover.id);
+      fillMedia(inlinePopover, entry.asset, `${entry.label} · ${entry.name}`);
+      document.body.append(inlinePopover); positionPopover();
+    }
+    function scheduleInlineHide() {
+      view.clearTimeout(inlineHideTimer);
+      if (inlineActive && !inlineActive.pinned) inlineHideTimer = view.setTimeout(() => {
+        if (!inlinePopover.contains(document.activeElement) && !inlineActive?.anchor.contains(document.activeElement)) closeInlinePreview();
+      }, 210);
+    }
+    function inlineEnter() { view.clearTimeout(hideTimer); view.clearTimeout(inlineHideTimer); }
+    function inlineLeave(event) {
+      if (inlinePopover.contains(event.relatedTarget) || inlineActive?.anchor.contains(event.relatedTarget)) return;
+      scheduleInlineHide();
+      if (!popover.contains(event.relatedTarget)) scheduleHide();
+    }
+    function inlineClick(event) {
+      event.stopPropagation();
+      if (event.target.closest("[data-record-close]")) closeInlinePreview(true);
+      else if (inlineActive) { inlineActive.pinned = true; pinPopover(); }
     }
     function fillDetails(task) {
       const finishedAt = task.finishedAt ?? task.completedAt;
@@ -469,12 +526,19 @@
       const expected = active;
       if (expected && !expected.pinned) hideTimer = view.setTimeout(() => {
         hideTimer = 0;
-        if (active === expected && !active.pinned && !popover.contains(document.activeElement) && !active.anchor.contains(document.activeElement)) dismiss();
+        if (active === expected && !active.pinned && !inlinePopover.contains(document.activeElement) && !popover.contains(document.activeElement) && !active.anchor.contains(document.activeElement)) dismiss();
       }, 210);
     }
     function hover(event) {
+      const part = event.target.closest?.(".prompt-reference[data-reference-key]:not(.is-missing)");
+      if (part && popover.contains(part) && active?.kind === "prompt") {
+        if (part.contains(event.relatedTarget)) return;
+        view.clearTimeout(hideTimer); view.clearTimeout(showTimer); view.clearTimeout(inlineHideTimer);
+        showTimer = view.setTimeout(() => { showTimer = 0; openInlinePreview(part); }, 300);
+        return;
+      }
       if (active?.pinned) return;
-      const anchor = event.target.closest?.('[data-record-popover="references"], [data-record-popover="prompt"], .prompt-reference[data-reference-key]:not(.is-missing)');
+      const anchor = event.target.closest?.('[data-record-popover="references"], [data-record-popover="prompt"], [data-record-popover="details"], .prompt-reference[data-reference-key]:not(.is-missing)');
       if (!anchor || !list.contains(anchor) || anchor.contains(event.relatedTarget)) return;
       view.clearTimeout(hideTimer); view.clearTimeout(showTimer);
       const kind = anchor.dataset.recordPopover || "reference";
@@ -483,17 +547,24 @@
       showTimer = view.setTimeout(() => { showTimer = 0; open(kind, anchor, taskAt(anchor)); }, kind === "references" ? 80 : 300);
     }
     function focusPreview(event) {
-      if (restoringFocus || active?.pinned) return;
-      const anchor = event.target.closest?.('[data-record-popover="references"], .prompt-reference[data-reference-key]:not(.is-missing)');
+      if (restoringFocus) return;
+      const part = event.target.closest?.(".prompt-reference[data-reference-key]:not(.is-missing)");
+      if (part && popover.contains(part)) { openInlinePreview(part); return; }
+      if (active?.pinned) return;
+      const anchor = event.target.closest?.('[data-record-popover="references"], [data-record-popover="details"], .prompt-reference[data-reference-key]:not(.is-missing)');
       if (anchor) open(anchor.dataset.recordPopover || "reference", anchor, taskAt(anchor));
     }
     function blurPreview(event) {
+      if (inlineActive && (inlineActive.anchor.contains(event.target) || inlinePopover.contains(event.target))) {
+        if (inlineActive.anchor.contains(event.relatedTarget) || inlinePopover.contains(event.relatedTarget)) return;
+        if (!inlineActive.pinned) closeInlinePreview();
+      }
       if (active?.kind === "menu") {
         const reveal = cards.get(active.taskId)?.element.querySelector("[data-record-delete-reveal]");
         if (!active.anchor.contains(event.relatedTarget) && !reveal?.contains(event.relatedTarget)) dismiss();
         return;
       }
-      if (!active || active.pinned || active.anchor.contains(event.relatedTarget) || popover.contains(event.relatedTarget)) return;
+      if (!active || active.pinned || active.anchor.contains(event.relatedTarget) || popover.contains(event.relatedTarget) || inlinePopover.contains(event.relatedTarget)) return;
       dismiss();
     }
     function closeAndRestoreFocus() {
@@ -503,6 +574,13 @@
       finally { restoringFocus = false; }
     }
     function leave(event) {
+      const part = event.target.closest?.(".prompt-reference[data-reference-key]");
+      if (part && popover.contains(part)) {
+        if (part.contains(event.relatedTarget)) return;
+        view.clearTimeout(showTimer);
+        if (!inlinePopover.contains(event.relatedTarget)) scheduleInlineHide();
+        return;
+      }
       const anchor = event.target.closest?.("[data-record-popover], .prompt-reference[data-reference-key]");
       if (!anchor || !list.contains(anchor) || anchor.contains(event.relatedTarget)) return;
       view.clearTimeout(showTimer); scheduleHide();
@@ -582,11 +660,8 @@
       if (part) {
         const entry = cards.get(task.id)?.entries.find((item) => item.key === part.dataset.referenceKey);
         if (entry) {
-          // A reference inside the full-prompt portal disappears when that
-          // portal becomes a media preview. Anchor to the persistent record,
-          // while resolving the media by the original immutable reference key.
-          const anchor = popover.contains(part) ? cards.get(task.id)?.element.querySelector(".generation-record-prompt") : part;
-          if (anchor) open("reference", anchor, task, true, part.dataset.referenceKey);
+          if (popover.contains(part)) { openInlinePreview(part, true); pinPopover(); }
+          else open("reference", part, task, true, part.dataset.referenceKey);
         }
         return;
       }
@@ -606,28 +681,36 @@
     }
     function pointerOutside(event) {
       if (referencePreview.isOpen()) return;
+      if (inlinePopover.contains(event.target)) { if (inlineActive) inlineActive.pinned = true; pinPopover(); return; }
+      if (inlineActive && !inlineActive.anchor.contains(event.target)) closeInlinePreview();
       if (active?.kind === "references" && popover.contains(event.target)) { pinPopover(); return; }
       if (active?.kind === "menu" && cards.get(active.taskId)?.element.querySelector("[data-record-delete-reveal]")?.contains(event.target)) return;
       if (active && !popover.contains(event.target) && !active.anchor.contains(event.target)) dismiss();
     }
     function keydown(event) {
       if (referencePreview.isOpen()) return;
+      if (event.key === "Escape" && inlineActive) { closeInlinePreview(true); event.preventDefault(); return; }
       if (event.key === "Escape" && active) { closeAndRestoreFocus(); event.preventDefault(); }
       else if ((event.key === "Enter" || event.key === " ") && (list.contains(event.target) || popover.contains(event.target))) {
         if (event.target.matches('[role="button"]:not(button)')) { event.preventDefault(); event.target.click(); }
       }
     }
     function onScroll(event) {
+      if (inlineActive && popover.contains(event.target)) closeInlinePreview();
       if (event.target === container && container.scrollHeight - container.scrollTop - container.clientHeight < 48) notice.hidden = true;
       if (active && !popover.contains(event.target)) positionPopover();
     }
     function onPopoverEnter() { view.clearTimeout(hideTimer); }
-    function onPopoverLeave(event) { if (!popover.contains(event.relatedTarget)) scheduleHide(); }
+    function onPopoverLeave(event) { view.clearTimeout(showTimer); if (!popover.contains(event.relatedTarget) && !inlinePopover.contains(event.relatedTarget)) { scheduleInlineHide(); scheduleHide(); } }
     function scrollBottom() { container.scrollTop = container.scrollHeight; notice.hidden = true; }
     list.addEventListener("pointerover", hover); list.addEventListener("pointerout", leave);
     list.addEventListener("focusin", focusPreview);
     list.addEventListener("focusout", blurPreview);
     list.addEventListener("click", click);
+    popover.addEventListener("pointerover", hover); popover.addEventListener("pointerout", leave);
+    popover.addEventListener("focusin", focusPreview);
+    inlinePopover.addEventListener("pointerenter", inlineEnter); inlinePopover.addEventListener("pointerleave", inlineLeave);
+    inlinePopover.addEventListener("click", inlineClick); inlinePopover.addEventListener("focusout", blurPreview);
     popover.addEventListener("click", popoverClick);
     popover.addEventListener("wheel", wheelReferences, { passive: false });
     popover.addEventListener("focusout", blurPreview);
@@ -650,6 +733,10 @@
       list.removeEventListener("focusin", focusPreview);
       list.removeEventListener("focusout", blurPreview);
       list.removeEventListener("click", click);
+      popover.removeEventListener("pointerover", hover); popover.removeEventListener("pointerout", leave);
+      popover.removeEventListener("focusin", focusPreview);
+      inlinePopover.removeEventListener("pointerenter", inlineEnter); inlinePopover.removeEventListener("pointerleave", inlineLeave);
+      inlinePopover.removeEventListener("click", inlineClick); inlinePopover.removeEventListener("focusout", blurPreview);
       popover.removeEventListener("click", popoverClick); popover.removeEventListener("pointerenter", onPopoverEnter); popover.removeEventListener("pointerleave", onPopoverLeave);
       popover.removeEventListener("wheel", wheelReferences);
       popover.removeEventListener("focusout", blurPreview);
