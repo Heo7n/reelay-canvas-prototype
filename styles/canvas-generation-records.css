@@ -4,7 +4,6 @@
   --record-surface-line: rgb(255 255 255 / 4%);
   --record-ink: #e3e5e9;
   --record-secondary: #999fa9;
-  --record-count-ink: #a1a4ac;
   --record-chip: #282c32;
   --record-chip-hover: #343942;
   --record-chip-ink: #c8cfd9;
@@ -20,7 +19,6 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
   --record-surface-line: rgb(99 129 171 / 9%);
   --record-ink: #414958;
   --record-secondary: #7a8398;
-  --record-count-ink: #747982;
   --record-chip: #eff4fc;
   --record-chip-hover: #e5eefb;
   --record-chip-ink: #566c91;
@@ -35,7 +33,7 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
 .generation-record-list {
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 54px;
   container-type: inline-size;
   color: var(--agent-panel-text);
   padding: 0 0 16px;
@@ -43,9 +41,6 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
 .generation-record {
   --record-reference-width: 112px;
   --record-cover-height: 68px;
-  --record-count-height: 18px;
-  --record-reference-gap: 4px;
-  --record-reference-height: calc(var(--record-cover-height) + var(--record-reference-gap) + var(--record-count-height));
   min-width: 0; font-size: 14px; font-weight: 400; line-height: 1.5;
 }
 .generation-record [hidden], .generation-record-new[hidden] { display: none !important; }
@@ -53,24 +48,26 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
   min-width: 0;
 }
 .generation-record-input {
-  display: grid; grid-template-columns: minmax(0, 1fr); align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1fr); align-items: start;
   column-gap: 10px;
 }
 .generation-record-input.has-references {
   grid-template-columns: var(--record-reference-width) minmax(0, 1fr);
+  grid-template-rows: minmax(var(--record-cover-height), auto);
 }
 .generation-record-copy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.generation-record-input.has-references .generation-record-copy { grid-column: 2; grid-row: 1; }
 .generation-record-input.has-references .generation-record-parameter,
 .generation-record-input.has-references .generation-record-details-trigger { flex-shrink: 0; }
 .generation-record-references {
-  display: flex; flex-direction: column; align-items: stretch; gap: var(--record-reference-gap); min-width: 0;
-  width: var(--record-reference-width); height: var(--record-reference-height); padding: 0; border: 0; border-radius: 9px;
+  position: relative; display: grid; grid-template-rows: minmax(0, 1fr); grid-column: 1; grid-row: 1; align-self: stretch; min-width: 0;
+  width: var(--record-reference-width); padding: 0; border: 0; border-radius: 9px;
   background: transparent; color: var(--record-secondary); cursor: pointer;
   transform-origin: center;
   transition: transform .16s cubic-bezier(.2,.7,.2,1);
 }
 .generation-record-cover {
-  display: grid; place-items: center; flex: 0 0 var(--record-cover-height); height: var(--record-cover-height);
+  display: grid; place-items: center; min-height: 0; height: 100%;
   overflow: hidden; border-radius: 9px; background: var(--agent-panel-hover);
   transition: filter .16s ease, box-shadow .16s ease;
 }
@@ -82,19 +79,20 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
 .generation-record-references:is(:hover, :focus-visible, [aria-expanded="true"]) .generation-record-cover {
   filter: brightness(.96); box-shadow: 0 0 0 1px var(--record-hairline);
 }
+/* Keep metadata on the cover without contributing another layout row. */
 .generation-record-counts {
-  display: flex; align-items: center; gap: 8px;
-  flex: 0 0 var(--record-count-height); box-sizing: border-box; min-width: 0;
-  color: var(--record-count-ink);
+  position: absolute; inset: auto 0 0;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-sizing: border-box; min-width: 0; padding: 18px 5px 5px;
+  border-radius: 0 0 9px 9px;
+  background: linear-gradient(transparent, rgb(0 0 0 / 58%));
+  color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 30%);
   font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums;
-  transition: color .16s ease;
+  pointer-events: none;
 }
-.generation-record-references:hover .generation-record-counts,
-.generation-record-references:focus-visible .generation-record-counts,
-.generation-record-references[aria-expanded="true"] .generation-record-counts { color: var(--record-ink); }
 .generation-record-counts > span { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; line-height: 18px; }
 .generation-record-counts > span > span { text-align: right; }
-.generation-record-counts svg, .generation-record-counts i { flex: 0 0 12px; width: 12px; height: 12px; stroke-width: 1.65; opacity: .85; }
+.generation-record-counts svg, .generation-record-counts i { flex: 0 0 12px; width: 12px; height: 12px; stroke-width: 1.8; opacity: .95; }
 .generation-record-prompt {
   width: 100%; min-width: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere; line-height: 20px; max-height: 60px; white-space: pre-wrap;
@@ -182,6 +180,7 @@ audio.generation-record-media { width: 100%; height: 42px; }
 .generation-record-actions button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--record-hairline); min-height: 38px; padding: 7px 12px; border-radius: 10px; color: var(--record-chip-ink); background: var(--record-surface); font: inherit; font-size: var(--agent-control-font-size); font-weight: 500; line-height: 22px; white-space: nowrap; cursor: pointer; transition: background .15s ease, color .15s ease; }
 .generation-record-actions button > svg { flex: 0 0 17px; width: 17px; height: 17px; stroke-width: 1.8; }
 .generation-record-actions button:hover { background: var(--agent-panel-hover); color: var(--record-ink); }
+.generation-record-actions button[aria-disabled="true"] { color: var(--record-secondary); background: var(--record-surface); opacity: .5; cursor: default; }
 .generation-record-actions button[data-generation-action="edit"] { color: var(--record-accent); background: var(--record-accent-bg); border-color: var(--record-accent-line); }
 .generation-record-actions button[data-generation-action="edit"]:hover { background: color-mix(in srgb, var(--record-accent-bg), var(--record-accent) 9%); }
 .generation-record-actions button:is(.generation-record-more, .generation-record-icon-action) { padding: 4px; width: 38px; display: grid; place-items: center; }
@@ -204,26 +203,28 @@ audio.generation-record-media { width: 100%; height: 42px; }
 .generation-record-references-popover { padding: 12px; box-sizing: border-box; }
 .generation-record-reference-total { margin-left: 3px; font-weight: 400; opacity: .8; }
 .generation-record-reference-rail { display: flex; align-items: flex-start; gap: var(--reference-tile-gap); min-width: 0; }
-.generation-record-reference-rail .generation-record-page-button {
-  flex: 0 0 22px; display: grid; place-items: center; width: 22px; height: 22px; margin-top: calc((var(--reference-tile-height, var(--reference-tile-size)) - 22px) / 2);
+.generation-record-reference-navigation { display: flex; flex: 0 0 auto; gap: 6px; margin-left: auto; padding-left: 12px; }
+.generation-record-reference-navigation[hidden] { display: none; }
+.generation-record-reference-navigation .generation-record-page-button {
+  flex: 0 0 22px; display: grid; place-items: center; width: 22px; height: 22px;
   padding: 0; border: 1px solid var(--record-hairline); border-radius: 50%; background: var(--record-chip);
   color: var(--record-secondary); cursor: pointer; transition: background .15s ease, color .15s ease;
 }
-.generation-record-reference-rail .generation-record-page-button:hover:not(:disabled) { color: var(--record-chip-ink); background: var(--record-chip-hover); }
-.generation-record-reference-rail .generation-record-page-button:disabled { opacity: .36; cursor: default; }
-.generation-record-reference-rail .generation-record-page-button[hidden] { display: none; }
+.generation-record-reference-navigation .generation-record-page-button:hover:not(:disabled) { color: var(--record-chip-ink); background: var(--record-chip-hover); }
+.generation-record-reference-navigation .generation-record-page-button:disabled { opacity: .36; cursor: default; }
+.generation-record-reference-navigation .generation-record-page-button[hidden] { display: none; }
 .generation-record-page-button svg { width: 15px; height: 15px; }
 .generation-record-reference-viewport { position: relative; flex: 0 0 auto; max-width: 100%; overflow: hidden; outline: none; }
 .generation-record-reference-page { display: flex; align-items: flex-start; gap: var(--reference-tile-gap); }
 .generation-record-reference-page.is-leaving { position: absolute; top: 0; left: 0; pointer-events: none; }
 .generation-record-reference-viewport .generation-record-reference-item:focus-visible { outline-offset: -2px; }
 .generation-record-reference-item {
-  display: flex; flex: 0 0 var(--reference-tile-size); flex-direction: column; gap: 3px; width: var(--reference-tile-size); padding: 0;
+  display: flex; flex: 0 0 var(--reference-tile-size); width: var(--reference-tile-size); padding: 0;
   border: 0; border-radius: 6px; background: transparent; color: var(--agent-panel-muted);
   font: inherit; text-align: center; cursor: pointer;
 }
 .generation-record-reference-item > span {
-  display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center;
+  position: relative; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center;
   width: var(--reference-tile-size); height: var(--reference-tile-height, var(--reference-tile-size)); border-radius: 7px; overflow: hidden;
   background: color-mix(in srgb, var(--agent-panel-text) 4%, transparent);
   transition: background .15s ease, box-shadow .15s ease;
@@ -233,19 +234,25 @@ audio.generation-record-media { width: 100%; height: 42px; }
 }
 .generation-record-reference-item > span > svg { width: 19px; height: 19px; stroke-width: 1.5; }
 .generation-record-reference-item :is(img, video) { width: 100%; height: 100%; object-fit: cover; object-position: center; }
-.generation-record-reference-item small { color: var(--record-secondary); font-size: 12px; line-height: 18px; }
+.generation-record-reference-item small {
+  position: absolute; inset: auto 0 0; padding: 13px 6px 4px;
+  color: #fff; background: linear-gradient(transparent, rgb(0 0 0 / 58%));
+  font-size: 11px; font-weight: 500; line-height: 15px; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+}
 .generation-record-references-popover.is-sparse { border-radius: 12px; }
 .generation-record-references-popover.is-sparse .generation-record-reference-rail { --reference-tile-height: 84px; }
-.generation-record-references-popover.is-sparse .generation-record-reference-item { gap: 5px; text-align: left; }
 .generation-record-references-popover.is-sparse .generation-record-reference-item :is(img, video) { object-fit: contain; }
-.generation-record-prompt-popover { width: 430px; }
+.generation-record-prompt-popover { width: var(--generation-prompt-width); box-sizing: border-box; }
 .generation-record-popover-title { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: var(--agent-control-font-size); font-weight: var(--agent-control-font-weight); color: var(--canvas-popover-muted); }
 .generation-record-popover-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .generation-record-popover-title > svg { flex: 0 0 16px; width: 16px; height: 16px; }
 .generation-record-popover-title > button:last-child { margin-left: auto; }
 .generation-record-popover-title button { flex: 0 0 22px; width: 22px; height: 22px; display: grid; place-items: center; padding: 2px; }
-.generation-record-full-prompt { max-height: min(340px, 52vh); overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 27px; padding-right: 4px; }
+.generation-record-full-prompt { max-height: min(560px, 70vh); overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 27px; padding-right: 4px; }
 .generation-record-preview-popover { width: 280px; padding: 10px; box-sizing: border-box; }
+.generation-record-reference-media-preview { padding: 6px; border-radius: 12px; }
 .generation-record-preview-popover .generation-record-popover-title { margin-bottom: 6px; font-size: 12px; }
 .generation-record-preview-media { display: block; width: 100%; max-height: min(200px, 40vh); object-fit: contain; border-radius: 6px; }
 audio.generation-record-preview-media { height: 42px; }
@@ -257,7 +264,7 @@ audio.generation-record-preview-media { height: 42px; }
 .generation-record-task-id code { min-width: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; line-height: 1.8; }
 .generation-record-task-id button { flex: 0 0 24px; display: grid; place-items: center; width: 24px; height: 24px; padding: 4px; color: var(--canvas-popover-muted); }
 @container (max-width: 480px) {
-  .generation-record { --record-reference-width: 96px; --record-cover-height: 58px; --record-count-height: 16px; }
+  .generation-record { --record-reference-width: 96px; --record-cover-height: 58px; }
   .generation-record-input { column-gap: 8px; }
   .generation-record-input.has-references .generation-record-prompt { -webkit-line-clamp: 2; max-height: 40px; }
   .generation-record-parameters { font-size: 12px; line-height: 20px; }

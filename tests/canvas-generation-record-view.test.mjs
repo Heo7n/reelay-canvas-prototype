@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 
-const [source, placement, mediaPlayer] = await Promise.all([
-  "canvas-generation-record-view.js", "canvas-popover-placement.js", "canvas-generation-media.js",
+const [source, placement, mediaPlayer, referencePreview] = await Promise.all([
+  "canvas-generation-record-view.js", "canvas-popover-placement.js", "canvas-generation-media.js", "canvas-generation-reference-preview.js",
 ].map((name) => readFile(new URL(`../src/legacy-canvas/${name}`, import.meta.url), "utf8")));
 
 function fixture(t, options = {}) {
@@ -40,7 +40,9 @@ function fixture(t, options = {}) {
   window.clearTimeout = (timer) => timers.delete(timer);
   window.HTMLMediaElement.prototype.pause = () => { pauses++; };
   window.HTMLMediaElement.prototype.load = () => {};
-  window.eval(placement); window.eval(mediaPlayer); window.eval(source);
+  window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  window.eval(placement); window.eval(mediaPlayer); window.eval(referencePreview); window.eval(source);
   const controller = window.REELAY_GENERATION_RECORD_VIEW.createController({
     document, container, getScope: () => scope, getTasks: () => tasks, getTask: (id) => tasks.find((task) => task.id === id),
     onAction: (...args) => actions.push(args), now: () => now,
@@ -180,12 +182,16 @@ test("keyboard paging cancels a pending hover departure and keeps a valid focus 
   const portal = f.query(".generation-record-references-popover");
   portal.dispatchEvent(new f.window.MouseEvent("pointerleave", { relatedTarget: f.query("#outside") }));
   assert.equal(f.timers.size, 1);
+  const previous = f.query('[data-reference-page="-1"]');
+  assert.equal(previous.disabled, true); assert.equal(previous.hidden, false);
+  assert.notEqual(previous.style.visibility, "hidden");
   const next = f.query('[data-reference-page="1"]'); next.focus();
   next.dispatchEvent(new f.window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
   next.dispatchEvent(new f.window.MouseEvent("click", { bubbles: true, detail: 0 }));
   f.advance(500);
   assert.equal(f.query(".generation-record-references-popover"), portal);
   assert.equal(f.query('[data-reference-page="1"]'), next); assert.equal(next.disabled, true);
+  assert.equal(next.hidden, false); assert.notEqual(next.style.visibility, "hidden");
   assert.equal(f.document.activeElement, f.query('[data-reference-page="-1"]'));
   assert.equal(f.timers.size, 0);
 });
@@ -210,9 +216,9 @@ test("rapid gallery paging slides in the requested direction, clips to ten slots
   assert.equal(portal.querySelectorAll("video").length, 10, "only the current page is loaded initially");
   activateWithPointer(f, next);
   const staleFinish = animations.at(-1).onfinish;
-  assert.equal(animations.at(-1).frames[0].transform, "translateX(580px)");
-  assert.equal(animations.at(-2).frames[1].transform, "translateX(-580px)");
-  assert.equal(viewport.style.width, "574px");
+  assert.equal(animations.at(-1).frames[0].transform, "translateX(880px)");
+  assert.equal(animations.at(-2).frames[1].transform, "translateX(-880px)");
+  assert.equal(viewport.style.width, "872px");
   assert.equal(portal.querySelectorAll("video").length, 20, "at most the incoming and outgoing page are mounted during movement");
   assert.equal(f.query(".generation-record-reference-page.is-leaving").getAttribute("aria-hidden"), "true");
   assert.equal(f.query(".generation-record-reference-page.is-leaving").inert, true);
@@ -223,14 +229,14 @@ test("rapid gallery paging slides in the requested direction, clips to ten slots
   assert.equal(f.document.activeElement, previous);
   const currentItems = () => [...portal.querySelectorAll(".generation-record-reference-page:not(.is-leaving) [data-reference-preview]")];
   assert.deepEqual(currentItems().map((item) => Number(item.dataset.referencePreview)), [30, 31, 32, 33, 34]);
-  assert.equal(viewport.style.width, "574px", "the short final page retains the ten-slot viewport throughout the slide");
+  assert.equal(viewport.style.width, "872px", "the short final page retains the ten-slot viewport throughout the slide");
   assert.equal(currentItems().length <= 10, true);
   assert.ok(animations.slice(0, 4).every((animation) => animation.cancelled));
   animations.at(-1).finish();
   assert.equal(portal.querySelectorAll("video").length, 5); assert.equal(f.query(".is-leaving"), null);
   activateWithPointer(f, previous);
-  assert.equal(animations.at(-1).frames[0].transform, "translateX(-580px)");
-  assert.equal(animations.at(-2).frames[1].transform, "translateX(580px)");
+  assert.equal(animations.at(-1).frames[0].transform, "translateX(-880px)");
+  assert.equal(animations.at(-2).frames[1].transform, "translateX(880px)");
   assert.equal(currentItems()[0].dataset.referencePreview, "20");
   const finishingAfterClose = animations.at(-1).onfinish;
   f.controller.close(); finishingAfterClose();
@@ -240,15 +246,15 @@ test("rapid gallery paging slides in the requested direction, clips to ten slots
 
 test("gallery resize and media back restore an available tile without replacing the controls", (t) => {
   const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(12); f.setTasks([task]);
-  f.setWidth(288); f.query(".generation-record-references").focus();
+  f.setWidth(314); f.query(".generation-record-references").focus();
   const previous = f.query('[data-reference-page="-1"]'); const next = f.query('[data-reference-page="1"]');
-  const second = f.query('[data-reference-preview="2"]'); second.focus(); f.setWidth(200);
+  const fourth = f.query('[data-reference-preview="3"]'); fourth.focus(); f.setWidth(200);
   assert.ok(f.query(".generation-record-references-popover"));
   assert.equal(f.document.activeElement.dataset.referencePreview, "0", "a tile displaced by resize returns focus to a visible item");
   assert.equal(f.query('[data-reference-page="-1"]'), previous); assert.equal(f.query('[data-reference-page="1"]'), next);
   activateWithPointer(f, next);
   const preview = f.query('[data-reference-preview="3"]'); activateWithPointer(f, preview);
-  f.setWidth(1400); f.query("[data-record-back]").click();
+  f.setWidth(1400); f.query(".generation-reference-preview-close").click();
   assert.equal(f.document.activeElement.dataset.referencePreview, "3", "back focuses the selected item after a width change");
   assert.ok(f.query('[data-reference-preview="0"]'));
 });
@@ -256,10 +262,33 @@ test("gallery resize and media back restore an available tile without replacing 
 test("reduced motion changes the gallery page immediately without retaining outgoing videos", (t) => {
   const f = fixture(t); const animations = mockReferenceAnimations(f);
   f.window.matchMedia = () => ({ matches: true });
-  const task = f.task(); task.input.referenceSnapshot = f.references(12); f.setTasks([task]); f.setWidth(288);
+  const task = f.task(); task.input.referenceSnapshot = f.references(12); f.setTasks([task]); f.setWidth(314);
   f.query(".generation-record-references").click(); activateWithPointer(f, f.query('[data-reference-page="1"]'));
   assert.equal(animations.length, 0); assert.equal(f.all(".generation-record-reference-page").length, 1);
-  assert.equal(f.query("[data-reference-preview]").dataset.referencePreview, "3");
+  assert.equal(f.query("[data-reference-preview]").dataset.referencePreview, "4");
+});
+
+test("header navigation leaves the row for media and wheel gestures page without momentum skips", (t) => {
+  const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(12); f.setTasks([task]);
+  f.setWidth(314);
+  f.query(".generation-record-references").dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true })); f.advance(100);
+  const gallery = f.query(".generation-record-references-popover");
+  assert.ok(f.query('[data-reference-page="1"]').closest(".generation-record-popover-title"));
+  assert.equal(f.all(".generation-record-reference-item").length, 4, "navigation no longer takes space from media");
+  const leading = () => Number(f.query("[data-reference-preview]").dataset.referencePreview);
+  const wheel = (options) => {
+    const event = new f.window.WheelEvent("wheel", { bubbles: true, cancelable: true, ...options });
+    gallery.dispatchEvent(event); return event;
+  };
+  wheel({ deltaY: 12 }); wheel({ deltaY: 12 }); assert.equal(leading(), 0);
+  assert.equal(wheel({ deltaY: 24 }).defaultPrevented, true); assert.equal(leading(), 4);
+  wheel({ deltaY: 120 }); f.advance(60); wheel({ deltaY: 30 }); assert.equal(leading(), 4);
+  f.advance(200); wheel({ deltaX: 100 }); assert.equal(leading(), 8);
+  f.advance(200); assert.equal(wheel({ deltaY: 100 }).defaultPrevented, true); assert.equal(leading(), 8);
+  wheel({ deltaY: -3, deltaMode: 1 }); assert.equal(leading(), 4);
+  assert.equal(wheel({ deltaY: 120, ctrlKey: true }).defaultPrevented, false); assert.equal(leading(), 4);
+  gallery.dispatchEvent(new f.window.MouseEvent("pointerleave", { relatedTarget: f.query("#outside") })); f.advance(500);
+  assert.equal(f.query(".generation-record-references-popover"), gallery, "scrolling pins the gallery for continued browsing");
 });
 
 test("reference strip pages every item without empty media tiles and previews its selected video", (t) => {
@@ -268,7 +297,7 @@ test("reference strip pages every item without empty media tiles and previews it
   assert.ok(f.query(".generation-record-references-popover"));
   const capacity = f.all(".generation-record-reference-item").length;
   const viewport = f.query(".generation-record-reference-viewport");
-  const viewportWidth = `${capacity * 58 - 6}px`;
+  const viewportWidth = "256px";
   assert.ok(capacity > 0 && capacity <= 10);
   assert.equal(Boolean(availablePage(f.query('[data-reference-page="-1"]'))), false);
   const indices = [];
@@ -286,13 +315,30 @@ test("reference strip pages every item without empty media tiles and previews it
   assert.ok(availablePage(f.query('[data-reference-page="-1"]')));
   assert.equal(Boolean(availablePage(f.query('[data-reference-page="1"]'))), false);
   f.query('[data-reference-preview="12"]').click();
-  assert.ok(f.query(".generation-record-preview-media").matches("video"));
+  assert.ok(f.query(".generation-reference-preview-media").matches("video"));
   assert.equal(f.query("video").controls, true);
   assert.doesNotMatch(f.query(".generation-record-popover").style.cssText, /NaN/);
-  f.query("[data-record-back]").click(); assert.equal(f.query("video"), null);
+  f.query(".generation-reference-preview-close").click(); assert.equal(f.query("video"), null);
   assert.equal(f.pauses, 1);
   assert.ok(f.query('[data-reference-preview="12"]'), "returning from preview retains the current reference page");
   assert.ok(f.query(".generation-record-references-popover"));
+});
+
+test("gallery resizing within the same capacity updates tile width and keeps captions inside previews", (t) => {
+  const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(12); f.setTasks([task]);
+  f.setWidth(500); f.query(".generation-record-references").click();
+  const portal = f.query(".generation-record-references-popover");
+  const viewport = f.query(".generation-record-reference-viewport");
+  const next = f.query('[data-reference-page="1"]');
+  assert.equal(f.all("[data-reference-preview]").length, 6);
+  assert.equal(viewport.style.width, "474px");
+  next.click(); f.setWidth(520);
+  assert.equal(f.query(".generation-record-references-popover"), portal);
+  assert.equal(f.query('[data-reference-page="1"]'), next);
+  assert.equal(f.all("[data-reference-preview]").length, 6);
+  assert.equal(f.query("[data-reference-preview]").dataset.referencePreview, "6");
+  assert.equal(viewport.style.width, "494px");
+  assert.ok(f.all("[data-reference-preview]").every((item) => item.querySelector(":scope > span > small")));
 });
 
 test("short reference strip uses only needed cells and has no paging controls", (t) => {
@@ -315,7 +361,7 @@ test("one reference opens a content-sized preview and returning from detail pres
   assert.equal(f.query(".generation-record-reference-viewport").style.width, "112px");
   assert.ok(f.all("[data-reference-page]").every((button) => button.hidden));
   f.query('[data-reference-preview="0"]').click();
-  f.query("[data-record-back]").click();
+  f.query(".generation-reference-preview-close").click();
   assert.equal(f.query(".generation-record-reference-viewport").style.width, "112px");
   assert.ok(f.query(".generation-record-references-popover").classList.contains("is-sparse"));
 });
@@ -325,17 +371,17 @@ test("resizing a later reference page normalizes pagination and restores all ite
   f.setWidth(200); f.query(".generation-record-references").click();
   const capacity = f.all("[data-reference-preview]").length;
   const viewport = f.query(".generation-record-reference-viewport");
-  assert.equal(viewport.style.width, `${capacity * 58 - 6}px`);
+  assert.equal(viewport.style.width, "168px");
   assert.ok(capacity < 5);
   f.query('[data-reference-page="1"]').click();
   assert.ok(Number(f.query("[data-reference-preview]").dataset.referencePreview) > 0);
   f.setWidth(1000);
   assert.deepEqual(f.all("[data-reference-preview]").map((item) => item.dataset.referencePreview), ["0", "1", "2", "3", "4"]);
   assert.equal(f.query(".generation-record-reference-viewport"), viewport);
-  assert.equal(viewport.style.width, "284px", "when all five references fit, the viewport uses their actual width");
+  assert.equal(viewport.style.width, "352px", "when all five references fit, the viewport uses their actual width");
   assert.ok(f.all("[data-reference-page]").every((button) => button.hidden && button.disabled));
   f.setWidth(200);
-  assert.equal(viewport.style.width, `${capacity * 58 - 6}px`, "resizing recalculates the page capacity without replacing its viewport");
+  assert.equal(viewport.style.width, "168px", "resizing recalculates the page capacity without replacing its viewport");
   assert.deepEqual(f.all("[data-reference-preview]").map((item) => Number(item.dataset.referencePreview)), Array.from({ length: capacity }, (_, index) => index));
   assert.equal(Boolean(availablePage(f.query('[data-reference-page="-1"]'))), false);
 });
@@ -379,6 +425,19 @@ test("only truncated prompt opens reading panel and pinned reader survives hover
   assert.equal(f.query(".generation-record-popover"), null); assert.equal(f.document.activeElement, prompt);
 });
 
+test("full prompt width follows the message column when the sidebar is resized", (t) => {
+  const f = fixture(t); f.setTasks([f.task()]);
+  const prompt = f.query(".generation-record-prompt");
+  Object.defineProperty(prompt, "clientHeight", { value: 60 }); Object.defineProperty(prompt, "scrollHeight", { value: 240 });
+  prompt.click(); const popover = f.query(".generation-record-prompt-popover");
+  const content = f.query(".generation-record-full-prompt");
+  for (const width of [432, 720, 508]) {
+    f.setWidth(width);
+    assert.equal(popover.style.getPropertyValue("--generation-prompt-width"), `${width}px`);
+    assert.equal(f.query(".generation-record-full-prompt"), content, "resizing preserves the reader and its scroll state");
+  }
+});
+
 test("hovering the reference summary opens its strip with a pointer bridge and outside dismissal", (t) => {
   const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(2); f.setTasks([task]);
   const item = f.query(".generation-record-references");
@@ -398,6 +457,40 @@ test("hovering the reference summary opens its strip with a pointer bridge and o
   assert.equal(f.query(".generation-record-popover"), null);
 });
 
+test("task details open on deliberate hover and retain a pointer bridge into the panel", (t) => {
+  const f = fixture(t); f.setTasks([f.task()]);
+  const trigger = f.query('[data-record-popover="details"]');
+  trigger.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true })); f.advance(100);
+  assert.equal(f.query(".generation-record-details-popover"), null);
+  trigger.dispatchEvent(new f.window.MouseEvent("pointerout", { bubbles: true })); f.advance(300);
+  assert.equal(f.query(".generation-record-details-popover"), null, "crossing the trigger must not open task details");
+  trigger.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true })); f.advance(301);
+  const panel = f.query(".generation-record-details-popover"); assert.ok(panel);
+  trigger.dispatchEvent(new f.window.MouseEvent("pointerout", { bubbles: true, relatedTarget: panel })); f.advance(100);
+  panel.dispatchEvent(new f.window.MouseEvent("pointerenter", { relatedTarget: trigger })); f.advance(300);
+  assert.equal(f.query(".generation-record-details-popover"), panel);
+  panel.dispatchEvent(new f.window.MouseEvent("pointerleave", { relatedTarget: f.query("#outside") })); f.advance(211);
+  assert.equal(f.query(".generation-record-details-popover"), null);
+});
+
+test("task details support focus and click pinning without disappearing when the pointer leaves", (t) => {
+  const f = fixture(t); f.setTasks([f.task()]);
+  const trigger = f.query('[data-record-popover="details"]');
+  trigger.focus(); const panel = f.query(".generation-record-details-popover"); assert.ok(panel);
+  panel.querySelector('[data-generation-action="feedback"]').focus(); f.advance(400);
+  assert.equal(f.query(".generation-record-details-popover"), panel);
+  f.query("#outside").focus(); f.advance(300);
+  assert.equal(f.query(".generation-record-details-popover"), null);
+  activateWithPointer(f, trigger);
+  const pinned = f.query(".generation-record-details-popover"); assert.ok(pinned);
+  trigger.dispatchEvent(new f.window.MouseEvent("pointerout", { bubbles: true }));
+  f.query("#outside").focus(); f.advance(400);
+  assert.equal(f.query(".generation-record-details-popover"), pinned);
+  f.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(f.query(".generation-record-details-popover"), null);
+  assert.equal(f.document.activeElement, trigger);
+});
+
 test("keyboard focus opens the picker and selecting audio then returning to an image uses one stable portal", (t) => {
   const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = [
     { key: "audio", asset: { type: "audio", url: "https://example.test/ref.wav" } },
@@ -406,26 +499,29 @@ test("keyboard focus opens the picker and selecting audio then returning to an i
   const summary = f.query(".generation-record-references"); summary.focus(); f.advance(401);
   assert.ok(f.query(".generation-record-references-popover"));
   f.query('[data-reference-preview="0"]').click();
-  assert.equal(f.query(".generation-record-preview-media").tagName, "AUDIO");
+  assert.equal(f.query(".generation-reference-preview-media").tagName, "AUDIO");
   assert.equal(f.query("audio").controls, true);
-  f.query("[data-record-back]").click(); f.query('[data-reference-preview="1"]').click();
+  f.query(".generation-reference-preview-close").click(); f.query('[data-reference-preview="1"]').click();
   assert.equal(f.all(".generation-record-popover").length, 1);
-  assert.equal(f.query(".generation-record-preview-media").tagName, "IMG");
+  assert.equal(f.query(".generation-reference-preview-media").tagName, "IMG");
   assert.equal(f.pauses, 1);
 });
 
-test("Escape closes a selected media preview and restores the summary without reopening it", (t) => {
-  const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(2); f.setTasks([task]);
-  const item = f.query(".generation-record-references"); item.focus();
-  f.query(".generation-record-reference-item").click();
-  assert.ok(f.query(".generation-record-popover"));
-  f.query("[data-record-close]").focus();
-  f.document.activeElement.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  assert.equal(f.document.activeElement, item);
-  assert.equal(f.query(".generation-record-popover"), null);
-  f.advance(500); assert.equal(f.query(".generation-record-popover"), null);
-  f.query("#outside").focus(); item.focus();
-  assert.ok(f.query(".generation-record-popover"), "an intentional new focus entry can preview again");
+test("closing fullscreen returns to the same reference page before Escape dismisses the gallery", (t) => {
+  const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(12); f.setTasks([task]);
+  const summary = f.query(".generation-record-references"); summary.focus();
+  f.query('[data-reference-page="1"]').click();
+  const tile = f.query(".generation-record-reference-item");
+  const gallery = f.query(".generation-record-references-popover");
+  tile.click();
+  const dialog = f.query(".generation-reference-preview"); assert.equal(dialog.open, true);
+  dialog.dispatchEvent(new f.window.Event("cancel", { cancelable: true }));
+  assert.equal(f.query(".generation-reference-preview"), null);
+  assert.equal(f.document.activeElement, tile);
+  assert.equal(f.query(".generation-record-references-popover"), gallery);
+  f.advance(500); assert.equal(f.query(".generation-record-references-popover"), gallery);
+  tile.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(f.query(".generation-record-popover"), null); assert.equal(f.document.activeElement, summary);
 });
 
 test("focus can move from a summary into its unpinned picker, but leaving both closes it", (t) => {
@@ -438,22 +534,24 @@ test("focus can move from a summary into its unpinned picker, but leaving both c
   assert.equal(f.query(".generation-record-popover"), null);
 });
 
-test("a pinned media preview survives focus changes and closes on an outside pointer action", (t) => {
+test("a fullscreen reference isolates background actions and closes when its conversation changes", (t) => {
   const f = fixture(t); const task = f.task(); task.input.referenceSnapshot = f.references(2); f.setTasks([task]);
   f.query(".generation-record-references").click(); f.query(".generation-record-reference-item").click();
-  const popover = f.query(".generation-record-popover"); assert.ok(popover);
-  f.query("#outside").focus(); f.advance(500);
-  assert.equal(f.query(".generation-record-popover"), popover);
+  const dialog = f.query(".generation-reference-preview"); assert.equal(dialog.open, true);
   f.query("#outside").dispatchEvent(new f.window.MouseEvent("pointerdown", { bubbles: true }));
+  assert.equal(f.query(".generation-reference-preview"), dialog);
+  f.setScope({ projectId: "other-project", conversationId: "other-chat" });
+  assert.equal(f.query(".generation-reference-preview"), null);
   assert.equal(f.query(".generation-record-popover"), null);
+  assert.equal(f.actions.length, 0);
 });
 
-function inlineReferenceFixture(t) {
+function inlineReferenceFixture(t, type = "image") {
   const markup = '保留<span class="prompt-reference" data-reference-key="asset:second" role="button" tabindex="0"><span class="prompt-reference-thumb"><img src="https://example.test/second.png" alt=""></span><span class="prompt-reference-label">图片2</span></span>的细节';
   const f = fixture(t, { renderPrompt: () => markup });
   const task = f.task(); task.input.referenceSnapshot = [
     { key: "asset:first", asset: { type: "image", url: "https://example.test/first.png" } },
-    { key: "asset:second", asset: { type: "image", url: "https://example.test/second.png" } },
+    { key: "asset:second", asset: { type, url: `https://example.test/second.${type === "image" ? "png" : "mp4"}` } },
   ]; f.setTasks([task]);
   return f;
 }
@@ -474,19 +572,95 @@ test("compact inline reference uses its thumbnail and number and previews the co
   assert.equal(f.query(".generation-record-prompt .prompt-reference"), part);
 });
 
-test("a reference opened from full prompt uses the persistent record anchor instead of its removed portal node", (t) => {
-  const f = inlineReferenceFixture(t); const prompt = f.query(".generation-record-prompt");
-  Object.defineProperty(prompt, "clientHeight", { value: 66 }); Object.defineProperty(prompt, "scrollHeight", { value: 120 });
-  prompt.click(); const part = f.query(".generation-record-full-prompt .prompt-reference");
-  assert.ok(part.querySelector('.prompt-reference-thumb img')); assert.match(part.textContent, /图片2/);
-  part.focus(); part.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  assert.equal(f.query(".generation-record-full-prompt"), null);
-  assert.equal(f.query(".generation-record-preview-media").src, "https://example.test/second.png");
-  assert.equal(f.all(".generation-record-popover").length, 1);
-  assert.equal(f.query(".generation-record-prompt"), prompt);
-  assert.doesNotMatch(f.query(".generation-record-popover").style.cssText, /NaN/);
-  prompt.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  assert.equal(f.query(".generation-record-popover"), null); assert.equal(f.document.activeElement, prompt);
+test("inline preview follows its reference, clamps to the message edges and flips below near the top", (t) => {
+  const f = inlineReferenceFixture(t); const part = f.query(".generation-record-prompt .prompt-reference");
+  let left = 1130; let top = 250;
+  part.getBoundingClientRect = () => ({ left, top, right: left + 70, bottom: top + 20, width: 70, height: 20 });
+  part.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true })); f.advance(401);
+  const popover = f.query(".generation-record-preview-popover");
+  assert.equal(popover.style.left, "975px", "the preview centers on the hovered reference rather than the message left edge");
+  assert.equal(popover.dataset.placement, "top");
+  left = 876; f.window.dispatchEvent(new f.window.Event("resize"));
+  assert.equal(popover.style.left, "876px", "the leftmost reference cannot push its preview out of the message column");
+  left = 1314; f.window.dispatchEvent(new f.window.Event("resize"));
+  assert.equal(popover.style.left, "1004px", "the rightmost reference stays inside the message right edge");
+  top = 75; f.window.dispatchEvent(new f.window.Event("resize"));
+  assert.equal(popover.dataset.placement, "bottom");
+  assert.equal(popover.style.top, "102px");
+});
+
+function openFullPrompt(f) {
+  const prompt = f.query(".generation-record-prompt");
+  Object.defineProperty(prompt, "clientHeight", { value: 66 }); Object.defineProperty(prompt, "scrollHeight", { value: 240 });
+  // Pointer opening avoids assigning keyboard focus to the reader in hover tests.
+  prompt.dispatchEvent(new f.window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  const reader = f.query(".generation-record-full-prompt"); reader.scrollTop = 80;
+  return { prompt, reader, part: reader.querySelector(".prompt-reference"), panel: f.query(".generation-record-prompt-popover") };
+}
+
+test("full prompt reference hover preserves its reader and scroll while allowing entry into the child preview", (t) => {
+  const f = inlineReferenceFixture(t); const { reader, part, panel } = openFullPrompt(f);
+  part.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true })); f.advance(100);
+  assert.equal(f.query(".generation-record-inline-preview"), null);
+  part.dispatchEvent(new f.window.MouseEvent("pointerout", { bubbles: true })); f.advance(300);
+  assert.equal(f.query(".generation-record-inline-preview"), null, "a brief crossing must not flash media");
+  part.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true })); f.advance(301);
+  const preview = f.query(".generation-record-inline-preview"); assert.ok(preview);
+  assert.equal(preview.querySelector(".generation-record-preview-media").src, "https://example.test/second.png");
+  assert.equal(f.query(".generation-record-full-prompt"), reader); assert.equal(reader.scrollTop, 80);
+  assert.equal(f.query(".generation-record-prompt-popover"), panel);
+  part.dispatchEvent(new f.window.MouseEvent("pointerout", { bubbles: true, relatedTarget: preview }));
+  panel.dispatchEvent(new f.window.MouseEvent("pointerleave", { relatedTarget: preview })); f.advance(100);
+  preview.dispatchEvent(new f.window.MouseEvent("pointerenter", { relatedTarget: part })); f.advance(300);
+  assert.equal(f.query(".generation-record-inline-preview"), preview);
+  assert.equal(f.query(".generation-record-full-prompt"), reader);
+  preview.dispatchEvent(new f.window.MouseEvent("pointerleave", { relatedTarget: reader })); f.advance(211);
+  assert.equal(f.query(".generation-record-inline-preview"), null);
+  assert.equal(f.query(".generation-record-full-prompt"), reader); assert.equal(reader.scrollTop, 80);
+  part.dispatchEvent(new f.window.MouseEvent("pointerover", { bubbles: true })); f.advance(301);
+  assert.ok(f.query(".generation-record-inline-preview"));
+  reader.scrollTop = 110; reader.dispatchEvent(new f.window.Event("scroll"));
+  assert.equal(f.query(".generation-record-inline-preview"), null, "scrolling the reader releases a preview whose reference has moved");
+  assert.equal(f.query(".generation-record-full-prompt"), reader); assert.equal(reader.scrollTop, 110);
+});
+
+for (const activation of ["click", "Enter"]) {
+  test(`full prompt reference ${activation} pins a child preview and Escape restores focus through both layers`, (t) => {
+    const f = inlineReferenceFixture(t); const { prompt, reader, part } = openFullPrompt(f);
+    if (activation === "click") activateWithPointer(f, part);
+    else { part.focus(); part.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })); }
+    const preview = f.query(".generation-record-inline-preview"); assert.ok(preview);
+    assert.equal(preview.querySelector(".generation-record-preview-media").src, "https://example.test/second.png");
+    assert.equal(f.query(".generation-record-full-prompt"), reader); assert.equal(reader.scrollTop, 80);
+    part.dispatchEvent(new f.window.MouseEvent("pointerout", { bubbles: true }));
+    reader.focus(); preview.dispatchEvent(new f.window.MouseEvent("pointerleave")); f.advance(400);
+    assert.equal(f.query(".generation-record-inline-preview"), preview, "activated previews remain available after hover leaves");
+    f.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(f.query(".generation-record-inline-preview"), null);
+    assert.equal(f.query(".generation-record-full-prompt"), reader); assert.equal(reader.scrollTop, 80);
+    assert.equal(f.document.activeElement, part);
+    f.advance(500); assert.equal(f.query(".generation-record-inline-preview"), null, "restoring focus must not reopen the child");
+    part.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(f.query(".generation-record-popover"), null); assert.equal(f.document.activeElement, prompt);
+  });
+}
+
+test("closing records, changing scope and removing the record release both preview layers and child media", (t) => {
+  for (const cleanup of ["close", "scope", "remove"]) {
+    const f = inlineReferenceFixture(t, "video"); const { part } = openFullPrompt(f);
+    part.click(); const preview = f.query(".generation-record-inline-preview"); assert.ok(preview);
+    const media = preview.querySelector("video"); assert.ok(media);
+    const pauses = f.pauses;
+    if (cleanup === "close") f.controller.close();
+    else if (cleanup === "scope") f.setScope({ projectId: "other-project", conversationId: "other-chat" });
+    else f.setTasks([]);
+    f.advance(500);
+    assert.equal(f.query(".generation-record-inline-preview"), null, cleanup);
+    assert.equal(f.query(".generation-record-prompt-popover"), null, cleanup);
+    assert.equal(media.isConnected, false, cleanup);
+    assert.equal(media.hasAttribute("src"), false, cleanup);
+    assert.ok(f.pauses > pauses, `${cleanup} pauses released preview media`);
+  }
 });
 
 test("sent Prompt thumbnails resolve stable snapshot keys without changing labels, accessibility or unrelated markup", (t) => {
@@ -665,8 +839,13 @@ test("locate is available only for an associated successful result", (t) => {
   const locate = f.query('[data-generation-action="locate"]');
   assert.equal(locate.hidden, true); locate.click(); assert.equal(f.actions.length, 0);
   task.status = "succeeded"; task.result = { type: "image", url: "https://example.test/result.png" };
-  f.controller.render(); assert.equal(locate.hidden, true);
+  f.controller.render(); assert.equal(locate.hidden, false);
+  assert.equal(locate.getAttribute("aria-disabled"), "true");
+  assert.equal(locate.title, "生成结果尚未放入画布");
+  locate.click(); assert.equal(f.actions.length, 0);
   task.addedNodeId = "result-1"; f.controller.render(); assert.equal(locate.hidden, false);
+  assert.equal(locate.getAttribute("aria-disabled"), "false");
+  assert.equal(locate.title, "定位生成结果");
   locate.click(); assert.equal(f.actions.at(-1)[0], "locate");
   assert.equal(f.query('[data-generation-action="add"]'), null);
 });
