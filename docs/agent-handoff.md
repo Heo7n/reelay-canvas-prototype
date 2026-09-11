@@ -2,11 +2,17 @@
 
 本文只保留下一位开发者真正需要的当前状态。产品细节、规划和工程规则分别以 `current-product-spec.md`、`product-expansion-plan.md`、`engineering-guardrails.md` 与 ADR 为准；阅读路径见 `development-workflow.md`。
 
+## 2026-09-11 消息滚动时抑制悬浮预览（本地阶段提交）
+
+- 基于已同步新版生成消息的 `fe10e12`，在记录 view 中区分消息列表与完整 Prompt 的滚动状态：滚动取消待开启预览、关闭未固定浮层；滚动静默 160ms 后需真实鼠标位移，再按原 hover 延迟恢复，不因滚动停止或边界事件自动重开。
+- 保留点击 / 键盘打开、固定阅读、素材横条滚轮分页；Prompt 内滚动仅收起从属媒体预览，父层 DOM 与阅读位置不变。切会话、关闭侧栏与销毁清理旧交互。未修改样式、主题、消息内容或生成任务流程。
+- 新增六项回归场景，记录 view 定向测试 53 项通过；完整 `npm run check` 1595 项通过，`npm run build` 与 `git diff --check` 通过。首轮完整检查的主页草稿恢复测试出现一次时序失败，未改代码重跑完整检查通过；日志在系统临时目录 `reelay-hover-scroll-check-retry.log` / `reelay-hover-scroll-build.log`。5196 实测长 Prompt 点击展开、滚轮保留固定阅读、侧栏关闭 / 重开正常，控制台无 error / warn；惯性和静止鼠标的重新触发边界由定向事件测试覆盖。本次仅本地提交，5196 预览继续运行，未推送或部署。
+
 ## 2026-09-11 本任务同步生成消息基线
 
 - 当前 `codex/canvas-loading-priority` 在 `78f0cb1` 上合入本地最新主线 `a8bb798`。该主线与“对话框改动”任务最新已提交的 `af1cc0e` 文件树一致；未导入对方仍未提交的提示词优化流程或覆盖其工作区。
 - 生成记录 view 与样式完整采用新版，包含标题行分页、滚轮翻页、全屏素材预览、等宽 Prompt 阅读及从属媒体预览；分页禁用态修复已在主线中，不重复保留旧素材行导航选择器。本任务浅色无纹理、深色细网纹及 Agent 原面板配色保留。
-- 合并后完整 `npm run check`、`npm run build` 和 diff 检查通过，日志在系统临时目录 `reelay-sync-generation-check.log` / `reelay-sync-generation-build.log`；5196 Agent 面板正常打开、控制台无 error / warn。预览已读取合并版本；未推送或部署。长提示词 hover 与列表滚动的互斥规则尚未修改，后续修复应基于本次合并后的生成记录 view。
+- 合并后完整 `npm run check`、`npm run build` 和 diff 检查通过，日志在系统临时目录 `reelay-sync-generation-check.log` / `reelay-sync-generation-build.log`；5196 Agent 面板正常打开、控制台无 error / warn。预览已读取合并版本；未推送或部署。后续长提示词 hover 与列表滚动的互斥修复见上节。
 
 ## 2026-09-11 画布材质预览（本地阶段提交）
 
