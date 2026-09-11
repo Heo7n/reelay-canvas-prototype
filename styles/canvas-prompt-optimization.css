@@ -1,3 +1,4 @@
+.prompt-optimization-button[hidden] { display: none !important; }
 .prompt-optimization-dialog {
   --optimization-accent: #abc0e8;
   --optimization-accent-surface: #333b4c;
@@ -40,15 +41,19 @@ html[data-theme="light"] .prompt-optimization-dialog {
 .prompt-optimization-dialog svg { width: 17px; height: 17px; flex-shrink: 0; }
 .prompt-optimization-header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 26px 30px 24px; }
 .prompt-optimization-header h2 { margin: 0; font-size: 19px; font-weight: 600; line-height: 28px; letter-spacing: -.3px; }
+.prompt-optimization-source-model { flex: 0 0 auto; margin: 0 30px 12px; color: var(--agent-panel-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .prompt-optimization-header-actions { display: flex; align-items: center; gap: 8px; color: var(--agent-panel-muted); min-width: 0; }
 
 .prompt-optimization-dialog .prompt-optimization-icon-button { width: 32px; height: 32px; padding: 7px; color: var(--agent-panel-muted); }
-.prompt-optimization-scheme-control { display: flex; align-items: center; min-width: 0; gap: 1px; }
+.prompt-optimization-scheme-control { position: relative; display: flex; align-items: center; min-width: 0; border-radius: 8px; transition: background 140ms ease; }
+.prompt-optimization-scheme-control:hover, .prompt-optimization-scheme-control:focus-within, .prompt-optimization-scheme-control:has([aria-expanded="true"]) { background: var(--canvas-popover-hover); }
+.prompt-optimization-scheme-control:has([data-action="default-info"]:not([hidden])) [data-scheme-name] { margin-right: 20px; }
 .prompt-optimization-dialog [data-action="schemes"] { padding: 6px 7px; min-width: 0; max-width: 240px; font-size: 13px; font-weight: 400; color: var(--agent-panel-muted); background: transparent; }
-.prompt-optimization-dialog [data-action="schemes"]:hover, .prompt-optimization-dialog [data-action="schemes"][aria-expanded="true"] { color: var(--agent-panel-text); background: var(--canvas-popover-hover); }
+.prompt-optimization-dialog [data-action="schemes"]:hover, .prompt-optimization-dialog [data-action="schemes"][aria-expanded="true"] { color: var(--agent-panel-text); background: transparent; }
 .prompt-optimization-dialog [data-scheme-name] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prompt-optimization-dialog [data-action="schemes"] > svg { width: 13px; height: 13px; }
-.prompt-optimization-dialog .prompt-optimization-info-button { flex: 0 0 24px; width: 24px; height: 28px; padding: 5px; color: var(--agent-panel-muted); opacity: .75; }
+.prompt-optimization-dialog .prompt-optimization-info-button { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); width: 20px; height: 24px; padding: 3px; border: 0; border-radius: 4px; color: var(--agent-panel-muted); background: transparent; opacity: .8; }
+.prompt-optimization-dialog .prompt-optimization-info-button:hover { color: var(--agent-panel-text); background: transparent; opacity: 1; }
 .prompt-optimization-dialog .prompt-optimization-info-button > svg { width: 14px; height: 14px; }
 .prompt-optimization-info-tooltip, .prompt-optimization-scheme-menu, .prompt-optimization-configuration-panel {
   position: fixed; z-index: 5; box-sizing: border-box; border: 1px solid var(--canvas-popover-line); border-radius: 12px;
@@ -92,15 +97,15 @@ html[data-theme="light"] .prompt-optimization-configuration-panel :is(input, sel
 @keyframes optimization-panel-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 
 .prompt-optimization-tabs { display: none; }
-.prompt-optimization-columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); flex: 1 1 auto; min-height: 0; margin: 0 30px; }
+.prompt-optimization-columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 12px; flex: 1 1 auto; min-height: 0; margin: 0 30px; }
 .prompt-optimization-column { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.prompt-optimization-source { padding-right: 25px; border-right: 1px solid var(--canvas-popover-line); }
-.prompt-optimization-suggestion { padding-left: 25px; }
-.prompt-optimization-column-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 0 0 35px; margin-bottom: 10px; }
-.prompt-optimization-column-heading h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.prompt-optimization-source { padding: 18px; border-radius: 12px; background: color-mix(in srgb, var(--agent-panel-text) 3%, transparent); }
+.prompt-optimization-suggestion { padding: 18px; }
+.prompt-optimization-column-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 0 0 45px; padding-bottom: 12px; margin-bottom: 18px; border-bottom: 1px solid color-mix(in srgb, var(--canvas-popover-line) 65%, transparent); }
+.prompt-optimization-column-heading h3 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; color: var(--agent-panel-text); }
 .prompt-optimization-original { font-size: 12px; font-weight: 400; color: var(--agent-panel-muted); }
 .prompt-optimization-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--canvas-popover-line) transparent; font-size: 14px; line-height: 1.95; overflow-wrap: anywhere; }
-.prompt-optimization-scroll[data-source] { white-space: pre-wrap; color: var(--agent-panel-muted); padding: 0 10px 14px 0; }
+.prompt-optimization-scroll[data-source] { white-space: pre-wrap; color: color-mix(in srgb, var(--agent-panel-text) 78%, var(--agent-panel-muted)); padding: 0 10px 14px 0; }
 .prompt-optimization-scroll[data-suggestion] { padding: 0 10px 14px 0; }
 .prompt-optimization-dialog .prompt-reference { margin-inline: 3px; vertical-align: baseline; }
 .prompt-optimization-dialog .prompt-editor-content { min-height: 180px; caret-color: var(--agent-panel-text); }
@@ -126,6 +131,7 @@ html[data-theme="light"] .prompt-optimization-configuration-panel :is(input, sel
   .prompt-optimization-header h2 { white-space: nowrap; }
   .prompt-optimization-dialog [data-action="schemes"] { max-width: 144px; font-size: 12px; padding-inline: 5px; }
   .prompt-optimization-header { gap: 8px; }
+  .prompt-optimization-dialog .prompt-optimization-info-button { right: 22px; }
   .prompt-optimization-configuration-panel { padding: 15px; }
   .prompt-optimization-configuration-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .prompt-optimization-configuration-panel textarea { height: 132px; }
@@ -133,7 +139,8 @@ html[data-theme="light"] .prompt-optimization-configuration-panel :is(input, sel
   .prompt-optimization-tabs button { font-size: 13px; padding: 5px 10px; color: var(--agent-panel-muted); }
   .prompt-optimization-tabs [aria-selected="true"] { background: var(--optimization-accent-surface); color: var(--optimization-accent); }
   .prompt-optimization-columns { display: block; margin-inline: 18px; min-height: 0; }
-  .prompt-optimization-column { height: 100%; padding: 0; border: 0; }
+  .prompt-optimization-column { height: 100%; padding: 12px; border: 0; }
+  .prompt-optimization-source-model { margin-inline: 18px; }
   .prompt-optimization-columns[data-active-tab="suggestion"] .prompt-optimization-source, .prompt-optimization-columns[data-active-tab="source"] .prompt-optimization-suggestion { display: none; }
   .prompt-optimization-notice { margin-inline: 18px; }
   .prompt-optimization-footer { padding: 15px 18px 18px; flex-wrap: wrap; }
@@ -141,18 +148,27 @@ html[data-theme="light"] .prompt-optimization-configuration-panel :is(input, sel
   .prompt-optimization-footer button { padding: 8px; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .prompt-optimization-dialog button { transition: none; }
+  .prompt-optimization-dialog button, .prompt-optimization-scheme-control { transition: none; }
   .prompt-optimization-scheme-menu, .prompt-optimization-configuration-panel { animation: none; }
   .prompt-optimization-dialog::backdrop { backdrop-filter: none; }
 }
 .prompt-optimization-toast {
   position: fixed; z-index: 10020; top: 24px; left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; justify-content: space-between; gap: 22px;
-  width: max-content; max-width: calc(100vw - 40px); padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+  width: max-content; max-width: calc(100vw - 40px); padding: 14px 16px;
   color: var(--agent-panel-text); background: var(--agent-panel-bg);
-  border: 1px solid var(--canvas-popover-line); border-radius: 12px;
-  box-shadow: var(--canvas-popover-shadow); font-family: inherit; font-size: 13px; line-height: 1.5;
+  border: 1px solid var(--canvas-popover-line); border-radius: 14px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 7%), 0 12px 32px rgb(0 0 0 / 10%); font-family: inherit; font-size: 13px; line-height: 1.6;
+  animation: optimization-toast-in 180ms ease-out;
 }
+.prompt-optimization-toast-content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.prompt-optimization-toast-status { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 20px; width: 20px; height: 20px; color: var(--agent-panel-muted); border-radius: 50%; }
+.prompt-optimization-toast-status svg { width: 18px; height: 18px; }
+.prompt-optimization-toast[data-tone="success"] .prompt-optimization-toast-status { color: #17281f; background: #83c8a2; }
+.prompt-optimization-toast[data-tone="success"] .prompt-optimization-toast-status svg { width: 13px; height: 13px; stroke-width: 2.5; }
+html[data-theme="light"] .prompt-optimization-toast[data-tone="success"] .prompt-optimization-toast-status { color: #fff; background: #408b63; }
+@keyframes optimization-toast-in { from { opacity: 0; transform: translate(-50%, -5px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .prompt-optimization-toast { animation: none; } }
 .prompt-optimization-toast button { flex-shrink: 0; padding: 3px 7px; border: 0; background: transparent; color: #849fce; font: inherit; font-weight: 500; cursor: pointer; border-radius: 5px; }
 html[data-theme="light"] .prompt-optimization-toast button { color: #546a98; }
 .prompt-optimization-toast button:hover { background: var(--canvas-popover-hover); }

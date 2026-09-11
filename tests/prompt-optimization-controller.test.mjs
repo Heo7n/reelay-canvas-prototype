@@ -17,6 +17,7 @@ const modelCatalog = [
   { id: "image-model", name: "Image Model", type: "image", optimizationInstructions: "图片默认：保留主体与构图" },
   { id: "video-model", name: "Video Model", type: "video", optimizationInstructions: "视频默认：明确动作与镜头" },
   { id: "other-model", name: "Other Model", type: "image", optimizationInstructions: "另一个模型的默认指令" },
+  { id: "unsupported-model", name: "Unsupported Model", type: "video" },
 ];
 
 function fixture(t, overrides = {}) {
@@ -65,6 +66,47 @@ function fixture(t, overrides = {}) {
   return { controller, target, ready, run, timers, window, toastAction,
     get viewOptions() { return viewOptions; }, get viewState() { return viewState; }, get opened() { return opened; } };
 }
+
+test("unsupported models cannot start optimization and hide the control before any adapter exists", (t) => {
+  const f = fixture(t), input = f.target(), button = f.window.document.createElement("button");
+  input.data.model = { id: "unsupported-model", type: "video" };
+  f.controller.syncButton(button, input.owner, { model: input.data.model, hasPrompt: true });
+  assert.equal(button.hidden, true);
+  assert.equal(button.disabled, true);
+  assert.equal(f.controller.activate(input), false);
+  assert.equal(f.timers.size, 0);
+  assert.equal(input.writes.length, 0);
+  input.data.model = { id: "video-model", type: "video" };
+  f.controller.syncButton(button, input.owner, { model: input.data.model, hasPrompt: true });
+  assert.equal(button.hidden, false);
+  assert.equal(button.disabled, false);
+});
+
+test("switching to an unsupported model closes review and preserves results for returning", (t) => {
+  const f = fixture(t), input = f.target();
+  f.ready(input);
+  const previous = plain(f.controller.get(input.owner));
+  input.data.model = { id: "unsupported-model", type: "video" };
+  f.controller.syncButton(f.window.document.createElement("button"), input.owner, { model: input.data.model, hasPrompt: true });
+  assert.equal(f.opened, false);
+  assert.equal(f.controller.activate(input), false);
+  assert.deepEqual(plain(f.controller.get(input.owner)), previous);
+  input.data.model = { id: "image-model", type: "image" };
+  assert.equal(f.controller.activate(input), true);
+  assert.equal(f.opened, true);
+  assert.equal(f.timers.size, 0);
+});
+
+test("a pending result does not notify or reopen after switching to an unsupported model", (t) => {
+  const f = fixture(t), input = f.target();
+  f.controller.activate(input);
+  input.data.model = { id: "unsupported-model", type: "video" };
+  f.run();
+  assert.equal(f.window.document.querySelector('.prompt-optimization-toast'), null);
+  assert.equal(f.controller.open(input.owner), false);
+  assert.equal(f.controller.get(input.owner).status, "ready");
+  assert.equal(input.writes.length, 0);
+});
 
 test("optimization is a suggestion workflow: starting, completing and opening never write the input", (t) => {
   const f = fixture(t), input = f.target();
@@ -180,10 +222,13 @@ test("another node with the same ID cannot inherit the previous node suggestion"
   assert.equal(next.writes.length, 0);
 });
 
-test("regenerating a stale result uses current source even after a suggestion was manually edited", t => {
+test("regenerating a stale result protects unapplied manual edits before using current source", t => {
   const f = fixture(t), input = f.target(); f.ready(input);
   f.viewOptions.onEdit("旧建议的手工修改");
   input.data.prompt = doc(text("新的原始输入"));
+  assert.equal(f.controller.regenerate(), false);
+  assert.equal(f.viewState.confirmAction, "current");
+  assert.equal(f.timers.size, 0);
   assert.equal(f.controller.regenerate(), true);
   assert.equal(f.viewState.confirmAction, "");
   assert.equal(f.controller.get(input.owner).status, "processing");
@@ -207,6 +252,47 @@ test("manually edited suggestions require regeneration confirmation and restart 
   assert.equal(f.controller.get(input.owner).source.prompt.content[0].text, "香水瓶置于森林中。");
   assert.equal(f.controller.get(input.owner).edited, false);
   assert.equal(input.writes.length, 0);
+});
+
+test("current-input action confirms unapplied edits and invalidates confirmation when input changes", t => {
+  const f = fixture(t), input = f.target(); f.ready(input);
+  f.viewOptions.onEdit("尚未填入的手改建议");
+  input.data.prompt = doc(text("新的输入"));
+  assert.equal(f.controller.apply(), false);
+  assert.equal(f.viewState.confirmAction, "current");
+  f.viewOptions.onCancelConfirm();
+  assert.equal(f.viewState.confirmAction, "");
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.controller.apply(), false);
+  input.data.prompt = doc(text("再次更改输入")); f.controller.refresh();
+  assert.equal(f.viewState.confirmAction, "");
+  assert.equal(f.controller.apply(), false);
+  assert.equal(f.controller.apply(), true);
+  f.run();
+  assert.deepEqual(plain(f.controller.get(input.owner).source.prompt), input.data.prompt);
+  assert.equal(input.writes.length, 0);
+});
+
+test("an applied manual suggestion needs no discard confirmation after subsequent input edits", t => {
+  const f = fixture(t), input = f.target(); f.ready(input);
+  f.viewOptions.onEdit("已经填入的手改建议"); f.controller.apply();
+  input.data.prompt = doc(text("另一份输入")); f.controller.activate(input);
+  assert.equal(f.controller.apply(), true);
+  assert.equal(f.viewState.confirmAction, "");
+  f.run();
+  assert.deepEqual(plain(f.controller.get(input.owner).source.prompt), input.data.prompt);
+  assert.equal(input.writes.length, 1);
+});
+
+test("previous model attribution appears only for a different model and clears on completion", t => {
+  const f = fixture(t), input = f.target(); f.ready(input);
+  assert.equal(f.viewState.previousModelName, "");
+  input.data.model.parameters.ratio = "16:9"; f.controller.refresh();
+  assert.equal(f.viewState.previousModelName, "");
+  input.data.model = { id: "video-model", type: "video" }; f.controller.refresh();
+  assert.equal(f.viewState.previousModelName, "Image Model");
+  f.controller.apply(); f.run();
+  assert.equal(f.viewState.previousModelName, "");
 });
 
 test("apply replaces only the prompt and undo restores exactly the prior prompt", (t) => {
@@ -391,7 +477,6 @@ for (const policy of ["node", "draft"]) {
     assert.equal(input.writes.length, 2);
     f.controller.activate(input);
     assert.equal(f.viewState.applied, true);
-    assert.equal(f.controller.regenerate(), false, "manual suggestion changes still require discard confirmation");
     assert.equal(f.controller.regenerate(), true);
     f.run();
     assert.deepEqual(plain(f.controller.get(input.owner).source), source, "regeneration after applying starts from the original, not the applied output");

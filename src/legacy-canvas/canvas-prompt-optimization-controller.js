@@ -8,8 +8,10 @@
     const win = document.defaultView || root;
     const adapters = new WeakMap();
     const drafts = new WeakMap(), applications = new WeakMap();
-    let active = null, view = null, confirmAction = "", notice = "", toast, toastTimer;
+    let active = null, view = null, confirmAction = "", confirmContext = "", notice = "", toast, toastTimer;
     const preferences = root.REELAY_PROMPT_OPTIMIZATION_PREFERENCES.createStore({ storage, models: getModels() });
+    const supportedModels = new Set(getModels().filter(root.REELAY_PROMPT_OPTIMIZATION_PREFERENCES.supportsModel).map(model => model.id));
+    const supportsModel = model => supportedModels.has(typeof model === "string" ? model : model?.id);
     let disposed = false;
     const same = (a, b) => JSON.stringify(promptDocument.normalize(a)) === JSON.stringify(promptDocument.normalize(b));
     const sameSource = (a, b) => same(a.prompt, b.prompt)
@@ -41,9 +43,30 @@
     function settingsFor(model) {
       return { customInstructions: preferences.get(model).customInstructions };
     }
+    function optimizationRequest(target, state) {
+      const snapshot = target.snapshot();
+      const current = !sameSource(state.source, snapshot) && !matchesApplication(target.owner, state, snapshot);
+      const source = current ? snapshot : state.source;
+      const settings = settingsFor(snapshot.model);
+      const action = current ? "current" : "regenerate";
+      return { source, action, key: JSON.stringify([snapshot, source, state.suggestion, settings, action]) };
+    }
+    function requestOptimization(target, state) {
+      const request = optimizationRequest(target, state);
+      if (!available(target, request.source.prompt)
+        || !promptDocument.toText(request.source.prompt, request.source.references).trim()) return false;
+      const application = applications.get(target.owner);
+      const suggestionWasApplied = application && sameSource(application.source, state.source)
+        && same(application.snapshot.prompt, state.suggestion);
+      if (state.edited && !suggestionWasApplied
+        && (confirmAction !== request.action || confirmContext !== request.key)) {
+        confirmAction = request.action; confirmContext = request.key; refresh(); return false;
+      }
+      return startCurrent(target, request.source);
+    }
     function configure(action, ...args) {
       const target = adapters.get(active);
-      if (!target?.isCurrent() || service.get(active)?.status === "processing") return false;
+      if (!target?.isCurrent() || !supportsModel(target.snapshot().model) || service.get(active)?.status === "processing") return false;
       try {
         preferences[action](target.snapshot().model, ...args);
         confirmAction = ""; refresh();
@@ -51,12 +74,16 @@
         return true;
       } catch (error) { message(error.message || "配置未保存，请重试"); return false; }
     }
-    function message(text, label, action) {
+    function message(text, label, action, tone = "info") {
       if (disposed) return;
       toast?.remove(); win.clearTimeout(toastTimer);
       toast = document.createElement("div"); toast.className = "prompt-optimization-toast";
+      toast.dataset.tone = tone;
       toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
-      const content = document.createElement("span"); content.textContent = text; toast.append(content);
+      const status = document.createElement("span"); status.className = "prompt-optimization-toast-status";
+      status.setAttribute("aria-hidden", "true");
+      status.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="./assets/icons/prompt-optimization.svg#${tone === "success" ? "check" : "info"}"/></svg>`;
+      const content = document.createElement("span"); content.className = "prompt-optimization-toast-content"; content.textContent = text; toast.append(status, content);
       if (label && action) {
         const button = document.createElement("button"); button.type = "button"; button.textContent = label;
         button.addEventListener("click", () => { toast?.remove(); action(); }); toast.append(button);
@@ -65,18 +92,23 @@
       toastTimer = win.setTimeout(() => { toast?.remove(); toast = null; }, label ? 7000 : 3500);
     }
     function available(target, suggestion) {
-      return Boolean(target?.isCurrent() && (!suggestion || promptDocument.resolve(suggestion, target.references()).valid));
+      return Boolean(target?.isCurrent() && supportsModel(target.snapshot().model)
+        && (!suggestion || promptDocument.resolve(suggestion, target.references()).valid));
     }
     function stateFor(owner) {
       const state = service.get(owner), target = adapters.get(owner);
       if (!state || !target) return null;
       const snapshot = target.isCurrent() ? target.snapshot() : null;
+      if (snapshot && !supportsModel(snapshot.model)) return null;
+      if (confirmAction && (!snapshot || optimizationRequest(target, state).key !== confirmContext)) confirmAction = "";
       const filled = snapshot && matchesApplication(owner, state, snapshot);
       const stale = !snapshot || (!sameSource(state.source, snapshot) && !filled);
       const configuration = preferences.get(snapshot?.model || state.source.model);
       const publicConfiguration = { ...configuration,
         customInstructions: configuration.selectedId === "default" ? "" : configuration.customInstructions };
       return { ...state, configuration: publicConfiguration, settings: { customInstructions: publicConfiguration.customInstructions }, confirmAction, notice: notice || state.error,
+        previousModelName: snapshot && snapshot.model.id !== state.source.model.id
+          ? getModels().find(model => model.id === state.source.model.id)?.name || state.source.model.name || state.source.model.id : "",
         applied: Boolean(filled && same(snapshot.prompt, state.suggestion)),
         unavailable: !available(target, stale ? snapshot?.prompt : state.suggestion), stale,
         emptyInput: Boolean(snapshot && !promptDocument.toText(snapshot.prompt, snapshot.references).trim()) };
@@ -90,9 +122,9 @@
       onReady(owner) {
         applications.delete(owner);
         onChange(owner); if (active === owner) refresh();
-        if (!adapters.get(owner)?.isCurrent()) return;
+        if (!available(adapters.get(owner))) return;
         if (active === owner && view?.isOpen()) service.markRead(owner);
-        else message("提示词已优化", "查看", () => open(owner));
+        else message("提示词已优化，可再次点击提示词优化按钮查看。", "查看", () => open(owner), "success");
       },
       onError(owner, state) { if (adapters.get(owner)?.isCurrent()) message(state.error || "优化未完成，请重试"); },
     });
@@ -108,13 +140,13 @@
       return view;
     }
     function open(owner, trigger) {
-      if (disposed || !adapters.get(owner)?.isCurrent()) return false;
+      if (disposed || !available(adapters.get(owner))) return false;
       if (!service.get(owner)) return false;
       active = owner; confirmAction = ""; notice = "";
       service.markRead(owner); ensureView().open(stateFor(owner), trigger); return true;
     }
     function activate(target, trigger) {
-      if (disposed || !target?.owner || !target.isCurrent()) return false;
+      if (disposed || !target?.owner || !available(target)) return false;
       adapters.set(target.owner, target);
       const previous = service.get(target.owner);
       if (previous?.status === "processing") return false;
@@ -123,6 +155,7 @@
       return startCurrent(target, snapshot);
     }
     function startCurrent(target, snapshot = target.snapshot()) {
+      if (!supportsModel(snapshot.model)) return false;
       if (!promptDocument.toText(snapshot.prompt, snapshot.references).trim()) return false;
       if (!promptDocument.resolve(snapshot.prompt, snapshot.references).valid) { message("请先修复失效的素材引用"); return false; }
       confirmAction = ""; notice = "";
@@ -135,18 +168,13 @@
     function regenerate() {
       const state = service.get(active), target = adapters.get(active);
       if (!state || state.status === "processing" || !target?.isCurrent()) return false;
-      if (!sameSource(state.source, target.snapshot()) && !matchesApplication(active, state, target.snapshot())) return startCurrent(target);
-      if (!available(target, state.source.prompt)) return false;
-      if (state.edited && confirmAction !== "regenerate") { confirmAction = "regenerate"; refresh(); return false; }
-      confirmAction = ""; notice = "";
-      try { return service.start(active, state.source, settingsFor(target.snapshot().model)); }
-      catch (error) { notice = error.message; refresh(); return false; }
+      return requestOptimization(target, state);
     }
     function apply() {
       const owner = active, state = service.get(owner), target = adapters.get(owner);
       if (!state || state.status === "processing") return false;
       const snapshot = target?.isCurrent() ? target.snapshot() : null;
-      if (snapshot && !sameSource(state.source, snapshot) && !matchesApplication(owner, state, snapshot)) return startCurrent(target);
+      if (snapshot && !sameSource(state.source, snapshot) && !matchesApplication(owner, state, snapshot)) return requestOptimization(target, state);
       if (!state.suggestion) return false;
       if (snapshot && matchesApplication(owner, state, snapshot) && same(snapshot.prompt, state.suggestion)) return false;
       if (!available(target, state.suggestion)) { notice = "输入位置或引用已变化，请重新发起优化。"; refresh(); return false; }
@@ -165,11 +193,14 @@
       });
       return true;
     }
-    function syncButton(button, owner, { hasPrompt = false, disabled = false } = {}) {
+    function syncButton(button, owner, { hasPrompt = false, disabled = false, model } = {}) {
       if (!button) return;
       const state = service.get(owner), target = adapters.get(owner), busy = state?.status === "processing";
+      const supported = supportsModel(model || (target?.isCurrent() ? target.snapshot().model : null));
+      button.hidden = !supported;
+      if (!supported && active === owner) close();
       const ready = Boolean(state && !busy && target?.isCurrent() && canReview(state, target.snapshot()));
-      button.disabled = disabled || busy || (!hasPrompt && !ready);
+      button.disabled = !supported || disabled || busy || (!hasPrompt && !ready);
       button.classList.toggle("is-processing", busy);
       button.classList.toggle("has-optimization", ready);
       button.classList.toggle("has-unread-optimization", Boolean(ready && state?.unread));

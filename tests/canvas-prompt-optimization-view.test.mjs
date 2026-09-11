@@ -46,10 +46,26 @@ test('processing and unavailable targets block apply while stale results offer c
   assert.equal(f.editor.options.isEditable(), false); assert.equal(f.document.querySelector('[data-action="apply"]').disabled, true);
   f.controller.update({ ...f.base, stale: true });
   assert.match(f.document.querySelector('[data-action="apply"]').textContent, /优化当前内容/);
+  assert.equal(f.document.querySelector('[data-action="regenerate"]').hidden, true);
   assert.doesNotMatch(f.document.querySelector('.prompt-optimization-notice').textContent, /填入将替换|确认替换/);
   assert.equal(f.document.querySelector('[data-action="cancel-confirm"]').hidden, true);
   f.document.querySelector('[data-action="apply"]').click(); assert.equal(f.calls.at(-1)[0], 'apply');
   f.controller.update({ ...f.base, unavailable: true }); assert.equal(f.document.querySelector('[data-action="apply"]').disabled, true);
+});
+
+test('stale confirmation stays on the primary action and model attribution is conditional', t => {
+  const f = fixture(t); f.open();
+  const model = f.document.querySelector('.prompt-optimization-source-model');
+  assert.equal(model.hidden, true);
+  f.controller.update({ ...f.base, stale: true, confirmAction: 'current', previousModelName: 'Seedance 2.0' });
+  assert.equal(f.document.querySelector('[data-action="apply"] span').textContent, '确认优化当前内容');
+  assert.equal(f.document.querySelector('[data-action="regenerate"]').hidden, true);
+  assert.equal(f.document.querySelector('[data-action="cancel-confirm"]').hidden, false);
+  assert.match(f.document.querySelector('.prompt-optimization-notice').textContent, /尚未填入/);
+  assert.equal(model.textContent, '上次优化使用：Seedance 2.0'); assert.equal(model.hidden, false);
+  f.controller.update(f.base);
+  assert.equal(model.hidden, true); assert.equal(model.textContent, '');
+  assert.equal(f.document.querySelector('[data-action="regenerate"]').hidden, false);
 });
 test('applied suggestions show a quiet completed action and return to fill after suggestion edits', t => {
   const f = fixture(t); f.open({ ...f.base, applied: true });
@@ -96,7 +112,7 @@ test('platform default shows only its name and accessible explanation, never pri
   const info = f.document.querySelector('[data-action="default-info"]'); info.focus();
   const tooltip = f.document.querySelector('.prompt-optimization-info-tooltip');
   assert.equal(tooltip.hidden, false); assert.equal(tooltip.getAttribute('role'), 'tooltip');
-  assert.equal(tooltip.textContent, '平台默认会随当前生成模型自动切换对应的优化规则。');
+  assert.equal(tooltip.textContent, '「平台默认」会随当前生成模型自动切换对应优化规则。');
   info.dispatchEvent(new f.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   assert.equal(tooltip.hidden, true); assert.equal(f.controller.isOpen(), true);
 });
@@ -163,4 +179,18 @@ test('open on another owner clears local forms even for the same model, and proc
   for (const selector of ['[data-action="schemes"]', '[data-configuration-name]', '[data-configuration-model]', '[data-custom]', '[data-save-configuration]']) assert.equal(f.document.querySelector(selector).disabled, true);
   f.controller.update({ ...f.base, source: { ...f.base.source, scope: 'node:2' } });
   assert.equal(f.document.querySelector('.prompt-optimization-configuration-panel').hidden, true);
+});
+
+test('default label and info share one control group without nesting interactive elements', t => {
+  const f = fixture(t); f.open();
+  const group = f.document.querySelector('.prompt-optimization-scheme-control');
+  const trigger = group.querySelector('[data-action="schemes"]'), info = group.querySelector('[data-action="default-info"]');
+  assert.equal(group.getAttribute('role'), 'group'); assert.equal(group.getAttribute('aria-label'), '优化配置');
+  assert.equal(trigger.parentElement, info.parentElement); assert.equal(trigger.contains(info), false);
+  assert.equal(group.querySelectorAll('button button').length, 0);
+  info.click(); assert.equal(f.document.querySelector('.prompt-optimization-info-tooltip').hidden, false);
+  assert.equal(f.document.querySelector('.prompt-optimization-scheme-menu').hidden, true, 'the information action does not open the scheme menu');
+  trigger.click(); assert.equal(f.document.querySelector('.prompt-optimization-scheme-menu').hidden, false);
+  f.controller.update({ ...f.base, configuration: configuration({ selectedId: 'cinematic' }) });
+  assert.equal(info.hidden, true); assert.equal(trigger.querySelector('[data-scheme-name]').textContent, '叙事镜头');
 });
