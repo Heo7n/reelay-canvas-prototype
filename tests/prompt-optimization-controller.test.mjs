@@ -452,4 +452,3 @@ test("changing scope cannot expose a successful pair from the previous scope", t
   assert.equal(f.controller.get(input.owner).source.scope, "another-project");
   assert.equal(f.controller.get(input.owner).suggestion, null);
 });
-
