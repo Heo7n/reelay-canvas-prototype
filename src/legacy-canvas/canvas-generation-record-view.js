@@ -321,7 +321,6 @@
       if (moveFocus) gallery.viewport.focus({ preventScroll: true });
       for (const [button, available] of [[gallery.previous, previousAvailable], [gallery.next, nextAvailable]]) {
         button.hidden = !paged; button.disabled = !available;
-        button.style.visibility = available ? "" : "hidden";
       }
       const page = document.createElement("div"); page.className = "generation-record-reference-page";
       page.innerHTML = visible.map((entry, index) => `<button type="button" class="generation-record-reference-item" data-record-popover="reference" data-reference-preview="${card.start + index}" aria-expanded="false" aria-label="${escape(`${entry.label}：${entry.name}，预览`)}"><span>${thumbnail(entry)}</span><small>${escape(entry.label)}</small></button>`).join("");

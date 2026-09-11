@@ -1,15 +1,18 @@
 :root {
   color-scheme: dark;
-  --bg: #050608;
-  --app-bg: #050608;
-  --grid-dot-color: rgba(255, 255, 255, 0.4);
+  --bg: #171819;
+  --app-bg: #171819;
+  /* Paired offsets preserve the base hue instead of tinting the canvas with gray. */
+  --canvas-weave-shadow: rgb(from var(--app-bg) calc(r - 5) calc(g - 5) calc(b - 5) / 0.7);
+  --canvas-weave-light: rgb(from var(--app-bg) calc(r + 5) calc(g + 5) calc(b + 5) / 0.7);
+  --grid-dot-color: rgba(255, 255, 255, 0.24);
   --empty-pill-bg: rgba(22, 23, 26, 0.82);
   --empty-pill-primary: rgba(255, 255, 255, 0.82);
   --empty-pill-secondary: rgba(255, 255, 255, 0.44);
   --empty-pill-accent: #8fb5ff;
-  --surface: #111214;
-  --surface-2: #191a1d;
-  --surface-3: #242528;
+  --surface: #202123;
+  --surface-2: #28292b;
+  --surface-3: #323335;
   --line-strong: rgba(255, 255, 255, 0.46);
   --text: #f4f4f5;
   --muted: #8d8e93;
@@ -18,7 +21,7 @@
   --accent-2: #db1aa2;
   --good: #88f0c2;
   --node-w: 760px;
-  --floating-bg: rgba(22, 23, 26, 0.78);
+  --floating-bg: rgba(32, 33, 35, 0.9);
   --floating-line: rgba(255, 255, 255, 0.1);
   --floating-text: rgba(255, 255, 255, 0.82);
   --agent-panel-bg: var(--surface);
@@ -150,7 +153,7 @@ html[data-theme="light"] {
   color-scheme: light;
   --bg: #f1f3f6;
   --app-bg: #f1f3f6;
-  --grid-dot-color: rgba(17, 24, 39, 0.34);
+  --grid-dot-color: rgba(32, 33, 31, 0.22);
   --empty-pill-bg: rgba(255, 255, 255, 0.78);
   --empty-pill-primary: rgba(17, 18, 20, 0.72);
   --empty-pill-secondary: rgba(17, 18, 20, 0.42);
@@ -1132,11 +1135,23 @@ html[data-theme-mode="dark"] .theme-feedback-dark {
   cursor: default;
 }
 
+html:not([data-theme="light"]) .canvas-shell::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background-image:
+    linear-gradient(45deg, transparent 20%, var(--canvas-weave-shadow) 35%, var(--canvas-weave-light) 50%, transparent 65%),
+    linear-gradient(-45deg, transparent 20%, var(--canvas-weave-shadow) 35%, var(--canvas-weave-light) 50%, transparent 65%);
+  background-size: 4px 4px;
+  pointer-events: none;
+}
+
 .canvas-grid {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background-image: radial-gradient(circle, var(--grid-dot-color) 0 1.09px, transparent 1.46px);
+  background-image: radial-gradient(circle, var(--grid-dot-color) 0 0.8px, transparent 1.15px);
   background-position: var(--grid-x, 0px) var(--grid-y, 0px);
   background-size: var(--grid-size, 24px) var(--grid-size, 24px);
   opacity: var(--grid-opacity, 0.34);

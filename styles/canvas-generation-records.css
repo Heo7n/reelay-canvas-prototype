@@ -209,7 +209,8 @@ audio.generation-record-media { width: 100%; height: 42px; }
   padding: 0; border: 1px solid var(--record-hairline); border-radius: 50%; background: var(--record-chip);
   color: var(--record-secondary); cursor: pointer; transition: background .15s ease, color .15s ease;
 }
-.generation-record-reference-rail .generation-record-page-button:hover { color: var(--record-chip-ink); background: var(--record-chip-hover); }
+.generation-record-reference-rail .generation-record-page-button:hover:not(:disabled) { color: var(--record-chip-ink); background: var(--record-chip-hover); }
+.generation-record-reference-rail .generation-record-page-button:disabled { opacity: .36; cursor: default; }
 .generation-record-reference-rail .generation-record-page-button[hidden] { display: none; }
 .generation-record-page-button svg { width: 15px; height: 15px; }
 .generation-record-reference-viewport { position: relative; flex: 0 0 auto; max-width: 100%; overflow: hidden; outline: none; }
