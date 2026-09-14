@@ -123,3 +123,6 @@ jobs:
 
       - name: Run PostgreSQL integration checks
         run: npm run check:server:postgres
+
+      - name: Verify isolated sample backup and restore
+        run: npm run check:backup:drill

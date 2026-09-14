@@ -157,8 +157,8 @@ describe("PostgreSQL Entity persistence", () => {
       () => `entity-test-${++nextId}`,
     );
 
-    let entityId = "";
-    let motionAssetId = "";
+    let entityId: string;
+    let motionAssetId: string;
     try {
       const front = await createPersonalAsset(assetStore, actorId, workspaceId, "a1");
       const voice = await createPersonalAsset(assetStore, actorId, workspaceId, "b2", "audio");

@@ -60,7 +60,7 @@
       units.push({ id: `group:${group.id}`, group, nodes: [] });
     }
 
-    let selected = [];
+    let selected;
     let selectedIds;
     let internalGroup = null;
     let expandedGroupCount = 0;

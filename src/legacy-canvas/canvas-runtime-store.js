@@ -144,7 +144,7 @@
           configurable: false,
           enumerable: true,
           get: () => getActiveField(field),
-          set: (value) => setActiveField(field, value),
+          set: (value) => { setActiveField(field, value); },
         });
       }
       Object.defineProperties(target, {

@@ -54,6 +54,7 @@ npm run worktrees
 
 | 范围 | 迭代入口 |
 | --- | --- |
+| JS / TS 代码规则 | `npm run lint -- src/<本次文件>`；全仓 `npm run lint` |
 | legacy 纯视觉微调 | `npm run check:visual`（CSS / HTML 静态检查）+ 当前预览查看实际效果 |
 | legacy 某个行为 | `node --test tests/<相关文件>.test.mjs` |
 | CSS / HTML / JS 语法 | 对应 `npm run check:css` / `check:html` / `check:js` |
@@ -73,6 +74,10 @@ git diff --check
 ```
 
 `check` 不依赖 Docker；数据库切片仍必须跑 PostgreSQL 集成验证，内存 adapter 不能替代。仅文档的里程碑按文档检查，不要求全画布回归。
+
+`lint` 已进入本地 `check` 与 CI，覆盖源码、脚本和测试的基础正确性规则，TS 禁止显式 `any` 和无理由跳过类型检查。缓存不入 Git，单文件检查用于日常迭代。暂不引入格式化或对 legacy 全量删未使用声明；TS 未使用声明仍由现有编译器检查。控制字符校验正则、Playwright fixture 空解构与源码片段测试采用有说明的规则配置，不为了通过 lint 改弱数据校验。
+
+核心依赖边界已自动拦截：`domain` 只依赖内部领域代码；`application` 与 `server/application` 可依赖领域和对应 ports，不得反向导入页面、HTTP / 数据库实现。当前仅放行纯校验库 `zod`；静态导入、再导出、动态导入、`require` 和 TS 类型导入统一检查，非字面量动态路径拒绝。测试文件可以导入测试框架及适配器。该规则检查模块导入，不宣称已约束 legacy 经 `window.REELAY_*` 传递的所有运行时依赖，也不替代权限、数据或状态测试。
 
 `npm test` 自动发现 `tests/*.test.mjs` 并执行 legacy 打包测试；`test:canvas` 是兼容别名，不再维护另一份清单。shell / server 测试按各自 Vitest 配置发现，启动 / 初始化脚本测试保留专用入口。新增测试必须实际进入对应命令。
 
