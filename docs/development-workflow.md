@@ -54,6 +54,7 @@ npm run worktrees
 
 | 范围 | 迭代入口 |
 | --- | --- |
+| legacy 纯视觉微调 | `npm run check:visual`（CSS / HTML 静态检查）+ 当前预览查看实际效果 |
 | legacy 某个行为 | `node --test tests/<相关文件>.test.mjs` |
 | CSS / HTML / JS 语法 | 对应 `npm run check:css` / `check:html` / `check:js` |
 | React / TS 页面或领域 | 对应 Vitest 文件；阶段检查 `npm run check:shell` |
@@ -61,6 +62,8 @@ npm run worktrees
 | PostgreSQL schema / migration / adapter | 上项 + 独立本机数据库的 `npm run check:server:postgres` |
 | 构建 / 入口 / 路由 | `npm run build`；影响体验分支时加 `npm run build:experience` |
 | 文档 | `npm run check:docs` 与 `git diff --check` |
+
+视觉微调不运行全量测试或重复构建，也不为每次间距调整单独提交。React CSS 以 Vite 编译和实际页面为准，`check:visual` 不代替其构建校验。行为变化先跑对应文件，阶段收口再执行下述完整检查；“1687 项测试”是许多快速断言，不是 1687 次浏览器操作。
 
 代码里程碑或提交前统一执行：
 
@@ -72,6 +75,14 @@ git diff --check
 `check` 不依赖 Docker；数据库切片仍必须跑 PostgreSQL 集成验证，内存 adapter 不能替代。仅文档的里程碑按文档检查，不要求全画布回归。
 
 `npm test` 自动发现 `tests/*.test.mjs` 并执行 legacy 打包测试；`test:canvas` 是兼容别名，不再维护另一份清单。shell / server 测试按各自 Vitest 配置发现，启动 / 初始化脚本测试保留专用入口。新增测试必须实际进入对应命令。
+
+### 关键浏览器验收
+
+首次安装依赖后执行 `npx playwright install chromium`（CI 使用 `--with-deps`）；之后运行 `npm run test:e2e`，构建账号产物并自动启动 / 关闭使用系统空闲端口的隔离内存服务。已构建同一代码时用 `npm run test:e2e:run`；只验一个流程可追加 `-- tests/e2e/<文件>.spec.ts`。不用手工启动测试服务；端口由操作系统一次性分配，测试浏览器只访问该实例，不复用 5174 / 5175 或其它运行中的服务。
+
+当前覆盖登录后编辑画布、返回重进与刷新读回；生成成功自动放置及定位；取消与退款；优化建议手动填入、引用保留及撤销。使用真实浏览器操作和 HTTP，服务端全部显式注入内存 stores，不读取环境文件、不连接数据库或云端素材。外部模拟结果媒体由测试替换为仓库样本，其它外网请求直接拒绝。它验证浏览器与 API 的链路，不能替代 PostgreSQL 重启持久化或真实供应商验收。
+
+`npm run check` 只包含这些脚本的类型检查，不启动浏览器。CI 单独执行浏览器任务；本地仅在相关核心流程改动和阶段验收时运行，不加入每次视觉反馈循环。失败保留 trace 与截图到忽略目录 `test-results/`，不以重试掩盖不稳定结果。
 
 ### 验证什么
 

@@ -60,6 +60,32 @@ jobs:
       - name: Build isolated static experience
         run: npm run build:experience
 
+  browser:
+    name: browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Verify isolated browser flows
+        run: npm run test:e2e
+      - name: Keep failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failures
+          path: test-results/
+          retention-days: 7
+
   postgres:
     name: postgres
     runs-on: ubuntu-latest

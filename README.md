@@ -10,6 +10,7 @@
 - 启动命令、换电脑接续、配置与数据位置统一见[本地开发](docs/local-development.md)。
 - 独立画布调试使用 `npm run dev:canvas`；它不替代完整路由、权限和保存验收。
 - 代码里程碑执行 `npm run check` 与 `git diff --check`；迭代中的定向检查按[开发工作流](docs/development-workflow.md)选择。
+- 视觉微调用 `npm run check:visual` 并查看预览；关键链路用 `npm run test:e2e` 在隔离内存服务自动验收，不接入本机创作数据。
 
 ## 规范入口
 
