@@ -3590,11 +3590,6 @@ html[data-theme="light"] .prompt-panel {
   opacity: 1;
 }
 
-.prompt-panel.prompt-is-optimizing .prompt-input {
-  cursor: progress;
-  opacity: 0.72;
-}
-
 .control-bar {
   position: absolute;
   left: 12px;

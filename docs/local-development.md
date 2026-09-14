@@ -1,132 +1,107 @@
 # 本地开发与数据位置
 
-本文统一记录完整路由预览的启动方式与本机数据位置。分支与检查规则见 [开发工作流](development-workflow.md)，产品边界见 [当前交接](agent-handoff.md)。本地预览、Git 远端同步和公网部署分别处理。
+这里统一维护日常启动、换电脑接续和数据保留规则。分支与验证见[开发工作流](development-workflow.md)，公网环境见[公网预览](vercel-supabase-preview.md)。历史候选端口不作为当前入口。
 
-两台 Windows 长期接续的配置、数据迁移证据与日常约定见 [跨电脑开发](cross-device-development.md)。当前机器已完成 `Reelay_Dev` 数据迁移并切换共享 API；家里电脑尚待安装和验收。日常预览在本机运行前端与 API，业务数据写入独立云开发库。
+## 当前机器
 
-## 1. 继续当前机器的开发
+最近核验：2026-09-14。以下是运行快照；重启前重新查端口与进程命令行，不依赖旧 PID。
 
-### 当前画布任务：2026-09-09 已提交改动同步
-
-`C:/Users/Ho/.codex/worktrees/cc38/0707` 的 `codex/canvas-agent-refinement` 已整合 `b603681`、`f2f8f7c` 与 `600fb82`。沿用 `5178 → 5180`；前端、提示词编辑器与 API 均读取本工作区。Node 依赖按合并后的锁文件安装；API 更新后沿用原候选入口重启，数据和会话归属保持。
-
-启动入口与日志仍位于 `D:/Software/codePro/0707/.git/worktrees/07072`：前端使用 `REELAY_DEV_API_PORT=5180` 与 `vite.shell.config.ts --host 127.0.0.1 --port 5178 --strictPort`，API 使用 `node --import tsx canvas-candidate-api.mjs`，工作目录必须为上述 cc38 目录。`canvas-preview.json` 保存最新进程记录；恢复前重查端口和命令行。本次没有复制凭据、数据库或媒体，没有 migration / seed，也未改变其他任务的端口。
-
-### 其他任务：2026-09-08 组织中心加载预览
-
-当前组织中心迭代使用 `5176 → 5189`，前端和候选 API 都读取 `C:/Users/Ho/.codex/worktrees/ead8/0707` 的 `codex/canvas-loading-priority`，包括本轮本地阶段提交的组织中心 UI 与加载修复。`5173 → 5175` 仍由主目录提供，未合入这轮成员 API 优化；下方原 `5176 → 5175` 是本次切换前的记录。
-
-- 本机启动文件和记录目录：`D:/Software/codePro/0707/.git/worktrees/07071`。`home-login-preview.ps1` 为前端设置 `REELAY_DEV_API_PORT=5189` 后启动原 5176；`organization-preview-api.mjs` 用当前 worktree 的 `createSharedServerEnvironment` 在进程内读取主目录 `.env.shared-development.local`，仅把 PORT 改为 5189，并运行本 worktree 的 `src/server/start.ts`。不复制任何凭据；仍是同一 Reelay_Dev PostgreSQL、私有桶和现有会话。
-- 进程启动时：前端 launcher `27792` / Vite `23168`，API launcher `92048` / Node `29904`。使用前重查端口与命令行，不直接沿用 PID。`home-login-preview.json` 已记录本轮来源、端口和启动文件；stdout / stderr 与各启动文件同目录同前缀。
-- 两个启动文件均用隐藏进程运行，恢复时先核对端口，再分别运行 `node organization-preview-api.mjs` 与 `powershell -NoProfile -ExecutionPolicy Bypass -File home-login-preview.ps1`。重启前端不能更新 API；本轮没有 migration / seed、数据迁移或公网部署。
-- 若后续同步到主目录并重启共享 5175，应再把本前端 launcher 中的 `REELAY_DEV_API_PORT` 恢复到 5175，验收后停止候选 5189；不能只停止候选却保留代理指向该端口。
-
-### 2026-09-08 文档优先与连接复用
-
-本轮基于已发布的 `f068def`，优化分支为 `codex/canvas-loading-priority`，目录为 `C:\Users\Ho\.codex\worktrees\ead8\0707`。该目录的前端继续使用 `5176 → 5175`；主目录 `D:\Software\codePro\0707` 的 `codex/canvas-development` 同步本轮代码后，`5173` 与共享 API `5175` 使用同一版本。后端代码修改需要重启 `5175`，仅前端 HMR 不会更新连接池。
-
-常驻 API 默认保留一条**已经建立**的数据库连接，并启用 TCP keepalive；不预连接、不定时发 SQL。多余空闲连接仍按 60 秒释放。Vercel 默认最小连接数为 `0`、空闲超时为 10 秒。`REELAY_DB_POOL_MIN` 可显式配置 `0..REELAY_DB_POOL_MAX`，设置 `0` 可恢复全释放；共享入口只接受专用配置文件中的值。失效空闲连接由 pg 移除，API 只记录脱敏错误码，后续请求可以重新连接，不自动重试或重放 SQL。首次连接、网络中断和云端主动断连仍可能产生等待。
-
-候选通过独立 `5186 → 5189` 完成验证，使用同一 Dev 数据源，未迁移或 seed；候选端口仅用于本轮对比，不是长期入口。具体测量和局限见 [加载评估](canvas-iteration-review.md#2026-09-08-文档优先与连接生命周期)。本轮改进与既有公网发布分别处理。
-
-### 2026-09-08 较早画布加载候选预览记录
-
-以下是此前切片的独立候选记录；代码已随 PR #23 集成，不能据此推断当前进程版本。该画布任务位于 `C:\Users\Ho\.codex\worktrees\cc38\0707`。完整路由入口为 <http://127.0.0.1:5178/app/login>，Vite 通过 `REELAY_DEV_API_PORT=5180` 连接本任务候选 API；未设置此变量时仍默认代理本机 `5175`。只允许有效数字端口，代理主机固定为 `127.0.0.1`。
-
-候选 API 在 `5180` 读取本 worktree 服务端代码，通过已有主目录共享开发环境在进程内复用同一云端 PostgreSQL / Supabase Storage。没有复制凭据、数据库、ObjectStore 或依赖，没有执行 migration / seed，也没有集成主目录共享开发提交。`5175` 仍属于原共享服务，不能为重启本任务预览而停止它。下方 2026-09-05 的本机数据库表是历史环境记录，不能用于推断当前候选数据位置。
-
-本任务隐藏启动入口、运行记录和日志位于 `D:\Software\codePro\0707\.git\worktrees\07072`：`canvas-candidate-api.mjs`、`canvas-candidate-api.stdout.log` / `.stderr.log`、`canvas-preview.json`、`canvas-preview.stdout.log` / `.stderr.log`。重启前重新核对端口与进程命令行；前端继续使用 `vite.shell.config.ts --host 127.0.0.1 --port 5178 --strictPort`，API 入口使用当前 worktree 的 Node / tsx 运行上述本机脚本。该运行记录不代表公网发布。
-
-先检查实际分支与服务；已经运行且目录正确的服务直接复用：
+| 用途 | 当前来源 |
+| --- | --- |
+| 前端 5174 | `C:/Users/Ho/.codex/worktrees/f859/0707`，`vite.shell.config.ts` |
+| API 5175 | 同一 f859 工作区的 `src/server/start.ts`，由共享开发环境校验后启动 |
+| API 专用配置 | `D:/Software/codePro/0707/.env.shared-development.local`，保持忽略，不复制进当前 worktree |
+| 启动记录与日志 | `D:/Software/codePro/0707/.git/worktrees/0707/` 内的 `generation-preview.json`、`generation-preview.*.log`、`generation-api.*.log` |
+| API 本机 launcher | 上述 Git 元数据目录内 `generation-shared-api.mjs`，读取当前工作目录代码与专用配置 |
 
 ```powershell
-Set-Location -LiteralPath 'D:\Software\codePro\0707'
 git status --short --branch
 npm run worktrees
-Get-NetTCPConnection -State Listen -LocalPort 5173,5175 -ErrorAction SilentlyContinue |
+Get-NetTCPConnection -State Listen -LocalPort 5174,5175 -ErrorAction SilentlyContinue |
   Select-Object LocalAddress,LocalPort,OwningProcess
 ```
 
-2026-09-07 切换后的运行位置如下。这是当前机器的记录，换电脑或重启服务时要重新核验并更新，不把目录名或静态 PID 当成永远正确的运行状态。
+已运行且来源正确则复用；端口占用时先查对应进程，不能结束所有 Node 进程或悄悄换到另一端口。当前入口为 <http://127.0.0.1:5174/app>；原项目路由可直接复用。
 
-| 用途 | 当前位置 | 说明 |
-| --- | --- | --- |
-| 前端 `5173` | `D:\Software\codePro\0707` | 读取当前检出的活动开发分支；`main` 是集成基线 |
-| API `5175` | `D:\Software\codePro\0707` | `npm run dev:server:shared`，读取专用忽略配置；后端代码修改后重启 |
-| 业务 PostgreSQL | Supabase `Ho_Org / Reelay_Dev`，`oocagsuhijyvmzwotyxn`，新加坡 | 当前项目、画布、账号、资产引用与主体的权威数据；常驻本机 API 使用 Session pooler `5432` |
-| API 的 ObjectStore | 同一 `Reelay_Dev` 私有桶 `reelay-assets` | 原文件均已迁入并验证；桶与本地 Supabase API 单素材上限 `50 MiB` |
-| 保留源数据库 `54329` | Docker Compose `reelay-local` / `postgres`，容器 `reelay-local-postgres-1` | 原 PostgreSQL 18.4 迁移源保留，不再用于日常业务写入 |
-| 保留源素材目录 | `D:\Software\codePro\0707-wt-canvas-integration\.reelay-data\object-store` | 已验证并迁移其中 30 个对象；保留原目录 |
-| 保留历史素材目录 | `D:\Software\codePro\0707-wt-canvas-shell-redesign\.reelay-data\object-store` | 已验证并迁移其余 12 个对象；保留原目录 |
+### 恢复前端
 
-旧 API 进程 PID `36992` 已停止，共享入口后台父进程在本次启动时为 PID `57800`；以后操作前必须重新查端口和命令行，不直接沿用这个 PID。当前 `5173` 与 `5175` 已通过健康检查，HTTP 已验证登录、两个原项目画布、主体 / 素材列表及封面读取与鉴权，详见跨电脑开发记录。
-
-端口占用时查看对应 `OwningProcess` 的命令行和启动来源，不能直接结束所有 Node 进程。日常共享预览不需要 Docker，也不运行 `db:setup`、`db:seed` 或数据恢复。保留源不会接收云端后续编辑，不能用它覆盖当前共享数据。
-
-### 只恢复前端
-
-确认 `5173` 没有现有服务后，在根目录执行：
+确认端口空闲后，在当前工作区执行：
 
 ```powershell
-npm run dev:shell -- --host 127.0.0.1 --port 5173 --strictPort
+npm run dev:shell -- --host 127.0.0.1 --port 5174 --strictPort
 ```
 
-入口为 <http://127.0.0.1:5173/app/login>；现有会话可直接回到原项目 URL。主演示账号为 `creator@reelay.test / reelay-demo`，完整账号列表见 [当前交接](agent-handoff.md)。`--strictPort` 防止地址悄悄切换。Vite 把 `/api` 代理到 `127.0.0.1:5175`，只启动前端不能替代 API 和数据库。
+Vite 默认把同源 `/api` 代理到 `127.0.0.1:5175`。独立并行任务确需其它 API 时，显式设置 `REELAY_DEV_API_PORT`，记录前后端来源；端口只接受有效数字，代理主机固定本机。前端 HMR 不会更新常驻 API。
 
-旧画布源码入口 `index.html` 与 `styles.css` 的脚本、样式引用保持无手工版本查询参数。Vite 会把带 `?v=` 的资源当成已版本化资源并返回一年 `immutable` 缓存，继续沿用同一版本值会让本地预览停留在旧代码；无查询参数的源码请求使用 `no-cache`，刷新时重新验证。正式构建仍由 `copy-legacy-canvas.mjs` 生成带内容哈希的 JS / CSS 文件，产物缓存策略不受影响。
+源码入口不加手工 `?v=`：Vite 会将它作为版本化资源缓存，导致预览留在旧代码。正式构建由构建脚本产生内容哈希。
 
-### 只恢复当前 API
+### 恢复当前 API
 
-确认 `5175` 没有现有服务、主目录 `.env.shared-development.local` 已配置 `Reelay_Dev` 后，在另一个 PowerShell 终端执行：
+确认 5175 空闲后，从当前 f859 工作区运行现有本机 launcher：
 
 ```powershell
-Set-Location -LiteralPath 'D:\Software\codePro\0707'
-npm run dev:server:shared
+node 'D:/Software/codePro/0707/.git/worktrees/0707/generation-shared-api.mjs'
 ```
 
-专用入口清除继承的旧数据库、ObjectStore、部署与 seed 环境，只从忽略配置文件读取共享连接信息；固定使用 `development + postgresql + supabase`，监听 `127.0.0.1:5175`。缺配置会失败，不会回退本机空素材库。`npm run start:server` / `dev:server` 的兼容默认值仍可能连接本机数据库和 filesystem，不能代替当前日常共享入口。
+它调用当前代码的 `createSharedServerEnvironment`，在进程内读取已保留的专用配置，再启动当前工作区的 API。换电脑时不复制该绝对路径 launcher，使用下节标准入口。
 
-### 生命周期与恢复检查
+共享入口只读取专用配置，清除继承的旧数据库、ObjectStore、部署与 seed 环境，固定 `development + postgresql + supabase`。缺配置或数据项目不匹配即失败，不回退空素材库。`dev:server` / `start:server` 是通用入口，可能使用独立本机默认数据，不能替代共享入口。
 
-前台命令需要保持两个终端运行；关闭终端、重启系统或停止进程都会中断预览。Codex 启动需要跨任务保留的预览时，应使用 `Start-Process -WindowStyle Hidden`，明确工作目录、专用启动入口及 stdout / stderr 日志；不依赖一次工具调用中的临时进程，也不另建重复服务。当前前端日志在根目录 `.git/dev-preview.stdout.log`、`.git/dev-preview.stderr.log`，共享 API 日志在 `.git/dev-shared-api.stdout.log`、`.git/dev-shared-api.stderr.log`，不进入 Git。
-
-恢复后检查 API 与浏览器：
+需要长期后台预览时，使用 `Start-Process -WindowStyle Hidden`，明确工作目录和日志；前台启动则保持终端运行。恢复后验证：
 
 ```powershell
 Invoke-RestMethod -Uri 'http://127.0.0.1:5175/api/health'
-Invoke-RestMethod -Uri 'http://127.0.0.1:5173/api/health'
+Invoke-RestMethod -Uri 'http://127.0.0.1:5174/api/health'
 ```
 
-然后打开原项目画布，确认节点、资产预览和控制台正常。健康接口只说明服务可访问，不能证明素材和页面内容正确。若恢复失败，先对照端口、前端 / API 日志和 `Reelay_Dev` 配置定位原因，不重跑 seed。
+再打开原项目确认节点、素材和控制台。health 成功只证明服务可访问，不能证明数据归属正确。失败先看端口、日志和配置，不运行 seed。
 
-### 登录与主页的历史独立评审预览
+## 首次安装与换电脑
 
-以下保留该设计切片的独立预览记录，不表示它现在仍在运行。切片目录为 `C:\Users\Ho\.codex\worktrees\ead8\0707`，当时活动分支 `codex/home-login-development`，起始基线为 `c6dd68a`。使用该目录自己的 `node_modules`，隐藏后台运行 `npm.cmd run dev:shell -- --host 127.0.0.1 --port 5176 --strictPort`；重启前仍须重新核对 worktree、端口与进程，不根据静态 PID 结束进程。
+1. 安装 Git、Node.js `24.x`，clone 仓库并检出实际交接的开发分支；运行 `npm ci`。各电脑安装自己的依赖，不复制 `node_modules`，不以网盘同步 `.git`。
+2. 以 [配置样例](examples/shared-development.env.example) 创建该电脑的 `.env.shared-development.local`，填写同一个 Reelay_Dev 的 Session pooler（5432）、服务端密钥与桶名。数据库与 Storage 必须属于同一项目；凭据不放聊天、源码或 `VITE_` 环境变量。
+3. 在配置所在的仓库运行 `npm run dev:server:shared`；另一终端按上节启动前端。标准入口固定 API 5175，不启动 Docker，不初始化或 seed。
+4. 本机浏览器重新登录，验证既有项目、画布、主体及素材顺序、原图 / 缩略图，再完成一次明确的保存与另一台重新打开的接续验收。家里电脑仍待此项验证，不能据单机结果称两机完成。
 
-访客入口为 `http://localhost:5176/app`，登录弹窗为 `http://localhost:5176/app/login`。使用 `localhost` 可与其他任务的 `127.0.0.1` Cookie 主机隔离；相同主机不同端口仍可能共享会话。`127.0.0.1:5176` 也可访问，但已有共享会话时会直接进入主页。API 继续代理到 `127.0.0.1:5175`，数据仍与其他前端预览共享，此切片不执行 migration、seed 或数据库 / ObjectStore 重置。
+离开前等待画布保存、提交并按已授权范围推送开发分支；另一台先检查脏文件再 `git pull --ff-only`。分叉时处理来源，不用 force/reset 覆盖。Git 同步代码，云库保存内容，聊天与 Cookie 不迁移。同主机不同端口可能共享 Cookie；`localhost` 与 `127.0.0.1` 可隔离浏览器登录，但不会隔离数据库。
 
-当时隐藏进程启动脚本、环境记录和日志保存在本 worktree 的 Git 元数据目录 `D:\Software\codePro\0707\.git\worktrees\07071`：`home-login-preview.ps1`、`home-login-preview.json`、`home-login-preview.stdout.log` 与 `home-login-preview.stderr.log`。这些文件不进入 Git。当前日常 `5173` / `5175` 的代码与云端数据归属以本页第 1 节为准。
+共享库不是实时协同画布：避免两台同时编辑同一画布，revision 冲突不自动合并。schema 变更由一个任务执行，另一台同步代码；不兼容实验用独立本机数据库。
 
-## 2. 家里电脑首次接入
+## 演示账号
 
-家里电脑尚未安装和验收。按 [跨电脑开发的首次安装](cross-device-development.md#每台电脑的首次安装) 安装 Git、Node `24.x` 与锁定依赖，检出已推送的同一代码分支，并在该电脑的 `.env.shared-development.local` 填写同一个 `Reelay_Dev` 配置；不复制聊天、Cookie 或 `node_modules`。
+主账号：`creator@reelay.test`（Hoo）；管理员入口 `/app/login?demo=admin` 预填 `linjing@reelay.test`。固定演示密码为 `reelay-demo`，完整十个账号与角色来源见 [demo-fixtures.ts](../src/server/demo-fixtures.ts)。这不代表正式账号注册或密码生命周期。
 
-通过 `npm run dev:server:shared` 和 `npm run dev:shell -- --host 127.0.0.1 --port 5173 --strictPort` 启动，重新登录后检查既有项目、画布、3 个主体及素材顺序、个人素材和预览，再进行两机接续验收。现有共享数据已迁移完成，换电脑不运行 migration、seed、`db:setup` 或旧库导入。
+## 数据归属与保留
 
-## 3. 独立本机测试环境
+| 数据 | 权威位置与边界 |
+| --- | --- |
+| 共享开发内容 | Reelay_Dev，`oocagsuhijyvmzwotyxn`；PostgreSQL + 同项目私有桶 `reelay-assets`，本机常驻 API 使用 Session pooler 5432 |
+| 公网账号演示 | 独立 Reelay_Test，`yacgzkkttwtyxkfxiwyn`；不与 Dev 自动互相复制 |
+| 免注册体验 | 独立静态构建的公开夹具与浏览器内存；刷新重置 |
+| 保留源数据库 | Docker `reelay-local / postgres`，本机 54329，原迁移源，不再日常写入 |
+| 保留素材源 | `D:/Software/codePro/0707-wt-canvas-integration/.reelay-data/object-store` |
+| 保留历史素材 | `D:/Software/codePro/0707-wt-canvas-shell-redesign/.reelay-data/object-store` |
 
-Docker 仍用于 PostgreSQL 集成测试或不兼容的 schema 实验。测试管理员连接必须指向独立本机环境，不能指向 `Reelay_Dev`；测试创建自己的临时数据库，不把保留源库当作可重置夹具。
+共享开发 API / 私有桶单素材上限为 50 MiB；独立 filesystem 模式为 64 MiB。公网同源代理与签名直传的上限不同，按公网说明核对。
 
-`db:setup` 只适用于明确选择的新建独立本机演示环境，不用于当前保留迁移源或两机共享开发。它会启动 PostgreSQL、执行 migration、幂等写入演示账号 / 项目 / 素材与主体；不会恢复另一环境的用户内容。仓库 v4 夹具是 12 张原图组成的幽影（5 张）、白汐（3 张）、玄翎（4 张），详见 [夹具边界](agent-handoff.md#开始与验证)。实际使用前应明确分离数据库与 ObjectStore，并让 API、migration 和 seed 指向同一测试环境；没有这个隔离条件时不执行初始化。
+### 已完成迁移的必要证据
 
-## 4. 数据与可重建文件的区别
+2026-09-07 已将 15 项目（含 2 个软删除）、6 画布、3 主体和 42 个 Media 迁入 Reelay_Dev，保留 ID、revision、名称、封面、顺序、账号散列及关联；65 条旧 sessions 未导入。42 原文件共 85,123,200 字节，全部回读 SHA-256 一致。当时个人素材列表为 20 项，另 22 个历史 Media 仍保留，这些是迁移时计数，不是当前 UI 必须固定的数量。
 
-| 内容 | Git 是否保存 | 处理原则 |
-| --- | --- | --- |
-| 源代码、`assets/` 中预置素材、migration 与 seed 定义 | 是 | 跟随版本；历史素材可能参与旧 fixture 识别，不能只看当前界面是否显示 |
-| `Reelay_Dev` PostgreSQL + 私有 ObjectStore | 否 | 两台电脑共用同一权威数据；仍需配套备份和验证，Git 不保存业务状态 |
-| 保留的本机数据库 + 两处 ObjectStore | 否 | 已迁移的历史源，保留且不再日常写入；不能反向覆盖云端新数据 |
-| `.env*`、`.vercel/` | 除 `.env.example` 外不保存 | 本机配置，不能覆盖或提交凭据 |
-| `node_modules/`、`dist/`、日志 | 否 | 通常可重建；先核对 junction、运行进程与实际目录 |
+迁移证据位于主目录 `D:/Software/codePro/0707/.reelay-data/shared-development/`：
 
-保留的两个旧 worktree 有 Git 之外的数据，本次已将其中数据库关联的全部 42 个原始对象迁入云开发库；迁移和代码合入都不等同于授权清理源目录，本轮保留这些目录及数据库。
+- `source-backup-2026-09-07T11-55-08-749Z/cloud-import-result.json`：最终快照的事务导入与类型化精确比对。
+- 同目录 `canvas-url-normalization.json`：仅 18 处画布本机绝对媒体地址改为同源相对地址，原始快照保留。
+- `source-backup-2026-09-07T11-43-38-793Z/cloud-object-verification.json`：42 个原对象的全量回读证据；最终快照已核对相同 object key 与 hash。
+
+这是已完成的迁移记录，普通换机不要重跑。旧库与旧素材不会接收云端新编辑，不得用它们反向覆盖当前内容。数据库与原文件需配套备份；Git 不保存这些业务状态。
+
+## 独立本机测试与夹具
+
+Docker 仅用于 PostgreSQL 集成验证和隔离实验；`TEST_DATABASE_ADMIN_URL` 不指向 Reelay_Dev、Reelay_Test 或保留源。测试创建自身临时数据库。
+
+`npm run db:setup` 只用于明确隔离的新本机演示环境，依次运行 db:up、migration 和幂等 seed；不能当成预览修复。其目标检查优先使用 `MIGRATION_DATABASE_URL`，未设置才看 `DATABASE_URL`，执行前必须确保两者与 API / ObjectStore 属于同一隔离环境。
+
+仓库 v4 夹具为幽影 5 张、白汐 3 张、玄翎 4 张。历史 v1–v3 文件与指纹仍参与幂等校准，用户改过的记录会拒绝覆盖，底层历史 blob 不硬删。不能因界面不展示而删除旧素材；公网个人库夹具入口另见公网说明。
+
+可重建的依赖、产物和日志与用户数据分开处理；删除前核对真实路径、junction 和运行进程。`.env*`、`.vercel/`、旧 worktree 及其忽略内容不因分支已合入而自动获得删除授权。

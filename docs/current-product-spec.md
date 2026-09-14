@@ -1,6 +1,6 @@
 # Reelay Canvas 当前产品与实现说明
 
-更新日期：2026-09-05
+更新日期：2026-09-14
 
 ## 1. 产品定位
 
@@ -26,7 +26,7 @@
 - 十个固定 `.test` 演示账号由服务端校验并使用 HttpOnly Cookie 维持独立会话；这只验证登录、路由保护、单组织成员关系和项目级访问控制，不是正式账号系统。组织角色固定为 `1` 名主账户、`2` 名管理员和 `7` 名成员。
 - 账号版与免注册体验版使用同一品牌轮廓的静态 SVG Favicon，分别为炭黑底和紫色底；应用壳与画布入口按构建模式选用同一套图标，带内容哈希的产物避免旧缓存混淆，不再由画布启动脚本重绘覆盖。
 - 用户、会话、唯一组织 Workspace、Project、项目成员关系、CanvasDocument、WorkspaceMediaAsset 元数据、个人 placement、ProjectAssetReference，以及个人根目录 Entity 的字段、有序 Media 引用和版本保存在 PostgreSQL；独立本地模式使用 filesystem ObjectStore，共享开发与 Vercel 入口使用私有 Supabase ObjectStore。最小链路已通过本地服务重启回读；公网已迁移至 `0013` 并完成私有桶与三主体 12 图写入，正式主域已验证三主体精确目录、12 图 HTTP 内容及个人主体页三张封面，内存 adapter 只用于快速契约测试和显式开发回退。
-- 两台 Windows 的共享开发入口为 `dev:server:shared`：各自运行本地前端与 API，连接独立 Reelay_Dev 的 PostgreSQL 和私有 Storage，配置错误时拒绝启动。本机已迁移现有项目、画布、3 主体和 42 份素材并切换日常 API；家里电脑尚待接入验收。Git 同步代码，云库保存业务数据，不提供实时协同编辑或浏览器偏好同步；操作与迁移记录见 `cross-device-development.md`。
+- 两台 Windows 的共享开发入口为 `dev:server:shared`：各自运行本地前端与 API，连接独立 Reelay_Dev 的 PostgreSQL 和私有 Storage，配置错误时拒绝启动。本机已迁移现有项目、画布、3 主体和 42 份素材并切换日常 API；家里电脑尚待接入验收。Git 同步代码，云库保存业务数据，不提供实时协同编辑或浏览器偏好同步；操作与迁移记录见[本地开发](local-development.md)。
 - 从受保护路由进入的旧画布会恢复多画布、节点、组、视口和模型参数；直接打开静态 `index.html` 仍是单次页面内存原型。
 - 进入画布只注册个人素材与主体目录，不为整个资产库预读原图或探测媒体尺寸。资产库关闭时不生成隐藏的媒体预览；打开后按当前列表展示，实际使用素材或编辑时仍保留必要的尺寸读取。
 - 同时进入的相同默认 API 读取共用进行中的网络请求，避免开发态重复挂载多读一遍画布和目录；结果完成后不缓存，再次进入仍读取服务端。登录、退出、保存等写入会隔开前后的读取，不复用写入前的进行中请求。
@@ -556,7 +556,7 @@ stateDiagram-v2
 
 - 组标题应支持重命名。
 - 排序可继续扩展为等距、左/右/顶/底对齐和按类型排列。
-- 撤销系统后续还需统一普通节点新建；整画布整理及持久生成历史、任务 / 结果版本撤销尚未实现；右侧页面内生成记录见 10.7。
+- 整画布整理已实现，见 5.1；右侧页面内生成记录见 10.7。普通节点新建的统一撤销、持久生成历史和任务 / 结果版本撤销仍待后续切片。
 
 ## 10. Agent 对话栏
 
@@ -768,7 +768,7 @@ src/legacy-canvas
 - 主要 React 页面已经按 route 拆包，HTTP adapter 只向页面暴露 application error；构建主包不再把组织中心、账号用量和画布宿主全部提前加载。
 - 旧画布已有 JavaScript、配置、CSS、HTML 检查以及序列化、只读和持久化状态机行为测试；React 壳已有 Vite 构建、严格 TypeScript 与 Vitest，统一入口为 `npm run check`。关键画布手势仍需浏览器运行验证。
 - 暂无代码格式化、lint 和自动浏览器端到端测试；当前 React 主链路已完成两套隔离浏览器的人工验证，下一阶段应把稳定的登录、路由保护和组织共享流程固化为 E2E。
-- 会话、账号联系资料、Workspace、Membership、Project、CanvasDocument、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已通过 PostgreSQL 持久化；本地资产二进制使用 filesystem ObjectStore，私有 Supabase ObjectStore 配置与真实三主体 12 图迁移已完成，正式主域已通过 HTTP 读取、鉴权、大小限制和三主体浏览器展示验收。仓库与公网 schema 均已至 `0013`。可重复 migration、幂等写入、乐观版本和重启集成测试覆盖本地持久化边界。画布文档仍处于迁移桥阶段，Folder、组织资产、生成任务与积分仍只存在原型状态。
+- 会话、账号联系资料、Workspace、Membership、Project、CanvasDocument、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已通过 PostgreSQL 持久化；独立本机环境可使用 filesystem ObjectStore，共享开发与公网使用私有 Supabase ObjectStore；真实三主体 12 图的首次公网迁移已完成，正式主域已通过 HTTP 读取、鉴权、大小限制和三主体浏览器展示验收。仓库与公网 schema 均已至 `0013`。可重复 migration、幂等写入、乐观版本和重启集成测试覆盖本地持久化边界。画布文档仍处于迁移桥阶段，Folder、组织资产、生成任务与积分仍只存在原型状态。
 - migration checksum 统一按 LF 计算并由 `.gitattributes` 固定 SQL 换行，Windows / Linux worktree 不会因 CRLF 差异误报历史 migration 被改写。
 - 演示会话 token 以摘要存库并具有过期 / 撤销状态，但十个固定账号、确定性 demo 密码散列和预置项目角色仍不是正式账号生命周期或完整权限管理系统。
 - 全局可变状态仍缺少完整 action/store 边界；连接与上述节点 / 分组切片已共用原子命令和按画布隔离的混合撤销分派，节点删除、高频移动预览、主体增量引用撤销与素材命名等仍保留有界的 legacy adapter。

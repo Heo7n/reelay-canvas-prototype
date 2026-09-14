@@ -3207,14 +3207,6 @@ function formatMediaSize(width, height) {
   return `${Math.round(width)} x ${Math.round(height)}`;
 }
 
-function formatDuration(seconds) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "";
-  const totalSeconds = Math.round(seconds);
-  const minutes = Math.floor(totalSeconds / 60);
-  const rest = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${rest}`;
-}
-
 function getMediaTitle(node, asset = getActiveAsset(node)) {
   if (node.kind === "asset") return getAssetDisplayName(asset);
   if (!node.preview) return "";
