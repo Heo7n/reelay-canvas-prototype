@@ -171,48 +171,16 @@
         </button>
       </aside>
       <aside class="asset-library-panel hidden" id="assetLibraryPanel" aria-label="资产库" aria-hidden="true" inert>
+        <header class="asset-library-header">
+          <nav class="asset-library-space-tabs" id="assetLibrarySpaceTabs" role="tablist" aria-label="资产空间">
+            <button class="active" type="button" role="tab" data-library-space="personal" aria-selected="true" tabindex="0" aria-controls="assetLibraryGrid"><i data-lucide="circle-user-round" aria-hidden="true"></i><span>个人</span></button>
+            <button type="button" role="tab" data-library-space="organization" aria-selected="false" tabindex="-1" aria-controls="assetLibraryGrid"><i data-lucide="building-2" aria-hidden="true"></i><span>组织</span></button>
+            <button type="button" role="tab" data-library-space="platform" aria-selected="false" tabindex="-1" aria-controls="assetLibraryGrid"><i data-lucide="library-big" aria-hidden="true"></i><span>平台</span></button>
+          </nav>
+        </header>
         <button class="asset-library-close" id="assetLibraryCloseBtn" type="button" title="收起资产库" aria-label="收起资产库" aria-controls="assetLibraryPanel">
           <i data-lucide="chevron-left" aria-hidden="true"></i>
         </button>
-        <header class="asset-library-header">
-          <div class="asset-library-heading">
-            <h2>资产库</h2>
-          </div>
-          <div class="asset-library-space-switcher">
-            <button class="asset-library-space-button" id="assetLibrarySpaceButton" type="button" aria-haspopup="menu" aria-controls="assetLibrarySpaceMenu" aria-expanded="false">
-              <span id="assetLibrarySpaceLabel">个人空间</span>
-              <i data-lucide="chevron-down" aria-hidden="true"></i>
-            </button>
-            <div class="asset-library-space-menu hidden" id="assetLibrarySpaceMenu" role="menu" aria-label="切换资产空间">
-              <button type="button" role="menuitemradio" data-library-space="personal" aria-checked="true">
-                <i data-lucide="user-round" aria-hidden="true"></i>
-                <span>个人空间</span>
-                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
-              </button>
-              <button type="button" role="menuitemradio" data-library-space="organization" aria-checked="false">
-                <i data-lucide="users-round" aria-hidden="true"></i>
-                <span>组织空间</span>
-                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
-              </button>
-              <button type="button" role="menuitemradio" data-library-space="platform" aria-checked="false">
-                <i data-lucide="badge-check" aria-hidden="true"></i>
-                <span>平台空间</span>
-                <i class="asset-space-check" data-lucide="check" aria-hidden="true"></i>
-              </button>
-            </div>
-          </div>
-        </header>
-        <nav class="asset-library-section-tabs" id="assetLibrarySectionTabs" role="tablist" aria-label="资产类型">
-          <button class="active" id="assetLibraryMediaTab" type="button" role="tab" data-library-section="media" aria-selected="true" aria-controls="assetLibraryGrid">素材</button>
-          <button id="assetLibraryEntityTab" type="button" role="tab" data-library-section="entity" aria-selected="false" aria-controls="assetLibraryGrid">主体</button>
-        </nav>
-        <div class="asset-library-search-row">
-          <label class="asset-library-search" aria-label="搜索资产库">
-            <i data-lucide="search" aria-hidden="true"></i>
-            <input id="assetLibrarySearchInput" type="search" placeholder="搜索" autocomplete="off" />
-          </label>
-          <div class="asset-library-platform-command-anchor" id="assetLibraryPlatformCommandAnchor"></div>
-        </div>
         <div class="asset-library-body">
           <section class="asset-library-content">
             <div class="asset-library-directorybar">
@@ -222,17 +190,30 @@
                     <i data-lucide="chevron-down" aria-hidden="true"></i>
                     <strong id="assetLibraryDirectoryName">默认目录</strong>
                   </button>
-                  <span class="asset-library-directory-divider" aria-hidden="true"></span>
                   <button class="asset-library-folder-create" id="assetLibraryCreateFolderBtn" type="button" title="在当前目录中新建文件夹" aria-label="在当前目录中新建文件夹">
                     <i data-lucide="plus" aria-hidden="true"></i>
                   </button>
                 </div>
                 <div class="asset-library-directory-tree-popover hidden" id="assetLibraryDirectoryTreePopover"></div>
               </div>
-              <div class="asset-library-command-slot" id="assetLibraryCommandBar"></div>
+              <div class="asset-library-directory-actions">
+                <button class="asset-library-search-toggle" id="assetLibrarySearchToggleBtn" type="button" title="搜索资产" aria-label="搜索资产" aria-expanded="false" aria-controls="assetLibrarySearchRegion">
+                  <i data-lucide="search" aria-hidden="true"></i>
+                </button>
+                <div class="asset-library-command-slot" id="assetLibraryCommandBar"></div>
+                <div class="asset-library-search" id="assetLibrarySearchRegion" aria-hidden="true" inert>
+                  <label for="assetLibrarySearchInput" aria-label="搜索资产">
+                    <i data-lucide="search" aria-hidden="true"></i>
+                  </label>
+                  <input id="assetLibrarySearchInput" type="search" aria-label="搜索资产" placeholder="搜索素材或素材组" autocomplete="off" />
+                  <button class="asset-library-search-close" id="assetLibrarySearchCloseBtn" type="button" title="关闭搜索" aria-label="关闭搜索">
+                    <i data-lucide="x" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
             </div>
             <div id="assetLibraryEntityFilter" hidden></div>
-            <div class="asset-library-grid" id="assetLibraryGrid" role="tabpanel" aria-labelledby="assetLibraryMediaTab"></div>
+            <div class="asset-library-grid" id="assetLibraryGrid" role="region" aria-label="资产内容"></div>
           </section>
         </div>
         <footer class="asset-library-footer">
@@ -385,10 +366,10 @@
             </div>
           </div>
           <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button text-button selection-toolbar-entity" type="button" data-selection-action="create-entity" aria-label="新建主体" aria-describedby="selectionEntityTip">
+          <button class="icon-toolbar-button text-button selection-toolbar-entity" type="button" data-selection-action="create-entity" aria-label="新建素材组" aria-describedby="selectionEntityTip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 21a6 6 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
-            <span>新建主体</span>
-            <span class="toolbar-tip" id="selectionEntityTip">用选中素材新建主体</span>
+            <span>新建素材组</span>
+            <span class="toolbar-tip" id="selectionEntityTip">用选中素材新建素材组</span>
           </button>
           <button class="icon-toolbar-button text-button selection-toolbar-group" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
             <i data-lucide="combine" aria-hidden="true"></i>
@@ -641,6 +622,7 @@
     <script src="./src/legacy-canvas/canvas-agent-composer-resize.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-history.js"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-model.js"></script>
+    <script src="./src/legacy-canvas/canvas-asset-library-header-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-view.js"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-menu-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-editor-model.js"></script>
@@ -666,7 +648,6 @@
     <script src="./src/legacy-canvas/canvas-persistence-coordinator.js"></script>
     <script src="./src/legacy-canvas/canvas-media-asset-coordinator.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-asset-coordinator.js"></script>
-    <script src="./src/legacy-canvas/canvas-asset-space-switcher.js"></script>
     <script src="./src/application/prompt-optimization-preferences.js"></script>
     <script src="./src/application/prompt-optimization-service.js"></script>
     <script src="./src/legacy-canvas/canvas-prompt-optimization-view.js"></script>

@@ -12,10 +12,10 @@ const [promptDocument, promptController, promptEditor] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-prompt-controller.js", root), "utf8"),
   buildPromptEditor(fileURLToPath(root)),
 ]);
-const assetSpaceSwitcher = await readFile(new URL("src/legacy-canvas/canvas-asset-space-switcher.js", root), "utf8");
 const agentHistory = await readFile(new URL("src/legacy-canvas/canvas-agent-history.js", root), "utf8");
 const agentParameters = await readFile(new URL("src/legacy-canvas/canvas-agent-parameters.js", root), "utf8");
 const agentModels = await readFile(new URL("src/legacy-canvas/canvas-agent-models.js", root), "utf8");
+const assetLibraryHeaderController = await readFile(new URL("src/legacy-canvas/canvas-asset-library-header-controller.js", root), "utf8");
 const assetLibraryMenuController = await readFile(new URL("src/legacy-canvas/canvas-asset-library-menu-controller.js", root), "utf8");
 const arrangeModules = await Promise.all(["layout", "scope", "controller"].map((name) => readFile(new URL(`src/legacy-canvas/canvas-arrange-${name}.js`, root), "utf8")));
 const toolbarMenuController = await readFile(new URL("src/legacy-canvas/canvas-toolbar-menu-controller.js", root), "utf8");
@@ -154,6 +154,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(assetLibraryModel);
   window.eval(assetLibraryView);
   window.eval(assetLibraryMenuController);
+  window.eval(assetLibraryHeaderController);
   window.eval(entityEditorModel);
   window.eval(entityEditorView);
   window.eval(entityEditorController);
@@ -176,7 +177,6 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(agentHistory);
   window.eval(agentParameters);
   window.eval(agentModels);
-  window.eval(assetSpaceSwitcher);
   for (const source of generationModules) window.eval(source);
   window.eval(`${app}\nwindow.__readonlyPromptEditors = promptEditors;`);
   assert.equal(window.document.querySelector("#agentDock").style.getPropertyValue("--agent-width"), "560px");
@@ -919,8 +919,8 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   window.document.querySelector("[data-library-space='platform']")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  assert.equal(window.document.querySelector("#assetLibraryMediaTab").textContent, "灵感搜索");
-  assert.equal(window.document.querySelector("#assetLibraryEntityTab").hidden, true);
+  assert.equal(window.document.querySelector("#assetLibraryMediaTab"), null);
+  assert.equal(window.document.querySelector("#assetLibraryEntityTab"), null);
   assert.equal(window.document.querySelector("#assetLibraryPanel").dataset.libraryFolderCapability, "false");
   assert.equal(window.document.querySelector("#assetLibraryDirectoryButton").disabled, true);
   assert.ok(window.document.querySelectorAll("[data-library-media]").length >= 1);

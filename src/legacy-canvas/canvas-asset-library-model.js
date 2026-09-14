@@ -403,11 +403,11 @@
 
     function listFolders(options = {}) {
       const resolvedSpace = resolveSpace(options.space ?? "personal");
-      const resolvedKind = resolveItemKind(options.kind ?? "media");
+      const resolvedKind = options.kind === "all" ? "all" : resolveItemKind(options.kind ?? "media");
       const hasParentFilter = Object.prototype.hasOwnProperty.call(options, "parentId");
       const parentId = options.parentId == null ? null : String(options.parentId);
       return [...foldersById.values()]
-        .filter((folder) => folder.space === resolvedSpace && folder.kind === resolvedKind)
+        .filter((folder) => folder.space === resolvedSpace && (resolvedKind === "all" || folder.kind === resolvedKind))
         .filter((folder) => !hasParentFilter || folder.parentId === parentId)
         .filter((folder) => matchesSearch([folder.name], options.query))
         .map(cloneValue);
@@ -421,37 +421,45 @@
     function getFolderPath({ folderId, space = "personal", kind = "media" } = {}) {
       if (folderId == null) return [];
       const resolvedSpace = resolveSpace(space);
-      const resolvedKind = resolveItemKind(kind);
+      const resolvedKind = kind === "all" ? getFolder(folderId)?.kind : resolveItemKind(kind);
       validateFolder(folderId, resolvedSpace, resolvedKind);
       return getFolderPathInternal(folderId).map(cloneValue);
     }
 
     function listItems(options = {}) {
       const space = resolveSpace(options.space);
-      const kind = resolveItemKind(options.kind || "media");
+      const kind = options.kind === "all" ? "all" : resolveItemKind(options.kind || "media");
       const hasFolderFilter = Object.prototype.hasOwnProperty.call(options, "folderId");
       const folderId = options.folderId == null ? null : String(options.folderId);
-      if (hasFolderFilter) validateFolder(folderId, space, kind);
+      if (hasFolderFilter) validateFolder(folderId, space, kind === "all" ? getFolder(folderId)?.kind : kind);
       const requestedMediaKind = options.mediaKind || options.type || "all";
+      const searchValues = (record) => [
+        record.name, record.displayName, record.mediaKind, record.type, record.description, record.tags,
+      ];
       const items = [...placementsByKey.values()]
-        .filter((placement) => placement.space === space && placement.item.kind === kind)
+        .filter((placement) => placement.space === space && (kind === "all" || placement.item.kind === kind))
         .filter((placement) => !hasFolderFilter || placement.folderId === folderId)
         .map((placement) => ({ placement, record: requireRecord(placement.item) }))
-        .filter(({ record }) => kind !== "media" || requestedMediaKind === "all" || record.mediaKind === requestedMediaKind)
-        .filter(({ record }) => matchesSearch([
-          record.name,
-          record.displayName,
-          record.mediaKind,
-          record.type,
-          record.description,
-          record.tags,
-        ], options.query))
+        .filter(({ placement, record }) => {
+          if (kind === "all" && placement.item.kind === "entity") {
+            const visibleMedia = record.mediaRefs
+              .filter((ref) => hasPlacementInternal({ kind: "media", id: ref.mediaId }, space))
+              .map((ref) => mediaById.get(ref.mediaId))
+              .filter((media) => media && media.visible !== false && media.hidden !== true)
+              .filter((media) => requestedMediaKind === "all" || media.mediaKind === requestedMediaKind);
+            if (requestedMediaKind !== "all" && !visibleMedia.length) return false;
+            return matchesSearch(searchValues(record), options.query)
+              || visibleMedia.some((media) => matchesSearch(searchValues(media), options.query));
+          }
+          return (placement.item.kind !== "media" || requestedMediaKind === "all" || record.mediaKind === requestedMediaKind)
+            && matchesSearch(searchValues(record), options.query);
+        })
         .map(({ placement, record }) => ({
           ...cloneValue(record),
-          kind,
+          kind: placement.item.kind,
           placement: cloneValue(placement),
         }));
-      if (kind === "media" && options.sort === "recent") {
+      if ((kind === "media" || kind === "all") && options.sort === "recent") {
         const timestamp = (item) => {
           if (item.createdAt == null || item.createdAt === "") return -Infinity;
           const value = typeof item.createdAt === "number" ? item.createdAt : Date.parse(item.createdAt);
@@ -509,6 +517,56 @@
 
     function listAllMedia() {
       return [...mediaById.values()].map(cloneValue);
+    }
+
+    function resolveMediaItems({ items = [], space = "personal", existingMedia = [] } = {}) {
+      if (!Array.isArray(items)) throw new TypeError("Asset library items must be an array.");
+      if (!Array.isArray(existingMedia)) throw new TypeError("Existing media must be an array.");
+      const resolvedSpace = resolveSpace(space);
+      // Canvas copies retain a library/source identity alongside their local id.
+      // Match those persisted fields without coupling this store to a UI model.
+      const identityKeys = (value) => {
+        const entry = value?.media && typeof value.media === "object" ? value.media : value;
+        return ["id", "assetId", "mediaAssetId", "librarySourceId", "workspaceAssetId", "platformSourceId", "sourceId"]
+          .map((field) => String(entry?.[field] ?? "").trim()).filter(Boolean);
+      };
+      const existingKeys = new Set(existingMedia.flatMap(identityKeys));
+      const skippedExistingKeys = new Set();
+      let existingCount = 0;
+      // Validate the whole selection before expanding it, so a stale or foreign
+      // top-level selection cannot silently become a different batch operation.
+      const records = items.map((value) => {
+        const item = resolveItemRef(value);
+        const record = requireRecord(item);
+        if (!hasPlacementInternal(item, resolvedSpace) || record.visible === false || record.hidden === true) {
+          throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
+        }
+        return { item, record };
+      });
+      const seen = new Set();
+      const unavailable = new Set();
+      const media = [];
+      for (const { item, record } of records) {
+        const ids = item.kind === "media" ? [record.id] : record.mediaRefs.map((ref) => ref.mediaId);
+        for (const id of ids) {
+          const entry = mediaById.get(id);
+          if (!entry || entry.visible === false || entry.hidden === true
+            || !hasPlacementInternal({ kind: "media", id }, resolvedSpace)) {
+            unavailable.add(id);
+            continue;
+          }
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const keys = identityKeys(entry);
+          if (keys.some((key) => existingKeys.has(key))) {
+            if (!keys.some((key) => skippedExistingKeys.has(key))) existingCount += 1;
+            keys.forEach((key) => skippedExistingKeys.add(key));
+            continue;
+          }
+          media.push(cloneValue(entry));
+        }
+      }
+      return { media, missingCount: unavailable.size, existingCount };
     }
 
     function hasPlacement(itemOrInput, maybeSpace, maybeFolderId) {
@@ -1013,6 +1071,7 @@
       getEntityMedia,
       listEntityMedia,
       listAllMedia,
+      resolveMediaItems,
       hasPlacement,
       snapshot,
       registerMedia,

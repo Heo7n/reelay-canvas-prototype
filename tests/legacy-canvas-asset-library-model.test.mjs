@@ -133,6 +133,131 @@ test("returns isolated media, Entity references, resolved Entity media, and snap
   assert.equal(store.getEntity(entityRef("hero")).mediaRefs.length, 2);
 });
 
+test("unified reads mix root assets without relocating or conflating records with the same id", () => {
+  const store = model.createAssetLibraryStore({
+    media: [
+      { id: "shared-id", type: "image", name: "照片", createdAt: "2026-09-10T00:00:00Z" },
+      { id: "recent", type: "video", name: "影片", createdAt: "2026-09-12T00:00:00Z" },
+    ],
+    entities: [{ id: "shared-id", name: "素材组", mediaRefs: ["shared-id"], createdAt: "2026-09-11T00:00:00Z" }],
+    placements: [
+      { item: mediaRef("shared-id"), space: "personal" },
+      { item: entityRef("shared-id"), space: "personal" },
+      { item: mediaRef("recent"), space: "personal" },
+    ],
+  });
+  const before = plain(store.snapshot());
+  const items = plain(store.listItems({ space: "personal", kind: "all", folderId: null, sort: "recent" }));
+  assert.deepEqual(items.map((item) => [item.kind, item.id]), [
+    ["media", "recent"], ["entity", "shared-id"], ["media", "shared-id"],
+  ]);
+  assert.deepEqual(items.map((item) => item.placement.item), items.map(({ kind, id }) => ({ kind, id })));
+  items[1].mediaRefs.length = 0;
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
+test("unified directories preserve both original trees and validate space at child reads", () => {
+  const store = createFixtureStore();
+  const before = plain(store.snapshot());
+  assert.deepEqual(plain(store.listFolders({ space: "personal", kind: "all", parentId: null })).map((folder) => folder.id), [
+    "personal-media", "personal-entity",
+  ]);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", folderId: null })), []);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", folderId: "personal-media" })).map((item) => item.id), [
+    "portrait", "voice",
+  ]);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", folderId: "personal-entity" })).map((item) => item.id), ["hero"]);
+  assert.deepEqual(plain(store.getFolderPath({ space: "personal", kind: "all", folderId: "personal-entity" })).map((folder) => folder.id), ["personal-entity"]);
+  assert.throws(() => store.listItems({ space: "organization", kind: "all", folderId: "personal-entity" }), /does not belong/);
+  assert.throws(() => store.getFolderPath({ space: "organization", kind: "all", folderId: "personal-entity" }), /does not belong/);
+  assert.throws(() => store.listItems({ space: "personal", kind: "all", folderId: "missing" }), /Folder not found/);
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
+test("unified type and search filters match groups through visible matching media", () => {
+  const store = createFixtureStore();
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", mediaKind: "audio", query: "台词" })).map((item) => item.id), ["voice", "hero"]);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", mediaKind: "image", query: "台词" })), []);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", mediaKind: "video" })), []);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", query: "人像" })).map((item) => item.id), ["portrait", "hero"]);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "entity", query: "人像" })), []);
+  assert.throws(() => store.createFolder({ space: "personal", kind: "all", name: "不允许的目录" }), /Unknown asset library item kind/);
+  const hiddenSnapshot = plain(store.snapshot());
+  hiddenSnapshot.media.find((media) => media.id === "voice").hidden = true;
+  const hiddenStore = model.createAssetLibraryStore(hiddenSnapshot);
+  assert.deepEqual(plain(hiddenStore.listItems({ space: "personal", kind: "all", mediaKind: "audio", folderId: "personal-entity" })), []);
+  assert.deepEqual(plain(hiddenStore.listItems({ space: "personal", kind: "all", query: "台词", folderId: "personal-entity" })), []);
+});
+
+test("mixed selection expansion preserves typed identities and ordered group references without duplicates", () => {
+  const store = model.createAssetLibraryStore({
+    media: [
+      { id: "shared", type: "image", name: "共享 ID 图片" },
+      { id: "voice", type: "audio", name: "音频" },
+      { id: "video", type: "video", name: "视频" },
+    ],
+    entities: [
+      { id: "shared", name: "共享 ID 素材组", mediaRefs: ["voice", "shared"] },
+      { id: "second", name: "第二组", mediaRefs: ["video", "voice"] },
+    ],
+    placements: [
+      ...["shared", "voice", "video"].map((id) => ({ item: mediaRef(id), space: "personal" })),
+      ...["shared", "second"].map((id) => ({ item: entityRef(id), space: "personal" })),
+    ],
+  });
+  const before = plain(store.snapshot());
+  const result = store.resolveMediaItems({ items: [entityRef("shared"), mediaRef("shared"), entityRef("second"), mediaRef("video")], space: "personal" });
+  assert.deepEqual(plain(result.media).map((media) => media.id), ["voice", "shared", "video"]);
+  assert.equal(result.missingCount, 0);
+  result.media[0].name = "外部修改";
+  assert.deepEqual(plain(store.snapshot()), before);
+  assert.deepEqual(plain(store.resolveMediaItems({ items: [mediaRef("shared"), entityRef("shared")], space: "personal" }).media).map((media) => media.id), ["shared", "voice"]);
+});
+
+test("mixed selection expansion rejects stale or inaccessible top-level references before returning a batch", () => {
+  const store = createFixtureStore();
+  const before = plain(store.snapshot());
+  assert.throws(() => store.resolveMediaItems({ items: [mediaRef("portrait"), mediaRef("platform-video")], space: "personal" }), /not visible/);
+  assert.throws(() => store.resolveMediaItems({ items: [entityRef("hero")], space: "organization" }), /not visible/);
+  assert.throws(() => store.resolveMediaItems({ items: [mediaRef("missing")], space: "personal" }), /not found/);
+  assert.throws(() => store.resolveMediaItems({ items: [{ kind: "all", id: "portrait" }] }), /Unknown asset library item kind/);
+  assert.throws(() => store.resolveMediaItems({ items: ["portrait"] }), /Unknown asset library item kind/);
+  assert.throws(() => store.resolveMediaItems({ items: {} }), /must be an array/);
+  assert.deepEqual(plain(store.resolveMediaItems({ items: [], space: "personal" })), { media: [], missingCount: 0, existingCount: 0 });
+  assert.deepEqual(plain(store.resolveMediaItems({ items: [mediaRef("platform-video")], space: "platform" }).media).map((media) => media.id), ["platform-video"]);
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
+test("mixed selection expansion skips hidden group members and counts unique unavailable media", () => {
+  const snapshot = plain(createFixtureStore().snapshot());
+  snapshot.media.find((media) => media.id === "voice").hidden = true;
+  snapshot.entities.push({ id: "another", name: "另一组", mediaRefs: ["voice", "portrait"] });
+  snapshot.placements.push({ item: entityRef("another"), space: "personal" });
+  const store = model.createAssetLibraryStore(snapshot);
+  const result = plain(store.resolveMediaItems({ items: [entityRef("hero"), entityRef("another")], space: "personal" }));
+  assert.deepEqual(result.media.map((media) => media.id), ["portrait"]);
+  assert.equal(result.missingCount, 1);
+  assert.throws(() => store.resolveMediaItems({ items: [entityRef("hero"), mediaRef("voice")], space: "personal" }), /not visible/);
+});
+
+test("mixed selection expansion can exclude existing canvas media through every stable identity field", () => {
+  const store = createFixtureStore();
+  const items = [entityRef("hero"), mediaRef("portrait")];
+  for (const field of ["id", "assetId", "mediaAssetId", "librarySourceId", "workspaceAssetId", "platformSourceId", "sourceId"]) {
+    const result = plain(store.resolveMediaItems({ items, space: "personal", existingMedia: [{ id: "canvas-copy", [field]: " portrait " }] }));
+    assert.deepEqual(result.media.map((media) => media.id), ["voice"], field);
+    assert.equal(result.existingCount, 1, field);
+    assert.equal(result.missingCount, 0, field);
+  }
+  const sourceResult = plain(store.resolveMediaItems({ items, space: "personal", existingMedia: [{ media: { id: "canvas-copy", sourceId: "canvas-result-1" } }] }));
+  assert.deepEqual(sourceResult.media.map((media) => media.id), ["voice"]);
+  assert.equal(sourceResult.existingCount, 1);
+  const unexcluded = plain(store.resolveMediaItems({ items, space: "personal" }));
+  assert.deepEqual(unexcluded.media.map((media) => media.id), ["portrait", "voice"]);
+  assert.equal(unexcluded.existingCount, 0);
+  assert.throws(() => store.resolveMediaItems({ items, existingMedia: {} }), /Existing media must be an array/);
+});
+
 test("registerMedia deduplicates by id, source id, or URL while adding a placement", () => {
   const store = createFixtureStore();
   const bySource = store.registerMedia({

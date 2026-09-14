@@ -265,7 +265,7 @@
     const coverMediaId = requestedCoverId;
     const name = String(entity.name ?? entity.displayName ?? options.name ?? "");
     const description = String(entity.description ?? options.description ?? "");
-    const title = mode === "create" ? "新建主体" : String(options.title ?? name).trim() || "未命名主体";
+    const title = mode === "create" ? "新建素材组" : String(options.title ?? name).trim() || "未命名素材组";
     const mutable = options.mutable !== false;
     const submitting = Boolean(options.submitting);
     const uploading = Boolean(options.uploading);
@@ -310,7 +310,7 @@
               ${headingIcon("square-user-round")}
               <h2 id="canvasEntityEditorTitle" title="${escapeHtml(title)}">${escapeHtml(title)}</h2>
             </div>
-            <button type="button" aria-label="关闭主体编辑器" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>${icon("x")}</button>
+            <button type="button" aria-label="关闭素材组编辑器" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>${icon("x")}</button>
           </header>
 
           <div class="entity-editor-details-scroll">
@@ -338,12 +338,12 @@
                   panelId: "canvasEntityEditorMediaGrid",
                 })}
                 <div class="entity-editor-media-actions">
-                  <button type="button" data-entity-editor-add-from-library="true"${canAddFromLibrary ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持从素材库添加" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
+                  <button type="button" data-entity-editor-add-from-library="true"${canAddFromLibrary ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持从素材库添加" : busy ? "请等待当前操作完成" : "当前素材组仅可查看"}"`}>
                     ${icon("images")}
                     <span>从素材库添加</span>
                   </button>
                   <span aria-hidden="true"></span>
-                  <button type="button" data-entity-editor-upload="true"${canUpload ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持上传素材" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
+                  <button type="button" data-entity-editor-upload="true"${canUpload ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持上传素材" : busy ? "请等待当前操作完成" : "当前素材组仅可查看"}"`}>
                     ${icon("upload")}
                     <span>上传</span>
                   </button>

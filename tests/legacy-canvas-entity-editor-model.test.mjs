@@ -66,7 +66,7 @@ test("creates an empty draft with the fixed creation title and isolated initial 
   assert.deepEqual(plain(draft.getState()), {
     mode: "create",
     entityId: null,
-    title: "新建主体",
+    title: "新建素材组",
     name: "",
     description: "",
     mediaRefs: [],
@@ -78,10 +78,10 @@ test("creates an empty draft with the fixed creation title and isolated initial 
     expectedVersion: null,
     dirty: false,
     valid: false,
-    errors: { name: "主体名称不能为空。", media: "请至少添加一个素材。" },
+    errors: { name: "素材组名称不能为空。", media: "请至少添加一个素材。" },
   });
-  draft.setName("新主体");
-  assert.equal(draft.getTitle(), "新建主体");
+  draft.setName("新素材组");
+  assert.equal(draft.getTitle(), "新建素材组");
 });
 
 test("seeded creation uses ordered references as a clean baseline and still requires a name", () => {
@@ -127,7 +127,7 @@ test("validates the trimmed name and creates an isolated atomic commit payload",
     () => draft.createCommitPayload(),
     (error) => {
       assert.equal(error.code, "invalid");
-      assert.deepEqual(plain(error.errors), { name: "主体名称不能为空。", media: "请至少添加一个素材。" });
+      assert.deepEqual(plain(error.errors), { name: "素材组名称不能为空。", media: "请至少添加一个素材。" });
       return true;
     },
   );
@@ -154,7 +154,7 @@ test("validates the trimmed name and creates an isolated atomic commit payload",
 
 test("deduplicates existing and uploaded Media by id while preserving first-reference order", () => {
   const draft = createDraft();
-  draft.setName("主体");
+  draft.setName("素材组");
   assert.equal(draft.addMedia("voice").added, true);
   assert.equal(draft.addMedia({ mediaId: "portrait" }).added, true);
   assert.equal(draft.addMedia("voice").added, false);

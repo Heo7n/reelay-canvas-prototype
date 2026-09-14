@@ -57,12 +57,12 @@ test("registers a frozen pure Entity editor and Media picker API", () => {
   assert.equal(view.renderMediaPicker({ visible: false }), "");
 });
 
-test("create mode keeps the title 新建主体 and renders the complete empty draft", () => {
+test("create mode keeps the title 新建素材组 and renders the complete empty draft", () => {
   const markup = view.renderEntityEditor({ mode: "create", name: "正在输入的名称" });
 
   assert.match(markup, /role="region" aria-labelledby="canvasEntityEditorTitle"/);
   assert.match(markup, /data-entity-editor-mode="create"/);
-  assert.match(markup, /<h2 id="canvasEntityEditorTitle" title="新建主体">新建主体<\/h2>/);
+  assert.match(markup, /<h2 id="canvasEntityEditorTitle" title="新建素材组">新建素材组<\/h2>/);
   assert.match(markup, /class="entity-editor-title">\s*<svg[^>]*data-entity-editor-icon="square-user-round"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg>\s*<h2 id="canvasEntityEditorTitle"/);
   assert.match(markup, /data-entity-editor-name="true"/);
   assert.match(markup, /value="正在输入的名称"/);
@@ -114,8 +114,8 @@ test("edit mode uses the live Entity name as its title and exposes save state", 
 test("model-shaped state can drive title, values, counts, filter, and preview directly", () => {
   const markup = view.renderEntityEditor({
     mode: "edit",
-    title: "重命名后的主体",
-    name: "重命名后的主体",
+    title: "重命名后的素材组",
+    name: "重命名后的素材组",
     description: "草稿描述",
     filter: "image",
     filteredMedia: [media[0]],
@@ -124,8 +124,8 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
     coverMediaId: "portrait",
   });
 
-  assert.match(markup, /title="重命名后的主体">重命名后的主体<\/h2>/);
-  assert.match(markup, /value="重命名后的主体"/);
+  assert.match(markup, /title="重命名后的素材组">重命名后的素材组<\/h2>/);
+  assert.match(markup, /value="重命名后的素材组"/);
   assert.match(markup, />草稿描述<\/textarea>/);
   assert.match(markup, /data-entity-editor-filter-active="image"/);
   assert.match(markup, /aria-selected="true"[^>]*data-entity-editor-filter="image"/);
@@ -140,7 +140,7 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
 test("filtering limits the Media grid while preserving live category counts", () => {
   const markup = view.renderEntityEditor({
     mode: "create",
-    name: "主体",
+    name: "素材组",
     media,
     filter: "image",
     selectedMediaId: "portrait",
@@ -188,7 +188,7 @@ test("image, video, and audio previews use only structured safe Media fields", (
 test("preview filename rename keeps the suffix fixed in a horizontal inline control", () => {
   const markup = view.renderEntityEditor({
     mode: "edit",
-    name: "主体",
+    name: "素材组",
     media: [{ id: "portrait", name: "角色.正面.webp", mediaKind: "image" }],
     selectedMediaId: "portrait",
     renamingMediaId: "portrait",
@@ -223,9 +223,9 @@ test("the editor escapes all user content and renders accessible validation erro
 });
 
 test("read-only and submitting states disable every mutation affordance", () => {
-  const readOnly = view.renderEntityEditor({ mode: "edit", name: "主体", media, mutable: false });
-  const submitting = view.renderEntityEditor({ mode: "edit", name: "主体", media, submitting: true });
-  const uploading = view.renderEntityEditor({ mode: "edit", name: "主体", media, uploading: true });
+  const readOnly = view.renderEntityEditor({ mode: "edit", name: "素材组", media, mutable: false });
+  const submitting = view.renderEntityEditor({ mode: "edit", name: "素材组", media, submitting: true });
+  const uploading = view.renderEntityEditor({ mode: "edit", name: "素材组", media, uploading: true });
 
   assert.match(readOnly, /data-entity-editor-name="true" disabled/);
   assert.match(readOnly, /data-entity-editor-description="true" disabled/);
@@ -247,7 +247,7 @@ test("read-only and submitting states disable every mutation affordance", () => 
 test("editor capability flags disable unavailable add paths before interaction", () => {
   const markup = view.renderEntityEditor({
     mode: "edit",
-    name: "主体",
+    name: "素材组",
     media,
     canAddFromLibrary: false,
     canUpload: false,
@@ -259,7 +259,7 @@ test("editor capability flags disable unavailable add paths before interaction",
 });
 
 test("four Media filters expose a roving tab relationship for keyboard control", () => {
-  const editor = view.renderEntityEditor({ mode: "edit", name: "主体", media, filter: "video" });
+  const editor = view.renderEntityEditor({ mode: "edit", name: "素材组", media, filter: "video" });
   const picker = view.renderMediaPicker({ media, filter: "audio" });
 
   assert.match(editor, /role="tablist" aria-label="已添加素材类型"/);
@@ -315,7 +315,7 @@ test("Media picker normalizes invalid state, escapes search, and disables an emp
 
 test("deduplicates repeated Media records before rendering editor and picker cards", () => {
   const repeated = [media[0], { ...media[0], name: "重复项" }];
-  const editor = view.renderEntityEditor({ mode: "edit", name: "主体", media: repeated });
+  const editor = view.renderEntityEditor({ mode: "edit", name: "素材组", media: repeated });
   const picker = view.renderMediaPicker({ media: repeated });
 
   assert.equal(editor.match(/data-entity-editor-media="portrait"/g)?.length, 1);

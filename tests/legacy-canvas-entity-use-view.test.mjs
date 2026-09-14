@@ -63,23 +63,23 @@ test("renders a cover-led Entity detail with inline metadata and the exact full-
   assert.match(markup, /雨林中的稳定角色设定/);
   assert.match(markup, /data-entity-use-action="add-canvas" data-entity-use-add-canvas="courier"/);
   assert.match(markup, /<span>添加到画布<\/span>/);
-  assert.doesNotMatch(markup, /主体详情|entity-use-detail-header|entity-use-detail-thumbnail|data-entity-use-detail-close/);
+  assert.doesNotMatch(markup, /素材组详情|entity-use-detail-header|entity-use-detail-thumbnail|data-entity-use-detail-close/);
   assert.doesNotMatch(markup, /data-lucide="plus"/);
   assert.doesNotMatch(markup, /\bautoplay\b|<audio|<video| controls(?:\s|>)/);
 });
 
 test("detail preview remains non-interactive until pinned and fails closed without usable media", () => {
   const preview = view.renderEntityDetail({
-    entity: { id: "audio-only", name: "声音主体", media: [media[3]] },
+    entity: { id: "audio-only", name: "声音素材组", media: [media[3]] },
   });
   const empty = view.renderEntityDetail({
-    entity: { id: "empty", name: "空主体", media: [] },
+    entity: { id: "empty", name: "空素材组", media: [] },
   });
 
   assert.match(preview, /data-entity-use-state="preview" data-pinned="false"/);
   assert.match(preview, /data-cover-kind="preview" data-media-kind="audio"/);
   assert.doesNotMatch(preview, /<audio|src="https:\/\/cdn\.example\/voice\.mp3"/);
-  assert.match(empty, /data-entity-use-unavailable="add-canvas" disabled aria-disabled="true" title="主体没有可添加的素材"/);
+  assert.match(empty, /data-entity-use-unavailable="add-canvas" disabled aria-disabled="true" title="素材组没有可添加的素材"/);
   assert.doesNotMatch(empty, /data-entity-use-action="add-canvas"|data-entity-use-add-canvas=/);
   assert.match(empty, /data-cover-kind="empty" data-media-kind="empty"/);
   assert.match(empty, /class="entity-use-detail-count">0 个素材<\/span>/);
@@ -194,7 +194,7 @@ test("picker renders personal and organization tabs, search, checkbox multi-sele
     },
     {
       id: "shared",
-      name: "共享主体",
+      name: "共享素材组",
       spaces: ["personal", "organization"],
       media: [media[0]],
     },
@@ -204,7 +204,7 @@ test("picker renders personal and organization tabs, search, checkbox multi-sele
       space: "organization",
       media: [media[0], media[1]],
     },
-    { id: "platform", name: "平台主体", space: "platform", media: [media[0]] },
+    { id: "platform", name: "平台素材组", space: "platform", media: [media[0]] },
   ];
   const markup = view.renderEntityPicker({
     entities,
@@ -214,21 +214,21 @@ test("picker renders personal and organization tabs, search, checkbox multi-sele
   });
 
   assert.match(markup, /class="entity-use-picker" role="dialog" aria-modal="true" aria-labelledby="entity-use-picker-title"/);
-  assert.match(markup, /<h2 id="entity-use-picker-title">选择主体<\/h2>/);
-  assert.match(markup, /role="group" aria-label="主体空间"/);
-  assert.match(markup, /id="entity-use-space-personal" type="button" aria-label="个人，3 个主体" aria-pressed="true"[^>]*data-entity-use-space="personal">\s*<span>个人<\/span>/);
-  assert.match(markup, /id="entity-use-space-organization" type="button" aria-label="组织，2 个主体" aria-pressed="false"[^>]*data-entity-use-space="organization">\s*<span>组织<\/span>/);
+  assert.match(markup, /<h2 id="entity-use-picker-title">选择素材组<\/h2>/);
+  assert.match(markup, /role="group" aria-label="素材组空间"/);
+  assert.match(markup, /id="entity-use-space-personal" type="button" aria-label="个人，3 个素材组" aria-pressed="true"[^>]*data-entity-use-space="personal">\s*<span>个人<\/span>/);
+  assert.match(markup, /id="entity-use-space-organization" type="button" aria-label="组织，2 个素材组" aria-pressed="false"[^>]*data-entity-use-space="organization">\s*<span>组织<\/span>/);
   assert.doesNotMatch(markup, /<small>[0-9]+<\/small>/);
   assert.match(markup, /value="信使"[^>]*data-entity-use-search="true"/);
   assert.match(markup, /data-entity-use-search-clear="true"/);
   assert.equal(markup.match(/data-entity-use-picker-card=/g)?.length, 1);
   assert.match(markup, /data-entity-use-picker-card="courier" data-selected="true"/);
   assert.match(markup, /aria-label="取消选择 雾森信使" aria-pressed="true"[^>]*data-entity-use-toggle="courier"/);
-  assert.doesNotMatch(markup, /平台主体|data-entity-use-picker-card="team"/);
+  assert.doesNotMatch(markup, /平台素材组|data-entity-use-picker-card="team"/);
   assert.match(markup, /data-entity-use-picker-count="true">已选 2 个<\/span>/);
   assert.match(markup, /data-entity-use-picker-cancel="true">取消<\/button>/);
   assert.match(markup, /data-entity-use-picker-add="true" data-entity-use-action="add-entities">\s*<span>添加<\/span>/);
-  assert.doesNotMatch(markup, /主体库|添加主体|确定|参考素材|data-entity-use-picker-close|已选 2 个[^]*<span>添加 ·/);
+  assert.doesNotMatch(markup, /素材组库|添加素材组|确定|参考素材|data-entity-use-picker-close|已选 2 个[^]*<span>添加 ·/);
   assert.doesNotMatch(markup, /\bautoplay\b|<audio|<video| controls(?:\s|>)/);
 });
 
@@ -282,7 +282,7 @@ test("picker resolves ordered Media references, escapes data, and renders useful
   assert.match(linked, /data-media-count="2"/);
   assert.doesNotMatch(linked, />2 个素材<\/small>/);
   assert.match(empty, /data-entity-use-picker-empty="true"/);
-  assert.match(empty, /没有匹配的主体/);
+  assert.match(empty, /没有匹配的素材组/);
   assert.match(disabled, /data-entity-use-picker-add="true" data-entity-use-unavailable="add-entities" disabled aria-disabled="true"/);
   assert.doesNotMatch(disabled, /data-entity-use-action="add-entities"/);
   assert.equal(view.renderEntityPicker({ visible: false }), "");
@@ -312,7 +312,7 @@ test("unavailable and busy picker states expose no executable mutation hooks", (
 
 test("explicit video covers are accepted as visual covers without embedding autoplay media", () => {
   const markup = view.renderEntityDetail({
-    entity: { id: "motion-entity", name: "动态主体", coverMediaId: "motion", media },
+    entity: { id: "motion-entity", name: "动态素材组", coverMediaId: "motion", media },
   });
 
   assert.match(markup, /data-cover-kind="video" data-media-kind="video"[^>]*>\s*<img src="https:\/\/cdn\.example\/motion\.webp"/);

@@ -1562,7 +1562,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(stylesEntry, /styles\/canvas-asset-library\.css"/);
   assert.match(stylesEntry, /styles\/canvas-entity-editor\.css"/);
   assert.match(html, /class="top-bar"[\s\S]*?data-canvas-home-button[\s\S]*?data-project-name[\s\S]*?data-project-menu-button/);
-  assert.match(html, /id="assetLibraryEntityTab"[^>]*data-library-section="entity"[^>]*>主体<\/button>/);
+  assert.doesNotMatch(html, /id="assetLibrary(?:Entity|Media)Tab"/);
   assert.match(html, /class="left-rail"[\s\S]*?data-canvas-menu-button[\s\S]*?id="railLibraryBtn"[\s\S]*?id="shareProjectBtn"[\s\S]*?id="railProfileBtn"/);
   assert.doesNotMatch(html, /class="share-reveal"/);
   assert.match(html, /data-canvas-tool="minimap"[\s\S]*?data-canvas-tool="fit"[\s\S]*?data-canvas-tool="organize"[^>]*aria-controls="canvasArrangeMenu"[\s\S]*?data-toolbar-popover="organize"[\s\S]*?id="zoomSlider"/);
@@ -1655,7 +1655,8 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(html, /canvas-media-asset-coordinator\.js"/);
   assert.match(html, /app\.js"/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
-  assert.match(html, /class="asset-library-search-row"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibraryPlatformCommandAnchor"/);
+  assert.match(html, /id="assetLibrarySearchToggleBtn"[\s\S]*?id="assetLibraryCommandBar"[\s\S]*?id="assetLibrarySearchRegion"[\s\S]*?id="assetLibrarySearchInput"/);
+  assert.match(html, /canvas-asset-library-header-controller\.js"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
 
   assert.match(html, /id="canvasEntityEditorHost" hidden inert aria-hidden="true"/);
@@ -1663,7 +1664,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(html, /id="canvasEntityEditorUploadInput"[^>]*hidden/);
   assert.doesNotMatch(html, /id="assetEntityEditor"|id="assetEntityEditorContent"|id="assetEntityUploadInput"/);
   assert.match(appSource, /createCanvasEntityEditorController\(\{[\s\S]*?saveEntity:\s*saveEntityEditorDraft/);
-  assert.match(appSource, /function openEntityEditorCreate\(\)[\s\S]*?canvasEntityEditor\.open\(\{[\s\S]*?mode:\s*"create"/);
+  assert.match(appSource, /function openEntityEditorCreate\(initialMedia = \[\]\)[\s\S]*?canvasEntityEditor\.open\(\{[\s\S]*?mode:\s*"create"/);
   assert.match(appSource, /function openEntityEditorEdit\(entityId\)[\s\S]*?expectedVersion:\s*entity\.version/);
   assert.doesNotMatch(appSource, /createEntityFromMedia|importPlatformMediaToPersonal|function saveAssetEntityEditor/);
 
@@ -1683,10 +1684,10 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(entityUseControllerSource, /root\.REELAY_CANVAS_ENTITY_USE_CONTROLLER/);
   assert.match(appSource, /case "entity-picker":[\s\S]*?if \(!canNodeUseEntityReferences\(node\)\) return/);
 
-  assert.match(appSource, /REELAY_ASSET_SPACE_SWITCHER\.createController/);
-  assert.match(html, /canvas-asset-space-switcher\.js"/);
-  assert.match(appSource, /closest\("#assetLibrarySectionTabs \[data-library-section\]"\)/);
-  assert.match(appSource, /closest\("#assetLibraryCommandBar button\[data-library-display\]"\)/);
+  assert.match(appSource, /REELAY_CANVAS_ASSET_LIBRARY_HEADER_CONTROLLER\.create/);
+  assert.match(html, /canvas-asset-library-header-controller\.js"/);
+  assert.doesNotMatch(appSource, /#assetLibrarySectionTabs/);
+  assert.doesNotMatch(appSource, /libraryDisplay|data-library-display/);
   assert.match(appSource, /const eventPath = typeof event\.composedPath === "function"/);
   assert.match(appSource, /function isCanvasDropTarget\(target\)[\s\S]*?closest\("#canvasShell"\)/);
   assert.match(appSource, /hasSupportedPayload && !isCanvasDropTarget\(event\.target\)/);
@@ -1694,16 +1695,16 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(appSource, /window\.parent !== window && space !== "personal"[\s\S]*?仅支持上传到个人空间/);
   assert.match(appSource, /event\.target\.closest\("\[data-library-batch-toggle\]"\)[\s\S]*?state\.librarySelectedIds\.size === 0[\s\S]*?state\.libraryToolbarMenu = null/);
 
-  assert.match(appSource, /state\.librarySpace === "platform"[\s\S]*?\? "media"/);
+  assert.match(appSource, /function getVisibleAssetLibraryContent\(\)[\s\S]*?const kind = "all"/);
   assert.match(appSource, /flatPlatformResults = state\.librarySpace === "platform"[\s\S]*?flatPlatformResults \? \[\]/);
   assert.match(renderAssetLibrarySource, /const canManageFolders = mutable;[\s\S]*?data-library-folder-capability", canManageFolders \? "true" : "false"/);
   assert.doesNotMatch(renderAssetLibrarySource, /canManageFolders\s*=\s*mutable\s*&&\s*section\s*===\s*"media"/);
-  assert.match(createFolderSource, /MAX_DIRECTORY_LEVELS[\s\S]*?kind:\s*state\.librarySection/);
+  assert.match(createFolderSource, /MAX_DIRECTORY_LEVELS[\s\S]*?kind:\s*getAssetLibraryFolder\(\)\?\.kind \|\| "media"/);
   assert.doesNotMatch(createFolderSource, /state\.librarySection === "entity"/);
-  assert.match(renderAssetLibrarySource, /allowedBatchActions:\s*platformResults\s*\?\s*\["add-canvas", "save-personal"\]\s*:\s*undefined/);
+  assert.match(renderAssetLibrarySource, /allowedBatchActions:/);
   assert.doesNotMatch(renderAssetLibrarySource, /section === "entity"\s*\?\s*\[\]/);
-  assert.doesNotMatch(renderAssetLibrarySource, /allowedActions:/);
-  assert.match(runLibraryActionSource, /if \(includesPersistedEntity && \["move", "share-organization", "delete"\]\.includes\(action\)\) \{\s*showActionToast\("主体的移动、共享与删除将在对应持久化切片接入；本次未执行"\);\s*return;\s*\}/);
+  assert.match(renderAssetLibrarySource, /allowedActions:/);
+  assert.match(runLibraryActionSource, /if \(includesPersistedEntity && \["move", "share-organization", "delete"\]\.includes\(action\)\) \{\s*showActionToast\("素材组的移动、共享与删除将在对应持久化切片接入；本次未执行"\);\s*return;\s*\}/);
   assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetsToCanvas/);
   assert.match(appSource, /action === "save-personal"[\s\S]*?保存平台素材到个人素材库尚未接入/);
   assert.doesNotMatch(appSource, /savePlatformMediaToPersonal|savePlatformSelectionToPersonal|save-material/);

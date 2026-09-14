@@ -14,7 +14,7 @@ const asset = {
   contentUrl: "/api/workspaces/workspace-1/media-assets/asset-1/content",
 };
 const entity = {
-  id: "entity-1", name: "Lirael", description: "角色主体",
+  id: "entity-1", name: "Lirael", description: "角色素材组",
   mediaRefs: [{ assetId: "asset-1", order: 0 }], coverAssetId: "asset-1", version: 1,
 };
 
@@ -74,7 +74,7 @@ test("accepts one correlated catalog and projects Entity Media references", () =
 test("coordinates create and update commands with correlated results", async () => {
   const { coordinator, dispatch, posted, entities } = harness();
   const created = coordinator.createEntity({
-    name: " Lirael ", description: "角色主体",
+    name: " Lirael ", description: "角色素材组",
     mediaRefs: [{ mediaId: "asset-1", order: 0 }], coverMediaId: "asset-1",
   });
   const createMessage = posted[0];

@@ -77,7 +77,7 @@
 
     function assertCurrent(scopeKey, isContextValid) {
       if (!scopeKey || getScopeKey() !== scopeKey || !isContextValid()) {
-        throw failure("画布或访问权限已变化，请重新打开主体编辑器", "stale");
+        throw failure("画布或访问权限已变化，请重新打开素材组编辑器", "stale");
       }
     }
 
@@ -142,7 +142,7 @@
       const scopeKey = String(getScopeKey() || "");
       assertCurrent(scopeKey, isContextValid);
       if (!Array.isArray(values) || values.length < 1 || values.length > 100) {
-        throw failure("主体需要 1 至 100 个素材");
+        throw failure("素材组需要 1 至 100 个素材");
       }
       const media = [];
       const idMap = new Map();

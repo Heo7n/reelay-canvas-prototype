@@ -354,7 +354,8 @@ test("selection toolbar creates a reviewed Entity without changing selected node
   assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), snapshot);
   assert.equal(first.undoStack.length, 0);
   assert.equal(h.state.selectedIds.size, 4);
-  assert.equal(h.state.librarySection, "entity");
+  assert.ok(h.window.document.querySelector(`[data-library-entity="${created.id}"]`));
+  assert.equal(h.window.document.querySelector("#assetLibraryEntityTab"), null);
   assert.equal(h.state.librarySpace, "personal");
 });
 
@@ -1333,7 +1334,7 @@ test("dragging a selected library card places all visible selected media in one 
   const library = prepareLibraryDrag(h);
   library.card("drag-video").querySelector("[data-library-select]").click();
   library.card("drag-image").querySelector("[data-library-select]").click();
-  h.state.librarySelectedIds.add("hidden-stale-selection");
+  h.state.librarySelectedIds.add("media:hidden-stale-selection");
   const payload = library.transfer();
   let dragPreview;
   payload.setDragImage = (element) => { dragPreview = element; };
@@ -1342,7 +1343,7 @@ test("dragging a selected library card places all visible selected media in one 
   assert.equal(dragPreview.querySelector("video, img"), null, "drag preview must not reload media");
   const expected = [...h.window.document.querySelectorAll("[data-library-media]")]
     .map((element) => element.dataset.libraryMedia)
-    .filter((id) => h.state.librarySelectedIds.has(id));
+    .filter((id) => h.state.librarySelectedIds.has(`media:${id}`));
   assert.deepEqual(JSON.parse(payload.getData("application/x-reelay-asset")).assetIds, expected);
   library.drop(payload);
   library.dispatch("dragend", library.card("drag-video"), payload);
@@ -1379,32 +1380,26 @@ test("dragging an unselected library card keeps the gesture single even during m
   assert.equal(first.undoStack.length, 1);
 });
 
-test("library dragover restores copy after crossing the panel for both grid and list destinations", (t) => {
+test("library dragover restores copy after crossing the panel to canvas or node destinations", (t) => {
   const h = createHarness(t);
   h.install(h.canvas("library-dragover", [h.node("drop-target")]));
   const library = prepareLibraryDrag(h);
   library.card("drag-video").querySelector("[data-library-select]").click();
   library.card("drag-image").querySelector("[data-library-select]").click();
   const shell = h.window.document.querySelector("#canvasShell");
-  for (const display of ["grid", "list"]) {
-    if (h.state.libraryDisplay !== display) {
-      h.window.document.querySelector("#assetLibraryCommandBar button[data-library-display]").click();
-    }
-    assert.equal(h.state.libraryDisplay, display);
-    const dataTransfer = library.drag("drag-video");
-    for (const destination of [shell, h.window.document.querySelector('[data-id="drop-target"]')]) {
-      const rejected = library.dispatch("dragover", library.card("drag-video"), dataTransfer);
-      assert.equal(rejected.defaultPrevented, true);
-      assert.equal(dataTransfer.dropEffect, "none");
-      assert.equal(shell.classList.contains("file-dragging"), false);
-      const accepted = library.dispatch("dragover", destination, dataTransfer);
-      assert.equal(accepted.defaultPrevented, true);
-      assert.equal(dataTransfer.dropEffect, "copy", `${display} drag must recover from the panel's rejected target`);
-      assert.equal(shell.classList.contains("file-dragging"), true);
-    }
-    library.dispatch("dragend", library.card("drag-video"), dataTransfer);
+  const dataTransfer = library.drag("drag-video");
+  for (const destination of [shell, h.window.document.querySelector('[data-id="drop-target"]')]) {
+    const rejected = library.dispatch("dragover", library.card("drag-video"), dataTransfer);
+    assert.equal(rejected.defaultPrevented, true);
+    assert.equal(dataTransfer.dropEffect, "none");
     assert.equal(shell.classList.contains("file-dragging"), false);
+    const accepted = library.dispatch("dragover", destination, dataTransfer);
+    assert.equal(accepted.defaultPrevented, true);
+    assert.equal(dataTransfer.dropEffect, "copy", "drag must recover from the panel's rejected target");
+    assert.equal(shell.classList.contains("file-dragging"), true);
   }
+  library.dispatch("dragend", library.card("drag-video"), dataTransfer);
+  assert.equal(shell.classList.contains("file-dragging"), false);
 });
 
 test("library video cards retain their media when checking a corner box and clicking blank canvas", (t) => {
@@ -1418,7 +1413,7 @@ test("library video cards retain their media when checking a corner box and clic
   video.currentTime = 3;
   card.querySelector("[data-library-select]").click();
   assert.equal(h.state.librarySelectionMode, true);
-  assert.equal(h.state.librarySelectedIds.has("drag-video"), true);
+  assert.equal(h.state.librarySelectedIds.has("media:drag-video"), true);
   assert.equal(library.card("drag-video"), card);
   assert.equal(card.querySelector("video"), video);
   h.window.setSelection(["selected-node"], "selected-node");
@@ -1436,7 +1431,7 @@ test("library video cards retain their media when checking a corner box and clic
   assert.equal(card.querySelector("[data-library-preview]"), preview);
   assert.equal(card.querySelector("video"), video);
   assert.equal(video.currentTime, 3);
-  assert.equal(h.state.librarySelectedIds.has("drag-video"), true);
+  assert.equal(h.state.librarySelectedIds.has("media:drag-video"), true);
 });
 
 test("library batch drop appends generator references once and undo preserves later content", (t) => {

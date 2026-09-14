@@ -14,7 +14,7 @@ function createHarness(t) {
     <main id="background"><div id="grid">
       <article data-library-entity="one"><button class="asset-library-card-preview">一</button></article>
       <article data-library-entity="two"><button class="asset-library-card-preview">二</button></article>
-    </div><div id="nodes"><button data-node="node-one">主体</button></div></main>
+    </div><div id="nodes"><button data-node="node-one">素材组</button></div></main>
     <div id="detail" hidden inert aria-hidden="true"></div>
     <div id="picker" hidden inert aria-hidden="true"></div>
   </body>`, { runScripts: "outside-only", url: "https://reelay.test/" });
@@ -280,7 +280,7 @@ test("picker restores original background attributes and refocuses the newly ren
   assert.equal(h.background.inert, true);
   assert.equal(h.background.getAttribute("aria-hidden"), "true");
   assert.equal(h.document.activeElement, h.picker.querySelector("input"));
-  h.document.querySelector("#nodes").innerHTML = '<button data-node="node-one">新的主体入口</button>';
+  h.document.querySelector("#nodes").innerHTML = '<button data-node="node-one">新的素材组入口</button>';
   h.click('[data-entity-use-action="cancel-picker"]');
   h.flushFrames();
   assert.equal(h.document.activeElement, h.document.querySelector("[data-node]"));

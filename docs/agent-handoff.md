@@ -4,12 +4,26 @@
 
 ## 最近核验：2026-09-14
 
-- 清理开始时，本工作区 HEAD、本地 `main` 与 `origin/main` 均为 `f32034c`，对应 [PR #29](https://github.com/Heo7n/reelay-canvas-prototype/pull/29)。实际分支与脏文件仍须通过 `git status --short --branch`、`npm run worktrees` 重新确认。
+- 最近核验的已发布主线基线为 `f32034c`，对应 [PR #29](https://github.com/Heo7n/reelay-canvas-prototype/pull/29)。实际分支与脏文件仍须通过 `git status --short --branch`、`npm run worktrees` 重新确认。
 - 此发布包含侧栏生成记录、参考预览和画布交互的集成，以及 Seedance 2.5 / 2.0 / 2.0 Fast 的提示词优化。优化生命周期和配置规则见[开发简版](prompt-optimization-development.md)。
 - PR #29 构建源为 `c31303a80430377d195c0ce0ace5859d10d055fe`；合并提交 `f32034c` 与该来源文件树一致。源码提交与 merge SHA 不必相同，判断发布一致性要核对文件树和实际产物。
 - 最近已验收账号站：[reelay-canvas-prototype](https://reelay-canvas-prototype.vercel.app)，部署 `dpl_21E1wxXt7KzR68UqeJ3KkaS3imR9`；体验站：[reelay-experience](https://reelay-experience.vercel.app)，部署 `dpl_EbDomQPJd68Qxpp5iNjKzQBgohc5`。这是最近核验快照，后续推送不自动代表公网更新。
 
-## 当前本地工作
+## 当前实验接续
+
+- 资产库实验工作区为 `C:/Users/Ho/.codex/worktrees/cc38/0707-experiment`，分支 `codex/experiment-20260910`，整改整合基线 `f21f3f6`。本节随资产库实验提交保存，接续分支固定为 `codex/experiment-20260910`；本次只提交并推送实验分支，不合并主线或发布公网。远端最新提交以 `git fetch origin` 后的分支记录为准。
+- 用户确认将资产库“主体”改为素材组，与单 Media 混排。两行紧凑顶部不显示独立标题，右缘收起与入口同高；仅保留网格，个人 / 组织搜索可悬停或点击过渡展开，平台搜索常显且与工具并排。组内展开与返回恢复原浏览状态已实现；组编辑保留菜单及组内入口。组内添加素材经编辑器完成，不提供脱离组引用的直接上传。
+- 混排选择使用类型加 ID，批量添加 / 新建组复用有序去重解析和现有权限。组只开放查看、编辑、重命名；含组选择不可审核、移动、共享、删除，混选拖拽拒绝并引导展开或批量添加。Media / Entity 原记录、目录与 placement 边界保留，没有新建持久化、同名 / 日期目录或媒体搬移。
+- 实验预览已从该工作区恢复为 `5178 → 5180`，沿用 Reelay_Dev；集成工作区的 `5174 → 5175` 是另一预览。同步代码不复制业务数据，不重跑迁移、seed 或初始化。
+- 产品行为见[资产库规范](current-product-spec.md#76-资产库)。本实验最新完整 `npm run check` 和差异检查通过；资产库合并阶段已通过账号 / 体验双构建，后续导航与搜索调整通过完整检查及实际预览。实际预览验证了 550px / 380px 两行布局、搜索覆盖、组内展开与返回、浅深主题，未执行共享数据迁移。新增实际入口测试覆盖同 ID 类型隔离、混选拖拽保护、批量去重和动作能力。
+
+### 换电脑继续
+
+在家中仓库执行 `git fetch origin`、`git switch codex/experiment-20260910`，已有同名本地分支时再执行 `git pull --ff-only`。首次安装依赖使用 `npm ci`。接着先读本页和[本地开发](local-development.md)，按“换电脑”流程配置共享开发环境并启动预览；不依赖办公室的绝对路径或临时启动脚本。
+
+当前实验方向是单素材与素材组混排的资产库，继续依据用户反馈迭代；组编辑、批量引用和权限边界见[产品规范](current-product-spec.md#76-资产库)。开发数据与私有媒体不在 Git 中，家中沿用同一 Reelay_Dev 的专用本地配置；配置及密钥不随提交推送，不重新初始化或 seed。
+
+## 整合基线的本地工作
 
 - 当前功能整合基线为 `7d1b3ba`，文档精简为 `d6b9bb7`；均为本地提交，实际 HEAD 以 Git 为准。当前实施切片已完成，下一任务接收交接后按用户的新需求继续，不自动重启全项目审计或全面拆分。
 - 规范整理、独立 Playwright 验收、ESLint / 核心导入边界及共享基础字体已在本地；CanvasHost 的等待保存导航已移入 `useCanvasNavigation.ts`，Host 保留保存与作用域权威。开发依赖 Vitest 已更新至 4.1.11，最近一次 npm audit 为 0 项。

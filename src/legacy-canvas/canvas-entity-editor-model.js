@@ -170,24 +170,24 @@
     }
 
     function getTitle() {
-      if (mode === "create") return "新建主体";
+      if (mode === "create") return "新建素材组";
       return String(draft.name || "").trim() || baseline.name;
     }
 
     function getValidation() {
       const errors = {};
       const normalizedName = String(draft.name || "").trim();
-      if (!normalizedName) errors.name = "主体名称不能为空。";
-      else if (normalizedName.length > 200) errors.name = "主体名称不能超过 200 个字符。";
-      if (String(draft.description || "").length > 2_000) errors.description = "主体描述不能超过 2000 个字符。";
+      if (!normalizedName) errors.name = "素材组名称不能为空。";
+      else if (normalizedName.length > 200) errors.name = "素材组名称不能超过 200 个字符。";
+      if (String(draft.description || "").length > 2_000) errors.description = "素材组描述不能超过 2000 个字符。";
       if (draft.mediaIds.length === 0) errors.media = "请至少添加一个素材。";
-      else if (draft.mediaIds.length > 100) errors.media = "一个主体最多添加 100 个素材。";
+      else if (draft.mediaIds.length > 100) errors.media = "一个素材组最多添加 100 个素材。";
       if (draft.coverMediaId != null) {
         const cover = mediaById.get(draft.coverMediaId);
         if (!draft.mediaIds.includes(draft.coverMediaId)) {
-          errors.coverMediaId = "主体封面必须属于当前主体。";
+          errors.coverMediaId = "素材组封面必须属于当前素材组。";
         } else if (!cover || !COVER_MEDIA_KINDS.has(cover.mediaKind)) {
-          errors.coverMediaId = "主体封面必须是图片。";
+          errors.coverMediaId = "素材组封面必须是图片。";
         }
       }
       return { valid: Object.keys(errors).length === 0, errors };

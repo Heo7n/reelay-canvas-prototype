@@ -86,11 +86,11 @@
 
     const skippedCount = emptyCount + unavailableCount;
     let reason = "";
-    if (!canCreate) reason = "当前画布不可新建主体";
+    if (!canCreate) reason = "当前画布不可新建素材组";
     else if (selected.length < 2) reason = "请先选择至少 2 个节点";
     else if (hosted && catalogStatus && catalogStatus !== "ready") {
       reason = catalogStatus === "loading" ? "个人素材库加载中，请稍后重试" : "个人素材库暂不可用，请稍后重试";
-    } else if (media.length > MAX_MEDIA) reason = `一个主体最多添加 ${MAX_MEDIA} 个素材，请减少选择`;
+    } else if (media.length > MAX_MEDIA) reason = `一个素材组最多添加 ${MAX_MEDIA} 个素材，请减少选择`;
     else if (!media.length) {
       reason = unavailableCount ? "选中素材无法导入个人素材库" : "选中节点暂无可用素材";
     }

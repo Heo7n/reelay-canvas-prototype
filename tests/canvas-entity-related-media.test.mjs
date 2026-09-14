@@ -91,13 +91,13 @@ test("read-only subjects retain only the related-media menu action and related f
   assert.match(markup, /data-library-menu-item="view-media"/);
   assert.doesNotMatch(markup, /data-library-menu-item="(?:edit|rename|move|share-organization|delete)"/);
   const filter = view.renderEntityMediaFilter({ entity: { name: '<img onerror="alert(1)">' }, status: "ready" });
-  assert.match(filter, /清除主体筛选/);
-  assert.match(filter, /跨目录/);
+  assert.match(filter, /返回资产库/);
+  assert.doesNotMatch(filter, /跨目录|筛选/);
   assert.doesNotMatch(filter, /<img/);
-  assert.match(view.renderEmptyState({ section: "media", entityFilterStatus: "unavailable", hasQuery: true }), /主体已不可用/);
-  assert.match(view.renderEmptyState({ section: "media", entityFilterStatus: "ready" }), /没有可用的关联素材/);
+  assert.match(view.renderEmptyState({ section: "media", entityFilterStatus: "unavailable", hasQuery: true }), /素材组已不可用/);
+  assert.match(view.renderEmptyState({ section: "media", entityFilterStatus: "ready" }), /素材组中没有可用素材/);
   const bar = view.renderCommandBar({ section: "media", mutable: true, entityFilter: true });
-  assert.match(bar, /返回素材库/);
+  assert.doesNotMatch(bar, /返回素材库/);
   assert.doesNotMatch(bar, /data-library-upload/);
 });
 
@@ -146,21 +146,26 @@ test("real subject menu opens cross-directory Media; search, type, clear and exp
   const h = harness(t);
   const before = plain(h.store.snapshot());
   const canvasBefore = JSON.stringify(h.window.createCanvasDocumentSnapshot());
-  h.document.querySelector('#assetLibraryEntityTab').click();
   const card = h.document.querySelector(`[data-library-entity="${h.entity.id}"]`);
   card.querySelector('[data-library-menu-toggle]').click();
   h.document.querySelector('[data-library-menu-item="view-media"]').click();
-  assert.equal(h.state.librarySection, "media");
+  assert.equal(h.document.querySelector('#assetLibraryEntityTab'), null);
   assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), [h.nestedMedia.id, h.rootMedia.id]);
   assert.equal(h.document.querySelector('#assetLibraryEntityFilter').hidden, false);
   assert.equal(h.document.activeElement.dataset.libraryClearEntityFilter, "true");
   assert.equal(h.document.querySelector('[data-library-upload]'), null);
   const search = h.document.querySelector('#assetLibrarySearchInput');
+  h.document.querySelector('#assetLibrarySearchToggleBtn').click();
   search.value = "台词";
   search.dispatchEvent(new h.window.Event("input", { bubbles: true }));
   assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), [h.nestedMedia.id]);
+  h.document.querySelector('#assetLibrarySearchCloseBtn').click();
   h.document.querySelector('[data-library-filter-toggle]').click();
   h.document.querySelector('[data-library-filter="image"]').click();
+  assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), [h.rootMedia.id]);
+  h.document.querySelector('#assetLibrarySearchToggleBtn').click();
+  search.value = "台词";
+  search.dispatchEvent(new h.window.Event("input", { bubbles: true }));
   assert.equal(h.window.getVisibleAssetLibraryContent().items.length, 0);
   h.document.querySelector('[data-library-clear-query]').click();
   assert.equal(h.window.getVisibleAssetLibraryContent().items.length, 2);
@@ -179,8 +184,6 @@ test("real subject menu opens cross-directory Media; search, type, clear and exp
   h.window.selectAssetLibraryDirectory(null);
   assert.equal(h.state.libraryEntityFilter, null);
   for (const action of [
-    () => h.document.querySelector('#assetLibraryMediaTab').click(),
-    () => h.document.querySelector('#assetLibraryEntityTab').click(),
     () => h.window.switchAssetLibraryContext({ space: "organization" }),
     () => h.window.closeAssetLibrary(),
   ]) {
@@ -203,6 +206,80 @@ test("active related-media filter follows renamed/edited Entity projections and 
   h.store.syncPersistedEntities([]);
   h.window.renderAssetLibrary();
   assert.equal(h.window.getVisibleAssetLibraryContent().items.length, 0);
-  assert.match(h.document.querySelector('#assetLibraryGrid').textContent, /主体已不可用/);
+  assert.match(h.document.querySelector('#assetLibraryGrid').textContent, /素材组已不可用/);
   assert.equal(h.state.libraryEntityFilter.entityId, h.entity.id);
+});
+
+test("mixed cards keep same-ID Media and groups independently selectable and guard group drags", (t) => {
+  const h = harness(t);
+  h.store.registerMedia({ media: { id: h.entity.id, type: "image", name: "同 ID 的独立图片", url: "blob:same-id" } });
+  h.window.renderAssetLibrary();
+  const select = (kind, id) => h.document.querySelector(`[data-library-select="${kind}:${id}"]`).click();
+  select("media", h.entity.id);
+  select("entity", h.entity.id);
+  assert.deepEqual([...h.state.librarySelectedIds].sort(), [`entity:${h.entity.id}`, `media:${h.entity.id}`]);
+  assert.equal(h.document.querySelectorAll("#assetLibraryGrid .selected").length, 2);
+  const payload = new Map();
+  const drag = () => {
+    const event = new h.window.Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: { setData: (type, value) => payload.set(type, value) } });
+    h.document.querySelector(`[data-library-media="${h.entity.id}"]`).dispatchEvent(event);
+    return event;
+  };
+  assert.equal(drag().defaultPrevented, true);
+  assert.equal(payload.size, 0);
+  select("entity", h.entity.id);
+  assert.equal(drag().defaultPrevented, false);
+  assert.deepEqual(JSON.parse(payload.get("application/x-reelay-asset")).assetIds, [h.entity.id]);
+  assert.deepEqual([...h.state.librarySelectedIds], [`media:${h.entity.id}`]);
+});
+
+test("opening a group browses its content without inserting nodes and returns to the mixed list", (t) => {
+  const h = harness(t);
+  const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
+  assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), [h.nestedMedia.id, h.rootMedia.id]);
+  assert.equal(h.document.querySelectorAll("#assetLibraryGrid [data-library-entity]").length, 0);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+  h.document.querySelector('#assetLibraryEntityFilter [data-library-clear-entity-filter]').click();
+  assert.ok(h.document.querySelector(`[data-library-entity="${h.entity.id}"]`));
+  assert.ok(h.document.querySelector(`[data-library-media="${h.rootMedia.id}"]`));
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+});
+
+test("adding a mixed selection expands ordered group content and inserts overlapping Media once", (t) => {
+  const h = harness(t);
+  const before = h.state.nodes.length;
+  h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`).click();
+  h.document.querySelector(`[data-library-select="media:${h.rootMedia.id}"]`).click();
+  h.document.querySelector('[data-library-batch-toggle]').click();
+  h.document.querySelector('[data-library-batch-action="add-canvas"]').click();
+  assert.equal(h.state.nodes.length, before + 2);
+  assert.equal(h.state.librarySelectedIds.size, 0);
+});
+
+test("mixed group selections expose only add and create while Media-only selections retain supported actions", (t) => {
+  const h = harness(t);
+  const menuActions = () => [...h.document.querySelectorAll('[data-library-batch-action]')].map((button) => button.dataset.libraryBatchAction).sort();
+  h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`).click();
+  h.document.querySelector(`[data-library-select="media:${h.rootMedia.id}"]`).click();
+  h.document.querySelector('[data-library-batch-toggle]').click();
+  assert.deepEqual(menuActions(), ["add-canvas", "create-group"]);
+  for (const [kind, label] of [["agent", "添加到对话参考"], ["node", "添加到当前节点"]]) {
+    h.state.libraryTarget = { kind, nodeId: "test-target" };
+    h.window.renderAssetLibrary();
+    assert.equal(h.document.querySelector('[data-library-batch-action="add-canvas"]').textContent.trim(), label);
+  }
+  h.state.libraryTarget = null;
+  h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`).click();
+  h.document.querySelector('[data-library-batch-toggle]').click();
+  assert.deepEqual(menuActions(), ["add-canvas", "create-group", "delete", "move", "review", "share-organization"]);
+});
+
+test("group card menus keep browse, edit and rename without unrelated Media mutations", (t) => {
+  const h = harness(t);
+  const card = h.document.querySelector(`[data-library-entity="${h.entity.id}"]`);
+  card.querySelector('[data-library-menu-toggle]').click();
+  const actions = [...h.document.querySelectorAll('[data-library-menu-item]')].map((button) => button.dataset.libraryMenuItem).sort();
+  assert.deepEqual(actions, ["edit", "rename", "view-media"]);
 });
