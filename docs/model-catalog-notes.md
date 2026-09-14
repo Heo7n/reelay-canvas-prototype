@@ -38,7 +38,7 @@
 | Seedance 2.0 Fast | 多模态参考与灵活运镜，快速生成同步音画 | [fal 的 Fast 专属端点](https://fal.ai/models/bytedance/seedance-2.0/fast/reference-to-video)明确较低延迟、多种图像/视频/音频参考、同步音频及运镜控制；不推导具体提速倍率或各渠道价格。 |
 | Kling 3.0 | 原生音画同步生成，多镜头叙事与主体一致性 | [官方 VIDEO 3.0 指南](https://app.klingai.com/global/quickstart/klingai-video-3-model-user-guide)明确 Native Audio、Multi-Shot 及 Enhanced Subject Consistency，均属于 VIDEO 3.0 本身，不借用 Omni 专属能力。 |
 
-这些简介描述模型的官方能力定位，不代表原型已接入供应商 API、联网检索、多镜头专用控件或真实生成服务。参数可选范围仍由下方原型能力契约定义；此次仅更新介绍，未修改能力字段、价格或调用路径。
+这些简介描述模型的官方能力定位，不代表原型已接入供应商 API、联网检索、多镜头专用控件或真实生成服务。参数可选范围由下方原型能力契约定义。
 
 ## 素材校验文案边界
 

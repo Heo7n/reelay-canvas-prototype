@@ -9,21 +9,24 @@ git status --short --branch
 npm run worktrees
 ```
 
-先确认实际目录、分支、脏文件和运行服务，再读[当前交接](agent-handoff.md)。根据下表读取相关章节，不默认通读所有长文档；发现文档与运行证据冲突时先核实根因并修正文档。
+首次接手或切换工作区时确认实际目录、分支和脏文件；涉及预览 / 服务时再核对运行进程，读取[当前交接](agent-handoff.md)。同一任务内已读且未变化的内容复用上下文；范围变化时只补读受影响章节，不每轮重新执行完整入场检查。
 
 用简短说明明确本次的**触发动作、预期反馈、应保留状态、完成标准**。可逆的实现细节可注明假设后推进；只有缺失的产品规则、数据范围或必要授权阻挡实施时才集中澄清。用户方案是输入，需独立判断，不为了迎合而照搬草图或其它产品。
 
 | 改动范围 | 读取入口 | 主要代码位置 |
 | --- | --- | --- |
-| UI、字号、布局、交互反馈 | [设计规范](design-system.md) + [产品规范](current-product-spec.md)相关节 | 功能 CSS、已有 view / 共享组件 |
-| 画布节点、素材、会话、手势 | 产品规范对应节；涉及状态时读[工程护栏](engineering-guardrails.md) | `src/legacy-canvas/`、`src/prompt-editor/`、`styles/` |
+| UI、字号、布局、图标 | 设计规范的[来源](design-system.md#1-现有来源与使用边界)、[字体颜色](design-system.md#2-字体颜色与留白)或[控件图标](design-system.md#3-控件图标与状态)；改变行为或有专属尺寸时补产品对应节 | 功能 CSS、已有 view / 共享组件 |
+| 浮层、预览、动效、容器适配 | 设计规范[第 4 节](design-system.md#4-浮层预览与动效) / [第 5 节](design-system.md#5-主题容器与验收)及受影响功能规则 | 现有定位 controller、功能 CSS |
+| 画布节点、素材、会话、手势 | 产品规范的[提示词](current-product-spec.md#73-提示词输入区)、[参考素材](current-product-spec.md#75-添加素材)、[资产库](current-product-spec.md#76-资产库)、[多选](current-product-spec.md#9-多选与批量操作)、[会话](current-product-spec.md#104-历史会话)或[生成记录](current-product-spec.md#107-生成模式的一条式记录与模拟任务)；涉及状态才补[数据不变量](engineering-guardrails.md#5-状态与数据不变量) | `src/legacy-canvas/`、`src/prompt-editor/`、`styles/` |
 | 提示词优化 | [功能开发简版](prompt-optimization-development.md) | `src/application/prompt-optimization-*`、对应 controller / view |
-| 登录、主页、项目、组织与账户 | 产品规范相关节 | `src/app/`、`src/pages/`、`src/shared/` |
+| 登录、主页、项目、组织与账户 | 产品规范[登录](current-product-spec.md#21-登录流程原型)、[主页与账户](current-product-spec.md#22-登录后主页原型)或[项目导航](current-product-spec.md#6-项目与画布导航) | `src/app/`、`src/pages/`、`src/shared/` |
 | 路由 / 数据 / 架构变化 | [ADR 0001](adr/0001-application-runtime-and-migration.md)、[ADR 0002](adr/0002-organization-project-access.md)与相关护栏 | domain / application / infrastructure / server |
 | 模型目录 | [模型说明](model-catalog-notes.md) | `data/model-catalog.js` |
 | 恢复预览 / 换电脑 | [本地开发](local-development.md) | 启动脚本、当前进程及忽略配置 |
 | 发布 / 云端数据 | [公网预览](vercel-supabase-preview.md) | 构建脚本、`api/`、`src/server/`、Vercel 配置 |
 | 尚未实现的能力 | [扩展规划](product-expansion-plan.md)相关节 | 随切片确定，不先搭空框架 |
+
+先按功能名搜索标题再读取相关段落，不把整份产品规范或扩展规划塞入上下文。明确了本次行为、代码归属和检查入口即可开始实现；普通改字、间距、图标不需要另写方案文档或逐条复述规范。发现文档与运行证据冲突时核实并修正对应段落。
 
 ## 2. 设计与实现
 

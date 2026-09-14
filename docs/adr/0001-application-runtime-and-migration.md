@@ -24,8 +24,8 @@
 - Zod 用于 URL、消息桥和 API 等运行时边界，不让领域对象依赖表单或网络结构；当前 HTTP adapters 已执行 DTO 校验。
 - 原方案为本地草稿和 Blob 预留 Dexie / IndexedDB；该离线草稿层尚未实现，不代表当前资产存储。已有个人媒体二进制由服务端 filesystem ObjectStore 持久保存；`localStorage` 保存主题等设备偏好。
 - 新代码使用 Vitest 和 Testing Library；后续若实现 IndexedDB 草稿层，再引入相应测试适配。现有 `node:test` 契约测试继续保留，直到被等价行为测试覆盖。
-- 端到端主链路稳定后再引入 Playwright，不在第一批脚手架中制造空测试。
-- 构建后图标使用 `lucide-react`；旧静态画布在迁移完成前使用 `app.js` 内的最小图标路径子集，不加载外部 CDN 或完整 vendor runtime。
+- 原决策推迟空的端到端脚手架；目前已有 Playwright 关键链路验收，执行方式以[开发工作流](../development-workflow.md#关键浏览器验收)为准。
+- React 图标使用 `lucide-react`；旧画布使用本地 Lucide 路径子集 / SVG sprite，不加载外部 CDN 或完整 vendor runtime。具体使用规则见[设计规范](../design-system.md#3-控件图标与状态)。
 
 当前不采用 Next.js、SSR、Redux、微前端、Turborepo 或完整 UI 组件库。核心产品是浏览器重交互工作台和画布，当前没有必须用 SSR 解决的 SEO 或服务端渲染需求；国内自托管也更适合同源 SPA 与独立 API 边界。
 

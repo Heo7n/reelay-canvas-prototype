@@ -3,9 +3,9 @@
 Before changing this prototype:
 
 1. Inspect the current branch and worktree; do not trust a branch name copied into a document.
-2. Read [the Vibe coding workflow](docs/development-workflow.md) and [current handoff](docs/agent-handoff.md).
-3. Use the routing table in `docs/development-workflow.md` to read only the relevant product spec, guardrail, plan, or ADR sections. Do not reload every long document for an unrelated local change.
-4. For visible UI changes, read [the design conventions](docs/design-system.md) and reuse existing tokens and components.
+2. Read the startup section of [the Vibe coding workflow](docs/development-workflow.md#1-开始核对事实与本次范围) and [current handoff](docs/agent-handoff.md); consult the remaining workflow sections when applicable.
+3. Follow that routing table to the affected sections, not whole documents. Reuse context already read in the same task unless the scope or source changed; README is an index, not an additional checklist.
+4. For visible UI changes, read the relevant [design conventions](docs/design-system.md) and reuse existing tokens and components. A visual-only edit does not require architecture, future plans, deployment guides or unrelated product rules.
 
 Keep these boundaries:
 

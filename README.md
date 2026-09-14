@@ -9,9 +9,7 @@
 - 当前本机预览：[5174 /app](http://127.0.0.1:5174/app)，API 为 5175。先核对进程来自哪个工作区，再复用或恢复。
 - 启动命令、换电脑接续、配置与数据位置统一见[本地开发](docs/local-development.md)。
 - 独立画布调试使用 `npm run dev:canvas`；它不替代完整路由、权限和保存验收。
-- 代码里程碑执行 `npm run check` 与 `git diff --check`；迭代中的定向检查按[开发工作流](docs/development-workflow.md)选择。
-- 局部代码规则检查用 `npm run lint -- src/<本次文件>`；完整检查已包含 lint 和核心模块依赖边界校验。
-- 视觉微调用 `npm run check:visual` 并查看预览；关键链路用 `npm run test:e2e` 在隔离内存服务自动验收，不接入本机创作数据。
+- 局部迭代与提交前检查按[工作流的检查表](docs/development-workflow.md#按影响选择检查)选择；浏览器验收使用隔离服务，不接入本机创作数据。
 
 ## 规范入口
 
@@ -24,7 +22,7 @@
 | 当前集成状态与下一入口 | [当前交接](docs/agent-handoff.md) |
 | 双站构建、发布与数据隔离 | [公网预览](docs/vercel-supabase-preview.md) |
 
-Agent 从 [AGENTS.md](AGENTS.md) 开始；产品功能不再在 README 重复列清单，历史实现与发布证据查 Git / PR。
+Agent 从 [AGENTS.md](AGENTS.md) 开始；上表是查找目录，不是开发前必读清单。日常任务只读工作流入口、当前交接与本次相关章节，已有上下文不反复加载。素材目录内的生成来源说明仅在替换对应素材时查阅；历史实现与发布证据查 Git / PR。
 
 ## 目录职责
 
