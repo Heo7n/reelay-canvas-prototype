@@ -1571,6 +1571,115 @@ describe("CanvasHost", () => {
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["logout", "create-project"] as const)("defers %s until both dirty content and active saves settle, once", async (target) => {
+    const saved = pendingResult<typeof document>();
+    const onNavigate = vi.fn();
+    render(<CanvasHost
+      repository={{ getCanvasDocument: vi.fn(async () => document), save: vi.fn(() => saved.promise) }}
+      context={editableContext}
+      onLogout={onNavigate}
+      onCreateProject={onNavigate}
+    />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    await waitFor(() => expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved"));
+    act(() => {
+      dispatchCanvasMessage(frame, dirtyMessage(true));
+      dispatchCanvasMessage(frame, saveMessage("save-before-side-effect"));
+      dispatchCanvasMessage(frame, target === "logout" ? navigateMessage("logout") : createProjectMessage);
+      dispatchCanvasMessage(frame, dirtyMessage(false));
+    });
+    expect(onNavigate).not.toHaveBeenCalled();
+    await act(async () => saved.resolve({ ...document, revision: 3 }));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    act(() => dispatchCanvasMessage(frame, dirtyMessage(false)));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("expires pending navigation without executing it after a late save", async () => {
+    const saved = pendingResult<typeof document>();
+    const onLogout = vi.fn();
+    render(<CanvasHost
+      repository={{ getCanvasDocument: vi.fn(async () => document), save: vi.fn(() => saved.promise) }}
+      context={editableContext} onLogout={onLogout}
+    />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    await waitFor(() => expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved"));
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        dispatchCanvasMessage(frame, dirtyMessage(true));
+        dispatchCanvasMessage(frame, saveMessage("late-save"));
+        dispatchCanvasMessage(frame, navigateMessage("logout"));
+        vi.advanceTimersByTime(9_999);
+      });
+      expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saving");
+      act(() => vi.advanceTimersByTime(1));
+      expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "error");
+      await act(async () => saved.resolve({ ...document, revision: 3 }));
+      act(() => dispatchCanvasMessage(frame, dirtyMessage(false)));
+      expect(onLogout).not.toHaveBeenCalled();
+      act(() => dispatchCanvasMessage(frame, navigateMessage("logout")));
+      expect(onLogout).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["document", "iframe"] as const)("drops queued navigation when the %s owner is replaced", async (replacement) => {
+    const saved = pendingResult<typeof document>();
+    const onLogout = vi.fn();
+    const scopedRepository = {
+      getCanvasDocument: vi.fn(async (projectId: string) => ({ ...document, projectId })),
+      save: vi.fn(() => saved.promise),
+    };
+    const view = render(<CanvasHost repository={scopedRepository} context={editableContext} onLogout={onLogout} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    await waitFor(() => expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved"));
+    act(() => {
+      dispatchCanvasMessage(frame, dirtyMessage(true));
+      dispatchCanvasMessage(frame, saveMessage("old-owner-save"));
+      dispatchCanvasMessage(frame, navigateMessage("logout"));
+    });
+    if (replacement === "document") {
+      view.rerender(routed(<CanvasHost repository={scopedRepository}
+        context={{ ...editableContext, projectId: "project-2" }} onLogout={onLogout} />));
+    }
+    const currentFrame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    act(() => dispatchCanvasMessage(currentFrame, { ...readyMessage, instanceId: "replacement-navigation-owner" }));
+    await act(async () => saved.resolve({ ...document, revision: 3 }));
+    act(() => dispatchCanvasMessage(currentFrame, dirtyMessage(false, "replacement-navigation-owner")));
+    expect(onLogout).not.toHaveBeenCalled();
+    act(() => dispatchCanvasMessage(currentFrame, navigateMessage("logout", "replacement-navigation-owner")));
+    expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the pending navigation deadline when the host unmounts", async () => {
+    const onLogout = vi.fn();
+    const view = render(<CanvasHost
+      repository={{ getCanvasDocument: vi.fn(async () => document), save: repository.save }}
+      context={editableContext} onLogout={onLogout}
+    />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    await waitFor(() => expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "saved"));
+    const schedule = vi.spyOn(window, "setTimeout");
+    const clear = vi.spyOn(window, "clearTimeout");
+    try {
+      act(() => {
+        dispatchCanvasMessage(frame, dirtyMessage(true));
+        dispatchCanvasMessage(frame, navigateMessage("logout"));
+      });
+      const deadlineIndex = schedule.mock.calls.findIndex(([, delay]) => delay === 10_000);
+      expect(deadlineIndex).toBeGreaterThanOrEqual(0);
+      const deadline = schedule.mock.results[deadlineIndex].value;
+      view.unmount();
+      expect(clear).toHaveBeenCalledWith(deadline);
+      expect(onLogout).not.toHaveBeenCalled();
+    } finally {
+      schedule.mockRestore();
+      clear.mockRestore();
+    }
+  });
+
   it("opens only authorized projected projects and delegates project creation", async () => {
     const onCreateProject = vi.fn();
     render(
