@@ -113,6 +113,8 @@ describe("LoginDialog", () => {
       element: <LoginDialog action="/" onClose={onClose} onBeforeSubmit={onBeforeSubmit} />,
     }]);
     render(<RouterProvider router={router} />);
+    // The async route can mount fields before the modal-opening effect runs.
+    await screen.findByRole("dialog");
     const account = await screen.findByLabelText("账号");
     const password = screen.getByLabelText("密码", { exact: true });
     fireEvent.change(account, { target: { value: "wrong@reelay.test" } });

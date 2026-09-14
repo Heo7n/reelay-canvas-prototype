@@ -786,9 +786,9 @@ function syncCanvasAccessUi() {
   canvasArrange.sync();
   if (emptyCreateMain) {
     const readonly = mode === "readonly";
-    emptyCreateMain.textContent = readonly ? "画布暂无内容" : "双击画布";
+    emptyCreateMain.textContent = readonly ? "画布暂无内容" : "开启创作之旅";
     if (emptyCreateSecondary) {
-      emptyCreateSecondary.textContent = readonly ? "" : "开始自由创作";
+      emptyCreateSecondary.textContent = readonly ? "" : "双击画布创建节点，或拖拽上传素材";
     }
   }
   if (!canvasAccessStatus) return;

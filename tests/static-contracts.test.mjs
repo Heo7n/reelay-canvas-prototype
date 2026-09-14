@@ -1511,8 +1511,8 @@ test("the current prototype still starts with the Agent panel closed", () => {
 });
 
 test("the editable empty canvas invites open-ended creation", () => {
-  assert.match(html, /empty-create-secondary">开始自由创作</);
-  assert.match(appSource, /emptyCreateSecondary\.textContent = readonly \? "" : "开始自由创作"/);
+  assert.match(html, /empty-create-secondary">双击画布创建节点，或拖拽上传素材</);
+  assert.match(appSource, /emptyCreateSecondary\.textContent = readonly \? "" : "双击画布创建节点，或拖拽上传素材"/);
   assert.doesNotMatch(html, /自由生成节点/);
   assert.doesNotMatch(appSource, /自由生成节点/);
 });
