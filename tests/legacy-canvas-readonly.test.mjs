@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
 const root = new URL("../", import.meta.url);
+const themeController = await readFile(new URL("src/legacy-canvas/canvas-theme-controller.js", root), "utf8");
 const [promptDocument, promptController, promptEditor] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-prompt-document.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-prompt-controller.js", root), "utf8"),
@@ -121,6 +122,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(promptController);
   window.eval(promptEditor);
   window.eval(config);
+  window.eval(themeController);
   window.eval(connections);
   window.eval(connectionInteraction);
   window.eval(connectionFeedbackMotion);

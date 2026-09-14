@@ -1,4 +1,5 @@
 @import url("../../styles/typography.css");
+@import url("../../styles/color-tokens.css");
 
 :root {
   font-family: var(--font-family-ui);
@@ -71,8 +72,8 @@ a {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #f7f7f6;
-  color: #525252;
+  background: var(--color-canvas-background);
+  color: var(--color-canvas-text);
   font-size: 14px;
 }
 
@@ -82,20 +83,20 @@ a {
   gap: 10px;
   max-width: 420px;
   padding: 24px;
-  border: 1px solid #dededb;
+  border: 1px solid var(--color-canvas-border);
   border-radius: 14px;
-  background: #fff;
+  background: var(--color-canvas-surface);
   text-align: center;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
 }
 
 .legacy-canvas-state-card strong {
-  color: #171717;
+  color: var(--color-canvas-text);
   font-size: 16px;
 }
 
 .legacy-canvas-state-card span {
-  color: #737373;
+  color: var(--color-canvas-text-muted);
   line-height: 1.6;
 }
 
@@ -105,27 +106,16 @@ a {
   padding: 9px 14px;
   border: 0;
   border-radius: 9px;
-  background: #171717;
-  color: #fff;
+  background: var(--color-canvas-action-background);
+  color: var(--color-canvas-action-text);
   cursor: pointer;
 }
 
-html[data-theme="dark"] .legacy-canvas-state {
-  background: #171717;
-  color: #d4d4d4;
+.legacy-canvas-state-card button:hover {
+  background: var(--color-canvas-action-hover);
 }
 
-html[data-theme="dark"] .legacy-canvas-state-card {
-  border-color: #393939;
-  background: #202020;
-  color: #d4d4d4;
-}
-
-html[data-theme="dark"] .legacy-canvas-state-card strong {
-  color: #f5f5f5;
-}
-
-html[data-theme="dark"] .legacy-canvas-state-card button {
-  background: #f5f5f5;
-  color: #171717;
+.legacy-canvas-state-card button:focus-visible {
+  outline: 2px solid var(--ui-focus-ring);
+  outline-offset: 3px;
 }

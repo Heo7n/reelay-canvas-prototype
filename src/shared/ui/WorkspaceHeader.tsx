@@ -151,6 +151,7 @@ export function WorkspaceHeader({
   const [profileOpen, setProfileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const profileRef = useRef<HTMLDetailsElement>(null);
+  const profileTriggerRef = useRef<HTMLElement>(null);
   const helpTriggerRef = useRef<HTMLButtonElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const avatar = actor.displayName.slice(0, 1).toUpperCase();
@@ -210,6 +211,7 @@ export function WorkspaceHeader({
               onPointerLeave={scheduleCloseProfile}
             >
               <summary
+                ref={profileTriggerRef}
                 className={styles.accountTrigger}
                 aria-label="打开账户菜单"
                 aria-expanded={profileOpen}
@@ -345,6 +347,7 @@ export function WorkspaceHeader({
           initialSection={accountSettingsSection}
           workspace={currentWorkspace}
           open={accountSettingsOpen}
+          returnFocusRef={profileTriggerRef}
           onClose={() => setAccountSettingsOpen(false)}
         />
       ) : null}

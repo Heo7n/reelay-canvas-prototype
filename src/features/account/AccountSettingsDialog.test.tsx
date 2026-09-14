@@ -46,10 +46,35 @@ function renderDialog(action = async ({ request }: { request: Request }) => {
     ],
     { initialEntries: ["/w/workspace-organization-reelay"] },
   );
-  render(<RouterProvider router={router} />);
+  return render(<RouterProvider router={router} />);
 }
 
 describe("AccountSettingsDialog", () => {
+  it("returns focus and restores scrolling when dismissed from a standalone trigger", () => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    trigger.focus();
+    const { unmount } = renderDialog();
+    expect(screen.getByRole("button", { name: "关闭账号设置" })).toHaveFocus();
+    expect(document.body.style.overflow).toBe("hidden");
+    unmount();
+    expect(trigger).toHaveFocus();
+    expect(document.body.style.overflow).toBe("");
+    trigger.remove();
+  });
+
+  it("does not focus an opener that disappeared while the dialog was open", () => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    trigger.focus();
+    const { unmount } = renderDialog();
+    trigger.remove();
+    const focus = vi.spyOn(trigger, "focus");
+    unmount();
+    expect(focus).not.toHaveBeenCalled();
+    expect(document.body.style.overflow).toBe("");
+  });
+
   it("keeps personal account settings focused on profile and personal credits", () => {
     renderDialog();
 

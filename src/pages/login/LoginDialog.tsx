@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Eye, EyeOff, X } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { Form, useActionData, useNavigation } from "react-router-dom";
 
 import type { LoginActionData } from "../../app/route-data";
 import { useTransientNotice } from "../../shared/hooks/useTransientNotice";
 import { Brand } from "../../shared/ui/Brand";
+import { DialogCloseButton } from "../../shared/ui/DialogCloseButton";
+import { captureFocusReturn } from "../../shared/ui/focus-return";
 import { LoginMediaCarousel } from "./LoginMediaCarousel";
 import styles from "./LoginDialog.module.css";
 
@@ -30,7 +32,7 @@ export function LoginDialog({ action, defaultAccount = "creator@reelay.test", on
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const previousFocus = document.activeElement;
+    const returnFocus = captureFocusReturn();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     // Native dialog focus selection reads autofocus before showModal opens it.
@@ -41,9 +43,7 @@ export function LoginDialog({ action, defaultAccount = "creator@reelay.test", on
     return () => {
       dialog.close();
       document.body.style.overflow = previousOverflow;
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
-        previousFocus.focus({ preventScroll: true });
-      }
+      returnFocus();
     };
   }, [showNotice]);
 
@@ -66,9 +66,7 @@ export function LoginDialog({ action, defaultAccount = "creator@reelay.test", on
       <div className={styles.layout}>
         <LoginMediaCarousel />
         <section className={styles.panel} aria-label="账户登录">
-          <button className={styles.close} type="button" aria-label="关闭登录" disabled={busy} onClick={onClose}>
-            <X aria-hidden="true" />
-          </button>
+          <DialogCloseButton className={styles.close} aria-label="关闭登录" disabled={busy} onClick={onClose} />
           <div className={styles.panelScroll}>
             <div className={styles.content}>
               <div className={styles.brandWrap} inert={busy}><Brand className={styles.brand} to="/" /></div>

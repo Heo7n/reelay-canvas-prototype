@@ -1,4 +1,5 @@
 @import url("./styles/typography.css");
+@import url("./styles/color-tokens.css");
 @import url("./styles/app.css");
 @import url("./styles/canvas-chrome.css");
 @import url("./styles/canvas-arrange.css");

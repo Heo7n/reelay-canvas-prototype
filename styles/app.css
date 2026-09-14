@@ -1,7 +1,7 @@
 :root {
   color-scheme: dark;
-  --bg: #171819;
-  --app-bg: #171819;
+  --bg: var(--color-canvas-background);
+  --app-bg: var(--color-canvas-background);
   /* Paired offsets preserve the base hue instead of tinting the canvas with gray. */
   --canvas-weave-shadow: rgb(from var(--app-bg) calc(r - 5) calc(g - 5) calc(b - 5) / 0.7);
   --canvas-weave-light: rgb(from var(--app-bg) calc(r + 5) calc(g + 5) calc(b + 5) / 0.7);
@@ -10,12 +10,12 @@
   --empty-pill-primary: rgba(255, 255, 255, 0.82);
   --empty-pill-secondary: rgba(255, 255, 255, 0.44);
   --empty-pill-accent: #8fb5ff;
-  --surface: #202123;
-  --surface-2: #28292b;
+  --surface: var(--color-canvas-surface);
+  --surface-2: var(--color-canvas-surface-raised);
   --surface-3: #323335;
   --line-strong: rgba(255, 255, 255, 0.46);
-  --text: #f4f4f5;
-  --muted: #8d8e93;
+  --text: var(--color-canvas-text);
+  --muted: var(--color-canvas-text-muted);
   --subtle: #5f6066;
   --accent: #b31283;
   --accent-2: #db1aa2;
@@ -27,16 +27,16 @@
   --agent-panel-bg: var(--surface);
   --agent-panel-raised: var(--surface-2);
   --agent-panel-hover: rgba(255, 255, 255, 0.08);
-  --agent-panel-text: #f4f4f5;
+  --agent-panel-text: var(--color-canvas-control-text);
   --agent-control-font-size: 13px;
   --agent-control-font-weight: 500;
   --agent-panel-muted: rgba(255, 255, 255, 0.52);
   --agent-panel-subtle: rgba(255, 255, 255, 0.52);
-  --agent-panel-line: rgba(255, 255, 255, 0.11);
+  --agent-panel-line: var(--color-canvas-border);
   --agent-panel-shadow: 0 22px 60px rgba(0, 0, 0, 0.38);
   --agent-input-bg: var(--surface);
-  --agent-send-bg: #f4f4f5;
-  --agent-send-text: #111214;
+  --agent-send-bg: var(--color-canvas-action-background);
+  --agent-send-text: var(--color-canvas-action-text);
   --canvas-popover-bg: var(--agent-panel-raised);
   --canvas-popover-surface: #202124;
   --canvas-popover-hover: #26272a;
@@ -81,7 +81,7 @@
   --node-chip-hover: rgba(255, 255, 255, 0.12);
   --node-chip-text: rgba(255, 255, 255, 0.86);
   --node-send-bg: var(--agent-send-bg);
-  --node-send-hover: #ffffff;
+  --node-send-hover: var(--color-canvas-action-hover);
   --node-send-text: var(--agent-send-text);
   --node-send-disabled-bg: #232428;
   --node-send-disabled-text: #707177;
@@ -151,19 +151,13 @@
 
 html[data-theme="light"] {
   color-scheme: light;
-  --bg: #f1f3f6;
-  --app-bg: #f1f3f6;
   --grid-dot-color: rgba(32, 33, 31, 0.22);
   --empty-pill-bg: rgba(255, 255, 255, 0.78);
   --empty-pill-primary: rgba(17, 18, 20, 0.72);
   --empty-pill-secondary: rgba(17, 18, 20, 0.42);
   --empty-pill-accent: #3f63b8;
-  --surface: #f8fafc;
-  --surface-2: #eef2f6;
   --surface-3: #e4eaf1;
   --line-strong: rgba(17, 18, 20, 0.38);
-  --text: #16171a;
-  --muted: #6c7078;
   --subtle: #8c919a;
   --floating-bg: rgba(248, 250, 252, 0.86);
   --floating-line: rgba(24, 33, 45, 0.12);
@@ -171,14 +165,10 @@ html[data-theme="light"] {
   --agent-panel-bg: var(--surface);
   --agent-panel-raised: var(--surface-2);
   --agent-panel-hover: rgba(17, 18, 20, 0.06);
-  --agent-panel-text: #111214;
   --agent-panel-muted: rgba(17, 18, 20, 0.58);
   --agent-panel-subtle: rgba(17, 18, 20, 0.58);
-  --agent-panel-line: rgba(17, 18, 20, 0.1);
   --agent-panel-shadow: 0 14px 38px rgba(17, 18, 20, 0.09);
   --agent-input-bg: var(--surface);
-  --agent-send-bg: #18191d;
-  --agent-send-text: #ffffff;
   --canvas-popover-bg: var(--agent-input-bg);
   --canvas-popover-surface: #f0f1f2;
   --canvas-popover-hover: #ebedef;
@@ -215,7 +205,6 @@ html[data-theme="light"] {
   --node-chip-hover: rgba(17, 18, 20, 0.1);
   --node-chip-text: rgba(17, 18, 20, 0.82);
   --node-send-bg: var(--agent-send-bg);
-  --node-send-hover: #37383e;
   --node-send-text: var(--agent-send-text);
   --node-send-disabled-bg: #e8eaed;
   --node-send-disabled-text: #a0a3aa;

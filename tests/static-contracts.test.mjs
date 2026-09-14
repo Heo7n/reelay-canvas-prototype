@@ -1353,7 +1353,7 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.match(appSource, /id: "selection:output"[\s\S]*?options: canvasConnectionInteraction\.getAggregatePortGeometry\(state\.scale\)/);
   assert.doesNotMatch(appSource, /--multi-selection-port-scale/);
   assert.match(appSource, /function syncSelectionOverlayProjection[\s\S]*?--multi-selection-surface-radius[\s\S]*?selectionSurfaceRadiusWorld \* state\.scale/);
-  assert.match(appSource, /function applyTheme[\s\S]*?--node-media-radius[\s\S]*?syncSelectionOverlayProjection\(\)[\s\S]*?renderSelectionToolbar\(\)/);
+  assert.match(appSource, /REELAY_CANVAS_THEME_CONTROLLER\.createController\([\s\S]*?onApply\(\)[\s\S]*?--node-media-radius[\s\S]*?syncSelectionOverlayProjection\(\)[\s\S]*?renderSelectionToolbar\(\)/);
   assert.match(appSource, /\[multiSelectionSurface, multiSelectionChrome\]\.forEach[\s\S]*?screenRect\.left[\s\S]*?screenRect\.height/);
   assert.match(appSource, /multiSelectionSurface\.classList\.add\("hidden"\)[\s\S]*?multiSelectionChrome\.classList\.add\("hidden"\)/);
   assert.match(appSource, /function getExactSelectionGroup\(selectedNodes = getSelectedNodes\(\)\)[\s\S]*?canvasSpatialSelection\.getExactSelectionGroup\(selectedNodes, state\.groups\)/);

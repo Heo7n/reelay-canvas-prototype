@@ -246,7 +246,7 @@
 .accountTrigger:focus-visible,
 .menuItem:focus-visible,
 .helpLink:focus-visible,
-.overviewRow:focus-visible { outline: 3px solid rgba(87, 112, 207, 0.24); outline-offset: -3px; }
+.overviewRow:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: -2px; }
 
 @media (max-width: 680px) {
   .header { height: 64px; padding: 12px 16px; }

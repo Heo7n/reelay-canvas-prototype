@@ -60,25 +60,17 @@
   background: #fff;
 }
 .closeButton {
+  --dialog-close-bg: rgba(255, 255, 255, 0.88);
+  --dialog-close-color: #4f4f55;
+  --dialog-close-hover-bg: #f1f1f2;
+  --dialog-close-hover-color: #171719;
   position: sticky;
   z-index: 2;
   top: 0;
   float: right;
-  display: grid;
-  width: 34px;
-  height: 34px;
   margin: -8px -36px 0 0;
-  padding: 0;
-  place-items: center;
-  border: 0;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.88);
-  color: #4f4f55;
-  cursor: pointer;
   backdrop-filter: blur(8px);
 }
-.closeButton:hover { background: #f1f1f2; color: #171719; }
-.closeButton svg { width: 18px; height: 18px; }
 
 .section { display: grid; gap: 24px; max-width: 1080px; margin: 0 auto; }
 .profileSection { gap: 20px; }
@@ -752,8 +744,7 @@
 .personalOutputValue span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .personalOutputValue svg { width: 14px; height: 14px; color: #777a80; }
 
-.sidebar nav button:focus-visible,
-.closeButton:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
+.sidebar nav button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
 
 :global(html[data-theme="dark"]) .dialog,
 :global(html[data-theme="dark"]) .content { background: #17181c; color: #f4f4f5; }
@@ -762,8 +753,12 @@
 :global(html[data-theme="dark"]) .sidebar nav button { color: #b0b0b7; }
 :global(html[data-theme="dark"]) .sidebar nav button:hover,
 :global(html[data-theme="dark"]) .sidebar nav .activeNavItem { background: #26272c; color: #f4f4f5; }
-:global(html[data-theme="dark"]) .closeButton { background: rgba(23, 24, 28, 0.88); color: #b8b8be; }
-:global(html[data-theme="dark"]) .closeButton:hover { background: #292a30; color: #fff; }
+:global(html[data-theme="dark"]) .closeButton {
+  --dialog-close-bg: rgba(23, 24, 28, 0.88);
+  --dialog-close-color: #b8b8be;
+  --dialog-close-hover-bg: #292a30;
+  --dialog-close-hover-color: #fff;
+}
 :global(html[data-theme="dark"]) .sectionHeading,
 :global(html[data-theme="dark"]) .detailsList > div,
 :global(html[data-theme="dark"]) .identityCard { border-color: #2f3035; }

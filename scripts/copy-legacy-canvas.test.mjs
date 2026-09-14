@@ -186,7 +186,7 @@ function runCanvas(t, html, scripts) {
   for (const script of scripts) new Script(script.source, { filename: script.name }).runInContext(context);
   return new Script(`JSON.stringify({
     account: state.account,
-    theme: state.themeMode,
+    theme: canvasTheme.getMode(),
     canvases: state.canvases,
     activeCanvasId: state.activeCanvasId,
     assetLibrary: state.assetLibrary,

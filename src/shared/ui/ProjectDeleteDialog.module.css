@@ -60,7 +60,7 @@
 .confirm { border: 1px solid #c6404b; background: #c6404b; color: #fff; }
 .cancel:hover:not(:disabled) { background: #f5f5f6; }
 .confirm:hover:not(:disabled) { background: #b43340; }
-.actions button:focus-visible { outline: 3px solid rgba(110, 110, 255, 0.28); outline-offset: 2px; }
+.actions button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
 
 :global(html[data-theme="dark"]) .dialog {
   border-color: rgba(244, 244, 245, 0.14);

@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { UserRound, X } from "lucide-react";
+import { UserRound } from "lucide-react";
 
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { CreditIcon } from "../../shared/ui/CreditIcon";
+import { DialogCloseButton } from "../../shared/ui/DialogCloseButton";
+import { captureFocusReturn } from "../../shared/ui/focus-return";
 import { AccountProfileSection } from "./AccountProfileSection";
 import { PersonalUsageSection } from "./PersonalUsageSection";
 import styles from "./AccountSettingsDialog.module.css";
@@ -16,6 +18,7 @@ interface AccountSettingsDialogProps {
   initialSection?: AccountSection;
   onClose: () => void;
   open: boolean;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   workspace: Workspace;
 }
 
@@ -29,6 +32,7 @@ export function AccountSettingsDialog({
   initialSection = "profile",
   onClose,
   open,
+  returnFocusRef,
   workspace,
 }: AccountSettingsDialogProps) {
   const [activeSection, setActiveSection] = useState<AccountSection>(initialSection);
@@ -36,15 +40,20 @@ export function AccountSettingsDialog({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    if (open) setActiveSection(initialSection);
+  }, [initialSection, open]);
+
+  useEffect(() => {
     if (!open) return undefined;
-    setActiveSection(initialSection);
+    const returnFocus = captureFocusReturn(returnFocusRef?.current);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     closeButtonRef.current?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
+      returnFocus();
     };
-  }, [initialSection, open]);
+  }, [open, returnFocusRef]);
 
   if (!open) return null;
 
@@ -105,9 +114,7 @@ export function AccountSettingsDialog({
         </aside>
 
         <div className={styles.content}>
-          <button ref={closeButtonRef} className={styles.closeButton} type="button" onClick={onClose} aria-label="关闭账号设置">
-            <X aria-hidden="true" />
-          </button>
+          <DialogCloseButton ref={closeButtonRef} className={styles.closeButton} onClick={onClose} aria-label="关闭账号设置" />
           {activeSection === "profile" ? <AccountProfileSection actor={actor} workspace={workspace} /> : null}
           {activeSection === "credits" ? <PersonalUsageSection actor={actor} /> : null}
         </div>

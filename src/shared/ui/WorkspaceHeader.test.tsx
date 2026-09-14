@@ -153,6 +153,11 @@ describe("workspace account menu", () => {
 
     expect(screen.getByRole("dialog", { name: "账号设置" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "账户信息" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭账号设置" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "关闭账号设置" }));
+    expect(screen.queryByRole("dialog", { name: "账号设置" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("打开账户菜单")).toHaveFocus();
+    expect(screen.getByLabelText("打开账户菜单")).toHaveAttribute("aria-expanded", "false");
   });
 
   it("opens personal credits directly from the credit summary", () => {

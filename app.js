@@ -89,9 +89,6 @@ const assetLibraryPreviewUse = document.querySelector("#assetLibraryPreviewUse")
 const canvasEntityEditorHost = document.querySelector("#canvasEntityEditorHost");
 const canvasEntityPickerHost = document.querySelector("#canvasEntityPickerHost");
 const canvasEntityEditorUploadInput = document.querySelector("#canvasEntityEditorUploadInput");
-const themeModeIcon = document.querySelector("#themeModeIcon");
-const themeInlineSwitch = document.querySelector("[data-theme-inline-switch]");
-const themeCurrentLabel = document.querySelector("#themeCurrentLabel");
 const profileCreditValue = document.querySelector("#profileCreditValue");
 const railCreditValue = document.querySelector("#railCreditValue");
 const railCreditTip = document.querySelector("#railCreditTip");
@@ -113,7 +110,6 @@ const selectionToolbar = document.querySelector("#selectionToolbar");
 let projectMenuTrigger = null;
 let canvasMenuTrigger = null;
 let canvasMoreMenuTrigger = null;
-let themeFeedbackTimer = null;
 let selectionSurfaceRadiusWorld = 20;
 const selectionDownloadMenu = document.querySelector("#selectionDownloadMenu");
 const selectionDownloadTrigger = document.querySelector(".selection-download-trigger");
@@ -150,7 +146,6 @@ const agentModelMenu = document.querySelector("#agentModelMenu");
 const agentParamSummary = document.querySelector("#agentParamSummary");
 const agentCreditValue = document.querySelector("#agentCreditValue");
 const canvasAccessStatus = document.querySelector("#canvasAccessStatus");
-const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const narrowViewportQuery = window.matchMedia("(max-width: 480px)");
 const narrowViewportInertState = new Map();
@@ -260,20 +255,19 @@ function loadMediaToolPreferences() {
   return structuredClone(defaultMediaToolPreferences);
 }
 
-function normalizeThemeMode(mode) {
-  if (mode === "light" || mode === "dark") return mode;
-  if (mode === "system") return systemThemeQuery.matches ? "light" : "dark";
-  return "light";
-}
-
-function loadThemeMode() {
-  try {
-    const savedMode = localStorage.getItem("reelay-theme-mode");
-    return normalizeThemeMode(savedMode);
-  } catch {
-    return "light";
-  }
-}
+const canvasTheme = window.REELAY_CANVAS_THEME_CONTROLLER.createController({
+  document,
+  refreshIcons,
+  onApply() {
+    const configuredNodeRadius = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--node-media-radius"),
+    );
+    if (Number.isFinite(configuredNodeRadius)) selectionSurfaceRadiusWorld = configuredNodeRadius;
+    syncSelectionOverlayProjection();
+    renderSelectionToolbar();
+  },
+  onChange: (theme) => canvasPersistence.post("canvas:theme-change", { theme }),
+});
 
 const state = {
   selectedIds: new Set(),
@@ -357,7 +351,6 @@ const state = {
   libraryFilterByContext: {},
   assetLibraryPreferredWidth: 550,
   assetLibraryWidth: 550,
-  themeMode: loadThemeMode(),
   canvasPanel: null,
   nodePopoverFrame: 0,
   groupChromeFrame: 0,
@@ -8065,58 +8058,8 @@ function syncAgentModelButton() {
 
 
 
-function getResolvedTheme(mode = state.themeMode) {
-  return normalizeThemeMode(mode);
-}
-
-function showThemeSwitchFeedback() {
-  if (!themeInlineSwitch) return;
-  window.clearTimeout(themeFeedbackTimer);
-  themeInlineSwitch.classList.add("is-visible");
-  themeFeedbackTimer = window.setTimeout(() => {
-    themeInlineSwitch.classList.remove("is-visible");
-  }, 1100);
-}
-
-function applyTheme(mode = state.themeMode, options = {}) {
-  const nextMode = normalizeThemeMode(mode);
-  const changed = nextMode !== state.themeMode;
-  state.themeMode = nextMode;
-  try {
-    localStorage.setItem("reelay-theme-mode", nextMode);
-  } catch {
-    // A blocked storage API should not prevent theme changes in the current session.
-  }
-  document.documentElement.dataset.theme = getResolvedTheme(nextMode);
-  document.documentElement.dataset.themeMode = nextMode;
-  const configuredNodeRadius = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--node-media-radius"),
-  );
-  if (Number.isFinite(configuredNodeRadius)) selectionSurfaceRadiusWorld = configuredNodeRadius;
-  syncSelectionOverlayProjection();
-  renderSelectionToolbar();
-  const themeLabels = {
-    light: "浅色模式",
-    dark: "深色模式",
-  };
-  const themeIcons = {
-    light: "sun",
-    dark: "moon",
-  };
-  const themeIndexes = {
-    light: 0,
-    dark: 1,
-  };
-  if (themeCurrentLabel) themeCurrentLabel.textContent = themeLabels[nextMode] || "深色模式";
-  if (themeModeIcon) {
-    themeModeIcon.innerHTML = `<i data-lucide="${themeIcons[nextMode] || "moon"}" aria-hidden="true"></i>`;
-  }
-  if (themeInlineSwitch) {
-    themeInlineSwitch.style.setProperty("--theme-index", themeIndexes[nextMode] ?? 1);
-  }
-  refreshIcons();
-  if (options.flash) showThemeSwitchFeedback();
-  if (changed && options.notifyHost !== false) canvasPersistence.post("canvas:theme-change", { theme: nextMode });
+function applyTheme(mode, options) {
+  return canvasTheme.apply(mode, options);
 }
 
 function setAgentWidth(width) {
@@ -10947,13 +10890,14 @@ profileMenu?.addEventListener("click", (event) => {
   if (action === "appearance") {
     event.preventDefault();
     event.stopPropagation();
-    applyTheme(state.themeMode === "light" ? "dark" : "light", { flash: true });
+    canvasTheme.toggle();
     return;
   }
   if (action === "account" || action === "profile") {
     event.preventDefault();
     event.stopPropagation();
     closeProfileMenu();
+    railProfileBtn?.focus({ preventScroll: true });
     requestHostAccountSettings("profile");
     return;
   }
@@ -10961,6 +10905,7 @@ profileMenu?.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
     closeProfileMenu();
+    railProfileBtn?.focus({ preventScroll: true });
     requestHostAccountSettings("credits");
     return;
   }
@@ -11553,7 +11498,9 @@ window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
   canvasArrange.close();
   promptOptimization?.close();
+  canvasTheme.clearFeedback();
   if (!event.persisted) {
+    canvasTheme.dispose();
     assetLibraryItemMenu.dispose();
     canvasToolbarMenus.dispose();
     canvasNodeTasks.dispose();
@@ -11577,7 +11524,7 @@ setAgentAssetValidationEnabled(state.agentAssetValidationEnabled);
 syncAgentComposerControls();
 syncAgentPromptOptimizationControl();
 syncCreditDisplay();
-applyTheme(state.themeMode);
+applyTheme();
 initializeCanvases();
 applyTransform();
 consumeHomeLaunchIntent();

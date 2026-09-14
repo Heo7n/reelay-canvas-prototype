@@ -83,11 +83,16 @@
 .legal button { text-decoration: underline; text-underline-offset: 3px; }
 .notice { position: absolute; z-index: 3; bottom: 20px; left: 50%; width: max-content; max-width: calc(100% - 40px); padding: 10px 16px; border: 1px solid var(--login-border); border-radius: 9px; background: var(--login-button); color: var(--login-button-text); box-shadow: 0 3px 14px rgb(0 0 0 / 12%); font-size: 12px; line-height: 1.6; text-align: center; opacity: 0; pointer-events: none; transform: translateX(-50%); transition: opacity 160ms ease; }
 .noticeVisible { opacity: 1; }
-.close { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--login-bg); color: var(--login-muted); cursor: pointer; }
-.close:hover { background: var(--login-hover); color: var(--login-text); }
-.close:disabled { cursor: wait; opacity: 0.5; }
-.close svg { width: 20px; height: 20px; }
-.close:focus-visible,
+.close {
+  --dialog-close-bg: var(--login-bg);
+  --dialog-close-color: var(--login-muted);
+  --dialog-close-hover-bg: var(--login-hover);
+  --dialog-close-hover-color: var(--login-text);
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+}
 .form button:focus-visible { outline: 2px solid var(--login-text); outline-offset: 3px; }
 
 @media (max-width: 1000px) {

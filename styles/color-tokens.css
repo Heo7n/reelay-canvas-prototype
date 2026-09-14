@@ -1,0 +1,29 @@
+/* Shared focus feedback plus the palette for the canvas and its React
+   loading/error host. Workspace materials remain independent. */
+:root {
+  --ui-focus-ring: #596a82;
+  --color-canvas-background: #f1f3f6;
+  --color-canvas-surface: #f8fafc;
+  --color-canvas-surface-raised: #eef2f6;
+  --color-canvas-text: #16171a;
+  --color-canvas-control-text: #111214;
+  --color-canvas-text-muted: #6c7078;
+  --color-canvas-border: rgba(17, 18, 20, 0.1);
+  --color-canvas-action-background: #18191d;
+  --color-canvas-action-hover: #37383e;
+  --color-canvas-action-text: #ffffff;
+}
+
+html[data-theme="dark"] {
+  --ui-focus-ring: #a6b8d0;
+  --color-canvas-background: #171819;
+  --color-canvas-surface: #202123;
+  --color-canvas-surface-raised: #28292b;
+  --color-canvas-text: #f4f4f5;
+  --color-canvas-control-text: #f4f4f5;
+  --color-canvas-text-muted: #8d8e93;
+  --color-canvas-border: rgba(255, 255, 255, 0.11);
+  --color-canvas-action-background: #f4f4f5;
+  --color-canvas-action-hover: #ffffff;
+  --color-canvas-action-text: #111214;
+}

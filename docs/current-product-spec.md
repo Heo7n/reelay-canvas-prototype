@@ -767,7 +767,8 @@ src/legacy-canvas
 - 迁移页面已经按 route、共享 UI、application port、HTTP adapter 和 server 边界拆分；旧画布已提取 codec、连接 / 指针控制器、持久化协调器、多画布 runtime store、CanvasCommand executor、内容字段 / 组关系契约、节点 task runner 和主体使用 controller。连接、离散节点参数、生成结果命名、建组 / 解组、现有局部排列与整画布整理已进入原子命令；成员结算与旧移动撤销复用组关系事务，连接 renderer、组框边界查询和组框重绘不再修复内容。节点创建 / 删除及其余内容入口仍未全部迁移，不能据此称完整画布 command 系统已经完成。
 - 主要 React 页面已经按 route 拆包，HTTP adapter 只向页面暴露 application error；构建主包不再把组织中心、账号用量和画布宿主全部提前加载。
 - 旧画布已有 JavaScript、配置、CSS、HTML 检查以及序列化、只读和持久化状态机行为测试；React 壳已有 Vite 构建、严格 TypeScript 与 Vitest。`npm run check` 同时包含 ESLint 基础规则和 domain / application 导入边界检查。React 与画布的基础字体共同来自 `styles/typography.css`，颜色、字号变量及公共组件尚未全部统一。关键画布手势仍需浏览器运行验证。
-- CanvasHost 的导航意图与等待保存超时由 `useCanvasNavigation.ts` 独占，文档 dirty / saving 仍由宿主维护；成功保存后才执行导航，作用域或 iframe 换代、保存失败及卸载时取消等待。该整理不改变导航、权限、文档保存或画布操作语义。
+- CanvasHost 的导航意图与等待保存超时由 `useCanvasNavigation.ts` 独占，文档 dirty / saving 仍由宿主维护；成功保存后才执行导航，作用域或 iframe 换代、保存失败及卸载时取消等待。画布主题偏好、旧 system 值读取兼容、图标同步、反馈 timer 与宿主通知由 `canvas-theme-controller.js` 独占，`app.js` 只适配主题应用后的选择框几何刷新，根 state 不再另存主题。宿主同步不回声，BFCache 离开清理反馈而保留控制器，真正卸载时销毁。
+- 画布加载 / 错误宿主与已加载画布共用语义色，避免切入时不同底色；错误说明文字与关键焦点按浅深主题保持可读。登录和账号面板共用 36px 命中区、20px Lucide X 的关闭按钮；登录保留提交期间禁用关闭，账号关闭后恢复入口焦点与原滚动状态。其余模态实现、表面材质与字体层级仍按设计规范逐步收敛。
 - 已有 Playwright 关键浏览器验收，覆盖演示登录、画布 HTTP 保存与刷新读回、对话生成定位 / 取消、提示词优化填入及撤销；测试使用独立内存服务，不替代 PostgreSQL 持久化与多人协同验收。代码格式化、系统性 lint 及更广的浏览器覆盖仍待渐进完善；运行方式见开发工作流。
 - 会话、账号联系资料、Workspace、Membership、Project、CanvasDocument、WorkspaceMediaAsset / personal placement / ProjectAssetReference，以及个人根目录 Entity 已通过 PostgreSQL 持久化；独立本机环境可使用 filesystem ObjectStore，共享开发与公网使用私有 Supabase ObjectStore；真实三主体 12 图的首次公网迁移已完成，正式主域已通过 HTTP 读取、鉴权、大小限制和三主体浏览器展示验收。仓库与公网 schema 均已至 `0013`。可重复 migration、幂等写入、乐观版本和重启集成测试覆盖本地持久化边界。画布文档仍处于迁移桥阶段，Folder、组织资产、生成任务与积分仍只存在原型状态。
 - migration checksum 统一按 LF 计算并由 `.gitattributes` 固定 SQL 换行，Windows / Linux worktree 不会因 CRLF 差异误报历史 migration 被改写。
