@@ -1,5 +1,7 @@
+@import url("../../styles/typography.css");
+
 :root {
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-family-ui);
   color: #171717;
   background: #f7f7f6;
   font-synthesis: none;
