@@ -795,6 +795,29 @@ html[data-theme="dark"] .agent-logo-body { filter: invert(1); }
   transition-duration: 90ms;
 }
 
+.agent-collapse-button {
+  flex: 0 0 var(--agent-collapse-width);
+  width: var(--agent-collapse-width);
+  gap: 4px;
+  padding: 0 6px;
+  color: var(--agent-panel-muted);
+  transition: background 150ms ease, color 150ms ease;
+}
+.agent-collapse-button .agent-logo {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+}
+.agent-collapse-button .agent-logo-body { width: 24px; }
+.agent-collapse-button > .lucide { flex: 0 0 16px; }
+.agent-collapse-button:is(:hover, :focus-visible) .agent-logo {
+  transform: translateY(-1px) rotate(-3deg) scale(1.03);
+}
+.agent-collapse-button:active .agent-logo {
+  transform: translateY(1px) scale(.98);
+  transition-duration: 90ms;
+}
+
 .agent-launcher:focus-visible {
   outline: 2px solid var(--ui-focus-ring);
   outline-offset: 2px;
@@ -868,8 +891,9 @@ html[data-theme="dark"] .agent-logo-body { filter: invert(1); }
     transition: none;
   }
 
-  .agent-launcher, .agent-tooltip, .agent-logo {
+  .agent-launcher, .agent-tooltip, .agent-logo, .agent-collapse-button {
     transition: none;
   }
   .agent-launcher:is(:hover, :focus-visible, :active) .agent-logo { transform: none; }
+  .agent-collapse-button:is(:hover, :focus-visible, :active) .agent-logo { transform: none; }
 }

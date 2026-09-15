@@ -487,11 +487,12 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     saveCountBeforeAgentResize,
   );
 
-  agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  agentHistoryBtn.focus();
+  agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
   assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "true");
   assert.equal(agentModeBtn.getAttribute("aria-expanded"), "false");
   assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
-  assert.equal(window.document.activeElement, window.document.querySelector("#agentHistoryNewChatBtn"));
+  assert.equal(window.document.activeElement, agentHistoryBtn);
   window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", {
     bubbles: true,
     cancelable: true,
@@ -502,6 +503,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.activeElement, agentHistoryBtn);
 
   agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(window.document.activeElement, agentHistoryMenu.querySelector('.history-select[aria-current="true"]'));
   agentModeBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "false");
   assert.equal(agentModeBtn.getAttribute("aria-expanded"), "true");

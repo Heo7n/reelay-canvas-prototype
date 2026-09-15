@@ -124,10 +124,12 @@ const agentResizeHandle = document.querySelector("#agentResizeHandle");
 const agentTopResizeHandle = document.querySelector("#agentTopResizeHandle");
 const agentBottomResizeHandle = document.querySelector("#agentBottomResizeHandle");
 const agentCloseBtn = document.querySelector("#agentCloseBtn");
+const agentCloseMotion = window.REELAY_AGENT_LAUNCHER_MOTION.createController({
+  document, launcher: agentCloseBtn, visibleWhenOpen: true, motionScale: 0.7,
+});
 const agentHistoryBtn = document.querySelector("#agentHistoryBtn");
 const agentHistoryMenu = document.querySelector("#agentHistoryMenu");
 const agentHistoryList = document.querySelector("#agentHistoryList");
-const agentHistoryNewChatBtn = document.querySelector("#agentHistoryNewChatBtn");
 const agentConversationTitle = document.querySelector("#agentConversationTitle");
 const agentMessages = document.querySelector("#agentMessages");
 const agentComposer = document.querySelector("#agentComposer");
@@ -7720,7 +7722,16 @@ function setAgentHistoryOpen(open, { focus = false } = {}) {
   }
   agentHistoryMenu?.classList.toggle("hidden", !shouldOpen);
   agentHistoryBtn?.setAttribute("aria-expanded", String(shouldOpen));
-  if (shouldOpen && focus) window.requestAnimationFrame(() => agentHistoryNewChatBtn?.focus());
+  if (shouldOpen) {
+    const current = agentHistoryList?.querySelector('.history-select[aria-current="true"]');
+    if (focus) current?.focus({ preventScroll: true });
+    if (current && agentHistoryList) {
+      const row = current.getBoundingClientRect();
+      const list = agentHistoryList.getBoundingClientRect();
+      if (row.top < list.top) agentHistoryList.scrollTop -= list.top - row.top;
+      else if (row.bottom > list.bottom) agentHistoryList.scrollTop += row.bottom - list.bottom;
+    }
+  }
 }
 
 function setAgentModeMenuOpen(open, { focus = false } = {}) {
@@ -7960,6 +7971,7 @@ function setAgentOpen(open) {
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
   agentLauncherMotion.setPanelOpen(open);
+  agentCloseMotion.setPanelOpen(open);
   if (open && isAssetLibraryOpen()) reconcileDualPanelWidths("agent");
   else if (!open && isAssetLibraryOpen()) {
     setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
@@ -11122,15 +11134,13 @@ agentLauncher?.addEventListener("keydown", (event) => {
   setAgentOpen(true);
 });
 agentCloseBtn?.addEventListener("click", () => setAgentOpen(false));
-document.querySelectorAll("#agentNewChatBtn, #agentHistoryNewChatBtn").forEach((button) => {
-  button.addEventListener("click", () => {
-    agentHistory.startNew();
-    focusAgentPrompt();
-  });
+document.querySelector("#agentNewChatBtn")?.addEventListener("click", () => {
+  agentHistory.startNew();
+  focusAgentPrompt();
 });
 agentHistoryBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  setAgentHistoryOpen(agentHistoryMenu?.classList.contains("hidden"), { focus: true });
+  setAgentHistoryOpen(agentHistoryMenu?.classList.contains("hidden"), { focus: event.detail === 0 });
 });
 agentHistoryMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -11380,6 +11390,7 @@ window.addEventListener("pagehide", (event) => {
   canvasTheme.clearFeedback();
   if (!event.persisted) {
     agentLauncherMotion.dispose();
+    agentCloseMotion.dispose();
     canvasTheme.dispose();
     assetLibraryItemMenu.dispose();
     canvasToolbarMenus.dispose();

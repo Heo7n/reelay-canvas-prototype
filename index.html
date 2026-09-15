@@ -489,13 +489,23 @@
             <div class="agent-height-resize-handle agent-height-resize-handle-bottom" id="agentBottomResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 底部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 底部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
             <header class="agent-header">
               <div class="agent-heading">
-                <button class="agent-icon-button" id="agentCloseBtn" type="button" title="收起对话" aria-label="收起 Reelay Agent" aria-controls="agentPanel">
-                  <i data-lucide="panel-right-close" aria-hidden="true"></i>
+                <button class="agent-icon-button agent-collapse-button" id="agentCloseBtn" type="button" title="收起对话" aria-label="收起 Reelay Agent" aria-controls="agentPanel">
+                  <span class="agent-logo" aria-hidden="true">
+                    <span class="agent-logo-body">
+                      <img src="./assets/reelay-logo.png" alt="" />
+                      <span class="agent-logo-eye agent-logo-eye-left"><span class="agent-logo-lid agent-logo-lid-top"></span><span class="agent-logo-lid agent-logo-lid-bottom"></span></span>
+                      <span class="agent-logo-eye agent-logo-eye-right"><span class="agent-logo-lid agent-logo-lid-top"></span><span class="agent-logo-lid agent-logo-lid-bottom"></span></span>
+                    </span>
+                  </span>
+                  <i data-lucide="chevrons-right" aria-hidden="true"></i>
                 </button>
                 <button class="agent-title-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话" aria-label="历史对话" aria-controls="agentHistoryMenu" aria-haspopup="dialog" aria-expanded="false">
                   <span class="agent-title" id="agentConversationTitle">新对话</span>
                   <i data-lucide="chevron-down" aria-hidden="true"></i>
                 </button>
+                <div class="agent-history-menu hidden" id="agentHistoryMenu" role="dialog" aria-label="历史对话">
+                  <div class="history-list" id="agentHistoryList"></div>
+                </div>
               </div>
               <div class="agent-actions" role="group" aria-label="对话操作">
                 <button class="agent-icon-button" id="agentRecordSelectBtn" type="button" title="多选生成记录" aria-label="多选生成记录" aria-pressed="false" aria-controls="agentGenerationRecords" disabled>
@@ -506,11 +516,6 @@
                 </button>
               </div>
             </header>
-
-            <div class="agent-history-menu hidden" id="agentHistoryMenu" role="dialog" aria-label="历史对话">
-              <button class="history-new-chat" id="agentHistoryNewChatBtn" type="button"><i data-lucide="plus" aria-hidden="true"></i><span>新建对话</span></button>
-              <div class="history-list" id="agentHistoryList"></div>
-            </div>
 
             <div class="agent-messages" id="agentMessages"></div>
             <div class="agent-messages" id="agentGenerationRecords" aria-label="生成记录" hidden></div>

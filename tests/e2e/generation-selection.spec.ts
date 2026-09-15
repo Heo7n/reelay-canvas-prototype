@@ -1,6 +1,6 @@
 import { test, expect, openCanvas } from "./fixtures";
 
-test("batch deletion confirms the selected history and preserves generated canvas media and credits", async ({ page }) => {
+test("batch deletion confirms the selected history and preserves generated canvas media and credits", async ({ page }, testInfo) => {
   const canvas = await openCanvas(page, "香水品牌 TVC_最终版");
   await page.clock.install();
   await canvas.locator("#agentModelBtn").click();
@@ -23,6 +23,14 @@ test("batch deletion confirms the selected history and preserves generated canva
   await expect(canceled).toHaveAttribute("data-status", "canceled");
   const balance = await canvas.locator("#railCreditValue").innerText();
   const nodeIds = await canvas.locator(".canvas-node").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-id")).sort());
+
+  // Capture real successful and canceled groups before selecting them.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const panelClip = (await canvas.locator("#agentPanel").boundingBox())!;
+  for (const theme of ["dark", "light"]) {
+    await canvas.locator("html").evaluate((element, value) => { element.dataset.theme = value; }, theme);
+    await page.screenshot({ path: testInfo.outputPath(`generation-groups-${theme}.png`), clip: panelClip });
+  }
 
   const select = canvas.locator("#agentRecordSelectBtn");
   await select.click();
@@ -104,11 +112,21 @@ test("sidebar header control keeps its hit area still and keyboard focus through
   const launcher = page.getByRole("button", { name: "展开 Reelay Agent", exact: true });
   const collapse = page.getByRole("button", { name: "收起 Reelay Agent", exact: true });
   const editor = page.locator('#agentInput [contenteditable="true"]');
+  // Decorative logo motion is allowed; the sidebar, hit area, and arrow must
+  // still settle after opening and remain stationary while hovered.
   const runningAnimations = () => handle.evaluate((element) => element.getAnimations({ subtree: true })
+    .filter((animation) => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      return !(target instanceof Element && target.closest(".agent-logo"));
+    })
     .filter((animation) => animation.playState === "running" || animation.pending).length);
   // The shared reduced-motion fallback uses 0.01ms transitions, which may be
   // reported as pending for one frame even though there is no visible motion.
   const visibleMotion = () => handle.evaluate((element) => element.getAnimations({ subtree: true })
+    .filter((animation) => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      return !(target instanceof Element && target.closest(".agent-logo"));
+    })
     .filter((animation) => (animation.playState === "running" || animation.pending)
       && Number(animation.effect?.getComputedTiming().activeDuration) > 1).length);
 
@@ -117,7 +135,7 @@ test("sidebar header control keeps its hit area still and keyboard focus through
   await launcher.click();
   await expect.poll(runningAnimations).toBe(0);
   const before = (await collapse.boundingBox())!;
-  const arrow = collapse.locator("svg");
+  const arrow = collapse.locator("svg.lucide-chevrons-right");
   await expect(arrow).toBeVisible();
   const beforeX = (await arrow.boundingBox())!.x;
   await collapse.hover();

@@ -383,7 +383,7 @@
     },
     {
       id: "seedance",
-      title: "你有多了解 Seedance 2.5 创作视频...",
+      title: "Seedance 2.5：从角色参考到镜头衔接的完整视频创作方案",
       messages: [
         {
           role: "user",
@@ -407,6 +407,54 @@
           role: "agent",
           content: "可以按素材类型建立输入区，再用生成节点衔接输出。后续适合加素材筛选、引用关系和批量操作。",
         },
+      ],
+    },
+    {
+      id: "rain-study",
+      title: "雨",
+      messages: [
+        { role: "user", content: "用雨滴、窗光和倒影，设计一个安静的开场。" },
+        { role: "agent", content: "先从玻璃上的雨滴特写开始，再缓慢移焦至窗外倒影，保留环境雨声。" },
+      ],
+    },
+    {
+      id: "vertical-brand-film",
+      title: "「流光」品牌短片｜15s 竖版 × 3",
+      messages: [
+        { role: "user", content: "为流光系列做三条竖版短片，分别突出材质、光线与使用场景。" },
+        { role: "agent", content: "三条保持统一的暖灰色调与结尾落版，用不同开场建立各自的视觉重点。" },
+      ],
+    },
+    {
+      id: "midnight-reverie",
+      title: "Midnight Reverie — Character & Camera Study",
+      messages: [
+        { role: "user", content: "Plan a quiet nighttime scene with restrained character movement." },
+        { role: "agent", content: "Begin with a medium profile shot, then track slowly alongside the character under soft streetlight." },
+      ],
+    },
+    {
+      id: "brand-story-revision",
+      title: "品牌故事｜第二版：从开场情绪、人物出场到产品落版的完整分镜讨论",
+      messages: [
+        { role: "user", content: "第二版需要把情绪铺垫缩短，人物更早出现，产品结尾留足阅读时间。" },
+        { role: "agent", content: "将开场收至两秒，第三秒切入人物动作，最后三秒使用稳定的产品构图。" },
+      ],
+    },
+    {
+      id: "shot-color-reference",
+      title: "Scene_012_Camera_B_Take_03_ColorReference",
+      messages: [
+        { role: "user", content: "核对第十二场 B 机位第三条的肤色、阴影和前后镜头色温。" },
+        { role: "agent", content: "以人物肤色为基准统一白平衡，保留背景冷暖关系，再对齐相邻镜头的阴影亮度。" },
+      ],
+    },
+    {
+      id: "audio-notes",
+      title: "声音设计 / Audio Notes",
+      messages: [
+        { role: "user", content: "整理脚步、衣料和远处环境声的入点，不加旁白。" },
+        { role: "agent", content: "脚步对应落地帧，衣料跟随转身，远处环境声以低音量贯穿镜头间隙。" },
       ],
     },
   ];

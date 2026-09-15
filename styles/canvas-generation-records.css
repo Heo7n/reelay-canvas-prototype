@@ -1,5 +1,5 @@
 #agentGenerationRecords[hidden], #agentMessages[hidden] { display: none !important; }
-#agentGenerationRecords { padding: 24px 16px; }
+#agentGenerationRecords { padding: 24px var(--agent-message-inset, 16px); }
 .generation-record-list, .generation-record-popover {
   --record-surface-line: var(--agent-panel-line);
   --record-ink: var(--agent-panel-text);
@@ -18,17 +18,34 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
   --record-danger-line: #eddde0;
 }
 .generation-record-list {
+  --record-group-bg: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 4%);
+  --record-group-radius: 12px;
+  --record-group-inset-block: 12px;
   display: flex;
   flex-direction: column;
-  gap: 54px;
+  gap: 44px;
   container-type: inline-size;
   color: var(--agent-panel-text);
   padding: 0 0 16px;
 }
+html[data-theme="light"] .generation-record-list {
+  --record-group-bg: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 2.4%);
+}
 .generation-record {
   --record-reference-width: 112px;
   --record-cover-height: 68px;
+  position: relative;
+  isolation: isolate;
   min-width: 0; font-size: 14px; font-weight: 400; line-height: 1.5;
+}
+.generation-record::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: calc(-1 * var(--record-group-inset-block)) calc(-1 * var(--agent-record-outset-inline, 8px));
+  border-radius: var(--record-group-radius);
+  background: var(--record-group-bg);
+  pointer-events: none;
 }
 
 #agentGenerationRecords.is-selecting-records { padding-top: 0; }
@@ -67,12 +84,12 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
 .generation-record-selection-toolbar button:disabled { opacity: .4; cursor: default; }
 .generation-record-selection-toolbar input:disabled { cursor: default; }
 .generation-record.is-selecting {
-  position: relative;
   padding-left: 28px;
 }
 .generation-record-select-overlay {
-  position: absolute; z-index: 3; inset: -10px -8px;
-  display: block; border: 1px solid transparent; border-radius: 10px;
+  position: absolute; z-index: 3;
+  inset: calc(-1 * var(--record-group-inset-block)) calc(-1 * var(--agent-record-outset-inline, 8px));
+  display: block; border: 1px solid transparent; border-radius: var(--record-group-radius);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
@@ -223,13 +240,18 @@ audio.generation-record-media { width: 100%; height: 42px; }
 .generation-record-refund { display: inline-block; margin-left: 9px; }
 .generation-record-outcome button { padding: 0 0 0 10px; border: 0; background: none; color: var(--record-ink); font: inherit; cursor: pointer; }
 .generation-record-footer { display: flex; align-items: center; width: 100%; margin: 10px 0 0; min-height: 32px; }
-.generation-record-actions { --record-action-bg: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 3%); min-height: 32px; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.generation-record-actions {
+  --record-action-bg: color-mix(in srgb, var(--record-group-bg), var(--record-ink) 6%);
+  --record-action-hover: color-mix(in srgb, var(--record-group-bg), var(--record-ink) 10%);
+  --record-action-pressed: color-mix(in srgb, var(--record-group-bg), var(--record-ink) 14%);
+  min-height: 32px; min-width: 0; display: flex; align-items: center; gap: 8px;
+}
 .generation-record-terminal-actions { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .generation-record-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; height: 32px; padding: 0 10px; border-radius: 8px; color: var(--record-ink); background: var(--record-action-bg); font: inherit; font-size: var(--agent-control-font-size); font-weight: 400; line-height: 20px; white-space: nowrap; cursor: pointer; transition: background .15s ease, color .15s ease; }
 .generation-record-actions button > svg { flex: 0 0 16px; width: 16px; height: 16px; stroke-width: 1.8; }
-.generation-record-actions button:hover { background: var(--record-chip-hover); }
-.generation-record-actions button:active { background: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 12%); }
-.generation-record-actions button[aria-expanded="true"] { background: var(--record-chip-hover); }
+.generation-record-actions button:hover { background: var(--record-action-hover); }
+.generation-record-actions button:active { background: var(--record-action-pressed); }
+.generation-record-actions button[aria-expanded="true"] { background: var(--record-action-hover); }
 .generation-record-actions button[aria-disabled="true"] { color: var(--record-secondary); background: transparent; opacity: .5; cursor: default; }
 .generation-record-actions button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
 .generation-record-cancel { position: relative; }

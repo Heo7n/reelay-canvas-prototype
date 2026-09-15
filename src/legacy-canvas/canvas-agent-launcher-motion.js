@@ -1,7 +1,7 @@
 (function registerAgentLauncherMotion(root) {
   "use strict";
 
-  function createController({ document, launcher }) {
+  function createController({ document, launcher, visibleWhenOpen = false, motionScale = 1 }) {
     const view = document.defaultView;
     const body = launcher?.querySelector(".agent-logo-body");
     const lids = Array.from(launcher?.querySelectorAll(".agent-logo-lid") || []);
@@ -9,16 +9,16 @@
     const supported = Boolean(body?.animate && lids.length && lids.every((lid) => lid.animate));
     const animations = new Set();
     const listeners = [];
-    let timer = null;
+    let blinkTimer = null;
+    let swayTimer = null;
     let panelOpen = launcher?.getAttribute("aria-expanded") === "true";
     let pointerInside = false;
     let focused = document.activeElement === launcher && launcher.matches(":focus-visible");
     let pageActive = true;
     let disposed = false;
-    let blinkCount = 0;
 
     function canAnimate() {
-      return supported && !disposed && pageActive && !panelOpen
+      return supported && !disposed && pageActive && panelOpen === visibleWhenOpen
         && !document.hidden && !reducedMotion.matches;
     }
 
@@ -27,8 +27,10 @@
     }
 
     function stop() {
-      view.clearTimeout(timer);
-      timer = null;
+      view.clearTimeout(blinkTimer);
+      view.clearTimeout(swayTimer);
+      blinkTimer = null;
+      swayTimer = null;
       for (const animation of animations) animation.cancel();
       animations.clear();
     }
@@ -58,30 +60,44 @@
       for (const lid of lids) animate(lid, frames, greeting ? 620 : 240);
     }
 
-    function schedule(first = false) {
-      if (!available() || timer !== null) return;
-      const delay = first ? 1500 + Math.random() * 1000 : 6000 + Math.random() * 4000;
-      timer = view.setTimeout(() => {
-        timer = null;
+    function sway() {
+      animate(body, [
+        { transform: "translateY(0) rotate(0deg)" },
+        { transform: `translateY(${-2 * motionScale}px) rotate(${-6 * motionScale}deg)`, offset: 0.3 },
+        { transform: `translateY(${-motionScale}px) rotate(${4 * motionScale}deg)`, offset: 0.65 },
+        { transform: `translateY(0) rotate(${-motionScale}deg)`, offset: 0.85 },
+        { transform: "translateY(0) rotate(0deg)" },
+      ], 1250);
+    }
+
+    function scheduleSway() {
+      if (!available() || swayTimer !== null) return;
+      swayTimer = view.setTimeout(() => {
+        swayTimer = null;
+        if (!available()) return;
+        sway();
+        scheduleSway();
+      }, 12000 + Math.random() * 4000);
+    }
+
+    function scheduleBlink(first = false) {
+      if (!available() || blinkTimer !== null) return;
+      const delay = first ? 1500 + Math.random() * 1000 : 6000 + Math.random() * 2000;
+      blinkTimer = view.setTimeout(() => {
+        blinkTimer = null;
         if (!available()) return;
         blink(first);
-        blinkCount += 1;
-        if (first || blinkCount % 3 === 0) {
-          animate(body, [
-            { transform: "translateY(0) rotate(0deg)" },
-            { transform: "translateY(-2px) rotate(-6deg)", offset: 0.3 },
-            { transform: "translateY(-1px) rotate(4deg)", offset: 0.65 },
-            { transform: "translateY(0) rotate(-1deg)", offset: 0.85 },
-            { transform: "translateY(0) rotate(0deg)" },
-          ], 1250);
+        if (first) {
+          sway();
+          scheduleSway();
         }
-        schedule();
+        scheduleBlink();
       }, delay);
     }
 
     function sync() {
       stop();
-      schedule(true);
+      scheduleBlink(true);
     }
 
     function listen(target, type, handler) {
@@ -102,14 +118,14 @@
     listen(reducedMotion, "change", sync);
     listen(view, "pagehide", () => { pageActive = false; sync(); });
     listen(view, "pageshow", () => { pageActive = true; sync(); });
-    schedule(true);
+    scheduleBlink(true);
 
     return Object.freeze({
       setPanelOpen(open) {
         if (panelOpen === Boolean(open)) return;
         panelOpen = Boolean(open);
         // Hiding the button need not emit pointerleave in every browser.
-        if (panelOpen) pointerInside = false;
+        if (panelOpen !== visibleWhenOpen) pointerInside = false;
         sync();
       },
       dispose() {
