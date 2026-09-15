@@ -139,7 +139,19 @@
       active = { context: { ...current.context }, card, url: asset.url || "", type: asset.type };
       const caption = document.createElement("div");
       caption.className = "reference-preview-label";
-      caption.textContent = label;
+      if (["image", "video", "audio"].includes(asset.type)) {
+        const { stem, extension } = global.REELAY_CANVAS_FILE_NAME.splitFileName(label);
+        const nameStem = document.createElement("span");
+        nameStem.className = "reference-preview-file-name-stem";
+        nameStem.textContent = stem;
+        const nameExtension = document.createElement("span");
+        nameExtension.className = "reference-preview-file-name-extension";
+        nameExtension.textContent = extension;
+        caption.classList.add("reference-preview-file-name");
+        caption.append(nameStem, nameExtension);
+      } else {
+        caption.textContent = label;
+      }
       let media;
       if (asset.url && ["image", "video", "audio"].includes(asset.type)) {
         media = document.createElement(asset.type === "image" ? "img" : asset.type);

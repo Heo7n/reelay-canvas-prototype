@@ -22,6 +22,10 @@ export interface SignedObjectDownload extends StoredObjectMetadata {
 }
 
 export interface SignedObjectUpload {
+  /** Verified provider-enforced byte ceiling for any object written with this grant. */
+  maxFileBytes: number;
+  /** Provider-issued authorization expiry; never inferred from the app's intent TTL. */
+  expiresAt: string;
   url: string;
   method: "PUT";
   headers: Record<string, string>;
@@ -57,6 +61,8 @@ export interface ObjectStore {
   getObject(objectKey: string, options?: GetObjectOptions): Promise<StoredObject | null>;
   /** Optional direct delivery for remote stores; callers must authorize access first. */
   createSignedDownload?(objectKey: string, expiresInSeconds: number): Promise<SignedObjectDownload | null>;
+  /** Current provider-enforced direct-upload ceiling; null means no verifiable finite limit. */
+  getSignedUploadLimit?(): Promise<number | null>;
   /** Uploads remain invisible until the caller verifies the real bytes and finalizes its intent. */
   createSignedUpload?(input: CreateSignedObjectUploadInput): Promise<SignedObjectUpload>;
   deleteObject(objectKey: string): Promise<boolean>;

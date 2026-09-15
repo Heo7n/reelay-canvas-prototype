@@ -3,8 +3,10 @@ import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { WorkspaceMediaAsset, ProjectAsset } from "../../domain/asset/workspace-media-asset";
+import { buildMediaUploadPolicy, isLibraryUploadFormat, LIBRARY_UPLOAD_POLICY } from "../../domain/asset/media-upload-policy";
+import { MediaStorageQuotaExceededError } from "../../domain/asset/media-storage";
 import type { SessionActor } from "../../domain/identity/session";
-import type { ObjectStore, StoredObjectMetadata } from "../application/ObjectStore";
+import type { ObjectStore, SignedObjectUpload, StoredObjectMetadata } from "../application/ObjectStore";
 import { ImagePreviewService, ImagePreviewUnsupportedError, ImagePreviewUnavailableError } from "../infrastructure/ImagePreviewService";
 import type { ProjectAccessReader } from "../application/ProjectStore";
 import {
@@ -32,11 +34,12 @@ import {
   WorkspaceAssetParamsSchema,
 } from "./asset-contracts";
 import { getRequestActor } from "./session-context";
+import { registerMediaLibraryRoutes } from "./media-library-routes";
 
 const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
 const CONTENT_TYPES_BY_KIND = Object.freeze({
-  image: new Set(["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"]),
+  image: new Set(["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp", "image/svg+xml"]),
   video: new Set(["video/mp4", "video/ogg", "video/quicktime", "video/webm"]),
   audio: new Set([
     "audio/aac",
@@ -130,6 +133,13 @@ function parseByteRange(value: string | undefined, byteSize: number): ByteRange 
 }
 
 function setStoredObjectHeaders(reply: FastifyReply, metadata: StoredObjectMetadata): FastifyReply {
+  if (metadata.contentType === "image/svg+xml") {
+    // An SVG is a document when navigated to directly. Keep it opaque and
+    // prevent scripts, external references and embedded active content while
+    // still allowing self-contained SVG shapes and inline styles in <img>.
+    reply.header("Content-Security-Policy", "sandbox; default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+      .header("Referrer-Policy", "no-referrer");
+  }
   return reply
     .header("Accept-Ranges", "bytes")
     .header("Cache-Control", "private, no-cache")
@@ -187,8 +197,10 @@ async function sendStoredObject(
   // Remote audio/video and large originals must not buffer through the Function response limit.
   // Both content routes authorize the current actor before reaching this point.
   // A non-cacheable, short-lived redirect lets Storage serve byte ranges directly.
-  const directDownload = asset.mediaKind === "audio" || asset.mediaKind === "video"
-    || metadata.byteSize > 4 * 1024 * 1024;
+  // Storage redirects do not inherit our SVG response sandbox.
+  const directDownload = metadata.contentType !== "image/svg+xml"
+    && (asset.mediaKind === "audio" || asset.mediaKind === "video"
+      || metadata.byteSize > 4 * 1024 * 1024);
   if (directDownload && objectStore.createSignedDownload) {
     const download = await objectStore.createSignedDownload(asset.objectKey, 300);
     if (!download
@@ -231,6 +243,11 @@ async function sendStoredObject(
 function uploadConflict(reply: FastifyReply, error: AssetUploadConflictError) {
   const messages: Record<AssetUploadConflictError["reason"], string> = {
     expired: "上传凭证已过期，请重新选择文件。",
+    cancelled: "此上传已取消，请重新选择文件。",
+    finalized: "文件已经保存，无法取消此上传。",
+    not_expired: "此上传仍在进行中。",
+    authorization_active: "上传仍在确认中，预留空间暂时保留。",
+    storage_owner_mismatch: "文件归属已变化，请重新选择文件。",
     idempotency_key_reused: "上传请求标识已用于其他文件。",
     metadata_mismatch: "上传内容与登记的文件信息不一致。",
     not_uploaded: "文件尚未完成上传。",
@@ -251,7 +268,11 @@ async function sendAssetContent(
 ) {
   const query = AssetContentQuerySchema.safeParse(request.query);
   if (!query.success) return reply.code(400).send({ error: { code: "invalid_request", message: "素材预览参数无效。" } });
-  if (!query.data.preview) return sendStoredObject(request, reply, objectStore, asset);
+  // Never pass uploaded SVG through a server renderer that could resolve
+  // external references. Its safe browser representation is the original.
+  if (!query.data.preview || asset.contentType === "image/svg+xml") {
+    return sendStoredObject(request, reply, objectStore, asset);
+  }
   if (asset.mediaKind !== "image") {
     return reply.code(415).send({ error: { code: "preview_unsupported", message: "此素材不支持图片缩略预览。" } });
   }
@@ -283,12 +304,22 @@ export async function registerAssetRoutes(
   app: FastifyInstance,
   dependencies: AssetRouteDependencies,
 ): Promise<void> {
+  registerMediaLibraryRoutes(app, dependencies);
   const previews = new ImagePreviewService(dependencies.objectStore);
   const maxUploadBytes = dependencies.maxUploadBytes ?? MAX_UPLOAD_BYTES;
   const maxIntentBytes = dependencies.objectStore.createSignedUpload
     ? Math.max(maxUploadBytes, 50 * 1024 * 1024) : maxUploadBytes;
   if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes <= 0 || maxUploadBytes > MAX_UPLOAD_BYTES) {
     throw new Error("Asset upload byte limit is invalid.");
+  }
+  async function currentUploadPolicy() {
+    const remoteLimit = dependencies.objectStore.createSignedUpload && dependencies.objectStore.getSignedUploadLimit
+      ? await dependencies.objectStore.getSignedUploadLimit().catch(() => null) : null;
+    // An unverifiable direct path must not be advertised. Small proxy uploads
+    // remain independently bounded by the server's request-body limit.
+    const effectiveLimit = remoteLimit !== null && Number.isSafeInteger(remoteLimit) && remoteLimit > 0
+      ? Math.min(maxIntentBytes, remoteLimit) : maxUploadBytes;
+    return buildMediaUploadPolicy(effectiveLimit);
   }
   if (!app.hasContentTypeParser("application/octet-stream")) {
     app.addContentTypeParser(
@@ -298,6 +329,25 @@ export async function registerAssetRoutes(
     );
   }
 
+  app.get("/api/workspaces/:workspaceId/media-upload-policy", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store").header("Vary", "Cookie");
+    const actor = await requireActor(request, reply, dependencies.sessions);
+    if (!actor) return reply;
+    const params = WorkspaceAssetParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.code(400).send({ error: { code: "invalid_request", message: "工作空间标识无效。" } });
+    }
+    try {
+      await dependencies.assetStore.listPersonalAssets({ actorId: actor.id, workspaceId: params.data.workspaceId });
+      return { policy: await currentUploadPolicy() };
+    } catch (error) {
+      if (error instanceof AssetWorkspaceUnavailableError) {
+        return reply.code(404).send({ error: { code: "workspace_not_found", message: "工作空间不存在。" } });
+      }
+      throw error;
+    }
+  });
+
   app.post("/api/workspaces/:workspaceId/media-upload-intents", async (request, reply) => {
     const actor = await requireActor(request, reply, dependencies.sessions);
     if (!actor) return reply;
@@ -306,21 +356,42 @@ export async function registerAssetRoutes(
     if (!params.success || !body.success) {
       return reply.code(400).send({ error: { code: "invalid_request", message: "上传文件信息无效。" } });
     }
-    if (body.data.byteSize > maxIntentBytes) {
-      return reply.code(413).send({
-        error: { code: "asset_too_large", message: `当前环境单个素材最大支持 ${maxIntentBytes / (1024 * 1024)} MB。` },
-      });
+    if (body.data.storageSpace !== undefined && body.data.projectId !== undefined) {
+      return reply.code(400).send({ error: { code: "invalid_request", message: "请选择资产空间或项目作为文件归属。" } });
     }
-    if (!CONTENT_TYPES_BY_KIND[body.data.mediaKind].has(body.data.contentType)) {
-      return reply.code(400).send({
-        error: { code: "unsupported_media_type", message: "文件类型与素材类型不匹配。" },
-      });
-    }
+    const contentType = LIBRARY_UPLOAD_POLICY.contentTypeAliases[body.data.contentType] ?? body.data.contentType;
     try {
+      const existing = await dependencies.assetStore.findUploadIntentByIdempotencyKey({
+        actorId: actor.id, workspaceId: params.data.workspaceId, idempotencyKey: body.data.idempotencyKey,
+      });
+      // A lost completion response is a read/recovery operation. A temporarily
+      // unavailable provider or a narrowed intake policy cannot block it.
+      if (existing?.status !== "uploaded" && existing?.status !== "finalized") {
+        const uploadPolicy = await currentUploadPolicy();
+        const purposeMaximum = body.data.uploadPurpose === "library" ? uploadPolicy.library.maxFileBytes : uploadPolicy.canvasMaxFileBytes;
+        const maximumBytes = Math.min(purposeMaximum, uploadPolicy.maxFileBytesByContentType[contentType] ?? purposeMaximum);
+        if (body.data.byteSize > maximumBytes) {
+          return reply.code(413).send({
+            error: { code: "asset_too_large", message: `当前环境单个素材最大支持 ${maximumBytes / (1024 * 1024)} MB。` },
+          });
+        }
+        if (!CONTENT_TYPES_BY_KIND[body.data.mediaKind].has(contentType)) {
+          return reply.code(400).send({
+            error: { code: "unsupported_media_type", message: "文件类型与素材类型不匹配。" },
+          });
+        }
+        if (body.data.uploadPurpose === "library" && !isLibraryUploadFormat({ ...body.data, contentType })) {
+          return reply.code(400).send({
+            error: { code: "unsupported_media_type", message: "请选择支持的图片、视频或音频格式，文件后缀须与类型一致。" },
+          });
+        }
+      }
+      const { uploadPurpose: _uploadPurpose, ...intentInput } = body.data;
       const intent = await dependencies.assetStore.createUploadIntent({
         actorId: actor.id,
         workspaceId: params.data.workspaceId,
-        ...body.data,
+        ...intentInput,
+        contentType,
       });
       const encodedWorkspaceId = encodeURIComponent(params.data.workspaceId);
       const encodedUploadId = encodeURIComponent(intent.id);
@@ -328,20 +399,41 @@ export async function registerAssetRoutes(
         && Date.now() >= Date.parse(intent.expiresAt)) {
         throw new AssetUploadConflictError("expired");
       }
-      const upload = body.data.byteSize > maxUploadBytes && dependencies.objectStore.createSignedUpload
-        ? await dependencies.objectStore.createSignedUpload({
+      let upload: Pick<SignedObjectUpload, "url" | "method" | "headers"> = {
+        url: `/api/workspaces/${encodedWorkspaceId}/media-upload-intents/${encodedUploadId}/content`,
+        method: "PUT", headers: { "Content-Type": "application/octet-stream" },
+      };
+      if (body.data.byteSize > maxUploadBytes && dependencies.objectStore.createSignedUpload && intent.status === "pending") {
+        const signed = await dependencies.objectStore.createSignedUpload({
           objectKey: intent.objectKey, contentType: intent.expectedContentType,
           checksumSha256: intent.expectedChecksumSha256,
-        })
-        : {
-          url: `/api/workspaces/${encodedWorkspaceId}/media-upload-intents/${encodedUploadId}/content`,
-          method: "PUT", headers: { "Content-Type": "application/octet-stream" },
-        };
+        });
+        if (!Number.isSafeInteger(signed.maxFileBytes) || signed.maxFileBytes < intent.expectedByteSize) {
+          return reply.code(503).send({ error: { code: "asset_upload_unavailable", message: "当前存储暂不支持此文件大小，请稍后重试。" } });
+        }
+        // A direct upload can outlive this request and the intent's ordinary
+        // expiry. Reserve its bytes until this specific capability expires.
+        await dependencies.assetStore.registerUploadAuthorization({
+          actorId: actor.id,
+          workspaceId: params.data.workspaceId,
+          uploadIntentId: intent.id,
+          expiresAt: signed.expiresAt,
+          reservedBytes: signed.maxFileBytes,
+        });
+        upload = { url: signed.url, method: signed.method, headers: signed.headers };
+      }
       return reply.code(201).send({
-        uploadIntent: { id: intent.id, expiresAt: intent.expiresAt },
+        uploadIntent: { id: intent.id, expiresAt: intent.expiresAt, status: intent.status },
         upload,
       });
     } catch (error) {
+      if (error instanceof MediaStorageQuotaExceededError) {
+        const available = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(error.storage.availableBytes / (1024 * 1024));
+        return reply.code(409).send({ error: { code: "media_storage_quota_exceeded", message: `${error.storage.owner.kind === "organization" ? "组织" : "个人"}空间不足，当前可用 ${available} MB。` }, storage: error.storage });
+      }
+      if (error instanceof ProjectAssetUnavailableError) {
+        return reply.code(404).send({ error: { code: "project_not_found", message: "项目不存在或无权上传。" } });
+      }
       if (error instanceof AssetWorkspaceUnavailableError) {
         return reply.code(404).send({ error: { code: "workspace_not_found", message: "工作空间不存在。" } });
       }
@@ -362,34 +454,26 @@ export async function registerAssetRoutes(
         return reply.code(400).send({ error: { code: "invalid_request", message: "上传内容无效。" } });
       }
       try {
-        const intent = await dependencies.assetStore.getUploadIntent({
+        const recorded = await dependencies.assetStore.writeUpload({
           actorId: actor.id,
           workspaceId: params.data.workspaceId,
           uploadIntentId: params.data.uploadId,
-        });
-        if (!intent) throw new AssetUploadIntentUnavailableError();
-        const expiresAt = Date.parse(intent.expiresAt);
-        if (!Number.isFinite(expiresAt) || Date.now() >= expiresAt) {
-          throw new AssetUploadConflictError("expired");
-        }
-        const checksum = createHash("sha256").update(body).digest("hex");
-        if (body.byteLength !== intent.expectedByteSize || checksum !== intent.expectedChecksumSha256) {
-          throw new AssetUploadConflictError("metadata_mismatch");
-        }
-        const stored = await dependencies.objectStore.putObject({
-          objectKey: intent.objectKey,
-          contentType: intent.expectedContentType,
-          body,
-        });
-        const recorded = await dependencies.assetStore.recordUpload({
-          actorId: actor.id,
-          workspaceId: params.data.workspaceId,
-          uploadIntentId: intent.id,
-          objectKey: stored.objectKey,
-          contentType: stored.contentType,
-          byteSize: stored.byteSize,
-          checksumSha256: stored.checksumSha256,
-          etag: stored.etag,
+        }, async (intent) => {
+          const expiresAt = Date.parse(intent.expiresAt);
+          if (!Number.isFinite(expiresAt) || Date.now() >= expiresAt) {
+            throw new AssetUploadConflictError("expired");
+          }
+          const checksum = createHash("sha256").update(body).digest("hex");
+          if (body.byteLength !== intent.expectedByteSize || checksum !== intent.expectedChecksumSha256) {
+            throw new AssetUploadConflictError("metadata_mismatch");
+          }
+          // The intent lock spans both storage I/O and the recorded metadata so
+          // cancellation cannot release its quota while bytes are being written.
+          return dependencies.objectStore.putObject({
+            objectKey: intent.objectKey,
+            contentType: intent.expectedContentType,
+            body,
+          });
         });
         return { uploadIntent: { id: recorded.id, status: recorded.status, uploadedAt: recorded.uploadedAt } };
       } catch (error) {
@@ -530,7 +614,7 @@ export async function registerAssetRoutes(
       const params = WorkspaceAssetItemParamsSchema.safeParse(request.params);
       if (!params.success) return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
       try {
-        const asset = await dependencies.assetStore.getPersonalAsset({
+        const asset = await dependencies.assetStore.getLibraryAsset({
           actorId: actor.id,
           workspaceId: params.data.workspaceId,
           assetId: params.data.assetId,

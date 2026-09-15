@@ -4,6 +4,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 const sources = await Promise.all([
+  "canvas-file-name.js",
   "canvas-prompt-document.js", "canvas-popover-placement.js", "canvas-reference-order.js", "canvas-reference-strip-controller.js", "canvas-agent-references.js",
 ].map((file) => readFile(new URL(`../src/legacy-canvas/${file}`, import.meta.url), "utf8")));
 

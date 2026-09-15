@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises";
 
 import type { Pool } from "pg";
 
+import { DEMO_LIBRARY_DIRECTORY_EXAMPLE } from "../../config/media-library-directory-example";
 import type { WorkspaceEntity } from "../../domain/asset/entity";
 import type { WorkspaceMediaAsset } from "../../domain/asset/workspace-media-asset";
 import type { EntityStore } from "../application/EntityStore";
 import type { ObjectStore } from "../application/ObjectStore";
 import type { ProjectAssetReferenceStore } from "../application/ProjectAssetReferenceStore";
 import type { WorkspaceMediaAssetStore } from "../application/WorkspaceMediaAssetStore";
+import { seedDemoLibraryDirectoryExample } from "./demo-library-directory-example";
 import {
   assertDemoEntityFixturesCanBeReconciled,
   reconcileHistoricalDemoEntities,
@@ -62,6 +64,8 @@ export interface DemoAssetSeedResult {
 export interface DemoAssetSeedOptions {
   /** Seed the personal catalog without attaching assets to projects or retiring historical links. */
   personalOnly?: boolean;
+  /** Explicitly add the single five-level example to an untouched demo placement. Defaults to false. */
+  withDirectoryExample?: boolean;
 }
 
 function fixtureUrl(fileName: string): URL {
@@ -217,6 +221,13 @@ export async function seedDemoAssetLibrary(
       dependencies.pool,
       historicalGenerations.flatMap(({ assets: historicalAssets }) => historicalAssets),
     );
+  }
+
+  if (options.withDirectoryExample) {
+    const fixture = canonicalFixtureAssets.find(({ key }) => key === DEMO_LIBRARY_DIRECTORY_EXAMPLE.assetKey);
+    if (!fixture) throw new Error("The directory example must reference a published demo asset.");
+    const asset = requireAsset(assetsByKey, fixture.key);
+    await seedDemoLibraryDirectoryExample(dependencies.pool, asset.id, fixture.displayName);
   }
 
   return { assets, entities };

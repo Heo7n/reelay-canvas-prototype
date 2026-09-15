@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { DEMO_LIBRARY_DIRECTORY_EXAMPLE } from "../../config/media-library-directory-example";
 import { InMemoryObjectStore } from "../infrastructure/InMemoryObjectStore";
 import { PostgresAssetStore } from "../infrastructure/PostgresAssetStore";
 import { PostgresEntityStore } from "../infrastructure/PostgresEntityStore";
@@ -103,6 +104,8 @@ beforeEach(async () => {
   try {
     await pool.query(`
       TRUNCATE TABLE
+        media_library_folders,
+        media_library_tags,
         entity_personal_media_bindings,
         entity_placements,
         entity_media_references,
@@ -255,6 +258,60 @@ function expectCanonicalEntityContents(
 }
 
 describe("demo asset library seed", () => {
+  it("opts into exactly one reusable five-level directory example and preserves later user placement changes", async () => {
+    const pool = createPool();
+    const assetStore = new PostgresAssetStore(pool);
+    const dependencies = { pool, assetStore, entityStore: new PostgresEntityStore(pool), objectStore: new InMemoryObjectStore() };
+    const context = { actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID };
+    try {
+      const seeded = await seedDemoAssetLibrary(dependencies);
+      expect((await assetStore.listLibrary(context)).folders).toHaveLength(0);
+      const fixtureIndex = DEMO_ASSET_FIXTURES.findIndex(({ key }) => key === DEMO_LIBRARY_DIRECTORY_EXAMPLE.assetKey);
+      const sample = seeded.assets[fixtureIndex];
+      const firstFolder = await assetStore.createLibraryFolder({ ...context, space: "personal", parentId: null, name: DEMO_LIBRARY_DIRECTORY_EXAMPLE.path[0] });
+      await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
+      const example = await assetStore.listLibrary(context);
+      expect(example.folders).toHaveLength(4);
+      expect(example.tags).toHaveLength(1);
+      let parentId: string | null = null;
+      for (const name of DEMO_LIBRARY_DIRECTORY_EXAMPLE.path) {
+        const folder = example.folders.find((candidate) => candidate.parentId === parentId && candidate.name === name);
+        expect(folder).toBeDefined();
+        if (parentId === null) expect(folder?.id).toBe(firstFolder.id);
+        parentId = folder!.id;
+      }
+      const entry = example.entries.find(({ assetId }) => assetId === sample.id);
+      expect(entry).toMatchObject({ folderId: parentId, displayName: DEMO_LIBRARY_DIRECTORY_EXAMPLE.displayName, tagIds: [DEMO_LIBRARY_DIRECTORY_EXAMPLE.builtinTagId, example.tags[0].id] });
+      expect(example.entries.filter(({ folderId }) => folderId !== null)).toHaveLength(1);
+      expect(example.tags[0].name).toBe(DEMO_LIBRARY_DIRECTORY_EXAMPLE.customTagName);
+      await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
+      expect(await assetStore.listLibrary(context)).toEqual(example);
+      expect((await assetStore.listProjectAssets({ actorId: DEMO_ACTOR_ID, projectId: DEMO_PROJECT_ID })).find(({ asset }) => asset.id === sample.id)?.asset.displayName).toBe(DEMO_ASSET_FIXTURES[fixtureIndex].displayName);
+      await assetStore.saveLibrary({ ...context, projectId: DEMO_PROJECT_ID, space: "personal", folderId: null, tagIds: [], items: [{ assetId: sample.id, displayName: "用户的收藏", action: "move", expectedFolderId: parentId }] });
+      const customized = await assetStore.listLibrary(context);
+      await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
+      expect(await assetStore.listLibrary(context)).toEqual(customized);
+    } finally { await pool.end(); }
+  });
+
+  it("does not add example folders or relocate a previously customized demo asset", async () => {
+    const pool = createPool();
+    const assetStore = new PostgresAssetStore(pool);
+    const dependencies = { pool, assetStore, entityStore: new PostgresEntityStore(pool), objectStore: new InMemoryObjectStore() };
+    const context = { actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID };
+    try {
+      const seeded = await seedDemoAssetLibrary(dependencies, { personalOnly: true });
+      const index = DEMO_ASSET_FIXTURES.findIndex(({ key }) => key === DEMO_LIBRARY_DIRECTORY_EXAMPLE.assetKey);
+      await assetStore.renamePersonalAsset({ ...context, assetId: seeded.assets[index].id, displayName: "用户已编辑的名称" });
+      const before = await assetStore.listLibrary(context);
+      await seedDemoAssetLibrary(dependencies, { personalOnly: true, withDirectoryExample: true });
+      expect(await assetStore.listLibrary(context)).toEqual(before);
+      expect(before.folders).toHaveLength(0);
+      expect(before.tags).toHaveLength(0);
+      expect(await assetStore.listProjectAssets({ actorId: DEMO_ACTOR_ID, projectId: DEMO_PROJECT_ID })).toHaveLength(0);
+    } finally { await pool.end(); }
+  });
+
   it.each([false, true])("seeds a personal-only catalog idempotently without changing projects or accounts (historical catalog: %s)", async (withHistoricalCatalog) => {
     const pool = createPool();
     const assetStore = new PostgresAssetStore(pool);

@@ -218,7 +218,7 @@ describe("PostgreSQL asset persistence", () => {
       });
       expect(renamed.objectVersion).toBe(asset.objectVersion);
       await expect(store.listProjectAssets({ actorId: ownerId, projectId })).resolves.toEqual([
-        { reference, asset: renamed },
+        { reference, asset },
       ]);
       expect(reference.assetVersion).toBe(asset.objectVersion);
       await expect(store.attachAssetToProject({ actorId: "actor-linjing", projectId, assetId: asset.id }))
@@ -236,7 +236,7 @@ describe("PostgreSQL asset persistence", () => {
       expect(restored).toHaveLength(1);
       expect(restored[0]).toEqual(expect.objectContaining({
         reference: expect.objectContaining({ projectId }),
-        asset: expect.objectContaining({ displayName: "最终主视觉.webp", checksumSha256, objectVersion: 1 }),
+        asset: expect.objectContaining({ displayName: "主视觉.webp", checksumSha256, objectVersion: 1 }),
       }));
       expect(restored[0].reference.assetVersion).toBe(restored[0].asset.objectVersion);
       await expect(restartedStore.getProjectAsset({

@@ -1,3 +1,4 @@
+import type { LibraryEntityBinding } from "../../domain/asset/media-library";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -64,6 +65,8 @@ export class InMemoryEntityStore implements EntityStore {
   private readonly personalAssetPlacements: Set<string>;
   private readonly entities = new Map<string, WorkspaceEntity>();
   private readonly personalEntityPlacements = new Set<string>();
+  private personalMediaReader?: (workspaceId: string, actorId: string, assetId: string) => InMemoryEntityAsset | null;
+  private readonly deletedLibraryEntities = new Set<string>();
   private readonly createCommandEntities = new Map<string, string>();
 
   constructor(
@@ -94,7 +97,7 @@ export class InMemoryEntityStore implements EntityStore {
     const existingId = this.createCommandEntities.get(commandKey);
     if (existingId) {
       const existing = this.entities.get(existingId);
-      if (!existing || !sameContent(existing, content)) {
+      if (!existing || this.deletedLibraryEntities.has(this.personalEntityPlacementKey(input.workspaceId, existingId, input.actorId)) || !sameContent(existing, content)) {
         throw new EntityCreateConflictError("idempotency_key_reused");
       }
       this.requirePersonalMedia(input.workspaceId, input.actorId, content);
@@ -177,6 +180,23 @@ export class InMemoryEntityStore implements EntityStore {
     return clone(updated);
   }
 
+  connectLibraryMedia(reader: (workspaceId: string, actorId: string, assetId: string) => InMemoryEntityAsset | null): void {
+    this.personalMediaReader = reader;
+  }
+
+  libraryBindings(workspaceId: string, actorId: string): LibraryEntityBinding[] {
+    return [...this.entities.values()].filter((entity) => entity.workspaceId === workspaceId && this.personalEntityPlacements.has(this.personalEntityPlacementKey(workspaceId, entity.id, actorId)))
+      .map((entity) => ({ id: entity.id, version: entity.version, assetIds: entity.mediaRefs.map((ref) => ref.mediaAssetId) }));
+  }
+
+  removeLibraryPlacements(workspaceId: string, actorId: string, entityIds: string[]): void {
+    for (const entityId of entityIds) {
+      const key = this.personalEntityPlacementKey(workspaceId, entityId, actorId);
+      this.personalEntityPlacements.delete(key);
+      this.deletedLibraryEntities.add(key);
+    }
+  }
+
   private requireWorkspaceMembership(workspaceId: WorkspaceId, actorId: ActorId): void {
     if (!this.workspaceMemberships.has(this.membershipKey(workspaceId, actorId))) {
       throw new EntityWorkspaceUnavailableError();
@@ -189,13 +209,14 @@ export class InMemoryEntityStore implements EntityStore {
     content: NormalizedEntityContent,
   ): void {
     const available = content.mediaRefs.every(({ mediaAssetId }) => {
+      if (this.personalMediaReader) return this.personalMediaReader(workspaceId, actorId, mediaAssetId)?.finalized === true;
       const asset = this.assets.get(this.assetKey(workspaceId, mediaAssetId));
       return asset?.finalized === true
         && this.personalAssetPlacements.has(this.personalAssetPlacementKey(workspaceId, mediaAssetId, actorId));
     });
     if (!available) throw new EntityMediaUnavailableError();
     if (content.coverMediaId) {
-      const cover = this.assets.get(this.assetKey(workspaceId, content.coverMediaId));
+      const cover = this.personalMediaReader ? this.personalMediaReader(workspaceId, actorId, content.coverMediaId) : this.assets.get(this.assetKey(workspaceId, content.coverMediaId));
       if (!cover || cover.mediaKind !== "image") throw new EntityCoverMediaInvalidError();
     }
   }

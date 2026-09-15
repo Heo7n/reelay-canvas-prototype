@@ -8,20 +8,27 @@ import type {
 } from "../../application/assets/MediaAssetRepository";
 import type { ProjectId } from "../../domain/project/project";
 import type { WorkspaceId } from "../../domain/workspace/workspace";
+import type { MediaStorageSpace } from "../../domain/asset/media-storage";
+import { MediaStorageResponseSchema } from "./media-storage-contracts";
 import {
   FinalizeMediaUploadResponseDtoSchema,
   MediaUploadIntentResponseDtoSchema,
+  MediaUploadPolicyResponseDtoSchema,
+  MediaUploadCancellationResponseDtoSchema,
   PersonalMediaAssetsResponseDtoSchema,
   ProjectAssetResponseDtoSchema,
   ProjectAssetsResponseDtoSchema,
 } from "./contracts";
 import { HttpApiClient, type HttpAdapterOptions } from "./HttpApiClient";
+import { HttpMediaLibraryRepository } from "./HttpMediaLibraryRepository";
 
 export class HttpMediaAssetRepository implements MediaAssetRepository {
   private readonly http: HttpApiClient;
+  readonly library: HttpMediaLibraryRepository;
 
   constructor(options: HttpAdapterOptions | HttpApiClient = {}) {
     this.http = options instanceof HttpApiClient ? options : new HttpApiClient(options);
+    this.library = new HttpMediaLibraryRepository(this.http);
   }
 
   async createUploadIntent(input: CreateMediaUploadIntentInput): Promise<MediaUploadGrant> {
@@ -31,6 +38,31 @@ export class HttpMediaAssetRepository implements MediaAssetRepository {
       MediaUploadIntentResponseDtoSchema,
       { method: "POST", body: JSON.stringify(body) },
     );
+  }
+
+  async getUploadPolicy(workspaceId: WorkspaceId) {
+    const response = await this.http.read(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/media-upload-policy`,
+      MediaUploadPolicyResponseDtoSchema,
+    );
+    return response.policy;
+  }
+
+  async getStorageUsage(workspaceId: WorkspaceId, space: MediaStorageSpace) {
+    const response = await this.http.read(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/media-storage?space=${space}`,
+      MediaStorageResponseSchema,
+    );
+    return response.storage;
+  }
+
+  async cancelUpload(workspaceId: WorkspaceId, uploadId: string) {
+    const response = await this.http.read(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/media-upload-intents/${encodeURIComponent(uploadId)}`,
+      MediaUploadCancellationResponseDtoSchema,
+      { method: "DELETE" },
+    );
+    return response.uploadIntent;
   }
 
   async finalizeUpload(workspaceId: WorkspaceId, uploadId: string): Promise<FinalizedMediaAsset> {

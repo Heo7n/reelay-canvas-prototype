@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 
-const [placementSource, controllerSource] = await Promise.all([
-  "canvas-popover-placement.js", "canvas-reference-strip-controller.js",
+const [fileNameSource, placementSource, controllerSource] = await Promise.all([
+  "canvas-file-name.js", "canvas-popover-placement.js", "canvas-reference-strip-controller.js",
 ].map((file) => readFile(new URL(`../src/legacy-canvas/${file}`, import.meta.url), "utf8")));
 
 function fixture(t) {
@@ -77,6 +77,7 @@ function fixture(t) {
     }));
   }
   render();
+  view.eval(fileNameSource);
   view.eval(placementSource);
   view.eval(controllerSource);
   const controller = view.REELAY_CANVAS_REFERENCE_STRIP.createController({
@@ -270,6 +271,31 @@ test("native video/audio controls never autoplay, and release their source when 
     assert.equal(media.hasAttribute("src"), false);
   }
   assert.deepEqual(f.mediaReleases(), { pauses: 2, loads: 2 });
+});
+
+test("file preview captions preserve media suffixes without splitting text reference labels", (t) => {
+  const f = fixture(t);
+  const label = "角色 & <转身>.最终.MP4";
+  for (const type of ["video", "audio"]) {
+    f.context().entries[0].asset.type = type;
+    f.context().entries[0].label = label;
+    f.key(f.card("a"), "Enter");
+    const caption = f.preview().querySelector(".reference-preview-label");
+    assert.equal(caption.textContent, label);
+    assert.equal(caption.querySelector(".reference-preview-file-name-stem").textContent, "角色 & <转身>.最终");
+    assert.equal(caption.querySelector(".reference-preview-file-name-extension").textContent, ".MP4");
+    assert.equal(f.preview().getAttribute("aria-label"), `${label}预览`);
+    f.controller.close();
+  }
+  f.context().entries[0].asset.type = "text";
+  f.key(f.card("a"), "Enter");
+  assert.equal(f.preview().querySelector(".reference-preview-label").textContent, label);
+  assert.equal(f.preview().querySelector(".reference-preview-file-name"), null);
+  f.controller.close();
+  f.context().entries[0].asset.type = "image";
+  f.key(f.card("a"), "Enter");
+  assert.equal(f.preview().querySelector(".reference-preview-label"), null);
+  assert.equal(f.preview().querySelector("img").alt, label);
 });
 
 test("preview labels and text are safe text, and unavailable assets get a readable placeholder", (t) => {

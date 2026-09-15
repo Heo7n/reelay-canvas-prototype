@@ -1,3 +1,5 @@
+import { InMemoryAssetStore } from "./infrastructure/InMemoryAssetStore";
+import { InMemoryEntityStore } from "./infrastructure/InMemoryEntityStore";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -7,6 +9,7 @@ import { registerAccountRoutes } from "./http/account-routes";
 import { registerWorkspaceProjectRoutes } from "./http/workspace-project-routes";
 import { registerCanvasDocumentRoutes } from "./http/canvas-document-routes";
 import { registerAssetRoutes } from "./http/asset-routes";
+import { registerMediaStorageRoutes } from "./http/media-storage-routes";
 import { registerEntityRoutes } from "./http/entity-routes";
 import type { CollaborationStore } from "./application/CollaborationStore";
 import type { EntityStore } from "./application/EntityStore";
@@ -28,6 +31,9 @@ export interface BuildServerOptions {
 export async function buildServer(options: BuildServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger ?? false });
   const { store } = options;
+  if (options.assetStore instanceof InMemoryAssetStore && options.entityStore instanceof InMemoryEntityStore) {
+    options.assetStore.connectLibraryEntities(options.entityStore);
+  }
 
   await app.register(cookie);
   app.addHook("onClose", async () => store.close());
@@ -44,6 +50,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   await registerWorkspaceProjectRoutes(app, store);
   await registerCanvasDocumentRoutes(app, store);
   if (options.assetStore && options.objectStore) {
+    registerMediaStorageRoutes(app, { assetStore: options.assetStore, objectStore: options.objectStore, sessions: store });
     await registerAssetRoutes(app, {
       assetStore: options.assetStore,
       objectStore: options.objectStore,

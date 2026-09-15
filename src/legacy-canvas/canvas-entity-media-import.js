@@ -4,7 +4,7 @@
   const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
   const ID_FIELDS = ["workspaceAssetId", "librarySourceId", "id"];
   const KINDS = new Set(["image", "video", "audio"]);
-  const EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|bmp|mp4|webm|mov|m4v|mp3|wav|ogg|m4a|aac|flac)$/i;
+  const EXTENSIONS = /\.(?:png|jpe?g|webp|gif|avif|bmp|svg|mp4|webm|mov|m4v|mp3|wav|ogg|m4a|aac|flac)$/i;
 
   function mediaKind(media) {
     return media?.mediaKind || media?.type;
@@ -21,7 +21,7 @@
   }
 
   function contentTypeMatches(type, kind) {
-    return typeof type === "string" && type.startsWith(`${kind}/`) && type !== "image/svg+xml";
+    return typeof type === "string" && type.startsWith(`${kind}/`);
   }
 
   function inspectImportSource(media, { baseUrl } = {}) {
@@ -67,6 +67,7 @@
       return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
     });
     const onImported = typeof options.onImported === "function" ? options.onImported : () => undefined;
+    const makeUploadAttemptId = options.makeUploadAttemptId || (() => root.crypto.randomUUID());
     const maxUploadBytes = options.maxUploadBytes == null ? MAX_UPLOAD_BYTES : Number(options.maxUploadBytes);
     if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes <= 0 || maxUploadBytes > MAX_UPLOAD_BYTES) {
       throw new TypeError("Entity media upload size limit is invalid.");
@@ -74,6 +75,7 @@
     // Keep aliases, never Blob/File bodies or a second authoritative personal catalog.
     const importedAliases = new Map();
     const pending = new Map();
+    const uploadAttemptKeys = new Map();
 
     function assertCurrent(scopeKey, isContextValid) {
       if (!scopeKey || getScopeKey() !== scopeKey || !isContextValid()) {
@@ -138,7 +140,7 @@
       return { file, contentType };
     }
 
-    async function prepareMedia(values, { isContextValid = () => true } = {}) {
+    async function prepareMedia(values, { isContextValid = () => true, uploadPurpose = "canvas", storageSpace = "personal" } = {}) {
       const scopeKey = String(getScopeKey() || "");
       assertCurrent(scopeKey, isContextValid);
       if (!Array.isArray(values) || values.length < 1 || values.length > 100) {
@@ -168,19 +170,30 @@
           if (!/^[a-f\d]{64}$/.test(checksum)) throw failure("素材校验值无效");
           canonical = byContent(checksum, file.size, source.mediaKind);
           if (!canonical) {
-            const key = `${scopeKey}:${source.mediaKind}:${file.size}:${checksum}`;
+            const key = `${scopeKey}:${uploadPurpose}:${storageSpace}:${source.mediaKind}:${file.size}:${checksum}`;
             let operation = pending.get(key);
             if (!operation) {
               const displayName = String(asset.displayName || asset.name || "未命名素材").trim();
-              const metadata = { target: "personal", mediaKind: source.mediaKind, displayName, contentType };
+              const metadata = { target: "personal", uploadPurpose, storageSpace, mediaKind: source.mediaKind, displayName, contentType };
               operation = Promise.resolve().then(async () => {
                 const identityDigest = String(await checksumFile(new Blob([
-                  JSON.stringify([checksum, file.size, source.mediaKind, contentType, displayName]),
+                  JSON.stringify([checksum, file.size, source.mediaKind, contentType, displayName, uploadPurpose, storageSpace]),
                 ]))).toLowerCase();
                 assertCurrent(scopeKey, isContextValid);
                 if (!/^[a-f\d]{64}$/.test(identityDigest)) throw failure("素材幂等标识无效");
-                metadata.idempotencyKey = `entity-media-v1-${identityDigest}`;
-                return persistFile(file, metadata);
+                metadata.idempotencyKey = uploadAttemptKeys.get(identityDigest) || `entity-media-v1-${identityDigest}`;
+                try { return await persistFile(file, metadata); }
+                catch (error) {
+                  if (!["asset_upload_cancelled", "asset_upload_expired"].includes(error?.serviceCode)) throw error;
+                  assertCurrent(scopeKey, isContextValid);
+                  // Only a terminal response proves the previous attempt cannot
+                  // succeed. Unknown network failures must retain the same key.
+                  const attemptId = String(makeUploadAttemptId());
+                  if (!/^[a-zA-Z0-9-]{1,80}$/.test(attemptId)) throw failure("无法创建新的上传尝试");
+                  const key = `entity-media-v1-${identityDigest}-${attemptId}`;
+                  uploadAttemptKeys.set(identityDigest, key);
+                  return persistFile(file, { ...metadata, idempotencyKey: key });
+                }
               }).then((saved) => {
                 if (!saved?.id || !identities(saved).length || mediaKind(saved) !== source.mediaKind
                   || saved.checksumSha256 !== checksum || saved.byteSize !== file.size) {

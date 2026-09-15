@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { require as requireTs } from "tsx/cjs/api";
+const { buildMediaUploadPolicy } = requireTs("../src/domain/asset/media-upload-policy.ts", import.meta.url);
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-media-asset-coordinator.js", import.meta.url), "utf8");
 const context = vm.createContext({ URL });
@@ -19,6 +21,71 @@ const workspaceAsset = {
   checksumSha256: checksum, contentUrl: "/api/workspaces/workspace-1/media-assets/asset-2/content",
 };
 const flushTasks = () => new Promise((resolve) => setImmediate(resolve));
+
+test("trusted policy keeps library intake separate from canvas bytes and preserves upload ownership", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  const policy = buildMediaUploadPolicy(64 * 1024 * 1024);
+  const message = { source: "reelay-shell", type: "host:media-upload-policy", protocolVersion: 1,
+    instanceId: "instance-1", status: "ready", policy };
+  assert.equal(coordinator.getUploadPolicy(), null);
+  assert.equal(dispatch(message, { origin: "https://other.test" }), false);
+  assert.equal(dispatch({ ...message, instanceId: "old" }), false);
+  assert.equal(dispatch({ ...message, policy: { ...policy, library: {} } }), false);
+  assert.equal(coordinator.getUploadPolicy(), null);
+  assert.equal(dispatch(message), true);
+  const large = { name: "edited.mp4", type: "video/mp4", size: 60 * 1024 * 1024 };
+  await assert.rejects(coordinator.persistFile(large, { mediaKind: "video", uploadPurpose: "library" }), /50 MB/);
+  const canvasUpload = coordinator.persistFile(large, { mediaKind: "video" });
+  await flushTasks();
+  assert.equal(posted.at(-1).uploadPurpose, "canvas");
+  dispatch({ source: "reelay-shell", type: "host:asset-command-error", protocolVersion: 1, instanceId: "instance-1",
+    requestId: posted.at(-1).requestId, code: "conflict", message: "组织存储空间不足" });
+  await assert.rejects(canvasUpload, /组织存储空间不足/);
+  const libraryUpload = coordinator.persistFile({ name: "logo.svg", type: "image/svg+xml", size: 42 },
+    { mediaKind: "image", target: "personal", uploadPurpose: "library", storageSpace: "organization" });
+  await flushTasks();
+  assert.equal(posted.at(-1).uploadPurpose, "library");
+  assert.equal(posted.at(-1).storageSpace, "organization");
+  coordinator.dispose();
+  await assert.rejects(libraryUpload, /已停止/);
+  assert.equal(coordinator.getUploadPolicy(), null);
+});
+
+test("a failed PUT requests correlated cancellation while immediately preserving its original error", async () => {
+  const { coordinator, dispatch, posted } = harness({ uploadFile: async () => { throw new Error("connection lost"); } });
+  const upload = coordinator.persistFile({ name: "cover.png", type: "image/png", size: 42 }, { mediaKind: "image" });
+  const rejection = assert.rejects(upload, /connection lost/);
+  await flushTasks();
+  const requestId = posted.at(-1).requestId;
+  dispatch({ source: "reelay-shell", type: "host:media-upload-grant", protocolVersion: 1, instanceId: "instance-1", requestId,
+    uploadIntent: { id: "intent", expiresAt: "2026-09-20T00:00:00Z" }, upload: { url: "/upload", method: "PUT", headers: {} } });
+  await rejection;
+  assert.deepEqual(JSON.parse(JSON.stringify(posted.at(-1))), { source: "reelay-legacy-canvas", type: "canvas:cancel-media-upload",
+    protocolVersion: 1, instanceId: "instance-1", requestId, uploadId: "intent" });
+  assert.equal(coordinator.getPendingCount(), 0);
+});
+
+test("uploaded and finalized grants recover their existing object without another PUT", async () => {
+  for (const status of ["uploaded", "finalized"]) {
+    const { coordinator, dispatch, posted, uploads } = harness();
+    const result = coordinator.persistFile({ name: "large.png", type: "image/png", size: 50 * 1024 * 1024 },
+      { mediaKind: "image", target: "personal", idempotencyKey: "original-attempt" });
+    await flushTasks();
+    const requestId = posted.at(-1).requestId;
+    const grant = { source: "reelay-shell", type: "host:media-upload-grant", protocolVersion: 1, instanceId: "instance-1", requestId,
+      uploadIntent: { id: "stored", expiresAt: "2026-09-20T00:00:00Z", status },
+      upload: { url: "/api/uploads/stored", method: "PUT", headers: {} } };
+    assert.equal(dispatch({ ...grant, uploadIntent: { ...grant.uploadIntent, status: "cancelled" } }), false);
+    assert.equal(dispatch(grant), true);
+    assert.equal(posted.at(-1).type, "canvas:finalize-media-upload");
+    assert.equal(posted.at(-1).uploadId, "stored");
+    assert.equal(uploads.length, 0);
+    assert.equal(dispatch({ source: "reelay-shell", type: "host:media-upload-result", protocolVersion: 1, instanceId: "instance-1",
+      requestId, uploadId: "stored", target: "personal", workspaceAsset }), true);
+    assert.deepEqual(JSON.parse(JSON.stringify(await result)), workspaceAsset);
+    assert.equal(dispatch(grant), false);
+  }
+});
 
 test("asset availability requires negotiation and a trusted current instance, and duplicate states have no effects", () => {
   let negotiated = false;
@@ -38,6 +105,14 @@ test("asset availability requires negotiation and a trusted current instance, an
   assert.deepEqual(updates, [{ projectAssets: "ready", workspaceCatalog: "loading" }]);
   assert.equal(dispatch({ ...message, workspaceCatalog: "unavailable" }), true);
   assert.deepEqual(updates.at(-1), { projectAssets: "ready", workspaceCatalog: "unavailable" });
+  assert.equal(dispatch({ ...message, workspaceCatalog: "unavailable", mediaLibrary: "ready" }), true);
+  assert.deepEqual(updates.at(-1), { projectAssets: "ready", workspaceCatalog: "unavailable", mediaLibrary: "ready" });
+  const previousCount = updates.length;
+  assert.equal(dispatch({ ...message, workspaceCatalog: "unavailable", mediaLibrary: "ready" }), true);
+  assert.equal(updates.length, previousCount);
+  assert.equal(dispatch({ ...message, workspaceCatalog: "unavailable", mediaLibrary: "unavailable" }), true);
+  assert.equal(updates.at(-1).mediaLibrary, "unavailable");
+  assert.equal(dispatch({ ...message, mediaLibrary: true }), false);
 });
 
 function harness(options = {}) {

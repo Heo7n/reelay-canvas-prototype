@@ -26,6 +26,7 @@ function storageFixture() {
   const objects = new Map<string, FakeObject>();
   const requests: { url: string; init: RequestInit; headers: Headers }[] = [];
   let publicBucket = false;
+  let uploadLimit: unknown = 50 * 1024 * 1024;
   let override: ((url: URL, init: RequestInit) => Response | undefined) | undefined;
   const fetcher: typeof globalThis.fetch = async (input, init = {}) => {
     const url = new URL(String(input));
@@ -34,10 +35,11 @@ function storageFixture() {
     const overridden = override?.(url, init);
     if (overridden) return overridden;
     if (url.pathname === `/storage/v1/bucket/${BUCKET}`) {
-      return Response.json({ id: BUCKET, public: publicBucket });
+      return Response.json({ id: BUCKET, public: publicBucket, file_size_limit: uploadLimit });
     }
     if (url.pathname.startsWith(`/storage/v1/object/upload/sign/${BUCKET}/`)) {
-      return Response.json({ url: `${url.pathname.replace("/storage/v1", "")}?token=test-upload-only` });
+        const token = `test.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 7200 })).toString("base64url")}.signature`;
+        return Response.json({ url: `${url.pathname.replace("/storage/v1", "")}?token=${token}` });
     }
     if (url.pathname.startsWith(`/storage/v1/object/sign/${BUCKET}/`)) {
       const key = decodeURIComponent(url.pathname.split(`/object/sign/${BUCKET}/`)[1]);
@@ -85,6 +87,7 @@ function storageFixture() {
     requests,
     store: () => new SupabaseObjectStore({ url: URL_ORIGIN, serviceRoleKey: SECRET, bucket: BUCKET, fetch: fetcher }),
     makePublic: () => { publicBucket = true; },
+    setUploadLimit: (value: unknown) => { uploadLimit = value; },
     override: (next: typeof override) => { override = next; },
   };
 }
@@ -94,7 +97,9 @@ describe("SupabaseObjectStore", () => {
     const fixture = storageFixture();
     const checksumSha256 = createHash("sha256").update(INPUT.body).digest("hex");
     const grant = await fixture.store().createSignedUpload({ ...INPUT, checksumSha256 });
-    expect(grant.url).toBe(`${URL_ORIGIN}/storage/v1/object/upload/sign/${BUCKET}/${INPUT.objectKey}?token=test-upload-only`);
+    expect(grant.url).toContain(`${URL_ORIGIN}/storage/v1/object/upload/sign/${BUCKET}/${INPUT.objectKey}?token=test.`);
+    expect(Date.parse(grant.expiresAt)).toBeGreaterThan(Date.now());
+    expect(grant.maxFileBytes).toBe(50 * 1024 * 1024);
     expect(grant.method).toBe("PUT");
     expect(grant.headers["Content-Type"]).toBe(INPUT.contentType);
     expect(grant.headers["x-upsert"]).toBe("false");
@@ -108,6 +113,29 @@ describe("SupabaseObjectStore", () => {
     other.override((url) => url.pathname.includes("/object/upload/sign/")
       ? Response.json({ url: "https://other.test/media?token=private" }) : undefined);
     await expect(other.store().createSignedUpload({ ...INPUT, checksumSha256 })).rejects.toThrow(/request failed/);
+    other.override((url) => url.pathname.includes("/object/upload/sign/")
+      ? Response.json({ url: `${url.pathname.replace("/storage/v1", "")}?token=missing-expiry` }) : undefined);
+    await expect(other.store().createSignedUpload({ ...INPUT, checksumSha256 })).rejects.toThrow(/reliable expiry/);
+  });
+
+  it("rechecks the provider's actual byte ceiling for every direct grant and fails closed without a finite limit", async () => {
+    const fixture = storageFixture();
+    const store = fixture.store();
+    const input = { ...INPUT, checksumSha256: createHash("sha256").update(INPUT.body).digest("hex") };
+    await expect(store.getSignedUploadLimit()).resolves.toBe(50 * 1024 * 1024);
+    fixture.setUploadLimit(8 * 1024 * 1024);
+    expect((await store.createSignedUpload(input)).maxFileBytes).toBe(8 * 1024 * 1024);
+    for (const value of [null, undefined, "50MB", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      fixture.setUploadLimit(value);
+      fixture.requests.length = 0;
+      await expect(store.getSignedUploadLimit()).resolves.toBeNull();
+      await expect(store.createSignedUpload(input)).rejects.toThrow(/finite bucket byte limit/);
+      expect(fixture.requests.some((request) => request.url.includes("/object/upload/sign/"))).toBe(false);
+    }
+    fixture.setUploadLimit(12 * 1024 * 1024);
+    await expect(store.getSignedUploadLimit()).resolves.toBe(12 * 1024 * 1024);
+    fixture.makePublic();
+    await expect(store.createSignedUpload(input)).rejects.toThrow(/private bucket/);
   });
 
   it("signs a short-lived exact private object without downloading its bytes", async () => {

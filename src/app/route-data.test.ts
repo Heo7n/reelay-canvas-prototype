@@ -71,6 +71,7 @@ function createServices(signedIn = true): ApplicationServices {
       update: vi.fn(),
     },
     mediaAssetRepository: {
+      getUploadPolicy: vi.fn(),
       createUploadIntent: vi.fn(),
       finalizeUpload: vi.fn(),
       renamePersonalAsset: vi.fn(),

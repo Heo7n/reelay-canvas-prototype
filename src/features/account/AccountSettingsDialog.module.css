@@ -74,6 +74,50 @@
 
 .section { display: grid; gap: 24px; max-width: 1080px; margin: 0 auto; }
 .profileSection { gap: 20px; }
+.storageRefresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #707076;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.storageRefresh:hover { background: #f1f1f2; color: #171719; }
+.storageRefresh:focus-visible { outline: 2px solid var(--reelay-focus-ring, #7777e9); outline-offset: 2px; }
+.storageRefresh svg { width: 14px; height: 14px; }
+.storageSpaces { display: grid; gap: 16px; }
+.storageSpace { display: grid; gap: 18px; padding: 24px; border: 1px solid #e7e7e8; border-radius: 12px; }
+.storageSpaceHeading { display: flex; align-items: center; gap: 12px; }
+.storageSpaceHeading > svg { width: 20px; height: 20px; color: #77777d; }
+.storageSpaceHeading > span:first-of-type { display: grid; gap: 5px; }
+.storageSpaceHeading strong { font-size: 14px; font-weight: 600; }
+.storageSpaceHeading small { color: #77777d; font-size: 12px; }
+.storageAmount { margin-left: auto; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.storageAmount > span { color: #77777d; font-size: 12px; }
+.storageTrack { display: flex; height: 6px; overflow: hidden; border-radius: 3px; background: #ededee; }
+.storageTrack > span { height: 100%; background: #7777ba; }
+.storageTrack > .storageReserved { background: #b7b7d1; }
+.storageMeta { display: flex; justify-content: space-between; gap: 16px; margin: 0; color: #77777d; font-size: 12px; line-height: 1.5; }
+.storageNotice { margin: -6px 0 0; color: #a34e56; font-size: 12px; }
+.storageExplanation { max-width: 660px; margin: 0; color: #85858b; font-size: 12px; line-height: 1.75; }
+:global(html[data-theme="dark"]) .storageSpace { border-color: #303137; }
+:global(html[data-theme="dark"]) .storageRefresh,
+:global(html[data-theme="dark"]) .storageSpaceHeading > svg,
+:global(html[data-theme="dark"]) .storageSpaceHeading small,
+:global(html[data-theme="dark"]) .storageAmount > span,
+:global(html[data-theme="dark"]) .storageMeta,
+:global(html[data-theme="dark"]) .storageExplanation { color: #a1a1a8; }
+:global(html[data-theme="dark"]) .storageRefresh:hover { background: #292a30; color: #f4f4f5; }
+:global(html[data-theme="dark"]) .storageTrack { background: #303137; }
+:global(html[data-theme="dark"]) .storageTrack > span { background: #9999d0; }
+:global(html[data-theme="dark"]) .storageTrack > .storageReserved { background: #545479; }
+:global(html[data-theme="dark"]) .storageNotice { color: #e39ba4; }
 .sectionHeading {
   display: flex;
   min-height: 64px;

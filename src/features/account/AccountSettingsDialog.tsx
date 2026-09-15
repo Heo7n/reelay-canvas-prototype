@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { UserRound } from "lucide-react";
+import { HardDrive, UserRound } from "lucide-react";
 
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -9,9 +9,12 @@ import { DialogCloseButton } from "../../shared/ui/DialogCloseButton";
 import { captureFocusReturn } from "../../shared/ui/focus-return";
 import { AccountProfileSection } from "./AccountProfileSection";
 import { PersonalUsageSection } from "./PersonalUsageSection";
+import { AccountStorageSection } from "./AccountStorageSection";
+import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
+import { applicationServices } from "../../app/services";
 import styles from "./AccountSettingsDialog.module.css";
 
-export type AccountSection = "profile" | "credits";
+export type AccountSection = "profile" | "credits" | "storage";
 
 interface AccountSettingsDialogProps {
   actor: SessionActor;
@@ -20,11 +23,13 @@ interface AccountSettingsDialogProps {
   open: boolean;
   returnFocusRef?: RefObject<HTMLElement | null>;
   workspace: Workspace;
+  mediaAssetRepository?: MediaAssetRepository;
 }
 
 const sectionItems = [
   { id: "profile", label: "个人主页", icon: UserRound },
   { id: "credits", label: "我的积分", icon: CreditIcon },
+  { id: "storage", label: "存储空间", icon: HardDrive },
 ] as const;
 
 export function AccountSettingsDialog({
@@ -34,8 +39,10 @@ export function AccountSettingsDialog({
   open,
   returnFocusRef,
   workspace,
+  mediaAssetRepository = applicationServices.mediaAssetRepository,
 }: AccountSettingsDialogProps) {
   const [activeSection, setActiveSection] = useState<AccountSection>(initialSection);
+  const visibleSection = activeSection === "storage" && !mediaAssetRepository.getStorageUsage ? "profile" : activeSection;
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -96,13 +103,14 @@ export function AccountSettingsDialog({
           <strong>账户管理</strong>
           <nav aria-label="账号设置分栏">
             {sectionItems.map((item) => {
+              if (item.id === "storage" && !mediaAssetRepository.getStorageUsage) return null;
               const Icon = item.icon;
               return (
                 <button
                   key={item.id}
                   type="button"
-                  className={activeSection === item.id ? styles.activeNavItem : ""}
-                  aria-current={activeSection === item.id ? "page" : undefined}
+                  className={visibleSection === item.id ? styles.activeNavItem : ""}
+                  aria-current={visibleSection === item.id ? "page" : undefined}
                   onClick={() => setActiveSection(item.id)}
                 >
                   <Icon aria-hidden="true" />
@@ -115,8 +123,9 @@ export function AccountSettingsDialog({
 
         <div className={styles.content}>
           <DialogCloseButton ref={closeButtonRef} className={styles.closeButton} onClick={onClose} aria-label="关闭账号设置" />
-          {activeSection === "profile" ? <AccountProfileSection actor={actor} workspace={workspace} /> : null}
-          {activeSection === "credits" ? <PersonalUsageSection actor={actor} /> : null}
+          {visibleSection === "profile" ? <AccountProfileSection actor={actor} workspace={workspace} /> : null}
+          {visibleSection === "credits" ? <PersonalUsageSection actor={actor} /> : null}
+          {visibleSection === "storage" ? <AccountStorageSection actorId={actor.id} workspaceId={workspace.id} organization={workspace.kind === "organization"} repository={mediaAssetRepository} /> : null}
         </div>
       </div>
     </div>,

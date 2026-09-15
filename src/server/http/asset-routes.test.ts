@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildServer } from "../app";
 import { createDemoSeed, DEMO_PASSWORD } from "../demo-fixtures";
+import { InMemoryEntityStore } from "../infrastructure/InMemoryEntityStore";
 import { InMemoryAssetStore } from "../infrastructure/InMemoryAssetStore";
 import { InMemoryCollaborationStore } from "../infrastructure/InMemoryCollaborationStore";
 import { InMemoryObjectStore } from "../infrastructure/InMemoryObjectStore";
@@ -33,7 +34,7 @@ describe("asset persistence routes", () => {
     const seed = createDemoSeed();
     const store = new InMemoryCollaborationStore(seed);
     const assetStore = new InMemoryAssetStore({
-      workspaceMemberships: seed.memberships.map(({ workspaceId, actorId }) => ({ workspaceId, actorId })),
+      workspaceMemberships: seed.memberships.map(({ workspaceId, actorId, role }) => ({ workspaceId, actorId, role })),
       projects: seed.projects.map((project) => ({
         id: project.id,
         workspaceId: project.workspaceId,
@@ -43,10 +44,105 @@ describe("asset persistence routes", () => {
       })),
     });
     objectStore = new InMemoryObjectStore();
-    app = await buildServer({ store, assetStore, objectStore });
+    const entityStore = new InMemoryEntityStore({ workspaceMemberships: seed.memberships, assets: [], personalAssetPlacements: [] });
+    app = await buildServer({ store, assetStore, entityStore, objectStore });
   });
 
   afterEach(async () => app.close());
+
+  it("saves a scoped library entry through real routes and exposes organization content only to members", async () => {
+    const session = await login(app, "creator@reelay.test");
+    const headers = { cookie: session };
+    const base = "/api/workspaces/workspace-organization-reelay/media-library";
+    const body = Buffer.from("library-content");
+    const intent = await app.inject({ method: "POST", url: "/api/workspaces/workspace-organization-reelay/media-upload-intents", headers,
+      payload: { idempotencyKey: "library-route-upload", mediaKind: "image", displayName: "Source.png", contentType: "image/png", byteSize: body.byteLength, checksumSha256: createHash("sha256").update(body).digest("hex") } });
+    expect(intent.statusCode).toBe(201);
+    await app.inject({ method: "PUT", url: intent.json().upload.url, headers: { ...headers, "content-type": "application/octet-stream" }, payload: body });
+    const finalized = await app.inject({ method: "POST", url: `/api/workspaces/workspace-organization-reelay/media-upload-intents/${intent.json().uploadIntent.id}/finalize`, headers });
+    const assetId = finalized.json().asset.id;
+    const outsider = await login(app, "chenxi@reelay.test");
+    const contentUrl = `/api/workspaces/workspace-organization-reelay/media-assets/${assetId}/content`;
+    expect((await app.inject({ method: "GET", url: contentUrl, headers: { cookie: outsider } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: base })).statusCode).toBe(401);
+    const folderResponse = await app.inject({ method: "POST", url: `${base}/folders`, headers, payload: { space: "organization", parentId: null, name: "角色参考" } });
+    expect(folderResponse.statusCode).toBe(200);
+    const folderId = folderResponse.json().folder.id;
+    const tagResponse = await app.inject({ method: "POST", url: `${base}/tags`, headers, payload: { space: "organization", name: "夏日" } });
+    expect(tagResponse.statusCode).toBe(200);
+    const tagId = tagResponse.json().tag.id;
+    const payload = { projectId: "project-scifi-trailer", space: "organization", folderId, tagIds: ["builtin:character", tagId], items: [{ assetId, displayName: "Shared title", action: "save" }] };
+    const saved = await app.inject({ method: "POST", url: `${base}/save`, headers, payload });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().catalog.entries).toEqual(expect.arrayContaining([expect.objectContaining({ assetId, space: "personal", displayName: "Source.png", folderId: null }), expect.objectContaining({ assetId, space: "organization", displayName: "Shared title", folderId, tagIds: ["builtin:character", tagId] })]));
+    expect((await app.inject({ method: "POST", url: `${base}/save`, headers, payload })).json()).toEqual(saved.json());
+    const shared = await app.inject({ method: "GET", url: base, headers: { cookie: outsider } });
+    expect(shared.statusCode).toBe(200);
+    expect(shared.json().catalog.entries).toHaveLength(1);
+    expect(shared.json().catalog.entries[0].space).toBe("organization");
+    const content = await app.inject({ method: "GET", url: contentUrl, headers: { cookie: outsider } });
+    expect(content.statusCode).toBe(200);
+    expect(content.rawPayload).toEqual(body);
+    expect((await app.inject({ method: "POST", url: `${base}/save`, headers, payload: { ...payload, folderId: null } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "POST", url: `${base}/folders`, headers, payload: { space: "platform", parentId: null, name: "Bad" } })).statusCode).toBe(400);
+  });
+
+  it("renames a directory through the scoped route with optimistic conflict and manager checks", async () => {
+    const session = await login(app, "creator@reelay.test"), member = await login(app, "chenxi@reelay.test");
+    const headers = { cookie: session };
+    const base = "/api/workspaces/workspace-organization-reelay/media-library";
+    const personal = (await app.inject({ method: "POST", url: `${base}/folders`, headers, payload: { space: "personal", parentId: null, name: "Original" } })).json().folder;
+    const shared = (await app.inject({ method: "POST", url: `${base}/folders`, headers, payload: { space: "organization", parentId: null, name: "Shared" } })).json().folder;
+    const payload = { space: "personal", folderId: personal.id, name: "Renamed", expectedName: personal.name };
+    expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, payload })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, headers: { cookie: member }, payload })).statusCode).toBe(404);
+    const renamed = await app.inject({ method: "POST", url: `${base}/rename-folder`, headers, payload });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().folder).toEqual({ ...personal, name: "Renamed" });
+    expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, headers, payload })).json()).toEqual(renamed.json());
+    const stale = await app.inject({ method: "POST", url: `${base}/rename-folder`, headers, payload: { ...payload, name: "Lost update" } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe("folder_changed");
+    expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, headers, payload: { ...payload, name: " " } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, headers, payload: { ...payload, folderId: null } })).statusCode).toBe(400);
+    const organizationPayload = { ...payload, space: "organization", folderId: shared.id, expectedName: shared.name };
+    expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, headers: { cookie: member }, payload: organizationPayload })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, headers, payload: organizationPayload })).statusCode).toBe(200);
+  });
+
+  it("deletes through the library route atomically without removing project media or source objects", async () => {
+    const session = await login(app, "creator@reelay.test");
+    const headers = { cookie: session };
+    const base = "/api/workspaces/workspace-organization-reelay/media-library";
+    const body = Buffer.from("delete-library-content");
+    const writeObject = vi.spyOn(objectStore, "putObject");
+    const intent = await app.inject({ method: "POST", url: "/api/workspaces/workspace-organization-reelay/media-upload-intents", headers,
+      payload: { idempotencyKey: "delete-route-upload", mediaKind: "image", displayName: "Source.png", contentType: "image/png", byteSize: body.byteLength, checksumSha256: createHash("sha256").update(body).digest("hex") } });
+    await app.inject({ method: "PUT", url: intent.json().upload.url, headers: { ...headers, "content-type": "application/octet-stream" }, payload: body });
+    const finalized = await app.inject({ method: "POST", url: `/api/workspaces/workspace-organization-reelay/media-upload-intents/${intent.json().uploadIntent.id}/finalize`, headers });
+    const assetId = finalized.json().asset.id;
+    const entitiesUrl = "/api/workspaces/workspace-organization-reelay/entities";
+    const groupResponse = await app.inject({ method: "POST", url: entitiesUrl, headers, payload: { idempotencyKey: "delete-route-group", name: "Group", description: "", assetIds: [assetId], coverAssetId: assetId } });
+    expect(groupResponse.statusCode).toBe(201);
+    const group = groupResponse.json().entity;
+    const payload = { space: "personal", items: [{ kind: "media", id: assetId }] };
+    const blocked = await app.inject({ method: "POST", url: `${base}/delete`, headers, payload });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error.code).toBe("library_item_in_use");
+    expect((await app.inject({ method: "POST", url: `${base}/delete`, payload })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: `${base}/delete`, headers, payload: { space: "personal", items: [{ kind: "folder", id: null }] } })).statusCode).toBe(400);
+    const deletePayload = { ...payload, items: [...payload.items, { kind: "entity", id: group.id, expectedVersion: group.version }] };
+    const deleted = await app.inject({ method: "POST", url: `${base}/delete`, headers, payload: deletePayload });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().catalog.entries).toEqual([]);
+    expect((await app.inject({ method: "GET", url: entitiesUrl, headers })).json().entities).toEqual([]);
+    expect((await app.inject({ method: "POST", url: `${base}/delete`, headers, payload: deletePayload })).json()).toEqual(deleted.json());
+    const replay = await app.inject({ method: "POST", url: `/api/workspaces/workspace-organization-reelay/media-upload-intents/${intent.json().uploadIntent.id}/finalize`, headers });
+    expect(replay.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: base, headers })).json().catalog.entries).toEqual([]);
+    const object = await objectStore.getObject(writeObject.mock.calls[0][0].objectKey);
+    expect(object?.body).toEqual(new Uint8Array(body));
+  });
 
   it.each([
     { mediaKind: "video", contentType: "video/mp4", byteSize: 16, signed: true },
@@ -229,7 +325,7 @@ describe("asset persistence routes", () => {
       referenceId,
       assetId,
       assetVersion: finalized.json().asset.objectVersion,
-      displayName: "角色最终参考.png",
+      displayName: "角色参考.png",
     }));
 
     const contentUrl = listed.json().projectAssets[0].contentUrl as string;
@@ -390,7 +486,7 @@ describe("asset persistence routes", () => {
     const store = new InMemoryCollaborationStore(seed);
     const expiredAssetStore = new InMemoryAssetStore(
       {
-        workspaceMemberships: seed.memberships.map(({ workspaceId, actorId }) => ({ workspaceId, actorId })),
+        workspaceMemberships: seed.memberships.map(({ workspaceId, actorId, role }) => ({ workspaceId, actorId, role })),
         projects: [],
       },
       () => new Date(Date.now() - 60_000),
@@ -427,7 +523,7 @@ describe("asset persistence routes", () => {
     expect(putObject).not.toHaveBeenCalled();
   });
 
-  it("maps an unavailable workspace on personal content reads to 404", async () => {
+  it("does not reveal a workspace through unauthorized library content reads", async () => {
     const session = await login(app, "creator@reelay.test");
     const response = await app.inject({
       method: "GET",
@@ -436,7 +532,7 @@ describe("asset persistence routes", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe("workspace_not_found");
+    expect(response.json().error.code).toBe("asset_not_found");
   });
 });
 
@@ -444,7 +540,7 @@ it("rejects uploads beyond the deployment limit before creating an intent or acc
   const seed = createDemoSeed();
   const store = new InMemoryCollaborationStore(seed);
   const assetStore = new InMemoryAssetStore({
-    workspaceMemberships: seed.memberships.map(({ workspaceId, actorId }) => ({ workspaceId, actorId })),
+    workspaceMemberships: seed.memberships.map(({ workspaceId, actorId, role }) => ({ workspaceId, actorId, role })),
     projects: [],
   });
   const createIntent = vi.spyOn(assetStore, "createUploadIntent");
@@ -472,14 +568,16 @@ it("authorizes signed large uploads and publishes only after verifying actual by
   const seed = createDemoSeed();
   const store = new InMemoryCollaborationStore(seed);
   const assetStore = new InMemoryAssetStore({
-    workspaceMemberships: seed.memberships.map(({ workspaceId, actorId }) => ({ workspaceId, actorId })), projects: [],
+    workspaceMemberships: seed.memberships.map(({ workspaceId, actorId, role }) => ({ workspaceId, actorId, role })), projects: [],
   });
   const objectStore = new InMemoryObjectStore();
   const signedUpload = vi.fn(async (_input: { objectKey: string; contentType: string; checksumSha256: string }) => ({
     url: "https://project.supabase.co/storage/v1/object/upload/sign/private/file?token=upload",
+    expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    maxFileBytes: 50 * 1024 * 1024,
     method: "PUT" as const, headers: { "Content-Type": "video/mp4", "x-metadata": "verified-after-upload" },
   }));
-  Object.assign(objectStore, { createSignedUpload: signedUpload });
+  Object.assign(objectStore, { createSignedUpload: signedUpload, getSignedUploadLimit: async () => 50 * 1024 * 1024 });
   const app = await buildServer({ store, assetStore, objectStore, maxAssetUploadBytes: 4 * 1024 * 1024 });
   try {
     const session = await login(app, "creator@reelay.test");
@@ -497,6 +595,7 @@ it("authorizes signed large uploads and publishes only after verifying actual by
     const created = await app.inject({ method: "POST", url: base, headers: { cookie: session }, payload });
     expect(created.statusCode).toBe(201);
     expect(created.json().upload.url).toContain("/object/upload/sign/");
+    expect(await assetStore.getMediaStorage({ actorId: "actor-tianmaochao", workspaceId: "workspace-organization-reelay" })).toMatchObject({ usedBytes: 0, reservedBytes: 50 * 1024 * 1024 });
     const intentId = created.json().uploadIntent.id;
     const finalizeUrl = `${base}/${intentId}/finalize`;
     const pending = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: session } });
@@ -517,6 +616,13 @@ it("authorizes signed large uploads and publishes only after verifying actual by
     const finalized = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: session } });
     expect(finalized.statusCode).toBe(200);
     expect(finalized.json().asset.checksumSha256).toBe(checksumSha256);
+    expect(await assetStore.getMediaStorage({ actorId: "actor-tianmaochao", workspaceId: "workspace-organization-reelay" })).toMatchObject({ usedBytes: body.byteLength, reservedBytes: 0 });
+    const beforeReplayGrants = signedUpload.mock.calls.length;
+    const intentReplay = await app.inject({ method: "POST", url: base, headers: { cookie: session }, payload });
+    expect(intentReplay.statusCode).toBe(201);
+    expect(intentReplay.json().uploadIntent.status).toBe("finalized");
+    expect(intentReplay.json().upload.url).toContain(`/media-upload-intents/${intentId}/content`);
+    expect(signedUpload).toHaveBeenCalledTimes(beforeReplayGrants);
     getObject.mockClear();
     const repeated = await app.inject({ method: "POST", url: finalizeUrl, headers: { cookie: session } });
     expect(repeated.json().asset.id).toBe(finalized.json().asset.id);

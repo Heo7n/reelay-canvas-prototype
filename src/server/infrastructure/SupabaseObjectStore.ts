@@ -232,13 +232,24 @@ export class SupabaseObjectStore implements ObjectStore {
     return { ...info.metadata, url: url.toString() };
   }
 
+  async getSignedUploadLimit(): Promise<number | null> {
+    const bucket = await this.readPrivateBucket();
+    const maximum = bucket.file_size_limit;
+    return typeof maximum === "number" && Number.isSafeInteger(maximum) && maximum > 0 ? maximum : null;
+  }
+
   async createSignedUpload(input: CreateSignedObjectUploadInput): Promise<SignedObjectUpload> {
     const key = normalizeObjectKey(input.objectKey);
     const contentType = input.contentType.trim();
     if (!contentType || /[\r\n]/.test(contentType) || !/^[0-9a-f]{64}$/.test(input.checksumSha256)) {
       throw new Error("Object upload metadata is invalid.");
     }
-    await this.assertPrivateBucket();
+    // A client can change Content-Length on a signed PUT. Check the provider's
+    // actual per-bucket limit on every grant, not a cached application default.
+    const maxFileBytes = await this.getSignedUploadLimit();
+    if (maxFileBytes === null) {
+      throw new Error("Storage upload requires a verified finite bucket byte limit.");
+    }
     const path = `/object/upload/sign/${this.objectPath(key)}`;
     const response = await this.request(path, { method: "POST", headers: { "x-upsert": "false" } });
     if (!response.ok) throw storageError(response.status);
@@ -248,8 +259,16 @@ export class SupabaseObjectStore implements ObjectStore {
     if (url.pathname !== `/storage/v1${path}` || !url.searchParams.get("token") || url.hash) {
       throw storageError(response.status);
     }
+    // This token comes directly from our authenticated provider request. Read
+    // its lifetime without trusting a client-supplied clock or exposing secrets.
+    let expiresAt: string;
+    try {
+      const payload = record(JSON.parse(Buffer.from(url.searchParams.get("token")!.split(".")[1], "base64url").toString("utf8")));
+      if (typeof payload.exp !== "number" || !Number.isSafeInteger(payload.exp) || payload.exp * 1000 <= Date.now()) throw new Error("Invalid expiry");
+      expiresAt = new Date(payload.exp * 1000).toISOString();
+    } catch { throw new Error("Storage upload authorization has no reliable expiry."); }
     return {
-      url: url.toString(), method: "PUT",
+      url: url.toString(), method: "PUT", expiresAt, maxFileBytes,
       headers: {
         "Content-Type": contentType,
         "cache-control": "max-age=3600",
@@ -288,16 +307,19 @@ export class SupabaseObjectStore implements ObjectStore {
     };
   }
 
+  private async readPrivateBucket(): Promise<Record<string, unknown>> {
+    const response = await this.request(`/bucket/${encodeURIComponent(this.bucket)}`);
+    if (!response.ok) throw storageError(response.status);
+    const bucket = record(await readJson(response));
+    if (bucket.id !== this.bucket || bucket.public !== false) {
+      throw new Error("Supabase object storage requires an existing private bucket.");
+    }
+    return bucket;
+  }
+
   private async assertPrivateBucket(): Promise<void> {
     if (!this.privateBucketCheck) {
-      this.privateBucketCheck = (async () => {
-        const response = await this.request(`/bucket/${encodeURIComponent(this.bucket)}`);
-        if (!response.ok) throw storageError(response.status);
-        const bucket = record(await readJson(response));
-        if (bucket.id !== this.bucket || bucket.public !== false) {
-          throw new Error("Supabase object storage requires an existing private bucket.");
-        }
-      })().catch((error: unknown) => {
+      this.privateBucketCheck = this.readPrivateBucket().then(() => undefined).catch((error: unknown) => {
         this.privateBucketCheck = undefined;
         throw error;
       });

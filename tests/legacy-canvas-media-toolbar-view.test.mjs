@@ -23,6 +23,7 @@ test("hidden media toolbar renders no markup", () => {
 test("compact media toolbar preserves interaction selectors and scale", () => {
   const markup = renderMediaToolbar({
     visible: true,
+    showLabels: false,
     toolbarScale: 0.82,
     pinnedTools: [cropTool],
   });
@@ -35,10 +36,9 @@ test("compact media toolbar preserves interaction selectors and scale", () => {
   assert.doesNotMatch(markup, /<span>裁剪<\/span>/);
 });
 
-test("expanded media toolbar renders labels, overflow tools, and customization", () => {
+test("media toolbar defaults to visible labels including download, overflow tools, and customization", () => {
   const markup = renderMediaToolbar({
     visible: true,
-    showLabels: true,
     menuOpen: true,
     pinnedTools: [cropTool],
     unpinnedTools: [eraseTool],
@@ -46,6 +46,7 @@ test("expanded media toolbar renders labels, overflow tools, and customization",
 
   assert.match(markup, /class="media-edit-toolbar show-labels"/);
   assert.match(markup, /<span>裁剪<\/span>/);
+  assert.match(markup, /<span>下载<\/span>/);
   assert.match(markup, /class="media-tool-menu"/);
   assert.match(markup, /data-media-tool="erase"/);
   assert.match(markup, /<span>橡皮擦<\/span>/);

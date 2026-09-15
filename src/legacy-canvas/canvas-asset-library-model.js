@@ -204,6 +204,7 @@
         kind,
         parentId,
         systemDefault: source.systemDefault === true,
+        ...(source.persisted ? { persisted: true } : {}),
       };
     }
 
@@ -212,7 +213,10 @@
       const item = resolveItemRef(source.item || source);
       const space = resolveSpace(source.space);
       const folderId = source.folderId == null ? null : String(source.folderId);
-      return { item, space, folderId };
+      return { item, space, folderId,
+        ...(source.persisted ? { persisted: true, displayName: String(source.displayName || ""),
+          tags: Array.isArray(source.tags) ? source.tags.map(String) : [] } : {}),
+      };
     }
 
     function validateFolder(folderId, space, kind) {
@@ -374,6 +378,7 @@
       if (!createPlacement(placement.item, placement.space, placement.folderId)) {
         throw new Error(`Duplicate placement: ${key}`);
       }
+      placementsByKey.set(key, placement);
     }
 
     function validateEntityVisibility(entity, space, placementMap = placementsByKey, mediaMap = mediaById) {
@@ -426,6 +431,63 @@
       return getFolderPathInternal(folderId).map(cloneValue);
     }
 
+    function placementRecord(placement) {
+      const record = requireRecord(placement.item);
+      return placement.persisted && placement.item.kind === "media"
+        ? { ...record, name: placement.displayName, displayName: placement.displayName, tags: placement.tags }
+        : record;
+    }
+
+    // Replace only server-owned projections; browser-only fixtures and Entity ownership remain independent.
+    function syncPersistedFolder(input) {
+      const folder = normalizeFolderRecord({ ...input, kind: "media", persisted: true });
+      validateFolder(folder.parentId, folder.space, "media");
+      const depth = folder.parentId ? getFolderDepthInternal(folder.parentId) + 1 : 1;
+      if (depth > MAX_FOLDER_DEPTH) throw new Error("Folder exceeds maximum depth.");
+      foldersById.set(folder.id, folder);
+    }
+
+    function syncPersistedCatalog({ media = [], folders = [], entries = [], tags = [], removedEntityIds = [] }) {
+      const current = snapshot();
+      const records = new Map(current.media.map((item) => [item.id, item]));
+      media.forEach((item) => records.set(item.id, { ...records.get(item.id), ...item }));
+      const names = new Map([
+        ["builtin:character", "角色"], ["builtin:scene", "场景"], ["builtin:object", "物品"], ["builtin:sound", "音效"],
+        ...tags.map((item) => [item.id, item.name]),
+      ]);
+      const ids = new Set([...mediaById.values()].filter((item) => item.workspaceAssetId).map((item) => item.id));
+      media.forEach((item) => ids.add(item.id));
+      // A deletion response can precede the Host's separate Entity catalog. Stage
+      // both placement removals together so the projection never contains a group without its media.
+      const removed = new Set(removedEntityIds);
+      const remainingPlacements = current.placements.filter((item) => !(item.item.kind === "entity"
+        && item.space === "personal" && removed.has(item.item.id)));
+      const remainingEntities = current.entities.filter((entity) => !removed.has(entity.id)
+        || remainingPlacements.some((placement) => placement.item.kind === "entity" && placement.item.id === entity.id));
+      const next = createAssetLibraryStore({
+        media: [...records.values()], entities: remainingEntities,
+        folders: [...current.folders.filter((item) => !item.persisted),
+          ...folders.map((item) => ({ ...item, kind: "media", persisted: true }))],
+        placements: [...remainingPlacements.filter((item) => !(item.item.kind === "media" && ids.has(item.item.id)
+          && mutableSpaces.has(item.space))),
+          ...entries.map((item) => ({ item: { kind: "media", id: item.assetId }, space: item.space,
+            folderId: item.folderId, displayName: item.displayName,
+            tags: item.tagIds.map((id) => names.get(id)).filter(Boolean), persisted: true }))],
+      }).snapshot();
+      mediaById.clear();
+      next.media.forEach((item) => mediaById.set(item.id, item));
+      entitiesById.clear();
+      persistedEntityIds.clear();
+      next.entities.forEach((item) => {
+        entitiesById.set(item.id, item);
+        if (Number.isInteger(item.version) && item.version > 0) persistedEntityIds.add(item.id);
+      });
+      foldersById.clear();
+      next.folders.forEach((item) => foldersById.set(item.id, item));
+      placementsByKey.clear();
+      next.placements.forEach((item) => placementsByKey.set(placementKey(item.item, item.space), item));
+    }
+
     function listItems(options = {}) {
       const space = resolveSpace(options.space);
       const kind = options.kind === "all" ? "all" : resolveItemKind(options.kind || "media");
@@ -439,7 +501,7 @@
       const items = [...placementsByKey.values()]
         .filter((placement) => placement.space === space && (kind === "all" || placement.item.kind === kind))
         .filter((placement) => !hasFolderFilter || placement.folderId === folderId)
-        .map((placement) => ({ placement, record: requireRecord(placement.item) }))
+        .map((placement) => ({ placement, record: placementRecord(placement) }))
         .filter(({ placement, record }) => {
           if (kind === "all" && placement.item.kind === "entity") {
             const visibleMedia = record.mediaRefs
@@ -477,7 +539,9 @@
     function getMedia(item) {
       const ref = resolveItemRef(item, "media");
       const record = mediaById.get(ref.id);
-      return record ? cloneValue(record) : null;
+      const space = item?.space || "personal";
+      const placement = placementsByKey.get(placementKey(ref, space));
+      return record ? cloneValue(placement ? placementRecord(placement) : record) : null;
     }
 
     function getEntity(item) {
@@ -489,7 +553,7 @@
     function getEntityMedia(item) {
       const entity = getEntity(item);
       if (!entity) return [];
-      return entity.mediaRefs.map((ref) => cloneValue(mediaById.get(ref.mediaId))).filter(Boolean);
+      return entity.mediaRefs.map((ref) => getMedia({ kind: "media", id: ref.mediaId, space: item?.space || "personal" })).filter(Boolean);
     }
 
     function listEntityMedia({ entityId, space = "personal", query = "", mediaKind = "all" } = {}) {
@@ -503,7 +567,7 @@
       const allItems = entity.mediaRefs.map(({ mediaId }) => {
         const record = mediaById.get(mediaId);
         const placement = placementsByKey.get(placementKey({ kind: "media", id: mediaId }, resolvedSpace));
-        return record && placement ? { ...cloneValue(record), kind: "media", placement: cloneValue(placement) } : null;
+        return record && placement ? { ...cloneValue(placementRecord(placement)), kind: "media", placement: cloneValue(placement) } : null;
       }).filter(Boolean);
       return {
         entity,
@@ -563,7 +627,7 @@
             keys.forEach((key) => skippedExistingKeys.add(key));
             continue;
           }
-          media.push(cloneValue(entry));
+          media.push(getMedia({ kind: "media", id, space: resolvedSpace }));
         }
       }
       return { media, missingCount: unavailable.size, existingCount };
@@ -807,6 +871,7 @@
     function renameFolder({ folderId, name, space } = {}) {
       const folder = foldersById.get(String(folderId || ""));
       if (!folder) throw new Error(`Folder not found: ${String(folderId || "")}`);
+      if (folder.persisted) throw new Error("已保存目录的此项操作尚未开放");
       const resolvedSpace = resolveSpace(space, folder.space);
       assertMutable(resolvedSpace);
       if (folder.space !== resolvedSpace) throw new Error(`Folder ${folder.id} does not belong to ${resolvedSpace}.`);
@@ -825,6 +890,7 @@
     function moveFolder({ folderId, parentId = null, space } = {}) {
       const folder = foldersById.get(String(folderId || ""));
       if (!folder) throw new Error(`Folder not found: ${String(folderId || "")}`);
+      if (folder.persisted) throw new Error("已保存目录的此项操作尚未开放");
       const resolvedSpace = resolveSpace(space, folder.space);
       assertMutable(resolvedSpace);
       if (folder.space !== resolvedSpace) throw new Error(`Folder ${folder.id} does not belong to ${resolvedSpace}.`);
@@ -1038,6 +1104,7 @@
     function removeFolder({ folderId, space } = {}) {
       const folder = foldersById.get(String(folderId || ""));
       if (!folder) throw new Error(`Folder not found: ${String(folderId || "")}`);
+      if (folder.persisted) throw new Error("已保存目录的此项操作尚未开放");
       const resolvedSpace = resolveSpace(space, folder.space);
       assertMutable(resolvedSpace);
       if (folder.space !== resolvedSpace) throw new Error(`Folder ${folder.id} does not belong to ${resolvedSpace}.`);
@@ -1076,6 +1143,8 @@
       snapshot,
       registerMedia,
       syncPersistedMedia,
+      syncPersistedCatalog,
+      syncPersistedFolder,
       registerPersistedEntity,
       syncPersistedEntities,
       updateEntity,

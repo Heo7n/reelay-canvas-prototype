@@ -39,6 +39,11 @@
     return String(value ?? "").replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
   }
 
+  function renderFileName(name) {
+    const { stem, extension } = root.REELAY_CANVAS_FILE_NAME.splitFileName(name);
+    return `<span class="entity-editor-file-name-stem">${escapeHtml(stem)}</span><span class="entity-editor-file-name-extension">${escapeHtml(extension)}</span>`;
+  }
+
   function icon(name, className = "") {
     return `<i${className ? ` class="${className}"` : ""} data-lucide="${name}" aria-hidden="true"></i>`;
   }
@@ -234,7 +239,7 @@
       <article class="${classNames("entity-editor-media-card", selected && "selected", isCover && "cover")}" role="listitem" data-entity-editor-media="${safeId}" data-media-kind="${media.mediaKind}">
         <button class="entity-editor-media-select" type="button" aria-label="预览 ${safeName}" aria-pressed="${selected}" data-entity-editor-media-select="${safeId}"${interactive ? "" : ' disabled aria-disabled="true"'}>
           <span class="entity-editor-media-thumbnail">${renderCardMedia(media)}</span>
-          <span class="entity-editor-media-name" title="${safeName}">${safeName}</span>
+          <span class="entity-editor-media-name" title="${safeName}">${renderFileName(media.name)}</span>
         </button>
         ${isCover ? '<span class="entity-editor-cover-badge">封面</span>' : ""}
         ${mutable ? `
@@ -384,7 +389,7 @@
                     ${selectedFileParts.extension ? `<span aria-label="固定扩展名 ${escapeHtml(selectedFileParts.extension)}">${escapeHtml(selectedFileParts.extension)}</span>` : ""}
                   </label>
                 ` : `
-                  <button class="entity-editor-preview-filename" type="button" title="双击重命名文件（扩展名保持不变）" aria-label="文件名称 ${escapeHtml(selectedFileName)}，双击或按 F2 重命名" data-entity-editor-preview-name="${escapeHtml(selectedId)}"${editable ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(selectedFileName)}</button>
+                    <button class="entity-editor-preview-filename" type="button" title="双击重命名文件（扩展名保持不变）" aria-label="文件名称 ${escapeHtml(selectedFileName)}，双击或按 F2 重命名" data-entity-editor-preview-name="${escapeHtml(selectedId)}"${editable ? "" : ' disabled aria-disabled="true"'}>${renderFileName(selectedFileName)}</button>
                 `}
               ` : `
                 <span class="entity-editor-preview-kind-icon">${headingIcon("image")}</span>

@@ -108,6 +108,7 @@ export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, 
       />
       <AccountSettingsDialog
         actor={actor}
+        mediaAssetRepository={mediaAssetRepository}
         workspace={currentWorkspace}
         initialSection={accountSettingsSection}
         open={accountSettingsOpen}

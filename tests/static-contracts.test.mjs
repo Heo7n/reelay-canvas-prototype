@@ -1348,7 +1348,7 @@ test("multi-selection uses a quiet shared container and one aggregate output por
   assert.doesNotMatch(appCss, /--multi-selection-shadow-near|--multi-selection-shadow-far|--multi-selection-highlight/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-hover[\s\S]*?cursor:\s*grab/);
   assert.match(appCss, /\.canvas-shell\.selection-frame-pressed[\s\S]*?cursor:\s*grabbing/);
-  assert.match(appCss, /\.icon-toolbar-button\s*\{[^}]*background:\s*transparent/);
+  assert.match(appCss, /\.icon-toolbar-button\s*(?:,[^{}]+)?\{[^}]*background:\s*transparent/);
   assert.match(appSource, /function syncSelectionOverlayProjection\(\)[\s\S]*?getAggregatePortGeometry\(state\.scale\)[\s\S]*?--multi-selection-port-offset[\s\S]*?portField\.portOffset[\s\S]*?--multi-selection-port-visual-size[\s\S]*?portField\.visualSize/);
   assert.match(appSource, /id: "selection:output"[\s\S]*?options: canvasConnectionInteraction\.getAggregatePortGeometry\(state\.scale\)/);
   assert.doesNotMatch(appSource, /--multi-selection-port-scale/);
@@ -1692,19 +1692,21 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(appSource, /function isCanvasDropTarget\(target\)[\s\S]*?closest\("#canvasShell"\)/);
   assert.match(appSource, /hasSupportedPayload && !isCanvasDropTarget\(event\.target\)/);
   assert.doesNotMatch(appSource, /window\.prompt\("新建文件夹名称"/);
-  assert.match(appSource, /window\.parent !== window && space !== "personal"[\s\S]*?仅支持上传到个人空间/);
+  assert.match(html, /canvas-library-upload-controller\.js"/);
+  assert.match(html, /canvas-library-delete-controller\.js"/);
+  assert.doesNotMatch(appSource, /function persistAssetLibraryFiles\(/);
   assert.match(appSource, /event\.target\.closest\("\[data-library-batch-toggle\]"\)[\s\S]*?state\.librarySelectedIds\.size === 0[\s\S]*?state\.libraryToolbarMenu = null/);
 
   assert.match(appSource, /function getVisibleAssetLibraryContent\(\)[\s\S]*?const kind = "all"/);
   assert.match(appSource, /flatPlatformResults = state\.librarySpace === "platform"[\s\S]*?flatPlatformResults \? \[\]/);
   assert.match(renderAssetLibrarySource, /const canManageFolders = mutable;[\s\S]*?data-library-folder-capability", canManageFolders \? "true" : "false"/);
   assert.doesNotMatch(renderAssetLibrarySource, /canManageFolders\s*=\s*mutable\s*&&\s*section\s*===\s*"media"/);
-  assert.match(createFolderSource, /MAX_DIRECTORY_LEVELS[\s\S]*?kind:\s*getAssetLibraryFolder\(\)\?\.kind \|\| "media"/);
+  assert.match(createFolderSource, /canCreateAssetLibraryFolder\(\)[\s\S]*?canvasLibraryDirectory\.beginCreate\(state\.libraryFolderId\)/);
   assert.doesNotMatch(createFolderSource, /state\.librarySection === "entity"/);
   assert.match(renderAssetLibrarySource, /allowedBatchActions:/);
   assert.doesNotMatch(renderAssetLibrarySource, /section === "entity"\s*\?\s*\[\]/);
   assert.match(renderAssetLibrarySource, /allowedActions:/);
-  assert.match(runLibraryActionSource, /if \(includesPersistedEntity && \["move", "share-organization", "delete"\]\.includes\(action\)\) \{\s*showActionToast\("素材组的移动、共享与删除将在对应持久化切片接入；本次未执行"\);\s*return;\s*\}/);
+  assert.match(runLibraryActionSource, /if \(includesPersistedEntity && \["move", "share-organization"\]\.includes\(action\)\)/);
   assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetsToCanvas/);
   assert.match(appSource, /action === "save-personal"[\s\S]*?保存平台素材到个人素材库尚未接入/);
   assert.doesNotMatch(appSource, /savePlatformMediaToPersonal|savePlatformSelectionToPersonal|save-material/);

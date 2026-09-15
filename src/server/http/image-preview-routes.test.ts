@@ -84,7 +84,7 @@ it("serves small personal previews, keeps originals and reauthorizes every condi
   const full = await app.inject({ method: "GET", url: contentUrl, headers: { cookie: owner } });
   expect(full.rawPayload).toEqual(original);
   expect(full.headers["cache-control"]).toBe("private, no-cache");
-  vi.spyOn(assets, "getPersonalAsset").mockResolvedValue(null);
+  vi.spyOn(assets, "getLibraryAsset").mockResolvedValue(null);
   expect((await app.inject({ method: "GET", url: previewUrl, headers: { cookie: owner, "if-none-match": etag } })).statusCode).toBe(404);
   expect((await app.inject({ method: "GET", url: previewUrl, headers: { cookie: owner } })).statusCode).toBe(404);
 });
@@ -178,7 +178,7 @@ it("revalidates original bytes without rereading storage, including HEAD, and st
     expect([401, 404]).toContain(rejected.statusCode);
     expect(rejected.headers["cache-control"]).toBe("private, no-store");
   }
-  vi.spyOn(assets, "getPersonalAsset").mockResolvedValue(null);
+  vi.spyOn(assets, "getLibraryAsset").mockResolvedValue(null);
   const revoked = await app.inject({ method: "GET", url, headers: { cookie: owner, "if-none-match": etag } });
   expect(revoked.statusCode).toBe(404);
   expect(revoked.headers["cache-control"]).toBe("private, no-store");

@@ -9,8 +9,20 @@ const source = await readFile(
   "utf8",
 );
 const context = vm.createContext({});
+new vm.Script(await readFile(new URL("../src/legacy-canvas/canvas-file-name.js", import.meta.url), "utf8")).runInContext(context);
 new vm.Script(source, { filename: "canvas-asset-library-view.js" }).runInContext(context);
 const view = context.REELAY_CANVAS_ASSET_LIBRARY_VIEW;
+
+test("organization contribution does not expose deletion without a separate delete capability", () => {
+  for (const render of [
+    () => view.renderMediaCard({ media: { id: "m", name: "素材", type: "image" }, space: "organization", mutable: true, menuOpen: true, canDelete: false }),
+    () => view.renderFolderCard({ folder: { id: "f", name: "目录", space: "organization" }, space: "organization", mutable: true, menuOpen: true, canDelete: false }),
+  ]) {
+    const markup = render();
+    assert.doesNotMatch(markup, /data-library-menu-item="delete"/);
+    assert.match(markup, /data-library-menu-item="rename"/);
+  }
+});
 
 test("registers the complete frozen canvas asset-library view API", () => {
   assert.ok(Object.isFrozen(view));
@@ -341,6 +353,80 @@ test("directory tree keeps five nested levels readable and marks the current fol
   assert.doesNotMatch(markup, /<四级/);
 });
 
+test("directory actions respect explicit permissions, root ownership and the five-level create limit", () => {
+  const folders = [
+    { id: "one", name: "角色", parentId: null },
+    { id: "two", name: "设计", parentId: "one" },
+    { id: "three", name: "材质", parentId: "two" },
+    { id: "four", name: "最终方案", parentId: "three" },
+  ];
+  const options = { folders, expandedFolderIds: ["one", "two", "three"], currentFolderId: "four" };
+  const tree = JSDOM.fragment(view.renderDirectoryTree({ ...options, space: "personal", canCreate: true, canRename: true, canDelete: true }));
+  const root = tree.querySelector('.asset-library-directory-row.root');
+  assert.equal(root.querySelector('[data-library-directory-create]').dataset.libraryDirectoryCreate, "");
+  assert.equal(root.querySelector('[data-library-directory-rename], [data-library-directory-delete]'), null);
+  const leaf = tree.querySelector('[data-library-directory-select="four"]').parentElement;
+  assert.equal(leaf.getAttribute("aria-selected"), "true");
+  assert.ok(leaf.querySelector('.asset-library-directory-check [data-lucide="check"]'));
+  assert.deepEqual([...leaf.querySelector('.asset-library-directory-actions-overlay').children].map((button) => button.firstElementChild.dataset.lucide), ["plus", "pencil", "trash-2"]);
+  assert.equal(leaf.querySelector('[data-library-directory-create]').disabled, true);
+  assert.equal(leaf.querySelector('[data-library-directory-create]').title, "最多支持 5 级目录");
+  const member = JSDOM.fragment(view.renderDirectoryTree({ ...options, space: "organization", canCreate: true, canRename: false, canDelete: false }));
+  assert.equal(member.querySelectorAll('[data-library-directory-create]').length, 5);
+  assert.equal(member.querySelector('[data-library-directory-rename], [data-library-directory-delete]'), null);
+  for (const capabilities of [{}, { space: "platform", canCreate: true, canRename: true, canDelete: true }]) {
+    const readonly = JSDOM.fragment(view.renderDirectoryTree({ ...options, ...capabilities }));
+    assert.equal(readonly.querySelector('.asset-library-directory-actions-overlay'), null);
+    assert.equal(readonly.querySelectorAll('[data-library-directory-select]').length, 5);
+  }
+});
+
+test("a create draft is the first child of its parent, escapes user input and does not invent a folder", () => {
+  const tree = JSDOM.fragment(view.renderDirectoryTree({
+    folders: [{ id: "parent", name: "角色", parentId: null }, { id: "child", name: "已有", parentId: "parent" }],
+    canCreate: true,
+    directoryDraft: { kind: "create", parentId: "parent", name: '<新名称 & "素材">', error: '名称 <冲突>', pending: false },
+  }));
+  const parent = tree.querySelector('[data-library-directory-select="parent"]').parentElement;
+  const draft = parent.nextElementSibling;
+  assert.equal(parent.getAttribute("aria-expanded"), "true");
+  assert.equal(draft.dataset.libraryDirectoryDraft, "create");
+  assert.equal(draft.getAttribute("aria-level"), "3");
+  const input = draft.querySelector('[data-library-directory-draft-input]');
+  assert.equal(input.value, '<新名称 & "素材">');
+  assert.equal(input.getAttribute("aria-label"), "文件夹名称");
+  assert.equal(input.dataset.libraryDirectoryDraftKind, "create");
+  assert.equal(input.maxLength, 100);
+  assert.equal(input.getAttribute("aria-invalid"), "true");
+  assert.equal(draft.querySelector('[role="alert"]').textContent, '名称 <冲突>');
+  assert.equal(draft.querySelector('[role="alert"]').id, input.getAttribute("aria-describedby"));
+  assert.ok(draft.querySelector('[data-library-directory-draft-confirm]'));
+  assert.ok(draft.querySelector('[data-library-directory-draft-cancel]'));
+  assert.ok(draft.nextElementSibling.querySelector('[data-library-directory-select="child"]'));
+  assert.equal(tree.querySelectorAll('[data-library-directory-select]').length, 3);
+  assert.equal(tree.querySelector('新名称'), null);
+});
+
+test("root create drafts open an empty root while rename replaces only the edited row", () => {
+  const create = JSDOM.fragment(view.renderDirectoryTree({ rootExpanded: false, canCreate: true,
+    directoryDraft: { kind: "create", parentId: null, name: "新目录" } }));
+  assert.equal(create.querySelector('.root').getAttribute('aria-expanded'), 'true');
+  assert.equal(create.querySelector('[data-library-directory-draft]').getAttribute('aria-level'), '2');
+  const options = { folders: [{ id: "parent", name: "角色", parentId: null }, { id: "child", name: "已有", parentId: "parent" }],
+    expandedFolderIds: ["parent"], canCreate: true, canRename: true, canDelete: true,
+    directoryDraft: { kind: "rename", folderId: "parent", name: "角色设定", pending: true } };
+  const rename = JSDOM.fragment(view.renderDirectoryTree(options));
+  assert.equal(rename.querySelector('[data-library-directory-select="parent"]'), null);
+  assert.ok(rename.querySelector('[data-library-directory-select="child"]'));
+  assert.equal(rename.querySelector('[data-library-directory-draft-input]').getAttribute('aria-label'), '重命名文件夹');
+  assert.equal(rename.querySelector('[data-library-directory-draft]').getAttribute('aria-level'), '2');
+  assert.equal(rename.querySelectorAll('[data-library-directory-draft]').length, 1);
+  assert.ok([...rename.querySelectorAll('button, input')].every((node) => node.disabled));
+  const platform = JSDOM.fragment(view.renderDirectoryTree({ ...options, space: "platform" }));
+  assert.equal(platform.querySelector('[data-library-directory-draft]'), null);
+  assert.equal(platform.querySelector('[data-library-directory-select="parent"]').disabled, false);
+});
+
 test("personal media cards expose selected, menu, rename, and all single-item actions", () => {
   const base = {
     media: { id: "media-1", name: "镜头 A", mediaKind: "video" },
@@ -386,6 +472,31 @@ test("personal media cards expose selected, menu, rename, and all single-item ac
   assert.doesNotMatch(audioMenu, /data-library-menu-item="review"/);
   assert.doesNotMatch(audioMenu, /提交 Seedance 合规审核/);
   assert.match(audioMenu, /data-library-menu-item="move"/);
+});
+
+test("media name display keeps the full extension separate without changing names, editing or non-file labels", () => {
+  const name = 'ChatGPT Image <角色 & "正面">.PNG';
+  const media = { id: "image", name, mediaKind: "image" };
+  const rendered = JSDOM.fragment(view.renderMediaCard({ media, mutable: true }));
+  const label = rendered.querySelector('.asset-library-card-name');
+  assert.equal(label.querySelector('.asset-library-file-name-stem').textContent, 'ChatGPT Image <角色 & "正面">');
+  assert.equal(label.querySelector('.asset-library-file-name-extension').textContent, '.PNG');
+  assert.equal(label.textContent, name);
+  assert.equal(label.title, name);
+  assert.equal(rendered.querySelector('.asset-library-card-namebar').getAttribute('aria-label'), `名称 ${name}，按 Enter 或 F2 重命名`);
+  assert.equal(rendered.querySelector('角色'), null);
+  const editing = JSDOM.fragment(view.renderMediaCard({ media, mutable: true, renaming: true }));
+  assert.equal(editing.querySelector('input').value, name);
+  assert.equal(editing.querySelector('.asset-library-file-name-stem'), null);
+  for (const markup of [
+    view.renderFolderCard({ folder: { id: "folder", name: "目录.png" } }),
+    view.renderEntityCard({ entity: { id: "group", name: "素材组.png" } }),
+  ]) {
+    const fragment = JSDOM.fragment(markup);
+    assert.equal(fragment.querySelector('.asset-library-file-name-stem'), null);
+    assert.match(fragment.querySelector('.asset-library-card-name').textContent, /\.png$/);
+  }
+  assert.equal(media.name, name);
 });
 
 test("media cards build previews only from structured safe media fields", () => {

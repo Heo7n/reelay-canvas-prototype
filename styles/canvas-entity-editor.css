@@ -492,6 +492,7 @@ html[data-theme="light"] .entity-editor-preview {
 }
 
 .entity-editor-media-name {
+  display: flex;
   min-width: 0;
   height: 28px;
   line-height: 28px;
@@ -671,12 +672,24 @@ html[data-theme="light"] .entity-editor-preview {
 }
 
 .entity-editor-preview-filename {
+  display: flex;
   max-width: min(420px, 42vw);
   height: 28px;
   padding: 0 5px;
   border-radius: 6px;
   background: transparent;
   cursor: text;
+}
+
+.entity-editor-file-name-stem {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+
+.entity-editor-file-name-extension {
+  flex: 0 0 auto;
 }
 
 .entity-editor-preview-filename:hover:not(:disabled) {

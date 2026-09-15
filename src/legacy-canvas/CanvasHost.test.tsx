@@ -7,6 +7,8 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationError } from "../application/shared/ApplicationError";
 import type { CanvasDocument } from "../domain/canvas/canvas-document";
+import type { MediaLibraryCatalog } from "../domain/asset/media-library";
+import { buildMediaUploadPolicy } from "../domain/asset/media-upload-policy";
 import { CanvasHost } from "./CanvasHost";
 
 afterEach(cleanup);
@@ -120,6 +122,444 @@ const progressiveContext = {
   ...editableContext,
   capabilities: { ...editableContext.capabilities, assetPersistence: true, entityPersistence: true },
 };
+
+describe("CanvasHost media library", () => {
+  function libraryFixture() {
+    const catalog: MediaLibraryCatalog = { folders: [{ id: "folder-1", name: "参考", parentId: null, space: "personal" }], tags: [], entries: [] };
+    const library = { list: vi.fn(async () => catalog), delete: vi.fn(async () => catalog), save: vi.fn(async () => catalog),
+      createFolder: vi.fn(async () => catalog.folders[0]!), renameFolder: vi.fn(async () => ({ ...catalog.folders[0]!, name: "更新目录" })), createTag: vi.fn(async () => ({ id: "tag", name: "自定义", space: "personal" as const })) };
+    const media = { library, listProjectAssets: vi.fn(async () => []), listPersonalAssets: vi.fn(async () => []) };
+    return { catalog, library, media };
+  }
+
+  it("delivers server upload policy after init without delaying the canvas document", async () => {
+    const { media } = libraryFixture();
+    const loading = pendingResult<ReturnType<typeof buildMediaUploadPolicy>>();
+    const getUploadPolicy = vi.fn(() => loading.promise);
+    render(<CanvasHost repository={repository} context={progressiveContext}
+      mediaAssetRepository={{ ...media, getUploadPolicy } as never} entityRepository={{ listPersonal: async () => [] } as never} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchProgressiveReady(frame);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:init" }), window.location.origin));
+    expect(getUploadPolicy).toHaveBeenCalledWith("organization-1");
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-upload-policy", status: "loading", policy: null }), window.location.origin));
+    const policy = buildMediaUploadPolicy(64 * 1024 * 1024);
+    await act(async () => loading.resolve(policy));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-upload-policy", status: "ready", policy }), window.location.origin));
+  });
+
+  it("cancels only the active granted upload and exposes terminal service codes for safe retry", async () => {
+    const { media } = libraryFixture();
+    const createUploadIntent = vi.fn().mockResolvedValueOnce({ uploadIntent: { id: "granted", expiresAt: "2026-09-20T00:00:00Z" },
+      upload: { url: "/upload", method: "PUT", headers: {} } }).mockRejectedValueOnce(
+      new ApplicationError("conflict", "旧上传已取消", { serviceCode: "asset_upload_cancelled" }));
+    const cancelUpload = vi.fn(async () => ({ id: "granted", status: "cancelled" as const }));
+    render(<CanvasHost repository={repository} context={progressiveContext}
+      mediaAssetRepository={{ ...media, createUploadIntent, cancelUpload } as never} entityRepository={{ listPersonal: async () => [] } as never} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    dispatchCanvasMessage(frame, readyMessage);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:init" }), window.location.origin));
+    const upload = { source: "reelay-legacy-canvas", type: "canvas:create-media-upload", protocolVersion: 1, instanceId: canvasInstanceId,
+      requestId: "original", idempotencyKey: "original-key", target: "personal", mediaKind: "image", displayName: "cover.png",
+      contentType: "image/png", byteSize: 42, checksumSha256: "a".repeat(64) };
+    dispatchCanvasMessage(frame, upload);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-upload-grant" }), window.location.origin));
+    const cancel = { source: "reelay-legacy-canvas", type: "canvas:cancel-media-upload", protocolVersion: 1, instanceId: canvasInstanceId,
+      requestId: "original", uploadId: "forged" };
+    dispatchCanvasMessage(frame, cancel);
+    expect(cancelUpload).not.toHaveBeenCalled();
+    dispatchCanvasMessage(frame, { ...cancel, uploadId: "granted" });
+    await waitFor(() => expect(cancelUpload).toHaveBeenCalledWith("organization-1", "granted"));
+    dispatchCanvasMessage(frame, { ...upload, requestId: "retry" });
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:asset-command-error",
+      requestId: "retry", serviceCode: "asset_upload_cancelled", message: "旧上传已取消" }), window.location.origin));
+  });
+
+  it("renames a folder in Host-owned scope and publishes the confirmed updated folder", async () => {
+    const { library, media } = libraryFixture();
+    const saveDocument = vi.fn();
+    render(<CanvasHost repository={{ ...repository, save: saveDocument }} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, instanceId: canvasInstanceId,
+      requestId: "rename-directory", command: "rename-folder", space: "personal", folderId: "folder-1", name: "更新目录", expectedName: "参考" };
+    act(() => dispatchCanvasMessage(frame, command));
+    await waitFor(() => expect(library.renameFolder).toHaveBeenCalledExactlyOnceWith({ workspaceId: "organization-1", space: "personal", folderId: "folder-1", name: "更新目录", expectedName: "参考" }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result", command: "rename-folder", requestId: "rename-directory", result: { id: "folder-1", space: "personal", name: "更新目录", parentId: null } }), window.location.origin));
+    act(() => dispatchProgressiveReady(frame, "renamed-frame"));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", instanceId: "renamed-frame", libraryCatalog: expect.objectContaining({ folders: [{ id: "folder-1", space: "personal", name: "更新目录", parentId: null }] }) }), window.location.origin));
+    expect(saveDocument).not.toHaveBeenCalled();
+  });
+
+  it("does not forward organization folder renaming by a regular member", async () => {
+    const { library, media } = libraryFixture();
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never}
+      context={{ ...progressiveContext, workspace: { ...progressiveContext.workspace, role: "member" } }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "rename-denied", command: "rename-folder", space: "organization", folderId: "folder-1", name: "New", expectedName: "Original" }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:asset-command-error", requestId: "rename-denied", code: "forbidden" }), window.location.origin));
+    expect(library.renameFolder).not.toHaveBeenCalled();
+  });
+
+  it("refreshes personal groups after deletion and reports the confirmed scoped catalog without saving the canvas", async () => {
+    const { catalog, library, media } = libraryFixture();
+    const listPersonal = vi.fn(async () => []);
+    const saveDocument = vi.fn();
+    render(<CanvasHost repository={{ ...repository, save: saveDocument }} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(listPersonal).toHaveBeenCalledTimes(1));
+    const items = [{ kind: "entity", id: "group", expectedVersion: 2 }, { kind: "folder", id: "folder-1" }];
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "delete-library", command: "delete", space: "personal", items }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result",
+      requestId: "delete-library", command: "delete", result: catalog }), window.location.origin));
+    expect(library.delete).toHaveBeenCalledExactlyOnceWith({ workspaceId: "organization-1", space: "personal", items });
+    expect(listPersonal).toHaveBeenCalledTimes(2);
+    expect(saveDocument).not.toHaveBeenCalled();
+  });
+
+  it("does not restore deleted groups or media when the initial personal catalog arrives late", async () => {
+    const { library, media } = libraryFixture();
+    const group = { id: "group", name: "组", description: "", version: 1, mediaRefs: [{ assetId: "asset", order: 0 }], coverAssetId: "asset" };
+    const initialEntities = pendingResult<typeof group[]>();
+    const listPersonal = vi.fn().mockReturnValueOnce(initialEntities.promise).mockResolvedValue([]);
+    media.listPersonalAssets.mockResolvedValueOnce([{ id: "asset", workspaceId: "organization-1", objectVersion: 1, mediaKind: "image", displayName: "素材",
+      contentType: "image/png", byteSize: 8, checksumSha256: "a".repeat(64), contentUrl: "/api/media/asset/content", createdAt: "2026-09-15T00:00:00.000Z", updatedAt: "2026-09-15T00:00:00.000Z" }] as never);
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never} entityRepository={{ listPersonal } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(library.list).toHaveBeenCalled());
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "delete-before-load", command: "delete", space: "personal", items: [{ kind: "entity", id: "group", expectedVersion: 1 }, { kind: "media", id: "asset" }] }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result", command: "delete" }), window.location.origin));
+    postMessage.mockClear();
+    await act(async () => initialEntities.resolve([group]));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", entities: [], assets: [] }), window.location.origin));
+    const catalogMessages = postMessage.mock.calls.map(([message]) => message).filter((message) => message.type === "host:workspace-asset-catalog");
+    expect(catalogMessages.every((message) => message.entities.length === 0 && message.assets.length === 0)).toBe(true);
+  });
+
+  it("rejects organization deletion by a member before forwarding the request", async () => {
+    const { library, media } = libraryFixture();
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never}
+      context={{ ...progressiveContext, workspace: { ...progressiveContext.workspace, role: "member" } }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "delete-denied", command: "delete", space: "organization", items: [{ kind: "media", id: "asset" }] }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:asset-command-error", requestId: "delete-denied", code: "forbidden" }), window.location.origin));
+    expect(library.delete).not.toHaveBeenCalled();
+  });
+
+  it("delivers the library when the separate entity catalog fails", async () => {
+    const { catalog, media } = libraryFixture();
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => { throw new Error("entity unavailable"); }) } as never}
+      context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:workspace-asset-catalog", libraryCatalog: catalog,
+    }), window.location.origin));
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:asset-availability", workspaceCatalog: "unavailable", mediaLibrary: "ready",
+    }), window.location.origin);
+  });
+
+  it("recovers personal media from the library projection when the older personal-list endpoint fails", async () => {
+    const { catalog, media } = libraryFixture();
+    catalog.entries.push({ assetId: "asset", assetVersion: 1, mediaKind: "image", displayName: "素材",
+      contentType: "image/png", byteSize: 8, checksumSha256: "a".repeat(64), contentUrl: "/api/media/asset/content",
+      createdAt: "2026-09-15T00:00:00.000Z", space: "personal", folderId: null, tagIds: [] });
+    media.listPersonalAssets.mockRejectedValueOnce(new Error("personal list unavailable"));
+    const entity = { id: "entity", name: "素材组", description: "", version: 1,
+      mediaRefs: [{ assetId: "asset", order: 0 }], coverAssetId: "asset" };
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => [entity]) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:workspace-asset-catalog", libraryCatalog: catalog,
+      assets: [expect.objectContaining({ assetId: "asset" })], entities: [entity],
+    }), window.location.origin));
+  });
+
+  it("uses host-owned scope and returns confirmed data without writing the canvas document", async () => {
+    const { catalog, library, media } = libraryFixture();
+    const saveDocument = vi.fn();
+    render(<CanvasHost repository={{ ...repository, save: saveDocument }} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(library.list).toHaveBeenCalledWith("organization-1"));
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "save-library", command: "save", space: "organization", folderId: null,
+      tagIds: ["builtin:scene"], items: [{ assetId: "asset", displayName: "库名称", action: "save" }] };
+    act(() => dispatchCanvasMessage(frame, command));
+    await waitFor(() => expect(library.save).toHaveBeenCalledExactlyOnceWith({ workspaceId: "organization-1", projectId: "project-1",
+      space: "organization", folderId: null, tagIds: command.tagIds, items: command.items }));
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:media-library-result", requestId: "save-library", command: "save", result: catalog,
+    }), window.location.origin);
+    expect(saveDocument).not.toHaveBeenCalled();
+  });
+
+  it("does not replay the initial library over a save completed while Entity loading is pending", async () => {
+    const { library, media } = libraryFixture();
+    const entities = pendingResult<[]>();
+    const latest = { folders: [{ id: "saved-folder", name: "新目录", parentId: null, space: "personal" as const }], tags: [], entries: [] };
+    library.save.mockResolvedValueOnce(latest);
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(() => entities.promise) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(1));
+    act(() => dispatchCanvasMessage(frame, {
+      source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "save-before-entities", command: "save", space: "personal", folderId: null,
+      tagIds: [], items: [{ assetId: "asset", displayName: "素材", action: "save" }],
+    }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result", result: latest }), window.location.origin));
+    await act(async () => entities.resolve([]));
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:workspace-asset-catalog").map(([message]) => message.libraryCatalog)).toEqual([latest]);
+  });
+
+  it.each(["success", "failure"] as const)("settles an earlier list %s before a later save and keeps the confirmed saved snapshot", async (outcome) => {
+    const { library, media } = libraryFixture();
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const oldRead = pendingResult<MediaLibraryCatalog>();
+    library.list.mockReturnValueOnce(oldRead.promise);
+    const latest: MediaLibraryCatalog = { folders: [{ id: "latest", name: "最新", parentId: null, space: "personal" }], tags: [], entries: [] };
+    library.save.mockResolvedValueOnce(latest);
+    const base = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, instanceId: canvasInstanceId };
+    act(() => dispatchCanvasMessage(frame, { ...base, requestId: "old-read", command: "list" }));
+    act(() => dispatchCanvasMessage(frame, { ...base, requestId: "latest-save", command: "save", space: "personal", folderId: null,
+      tagIds: [], items: [{ assetId: "asset", displayName: "素材", action: "save" }] }));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(2));
+    expect(library.save).not.toHaveBeenCalled();
+    await act(async () => outcome === "success" ? oldRead.resolve({ folders: [], tags: [], entries: [] }) : oldRead.reject(new Error("old failure")));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result", requestId: "latest-save", result: latest }), window.location.origin));
+    expect(postMessage.mock.calls.filter(([message]) => message.requestId === "old-read" || message.requestId === "latest-save")
+      .map(([message]) => message.requestId)).toEqual(["old-read", "latest-save"]);
+    act(() => dispatchProgressiveReady(frame, "replacement-after-save"));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:workspace-asset-catalog", instanceId: "replacement-after-save", libraryCatalog: latest,
+    }), window.location.origin));
+    expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", mediaLibrary: "ready" });
+  });
+
+  it.each(["create-folder", "rename-folder"] as const)("includes a cancelled draft's confirmed %s in the next draft's list", async (command) => {
+    const { library, media, catalog } = libraryFixture();
+    const write = pendingResult<typeof catalog.folders[0]>();
+    const folder = { id: command === "create-folder" ? "new-folder" : "folder-1", name: "已确认目录", space: "personal" as const, parentId: null };
+    const latest = { ...catalog, folders: [...catalog.folders.filter((item) => item.id !== folder.id), folder] };
+    if (command === "create-folder") library.createFolder.mockReturnValueOnce(write.promise);
+    else library.renameFolder.mockReturnValueOnce(write.promise);
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const base = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, instanceId: canvasInstanceId };
+    act(() => dispatchCanvasMessage(frame, { ...base, requestId: "draft-a-write", command, space: "personal", name: folder.name,
+      ...(command === "create-folder" ? { parentId: null } : { folderId: "folder-1", expectedName: "参考" }) }));
+    await waitFor(() => expect(command === "create-folder" ? library.createFolder : library.renameFolder).toHaveBeenCalledTimes(1));
+    // A's modal can close while its write is pending; B must read after that write settles.
+    await act(async () => dispatchCanvasMessage(frame, { ...base, requestId: "draft-b-list", command: "list" }));
+    expect(library.list).toHaveBeenCalledTimes(1);
+    library.list.mockResolvedValueOnce(latest);
+    await act(async () => write.resolve(folder));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:media-library-result", requestId: "draft-b-list", command: "list", result: latest,
+    }), window.location.origin));
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:media-library-result")
+      .map(([message]) => message.requestId)).toEqual(["draft-a-write", "draft-b-list"]);
+  });
+
+  it.each(["instance", "project"] as const)("does not execute a queued library read after its %s is replaced", async (replacement) => {
+    const { library, media, catalog } = libraryFixture();
+    const write = pendingResult<typeof catalog.folders[0]>();
+    library.createFolder.mockReturnValueOnce(write.promise);
+    const entityRepository = { listPersonal: vi.fn(async () => []) };
+    const view = render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={entityRepository as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const base = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, instanceId: canvasInstanceId };
+    act(() => dispatchCanvasMessage(frame, { ...base, requestId: "old-write", command: "create-folder", space: "personal", name: "新目录", parentId: null }));
+    await waitFor(() => expect(library.createFolder).toHaveBeenCalledTimes(1));
+    await act(async () => dispatchCanvasMessage(frame, { ...base, requestId: "old-queued-list", command: "list" }));
+    expect(library.list).toHaveBeenCalledTimes(1);
+    if (replacement === "instance") act(() => dispatchProgressiveReady(frame, "new-library-instance"));
+    else {
+      view.rerender(routed(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+        entityRepository={entityRepository as never} context={{ ...progressiveContext, projectId: "project-2" }} />));
+      await waitFor(() => expect(library.list).toHaveBeenCalledTimes(2));
+    }
+    const readsBeforeCompletion = library.list.mock.calls.length;
+    await act(async () => write.resolve(catalog.folders[0]!));
+    expect(library.list).toHaveBeenCalledTimes(readsBeforeCompletion);
+    expect(postMessage.mock.calls.some(([message]) => message.requestId === "old-write" || message.requestId === "old-queued-list")).toBe(false);
+  });
+
+  it("rereads a command list invalidated by upload discovery before replying to the draft", async () => {
+    const { library, media, catalog } = libraryFixture();
+    const importFile = vi.fn(async () => ({ projectAsset: null, asset: {
+      id: "import", workspaceId: "organization-1", objectVersion: 1, mediaKind: "image" as const,
+      displayName: "素材", contentType: "image/png", byteSize: 4, checksumSha256: "a".repeat(64),
+      contentUrl: "/api/media/content", createdAt: "2026-09-15T00:00:00.000Z", updatedAt: "2026-09-15T00:00:00.000Z",
+    } }));
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      transientMediaRepository={{ importFile }} entityRepository={{ listPersonal: vi.fn(async () => []) } as never}
+      context={{ ...progressiveContext, capabilities: { ...progressiveContext.capabilities, transientMediaUpload: true } }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const oldRead = pendingResult<MediaLibraryCatalog>();
+    const latest: MediaLibraryCatalog = { folders: [{ id: "latest", name: "最新", space: "personal", parentId: null }], entries: [], tags: [] };
+    library.list.mockReturnValueOnce(oldRead.promise).mockResolvedValue(latest);
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "draft-list", command: "list" }));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(2));
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:import-transient-media", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "new-import", target: "personal", displayName: "素材", mediaKind: "image", contentType: "image/png", body: new ArrayBuffer(4) }));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(3));
+    await act(async () => oldRead.resolve(catalog));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:media-library-result", requestId: "draft-list", command: "list", result: latest,
+    }), window.location.origin));
+    expect(library.list).toHaveBeenCalledTimes(4);
+    expect(postMessage.mock.calls.filter(([message]) => message.requestId === "draft-list")).toHaveLength(1);
+  });
+
+  it("sequences overlapping write requests so later metadata cannot be replaced by an older save result", async () => {
+    const { library, media, catalog } = libraryFixture();
+    const first = pendingResult<MediaLibraryCatalog>();
+    const latest: MediaLibraryCatalog = { folders: [{ id: "latest", name: "最新", parentId: null, space: "personal" }], tags: [], entries: [] };
+    library.save.mockReturnValueOnce(first.promise).mockResolvedValueOnce(latest);
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(library.list).toHaveBeenCalled());
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, command: "save", space: "personal", folderId: null, tagIds: [],
+      items: [{ assetId: "asset", displayName: "素材", action: "save" }] };
+    act(() => {
+      dispatchCanvasMessage(frame, { ...command, requestId: "first-save" });
+      dispatchCanvasMessage(frame, { ...command, requestId: "second-save" });
+    });
+    await waitFor(() => expect(library.save).toHaveBeenCalledTimes(1));
+    await act(async () => first.resolve(catalog));
+    await waitFor(() => expect(library.save).toHaveBeenCalledTimes(2));
+    expect(postMessage.mock.calls.filter(([message]) => message.type === "host:media-library-result").map(([message]) => [message.requestId, message.result])).toEqual([
+      ["first-save", catalog], ["second-save", latest],
+    ]);
+  });
+
+  it("keeps batch imports writable while refreshing and ignores an older concurrent refresh", async () => {
+    const { library, media } = libraryFixture();
+    let importCount = 0;
+    const importFile = vi.fn(async () => ({ projectAsset: null, asset: {
+      id: `import-${++importCount}`, workspaceId: "organization-1", objectVersion: 1,
+      mediaKind: "image" as const, displayName: "素材", contentType: "image/png", byteSize: 4,
+      checksumSha256: "a".repeat(64), contentUrl: "/api/media/content", createdAt: "2026-09-15T00:00:00.000Z", updatedAt: "2026-09-15T00:00:00.000Z",
+    } }));
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      transientMediaRepository={{ importFile }} entityRepository={{ listPersonal: vi.fn(async () => []) } as never}
+      context={{ ...progressiveContext, capabilities: { ...progressiveContext.capabilities, transientMediaUpload: true } }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const first = pendingResult<MediaLibraryCatalog>();
+    const second = pendingResult<MediaLibraryCatalog>();
+    library.list.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const upload = { source: "reelay-legacy-canvas", type: "canvas:import-transient-media", protocolVersion: 1,
+      instanceId: canvasInstanceId, target: "personal", displayName: "素材", mediaKind: "image", contentType: "image/png", body: new ArrayBuffer(4) };
+    act(() => dispatchCanvasMessage(frame, { ...upload, requestId: "first-import" }));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(2));
+    act(() => dispatchCanvasMessage(frame, { ...upload, requestId: "second-import" }));
+    await waitFor(() => expect(importFile).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(3));
+    const latest: MediaLibraryCatalog = { folders: [{ id: "latest", name: "最新", space: "personal", parentId: null }], entries: [], tags: [] };
+    await act(async () => second.resolve(latest));
+    await act(async () => first.resolve({ folders: [], tags: [], entries: [] }));
+    const snapshots = postMessage.mock.calls.filter(([message]) => message.type === "host:workspace-asset-catalog");
+    expect(snapshots.at(-1)![0].libraryCatalog).toEqual(latest);
+  });
+
+  it("permits listing but refuses mutations for a read-only canvas", async () => {
+    const { library, media } = libraryFixture();
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never} context={{ ...progressiveContext, writable: false }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(1));
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "folder", command: "create-folder", space: "personal", parentId: null, name: "参考" };
+    act(() => dispatchCanvasMessage(frame, command));
+    expect(library.createFolder).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:asset-command-error", code: "forbidden", requestId: "folder" }), window.location.origin);
+    act(() => dispatchCanvasMessage(frame, { source: command.source, type: command.type, protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "read", command: "list" }));
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(2));
+  });
+
+  it("drops completion after instance replacement and preserves server validation text", async () => {
+    const { media, library, catalog } = libraryFixture();
+    const pending = pendingResult<typeof catalog.folders[0]>();
+    library.createFolder.mockImplementationOnce(() => pending.promise);
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
+      entityRepository={{ listPersonal: vi.fn(async () => []) } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(library.list).toHaveBeenCalled());
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "old-folder", command: "create-folder", space: "personal", parentId: null, name: "参考" };
+    act(() => dispatchCanvasMessage(frame, command));
+    await waitFor(() => expect(library.createFolder).toHaveBeenCalledTimes(1));
+    act(() => dispatchProgressiveReady(frame, "replacement"));
+    await act(async () => pending.resolve(catalog.folders[0]!));
+    expect(postMessage.mock.calls.some(([message]) => message.type === "host:media-library-result" && message.requestId === "old-folder")).toBe(false);
+    library.createFolder.mockRejectedValueOnce(new ApplicationError("conflict", "当前目录已有同名文件夹。", { serviceCode: "folder_name_conflict" }));
+    act(() => dispatchCanvasMessage(frame, { ...command, instanceId: "replacement", requestId: "retry-folder" }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "host:asset-command-error", requestId: "retry-folder", code: "conflict", message: "当前目录已有同名文件夹。",
+    }), window.location.origin));
+  });
+});
 
 describe("CanvasHost progressive asset loading", () => {
   it.each([document, null])("starts catalogs only after a successful document read, including empty canvases: %j", async (loadedDocument) => {
@@ -503,6 +943,7 @@ describe("CanvasHost", () => {
     act(() => { dispatchCanvasMessage(frame, message); dispatchCanvasMessage(frame, message); });
     expect(importFile).toHaveBeenCalledTimes(1);
     expect(importFile).toHaveBeenCalledWith({ workspaceId: "organization-1", projectId: "project-1", target: "project",
+      uploadPurpose: "canvas", storageSpace: "personal",
       displayName: "memory.png", contentType: "image/png", mediaKind: "image", body: message.body });
     await act(async () => complete({ asset, projectAsset }));
     expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:transient-media-result", requestId: "transient-1", projectAsset }), window.location.origin);
@@ -740,6 +1181,8 @@ describe("CanvasHost", () => {
     await waitFor(() => expect(createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({
       workspaceId: "organization-1",
       idempotencyKey: "attempt-1",
+      uploadPurpose: "canvas",
+      projectId: "project-1",
     })));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "host:media-upload-grant", requestId: "request-1" }),
@@ -775,7 +1218,7 @@ describe("CanvasHost", () => {
       updatedAt: "2026-09-01T00:00:00.000Z",
     };
     const createUploadIntent = vi.fn(async () => ({
-      uploadIntent: { id: "upload-personal", expiresAt: "2026-08-31T12:00:00.000Z" },
+      uploadIntent: { id: "upload-personal", expiresAt: "2026-08-31T12:00:00.000Z", status: "finalized" as const },
       upload: { url: "/api/uploads/upload-personal", method: "PUT" as const, headers: {} },
     }));
     const finalizeUpload = vi.fn(async () => finalizedAsset);
@@ -811,6 +1254,8 @@ describe("CanvasHost", () => {
       requestId: "request-personal",
       idempotencyKey: "attempt-personal",
       target: "personal",
+      uploadPurpose: "library",
+      storageSpace: "organization",
       mediaKind: "image",
       displayName: "portrait.png",
       contentType: "image/png",
@@ -818,9 +1263,12 @@ describe("CanvasHost", () => {
       checksumSha256: "b".repeat(64),
     });
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "host:media-upload-grant", requestId: "request-personal" }),
+      expect.objectContaining({ type: "host:media-upload-grant", requestId: "request-personal",
+        uploadIntent: expect.objectContaining({ status: "finalized" }) }),
       window.location.origin,
     ));
+    expect(createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({ uploadPurpose: "library", storageSpace: "organization" }));
+    expect(createUploadIntent).not.toHaveBeenCalledWith(expect.objectContaining({ projectId: expect.anything() }));
     dispatchCanvasMessage(frame, {
       source: "reelay-legacy-canvas",
       type: "canvas:finalize-media-upload",
@@ -842,7 +1290,7 @@ describe("CanvasHost", () => {
     ));
   });
 
-  it("renames personal Media in host scope and synchronizes workspace and project snapshots", async () => {
+  it("renames the personal placement while preserving project source names", async () => {
     const projectAsset = {
       referenceId: "reference-rename",
       assetId: "asset-rename",
@@ -958,7 +1406,7 @@ describe("CanvasHost", () => {
       expect.objectContaining({
         type: "host:project-assets",
         instanceId: "canvas-instance-2",
-        projectAssets: [expect.objectContaining({ assetId: "asset-rename", displayName: "after.png" })],
+        projectAssets: [expect.objectContaining({ assetId: "asset-rename", displayName: "before.png" })],
       }),
       window.location.origin,
     ));

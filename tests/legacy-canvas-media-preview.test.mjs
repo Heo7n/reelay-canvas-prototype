@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 
-const scripts = await Promise.all(["canvas-media-preview", "canvas-entity-editor-view", "canvas-entity-use-view"]
+const scripts = await Promise.all(["canvas-file-name", "canvas-media-preview", "canvas-entity-editor-view", "canvas-entity-use-view"]
   .map((name) => readFile(new URL(`../src/legacy-canvas/${name}.js`, import.meta.url), "utf8")));
 const media = { id: "one", mediaKind: "image", name: "角色动效", url: "/original.gif", thumbnailUrl: "/preview.webp" };
 function setup(t) {

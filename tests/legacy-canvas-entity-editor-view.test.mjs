@@ -9,6 +9,9 @@ const source = await readFile(
   "utf8",
 );
 const context = vm.createContext({});
+new vm.Script(await readFile(new URL("../src/legacy-canvas/canvas-file-name.js", import.meta.url), "utf8"), {
+  filename: "canvas-file-name.js",
+}).runInContext(context);
 new vm.Script(source, { filename: "canvas-entity-editor-view.js" }).runInContext(context);
 const view = context.REELAY_CANVAS_ENTITY_EDITOR_VIEW;
 
@@ -133,7 +136,7 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
   assert.doesNotMatch(markup, /entity-editor-media-kind/);
   assert.match(markup, /data-entity-editor-preview="portrait"/);
   assert.match(markup, /entity-editor-preview-kind-icon[^]*data-entity-editor-icon="image"/);
-  assert.match(markup, /data-entity-editor-preview-name="portrait"[^>]*>正面照<\/button>/);
+  assert.equal(new JSDOM(markup).window.document.querySelector('[data-entity-editor-preview-name="portrait"]').textContent, "正面照");
   assert.match(markup, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<span class="entity-editor-cover-control entity-editor-cover-status" role="status"[^>]*>当前封面<\/span>/);
 });
 
@@ -183,6 +186,33 @@ test("image, video, and audio previews use only structured safe Media fields", (
   assert.doesNotMatch(unsafe, /javascript:/i);
   assert.doesNotMatch(unsafe, /<img src=x/);
   assert.match(unsafe, /图片暂不可预览/);
+});
+
+test("media card and preview names preserve suffixes while keeping original names and edit affordances", (t) => {
+  const name = '角色定妆 & <正面>.Version2.PNG';
+  const dom = new JSDOM(view.renderEntityEditor({
+    mode: "edit",
+    name: "素材组.png",
+    media: [{ id: "portrait", name, mediaKind: "image" }],
+    selectedMediaId: "portrait",
+  }));
+  t.after(() => dom.window.close());
+  const doc = dom.window.document;
+  for (const selector of [".entity-editor-media-name", ".entity-editor-preview-filename"]) {
+    const label = doc.querySelector(selector);
+    assert.equal(label.textContent, name);
+    assert.equal(label.querySelector(".entity-editor-file-name-stem").textContent, "角色定妆 & <正面>.Version2");
+    assert.equal(label.querySelector(".entity-editor-file-name-extension").textContent, ".PNG");
+  }
+  assert.equal(doc.querySelector(".entity-editor-media-name").title, name);
+  assert.equal(doc.querySelector(".entity-editor-media-select").getAttribute("aria-label"), `预览 ${name}`);
+  const preview = doc.querySelector(".entity-editor-preview-filename");
+  assert.equal(preview.title, "双击重命名文件（扩展名保持不变）");
+  assert.equal(preview.getAttribute("aria-label"), `文件名称 ${name}，双击或按 F2 重命名`);
+  assert.equal(preview.dataset.entityEditorPreviewName, "portrait");
+  assert.equal(doc.querySelector("#canvasEntityEditorTitle").textContent, "素材组.png");
+  assert.equal(doc.querySelector("#canvasEntityEditorTitle .entity-editor-file-name-extension"), null);
+  assert.equal(doc.querySelector("#canvasEntityEditorName").value, "素材组.png");
 });
 
 test("preview filename rename keeps the suffix fixed in a horizontal inline control", () => {

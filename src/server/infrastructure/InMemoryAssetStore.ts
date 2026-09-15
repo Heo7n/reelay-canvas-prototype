@@ -1,8 +1,9 @@
+import type { InMemoryEntityStore } from "./InMemoryEntityStore";
 import { randomUUID } from "node:crypto";
+import { MediaStorageQuotaExceededError, mediaStorageLimit, mediaStorageSnapshot, type MediaStorageLimits, type MediaStorageOwner } from "../../domain/asset/media-storage";
 
 import type {
   AssetUploadIntent,
-  MediaAssetPlacement,
   ProjectAsset,
   ProjectAssetReference,
   WorkspaceMediaAsset,
@@ -30,16 +31,28 @@ import {
   type RecordAssetUploadInput,
   type RenamePersonalAssetInput,
   type WorkspaceMediaAssetStore,
+  type ReadMediaStorageInput,
+  type UploadedAssetObject,
+  type CancelAssetUploadInput,
+  type FindAssetUploadIntentInput,
 } from "../application/WorkspaceMediaAssetStore";
 
+import { BUILTIN_LIBRARY_TAGS, MediaLibraryError, libraryNameKey, normalizeLibraryName, planLibraryDeletion, type DeleteLibraryInput, type RenameLibraryFolderInput, validateLibraryFolderRename, validateLibraryFolder, validateLibrarySave, type CreateLibraryFolderInput, type CreateLibraryTagInput, type LibraryFolder, type LibraryTag, type LibrarySpace, type MediaLibraryCatalog, type SaveLibraryInput } from "../../domain/asset/media-library";
+import type { LibraryActorInput } from "../application/MediaLibraryStore";
+
+type MemoryPlacement = { id: string; workspaceId: string; assetId: string; scopeKind: LibrarySpace; ownerActorId: string | null; createdByActorId: string; createdAt: string; displayName?: string; folderId?: string | null; tagIds?: string[]; updatedAt?: string };
+type ScopedFolder = LibraryFolder & { workspaceId: string; ownerActorId: string | null };
+type ScopedTag = LibraryTag & { workspaceId: string; ownerActorId: string | null };
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 export interface InMemoryAssetWorkspaceMembership {
   workspaceId: WorkspaceId;
   actorId: ActorId;
+  role?: "owner" | "admin" | "member";
 }
 
 export interface InMemoryAssetProject {
+  accessKind?: "private" | "collaborative";
   id: ProjectId;
   workspaceId: WorkspaceId;
   deleted?: boolean;
@@ -80,27 +93,35 @@ function clone<T>(value: T): T {
 
 export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAssetReferenceStore {
   private readonly workspaceMemberships: Set<string>;
+  private readonly workspaceRoles = new Map<string, "owner" | "admin" | "member">();
+  private entityStore?: InMemoryEntityStore;
   private readonly projects = new Map<ProjectId, InMemoryAssetProject>();
   private readonly uploadIntents = new Map<string, AssetUploadIntent>();
   private readonly uploadIntentByIdempotencyKey = new Map<string, string>();
   private readonly assets = new Map<string, WorkspaceMediaAsset>();
-  private readonly placements = new Map<string, MediaAssetPlacement>();
+  private readonly placements = new Map<string, MemoryPlacement>();
+  private readonly libraryFolders = new Map<string, ScopedFolder>();
+  private readonly libraryTags = new Map<string, ScopedTag>();
   private readonly projectReferences = new Map<string, ProjectAssetReference>();
+  private readonly intentOperations = new Map<string, Promise<unknown>>();
 
   constructor(
     seed: InMemoryAssetStoreSeed = { workspaceMemberships: [], projects: [] },
     private readonly now: () => Date = () => new Date(),
     private readonly createId: () => string = randomUUID,
     private readonly uploadIntentTtlMs = 15 * 60 * 1_000,
+    private readonly storageLimits: MediaStorageLimits = {},
   ) {
     this.workspaceMemberships = new Set(
       seed.workspaceMemberships.map(({ workspaceId, actorId }) => `${workspaceId}\u0000${actorId}`),
     );
+    seed.workspaceMemberships.forEach(({ workspaceId, actorId, role }) => this.workspaceRoles.set(`${workspaceId}\u0000${actorId}`, role ?? "member"));
     seed.projects.forEach((project) => this.projects.set(project.id, clone(project)));
   }
 
   async createUploadIntent(input: CreateAssetUploadIntentInput): Promise<AssetUploadIntent> {
     this.requireWorkspaceMembership(input.workspaceId, input.actorId);
+    const owner = this.resolveStorageOwner(input);
     const idempotencyKey = requiredText(input.idempotencyKey, "Asset upload idempotency key");
     const displayName = requiredText(input.displayName, "Asset display name");
     const contentType = requiredText(input.contentType, "Asset content type");
@@ -113,12 +134,21 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       if (!existing || !this.sameIntentRequest(existing, input, displayName, contentType, byteSize, checksumSha256)) {
         throw new AssetUploadConflictError("idempotency_key_reused");
       }
+      if (existing.storageOwner.kind !== owner.kind || existing.storageOwner.id !== owner.id || existing.projectId !== (input.projectId ?? null)) throw new AssetUploadConflictError("idempotency_key_reused");
+      this.requireActiveIntent(existing);
       return clone(existing);
     }
+
+    const storage = this.storageSnapshot(owner);
+    if (byteSize > storage.availableBytes) throw new MediaStorageQuotaExceededError(storage);
 
     const createdAt = this.now();
     const id = `upload-${this.createId()}`;
     const intent: AssetUploadIntent = {
+      storageOwner: owner,
+      projectId: input.projectId ?? null,
+      uploadAuthorizationExpiresAt: null,
+      reservedByteSize: byteSize,
       id,
       workspaceId: input.workspaceId,
       createdByActorId: input.actorId,
@@ -145,6 +175,16 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     return clone(intent);
   }
 
+  async findUploadIntentByIdempotencyKey(input: FindAssetUploadIntentInput): Promise<AssetUploadIntent | null> {
+    this.requireWorkspaceMembership(input.workspaceId, input.actorId);
+    const key = requiredText(input.idempotencyKey, "Asset upload idempotency key");
+    const id = this.uploadIntentByIdempotencyKey.get(`${input.workspaceId}\u0000${input.actorId}\u0000${key}`);
+    const intent = id ? this.uploadIntents.get(id) : undefined;
+    if (!intent) return null;
+    this.requireIntentOwner(intent);
+    return clone(intent);
+  }
+
   async getUploadIntent(input: ReadAssetUploadIntentInput): Promise<AssetUploadIntent | null> {
     this.requireWorkspaceMembership(input.workspaceId, input.actorId);
     const intent = this.uploadIntents.get(input.uploadIntentId);
@@ -155,6 +195,8 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
 
   async recordUpload(input: RecordAssetUploadInput): Promise<AssetUploadIntent> {
     const intent = this.requireUploadIntent(input.workspaceId, input.actorId, input.uploadIntentId);
+    this.requireActiveIntent(intent);
+    this.requireIntentOwner(intent);
     const objectKey = requiredText(input.objectKey, "Asset object key");
     const contentType = requiredText(input.contentType, "Asset content type");
     const byteSize = validByteSize(input.byteSize);
@@ -167,9 +209,6 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       || checksumSha256 !== intent.expectedChecksumSha256
     ) {
       throw new AssetUploadConflictError("metadata_mismatch");
-    }
-    if (intent.status !== "finalized" && this.now().getTime() >= Date.parse(intent.expiresAt)) {
-      throw new AssetUploadConflictError("expired");
     }
     if (intent.status !== "pending") {
       if (
@@ -196,9 +235,8 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       const existing = this.assets.get(intent.assetId);
       if (existing) return clone(existing);
     }
-    if (this.now().getTime() >= Date.parse(intent.expiresAt)) {
-      throw new AssetUploadConflictError("expired");
-    }
+    this.requireActiveIntent(intent);
+    this.requireIntentOwner(intent);
     if (
       intent.status !== "uploaded"
       || !intent.uploadedContentType
@@ -209,6 +247,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
 
     const timestamp = this.now().toISOString();
     const asset: WorkspaceMediaAsset = {
+      storageOwner: clone(intent.storageOwner),
       id: `asset-${this.createId()}`,
       workspaceId: intent.workspaceId,
       mediaKind: intent.mediaKind,
@@ -222,21 +261,111 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       createdAt: timestamp,
       updatedAt: timestamp,
     };
-    const placement: MediaAssetPlacement = {
+    const placement: MemoryPlacement = {
       id: `placement-${this.createId()}`,
       workspaceId: asset.workspaceId,
       assetId: asset.id,
-      scopeKind: "personal",
-      ownerActorId: input.actorId,
+      scopeKind: intent.storageOwner.kind,
+      ownerActorId: intent.storageOwner.kind === "personal" ? input.actorId : null,
       createdByActorId: input.actorId,
       createdAt: timestamp,
     };
     this.assets.set(asset.id, asset);
-    this.placements.set(this.personalPlacementKey(asset.workspaceId, asset.id, input.actorId), placement);
+    this.placements.set(this.personalPlacementKey(asset.workspaceId, asset.id, placement.ownerActorId ?? "@organization"), placement);
     intent.status = "finalized";
     intent.assetId = asset.id;
     intent.finalizedAt = timestamp;
     return clone(asset);
+  }
+
+  private resolveStorageOwner(input: ReadMediaStorageInput, writable = true): MediaStorageOwner {
+    this.requireWorkspaceMembership(input.workspaceId, input.actorId);
+    let kind = input.storageSpace ?? "personal";
+    if (input.projectId) {
+      const project = this.requireProject(input.projectId, input.actorId, writable);
+      if (project.workspaceId !== input.workspaceId) throw new ProjectAssetUnavailableError();
+      kind = project.accessKind === "collaborative" ? "organization" : "personal";
+      if (input.storageSpace && input.storageSpace !== kind) throw new AssetUploadConflictError("storage_owner_mismatch");
+    }
+    return { kind, id: kind === "personal" ? input.actorId : input.workspaceId };
+  }
+
+  private requireIntentOwner(intent: AssetUploadIntent): void {
+    const owner = this.resolveStorageOwner({ workspaceId: intent.workspaceId, actorId: intent.createdByActorId, storageSpace: intent.storageOwner.kind, projectId: intent.projectId ?? undefined });
+    if (owner.id !== intent.storageOwner.id || owner.kind !== intent.storageOwner.kind) throw new AssetUploadConflictError("storage_owner_mismatch");
+  }
+
+  private requireActiveIntent(intent: AssetUploadIntent): void {
+    if (intent.status === "cancelling" || intent.status === "cancelled") throw new AssetUploadConflictError("cancelled");
+    if (intent.status !== "finalized" && this.now().getTime() >= Date.parse(intent.expiresAt)) throw new AssetUploadConflictError("expired");
+  }
+
+  private storageSnapshot(owner: MediaStorageOwner) {
+    const matches = (value: MediaStorageOwner | undefined) => value?.kind === owner.kind && value.id === owner.id;
+    const used = [...this.assets.values()].filter((asset) => matches(asset.storageOwner)).reduce((total, asset) => total + asset.byteSize, 0);
+    const reserved = [...this.uploadIntents.values()].filter((intent) => matches(intent.storageOwner) && ["pending", "uploaded", "cancelling"].includes(intent.status)).reduce((total, intent) => total + intent.reservedByteSize, 0);
+    return mediaStorageSnapshot(owner, mediaStorageLimit(this.storageLimits, owner.kind), used, reserved);
+  }
+
+  async getMediaStorage(input: ReadMediaStorageInput) { return this.storageSnapshot(this.resolveStorageOwner(input, false)); }
+
+  async listExpiredUploadIntents(input: ReadMediaStorageInput): Promise<AssetUploadIntent[]> {
+    const owner = this.resolveStorageOwner(input, false);
+    return clone([...this.uploadIntents.values()].filter((intent) => intent.workspaceId === input.workspaceId && intent.createdByActorId === input.actorId
+      && intent.storageOwner.kind === owner.kind && intent.storageOwner.id === owner.id
+      && ((["pending", "uploaded"].includes(intent.status) && Date.parse(intent.expiresAt) <= this.now().getTime()) || intent.status === "cancelling")).slice(0, 100));
+  }
+
+  async registerUploadAuthorization(input: ReadAssetUploadIntentInput & { expiresAt: string; reservedBytes?: number }): Promise<void> {
+    const intent = this.requireUploadIntent(input.workspaceId, input.actorId, input.uploadIntentId);
+    if (intent.status === "finalized") throw new AssetUploadConflictError("finalized");
+    this.requireActiveIntent(intent);
+    this.requireIntentOwner(intent);
+    const expiry = Date.parse(input.expiresAt);
+    if (!Number.isFinite(expiry) || expiry <= this.now().getTime()) throw new AssetUploadConflictError("expired");
+    const bytes = input.reservedBytes ?? intent.expectedByteSize;
+    if (!Number.isSafeInteger(bytes) || bytes < intent.expectedByteSize) throw new AssetUploadConflictError("metadata_mismatch");
+    const storage = this.storageSnapshot(intent.storageOwner);
+    if (Math.max(0, bytes - intent.reservedByteSize) > storage.availableBytes) throw new MediaStorageQuotaExceededError(storage);
+    intent.reservedByteSize = Math.max(intent.reservedByteSize, bytes);
+    intent.uploadAuthorizationExpiresAt = new Date(Math.max(expiry, Date.parse(intent.uploadAuthorizationExpiresAt ?? "") || 0)).toISOString();
+  }
+
+  async writeUpload(input: ReadAssetUploadIntentInput, write: (intent: AssetUploadIntent) => Promise<UploadedAssetObject>): Promise<AssetUploadIntent> {
+    return this.withIntentLock(input.uploadIntentId, async () => {
+      const intent = this.requireUploadIntent(input.workspaceId, input.actorId, input.uploadIntentId);
+      this.requireActiveIntent(intent);
+      this.requireIntentOwner(intent);
+      return this.recordUpload({ ...input, ...await write(clone(intent)) });
+    });
+  }
+
+  async beginUploadCancellation(input: CancelAssetUploadInput): Promise<AssetUploadIntent> {
+    return this.withIntentLock(input.uploadIntentId, async () => {
+      const intent = this.requireUploadIntent(input.workspaceId, input.actorId, input.uploadIntentId);
+      if (intent.status === "finalized") throw new AssetUploadConflictError("finalized");
+      if (input.expiredOnly && intent.status !== "cancelling" && this.now().getTime() < Date.parse(intent.expiresAt)) throw new AssetUploadConflictError("not_expired");
+      if (intent.status !== "cancelled") intent.status = "cancelling";
+      return clone(intent);
+    });
+  }
+
+  async completeUploadCancellation(input: ReadAssetUploadIntentInput): Promise<void> {
+    return this.withIntentLock(input.uploadIntentId, async () => {
+      const intent = this.requireUploadIntent(input.workspaceId, input.actorId, input.uploadIntentId);
+      if (intent.status === "cancelled") return;
+      if (intent.status !== "cancelling") throw new AssetUploadConflictError("metadata_mismatch");
+      if (intent.uploadAuthorizationExpiresAt) throw new AssetUploadConflictError("authorization_active");
+      intent.status = "cancelled";
+    });
+  }
+
+  private async withIntentLock<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    const prior = this.intentOperations.get(id) ?? Promise.resolve();
+    const current = prior.catch(() => undefined).then(operation);
+    this.intentOperations.set(id, current);
+    try { return await current; }
+    finally { if (this.intentOperations.get(id) === current) this.intentOperations.delete(id); }
   }
 
   async listPersonalAssets(input: ListPersonalAssetsInput): Promise<WorkspaceMediaAsset[]> {
@@ -246,7 +375,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.assetId.localeCompare(right.assetId))
       .flatMap((placement) => {
         const asset = this.assets.get(placement.assetId);
-        return asset ? [clone(asset)] : [];
+        return asset ? [{ ...clone(asset), displayName: placement.displayName ?? asset.displayName, updatedAt: placement.updatedAt ?? asset.updatedAt }] : [];
       });
   }
 
@@ -254,7 +383,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     this.requireWorkspaceMembership(input.workspaceId, input.actorId);
     const placement = this.placements.get(this.personalPlacementKey(input.workspaceId, input.assetId, input.actorId));
     const asset = placement ? this.assets.get(input.assetId) : null;
-    return asset ? clone(asset) : null;
+    return asset ? { ...clone(asset), displayName: placement?.displayName ?? asset.displayName, updatedAt: placement?.updatedAt ?? asset.updatedAt } : null;
   }
 
   async renamePersonalAsset(input: RenamePersonalAssetInput): Promise<WorkspaceMediaAsset> {
@@ -269,7 +398,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       displayName,
       updatedAt: this.now().toISOString(),
     };
-    this.assets.set(renamed.id, renamed);
+    if (placement) { placement.displayName = displayName; placement.updatedAt = renamed.updatedAt; }
     return clone(renamed);
   }
 
@@ -277,9 +406,10 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     const project = this.requireProject(input.projectId, input.actorId, true);
     const asset = this.assets.get(input.assetId);
     if (
-      !asset
+      !this.workspaceMemberships.has(`${project.workspaceId}\u0000${input.actorId}`)
+      || !asset
       || asset.workspaceId !== project.workspaceId
-      || !this.placements.has(this.personalPlacementKey(asset.workspaceId, asset.id, input.actorId))
+      || (!this.placements.has(this.personalPlacementKey(asset.workspaceId, asset.id, input.actorId)) && !this.placements.has(this.personalPlacementKey(asset.workspaceId, asset.id, "@organization")))
     ) throw new ProjectAssetUnavailableError();
 
     const lookupKey = `${project.id}\u0000${asset.id}\u0000${asset.objectVersion}`;
@@ -316,6 +446,103 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     );
     const asset = reference ? this.assets.get(reference.assetId) : null;
     return reference && asset ? { reference: clone(reference), asset: clone(asset) } : null;
+  }
+
+  connectLibraryEntities(entities: InMemoryEntityStore): void {
+    this.entityStore = entities;
+    entities.connectLibraryMedia((workspaceId, actorId, assetId) => {
+      const asset = this.placements.has(this.personalPlacementKey(workspaceId, assetId, actorId)) ? this.assets.get(assetId) : undefined;
+      return asset && asset.workspaceId === workspaceId ? { id: asset.id, workspaceId, mediaKind: asset.mediaKind, finalized: true } : null;
+    });
+  }
+
+  async deleteLibrary(input: DeleteLibraryInput & { actorId: string }): Promise<MediaLibraryCatalog> {
+    const catalog = this.readLibraryCatalog(input);
+    if (input.space === "organization" && !["owner", "admin"].includes(this.workspaceRoles.get(`${input.workspaceId}\u0000${input.actorId}`) ?? "member")) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以删除组织素材。");
+    const plan = planLibraryDeletion(catalog, this.entityStore?.libraryBindings(input.workspaceId, input.actorId) ?? [], input);
+    // All validation above is synchronous; no interleaving can expose a partial in-memory batch.
+    this.entityStore?.removeLibraryPlacements(input.workspaceId, input.actorId, plan.entityIds);
+    for (const id of plan.assetIds) this.placements.delete(this.personalPlacementKey(input.workspaceId, id, input.space === "personal" ? input.actorId : "@organization"));
+    for (const id of plan.folderIds) this.libraryFolders.delete(id);
+    return this.readLibraryCatalog(input);
+  }
+
+  async listLibrary(input: LibraryActorInput): Promise<MediaLibraryCatalog> { return this.readLibraryCatalog(input); }
+
+  private readLibraryCatalog(input: LibraryActorInput): MediaLibraryCatalog {
+    this.requireWorkspaceMembership(input.workspaceId, input.actorId);
+    const visible = (record: { workspaceId: string; ownerActorId: string | null }) => record.workspaceId === input.workspaceId && (record.ownerActorId === null || record.ownerActorId === input.actorId);
+    return clone({
+      folders: [...this.libraryFolders.values()].filter(visible).map(({ id, name, parentId, space }) => ({ id, name, parentId, space })),
+      tags: [...this.libraryTags.values()].filter(visible).map(({ id, name, space }) => ({ id, name, space })),
+      entries: [...this.placements.values()].filter(visible).flatMap((placement) => {
+        const asset = this.assets.get(placement.assetId);
+        return asset ? [{ assetId: asset.id, assetVersion: asset.objectVersion, mediaKind: asset.mediaKind, displayName: placement.displayName ?? asset.displayName,
+          contentType: asset.contentType, byteSize: asset.byteSize, checksumSha256: asset.checksumSha256,
+          contentUrl: `/api/workspaces/${encodeURIComponent(input.workspaceId)}/media-assets/${encodeURIComponent(asset.id)}/content`,
+          createdAt: placement.createdAt, space: placement.scopeKind, folderId: placement.folderId ?? null, tagIds: placement.tagIds ?? [] }] : [];
+      }),
+    });
+  }
+
+  async createLibraryFolder(input: CreateLibraryFolderInput & { actorId: string }): Promise<LibraryFolder> {
+    const catalog = this.readLibraryCatalog(input);
+    const name = validateLibraryFolder(catalog, input);
+    const folder: ScopedFolder = { id: `folder-${this.createId()}`, name, parentId: input.parentId, space: input.space, workspaceId: input.workspaceId, ownerActorId: input.space === "personal" ? input.actorId : null };
+    this.libraryFolders.set(folder.id, folder);
+    const { id, parentId, space } = folder;
+    return { id, name, parentId, space };
+  }
+
+  async renameLibraryFolder(input: RenameLibraryFolderInput & { actorId: string }): Promise<LibraryFolder> {
+    const catalog = this.readLibraryCatalog(input);
+    if (input.space === "organization" && !["owner", "admin"].includes(this.workspaceRoles.get(`${input.workspaceId}\u0000${input.actorId}`) ?? "member")) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以重命名组织文件夹。");
+    const folder = validateLibraryFolderRename(catalog, input);
+    const current = this.libraryFolders.get(folder.id)!;
+    this.libraryFolders.set(folder.id, { ...current, name: folder.name });
+    return clone(folder);
+  }
+
+  async createLibraryTag(input: CreateLibraryTagInput & { actorId: string }): Promise<LibraryTag> {
+    const catalog = this.readLibraryCatalog(input);
+    const name = normalizeLibraryName(input.name);
+    if (!name || name.length > 40 || [...name].some((character) => character.charCodeAt(0) < 32)) throw new MediaLibraryError("invalid_tag_name", "标签名称需为 1–40 个字符。");
+    const existing = [...BUILTIN_LIBRARY_TAGS.map((tag) => ({ ...tag, space: input.space })), ...catalog.tags.filter((tag) => tag.space === input.space)].find((tag) => libraryNameKey(tag.name) === libraryNameKey(name));
+    if (existing) return clone(existing);
+    const tag: ScopedTag = { id: `tag-${this.createId()}`, name, space: input.space, workspaceId: input.workspaceId, ownerActorId: input.space === "personal" ? input.actorId : null };
+    this.libraryTags.set(tag.id, tag);
+    return { id: tag.id, name, space: tag.space };
+  }
+
+  async saveLibrary(input: SaveLibraryInput & { actorId: string }): Promise<MediaLibraryCatalog> {
+    const catalog = this.readLibraryCatalog(input);
+    const normalized = validateLibrarySave(catalog, input);
+    const project = this.requireProject(input.projectId, input.actorId, false);
+    if (project.workspaceId !== input.workspaceId) throw new ProjectAssetUnavailableError();
+    // Validate the whole batch before the first placement mutation.
+    for (const item of normalized.items) {
+      const asset = this.assets.get(item.assetId);
+      const readable = catalog.entries.some((entry) => entry.assetId === item.assetId) || [...this.projectReferences.values()].some((reference) => reference.projectId === input.projectId && reference.assetId === item.assetId);
+      if (!asset || asset.workspaceId !== input.workspaceId || !readable) throw new PersonalAssetUnavailableError();
+    }
+    const timestamp = this.now().toISOString();
+    for (const item of normalized.items) {
+      const key = this.personalPlacementKey(input.workspaceId, item.assetId, input.space === "personal" ? input.actorId : "@organization");
+      const existing = this.placements.get(key);
+      if (existing && item.action === "add") continue;
+      this.placements.set(key, { id: existing?.id ?? `placement-${this.createId()}`, workspaceId: input.workspaceId, assetId: item.assetId, scopeKind: input.space,
+        ownerActorId: input.space === "personal" ? input.actorId : null, createdByActorId: existing?.createdByActorId ?? input.actorId,
+        createdAt: existing?.createdAt ?? timestamp, displayName: item.displayName, folderId: input.folderId, tagIds: normalized.tagIds, updatedAt: timestamp });
+    }
+    return this.listLibrary(input);
+  }
+
+  async getLibraryAsset(input: LibraryActorInput & { assetId: string }): Promise<WorkspaceMediaAsset | null> {
+    if (!this.workspaceMemberships.has(`${input.workspaceId}\u0000${input.actorId}`)) return null;
+    const hasPlacement = this.placements.has(this.personalPlacementKey(input.workspaceId, input.assetId, input.actorId))
+      || this.placements.has(this.personalPlacementKey(input.workspaceId, input.assetId, "@organization"));
+    const asset = hasPlacement ? this.assets.get(input.assetId) : null;
+    return asset ? clone(asset) : null;
   }
 
   private requireWorkspaceMembership(workspaceId: WorkspaceId, actorId: ActorId): void {

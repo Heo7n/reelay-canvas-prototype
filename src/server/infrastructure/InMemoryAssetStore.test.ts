@@ -189,7 +189,7 @@ describe("InMemoryAssetStore", () => {
     expect(renamed.objectVersion).toBe(asset.objectVersion);
 
     const projectAssets = await store.listProjectAssets({ actorId: viewerId, projectId });
-    expect(projectAssets).toEqual([{ reference, asset: renamed }]);
+    expect(projectAssets).toEqual([{ reference, asset }]);
     expect(projectAssets[0].reference.assetVersion).toBe(asset.objectVersion);
   });
 });

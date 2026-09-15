@@ -262,7 +262,18 @@
       }));
     const currentFolderId = options.currentFolderId == null ? null : String(options.currentFolderId);
     const expandedIds = new Set((Array.isArray(options.expandedFolderIds) ? options.expandedFolderIds : []).map(String));
-    const rootExpanded = options.rootExpanded !== false;
+    const writableSpace = normalizeSpace(options.space) !== "platform";
+    const canCreate = writableSpace && options.canCreate === true;
+    const canRename = writableSpace && options.canRename === true;
+    const canDelete = writableSpace && options.canDelete === true;
+    const candidateDraft = options.directoryDraft;
+    const draft = candidateDraft && ((candidateDraft.kind === "create" && canCreate) || (candidateDraft.kind === "rename" && canRename))
+      ? { ...candidateDraft, parentId: candidateDraft.parentId == null ? null : String(candidateDraft.parentId),
+        folderId: candidateDraft.folderId == null ? null : String(candidateDraft.folderId) } : null;
+    const pending = draft?.pending === true;
+    const disabled = pending ? ' disabled aria-disabled="true"' : "";
+    const creatingUnder = (id) => draft?.kind === "create" && draft.parentId === id;
+    const rootExpanded = options.rootExpanded !== false || creatingUnder(null);
     const foldersById = new Map(folders.map((folder) => [folder.id, folder]));
     const childrenByParent = new Map();
     for (const folder of folders) {
@@ -285,10 +296,41 @@
     };
 
     const renderToggle = ({ id, expanded, root = false }) => `
-      <button class="asset-library-directory-toggle" type="button" aria-label="${expanded ? "收起" : "展开"}目录" aria-expanded="${expanded}" ${root ? 'data-library-directory-root-toggle="true"' : `data-library-directory-toggle="${escapeHtml(id)}"`}>
+      <button class="asset-library-directory-toggle" type="button" aria-label="${expanded ? "收起" : "展开"}目录" aria-expanded="${expanded}" ${root ? 'data-library-directory-root-toggle="true"' : `data-library-directory-toggle="${escapeHtml(id)}"`}${disabled}>
         ${icon(expanded ? "chevron-down" : "chevron-right")}
       </button>
     `;
+
+    const renderActions = (folder, level) => {
+      const id = escapeHtml(folder?.id || "");
+      const name = escapeHtml(folder?.name || "默认目录");
+      const actions = [];
+      if (canCreate) {
+        const atMaximumDepth = level >= 5;
+        const label = atMaximumDepth ? "最多支持 5 级目录" : `在 ${name} 中新建文件夹`;
+        actions.push(`<button class="asset-library-directory-action" type="button" data-library-directory-create="${id}" aria-label="${label}" title="${label}"${atMaximumDepth ? ' disabled aria-disabled="true"' : disabled}>${icon("plus")}</button>`);
+      }
+      if (folder && canRename) actions.push(`<button class="asset-library-directory-action" type="button" data-library-directory-rename="${id}" aria-label="重命名 ${name}" title="重命名"${disabled}>${icon("pencil")}</button>`);
+      if (folder && canDelete) actions.push(`<button class="asset-library-directory-action danger" type="button" data-library-directory-delete="${id}" aria-label="删除 ${name}" title="删除"${disabled}>${icon("trash-2")}</button>`);
+      return actions.length ? `<span class="asset-library-directory-actions-overlay">${actions.join("")}</span>` : "";
+    };
+
+    const renderDraft = (level) => {
+      const label = draft.kind === "create" ? "文件夹名称" : "重命名文件夹";
+      const error = String(draft.error || "");
+      const errorId = "asset-library-directory-draft-error";
+      return `
+        <div class="asset-library-directory-draft" role="treeitem" aria-level="${level}" style="--asset-directory-level:${level}" data-library-directory-draft="${draft.kind}">
+          <div class="asset-library-directory-draft-row">
+            ${icon("folder")}
+            <input class="asset-library-directory-draft-input" type="text" value="${escapeHtml(draft.name || "")}" aria-label="${label}" placeholder="${label}" maxlength="100" autocomplete="off" spellcheck="false" data-library-directory-draft-input="true" data-library-directory-draft-kind="${draft.kind}"${error ? ` aria-invalid="true" aria-describedby="${errorId}"` : ""}${disabled}>
+            <button class="asset-library-directory-action" type="button" data-library-directory-draft-confirm="true" aria-label="${draft.kind === "create" ? "确认新建文件夹" : "确认重命名文件夹"}" title="确认"${disabled}>${icon("check")}</button>
+            <button class="asset-library-directory-action" type="button" data-library-directory-draft-cancel="true" aria-label="取消目录编辑" title="取消"${disabled}>${icon("x")}</button>
+          </div>
+          ${error ? `<p class="asset-library-directory-draft-error" id="${errorId}" role="alert">${escapeHtml(error)}</p>` : ""}
+        </div>
+      `;
+    };
 
     const renderRows = (parentId, level, ancestry = new Set()) => {
       const children = childrenByParent.get(parentId || "") || [];
@@ -297,25 +339,27 @@
         const nextAncestry = new Set(ancestry);
         nextAncestry.add(folder.id);
         const descendants = childrenByParent.get(folder.id) || [];
-        const hasChildren = descendants.length > 0;
-        const expanded = hasChildren && expandedIds.has(folder.id);
+        const hasDraftChild = level < 5 && creatingUnder(folder.id);
+        const hasChildren = descendants.length > 0 || hasDraftChild;
+        const expanded = hasChildren && (expandedIds.has(folder.id) || hasDraftChild);
         const selected = folder.id === currentFolderId;
         const safeId = escapeHtml(folder.id);
         const safeName = escapeHtml(folder.name);
         const safePath = escapeHtml(pathLabel(folder));
-        return `
+        const row = draft?.kind === "rename" && draft.folderId === folder.id ? renderDraft(level) : `
           <div class="${classNames("asset-library-directory-row", selected && "current")}" role="treeitem" aria-level="${level}" aria-selected="${selected}"${hasChildren ? ` aria-expanded="${expanded}"` : ""} style="--asset-directory-level:${level}">
             ${hasChildren
               ? renderToggle({ id: folder.id, expanded })
               : '<span class="asset-library-directory-toggle-spacer" aria-hidden="true"></span>'}
-            <button class="asset-library-directory-select" type="button" data-library-directory-select="${safeId}" title="${safePath}">
+            <button class="asset-library-directory-select" type="button" data-library-directory-select="${safeId}" title="${safePath}"${disabled}>
               ${icon("folder")}
               <span>${safeName}</span>
             </button>
             <span class="asset-library-directory-check" aria-hidden="true">${selected ? icon("check") : ""}</span>
+            ${renderActions(folder, level)}
           </div>
-          ${expanded ? renderRows(folder.id, level + 1, nextAncestry) : ""}
         `;
+        return `${row}${hasDraftChild ? renderDraft(level + 1) : ""}${expanded ? renderRows(folder.id, level + 1, nextAncestry) : ""}`;
       }).join("");
     };
 
@@ -323,16 +367,18 @@
     const rootSelected = currentFolderId == null;
     return `
       <div class="asset-library-directory-tree" role="tree" aria-label="目录">
-        <div class="${classNames("asset-library-directory-row", "root", rootSelected && "current")}" role="treeitem" aria-level="1" aria-selected="${rootSelected}"${rootChildren.length ? ` aria-expanded="${rootExpanded}"` : ""} style="--asset-directory-level:1">
-          ${rootChildren.length
+        <div class="${classNames("asset-library-directory-row", "root", rootSelected && "current")}" role="treeitem" aria-level="1" aria-selected="${rootSelected}"${rootChildren.length || creatingUnder(null) ? ` aria-expanded="${rootExpanded}"` : ""} style="--asset-directory-level:1">
+          ${rootChildren.length || creatingUnder(null)
             ? renderToggle({ id: "", expanded: rootExpanded, root: true })
             : '<span class="asset-library-directory-toggle-spacer" aria-hidden="true"></span>'}
-          <button class="asset-library-directory-select" type="button" data-library-directory-select="" title="默认目录">
+          <button class="asset-library-directory-select" type="button" data-library-directory-select="" title="默认目录"${disabled}>
             ${icon("folder")}
             <span>默认目录</span>
           </button>
           <span class="asset-library-directory-check" aria-hidden="true">${rootSelected ? icon("check") : ""}</span>
+          ${renderActions(null, 1)}
         </div>
+        ${creatingUnder(null) ? renderDraft(2) : ""}
         ${rootExpanded ? renderRows(null, 2) : ""}
       </div>
     `;
@@ -352,6 +398,10 @@
     const safeKind = escapeHtml(kind);
     const safeName = escapeHtml(name);
     const safeMeta = escapeHtml(meta);
+    const fileName = kind === "media" ? root.REELAY_CANVAS_FILE_NAME.splitFileName(name) : null;
+    const displayName = fileName
+      ? `<span class="asset-library-file-name-stem">${escapeHtml(fileName.stem)}</span><span class="asset-library-file-name-extension">${escapeHtml(fileName.extension)}</span>`
+      : safeName;
     const renameKeyboardAttrs = mutable && !renaming
       ? ` tabindex="0" aria-label="名称 ${safeName}，按 Enter 或 F2 重命名"`
       : "";
@@ -359,7 +409,7 @@
       <div class="asset-library-card-namebar"${mutable ? ` data-library-rename="${safeId}" data-library-item-kind="${safeKind}"${renameKeyboardAttrs}` : ""}>
         ${renaming
           ? renderRenameField({ id, kind, name })
-          : `<span class="asset-library-card-name" title="${safeName}">${safeName}</span>`}
+          : `<span class="${classNames("asset-library-card-name", fileName && "asset-library-file-name")}" title="${safeName}">${displayName}</span>`}
         ${safeMeta ? `<span class="asset-library-card-meta">${safeMeta}</span>` : ""}
       </div>
     `;
@@ -383,7 +433,7 @@
           ${icon("folder")}
         </button>
         ${renderNameBar({ id, kind: "folder", name, meta: "", renaming, mutable })}
-        ${renderCardControls({ id, kind: "folder", selected: false, selectionMode: false, menuOpen, mutable, space })}
+        ${renderCardControls({ id, kind: "folder", selected: false, selectionMode: false, menuOpen, mutable, space, canDelete: options.canDelete })}
       </article>
     `;
   }
@@ -445,20 +495,21 @@
       : icon("image");
   }
 
-  function getItemActions({ kind, space, mediaKind = null, allowedActions = null, mutable = true }) {
+  function getItemActions({ kind, space, mediaKind = null, allowedActions = null, mutable = true, canDelete = true }) {
     return actionsForSpace(
       kind === "folder" ? FOLDER_ACTIONS : kind === "entity" ? ENTITY_ACTIONS : ITEM_ACTIONS,
       space,
       allowedActions,
     ).filter((action) => mutable || (kind === "entity" && space !== "platform" && action.id === "view-media"))
-      .filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio");
+      .filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio")
+      .filter((action) => action.id !== "delete" || canDelete);
   }
 
-  function renderItemMenu({ id, kind, space, mediaKind = null, allowedActions = null, mutable = true }) {
+  function renderItemMenu({ id, kind, space, mediaKind = null, allowedActions = null, mutable = true, canDelete = true }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
     const itemLabel = safeKind === "folder" ? "文件夹" : safeKind === "entity" ? "素材组" : "素材";
-    const actions = getItemActions({ kind, space, mediaKind, allowedActions, mutable });
+    const actions = getItemActions({ kind, space, mediaKind, allowedActions, mutable, canDelete });
     return `
       <div class="asset-library-item-menu" popover="manual" role="menu" aria-label="${itemLabel}操作">
         ${actions.map((action) => `
@@ -471,10 +522,10 @@
     `;
   }
 
-  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, selectable = true, space, mediaKind = null, allowedActions = null }) {
+  function renderCardControls({ id, kind, selected, selectionMode, menuOpen, mutable, selectable = true, space, mediaKind = null, allowedActions = null, canDelete = true }) {
     const safeId = escapeHtml(id);
     const safeKind = escapeHtml(kind);
-    const hasMenuActions = getItemActions({ kind, space, mediaKind, allowedActions, mutable }).length > 0;
+    const hasMenuActions = getItemActions({ kind, space, mediaKind, allowedActions, mutable, canDelete }).length > 0;
     return `
       ${kind !== "folder" && selectable && (mutable || space === "platform")
         ? `
@@ -488,7 +539,7 @@
           <button class="asset-library-more-button" type="button" aria-label="更多操作" aria-haspopup="menu" aria-expanded="${menuOpen}" data-library-menu-toggle="${safeId}" data-library-item-kind="${safeKind}">
             ${icon("ellipsis-vertical")}
           </button>
-          ${menuOpen ? renderItemMenu({ id, kind, space, mediaKind, allowedActions, mutable }) : ""}
+          ${menuOpen ? renderItemMenu({ id, kind, space, mediaKind, allowedActions, mutable, canDelete }) : ""}
         `
         : ""}
     `;
@@ -515,7 +566,7 @@
           ${renderStructuredPreview(media)}
         </button>
         ${renderNameBar({ id, kind: "media", name, meta: options.meta ?? "", renaming, mutable })}
-        ${renderCardControls({ id, kind: "media", selected, selectionMode, menuOpen, mutable, selectable: selectionEnabled, space, mediaKind })}
+        ${renderCardControls({ id, kind: "media", selected, selectionMode, menuOpen, mutable, selectable: selectionEnabled, space, mediaKind, canDelete: options.canDelete })}
       </article>
     `;
   }

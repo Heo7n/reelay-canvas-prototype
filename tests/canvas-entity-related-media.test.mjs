@@ -10,6 +10,7 @@ const root = new URL("../", import.meta.url);
 const modelSource = await readFile(new URL("src/legacy-canvas/canvas-asset-library-model.js", root), "utf8");
 const viewSource = await readFile(new URL("src/legacy-canvas/canvas-asset-library-view.js", root), "utf8");
 const context = vm.createContext({});
+new vm.Script(await readFile(new URL("src/legacy-canvas/canvas-file-name.js", root), "utf8")).runInContext(context);
 new vm.Script(modelSource).runInContext(context);
 new vm.Script(viewSource).runInContext(context);
 const { REELAY_CANVAS_ASSET_LIBRARY_MODEL: model, REELAY_CANVAS_ASSET_LIBRARY_VIEW: view } = context;
@@ -258,7 +259,7 @@ test("adding a mixed selection expands ordered group content and inserts overlap
   assert.equal(h.state.librarySelectedIds.size, 0);
 });
 
-test("mixed group selections expose only add and create while Media-only selections retain supported actions", (t) => {
+test("standalone mixed selections expose add and create while Media selections omit persistent deletion", (t) => {
   const h = harness(t);
   const menuActions = () => [...h.document.querySelectorAll('[data-library-batch-action]')].map((button) => button.dataset.libraryBatchAction).sort();
   h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`).click();
@@ -273,7 +274,7 @@ test("mixed group selections expose only add and create while Media-only selecti
   h.state.libraryTarget = null;
   h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`).click();
   h.document.querySelector('[data-library-batch-toggle]').click();
-  assert.deepEqual(menuActions(), ["add-canvas", "create-group", "delete", "move", "review", "share-organization"]);
+  assert.deepEqual(menuActions(), ["add-canvas", "create-group", "move", "review", "share-organization"]);
 });
 
 test("group card menus keep browse, edit and rename without unrelated Media mutations", (t) => {

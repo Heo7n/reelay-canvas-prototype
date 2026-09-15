@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { MediaUploadPolicySchema } from "../../domain/asset/media-upload-policy";
+
+export const MediaUploadPolicyResponseDtoSchema = z.object({ policy: MediaUploadPolicySchema }).strict();
+export const MediaUploadCancellationResponseDtoSchema = z.object({ uploadIntent: z.object({
+  id: z.string().min(1), status: z.enum(["cancelled", "cancelling"]), reason: z.literal("remote_upload_pending").optional(),
+}).strict() }).strict();
 
 const IdentifierSchema = z.string().trim().min(1).max(160);
 
@@ -185,6 +191,7 @@ export const MediaUploadIntentResponseDtoSchema = z.object({
   uploadIntent: z.object({
     id: IdentifierSchema,
     expiresAt: z.string().datetime({ offset: true }),
+    status: z.enum(["pending", "uploaded", "finalized"]).optional(),
   }).strict(),
   upload: z.object({
     url: z.string().trim().min(1).max(4_096),

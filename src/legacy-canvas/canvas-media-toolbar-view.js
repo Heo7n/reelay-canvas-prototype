@@ -24,7 +24,7 @@
 
   function renderMediaToolbar(options = {}) {
     if (!options.visible) return "";
-    const showLabels = Boolean(options.showLabels);
+    const showLabels = options.showLabels !== false;
     const pinnedTools = Array.isArray(options.pinnedTools) ? options.pinnedTools : [];
     const editingTools = pinnedTools.filter((tool) => tool?.id !== "add-library");
     const libraryTool = pinnedTools.find((tool) => tool?.id === "add-library");
@@ -60,10 +60,7 @@
         <span class="media-tool-separator" aria-hidden="true"></span>
         <div class="media-tool-actions">
           ${libraryTool ? renderToolButton(libraryTool, showLabels) : ""}
-          <button class="media-tool-button" type="button" data-media-tool="download" aria-label="下载">
-            <i data-lucide="download" aria-hidden="true"></i>
-            <span class="toolbar-tip" aria-hidden="true">下载</span>
-          </button>
+          ${renderToolButton({ id: "download", icon: "download", label: "下载" }, showLabels)}
         </div>
       </div>
     `;

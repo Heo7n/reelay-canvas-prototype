@@ -13,7 +13,14 @@ import type {
   ImportTransientMediaInput,
   TransientMediaRepository,
 } from "../../application/assets/TransientMediaRepository";
+import type { MediaLibraryRepository } from "../../application/assets/MediaLibraryRepository";
+import {
+  BUILTIN_LIBRARY_TAGS, MediaLibraryError, libraryNameKey, normalizeLibraryName,
+  planLibraryDeletion, validateLibraryFolderRename, validateLibraryFolder, validateLibrarySave,
+  type LibraryEntry, type LibraryFolder, type LibraryTag, type MediaLibraryCatalog,
+} from "../../domain/asset/media-library";
 import { ApplicationError } from "../../application/shared/ApplicationError";
+import { buildMediaUploadPolicy, isLibraryUploadFormat } from "../../domain/asset/media-upload-policy";
 import {
   EntityValidationError,
   normalizeEntityContent,
@@ -21,12 +28,14 @@ import {
   normalizeExpectedEntityVersion,
 } from "../../domain/asset/entity";
 import { createExperienceAssetFixtures } from "./experience-fixtures";
+import { DEMO_ASSET_FIXTURES } from "../../config/entity-demo-fixtures";
+import { DEMO_LIBRARY_DIRECTORY_EXAMPLE } from "../../config/media-library-directory-example";
 
 export const EXPERIENCE_MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const EXPERIENCE_MAX_IMPORT_BYTES = 128 * 1024 * 1024;
 
 const CONTENT_TYPES_BY_KIND = {
-  image: new Set(["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"]),
+  image: new Set(["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp", "image/svg+xml"]),
   video: new Set(["video/mp4", "video/ogg", "video/quicktime", "video/webm"]),
   audio: new Set(["audio/aac", "audio/flac", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav", "audio/webm", "audio/x-wav"]),
 };
@@ -49,15 +58,82 @@ function normalizeDisplayName(value: string): string {
 /** Browser-page-owned data, with no network client or persistent storage. */
 export class ExperienceAssetStore implements TransientMediaRepository {
   private readonly assets = new Map<string, PersonalMediaAsset>();
+  private readonly deletedLibraryEntities = new Set<string>();
   private readonly entityRecords = new Map<string, WorkspaceEntity>();
   private readonly projectReferences = new Map<string, Map<string, string>>();
   private readonly entityCreations = new Map<string, { entityId: string; fingerprint: string }>();
   private readonly objectUrls = new Set<string>();
+  private readonly libraryFolders = new Map<string, LibraryFolder>();
+  private readonly libraryTags = new Map<string, LibraryTag>();
+  private readonly libraryEntries = new Map<string, LibraryEntry>();
   private allocatedBytes = 0;
   private generation = 0;
   private disposed = false;
 
+  readonly library: MediaLibraryRepository = {
+    list: async (workspaceId) => {
+      this.requireWorkspace(workspaceId);
+      return this.catalog();
+    },
+    createFolder: async (input) => this.libraryOperation(() => {
+      this.requireWorkspace(input.workspaceId);
+      const name = validateLibraryFolder(this.catalog(), input);
+      const folder: LibraryFolder = { id: `experience-folder-${crypto.randomUUID()}`,
+        space: input.space, parentId: input.parentId, name };
+      this.libraryFolders.set(folder.id, folder);
+      return structuredClone(folder);
+    }),
+    renameFolder: async (input) => this.libraryOperation(() => {
+      this.requireWorkspace(input.workspaceId);
+      const folder = validateLibraryFolderRename(this.catalog(), input);
+      this.libraryFolders.set(folder.id, folder);
+      return structuredClone(folder);
+    }),
+    createTag: async (input) => this.libraryOperation(() => {
+      this.requireWorkspace(input.workspaceId);
+      const name = normalizeLibraryName(input.name);
+      if (!name || name.length > 40 || /[\u0000-\u001f]/u.test(name)) throw invalid("标签名称需为 1–40 个字符。", "invalid_tag_name");
+      const builtin = BUILTIN_LIBRARY_TAGS.find((tag) => libraryNameKey(tag.name) === libraryNameKey(name));
+      if (builtin) return { ...builtin, space: input.space };
+      const existing = [...this.libraryTags.values()].find((tag) => tag.space === input.space && libraryNameKey(tag.name) === libraryNameKey(name));
+      if (existing) return structuredClone(existing);
+      const tag: LibraryTag = { id: `experience-tag-${crypto.randomUUID()}`, space: input.space, name };
+      this.libraryTags.set(tag.id, tag);
+      return structuredClone(tag);
+    }),
+    delete: async (input) => this.libraryOperation(() => {
+      this.requireWorkspace(input.workspaceId);
+      const entities = [...this.entityRecords.values()].filter((entity) => !this.deletedLibraryEntities.has(entity.id));
+      const plan = planLibraryDeletion(this.catalog(), entities.map((entity) => ({ id: entity.id, version: entity.version, assetIds: entity.mediaRefs.map((ref) => ref.assetId) })), input);
+      for (const id of plan.entityIds) this.deletedLibraryEntities.add(id);
+      for (const id of plan.assetIds) this.libraryEntries.delete(`${input.space}:${id}`);
+      for (const id of plan.folderIds) this.libraryFolders.delete(id);
+      return this.catalog();
+    }),
+    save: async (input) => this.libraryOperation(() => {
+      this.requireWorkspace(input.workspaceId);
+      this.requireProject(input.projectId);
+      const normalized = validateLibrarySave(this.catalog(), input);
+      // Validate the complete batch before committing any placement.
+      const entries = normalized.items.map((item) => {
+        const asset = this.requireAsset(item.assetId);
+        if (![...this.libraryEntries.values()].some((entry) => entry.assetId === asset.id) && !this.projectReferences.get(input.projectId)?.has(asset.id)) throw new ApplicationError("not_found", "素材不存在或无法从当前项目保存。");
+        const existing = this.libraryEntries.get(`${normalized.space}:${item.assetId}`);
+        if (existing && item.action === "add") return existing;
+        return { ...this.libraryEntry(asset), displayName: item.displayName,
+          space: normalized.space, folderId: normalized.folderId, tagIds: [...normalized.tagIds] };
+      });
+      for (const entry of entries) this.libraryEntries.set(`${entry.space}:${entry.assetId}`, entry);
+      return this.catalog();
+    }),
+  };
+
   readonly media: MediaAssetRepository = {
+    library: this.library,
+    getUploadPolicy: async (workspaceId) => {
+      this.requireWorkspace(workspaceId);
+      return buildMediaUploadPolicy(EXPERIENCE_MAX_FILE_BYTES);
+    },
     createUploadIntent: async () => {
       this.requireActive();
       throw invalid("体验素材请使用本页临时导入。", "transient_upload_required");
@@ -69,17 +145,20 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     renamePersonalAsset: async (workspaceId, assetId, displayName) => {
       this.requireWorkspace(workspaceId);
       const current = this.requireAsset(assetId);
+      if (!this.libraryEntries.has(`personal:${assetId}`)) throw new ApplicationError("not_found", "素材不存在。");
       const asset = { ...current, displayName: normalizeDisplayName(displayName), updatedAt: new Date().toISOString() };
-      this.assets.set(assetId, asset);
+      const entry = this.libraryEntries.get(`personal:${assetId}`);
+      if (entry) this.libraryEntries.set(`personal:${assetId}`, { ...entry, displayName: asset.displayName });
       return structuredClone(asset);
     },
     attachToProject: async (projectId, assetId) => {
       this.requireProject(projectId);
+      if (![...this.libraryEntries.values()].some((entry) => entry.assetId === assetId)) throw new ApplicationError("not_found", "素材不存在。");
       return this.attach(projectId, this.requireAsset(assetId));
     },
     listPersonalAssets: async (workspaceId) => {
       this.requireWorkspace(workspaceId);
-      return structuredClone([...this.assets.values()]);
+      return structuredClone([...this.libraryEntries.values()].filter((entry) => entry.space === "personal").map((entry) => ({ ...this.requireAsset(entry.assetId), displayName: entry.displayName })));
     },
     listProjectAssets: async (projectId) => {
       this.requireProject(projectId);
@@ -97,7 +176,7 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     },
     listPersonal: async (workspaceId) => {
       this.requireWorkspace(workspaceId);
-      return structuredClone([...this.entityRecords.values()]);
+      return structuredClone([...this.entityRecords.values()].filter((entity) => !this.deletedLibraryEntities.has(entity.id)));
     },
     update: async (input) => this.updateEntity(input),
   };
@@ -115,8 +194,12 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     if (input.target !== "personal" && input.target !== "project") throw invalid("素材目标无效。");
     const { projectId, target, mediaKind } = input;
     const displayName = normalizeDisplayName(input.displayName);
-    const contentType = input.contentType.trim().toLowerCase();
+    const providedType = input.contentType.trim().toLowerCase();
+    const contentType = buildMediaUploadPolicy(EXPERIENCE_MAX_FILE_BYTES).library.contentTypeAliases[providedType] || providedType;
     if (!CONTENT_TYPES_BY_KIND[mediaKind]?.has(contentType)) throw invalid("暂不支持此素材格式。");
+    if (input.uploadPurpose === "library" && !isLibraryUploadFormat({ mediaKind, contentType, displayName: input.displayName })) {
+      throw invalid("资产库暂不支持此文件格式。");
+    }
     const byteSize = input.body.byteLength;
     if (byteSize === 0) throw invalid("无法导入空文件。");
     if (byteSize > EXPERIENCE_MAX_FILE_BYTES) throw invalid("体验版单个素材最大支持 4 MB。", "asset_too_large");
@@ -151,6 +234,7 @@ export class ExperienceAssetStore implements TransientMediaRepository {
         updatedAt: timestamp,
       };
       this.assets.set(asset.id, asset);
+      this.libraryEntries.set(`personal:${asset.id}`, this.libraryEntry(asset));
       this.objectUrls.add(objectUrl);
       return {
         asset: structuredClone(asset),
@@ -167,8 +251,12 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     this.requireActive();
     this.clear();
     const fixtures = createExperienceAssetFixtures(this.options.workspaceId);
-    for (const asset of fixtures.media) this.assets.set(asset.id, asset);
+    for (const asset of fixtures.media) {
+      this.assets.set(asset.id, asset);
+      this.libraryEntries.set(`personal:${asset.id}`, this.libraryEntry(asset));
+    }
     for (const entity of fixtures.entities) this.entityRecords.set(entity.id, entity);
+    this.resetLibraryDirectoryExample();
   }
 
   dispose(): void {
@@ -182,13 +270,57 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     this.objectUrls.clear();
     this.assets.clear();
     this.entityRecords.clear();
+    this.deletedLibraryEntities.clear();
     this.projectReferences.clear();
     this.entityCreations.clear();
+    this.libraryEntries.clear();
+    this.libraryFolders.clear();
+    this.libraryTags.clear();
     this.allocatedBytes = 0;
   }
 
   private requireActive(): void {
     if (this.disposed) throw invalid("本次体验已结束。", "experience_disposed");
+  }
+
+  private catalog(): MediaLibraryCatalog {
+    return structuredClone({ folders: [...this.libraryFolders.values()], tags: [...this.libraryTags.values()],
+      entries: [...this.libraryEntries.values()] });
+  }
+
+  private resetLibraryDirectoryExample(): void {
+    const example = DEMO_LIBRARY_DIRECTORY_EXAMPLE;
+    const fixture = DEMO_ASSET_FIXTURES.find((asset) => asset.key === example.assetKey);
+    if (!fixture) throw new Error("The library directory example must reference an existing demo asset.");
+    let parentId: string | null = null;
+    for (const [index, name] of example.path.entries()) {
+      const folder: LibraryFolder = { id: `experience-library-example-folder-${index + 1}`,
+        name, parentId, space: "personal" };
+      validateLibraryFolder(this.catalog(), { ...folder, workspaceId: this.options.workspaceId });
+      this.libraryFolders.set(folder.id, folder);
+      parentId = folder.id;
+    }
+    const tag: LibraryTag = { id: "experience-library-example-tag", name: example.customTagName, space: "personal" };
+    this.libraryTags.set(tag.id, tag);
+    const asset = this.requireAsset(`experience-${fixture.staticMediaId}`);
+    this.libraryEntries.set(`personal:${asset.id}`, { ...this.libraryEntry(asset),
+      displayName: example.displayName, folderId: parentId, tagIds: [example.builtinTagId, tag.id] });
+  }
+
+  private libraryEntry(asset: PersonalMediaAsset): LibraryEntry {
+    return { assetId: asset.id, assetVersion: asset.objectVersion, mediaKind: asset.mediaKind,
+      displayName: asset.displayName, contentType: asset.contentType, byteSize: asset.byteSize,
+      checksumSha256: asset.checksumSha256, contentUrl: asset.contentUrl, createdAt: asset.createdAt,
+      space: "personal", folderId: null, tagIds: [] };
+  }
+
+  private libraryOperation<T>(operation: () => T): T {
+    try { return operation(); } catch (error) {
+      if (!(error instanceof MediaLibraryError)) throw error;
+      const code = ["folder_name_conflict", "placement_changed", "explicit_move_required", "library_item_in_use", "entity_changed", "folder_changed"].includes(error.code)
+        ? "conflict" : error.code.endsWith("not_found") ? "not_found" : "request_failed";
+      throw new ApplicationError(code, error.message, { serviceCode: error.code });
+    }
   }
 
   private requireWorkspace(workspaceId: string): void {
@@ -209,7 +341,7 @@ export class ExperienceAssetStore implements TransientMediaRepository {
 
   private requireEntity(entityId: string): WorkspaceEntity {
     const entity = this.entityRecords.get(entityId);
-    if (!entity) throw new ApplicationError("not_found", "主体不存在。");
+    if (!entity || this.deletedLibraryEntities.has(entityId)) throw new ApplicationError("not_found", "主体不存在。");
     return entity;
   }
 
@@ -249,7 +381,10 @@ export class ExperienceAssetStore implements TransientMediaRepository {
         mediaAssetIds: input.assetIds,
         coverMediaId: input.coverAssetId,
       });
-      for (const ref of content.mediaRefs) this.requireAsset(ref.mediaAssetId);
+      for (const ref of content.mediaRefs) {
+        this.requireAsset(ref.mediaAssetId);
+        if (!this.libraryEntries.has(`personal:${ref.mediaAssetId}`)) throw new ApplicationError("not_found", "素材未保存在个人素材库中。");
+      }
       return {
         name: content.name,
         description: content.description,
@@ -271,11 +406,12 @@ export class ExperienceAssetStore implements TransientMediaRepository {
       if (error instanceof EntityValidationError) throw invalid(error.message, error.reason);
       throw error;
     }
+    const previous = this.entityCreations.get(key);
+    if (previous && this.deletedLibraryEntities.has(previous.entityId)) throw new ApplicationError("conflict", "该素材组已删除，请重新发起创建。");
     const content = this.entityContent(input);
     const fingerprint = JSON.stringify(content);
-    const previous = this.entityCreations.get(key);
     if (previous) {
-      if (previous.fingerprint !== fingerprint) throw new ApplicationError("conflict", "本次创建请求的内容已改变。");
+      if (this.deletedLibraryEntities.has(previous.entityId) || previous.fingerprint !== fingerprint) throw new ApplicationError("conflict", "本次创建请求的内容已改变。");
       return structuredClone(this.requireEntity(previous.entityId));
     }
     const timestamp = new Date().toISOString();

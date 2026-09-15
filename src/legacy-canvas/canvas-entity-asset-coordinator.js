@@ -158,6 +158,7 @@
       onCatalog({
         assets: message.assets.map((asset) => ({ ...asset })),
         entities,
+        ...(message.libraryCatalog ? { libraryCatalog: message.libraryCatalog } : {}),
       });
       return true;
     }

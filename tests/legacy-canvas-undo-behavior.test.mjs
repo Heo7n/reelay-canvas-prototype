@@ -1785,7 +1785,7 @@ test("preview undo does not consume existing history and a same-ID replacement c
   assert.equal(nodes[1].x, 400);
 });
 
-test("media toolbar defaults to icons while preserving explicit saved label choices", (t) => {
+test("media toolbar defaults to visible names while preserving explicit saved label choices", (t) => {
   const { window } = createHarness(t);
   for (const saved of [null, { image: { tools: ["crop"] } }, {
     image: { tools: ["crop"], showLabels: true },
@@ -1793,9 +1793,9 @@ test("media toolbar defaults to icons while preserving explicit saved label choi
   }]) {
     window.localStorage.setItem("reelay-media-tools", JSON.stringify(saved));
     const preferences = window.loadMediaToolPreferences();
-    assert.equal(preferences.image.showLabels, saved?.image?.showLabels === true);
-    assert.equal(preferences.video.showLabels, false);
-    assert.equal(preferences.audio.showLabels, false);
+    assert.equal(preferences.image.showLabels, saved?.image?.showLabels !== false);
+    assert.equal(preferences.video.showLabels, saved?.video?.showLabels !== false);
+    assert.equal(preferences.audio.showLabels, true);
     if (saved?.image) assert.deepEqual(plain(preferences.image.tools), ["crop"]);
   }
 });
@@ -1809,6 +1809,24 @@ test("media toolbar retains its screen size across the full canvas zoom range", 
     h.state.scale = scale;
     for (const node of nodes) {
       assert.ok(Math.abs(h.window.getNodeLayout(node).toolbarScale * scale - 1) < 1e-10);
+    }
+  }
+});
+
+test("media toolbar keeps enabled names on narrow media and across canvas zoom", (t) => {
+  const h = createHarness(t);
+  const node = h.window.defaultAssetNode(100, 100, {
+    id: "image", type: "image", url: "blob:http://reelay.test/image", width: 640, height: 1280,
+  });
+  h.install(h.canvas("main", [node]));
+  h.window.setSelection([node.id], node.id);
+  h.state.mediaToolbarNodeId = node.id;
+  for (const mediaWidth of [220, 760]) {
+    for (const scale of [0.2, 1, 2]) {
+      h.state.scale = scale;
+      const host = h.window.document.createElement("div");
+      host.innerHTML = h.window.mediaEditToolbar(node, { mediaWidth, toolbarScale: 1 / scale });
+      assert.deepEqual([...host.querySelectorAll('.media-tool-button.with-label > span:not(.toolbar-tip)')].map((label) => label.textContent), ["HD 放大", "裁剪", "去背景", "保存到素材", "下载"]);
     }
   }
 });

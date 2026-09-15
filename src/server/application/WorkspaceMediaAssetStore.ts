@@ -7,8 +7,12 @@ import type {
 } from "../../domain/asset/workspace-media-asset";
 import type { ActorId } from "../../domain/identity/session";
 import type { WorkspaceId } from "../../domain/workspace/workspace";
+import type { MediaLibraryStore } from "./MediaLibraryStore";
+import type { MediaStorageSnapshot, MediaStorageSpace } from "../../domain/asset/media-storage";
 
 export interface CreateAssetUploadIntentInput {
+  storageSpace?: MediaStorageSpace;
+  projectId?: string;
   actorId: ActorId;
   workspaceId: WorkspaceId;
   idempotencyKey: string;
@@ -45,6 +49,21 @@ export interface ReadAssetUploadIntentInput extends ListPersonalAssetsInput {
   uploadIntentId: AssetUploadIntentId;
 }
 
+export interface FindAssetUploadIntentInput extends ListPersonalAssetsInput {
+  idempotencyKey: string;
+}
+
+export interface ReadMediaStorageInput extends ListPersonalAssetsInput {
+  storageSpace?: MediaStorageSpace;
+  projectId?: string;
+}
+
+export type UploadedAssetObject = Pick<RecordAssetUploadInput, "objectKey" | "contentType" | "byteSize" | "checksumSha256" | "etag">;
+
+export interface CancelAssetUploadInput extends ReadAssetUploadIntentInput {
+  expiredOnly?: boolean;
+}
+
 export interface ReadPersonalAssetInput extends ListPersonalAssetsInput {
   assetId: WorkspaceMediaAssetId;
 }
@@ -64,7 +83,12 @@ export type AssetUploadConflictReason =
   | "idempotency_key_reused"
   | "metadata_mismatch"
   | "not_uploaded"
-  | "expired";
+  | "expired"
+  | "cancelled"
+  | "finalized"
+  | "not_expired"
+  | "authorization_active"
+  | "storage_owner_mismatch";
 
 export class AssetUploadConflictError extends Error {
   constructor(readonly reason: AssetUploadConflictReason) {
@@ -87,9 +111,16 @@ export class PersonalAssetUnavailableError extends Error {
   }
 }
 
-export interface WorkspaceMediaAssetStore {
+export interface WorkspaceMediaAssetStore extends MediaLibraryStore {
+  getMediaStorage(input: ReadMediaStorageInput): Promise<MediaStorageSnapshot>;
+  listExpiredUploadIntents(input: ReadMediaStorageInput): Promise<AssetUploadIntent[]>;
+  registerUploadAuthorization(input: ReadAssetUploadIntentInput & { expiresAt: string; reservedBytes?: number }): Promise<void>;
+  writeUpload(input: ReadAssetUploadIntentInput, write: (intent: AssetUploadIntent) => Promise<UploadedAssetObject>): Promise<AssetUploadIntent>;
+  beginUploadCancellation(input: CancelAssetUploadInput): Promise<AssetUploadIntent>;
+  completeUploadCancellation(input: ReadAssetUploadIntentInput): Promise<void>;
   createUploadIntent(input: CreateAssetUploadIntentInput): Promise<AssetUploadIntent>;
   getUploadIntent(input: ReadAssetUploadIntentInput): Promise<AssetUploadIntent | null>;
+  findUploadIntentByIdempotencyKey(input: FindAssetUploadIntentInput): Promise<AssetUploadIntent | null>;
   recordUpload(input: RecordAssetUploadInput): Promise<AssetUploadIntent>;
   finalizeUpload(input: FinalizeAssetUploadInput): Promise<WorkspaceMediaAsset>;
   listPersonalAssets(input: ListPersonalAssetsInput): Promise<WorkspaceMediaAsset[]>;

@@ -164,7 +164,7 @@ const {
   assetLibrarySeed = {},
   mediaToolDefinitions = {},
   mediaToolsByType = { image: [], video: [], audio: [] },
-  defaultMediaToolPreferences = { image: { tools: [], showLabels: false }, video: { tools: [], showLabels: false }, audio: { tools: [], showLabels: false } },
+  defaultMediaToolPreferences = { image: { tools: [], showLabels: true }, video: { tools: [], showLabels: true }, audio: { tools: [], showLabels: true } },
   generationWorkflows = { image: [], video: [] },
   agentConversations: seedAgentConversations = [{ id: "new", title: "新对话", messages: [] }],
   layoutRules = {},
@@ -329,6 +329,7 @@ const state = {
     transientMediaUpload: false,
     progressiveAssetLoading: false,
     workspaceCatalog: "unavailable",
+    mediaLibrary: undefined,
   },
   mediaToolPreferences: loadMediaToolPreferences(),
   mediaToolbarNodeId: null,
@@ -485,6 +486,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.hostCapabilities.transientMediaUpload = context.capabilities?.transientMediaUpload === true;
     state.hostCapabilities.progressiveAssetLoading = context.capabilities?.progressiveAssetLoading === true;
     state.hostCapabilities.workspaceCatalog = state.hostCapabilities.progressiveAssetLoading ? "loading" : "unavailable";
+    state.hostCapabilities.mediaLibrary = undefined;
     const launchScope = JSON.stringify([context.workspaceId, context.projectId, context.canvasId]);
     if (hostLaunchScope !== launchScope) {
       hostLaunchScope = launchScope;
@@ -539,10 +541,11 @@ const canvasMediaAssets = canvasMediaAssetCoordinatorFactory.createCanvasMediaAs
   },
   useTransientUpload: () => state.hostCapabilities.transientMediaUpload,
   usesProgressiveAssetLoading: () => state.hostCapabilities.progressiveAssetLoading,
-  onAvailability({ projectAssets, workspaceCatalog }) {
-    state.hostCapabilities.assetPersistence = projectAssets === "ready" && workspaceCatalog !== "loading";
+  onAvailability({ projectAssets, workspaceCatalog, mediaLibrary }) {
+    state.hostCapabilities.assetPersistence = projectAssets === "ready" && (mediaLibrary || workspaceCatalog) !== "loading";
     state.hostCapabilities.entityPersistence = workspaceCatalog === "ready";
     state.hostCapabilities.workspaceCatalog = workspaceCatalog;
+    state.hostCapabilities.mediaLibrary = mediaLibrary;
     renderAssetLibrary();
     renderSelectionToolbar();
     canvasEntityUse.refresh({ renderPicker: true });
@@ -621,6 +624,97 @@ const canvasEntityMediaImport = window.REELAY_CANVAS_ENTITY_MEDIA_IMPORT.createE
     renderAssetLibrary();
     renderSelectionToolbar();
   },
+});
+const canvasMediaLibrary = window.REELAY_CANVAS_MEDIA_LIBRARY_COORDINATOR.createMediaLibraryCoordinator({
+  instanceId: canvasInstanceId,
+  makeRequestId: () => crypto.randomUUID(),
+  postMessage: (message) => window.parent.postMessage(message, window.location.origin),
+  setTimer: (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer: (timerId) => window.clearTimeout(timerId),
+  isHosted: () => window.parent !== window,
+  getExpectedOrigin: () => window.location.origin,
+  getExpectedSource: () => window.parent,
+});
+const canvasSaveMedia = window.REELAY_CANVAS_SAVE_MEDIA_CONTROLLER.createSaveMediaController({
+  document,
+  createDialog: window.REELAY_CANVAS_SAVE_MEDIA_DIALOG.createSaveMediaDialog,
+  coordinator: canvasMediaLibrary,
+  importer: canvasEntityMediaImport,
+  getScopeKey: () => JSON.stringify([hostLaunchScope, state.projectId, state.activeCanvasId, state.identity.account]),
+  isMutable: isCanvasMutationAllowed,
+  inspectSource: (asset) => window.REELAY_CANVAS_ENTITY_MEDIA_IMPORT.inspectImportSource(asset, { baseUrl: window.location.href }),
+  onCatalog: registerHostMediaLibrary,
+  onFolder: (folder) => { assetLibraryStore.syncPersistedFolder(folder); renderAssetLibrary(); },
+  canCreateFolder: canCreateAssetLibraryFolder,
+  canManageFolders: canManageAssetLibraryFolder,
+  confirmDeleteFolder: ({ folder, space, onConfirm, onCancel }) => showConfirmDialog({
+    title: "删除文件夹？",
+    body: `「${folder.name}」及其子文件夹中的素材将从${space === "organization" ? "组织" : "个人"}空间移除。已放到画布上的内容会保留；仍被素材组引用时无法删除。此操作无法撤销。`,
+    confirmText: "删除文件夹", danger: true, waitForConfirm: true, pendingText: "删除中…", onConfirm, onCancel,
+  }),
+  confirmMove: ({ count, destination, onConfirm, onCancel }) => showConfirmDialog({
+    title: "移动已有素材？",
+    body: `将 ${count} 份已入库素材移动到：\n${destination}`,
+    confirmText: "移动并保存",
+    cancelText: "返回",
+    onConfirm,
+    onCancel,
+  }),
+  notify: showActionToast,
+});
+const canvasLibraryUpload = window.REELAY_CANVAS_LIBRARY_UPLOAD_CONTROLLER.createLibraryUploadController({
+  saveController: canvasSaveMedia,
+  pickFiles: ({ accept }) => {
+    if (!assetLibraryUploadInput) return;
+    assetLibraryUploadInput.accept = accept;
+    assetLibraryUploadInput.click();
+  },
+  isMutable: () => isCanvasMutationAllowed() && isAssetLibraryMutable() && canPersistLibraryMedia(),
+  getScopeKey: () => JSON.stringify([hostLaunchScope, state.projectId, state.activeCanvasId, state.identity.account, state.librarySpace]),
+  getUploadPolicy: () => canvasMediaAssets.getUploadPolicy(),
+});
+const canvasLibraryDelete = window.REELAY_CANVAS_LIBRARY_DELETE_CONTROLLER.createLibraryDeleteController({
+  getScopeKey: () => JSON.stringify([hostLaunchScope, state.projectId, state.activeCanvasId, state.identity.account, state.librarySpace]),
+  canDelete: canDeleteAssetLibraryItems,
+  confirm: showConfirmDialog,
+  remove: (input) => canvasMediaLibrary.request("delete", input),
+  onDeleted(catalog, items) {
+    registerHostMediaLibrary(catalog, { removedEntityIds: items.filter((item) => item.kind === "entity").map((item) => item.id) });
+    clearAssetLibrarySelection();
+    state.libraryMenuTarget = null;
+    state.libraryMoveFolderId = null;
+    if (items.some((item) => item.kind === "entity" && item.id === state.libraryEntityFilter?.entityId)) {
+      state.libraryEntityFilter = null;
+    }
+    renderAssetLibrary();
+  },
+  notify: showActionToast,
+});
+const canvasLibraryDirectory = window.REELAY_CANVAS_LIBRARY_DIRECTORY_CONTROLLER.createLibraryDirectoryController({
+  getScopeKey: () => JSON.stringify([hostLaunchScope, state.projectId, state.activeCanvasId, state.identity.account]),
+  getSpace: () => state.librarySpace,
+  getFolders: (space) => assetLibraryStore.listFolders({ space, kind: "all" }),
+  getCurrentFolderId: () => state.libraryFolderId,
+  canCreate: canCreateAssetLibraryFolder,
+  canRename: canManageAssetLibraryFolder,
+  request: (command, input) => canvasMediaLibrary.request(command, input),
+  onFolder: (folder) => { assetLibraryStore.syncPersistedFolder(folder); renderAssetLibrary(); },
+  onDraftChange: (_draft, change) => {
+    if (change?.reason === "input") {
+      const input = assetLibraryDirectoryTreePopover?.querySelector("[data-library-directory-draft-input]");
+      input?.removeAttribute("aria-invalid");
+      input?.removeAttribute("aria-describedby");
+      assetLibraryDirectoryTreePopover?.querySelector(".asset-library-directory-draft-error")?.remove();
+    } else renderAssetLibraryDirectory({ focusDraft: true });
+  },
+  onCreated(folder) {
+    state.libraryFolderId = folder.id;
+    state.libraryEntityFilter = null;
+    state.libraryDirectoryMenuOpen = true;
+    ensureCurrentAssetLibraryPathExpanded();
+    renderAssetLibrary();
+  },
+  onError: (message) => { if (!canvasLibraryDirectory.getDraft()) showActionToast(message); },
 });
 const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntityEditorController({
   host: canvasEntityEditorHost,
@@ -805,6 +899,9 @@ function syncCanvasAccessUi() {
 }
 
 function applyCanvasAccessMode(mode) {
+  canvasSaveMedia.syncContext();
+  canvasLibraryDelete.syncContext();
+  canvasLibraryDirectory.syncContext();
   if (!isCanvasMutationAllowed()) {
     const cancelledTasks = canvasNodeTasks.cancelScope({}, "access-revoked");
     state.action = null;
@@ -1255,7 +1352,8 @@ function scheduleCanvasDocumentSave(delay = 800) {
 function handleHostBridgeMessage(event) {
   return canvasPersistence.handleHostMessage(event)
     || canvasMediaAssets.handleHostMessage(event)
-    || canvasEntityAssets.handleHostMessage(event);
+    || canvasEntityAssets.handleHostMessage(event)
+    || canvasMediaLibrary.handleHostMessage(event);
 }
 
 function screenToWorld(clientX, clientY) {
@@ -3520,7 +3618,7 @@ function mediaEditToolbar(node, layout) {
   if (!asset || !shouldShowMediaEditToolbar(node)) return "";
   const type = getNodeMediaType(node);
   const preference = state.mediaToolPreferences[type] || defaultMediaToolPreferences[type];
-  const showLabels = preference.showLabels && layout.mediaWidth >= 440;
+  const showLabels = preference.showLabels;
   const unpinned = mediaToolsByType[type].filter((tool) => !preference.tools.includes(tool));
   return canvasMediaToolbarView.renderMediaToolbar({
     visible: true,
@@ -3659,6 +3757,8 @@ function switchAssetLibraryContext({ space = state.librarySpace } = {}) {
   canvasEntityUse.closeDetail();
   rememberAssetLibraryContext();
   state.librarySpace = canvasAssetLibraryModel.normalizeSpace(space);
+  canvasLibraryDelete.syncContext();
+  canvasLibraryDirectory.syncContext();
   state.libraryFolderId = null;
   state.libraryEntityFilter = null;
   state.libraryDirectoryMenuOpen = false;
@@ -3718,10 +3818,26 @@ function isAssetLibraryMutable() {
     && (state.librarySpace !== "personal" || !getPersonalCatalogStatus());
 }
 
+function canDeleteAssetLibraryItems(space = state.librarySpace) {
+  return window.parent !== window && isCanvasMutationAllowed() && space === state.librarySpace && isAssetLibraryMutable()
+    && canPersistLibraryMedia()
+    && (space === "personal" || (space === "organization" && ["owner", "admin"].includes(state.identity.workspaceRole)));
+}
+
+function canCreateAssetLibraryFolder(space = state.librarySpace) {
+  return window.parent !== window && isCanvasMutationAllowed() && canPersistLibraryMedia()
+    && ["personal", "organization"].includes(space);
+}
+
+function canManageAssetLibraryFolder(space = state.librarySpace) {
+  return canCreateAssetLibraryFolder(space)
+    && (space === "personal" || ["owner", "admin"].includes(state.identity.workspaceRole));
+}
+
 function getPersonalCatalogStatus() {
+  const status = state.hostCapabilities.mediaLibrary ?? state.hostCapabilities.workspaceCatalog;
   return window.parent !== window && state.hostCapabilities.progressiveAssetLoading
-    && state.hostCapabilities.workspaceCatalog !== "ready"
-    ? state.hostCapabilities.workspaceCatalog : "";
+    && status !== "ready" ? status : "";
 }
 
 function canPersistLibraryMedia() {
@@ -3793,6 +3909,7 @@ function ensureCurrentAssetLibraryPathExpanded() {
 
 function setAssetLibraryDirectoryMenuOpen(open) {
   state.libraryDirectoryMenuOpen = Boolean(open);
+  if (!open) canvasLibraryDirectory.cancel();
   if (state.libraryDirectoryMenuOpen) ensureCurrentAssetLibraryPathExpanded();
 }
 
@@ -3805,6 +3922,7 @@ function selectAssetLibraryDirectory(folderId) {
   state.libraryFolderId = normalizedFolderId;
   state.libraryEntityFilter = null;
   state.libraryDirectoryMenuOpen = false;
+  canvasLibraryDirectory.cancel();
   state.libraryRenameTarget = null;
   clearAssetLibrarySelection();
   renderAssetLibrary();
@@ -3856,6 +3974,31 @@ function getVisibleAssetLibraryContent() {
   return { folders, allItems, items };
 }
 
+function renderAssetLibraryDirectory({ focusDraft = false } = {}) {
+  if (!assetLibraryDirectoryTreePopover) return;
+  const previous = assetLibraryDirectoryTreePopover.querySelector("[data-library-directory-draft-input]");
+  const focused = previous === document.activeElement;
+  const selection = focused ? [previous.selectionStart, previous.selectionEnd] : null;
+  const draft = canvasLibraryDirectory.getDraft();
+  assetLibraryDirectoryTreePopover.classList.toggle("hidden", !state.libraryDirectoryMenuOpen);
+  assetLibraryDirectoryTreePopover.innerHTML = state.libraryDirectoryMenuOpen
+    ? canvasAssetLibraryView.renderDirectoryTree({
+        folders: getAssetLibraryFolders(), space: state.librarySpace,
+        currentFolderId: state.libraryFolderId,
+        expandedFolderIds: [...state.libraryExpandedFolderIds],
+        rootExpanded: state.libraryDirectoryRootExpanded,
+        canCreate: canCreateAssetLibraryFolder(), canRename: canManageAssetLibraryFolder(),
+        canDelete: canDeleteAssetLibraryItems(), directoryDraft: draft,
+      }) : "";
+  const input = assetLibraryDirectoryTreePopover.querySelector("[data-library-directory-draft-input]");
+  if (input && !input.disabled && (focusDraft || focused)) {
+    input.focus({ preventScroll: true });
+    if (selection) input.setSelectionRange(...selection);
+    else if (draft?.kind === "rename") input.select();
+    input.scrollIntoView({ block: "nearest" });
+  }
+}
+
 function renderAssetLibrary() {
   if (!assetLibraryGrid || !canvasAssetLibraryView || !isAssetLibraryOpen()) return;
   const previousRenameInput = assetLibraryGrid.querySelector("[data-library-rename-input]");
@@ -3864,9 +4007,11 @@ function renderAssetLibrary() {
   const platform = space === "platform";
   const section = "all";
   const canCreateEntity = mutable && space === "personal" && canPersistLibraryEntities();
-  const canUploadMedia = mutable && space === "personal" && getAssetLibraryFolder()?.kind !== "entity" && canPersistLibraryMedia();
+  const canUploadMedia = mutable && !platform && getAssetLibraryFolder()?.kind !== "entity" && canPersistLibraryMedia();
+  const canDelete = canDeleteAssetLibraryItems(space);
   const canManageFolders = mutable;
   if (!canManageFolders) state.libraryDirectoryMenuOpen = false;
+  canvasLibraryDirectory.syncContext();
   const folder = getAssetLibraryFolder();
   const folderPath = getAssetLibraryFolderPath();
   const allFolders = getAssetLibraryFolders();
@@ -3906,6 +4051,9 @@ function renderAssetLibrary() {
     assetLibraryDirectoryName.title = entityFilter ? "选择目录将清除素材组内容" : ["默认目录", ...folderPath.map((entry) => entry.name)].join(" / ");
   }
   if (assetLibraryDirectoryButton) {
+    const fullPath = [space === "organization" ? "组织" : space === "platform" ? "平台" : "个人", "默认目录", ...folderPath.map((entry) => entry.name)].join(" / ");
+    assetLibraryDirectoryButton.title = fullPath;
+    assetLibraryDirectoryButton.setAttribute("aria-label", `当前目录：${fullPath}`);
     assetLibraryDirectoryButton.disabled = !canManageFolders;
     assetLibraryDirectoryButton.setAttribute("aria-disabled", canManageFolders ? "false" : "true");
     assetLibraryDirectoryButton.setAttribute("aria-expanded", state.libraryDirectoryMenuOpen ? "true" : "false");
@@ -3913,24 +4061,15 @@ function renderAssetLibrary() {
   if (assetLibraryCreateFolderBtn) {
     const currentLevel = folderPath.length + 1;
     const atMaximumDepth = currentLevel >= canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS;
-    assetLibraryCreateFolderBtn.hidden = !canManageFolders || Boolean(entityFilter);
-    assetLibraryCreateFolderBtn.disabled = !canManageFolders || atMaximumDepth || Boolean(entityFilter);
-    assetLibraryCreateFolderBtn.setAttribute("aria-disabled", (!canManageFolders || atMaximumDepth || entityFilter) ? "true" : "false");
+    const canCreateFolders = canCreateAssetLibraryFolder(space);
+    assetLibraryCreateFolderBtn.hidden = !canCreateFolders || Boolean(entityFilter);
+    assetLibraryCreateFolderBtn.disabled = !canCreateFolders || atMaximumDepth || Boolean(entityFilter);
+    assetLibraryCreateFolderBtn.setAttribute("aria-disabled", (!canCreateFolders || atMaximumDepth || entityFilter) ? "true" : "false");
     assetLibraryCreateFolderBtn.title = atMaximumDepth
       ? `最多支持 ${canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS} 层目录`
       : "在当前目录中新建文件夹";
   }
-  if (assetLibraryDirectoryTreePopover) {
-    assetLibraryDirectoryTreePopover.classList.toggle("hidden", !state.libraryDirectoryMenuOpen);
-    assetLibraryDirectoryTreePopover.innerHTML = state.libraryDirectoryMenuOpen
-      ? canvasAssetLibraryView.renderDirectoryTree({
-          folders: allFolders,
-          currentFolderId: state.libraryFolderId,
-          expandedFolderIds: [...state.libraryExpandedFolderIds],
-          rootExpanded: state.libraryDirectoryRootExpanded,
-        })
-      : "";
-  }
+  renderAssetLibraryDirectory();
 
   if (assetLibraryCommandBar) {
     assetLibraryCommandBar.innerHTML = canvasAssetLibraryView.renderCommandBar({
@@ -3943,7 +4082,7 @@ function renderAssetLibrary() {
       allowedBatchActions: platformResults
         ? ["add-canvas", "save-personal"]
         : ["add-canvas", ...(canCreateEntity ? ["create-group"] : []),
-          ...(!hasSelectedGroups ? ["review", "move", "share-organization", "delete"] : [])],
+          ...(!hasSelectedGroups ? ["review", "move", "share-organization"] : []), ...(canDelete && (!hasSelectedGroups || space === "personal") ? ["delete"] : [])],
       addLabel: state.libraryTarget?.kind === "agent" ? "添加到对话参考"
         : state.libraryTarget?.kind === "node" ? "添加到当前节点" : "添加到画布",
       canImportPlatformAssets: false,
@@ -3960,7 +4099,8 @@ function renderAssetLibrary() {
       folder: item,
       renaming: renameKey === `folder:${item.id}`,
       menuOpen: menuKey === `folder:${item.id}`,
-      mutable: canManageFolders,
+      mutable: canManageAssetLibraryFolder(space),
+      canDelete,
       space,
     }))
     .join("");
@@ -3973,10 +4113,11 @@ function renderAssetLibrary() {
         menuOpen: menuKey === itemKey,
         renaming: renameKey === itemKey,
         mutable,
+        canDelete,
         space,
       };
       if (item.kind === "entity") {
-        const entityMedia = assetLibraryStore.getEntityMedia({ kind: "entity", id: item.id })
+        const entityMedia = assetLibraryStore.getEntityMedia({ kind: "entity", id: item.id, space })
           .filter((media) => assetLibraryStore.hasPlacement({ kind: "media", id: media.id }, space));
         const coverMedia = item.coverMediaId
           ? entityMedia.find((media) => media.id === item.coverMediaId)
@@ -3992,7 +4133,7 @@ function renderAssetLibrary() {
           mediaCount: entityMedia.length,
           coverPreview: entityMedia.find((media) => media.id === item.coverMediaId) || null,
           allowedActions: window.parent !== window
-            ? ["view-media", ...(space === "personal" && canPersistLibraryEntities() ? ["edit", "rename"] : [])]
+            ? ["view-media", ...(space === "personal" && canPersistLibraryEntities() ? ["edit", "rename"] : []), ...(canDelete && space === "personal" ? ["delete"] : [])]
             : ["view-media", "edit", "rename"],
         });
       }
@@ -4063,7 +4204,7 @@ function renderAssetLibrary() {
 }
 
 function findLibraryAsset(assetId) {
-  return assetLibraryStore.getMedia({ kind: "media", id: assetId })
+  return assetLibraryStore.getMedia({ kind: "media", id: assetId, space: state.librarySpace })
     || getCanvasLibraryAssets().find((asset) => asset.id === assetId)
     || null;
 }
@@ -4099,7 +4240,7 @@ function getEntityUseDetailPayload(entityId, space) {
   if (!entity) return null;
   if (!assetLibraryStore.hasPlacement({ kind: "entity", id: entity.id }, space)) return null;
   const media = assetLibraryStore
-    .getEntityMedia({ kind: "entity", id: entity.id })
+    .getEntityMedia({ kind: "entity", id: entity.id, space })
     .filter((item) => assetLibraryStore.hasPlacement({ kind: "media", id: item.id }, space));
   return { ...entity, media };
 }
@@ -4119,7 +4260,7 @@ function getEntityUsePickerEntities() {
       entitiesById.set(entity.id, {
         ...record,
         spaces: [space],
-        media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entity.id }),
+        media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entity.id, space }),
       });
     }
   }
@@ -4130,9 +4271,18 @@ function createEntityUseMediaPlan(entityIds, existingMedia, selectedSpaces) {
   const entities = entityIds
     .map((entityId) => assetLibraryStore.getEntity({ kind: "entity", id: entityId }))
     .filter(Boolean);
+  const mediaById = new Map();
+  for (const entity of entities) {
+    const space = selectedSpaces.get(entity.id) || "personal";
+    for (const media of assetLibraryStore.getEntityMedia({ kind: "entity", id: entity.id, space })) {
+      if (!mediaById.has(media.id) && assetLibraryStore.hasPlacement({ kind: "media", id: media.id }, space)) {
+        mediaById.set(media.id, media);
+      }
+    }
+  }
   return canvasEntityUseModel.createEntityMediaPlan({
     entities,
-    media: assetLibraryStore.listAllMedia(),
+    media: [...mediaById.values()],
     existingMedia,
     isMediaVisible(media, entity) {
       const space = selectedSpaces.get(entity.id) || "personal";
@@ -4253,7 +4403,7 @@ function addEntityToCanvas({ scope, entityId, space }) {
 }
 
 function openAssetLibraryPreview(id) {
-  const item = assetLibraryStore.getMedia({ kind: "media", id });
+  const item = assetLibraryStore.getMedia({ kind: "media", id, space: state.librarySpace });
   if (!item || !assetLibraryPreviewDialog || !assetLibraryPreviewBody) return;
   state.libraryPreviewTarget = { kind: "media", id };
   const name = getAssetDisplayName(item);
@@ -4840,6 +4990,9 @@ function render() {
 }
 
 function renderCanvasView() {
+  canvasSaveMedia.syncContext();
+  canvasLibraryDelete.syncContext();
+  canvasLibraryDirectory.syncContext();
   canvasEntityUse.refresh();
   if (state.activeGroupId && !getGroupById(state.activeGroupId)) state.activeGroupId = null;
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
@@ -5455,28 +5608,10 @@ async function downloadAssetFile(asset, fileName = `${getAssetDisplayName(asset)
 }
 
 function addEditableMediaToLibrary(node) {
+  if (!requireCanvasMutation()) return;
   const asset = getEditableMedia(node);
   if (!asset) return;
-  const sourceId = asset.librarySourceId || asset.id;
-  const registered = findRegisteredLibraryMedia(asset);
-  if (hasPersonalLibraryPlacement(registered)) {
-    showActionToast("该媒体已在个人素材中");
-    return;
-  }
-  if (window.parent !== window && !asset.workspaceAssetId && !registered?.workspaceAssetId) {
-    showActionToast("该媒体尚未持久化，当前不能加入云端素材库");
-    return;
-  }
-  registerLibraryAssets(
-    [
-      registered || {
-        ...cloneAsset(asset, "generated"),
-        librarySourceId: sourceId,
-      },
-    ],
-    "project",
-  );
-  showActionToast("已加入个人素材");
+  canvasSaveMedia.open([{ node, asset }]);
 }
 
 function enhanceEditableMedia(node) {
@@ -7451,7 +7586,7 @@ function getDialogFocusFallback(previousFocus) {
   return [...document.querySelectorAll(selector)].find(canRestoreDialogFocus) || null;
 }
 
-function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, onConfirm, onCancel }) {
+function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "取消", danger = false, showCancel = true, onConfirm, onCancel, waitForConfirm = false, pendingText = "处理中…" }) {
   const existingLayer = document.querySelector(".confirm-layer");
   if (existingLayer) {
     if (typeof existingLayer.closeConfirmDialog === "function") {
@@ -7493,6 +7628,7 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
   document.body.appendChild(layer);
 
   let closed = false;
+  let pending = false;
   const close = (restoreFocus = true, confirmed = false) => {
     if (closed) return;
     closed = true;
@@ -7508,20 +7644,45 @@ function showConfirmDialog({ title, body, confirmText = "确认", cancelText = "
     }
   };
   layer.closeConfirmDialog = close;
-  layer.querySelector(".confirm-cancel")?.addEventListener("click", close);
+  layer.querySelector(".confirm-cancel")?.addEventListener("click", () => { if (!pending) close(); });
   layer.addEventListener("cancel", (event) => {
     event.preventDefault();
-    close();
+    if (!pending) close();
   });
   layer.addEventListener("pointerdown", (event) => {
-    if (event.target === layer) close();
+    if (event.target === layer && !pending) close();
   });
   layer.querySelector(".confirm-ok")?.addEventListener("click", () => {
+    if (pending) return;
+    if (waitForConfirm) {
+      pending = true;
+      layer.setAttribute("aria-busy", "true");
+      layer.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+      const confirmButton = layer.querySelector(".confirm-ok");
+      confirmButton.textContent = pendingText;
+      layer.querySelector(".confirm-error")?.remove();
+      Promise.resolve().then(onConfirm).then(() => close(true, true)).catch((error) => {
+        if (closed) return;
+        const notice = document.createElement("p");
+        notice.className = "confirm-body confirm-error";
+        notice.setAttribute("role", "alert");
+        notice.textContent = error?.message || "操作失败，请重试";
+        layer.querySelector(".confirm-actions").before(notice);
+      }).finally(() => {
+        if (closed) return;
+        pending = false;
+        layer.setAttribute("aria-busy", "false");
+        layer.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+        confirmButton.textContent = confirmText;
+      });
+      return;
+    }
     close(true, true);
     onConfirm?.();
   });
   layer.showModal();
   (layer.querySelector("[autofocus]") || layer.querySelector("button"))?.focus();
+  return () => close(false);
 }
 
 function escapePlainText(value) {
@@ -8656,30 +8817,7 @@ function sanitizeFileName(value) {
 
 function addSelectedMediaToLibrary() {
   if (!requireCanvasMutation()) return;
-  const entries = getSelectedMediaEntries();
-  if (!entries.length) {
-    showActionToast("选中的节点还没有可保存素材");
-    return;
-  }
-  const additions = [];
-  for (const { asset } of entries) {
-    const sourceId = asset.librarySourceId || asset.id;
-    const registered = findRegisteredLibraryMedia(asset);
-    if (hasPersonalLibraryPlacement(registered)) continue;
-    if (window.parent !== window && !asset.workspaceAssetId && !registered?.workspaceAssetId) continue;
-    const candidate = registered || {
-      ...cloneAsset(asset, asset.source || "library"),
-      librarySourceId: sourceId,
-    };
-    if (additions.some((item) => item.id === candidate.id || (item.url && item.url === candidate.url))) continue;
-    additions.push(candidate);
-  }
-  if (!additions.length) {
-    showActionToast(window.parent !== window ? "选中素材尚未持久化或已在个人素材中" : "选中素材已在个人素材中");
-    return;
-  }
-  registerLibraryAssets(additions, "project");
-  showActionToast(`已保存 ${additions.length} 个素材`);
+  canvasSaveMedia.open(getSelectedMediaEntries());
 }
 
 async function downloadNodesMedia(nodes, packageMode = false) {
@@ -9684,6 +9822,14 @@ function selectAllVisibleAssetLibraryItems() {
 
 function startAssetLibraryRename(kind, id) {
   if (!isAssetLibraryMutable()) return;
+  if (kind === "folder") {
+    if (!canManageAssetLibraryFolder()) return;
+    state.libraryDirectoryMenuOpen = true;
+    state.libraryDirectoryRootExpanded = true;
+    getAssetLibraryFolderPath(id).forEach((folder) => state.libraryExpandedFolderIds.add(folder.id));
+    canvasLibraryDirectory.beginRename(id);
+    return;
+  }
   if (kind === "entity" && !canPersistLibraryEntities()) return;
   state.libraryRenameTarget = { kind, id };
   state.libraryMenuTarget = null;
@@ -9706,9 +9852,7 @@ async function finishAssetLibraryRename(input, { cancel = false } = {}) {
     return;
   }
   try {
-    if (target.kind === "folder") {
-      assetLibraryStore.renameFolder({ folderId: target.id, name, space: state.librarySpace });
-    } else if (target.kind === "entity" && window.parent !== window) {
+    if (target.kind === "entity" && window.parent !== window) {
       const entity = assetLibraryStore.getEntity({ kind: "entity", id: target.id });
       if (!entity || !Number.isInteger(entity.version) || !canPersistLibraryEntities()) {
         throw new Error("当前素材组尚未接入持久化重命名");
@@ -9732,43 +9876,10 @@ async function finishAssetLibraryRename(input, { cancel = false } = {}) {
 }
 
 function createAssetLibraryFolder() {
-  if (!isAssetLibraryMutable()) return;
-  if (getAssetLibraryFolderPath().length + 1 >= canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS) {
-    showActionToast(`最多支持 ${canvasAssetLibraryModel.MAX_DIRECTORY_LEVELS} 层目录`);
-    return;
-  }
-  const siblingNames = new Set(
-    assetLibraryStore.listFolders({
-      space: state.librarySpace,
-      kind: "all",
-      parentId: state.libraryFolderId,
-    }).map((folder) => canvasAssetLibraryModel.normalizeSearch(folder.name)),
-  );
-  let sequence = 1;
-  let name = "新建文件夹";
-  while (siblingNames.has(canvasAssetLibraryModel.normalizeSearch(name))) {
-    sequence += 1;
-    name = `新建文件夹 ${sequence}`;
-  }
-  try {
-    const folder = assetLibraryStore.createFolder({
-      id: crypto.randomUUID(),
-      name,
-      space: state.librarySpace,
-      kind: getAssetLibraryFolder()?.kind || "media",
-      parentId: state.libraryFolderId,
-    });
-    if (state.libraryFolderId) state.libraryExpandedFolderIds.add(state.libraryFolderId);
-    else state.libraryDirectoryRootExpanded = true;
-    state.libraryDirectoryMenuOpen = false;
-    state.librarySearch = "";
-    state.librarySearchByContext[getAssetLibraryContextKey()] = "";
-    clearAssetLibrarySelection();
-    state.libraryRenameTarget = { kind: "folder", id: folder.id };
-  } catch (error) {
-    showActionToast(error?.message || "新建文件夹失败");
-  }
-  renderAssetLibrary();
+  if (!canCreateAssetLibraryFolder()) return;
+  state.libraryDirectoryMenuOpen = true;
+  ensureCurrentAssetLibraryPathExpanded();
+  canvasLibraryDirectory.beginCreate(state.libraryFolderId);
 }
 
 function libraryImagePreviewUrl(contentUrl, mediaKind) {
@@ -9836,15 +9947,28 @@ function workspaceAssetToLibraryMedia(workspaceAsset) {
   };
 }
 
-function registerHostWorkspaceAssetCatalog({ assets = [], entities = [] } = {}) {
+function registerHostMediaLibrary(catalog, { removedEntityIds = [] } = {}) {
+  const media = catalog.entries.map(workspaceAssetToLibraryMedia);
+  assetLibraryStore.syncPersistedCatalog({ ...catalog, media, removedEntityIds });
+  hostPersonalMediaIds.clear();
+  catalog.entries.filter((entry) => entry.space === "personal").forEach((entry) => hostPersonalMediaIds.add(entry.assetId));
+  if (state.libraryFolderId && !assetLibraryStore.getFolder(state.libraryFolderId)) state.libraryFolderId = null;
+  renderAssetLibrary();
+  renderSelectionToolbar();
+}
+
+function registerHostWorkspaceAssetCatalog({ assets = [], entities = [], libraryCatalog } = {}) {
   try {
     const media = assets.map(workspaceAssetToLibraryMedia);
     media.forEach((asset) => {
       assetLibraryStore.registerMedia({ media: asset, space: "personal", folderId: null });
     });
     assetLibraryStore.syncPersistedEntities({ entities });
-    hostPersonalMediaIds.clear();
-    media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+    if (libraryCatalog) registerHostMediaLibrary(libraryCatalog);
+    if (!libraryCatalog) {
+      hostPersonalMediaIds.clear();
+      media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+    }
     restoreTransientCanvasMedia(media);
     renderAssetLibrary();
     renderSelectionToolbar();
@@ -10127,7 +10251,7 @@ function openEntityEditorEdit(entityId) {
   canvasEntityEditor.open({
     mode: "edit",
     entity,
-    media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entityId }),
+    media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entityId, space: "personal" }),
     expectedVersion: entity.version,
     mutable: true,
     canAddFromLibrary: true,
@@ -10141,96 +10265,20 @@ function defaultUploadContentType(mediaKind) {
   return "image/jpeg";
 }
 
-async function persistAssetLibraryFiles(files, { space = state.librarySpace, folderId = null } = {}) {
-  const accepted = Array.from(files || [])
-    .map((file) => ({ file, mediaKind: getAssetType(file) }))
-    .filter((entry) => entry.mediaKind);
-  if (!accepted.length) {
-    throw new Error("请选择图片、视频或音频文件");
-  }
-  if (!canPersistLibraryMedia()) {
-    showActionToast("当前项目尚未接入资产持久化");
-    return;
-  }
-  if (window.parent !== window && space !== "personal") {
-    throw new Error("首个持久化切片仅支持上传到个人空间");
-  }
-  showActionToast(`正在上传 ${accepted.length} 个素材…`);
-  const settled = window.parent === window
-    ? createAssetsFromFiles(accepted.map((entry) => entry.file)).map((asset) => ({
-        status: "fulfilled",
-        value: {
-          ...asset,
-          displayName: asset.name || asset.displayName,
-        },
-      }))
-    : await Promise.allSettled(accepted.map(async ({ file, mediaKind }) => {
-        const projectAsset = await canvasMediaAssets.persistFile(file, {
-          mediaKind,
-          displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
-          contentType: file.type || defaultUploadContentType(mediaKind),
-        });
-        return projectAssetToLibraryMedia(projectAsset);
-      }));
-  const uploaded = settled
-    .filter((result) => result.status === "fulfilled")
-    .map((result) => result.value);
-  const failures = settled.filter((result) => result.status === "rejected");
-  const hydrated = await Promise.all(uploaded.map(async (asset) => ({
-    ...asset,
-    ...await readAssetMetadata(asset),
-  })));
-  const media = hydrated.map((asset) => assetLibraryStore.registerMedia({
-    media: asset,
-    space,
-    folderId,
-  }).media);
-  if (window.parent !== window && space === "personal") {
-    media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
-  }
-  if (!media.length && failures.length) {
-    throw failures[0].reason instanceof Error ? failures[0].reason : new Error("素材上传失败");
-  }
-  return { media, failedCount: failures.length };
-}
-
-async function addFilesToAssetLibrary(files) {
-  if (!isAssetLibraryMutable() || getAssetLibraryFolder()?.kind === "entity") return;
+function addFilesToAssetLibrary(files) {
   try {
-    const { media, failedCount } = await persistAssetLibraryFiles(files, {
-      space: state.librarySpace,
-      folderId: state.libraryFolderId,
-    });
-    showActionToast(failedCount
-      ? `已上传 ${media.length} 个素材，${failedCount} 个失败`
-      : `已上传 ${media.length} 个素材`);
+    canvasLibraryUpload.complete(files);
   } catch (error) {
-    showActionToast(error?.message || "资产写入失败");
+    showActionToast(error?.message || "无法打开上传窗口");
   }
-  renderAssetLibrary();
 }
 
 function deleteAssetLibraryItems(items) {
-  if (!items.length) return;
-  const groupsOnly = items.every((item) => item.kind === "entity");
-  const noun = groupsOnly ? "素材组" : items.every((item) => item.kind === "media") ? "素材" : "资产";
-  showConfirmDialog({
-    title: `删除${items.length > 1 ? ` ${items.length} 个` : ""}${noun}？`,
-    body: groupsOnly
-      ? "素材组将从当前空间移除，组内引用的素材会保留。此操作无法撤销。"
-      : "所选资产将从当前空间移除。若素材仍被其他素材组引用，本次删除会被阻止。此操作无法撤销。",
-    confirmText: `删除${noun}`,
-    danger: true,
-    onConfirm: () => {
-      try {
-        assetLibraryStore.removePlacements({ items, space: state.librarySpace });
-        clearAssetLibrarySelection();
-        showActionToast(`已删除 ${items.length} 个${noun}`);
-      } catch (error) {
-        showActionToast(error?.message || "删除失败");
-      }
-      renderAssetLibrary();
-    },
+  canvasLibraryDelete.open({
+    space: state.librarySpace,
+    items: items.map((item) => item.kind === "entity"
+      ? { kind: "entity", id: item.id, expectedVersion: assetLibraryStore.getEntity(item)?.version }
+      : { kind: "media", id: item.id }),
   });
 }
 
@@ -10286,8 +10334,8 @@ function runAssetLibraryAction(action, items) {
     if (item.kind !== "entity") return false;
     return Number.isInteger(assetLibraryStore.getEntity(item)?.version);
   });
-  if (includesPersistedEntity && ["move", "share-organization", "delete"].includes(action)) {
-    showActionToast("素材组的移动、共享与删除将在对应持久化切片接入；本次未执行");
+  if (includesPersistedEntity && ["move", "share-organization"].includes(action)) {
+    showActionToast("素材组的移动与共享尚未接入");
     return;
   }
   state.libraryToolbarMenu = null;
@@ -10353,24 +10401,8 @@ function runAssetLibraryAction(action, items) {
 
 function deleteAssetLibraryFolder(folderId) {
   const folder = assetLibraryStore.getFolder(folderId);
-  if (!folder) return;
-  showConfirmDialog({
-    title: "删除文件夹？",
-    body: `「${folder.name}」及其子文件夹中的资产将从当前空间移除。若素材仍被其他素材组引用，本次删除会被阻止。此操作无法撤销。`,
-    confirmText: "删除文件夹",
-    danger: true,
-    onConfirm: () => {
-      try {
-        const result = assetLibraryStore.removeFolder({ folderId, space: state.librarySpace });
-        state.libraryMenuTarget = null;
-        state.libraryMoveFolderId = null;
-        showActionToast(`已删除 ${result.folders.length} 个目录`);
-      } catch (error) {
-        showActionToast(error?.message || "删除文件夹失败");
-      }
-      renderAssetLibrary();
-    },
-  });
+  if (!folder || folder.space !== state.librarySpace) return;
+  canvasLibraryDelete.open({ space: state.librarySpace, folderName: folder.name, items: [{ kind: "folder", id: folderId }] });
 }
 
 function runAssetLibraryFolderAction(action, folderId) {
@@ -10454,6 +10486,17 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     renderAssetLibrary();
     return;
   }
+  const directoryCreate = event.target.closest("[data-library-directory-create]");
+  if (directoryCreate) {
+    canvasLibraryDirectory.beginCreate(directoryCreate.dataset.libraryDirectoryCreate || null);
+    return;
+  }
+  const directoryRename = event.target.closest("[data-library-directory-rename]");
+  if (directoryRename) { canvasLibraryDirectory.beginRename(directoryRename.dataset.libraryDirectoryRename); return; }
+  const directoryDelete = event.target.closest("[data-library-directory-delete]");
+  if (directoryDelete) { deleteAssetLibraryFolder(directoryDelete.dataset.libraryDirectoryDelete); return; }
+  if (event.target.closest("[data-library-directory-draft-confirm]")) { void canvasLibraryDirectory.commit(); return; }
+  if (event.target.closest("[data-library-directory-draft-cancel]")) { canvasLibraryDirectory.cancel(); return; }
   if (event.target.closest("[data-library-directory-root-toggle]")) {
     state.libraryDirectoryRootExpanded = !state.libraryDirectoryRootExpanded;
     renderAssetLibrary();
@@ -10477,7 +10520,11 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-library-upload]")) {
-    assetLibraryUploadInput?.click();
+    try {
+      canvasLibraryUpload.open({ space: state.librarySpace, folderId: state.libraryFolderId });
+    } catch (error) {
+      showActionToast(error?.message || "无法打开上传窗口");
+    }
     return;
   }
   if (event.target.closest("[data-library-selection-toggle]")) {
@@ -10624,7 +10671,19 @@ assetLibraryUploadInput?.addEventListener("change", (event) => {
   void addFilesToAssetLibrary(event.currentTarget.files);
   event.currentTarget.value = "";
 });
+assetLibraryUploadInput?.addEventListener("cancel", () => canvasLibraryUpload.cancel());
 assetLibraryCreateFolderBtn?.addEventListener("click", createAssetLibraryFolder);
+assetLibraryDirectoryTreePopover?.addEventListener("input", (event) => {
+  if (event.target.matches("[data-library-directory-draft-input]")) canvasLibraryDirectory.setName(event.target.value);
+});
+assetLibraryDirectoryTreePopover?.addEventListener("keydown", (event) => {
+  if (event.target.matches("[data-library-directory-draft-input]")) {
+    event.stopPropagation();
+    if (event.isComposing || event.keyCode === 229) return;
+    if (event.key === "Enter") { event.preventDefault(); void canvasLibraryDirectory.commit(); }
+    else if (event.key === "Escape") { event.preventDefault(); canvasLibraryDirectory.cancel(); assetLibraryDirectoryButton?.focus(); }
+  }
+});
 assetLibraryGrid?.addEventListener("focusout", (event) => {
   if (event.target.matches("[data-library-rename-input]")) void finishAssetLibraryRename(event.target);
 });
@@ -11414,6 +11473,7 @@ document.addEventListener("focusin", (event) => {
 
 // Dismiss from the original hit target, before canvas pointer capture retargets click.
 document.addEventListener("pointerdown", (event) => {
+  if (canvasSaveMedia.isOpen()) return;
   if (event.button === 0 && !event.target?.closest(".media-edit-toolbar, .media-frame")) {
     if (closeMediaToolbarState()) render();
   }
@@ -11435,8 +11495,9 @@ document.addEventListener("click", (event) => {
     closeProjectMenus();
   }
   let shouldRenderLibrary = false;
-  if (!pathMatches(".asset-library-directory-shell") && state.libraryDirectoryMenuOpen) {
+  if (!pathMatches(".asset-library-directory-shell, .confirm-layer") && state.libraryDirectoryMenuOpen) {
     state.libraryDirectoryMenuOpen = false;
+    canvasLibraryDirectory.cancel();
     shouldRenderLibrary = true;
   }
   if (!pathMatches("#assetLibraryCommandBar, .asset-library-item-menu, [data-library-menu-toggle]")) {

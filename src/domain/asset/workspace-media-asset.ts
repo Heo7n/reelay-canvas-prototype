@@ -1,6 +1,7 @@
 import type { ActorId } from "../identity/session";
 import type { ProjectId } from "../project/project";
 import type { WorkspaceId } from "../workspace/workspace";
+import type { MediaStorageOwner } from "./media-storage";
 
 export type AssetUploadIntentId = string;
 export type WorkspaceMediaAssetId = string;
@@ -8,9 +9,13 @@ export type MediaAssetPlacementId = string;
 export type ProjectAssetReferenceId = string;
 
 export type MediaKind = "image" | "video" | "audio";
-export type AssetUploadStatus = "pending" | "uploaded" | "finalized";
+export type AssetUploadStatus = "pending" | "uploaded" | "finalized" | "cancelling" | "cancelled";
 
 export interface AssetUploadIntent {
+  storageOwner: MediaStorageOwner;
+  projectId: string | null;
+  uploadAuthorizationExpiresAt: string | null;
+  reservedByteSize: number;
   id: AssetUploadIntentId;
   workspaceId: WorkspaceId;
   createdByActorId: ActorId;
@@ -34,6 +39,7 @@ export interface AssetUploadIntent {
 }
 
 export interface WorkspaceMediaAsset {
+  storageOwner?: MediaStorageOwner;
   id: WorkspaceMediaAssetId;
   workspaceId: WorkspaceId;
   mediaKind: MediaKind;

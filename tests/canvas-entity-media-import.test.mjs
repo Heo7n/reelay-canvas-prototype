@@ -45,12 +45,12 @@ function harness(options = {}) {
 }
 
 test("only local readable media and controlled static assets are eligible for deferred import", () => {
-  for (const url of ["blob:https://reelay.test/local", "data:image/png;base64,aGk=", "/assets/home/portrait.png", "./assets/audio/voice.mp3"]) {
+  for (const url of ["blob:https://reelay.test/local", "data:image/png;base64,aGk=", "data:image/svg+xml,aGk=", "/assets/vector.svg", "/assets/home/portrait.png", "./assets/audio/voice.mp3"]) {
     const media = raw("one", { url, type: url.endsWith("mp3") ? "audio" : "image" });
     assert.equal(inspectImportSource(media, { baseUrl }).allowed, true, url);
   }
   for (const url of ["blob:https://other.test/local", "https://other.test/pic.png", "/api/private/image.png", "/assets/file.txt",
-    "/assets/../private/image.png", "data:text/html,aGk=", "data:image/svg+xml,aGk=", "javascript:alert(1)", "", "https://user:password@reelay.test/assets/a.png"]) {
+    "/assets/../private/image.png", "data:text/html,aGk=", "javascript:alert(1)", "", "https://user:password@reelay.test/assets/a.png"]) {
     assert.equal(inspectImportSource(raw("one", { url }), { baseUrl }).allowed, false, url);
   }
   assert.equal(inspectImportSource(raw("one", { workspaceAssetId: "another-user-asset" }), { baseUrl }).allowed, false);
@@ -86,6 +86,42 @@ test("confirmation imports into personal root, returns canonical IDs, and leaves
   assert.equal(result.idMap.get("local-1"), "saved-1");
   assert.equal(result.media[0].checksumSha256, checksum);
   assert.equal(JSON.stringify(selected), before);
+});
+
+test("a confirmed cancelled upload rotates its attempt key but an uncertain network failure keeps the original", async () => {
+  const keys = [];
+  let attempts = 0;
+  const h = harness({ makeUploadAttemptId: () => "confirmed-new-attempt", persistFile: async (_file, metadata) => {
+    keys.push(metadata.idempotencyKey);
+    if (++attempts === 1) throw Object.assign(new Error("旧上传已取消"), { serviceCode: "asset_upload_cancelled" });
+    if (attempts === 2) throw new Error("network uncertain");
+    return saved();
+  } });
+  await assert.rejects(h.prepare([raw()]), /network uncertain/);
+  await h.prepare([raw()]);
+  assert.notEqual(keys[0], keys[1]);
+  assert.equal(keys[1], keys[2]);
+  assert.match(keys[1], /confirmed-new-attempt$/);
+  const uncertainKeys = [];
+  const uncertain = harness({ persistFile: async (_file, metadata) => { uncertainKeys.push(metadata.idempotencyKey); throw new Error("offline"); } });
+  await assert.rejects(uncertain.prepare([raw()]), /offline/);
+  await assert.rejects(uncertain.prepare([raw()]), /offline/);
+  assert.equal(uncertainKeys[0], uncertainKeys[1]);
+});
+
+test("SVG local import stays a typed file and carries library purpose to persistence", async () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M0 0h20v20z"/></svg>';
+  const uploads = [];
+  const h = harness({ fetchMedia: async () => new Response(svg, { headers: { "content-type": "image/svg+xml" } }),
+    persistFile: async (file, metadata) => {
+      uploads.push({ file, metadata });
+      return saved("vector", { checksumSha256: await checksumFile(file), byteSize: file.size, contentType: file.type });
+    } });
+  await h.importer.prepareMedia([raw("vector", { name: "logo.svg" })], { uploadPurpose: "library", storageSpace: "organization" });
+  assert.equal(await uploads[0].file.text(), svg);
+  assert.equal(uploads[0].file.type, "image/svg+xml");
+  assert.equal(uploads[0].metadata.uploadPurpose, "library");
+  assert.equal(uploads[0].metadata.storageSpace, "organization");
 });
 
 test("actual binary checksum reuses same personal media even when source URLs and names differ", async () => {
@@ -211,7 +247,7 @@ test("switching workspace while upload completes never registers it into the nex
 test("media MIME, empty bodies, redirects and byte limits reject before upload", async (t) => {
   const variants = [
     ["wrong MIME", () => new Response("hi", { headers: { "content-type": "text/html" } }), /内容类型/],
-    ["SVG", () => new Response("hi", { headers: { "content-type": "image/svg+xml" } }), /内容类型/],
+    ["wrong kind", () => new Response("hi", { headers: { "content-type": "audio/mpeg" } }), /内容类型/],
     ["empty", () => new Response("", { headers: { "content-type": "image/png" } }), /素材为空/],
     ["declared size", () => new Response("hi", { headers: { "content-type": "image/png", "content-length": "99" } }), /大小限制/],
     ["streamed size", () => new Response("x".repeat(30), { headers: { "content-type": "image/png" } }), /大小限制/],

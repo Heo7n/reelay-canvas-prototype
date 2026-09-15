@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 
-const [modelSource, viewSource, controllerSource, mediaPreviewSource] = await Promise.all([
+const [fileNameSource, modelSource, viewSource, controllerSource, mediaPreviewSource] = await Promise.all([
+  readFile(new URL("../src/legacy-canvas/canvas-file-name.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-entity-editor-model.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-entity-editor-view.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-entity-editor-controller.js", import.meta.url), "utf8"),
@@ -42,6 +43,7 @@ function createHarness(overrides = {}) {
     </html>
   `, { runScripts: "outside-only", url: "https://reelay.test/index.html" });
   const { window } = dom;
+  window.eval(fileNameSource);
   window.eval(modelSource);
   window.eval(mediaPreviewSource);
   window.eval(viewSource);

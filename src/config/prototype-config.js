@@ -350,7 +350,7 @@
     trim: { icon: "scissors", label: "裁剪片段" },
     interpolate: { icon: "gauge", label: "提升帧率" },
     denoise: { icon: "audio-waveform", label: "降噪" },
-    "add-library": { icon: "folder-plus", label: "加入资产库" },
+    "add-library": { icon: "folder-plus", label: "保存到素材" },
   };
 
   const mediaToolsByType = {
@@ -360,9 +360,9 @@
   };
 
   const defaultMediaToolPreferences = {
-    image: { tools: ["enhance", "crop", "remove-bg", "add-library"], showLabels: false },
-    video: { tools: ["enhance", "trim", "interpolate", "add-library"], showLabels: false },
-    audio: { tools: ["enhance", "trim", "denoise", "add-library"], showLabels: false },
+    image: { tools: ["enhance", "crop", "remove-bg", "add-library"], showLabels: true },
+    video: { tools: ["enhance", "trim", "interpolate", "add-library"], showLabels: true },
+    audio: { tools: ["enhance", "trim", "denoise", "add-library"], showLabels: true },
   };
 
   const generationWorkflows = {

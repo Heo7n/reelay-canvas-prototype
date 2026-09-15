@@ -53,6 +53,7 @@
     const pending = new Map();
     const seenProjectAssetRequests = new Set();
     let lastAvailability = "";
+    let uploadPolicy = null;
 
     function send(type, payload) {
       if (!isHosted()) return false;
@@ -80,6 +81,8 @@
       if (!isHosted()) throw commandError("unsupported", "当前画布未连接资产持久化服务");
       const mediaKind = metadata.mediaKind;
       const target = metadata.target == null ? "project" : String(metadata.target);
+      const uploadPurpose = metadata.uploadPurpose || "canvas";
+      const storageSpace = metadata.storageSpace || "personal";
       const displayName = String(metadata.displayName || file?.name || "").trim();
       const contentType = String(metadata.contentType || file?.type || "").trim().toLowerCase();
       const byteSize = file?.size;
@@ -87,11 +90,17 @@
       if (requestedIdempotencyKey != null && !isNonEmptyString(requestedIdempotencyKey)) {
         throw commandError("invalid", "素材上传幂等标识无效");
       }
-      if (!file || !UPLOAD_TARGETS.has(target) || !MEDIA_KINDS.has(mediaKind) || !isNonEmptyString(displayName, 300)
+      if (!file || !["canvas", "library"].includes(uploadPurpose) || !["personal", "organization"].includes(storageSpace)
+        || !UPLOAD_TARGETS.has(target) || !MEDIA_KINDS.has(mediaKind) || !isNonEmptyString(displayName, 300)
         || !isNonEmptyString(contentType, 120) || !Number.isInteger(byteSize)
         || byteSize <= 0 || byteSize > MAX_UPLOAD_BYTES) {
         throw commandError("invalid", "文件类型、大小或名称不符合上传要求");
       }
+      if (uploadPurpose === "library" && !uploadPolicy) throw commandError("network", "上传设置尚未就绪，请稍后重试");
+      const entryLimit = uploadPurpose === "library" ? uploadPolicy.library.maxFileBytes
+        : uploadPolicy?.canvasMaxFileBytes || MAX_UPLOAD_BYTES;
+      const limit = Math.min(entryLimit, uploadPolicy?.maxFileBytesByContentType?.[contentType] || entryLimit);
+      if (byteSize > limit) throw commandError("invalid", `素材超过单文件 ${limit / (1024 * 1024)} MB 上传限制`);
       if (useTransientUpload()) {
         if (byteSize > 4 * 1024 * 1024) throw commandError("invalid", "体验模式单个素材最大支持 4 MB");
         const body = await file.arrayBuffer();
@@ -101,7 +110,7 @@
         return new Promise((resolve, reject) => {
           const timeoutId = setTimer(() => finish(requestId, commandError("network", "文件导入已超时")), requestTimeoutMs);
           pending.set(requestId, { resolve, reject, timeoutId, stage: "transient", target });
-          send("canvas:import-transient-media", { requestId, target, mediaKind, displayName, contentType, body });
+          send("canvas:import-transient-media", { requestId, target, uploadPurpose, storageSpace, mediaKind, displayName, contentType, body });
         });
       }
       const checksumSha256 = String(await checksumFile(file)).toLowerCase();
@@ -112,7 +121,7 @@
       return new Promise((resolve, reject) => {
         const timeoutId = setTimer(() => finish(requestId, commandError("network", "资产上传请求已超时")), requestTimeoutMs);
         pending.set(requestId, { file, resolve, reject, timeoutId, stage: "grant", target, uploadId: null });
-        send("canvas:create-media-upload", { requestId, idempotencyKey, target, mediaKind, displayName, contentType, byteSize, checksumSha256 });
+        send("canvas:create-media-upload", { requestId, idempotencyKey, target, uploadPurpose, storageSpace, mediaKind, displayName, contentType, byteSize, checksumSha256 });
       });
     }
 
@@ -148,11 +157,13 @@
     function acceptAvailability(message) {
       const states = ["loading", "ready", "unavailable"];
       if (!usesProgressiveAssetLoading() || message.instanceId !== instanceId
-        || !states.includes(message.projectAssets) || !states.includes(message.workspaceCatalog)) return false;
-      const key = `${message.projectAssets}:${message.workspaceCatalog}`;
+        || !states.includes(message.projectAssets) || !states.includes(message.workspaceCatalog)
+        || (message.mediaLibrary !== undefined && !states.includes(message.mediaLibrary))) return false;
+      const key = `${message.projectAssets}:${message.workspaceCatalog}:${message.mediaLibrary || ""}`;
       if (lastAvailability !== key) {
         lastAvailability = key;
-        onAvailability({ projectAssets: message.projectAssets, workspaceCatalog: message.workspaceCatalog });
+        onAvailability({ projectAssets: message.projectAssets, workspaceCatalog: message.workspaceCatalog,
+          ...(message.mediaLibrary === undefined ? {} : { mediaLibrary: message.mediaLibrary }) });
       }
       return true;
     }
@@ -164,6 +175,16 @@
         || !isNonEmptyString(message.upload?.url, 4096) || !message.upload.headers
         || typeof message.upload.headers !== "object" || Array.isArray(message.upload.headers)
         || !Object.values(message.upload.headers).every((value) => typeof value === "string")) return false;
+      const status = message.uploadIntent.status || "pending";
+      if (!["pending", "uploaded", "finalized"].includes(status)) return false;
+      if (status !== "pending") {
+        // The service has already stored these bytes. Recover the same object
+        // through idempotent finalization without writing another body or grant.
+        operation.uploadId = message.uploadIntent.id;
+        operation.stage = "finalize";
+        send("canvas:finalize-media-upload", { requestId: message.requestId, uploadId: operation.uploadId });
+        return true;
+      }
       let uploadUrl;
       let credentials = "same-origin";
       try {
@@ -190,7 +211,11 @@
           operation.stage = "finalize";
           send("canvas:finalize-media-upload", { requestId: message.requestId, uploadId: operation.uploadId });
         },
-        (error) => finish(message.requestId, commandError("network", error?.message || "文件上传失败")),
+        (error) => {
+          if (pending.get(message.requestId) !== operation) return;
+          send("canvas:cancel-media-upload", { requestId: message.requestId, uploadId: operation.uploadId });
+          finish(message.requestId, commandError("network", error?.message || "文件上传失败"));
+        },
       );
       return true;
     }
@@ -224,13 +249,35 @@
     function acceptError(message) {
       const operation = pending.get(message.requestId);
       if (message.instanceId !== instanceId || !operation || !ERROR_CODES.has(message.code)) return false;
-      return finish(message.requestId, commandError(message.code, "资产命令执行失败"));
+      const error = commandError(message.code, message.message || "资产命令执行失败");
+      if (["asset_upload_cancelled", "asset_upload_expired"].includes(message.serviceCode)) {
+        error.serviceCode = message.serviceCode;
+        if (message.serviceCode === "asset_upload_expired" && operation.uploadId) {
+          send("canvas:cancel-media-upload", { requestId: message.requestId, uploadId: operation.uploadId });
+        }
+      }
+      return finish(message.requestId, error);
     }
 
     function handleHostMessage(event) {
       if (!isTrustedHostEvent(event)) return false;
       const message = event.data;
       if (!message || typeof message !== "object" || message.source !== HOST_SOURCE || message.protocolVersion !== PROTOCOL_VERSION) return false;
+      if (message.type === "host:media-upload-policy") {
+        if (message.instanceId !== instanceId || !["loading", "ready", "unavailable"].includes(message.status)) return false;
+        if (message.status !== "ready") { uploadPolicy = null; return true; }
+        const value = message.policy;
+        const sizes = [value?.canvasMaxFileBytes, value?.library?.maxFileBytes, ...Object.values(value?.maxFileBytesByContentType || {})];
+        if (!sizes.every((size) => Number.isSafeInteger(size) && size > 0)
+          || !value?.maxFileBytesByContentType || !value?.library?.contentTypeAliases
+          || !Object.values(value.library.contentTypeAliases).every((type) => typeof type === "string")
+          || !Array.isArray(value.library.formats) || !value.library.formats.length
+          || !value.library.formats.every((group) => MEDIA_KINDS.has(group.mediaKind) && group.extensions
+            && Object.entries(group.extensions).length > 0 && Object.entries(group.extensions).every(([extension, type]) =>
+              /^[a-z0-9]+$/.test(extension) && typeof type === "string" && type.startsWith(`${group.mediaKind}/`)))) return false;
+        uploadPolicy = JSON.parse(JSON.stringify(value));
+        return true;
+      }
       if (message.type === "host:project-assets") return acceptProjectAssets(message);
       if (message.type === "host:asset-availability") return acceptAvailability(message);
       if (message.type === "host:media-upload-grant") return acceptUploadGrant(message);
@@ -244,9 +291,11 @@
     function dispose() {
       for (const requestId of [...pending.keys()]) finish(requestId, commandError("network", "资产协调器已停止"));
       seenProjectAssetRequests.clear();
+      uploadPolicy = null;
     }
 
-    return Object.freeze({ dispose, getPendingCount: () => pending.size, handleHostMessage, persistFile, renameMedia });
+    return Object.freeze({ dispose, getPendingCount: () => pending.size, getUploadPolicy: () => uploadPolicy,
+      handleHostMessage, persistFile, renameMedia });
   }
 
   root.REELAY_CANVAS_MEDIA_ASSET_COORDINATOR = Object.freeze({ createCanvasMediaAssetCoordinator });

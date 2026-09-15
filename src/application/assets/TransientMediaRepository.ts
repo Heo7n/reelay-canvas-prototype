@@ -4,6 +4,8 @@ export interface ImportTransientMediaInput {
   workspaceId: string;
   projectId: string;
   target: "project" | "personal";
+  uploadPurpose?: "canvas" | "library";
+  storageSpace?: "personal" | "organization";
   displayName: string;
   mediaKind: MediaAssetKind;
   contentType: string;

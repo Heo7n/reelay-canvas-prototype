@@ -6,6 +6,7 @@ import {
   hostAssetAvailabilityMessageSchema,
   hostFlushMessageSchema,
   hostMediaRenameResultMessageSchema,
+  hostMediaLibraryResultMessageSchema,
   hostMediaUploadGrantMessageSchema,
   hostMediaUploadResultMessageSchema,
   hostMessageSchema,
@@ -24,6 +25,24 @@ const document = {
 };
 
 describe("legacy canvas bridge", () => {
+  it("validates library commands and keeps workspace/project authority out of canvas messages", () => {
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", command: "save", space: "organization", folderId: null,
+      tagIds: ["builtin:scene"], items: [{ assetId: "asset", displayName: "名称", action: "move", expectedFolderId: "old" }] };
+    expect(parseCanvasMessage(command)).toEqual(command);
+    const add = { ...command, items: [{ assetId: "asset", displayName: "新增素材", action: "add" }] };
+    expect(parseCanvasMessage(add)).toEqual(add);
+    expect(parseCanvasMessage({ ...add, items: [{ ...add.items[0], action: "replace" }] })).toBeNull();
+    for (const invalid of [{ workspaceId: "forged" }, { projectId: "forged" }, { space: "platform" }, { items: [] }]) {
+      expect(parseCanvasMessage({ ...command, ...invalid })).toBeNull();
+    }
+    const result = { source: "reelay-shell", type: "host:media-library-result", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", command: "create-folder",
+      result: { id: "folder", space: "personal", parentId: null, name: "角色" } };
+    expect(hostMediaLibraryResultMessageSchema.parse(result)).toEqual(result);
+    expect(hostMediaLibraryResultMessageSchema.safeParse({ ...result, command: "list" }).success).toBe(false);
+  });
+
   it("negotiates progressive assets separately from the backwards-compatible ready message", () => {
     const ready = { source: "reelay-legacy-canvas", type: "canvas:ready", protocolVersion: 1, instanceId: "instance" };
     expect(parseCanvasMessage(ready)).toEqual(ready);
@@ -265,8 +284,11 @@ describe("legacy canvas bridge", () => {
       checksumSha256: "a".repeat(64),
     });
     expect(create?.type).toBe("canvas:create-media-upload");
-    expect(create).toEqual(expect.objectContaining({ target: "project" }));
+    expect(create).toEqual(expect.objectContaining({ target: "project", uploadPurpose: "canvas", storageSpace: "personal" }));
     expect(parseCanvasMessage({ ...create, workspaceId: "iframe-controlled" })).toBeNull();
+    expect(parseCanvasMessage({ ...create, projectId: "iframe-controlled" })).toBeNull();
+    expect(parseCanvasMessage({ ...create, uploadPurpose: "library", storageSpace: "organization" })).toEqual(expect.objectContaining({ uploadPurpose: "library", storageSpace: "organization" }));
+    expect(parseCanvasMessage({ ...create, uploadPurpose: "render" })).toBeNull();
     expect(parseCanvasMessage({ ...create, byteSize: 64 * 1024 * 1024 + 1 })).toBeNull();
     expect(parseCanvasMessage({ ...create, checksumSha256: "A".repeat(64) })).toBeNull();
 
@@ -345,6 +367,23 @@ describe("legacy canvas bridge", () => {
       instanceId: "canvas-instance-1",
       code: "forbidden",
     }).code).toBe("forbidden");
+  });
+
+  it("validates folder renaming with an observed name and prevents root or scope injection", () => {
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, requestId: "rename-folder-1", instanceId: "canvas-instance-1", command: "rename-folder", space: "personal", folderId: "folder", name: "New", expectedName: "Original" };
+    expect(parseCanvasMessage(command)).toEqual(command);
+    expect(parseCanvasMessage({ ...command, expectedName: undefined })).toBeNull();
+    expect(parseCanvasMessage({ ...command, folderId: null })).toBeNull();
+    expect(parseCanvasMessage({ ...command, workspaceId: "injected" })).toBeNull();
+    expect(parseCanvasMessage({ ...command, name: "   " })).toBeNull();
+  });
+
+  it("validates deletion selection and requires a version for groups", () => {
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, requestId: "delete-1", instanceId: "canvas-instance-1", command: "delete", space: "personal", items: [{ kind: "entity", id: "group", expectedVersion: 2 }] };
+    expect(parseCanvasMessage(command)).toEqual(command);
+    expect(parseCanvasMessage({ ...command, items: [{ kind: "entity", id: "group" }] })).toBeNull();
+    expect(parseCanvasMessage({ ...command, items: [{ kind: "folder", id: null }] })).toBeNull();
+    expect(parseCanvasMessage({ ...command, workspaceId: "untrusted-scope" })).toBeNull();
   });
 
   it("rejects unknown or structurally invalid account sections", () => {

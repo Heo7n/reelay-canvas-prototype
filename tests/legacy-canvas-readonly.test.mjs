@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
 const root = new URL("../", import.meta.url);
+const fileName = await readFile(new URL("src/legacy-canvas/canvas-file-name.js", root), "utf8");
 const themeController = await readFile(new URL("src/legacy-canvas/canvas-theme-controller.js", root), "utf8");
+const saveMediaModules = await Promise.all(["canvas-media-library-coordinator", "canvas-save-media-dialog", "canvas-save-media-controller", "canvas-library-upload-controller", "canvas-library-delete-controller", "canvas-library-directory-controller"]
+  .map((name) => readFile(new URL(`src/legacy-canvas/${name}.js`, root), "utf8")));
 const [promptDocument, promptController, promptEditor] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-prompt-document.js", root), "utf8"),
   readFile(new URL("src/legacy-canvas/canvas-prompt-controller.js", root), "utf8"),
@@ -135,6 +138,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   arrangeModules.forEach((source) => window.eval(source));
   window.eval(parameterHelpController);
   window.eval(referenceOrder);
+  window.eval(fileName);
   window.eval(referenceStripController);
   window.eval(agentReferences);
   window.eval(agentComposerView);
@@ -178,6 +182,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(agentParameters);
   window.eval(agentModels);
   for (const source of generationModules) window.eval(source);
+  for (const source of saveMediaModules) window.eval(source);
   window.eval(`${app}\nwindow.__readonlyPromptEditors = promptEditors;`);
   assert.equal(window.document.querySelector("#agentDock").style.getPropertyValue("--agent-width"), "560px");
 

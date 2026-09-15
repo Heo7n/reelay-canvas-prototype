@@ -115,6 +115,7 @@ export class PostgresEntityStore implements EntityStore {
     const idempotencyKey = normalizeEntityIdempotencyKey(input.idempotencyKey);
     const content = normalizeEntityContent(input);
     return this.withTransaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`media-library:${input.workspaceId}`]);
       await this.lockWorkspaceMembership(client, input.workspaceId, input.actorId);
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -129,6 +130,8 @@ export class PostgresEntityStore implements EntityStore {
       );
       if (existing) {
         if (!sameContent(existing, content)) throw new EntityCreateConflictError("idempotency_key_reused");
+        const deleted = await client.query("SELECT 1 FROM entity_library_deletions WHERE workspace_id=$1 AND entity_id=$2 AND owner_user_id=$3", [input.workspaceId, existing.id, input.actorId]);
+        if (deleted.rows.length) throw new EntityCreateConflictError("idempotency_key_reused");
         await this.lockPersonalMedia(client, input.workspaceId, input.actorId, content);
         await this.ensurePersonalEntityPlacement(
           client,
@@ -201,6 +204,7 @@ export class PostgresEntityStore implements EntityStore {
     const expectedVersion = normalizeExpectedEntityVersion(input.expectedVersion);
     const content = normalizeEntityContent(input);
     return this.withTransaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`media-library:${input.workspaceId}`]);
       await this.lockWorkspaceMembership(client, input.workspaceId, input.actorId);
       const locked = await client.query<LockedEntityRow>(
         `SELECT entity.version

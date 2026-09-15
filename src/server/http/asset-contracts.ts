@@ -32,6 +32,9 @@ export const ProjectAssetContentParamsSchema = z.object({
 
 export const CreateAssetUploadIntentBodySchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(200),
+  uploadPurpose: z.enum(["library", "canvas"]).optional().default("canvas"),
+  storageSpace: z.enum(["personal", "organization"]).optional(),
+  projectId: IdentifierSchema.optional(),
   mediaKind: z.enum(["image", "video", "audio"]),
   displayName: z.string().trim().min(1).max(300),
   contentType: z.string().trim().toLowerCase().min(1).max(120),

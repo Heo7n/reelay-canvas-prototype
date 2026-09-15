@@ -870,3 +870,25 @@ test("rejects every mutation whose source or target placement is the platform sp
   );
   assert.deepEqual(plain(store.snapshot()), before);
 });
+
+test("projects a confirmed mixed group and media deletion atomically before the Host group catalog arrives", () => {
+  const media = ["removed", "kept"].map((id) => ({ id, workspaceAssetId: id, type: "image", name: id, url: `/api/media/${id}/content` }));
+  const entity = (id, mediaId) => ({ id, name: id, version: 1, description: "", mediaRefs: [{ assetId: mediaId, order: 0 }], coverAssetId: mediaId });
+  const removed = entity("removed-group", "removed"), kept = entity("kept-group", "kept");
+  const store = model.createAssetLibraryStore();
+  const entries = media.map((asset) => ({ assetId: asset.id, space: "personal", folderId: null, displayName: asset.name, tagIds: [] }));
+  store.syncPersistedCatalog({ media, folders: [], entries, tags: [] });
+  store.syncPersistedEntities({ entities: [removed, kept] });
+  const deletionResult = { media: [media[1]], folders: [], entries: [entries[1]], tags: [], removedEntityIds: [removed.id] };
+  store.syncPersistedCatalog(deletionResult);
+  assert.equal(store.hasPlacement(entityRef(removed.id), "personal"), false);
+  assert.equal(store.hasPlacement(mediaRef("removed"), "personal"), false);
+  assert.equal(store.getEntity(removed.id), null);
+  assert.equal(store.getMedia(mediaRef("removed")).url, media[0].url);
+  assert.equal(store.hasPlacement(entityRef(kept.id), "personal"), true);
+  assert.equal(store.hasPlacement(mediaRef("kept"), "personal"), true);
+  const after = plain(store.snapshot());
+  store.syncPersistedEntities({ entities: [kept] });
+  store.syncPersistedCatalog(deletionResult);
+  assert.deepEqual(plain(store.snapshot()), after);
+});

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { MediaUploadPolicySchema } from "../domain/asset/media-upload-policy";
+import { DeleteLibraryItemSchema, LibraryFolderSchema, LibraryTagSchema, MediaLibraryCatalogSchema } from "../domain/asset/media-library";
 
 export const bridgeCanvasDocumentSchema = z
   .object({
@@ -58,6 +60,15 @@ const canvasInstanceIdSchema = z.string().min(1).max(200);
 const bridgeRequestIdSchema = z.string().min(1).max(200);
 const bridgeIdentifierSchema = z.string().min(1).max(200);
 const mediaKindSchema = z.enum(["image", "video", "audio"]);
+
+export const hostMediaUploadPolicyMessageSchema = z.object({
+  source: z.literal("reelay-shell"),
+  type: z.literal("host:media-upload-policy"),
+  protocolVersion: z.literal(1),
+  instanceId: canvasInstanceIdSchema,
+  policy: MediaUploadPolicySchema.nullable(),
+  status: z.enum(["loading", "ready", "unavailable"]),
+}).strict();
 
 export const bridgeProjectAssetSchema = z.object({
   referenceId: bridgeIdentifierSchema,
@@ -170,6 +181,7 @@ export const hostAssetAvailabilityMessageSchema = z.object({
   instanceId: canvasInstanceIdSchema,
   projectAssets: z.enum(["loading", "ready", "unavailable"]),
   workspaceCatalog: z.enum(["loading", "ready", "unavailable"]),
+  mediaLibrary: z.enum(["loading", "ready", "unavailable"]).optional(),
 }).strict();
 
 export const hostWorkspaceAssetCatalogMessageSchema = z.object({
@@ -180,6 +192,7 @@ export const hostWorkspaceAssetCatalogMessageSchema = z.object({
   instanceId: canvasInstanceIdSchema,
   assets: z.array(bridgeWorkspaceAssetSchema).max(10_000),
   entities: z.array(bridgeWorkspaceEntitySchema).max(10_000),
+  libraryCatalog: MediaLibraryCatalogSchema.optional(),
 }).strict();
 
 export const hostEntityCommandResultMessageSchema = z.object({
@@ -200,6 +213,7 @@ export const hostMediaUploadGrantMessageSchema = z.object({
   uploadIntent: z.object({
     id: bridgeIdentifierSchema,
     expiresAt: z.string().datetime({ offset: true }),
+    status: z.enum(["pending", "uploaded", "finalized"]).optional(),
   }).strict(),
   upload: z.object({
     url: z.string().trim().min(1).max(4_096),
@@ -259,9 +273,53 @@ export const hostAssetCommandErrorMessageSchema = z.object({
   requestId: bridgeRequestIdSchema,
   instanceId: canvasInstanceIdSchema,
   code: z.enum(["invalid", "forbidden", "missing", "conflict", "network", "unsupported"]),
+  message: z.string().max(500).optional(),
+  serviceCode: z.string().min(1).max(100).optional(),
 }).strict();
 
+const libraryCommandFields = {
+  source: z.literal("reelay-legacy-canvas"),
+  type: z.literal("canvas:media-library-command"),
+  protocolVersion: z.literal(1),
+  instanceId: canvasInstanceIdSchema,
+  requestId: bridgeRequestIdSchema,
+};
+const librarySpaceSchema = z.enum(["personal", "organization"]);
+export const canvasMediaLibraryCommandSchema = z.discriminatedUnion("command", [
+  z.object({ ...libraryCommandFields, command: z.literal("list") }).strict(),
+  z.object({ ...libraryCommandFields, command: z.literal("create-folder"),
+    space: librarySpaceSchema, parentId: bridgeIdentifierSchema.nullable(), name: z.string().trim().min(1).max(100),
+  }).strict(),
+  z.object({ ...libraryCommandFields, command: z.literal("rename-folder"), space: librarySpaceSchema, folderId: bridgeIdentifierSchema, name: z.string().trim().min(1).max(100), expectedName: z.string().min(1).max(100) }).strict(),
+  z.object({ ...libraryCommandFields, command: z.literal("create-tag"),
+    space: librarySpaceSchema, name: z.string().trim().min(1).max(40),
+  }).strict(),
+  z.object({ ...libraryCommandFields, command: z.literal("delete"), space: librarySpaceSchema, items: z.array(DeleteLibraryItemSchema).min(1).max(100) }).strict(),
+  z.object({ ...libraryCommandFields, command: z.literal("save"),
+    space: librarySpaceSchema, folderId: bridgeIdentifierSchema.nullable(),
+    tagIds: z.array(bridgeIdentifierSchema).max(50),
+    items: z.array(z.object({
+      assetId: bridgeIdentifierSchema, displayName: z.string().trim().min(1).max(300),
+      action: z.enum(["add", "save", "move"]), expectedFolderId: bridgeIdentifierSchema.nullable().optional(),
+    }).strict()).min(1).max(100),
+  }).strict(),
+]);
+
+const libraryResultFields = {
+  source: z.literal("reelay-shell"), type: z.literal("host:media-library-result"),
+  protocolVersion: z.literal(1), instanceId: canvasInstanceIdSchema, requestId: bridgeRequestIdSchema,
+};
+export const hostMediaLibraryResultMessageSchema = z.discriminatedUnion("command", [
+  z.object({ ...libraryResultFields, command: z.literal("list"), result: MediaLibraryCatalogSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("delete"), result: MediaLibraryCatalogSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("save"), result: MediaLibraryCatalogSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("create-folder"), result: LibraryFolderSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("rename-folder"), result: LibraryFolderSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("create-tag"), result: LibraryTagSchema }).strict(),
+]);
+
 export const canvasMessageSchema = z.discriminatedUnion("type", [
+  canvasMediaLibraryCommandSchema,
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:capabilities"),
@@ -276,6 +334,8 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     instanceId: canvasInstanceIdSchema,
     requestId: bridgeRequestIdSchema,
     target: z.enum(["project", "personal"]),
+    uploadPurpose: z.enum(["canvas", "library"]).optional().default("canvas"),
+    storageSpace: z.enum(["personal", "organization"]).optional().default("personal"),
     mediaKind: mediaKindSchema,
     displayName: z.string().trim().min(1).max(300),
     contentType: z.string().trim().min(1).max(120),
@@ -346,11 +406,21 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     requestId: bridgeRequestIdSchema,
     idempotencyKey: z.string().trim().min(1).max(200),
     target: z.enum(["project", "personal"]).optional().default("project"),
+    uploadPurpose: z.enum(["canvas", "library"]).optional().default("canvas"),
+    storageSpace: z.enum(["personal", "organization"]).optional().default("personal"),
     mediaKind: mediaKindSchema,
     displayName: z.string().trim().min(1).max(300),
     contentType: z.string().trim().min(1).max(120),
     byteSize: z.number().int().positive().max(64 * 1024 * 1024),
     checksumSha256: z.string().regex(/^[a-f\d]{64}$/),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"),
+    type: z.literal("canvas:cancel-media-upload"),
+    protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema,
+    requestId: bridgeRequestIdSchema,
+    uploadId: bridgeIdentifierSchema,
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),
