@@ -5,7 +5,8 @@
     captureInput, clearDraft, restoreDraft, hasDraft, charge, refund, makeResult, capturePlacementTarget,
     placeResult, locateResult, showMessage, escapeHtml, assetPreview, renderPrompt, sanitizeUrl,
     placeAnchoredPopover, refreshIcons, getDemoPresets = () => [], preparePreviewInput = () => null,
-    createPreviewHistory = null }) {
+    createPreviewHistory = null, selectionTrigger = null, beforeSelection = () => {},
+    confirmRemoveRecords = async () => false }) {
     const window = document.defaultView;
     let disposed = false;
     let sending = false;
@@ -13,6 +14,8 @@
     let previewHandled = false;
     const placementTargets = new WeakMap();
     let recordView;
+    let selectionView;
+    let removing = false;
     const service = root.REELAY_GENERATION_TASKS.createService({
       makeId: () => window.crypto.randomUUID(), now: () => Date.now(),
       setTimer: (fn, delay) => window.setTimeout(fn, delay), clearTimer: (id) => window.clearTimeout(id),
@@ -36,8 +39,18 @@
       if (generation) initializePreviewHistory();
       chatContainer.hidden = generation;
       container.hidden = !generation;
-      if (generation) recordView.render(options);
-      else recordView.close();
+      if (selectionTrigger) selectionTrigger.hidden = !generation;
+      if (generation) {
+        recordView.render(options);
+        selectionView?.render();
+        if (!isEditable()) {
+          selectionView?.close();
+          if (selectionTrigger) selectionTrigger.disabled = true;
+        }
+      } else {
+        selectionView?.close();
+        recordView.close();
+      }
     }
 
     function initializePreviewHistory() {
@@ -74,6 +87,7 @@
         if (!input) return null;
         const task = submitSnapshot(input, scope);
         if (task) {
+          selectionView?.close();
           clearDraft();
           render({ forceBottom: true });
         }
@@ -127,13 +141,40 @@
           else showMessage("生成已完成，原画布暂不可放置，结果保留在记录中");
         }
       }
-      if (sameConversation(task)) render();
+      if (!removing && sameConversation(task)) render();
     });
     recordView = root.REELAY_GENERATION_RECORD_VIEW.createController({
       document, container, getScope, getTasks: tasks, getTask: (id) => service.get(id),
       onAction: action, canCancel: (task) => service.canCancel(task), now: () => Date.now(),
       escapeHtml, assetPreview, renderPrompt, sanitizeUrl, placeAnchoredPopover, refreshIcons, showMessage,
     });
+
+    async function removeSelected(selectedTasks) {
+      if (disposed || !isGenerationMode() || !isEditable() || !selectedTasks.length) return;
+      const scope = { ...getScope() };
+      const confirmed = await confirmRemoveRecords({ count: selectedTasks.length });
+      if (!confirmed || disposed || !isGenerationMode() || !isEditable()
+        || getScope()?.projectId !== scope.projectId || getScope()?.conversationId !== scope.conversationId) return;
+      let removed = 0;
+      removing = true;
+      try {
+        // Delete only the captured selection, revalidating identity and scope at
+        // confirmation time. The task service protects active tasks and billing.
+        for (const task of selectedTasks) {
+          if (sameConversation(task, scope) && service.get(task.id) === task && service.remove(task)) removed += 1;
+        }
+      } finally { removing = false; }
+      selectionView.close({ restoreFocus: true });
+      render();
+      if (removed) showMessage(`已删除 ${removed} 条生成记录`);
+    }
+    if (selectionTrigger) {
+      selectionView = root.REELAY_GENERATION_SELECTION.createController({
+        document, container, trigger: selectionTrigger, getScope, getTasks: tasks,
+        getTask: (id) => service.get(id), onRemove: removeSelected,
+        onEnter() { recordView.close(); beforeSelection(); }, refreshIcons,
+      });
+    }
 
     const capabilities = Object.freeze({
       list: () => service.list().filter((task) => !task.isPreview), subscribe: service.subscribe,
@@ -158,10 +199,10 @@
     function connect() {
       window.dispatchEvent(new window.CustomEvent("reelay:generation-ready", { detail: capabilities }));
     }
-    function close() { recordView.close(); }
+    function close() { selectionView?.close(); recordView.close(); }
     function dispose() {
       if (disposed) return;
-      disposed = true; close(); unsubscribe(); service.dispose(); recordView.dispose();
+      disposed = true; close(); unsubscribe(); service.dispose(); selectionView?.dispose(); recordView.dispose();
       for (const [target, name, fn, capture] of listeners) target.removeEventListener(name, fn, capture);
     }
     function pageHide(event) { if (event.persisted) close(); else dispose(); }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const sources = await Promise.all([
   "canvas-file-name.js",
@@ -14,6 +15,7 @@ function fixture(t) {
     runScripts: "outside-only", url: "https://reelay.test/", pretendToBeVisual: true,
   });
   const view = dom.window;
+  view.eval(canvasIconsSource);
   const document = view.document;
   const shelf = document.querySelector("#shelf");
   const fileInput = document.querySelector("#files");

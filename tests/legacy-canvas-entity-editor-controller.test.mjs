@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const [fileNameSource, modelSource, viewSource, controllerSource, mediaPreviewSource] = await Promise.all([
   readFile(new URL("../src/legacy-canvas/canvas-file-name.js", import.meta.url), "utf8"),
@@ -44,6 +45,7 @@ function createHarness(overrides = {}) {
   `, { runScripts: "outside-only", url: "https://reelay.test/index.html" });
   const { window } = dom;
   window.eval(fileNameSource);
+  window.eval(canvasIconsSource);
   window.eval(modelSource);
   window.eval(mediaPreviewSource);
   window.eval(viewSource);

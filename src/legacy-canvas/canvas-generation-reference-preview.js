@@ -3,7 +3,7 @@
 
   let nextId = 0;
   const types = { image: "图片", video: "视频", audio: "音频" };
-  const svg = (body) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  const icon = (name) => root.REELAY_ICONS.markup(name);
 
   function createController({ document, sanitizeUrl = () => "" } = {}) {
     let current = null;
@@ -48,7 +48,7 @@
       const titleId = `generation-reference-preview-title-${++nextId}`;
       dialog.className = "generation-reference-preview";
       dialog.setAttribute("aria-labelledby", titleId);
-      dialog.innerHTML = `<header class="generation-reference-preview-header"><h2 id="${titleId}"></h2><button type="button" class="generation-reference-preview-close" aria-label="关闭素材预览" title="关闭（Esc）" autofocus>${svg('<path d="m6 6 12 12M6 18 18 6"/>')}</button></header><div class="generation-reference-preview-stage"><div class="generation-reference-preview-status" role="status" aria-live="polite"><span class="generation-reference-preview-spinner" aria-hidden="true"></span><span data-preview-message>正在加载…</span></div></div>`;
+      dialog.innerHTML = `<header class="generation-reference-preview-header"><h2 id="${titleId}"></h2><button type="button" class="generation-reference-preview-close" aria-label="关闭素材预览" title="关闭（Esc）" autofocus>${icon("x")}</button></header><div class="generation-reference-preview-stage"><div class="generation-reference-preview-status" role="status" aria-live="polite"><span class="generation-reference-preview-spinner" aria-hidden="true"></span><span data-preview-message>正在加载…</span></div></div>`;
       dialog.querySelector("h2").textContent = name;
       const stage = dialog.querySelector(".generation-reference-preview-stage");
       const status = dialog.querySelector(".generation-reference-preview-status");
@@ -108,7 +108,7 @@
           } else {
             const audioCard = document.createElement("div");
             audioCard.className = "generation-reference-preview-audio-card";
-            audioCard.innerHTML = `<span class="generation-reference-preview-audio-icon">${svg('<path d="M9 18V5l12-2v13M9 8l12-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="18" cy="16" rx="3" ry="3"/>')}</span><span class="generation-reference-preview-audio-label"></span>`;
+            audioCard.innerHTML = `<span class="generation-reference-preview-audio-icon">${icon("music-2")}</span><span class="generation-reference-preview-audio-label"></span>`;
             audioCard.querySelector(".generation-reference-preview-audio-label").textContent = name;
             audioCard.append(media);
             stage.prepend(audioCard);

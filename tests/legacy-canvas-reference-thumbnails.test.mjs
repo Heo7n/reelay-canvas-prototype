@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-reference-thumbnails.js", import.meta.url), "utf8");
 
 function fixture(t) {
   const dom = new JSDOM("<!doctype html><body><div id='strip'></div></body>", { runScripts: "outside-only", url: "https://reelay.test/" });
   const view = dom.window;
+  view.eval(canvasIconsSource);
   const document = view.document;
   let intersections;
   const observed = new Set();

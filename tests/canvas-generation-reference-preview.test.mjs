@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-generation-reference-preview.js", import.meta.url), "utf8");
 
@@ -26,6 +27,7 @@ function fixture(t, options = {}) {
   };
   window.HTMLMediaElement.prototype.pause = () => { pauses++; };
   window.HTMLMediaElement.prototype.load = () => { loads++; };
+  window.eval(canvasIconsSource);
   window.eval(source);
   const controller = window.REELAY_GENERATION_REFERENCE_PREVIEW.createController({
     document,

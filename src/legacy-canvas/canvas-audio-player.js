@@ -1,8 +1,8 @@
 (function registerCanvasAudioPlayer(global) {
   "use strict";
 
-  const playIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5Z" fill="currentColor"/></svg>';
-  const pauseIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z" fill="currentColor"/></svg>';
+  const playIcon = () => global.REELAY_ICONS.markup("play", { fill: "currentColor" });
+  const pauseIcon = () => global.REELAY_ICONS.markup("pause", { fill: "currentColor" });
   // A stable schematic waveform, not decoded peaks. Rendering a node must not fetch
   // or decode an entire audio file merely to draw its thumbnail.
   const heights = [12, 30, 58, 76, 68, 49, 62, 80, 84, 72, 51, 32, 40, 22, 10, 10,
@@ -54,7 +54,7 @@
       </div>
       <div class="audio-controls">
         <div class="audio-time"><span data-audio-current>00:00</span><span class="audio-time-divider" aria-hidden="true"> / </span><span data-audio-duration>${initialDuration ? formatTime(initialDuration) : "--:--"}</span></div>
-        <button class="audio-play-button" data-audio-toggle type="button" aria-label="音频加载中" title="音频加载中" disabled>${playIcon}</button>
+        <button class="audio-play-button" data-audio-toggle type="button" aria-label="音频加载中" title="音频加载中" disabled>${playIcon()}</button>
         <span class="audio-status" data-audio-status role="status" aria-live="polite"></span>
       </div>
       ${safeUrl ? `<audio class="frame-audio" src="${safeUrl}" preload="metadata"></audio>` : ""}
@@ -206,7 +206,7 @@
       setAttribute(record.button, "title", label);
       if (record.iconPlaying !== pendingOrActive) {
         record.iconPlaying = pendingOrActive;
-        record.button.innerHTML = pendingOrActive ? pauseIcon : playIcon;
+        record.button.innerHTML = pendingOrActive ? pauseIcon() : playIcon();
       }
       setText(record.status, failed ? "音频加载失败" : record.playError);
     }

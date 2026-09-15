@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { installCanvasIcons } from "./helpers/canvas-icons.mjs";
 
 const scripts = await Promise.all([
   "../src/legacy-canvas/canvas-prompt-document.js",
@@ -23,6 +24,7 @@ const modelCatalog = [
 function fixture(t, overrides = {}) {
   const dom = new JSDOM('<!doctype html><body><div class="prompt-optimization-dialog"></div></body>', { runScripts: "outside-only" });
   const { window } = dom;
+  installCanvasIcons(window);
   for (const script of scripts) window.eval(script);
   const timers = new Map();
   let sequence = 0, opened = false, viewOptions, viewState;

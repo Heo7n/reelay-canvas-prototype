@@ -44,7 +44,7 @@ function shellHistoryFallback() {
 export default defineConfig(({ mode }) => ({
   base: "/",
   define: { "import.meta.env.VITE_REELAY_EXPERIENCE": JSON.stringify(mode === "experience" ? "true" : "false") },
-  plugins: [siteFavicon(mode === "experience"), react(), shellHistoryFallback(), canvasLayoutTunerPlugin(), promptEditorPlugin(), generationSimulatorPlugin()],
+  plugins: [siteFavicon(mode === "experience"), react(), shellHistoryFallback(), canvasLayoutTunerPlugin(), promptEditorPlugin(), promptEditorPlugin("icons"), generationSimulatorPlugin()],
   server: {
     proxy: mode === "experience" ? undefined : {
       "/api": `http://127.0.0.1:${developmentApiPort}`,

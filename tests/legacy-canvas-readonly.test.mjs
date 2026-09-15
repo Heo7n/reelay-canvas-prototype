@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
@@ -29,6 +30,7 @@ const audioPlayer = await readFile(new URL("src/legacy-canvas/canvas-audio-playe
 const agentComposerView = await readFile(new URL("src/legacy-canvas/canvas-agent-composer-view.js", root), "utf8");
 const agentReferences = await readFile(new URL("src/legacy-canvas/canvas-agent-references.js", root), "utf8");
 const generationModules = await Promise.all([
+  "src/legacy-canvas/canvas-agent-launcher-motion.js",
   "src/application/prompt-optimization-preferences.js",
   "src/application/prompt-optimization-service.js",
   "src/legacy-canvas/canvas-prompt-optimization-view.js",
@@ -36,7 +38,8 @@ const generationModules = await Promise.all([
   "src/legacy-canvas/canvas-reference-thumbnails.js",
   "src/legacy-canvas/canvas-agent-composer-resize.js",
   "src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js",
-  "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-reference-preview.js", "src/legacy-canvas/canvas-generation-record-view.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
+  "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-reference-preview.js", "src/legacy-canvas/canvas-generation-record-view.js",
+  "src/legacy-canvas/canvas-generation-selection.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
   "src/legacy-canvas/canvas-agent-result-placement.js",
 ].map((path) => readFile(new URL(path, root), "utf8")));
 const [selectionEntityModel, entityMediaImport] = await Promise.all([
@@ -100,6 +103,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   });
   t.after(() => dom.window.close());
   const { window } = dom;
+  window.eval(canvasIconsSource);
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
   const postedMessages = [];
   const hostWindow = { postMessage(message) { postedMessages.push(message); } };
@@ -488,11 +492,12 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     saveCountBeforeAgentResize,
   );
 
-  agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  agentHistoryBtn.focus();
+  agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
   assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "true");
   assert.equal(agentModeBtn.getAttribute("aria-expanded"), "false");
   assert.equal(agentModelBtn.getAttribute("aria-expanded"), "false");
-  assert.equal(window.document.activeElement, window.document.querySelector("#agentHistoryNewChatBtn"));
+  assert.equal(window.document.activeElement, agentHistoryBtn);
   window.document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", {
     bubbles: true,
     cancelable: true,
@@ -503,6 +508,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   assert.equal(window.document.activeElement, agentHistoryBtn);
 
   agentHistoryBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  assert.equal(window.document.activeElement, agentHistoryMenu.querySelector('.history-select[aria-current="true"]'));
   agentModeBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   assert.equal(agentHistoryBtn.getAttribute("aria-expanded"), "false");
   assert.equal(agentModeBtn.getAttribute("aria-expanded"), "true");

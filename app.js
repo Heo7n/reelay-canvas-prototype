@@ -122,15 +122,18 @@ const selectionLayoutTrigger = document.querySelector(".selection-layout-trigger
 let selectionLayoutSession = null;
 const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
+const agentLauncherMotion = window.REELAY_AGENT_LAUNCHER_MOTION.createController({ document, launcher: agentLauncher });
 const agentPanel = document.querySelector("#agentPanel");
 const agentResizeHandle = document.querySelector("#agentResizeHandle");
 const agentTopResizeHandle = document.querySelector("#agentTopResizeHandle");
 const agentBottomResizeHandle = document.querySelector("#agentBottomResizeHandle");
 const agentCloseBtn = document.querySelector("#agentCloseBtn");
+const agentCloseMotion = window.REELAY_AGENT_LAUNCHER_MOTION.createController({
+  document, launcher: agentCloseBtn, visibleWhenOpen: true, motionScale: 0.7,
+});
 const agentHistoryBtn = document.querySelector("#agentHistoryBtn");
 const agentHistoryMenu = document.querySelector("#agentHistoryMenu");
 const agentHistoryList = document.querySelector("#agentHistoryList");
-const agentHistoryNewChatBtn = document.querySelector("#agentHistoryNewChatBtn");
 const agentConversationTitle = document.querySelector("#agentConversationTitle");
 const agentMessages = document.querySelector("#agentMessages");
 const agentComposer = document.querySelector("#agentComposer");
@@ -1432,12 +1435,13 @@ function applyTransform() {
   shell.style.setProperty("--group-interaction-scale", inverseCanvasScale);
   shell.style.setProperty(
     "--port-zone-outward",
-    `${(portField.fieldOutwardRadius / state.scale).toFixed(2)}px`,
+    `${(portField.hitOutwardRadius / state.scale).toFixed(2)}px`,
   );
   shell.style.setProperty(
     "--port-zone-height",
-    `${((portField.fieldVerticalRadius * 2) / state.scale).toFixed(2)}px`,
+    `${((portField.hitVerticalRadius * 2) / state.scale).toFixed(2)}px`,
   );
+  shell.style.setProperty("--port-hit-radius-x", `${portField.hitHorizontalRadius / state.scale}px`);
   scheduleGroupChromeLayout();
   updateCanvasGrid();
   syncPromptPanelLayouts();
@@ -3026,163 +3030,8 @@ function safeMediaAttributeUrl(value) {
   return escapeHtml(sanitizeRuntimeMediaUrl(value));
 }
 
-// sparkles / workflow / layers-2 use official Lucide SVG paths (ISC).
-// Source: https://github.com/lucide-icons/lucide/tree/main/icons
-// License: assets/icons/LUCIDE-LICENSE.txt
-// Media toolbar SVGs use Lucide 1.25.0 (ISC); badge-hd and scan alias hd and scan-line.
-// Source license: assets/icons/LUCIDE-LICENSE.txt.
-const fallbackIconPaths = {
-  "align-horizontal-space-around": '<path d="M4 18V6"/><path d="M20 18V6"/><path d="M8 12h8"/><path d="m14 9 3 3-3 3"/><path d="m10 9-3 3 3 3"/>',
-  "align-vertical-space-around": '<path d="M6 4h12"/><path d="M6 20h12"/><path d="M12 8v8"/><path d="m9 14 3 3 3-3"/><path d="m9 10 3-3 3 3"/>',
-  "archive": '<path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M4 4h16v3H4z"/><path d="M9 11h6"/>',
-  "arrow-right-from-line": '<path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/>',
-  "arrow-up": '<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>',
-  "audio-lines": '<path d="M4 10v4"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 8v8"/><path d="M20 10v4"/>',
-  "audio-waveform": '<path d="M3 12h2"/><path d="M7 9v6"/><path d="M11 5v14"/><path d="M15 8v8"/><path d="M19 10v4"/><path d="M21 12h-1"/>',
-  "badge-check": '<path d="M12 3 14.1 5.1 17 4.4 17.8 7.2 20.6 8 19.9 10.9 22 13 19.9 15.1 20.6 18 17.8 18.8 17 21.6 14.1 20.9 12 23 9.9 20.9 7 21.6 6.2 18.8 3.4 18 4.1 15.1 2 13 4.1 10.9 3.4 8 6.2 7.2 7 4.4 9.9 5.1z"/><path d="m8.5 12.5 2.3 2.3 4.9-5"/>',
-  "badge-hd": '<path d="M10 12H6"/><path d="M10 15V9"/><path d="M14 14.5a.5.5 0 0 0 .5.5h1a2.5 2.5 0 0 0 2.5-2.5v-1A2.5 2.5 0 0 0 15.5 9h-1a.5.5 0 0 0-.5.5z"/><path d="M6 15V9"/><rect x="2" y="5" width="20" height="14" rx="2"/>',
-  "book-open": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v15h-3a5 5 0 0 0-5 3z"/><path d="M12 6.5V22"/>',
-  "book-open-check": '<path d="M12 6.5A5 5 0 0 0 7 4H4v15h3a5 5 0 0 1 5 3z"/><path d="M12 6.5A5 5 0 0 1 17 4h3v8"/><path d="M12 6.5V22"/><path d="m15 18 2 2 4-5"/>',
-  "bot": '<path d="M12 8V4"/><path d="M8 4h8"/><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M9 17h6"/>',
-  "box": '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
-  "building-2": '<path d="M10 12h4"/><path d="M10 8h4"/><path d="M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/>',
-  "calendar-days": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/>',
-  "check": '<path d="m5 12 4 4 10-10"/>',
-  "chevron-down": '<path d="m6 9 6 6 6-6"/>',
-  "chevron-left": '<path d="m15 18-6-6 6-6"/>',
-  "chevron-right": '<path d="m9 6 6 6-6 6"/>',
-  "circle": '<circle cx="12" cy="12" r="8"/>',
-  "circle-dollar-sign": '<circle cx="12" cy="12" r="9"/><path d="M12 6v12"/><path d="M15.5 8.5c-.8-.6-1.8-1-3.1-1-1.7 0-3 .8-3 2.1 0 3 6.1 1.5 6.1 4.8 0 1.4-1.4 2.3-3.2 2.3-1.4 0-2.6-.4-3.6-1.2"/>',
-  "circle-help": '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4"/><path d="M12 17h.01"/>',
-  "circle-user-round": '<path d="M17.925 20.056a6 6 0 0 0-11.851.001"/><circle cx="12" cy="11" r="4"/><circle cx="12" cy="12" r="10"/>',
-  "library-big": '<rect width="8" height="18" x="3" y="3" rx="1"/><path d="M7 3v18"/><path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"/>',
-  "circle-play": '<circle cx="12" cy="12" r="10"/><path d="m10 8 6 4-6 4z"/>',
-  "combine": '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/><path d="M13 17H9a2 2 0 0 1-2-2v-4"/>',
-  "crop": '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',
-  "download": '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
-  "ellipsis": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
-  "ellipsis-vertical": '<path d="M12 5h.01"/><path d="M12 12h.01"/><path d="M12 19h.01"/>',
-  "eraser": '<path d="m7 21-4-4 9.5-9.5a3 3 0 0 1 4.2 0l1.8 1.8a3 3 0 0 1 0 4.2L11 21z"/><path d="m9 12 6 6"/><path d="M7 21h12"/>',
-  "eye": '<path d="M2.1 12s3.6-7 9.9-7 9.9 7 9.9 7-3.6 7-9.9 7-9.9-7-9.9-7"/><circle cx="12" cy="12" r="3"/>',
-  "filter-x": '<path d="M4 5h16l-6 7v5l-4 2v-7z"/><path d="m16 16 4 4"/><path d="m20 16-4 4"/>',
-  "focus": '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
-  "folder": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/>',
-  "folder-input": '<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M12 9v7"/><path d="m9 13 3 3 3-3"/>',
-  "folder-plus": '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
-  "folders": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1"/><path d="M5 10a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/>',
-  "gauge": '<path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 14 16 9"/><path d="M5 20h14"/>',
-  "grid-3x3": '<path d="M4 4h16v16H4z"/><path d="M4 9.3h16"/><path d="M4 14.7h16"/><path d="M9.3 4v16"/><path d="M14.7 4v16"/>',
-  "grid-2x2": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
-  "house": '<path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
-  "image": '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-4 4-2-2-5 5"/>',
-  "images": '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M3 17V7a4 4 0 0 1 4-4h10"/><path d="m19 15-4-4-3 3-1.5-1.5L7 16"/>',
-  "keyboard": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01"/><path d="M11 10h.01"/><path d="M15 10h.01"/><path d="M7 14h10"/>',
-  "layers-2": '<path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74z"/><path d="m20 14.285 1.5.845a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74l1.5-.845"/>',
-  "layers-3": '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
-  "layout-grid": '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
-  "list": '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
-  "list-checks": '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
-  "list-filter": '<path d="M3 6h18"/><path d="M6 12h12"/><path d="M10 18h4"/>',
-  "log-out": '<path d="M10 17v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2"/><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/>',
-  "map": '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
-  "message-square-plus": '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/><path d="M12 8v6"/><path d="M9 11h6"/>',
-  "maximize-2": '<path d="M15 3h6v6"/><path d="m14 10 7-7"/><path d="M9 21H3v-6"/><path d="m10 14-7 7"/>',
-  "minimize-2": '<path d="M4 14h6v6"/><path d="m10 14-7 7"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/>',
-  "monitor": '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/>',
-  "moon": '<path d="M21 13.2A7.5 7.5 0 1 1 10.8 3 6 6 0 0 0 21 13.2z"/>',
-  "more-horizontal": '<path d="M5 12h.01"/><path d="M12 12h.01"/><path d="M19 12h.01"/>',
-  "mouse-pointer-click": '<path d="m4 4 7 17 2-7 7-2z"/><path d="M15 4h5"/><path d="M18 2v5"/>',
-  "mouse-pointer-2": '<path d="M4 4l7.1 17 2.5-7.4L21 11z"/>',
-  "panel-left-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 9-3 3 3 3"/>',
-  "panel-right-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="m8 9 3 3-3 3"/>',
-  "panels-top-left": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 9v12"/>',
-  "paperclip": '<path d="m21 8.5-9.5 9.5a5 5 0 0 1-7.1-7.1l10-10a3.3 3.3 0 0 1 4.7 4.7L9.5 15a1.7 1.7 0 0 1-2.4-2.4L16 3.8"/>',
-  "pause": '<path d="M8 5v14"/><path d="M16 5v14"/>',
-  "pencil": '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>',
-  "pin": '<path d="M12 17v5"/><path d="M6 17h12"/><path d="m8 3 8 8"/><path d="M9 3h6l-1 5 4 4-3 3-4-4-5 1z"/>',
-  "pin-off": '<path d="m2 2 20 20"/><path d="M12 17v5"/><path d="M6 17h12"/><path d="M9 3h6l-1 5 4 4-2 2"/><path d="M8 12l-2 .5 5-5"/>',
-  "play": '<path d="m8 5 12 7-12 7z"/>',
-  "play-square": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
-  "square-play": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
-  "plus": '<path d="M12 5v14"/><path d="M5 12h14"/>',
-  "rotate-cw": '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
-  "scan": '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
-  "scan-search": '<path d="M7 3H5a2 2 0 0 0-2 2v2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="11" cy="11" r="3"/><path d="m14 14 3 3"/>',
-  "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 8.6 19 19"/><path d="M8.6 15.4 19 5"/>',
-  "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
-  "search-x": '<circle cx="10.5" cy="10.5" r="7"/><path d="m20 20-4.5-4.5"/><path d="m8 8 5 5"/><path d="m13 8-5 5"/>',
-  "send-horizontal": '<path d="M3 12 21 4l-5 16-4-7z"/><path d="M12 13 21 4"/>',
-  "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/>',
-  "settings-2": '<path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/>',
-  "share-2": '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4"/><path d="m8.6 13.5 6.8 4"/>',
-  "shield-check": '<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="m9 12 2 2 4-4"/>',
-  "sliders-horizontal": '<path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/>',
-  "sparkles": '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/>',
-  "notepad-text-dashed": '<path d="M5 3h14v18H5z"/><path d="M9 3v3"/><path d="M15 3v3"/><path d="M8 10h8"/><path d="M8 14h5"/>',
-  "square-plus": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/>',
-  "square": '<rect x="4" y="4" width="16" height="16" rx="2"/>',
-  "square-check-big": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 12 3 3 6-6"/>',
-  "copy-check": '<path d="m12 15 2 2 4-4"/><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
-  "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/>',
-  "timer": '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/>',
-  "type": '<path d="M4 5h16"/><path d="M10 5v14"/><path d="M14 5v14"/><path d="M8 19h8"/>',
-  "trash-2": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
-  "ungroup": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 4h3a3 3 0 0 1 3 3v3"/><path d="M10 20H7a3 3 0 0 1-3-3v-3"/>',
-  "upload": '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14a2 2 0 0 0 2-2v-3"/><path d="M3 15v3a2 2 0 0 0 2 2"/>',
-  "user-round": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
-  "user-round-plus": '<circle cx="10" cy="8" r="4"/><path d="M2 21a8 8 0 0 1 14-5"/><path d="M19 14v6"/><path d="M16 17h6"/>',
-  "users": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
-  "users-round": '<path d="M16 21a6 6 0 0 0-12 0"/><circle cx="10" cy="8" r="4"/><path d="M22 21a5 5 0 0 0-5-5"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/>',
-  "video": '<path d="M15 10.5 21 7v10l-6-3.5z"/><rect x="3" y="6" width="12" height="12" rx="2"/>',
-  "volume-2": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 9a4 4 0 0 1 0 6"/><path d="M18 6a8 8 0 0 1 0 12"/>',
-  "volume-x": '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m17 10 4 4"/><path d="m21 10-4 4"/>',
-  "workflow": '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
-  "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
-};
-
-function createFallbackIcon(name, sourceIcon) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.8");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", sourceIcon?.getAttribute("aria-hidden") || "true");
-  svg.classList.add("lucide", `lucide-${name}`);
-  sourceIcon?.classList?.forEach((className) => svg.classList.add(className));
-  svg.dataset.fallbackIcon = name;
-  svg.innerHTML = fallbackIconPaths[name] || fallbackIconPaths.circle;
-  return svg;
-}
-
-function renderFallbackIcons() {
-  document.querySelectorAll("i[data-lucide]").forEach((icon) => {
-    icon.replaceWith(createFallbackIcon(icon.dataset.lucide || "circle", icon));
-  });
-}
-
-function renderCustomFallbackIcons() {
-  document.querySelectorAll('i[data-lucide="badge-hd"]').forEach((icon) => {
-    icon.replaceWith(createFallbackIcon("badge-hd", icon));
-  });
-}
-
-function refreshIcons() {
-  renderCustomFallbackIcons();
-  if (window.lucide) {
-    try {
-      window.lucide.createIcons({
-        attrs: {
-          "stroke-width": 1.8,
-        },
-      });
-    } catch {
-      renderFallbackIcons();
-      return;
-    }
-  }
-  renderFallbackIcons();
+function refreshIcons(root = document) {
+  window.REELAY_ICONS.refresh(root);
 }
 
 function formatCredit(value) {
@@ -4792,21 +4641,9 @@ function generatorMediaContent(node, displayWidth) {
     `;
   }
 
-  const placeholderIcon =
-    node.mode === "video"
-      ? `
-        <svg class="upload-icon video-placeholder-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="4" y="5" width="16" height="14" rx="3" stroke="currentColor" stroke-width="2"/>
-          <path d="M10 9.2L15.2 12 10 14.8V9.2Z" fill="currentColor"/>
-        </svg>
-      `
-      : `
-        <svg class="upload-icon image-placeholder-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="4" y="5" width="16" height="14" rx="3" stroke="currentColor" stroke-width="2"/>
-          <path d="M7 16l3.2-3.2 2.3 2.2 2.2-2.7L18 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="16.5" cy="8.5" r="1.3" fill="currentColor"/>
-        </svg>
-      `;
+  const placeholderIcon = window.REELAY_ICONS.markup(node.mode === "video" ? "square-play" : "image", {
+    class: `upload-icon ${node.mode === "video" ? "video" : "image"}-placeholder-icon`,
+  });
 
   return `
     <div class="upload-stack">
@@ -4869,7 +4706,7 @@ function assetShelf(node) {
         <span class="reference-number" aria-hidden="true" title="${escapeHtml(label)}">${ordinal}</span>
         <button class="asset-remove" data-reference-remove data-action="${linked ? "remove-linked-source" : "remove-material"}"
           data-value="${escapeHtml(connectionId || asset.id)}" data-canvas-mutation type="button" ${locked ? "disabled" : ""}
-          title="${removeLabel}" aria-label="${removeLabel} ${escapeHtml(name)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+          title="${removeLabel}" aria-label="${removeLabel} ${escapeHtml(name)}">${window.REELAY_ICONS.markup("x")}</button>
       </div>`;
   }).join("");
   return `<div class="asset-shelf" role="group" aria-label="参考素材，拖动可排序">${cards}</div>`;
@@ -5382,15 +5219,7 @@ function createAssetNodeElement(node, existingElement = null) {
 }
 
 function entityEntryIconMarkup() {
-  return `
-    <span class="entity-entry-glyph" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/>
-        <circle cx="12" cy="9.25" r="2.1" fill="currentColor" stroke="none"/>
-        <path d="M8.4 16.4c.45-2.2 1.7-3.3 3.6-3.3s3.15 1.1 3.6 3.3"/>
-      </svg>
-    </span>
-  `;
+  return `<span class="entity-entry-glyph" aria-hidden="true">${window.REELAY_ICONS.markup("square-user-round")}</span>`;
 }
 
 function createGeneratorNodeElement(node, existingElement = null) {
@@ -5431,16 +5260,16 @@ function createGeneratorNodeElement(node, existingElement = null) {
           <div class="control-spacer"></div>
           ${`
             <button class="control-chip composer-tool-button prompt-optimization-button " data-action="prompt-optimization" data-canvas-mutation type="button" title="${getNodePromptText(node).trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="提示词优化" aria-busy="false" ${node.generating || !getNodePromptText(node).trim() ? "disabled" : ""}>
-              <svg class="prompt-optimization-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 3.75h7.4l3.1 3.1v10.9a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"/><path d="M14.6 3.9v3.4h3.3M8.5 11h4.2M8.5 14.2h3"/><path class="prompt-sparkle" d="M18.25 10.6c.2 1.15.95 1.9 2.1 2.1-1.15.2-1.9.95-2.1 2.1-.2-1.15-.95-1.9-2.1-2.1 1.15-.2 1.9-.95 2.1-2.1Z"/></svg>
+              ${window.REELAY_ICONS.markup("wand-sparkles", { class: "prompt-optimization-icon" })}
               <span class="prompt-optimization-spinner" aria-hidden="true"></span>
             </button>
           `}
           <button class="control-chip composer-tool-button advanced-settings-chip ${node.advancedSettingsExpanded ? "active" : ""}" data-action="advanced-settings-toggle" type="button" title="高级设置" aria-label="高级设置" aria-expanded="${node.advancedSettingsExpanded}" aria-controls="advanced-settings-${escapeHtml(node.id)}" ${generationInputsDisabled}>
-            <svg class="advanced-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h11M4 11.5h8M4 16.5h5"/><circle cx="17" cy="15.5" r="3.1"/><path d="M17 10.8v1.2M17 19v1.2M12.3 15.5h1.2M20.5 15.5h1.2M13.7 12.2l.85.85M19.45 17.95l.85.85M20.3 12.2l-.85.85M14.55 17.95l-.85.85"/></svg>
+            ${window.REELAY_ICONS.markup("sliders-horizontal", { class: "advanced-settings-icon" })}
           </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
             <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
-            <span class="send-arrow"><svg class="send-arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></span>
+            <span class="send-arrow">${window.REELAY_ICONS.markup("arrow-up", { class: "send-arrow-icon" })}</span>
           </button>
         </div>
         ${node.panel === "material" ? materialPanel() : ""}
@@ -5529,14 +5358,13 @@ function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
   bindMediaTitleEvents(el, node);
   bindMediaToolbarEvents(el, node);
   el.querySelectorAll("[data-node-port-zone]").forEach((zone) => {
-    const side = zone.dataset.nodePortZone;
     zone.addEventListener("pointermove", (event) => {
-      if (state.action?.type === "connect") return;
-      positionNodePortAtPointer(zone, event.clientX, event.clientY);
+      if (state.action || state.isSpaceDown) return;
+      positionNodePortAtPointer(event.clientX, event.clientY);
     });
     zone.addEventListener("pointerleave", () => {
       if (state.action?.type === "connect") return;
-      resetNodePortPosition(zone);
+      clearConnectionPortHover();
     });
     zone.addEventListener("pointerdown", (event) => {
       if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
@@ -5545,8 +5373,15 @@ function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
         beginPan(event);
         return;
       }
-      positionNodePortAtPointer(zone, event.clientX, event.clientY);
-      beginConnectionDrag(event, node.id, side);
+      const hitElements = document.elementsFromPoint(event.clientX, event.clientY);
+      const body = getConnectionPortUnderlyingBody(hitElements, event.clientX, event.clientY);
+      if (body) {
+        clearConnectionPortHover();
+        canvasNodePointerController.handlePointerDown(event, body.closest(".canvas-node").dataset.id, { target: body });
+        return;
+      }
+      const entry = positionNodePortAtPointer(event.clientX, event.clientY);
+      if (entry) beginConnectionDrag(event, entry.nodeId, entry.side);
     });
   });
 }
@@ -6312,7 +6147,7 @@ function advancedSettingsPanel(node) {
       </div>
       <div class="advanced-setting-row advanced-setting-schedule">
         <div class="advanced-setting-label"><span>定时任务</span>${advancedSettingInfo(node, "schedule", "定时任务")}</div>
-        <button class="advanced-schedule-button" type="button" disabled aria-disabled="true" aria-label="定时任务暂未开放" title="定时任务暂未开放"><svg class="advanced-schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M7.5 3.5v4M16.5 3.5v4M3.5 9.5h17M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></button>
+        <button class="advanced-schedule-button" type="button" disabled aria-disabled="true" aria-label="定时任务暂未开放" title="定时任务暂未开放">${window.REELAY_ICONS.markup("calendar-days", { class: "advanced-schedule-icon" })}</button>
       </div>
     </section>
   `;
@@ -6743,7 +6578,7 @@ function buildConnectionPortRegistry() {
 function setConnectionPortScreenPoint(entry, point) {
   if (!entry || !point) return 0.5;
   const zoneRect = entry.zone.getBoundingClientRect();
-  const localX = clamp(point.x - zoneRect.left, 0, zoneRect.width);
+  const localX = point.x - zoneRect.left;
   const localY = clamp(point.y - zoneRect.top, 0, zoneRect.height);
   entry.port.dataset.portRatio = "0.5";
   entry.port.style.setProperty("--port-x", `${((localX / zoneRect.width) * 100).toFixed(2)}%`);
@@ -6751,12 +6586,42 @@ function setConnectionPortScreenPoint(entry, point) {
   return 0.5;
 }
 
-function positionNodePortAtPointer(zone, clientX, clientY) {
-  const entry = getConnectionPortDomEntry(zone);
-  if (!entry) return 0.5;
-  const registry = canvasConnectionInteraction.buildPortRegistry([entry.definition]);
-  const point = canvasConnectionInteraction.clampPointerToPort({ x: clientX, y: clientY }, registry[0]);
-  return point ? setConnectionPortScreenPoint(entry, point) : 0.5;
+function positionNodePortAtPointer(clientX, clientY) {
+  // Only inspect hit-tested zones; overlap is resolved by proximity instead of
+  // whichever node happened to render last. Hover and pointerdown share this choice.
+  const hitElements = document.elementsFromPoint(clientX, clientY);
+  if (getConnectionPortUnderlyingBody(hitElements, clientX, clientY)) {
+    clearConnectionPortHover();
+    return null;
+  }
+  const entries = hitElements
+    .filter((element) => element.matches("[data-node-port-zone]"))
+    .map(getConnectionPortDomEntry)
+    .filter(Boolean);
+  const registry = canvasConnectionInteraction.buildPortRegistry(entries.map((entry) => entry.definition));
+  const hovered = canvasConnectionInteraction.findHoveredPort({ x: clientX, y: clientY }, registry);
+  const entry = entries.find((candidate) => candidate.id === hovered?.portId);
+  clearConnectionPortHover(entry?.port);
+  if (!entry) return null;
+  entry.port.classList.add("is-pointer-near");
+  setConnectionPortScreenPoint(entry, hovered.point);
+  return entry;
+}
+
+function getConnectionPortUnderlyingBody(hitElements, clientX, clientY) {
+  return hitElements.find((element) => {
+    if (element.closest("[data-node-port-zone]") || !element.closest(".media-frame")) return false;
+    const rect = element.closest(".media-frame").getBoundingClientRect();
+    return clientX > rect.left && clientX < rect.right && clientY > rect.top && clientY < rect.bottom;
+  });
+}
+
+function clearConnectionPortHover(exceptPort = null) {
+  nodeLayer.querySelectorAll(".node-port.is-pointer-near").forEach((port) => {
+    if (port === exceptPort) return;
+    port.classList.remove("is-pointer-near");
+    resetNodePortPosition(port.closest("[data-node-port-zone]"));
+  });
 }
 
 function resetNodePortPosition(zone) {
@@ -6985,6 +6850,7 @@ function beginConnectionDrag(event, originNodeId, originSide = "output") {
   event.preventDefault();
   event.stopPropagation();
   closeCanvasCreateMenus();
+  clearConnectionPortHover();
   setConnectionPortScreenPoint(originEntry, originScreenPoint);
   const originRatio = 0.5;
   const start = screenToWorld(originPort.anchor.x, originPort.anchor.y);
@@ -7876,6 +7742,14 @@ const agentResultPlacement = window.REELAY_AGENT_RESULT_PLACEMENT.createControll
 
 agentGeneration = window.REELAY_AGENT_GENERATION.createController({
   document, container: document.querySelector("#agentGenerationRecords"), chatContainer: agentMessages,
+  selectionTrigger: document.querySelector("#agentRecordSelectBtn"),
+  beforeSelection: closeAgentPopovers,
+  confirmRemoveRecords: ({ count }) => new Promise((resolve) => showConfirmDialog({
+    title: `删除 ${count} 条生成记录？`,
+    body: "记录删除后无法恢复，画布中的生成结果会保留。",
+    confirmText: "删除记录", danger: true,
+    onConfirm: () => resolve(true), onCancel: () => resolve(false),
+  })),
   getScope: () => ({ projectId: state.projectId, conversationId: agentHistory.getActiveId(), canvasId: state.activeCanvasId }),
   isGenerationMode: () => agentModels.getMode() === "generation",
   isEditable: () => requireCanvasMutation({ notify: false }),
@@ -7979,7 +7853,7 @@ function addAgentReferenceAssets(assets, scope = agentReferences.captureScope())
 function agentReferenceThumbnail(asset) {
   if (asset.type === "image") return assetPreview({ ...asset,
     url: sanitizeRuntimeMediaUrl(asset.thumbnailUrl) || libraryImagePreviewUrl(asset.url, "image") });
-  if (asset.type === "audio") return '<svg class="agent-reference-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg>';
+  if (asset.type === "audio") return window.REELAY_ICONS.markup("audio-lines", { class: "agent-reference-glyph" });
   return window.REELAY_CANVAS_REFERENCE_THUMBNAILS.renderVideo(asset, { sanitizeUrl: sanitizeRuntimeMediaUrl, escapeHtml });
 }
 
@@ -7998,7 +7872,16 @@ function setAgentHistoryOpen(open, { focus = false } = {}) {
   }
   agentHistoryMenu?.classList.toggle("hidden", !shouldOpen);
   agentHistoryBtn?.setAttribute("aria-expanded", String(shouldOpen));
-  if (shouldOpen && focus) window.requestAnimationFrame(() => agentHistoryNewChatBtn?.focus());
+  if (shouldOpen) {
+    const current = agentHistoryList?.querySelector('.history-select[aria-current="true"]');
+    if (focus) current?.focus({ preventScroll: true });
+    if (current && agentHistoryList) {
+      const row = current.getBoundingClientRect();
+      const list = agentHistoryList.getBoundingClientRect();
+      if (row.top < list.top) agentHistoryList.scrollTop -= list.top - row.top;
+      else if (row.bottom > list.bottom) agentHistoryList.scrollTop += row.bottom - list.bottom;
+    }
+  }
 }
 
 function setAgentModeMenuOpen(open, { focus = false } = {}) {
@@ -8237,6 +8120,8 @@ function setAgentOpen(open) {
   appShell?.classList.toggle("agent-open", open);
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
+  agentLauncherMotion.setPanelOpen(open);
+  agentCloseMotion.setPanelOpen(open);
   if (open && isAssetLibraryOpen()) reconcileDualPanelWidths("agent");
   else if (!open && isAssetLibraryOpen()) {
     setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
@@ -8265,8 +8150,12 @@ function setAgentOpen(open) {
   if (open) { mountAgentPrompt(); agentComposerResize?.sync(); }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
   syncPromptPanelLayouts();
-  if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => focusAgentPrompt());
-  if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
+  if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => {
+    if (state.agentOpen) focusAgentPrompt();
+  });
+  if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => {
+    if (!state.agentOpen) agentLauncher?.focus();
+  });
 }
 
 function getProjectShareUrl() {
@@ -11312,15 +11201,13 @@ agentLauncher?.addEventListener("keydown", (event) => {
   setAgentOpen(true);
 });
 agentCloseBtn?.addEventListener("click", () => setAgentOpen(false));
-document.querySelectorAll("#agentNewChatBtn, #agentHistoryNewChatBtn").forEach((button) => {
-  button.addEventListener("click", () => {
-    agentHistory.startNew();
-    focusAgentPrompt();
-  });
+document.querySelector("#agentNewChatBtn")?.addEventListener("click", () => {
+  agentHistory.startNew();
+  focusAgentPrompt();
 });
 agentHistoryBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
-  setAgentHistoryOpen(agentHistoryMenu?.classList.contains("hidden"), { focus: true });
+  setAgentHistoryOpen(agentHistoryMenu?.classList.contains("hidden"), { focus: event.detail === 0 });
 });
 agentHistoryMenu?.addEventListener("pointerdown", (event) => {
   event.stopPropagation();
@@ -11572,6 +11459,8 @@ window.addEventListener("pagehide", (event) => {
   canvasTheme.clearFeedback();
   if (!event.persisted) {
     assetLibraryHeader.destroy();
+    agentLauncherMotion.dispose();
+    agentCloseMotion.dispose();
     canvasTheme.dispose();
     assetLibraryItemMenu.dispose();
     canvasToolbarMenus.dispose();

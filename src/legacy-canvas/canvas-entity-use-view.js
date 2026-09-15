@@ -22,7 +22,7 @@
   }
 
   function icon(name, className = "") {
-    return `<i${className ? ` class="${className}"` : ""} data-lucide="${name}" aria-hidden="true"></i>`;
+    return root.REELAY_ICONS.markup(name, className ? { class: className } : {});
   }
 
   function finiteNumber(value, fallback) {

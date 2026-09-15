@@ -1,7 +1,7 @@
 (function registerPromptOptimizationView(root) {
   "use strict";
-  // Official Lucide 1.25.0 icons, exported from the installed package (ISC).
-  const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="./assets/icons/prompt-optimization.svg#${name}"/></svg>`;
+  const MEDIA_ICONS = { image: 'image', video: 'square-play', audio: 'audio-lines' };
+  const icon = (name) => root.REELAY_ICONS.markup(name);
 
   function createController({ document, promptDocument = root.REELAY_CANVAS_PROMPT_DOCUMENT, showMessage = () => {},
     sanitizeUrl, onEdit = () => {}, onRegenerate = () => {}, onApply = () => {},
@@ -18,7 +18,7 @@
     dialog.className = 'prompt-optimization-dialog';
     dialog.setAttribute('aria-labelledby', 'prompt-optimization-title');
     dialog.dataset.wheelScope = 'local';
-    dialog.innerHTML = `<header class="prompt-optimization-header"><div><h2 id="prompt-optimization-title">提示词优化</h2></div><div class="prompt-optimization-header-actions"><div class="prompt-optimization-scheme-control" role="group" aria-label="优化配置"><button type="button" data-action="schemes" aria-haspopup="menu" aria-expanded="false" aria-controls="prompt-optimization-scheme-menu"><span data-scheme-name>平台默认</span>${icon('chevron')}</button><button type="button" class="prompt-optimization-info-button" data-action="default-info" aria-label="平台默认说明" aria-describedby="prompt-optimization-default-info">${icon('info')}</button></div><button type="button" class="prompt-optimization-icon-button" data-action="close" aria-label="关闭提示词优化">${icon('close')}</button></div></header>
+    dialog.innerHTML = `<header class="prompt-optimization-header"><div><h2 id="prompt-optimization-title">提示词优化</h2></div><div class="prompt-optimization-header-actions"><div class="prompt-optimization-scheme-control" role="group" aria-label="优化配置"><button type="button" data-action="schemes" aria-haspopup="menu" aria-expanded="false" aria-controls="prompt-optimization-scheme-menu"><span data-scheme-name>平台默认</span>${icon('chevron-down')}</button><button type="button" class="prompt-optimization-info-button" data-action="default-info" aria-label="平台默认说明" aria-describedby="prompt-optimization-default-info">${icon('info')}</button></div><button type="button" class="prompt-optimization-icon-button" data-action="close" aria-label="关闭提示词优化">${icon('x')}</button></div></header>
       <div class="prompt-optimization-scheme-menu" id="prompt-optimization-scheme-menu" role="menu" aria-label="优化配置方案" hidden></div>
       <div class="prompt-optimization-info-tooltip" id="prompt-optimization-default-info" role="tooltip" hidden>「平台默认」会随当前生成模型自动切换对应优化规则。</div>
       <section class="prompt-optimization-configuration-panel" role="dialog" aria-label="自定义优化配置" hidden>
@@ -33,7 +33,7 @@
       <div class="prompt-optimization-columns" data-active-tab="suggestion"><section id="prompt-optimization-source" class="prompt-optimization-column prompt-optimization-source"><div class="prompt-optimization-column-heading"><h3>优化前<span class="prompt-optimization-original">（原文）</span></h3></div><div class="prompt-optimization-scroll" data-source></div></section>
       <section id="prompt-optimization-suggestion" class="prompt-optimization-column prompt-optimization-suggestion"><div class="prompt-optimization-column-heading"><h3>优化后</h3><button type="button" data-action="copy" class="prompt-optimization-icon-button" aria-label="复制优化后">${icon('copy')}</button></div><div class="prompt-optimization-scroll" data-suggestion><div class="prompt-editor" data-editor></div></div><div class="prompt-optimization-progress" hidden><span></span>正在整理表达与创作细节…</div></section></div>
       <div class="prompt-optimization-notice" role="status" hidden></div>
-      <footer class="prompt-optimization-footer"><div><button type="button" data-action="cancel-confirm" hidden>取消</button><button type="button" data-action="regenerate">${icon('refresh')}<span>重新优化</span></button><button type="button" data-action="apply" class="prompt-optimization-primary"><span>填入输入框</span>${icon('arrow')}</button></div></footer>`;
+      <footer class="prompt-optimization-footer"><div><button type="button" data-action="cancel-confirm" hidden>取消</button><button type="button" data-action="regenerate">${icon('refresh-cw')}<span>重新优化</span></button><button type="button" data-action="apply" class="prompt-optimization-primary"><span>填入输入框</span>${icon('arrow-right')}</button></div></footer>`;
     const query = (selector) => dialog.querySelector(selector);
     const safeUrl = (value) => {
       if (typeof value !== 'string' || /^\s*(?:javascript|vbscript|data:(?!image\/|video\/|audio\/))/i.test(value)) return '';
@@ -93,7 +93,7 @@
         choose.append(check, name); row.append(choose);
         if (option.id !== 'default') {
           const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'prompt-optimization-scheme-edit'; edit.dataset.configurationEdit = option.id;
-          edit.setAttribute('role', 'menuitem'); edit.setAttribute('aria-label', `编辑 ${option.name}`); edit.tabIndex = -1; edit.innerHTML = icon('edit'); row.append(edit);
+          edit.setAttribute('role', 'menuitem'); edit.setAttribute('aria-label', `编辑 ${option.name}`); edit.tabIndex = -1; edit.innerHTML = icon('pen'); row.append(edit);
         }
         menu.append(row);
       }
@@ -218,7 +218,7 @@
         chip.setAttribute('tabindex', '0'); chip.setAttribute('aria-label', reference?.name || part.fallbackLabel);
         const thumb = document.createElement('span'); thumb.className = 'prompt-reference-thumb';
         const url = safeUrl(reference?.asset?.thumbnailUrl || reference?.asset?.thumbnail || (part.mediaType === 'image' ? reference?.asset?.url : ''));
-        if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; thumb.append(img); } else thumb.innerHTML = icon(part.mediaType);
+        if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; thumb.append(img); } else thumb.innerHTML = icon(MEDIA_ICONS[part.mediaType] || 'image');
         const label = document.createElement('span'); label.className = 'prompt-reference-label'; label.textContent = reference?.label || part.fallbackLabel;
         chip.append(thumb, label); region.append(chip);
       }

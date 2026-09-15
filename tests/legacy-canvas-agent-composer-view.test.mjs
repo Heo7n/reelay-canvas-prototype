@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const [source, placementSource, promptSource] = await Promise.all([
   "canvas-agent-composer-view.js", "canvas-popover-placement.js", "canvas-prompt-document.js",
@@ -18,6 +19,7 @@ function fixture(t) {
       <button id="agentAdvancedBtn">高级设置</button></div>
     </section><div id="messages"></div><button id="outside">其他</button></body>`, { runScripts: "outside-only" });
   const view = dom.window;
+  view.eval(canvasIconsSource);
   const document = view.document;
   const composer = document.querySelector("#composer");
   const prompt = document.querySelector("#prompt");

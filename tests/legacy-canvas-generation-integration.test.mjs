@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
@@ -13,7 +14,7 @@ const paths = [...scriptDocument.window.document.querySelectorAll("script[src]")
   .filter((src) => src.startsWith("./"))
   .map((src) => src.split("?")[0]);
 scriptDocument.window.close();
-const sources = await Promise.all(paths.map(async (path) => ({ path, source: await readFile(new URL(path, root), "utf8") })));
+const sources = await Promise.all(paths.map(async (path) => ({ path, source: path === "./assets/canvas-icons.js" ? canvasIconsSource : await readFile(new URL(path, root), "utf8") })));
 const promptEditorSource = await buildPromptEditor(fileURLToPath(root));
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -355,6 +356,44 @@ test("edit restores original model, parameters and stable @ bindings and protect
   assert.deepEqual(plain(resolved.document), plain(task.input.promptDocument));
 });
 
+for (const elapsed of [0, 7000]) {
+  test(`editing an active task at ${elapsed}ms restores a snapshot without canceling, charging or changing the original task`, (t) => {
+    const h = harness(t);
+    const saved = withReferences(h);
+    const task = h.send(null);
+    const input = plain(task.input);
+    h.advance(elapsed);
+    const status = task.status;
+    h.agentModels.setGenerationModel("gpt-image-2");
+    h.draft("保留当前尚未发送的草稿");
+    h.click(task, "edit");
+    assert.equal(h.editor().getText(), "保留当前尚未发送的草稿");
+    assert.equal(h.agentModels.getModel().id, "gpt-image-2");
+    assert.equal(task.status, status);
+    h.draft("");
+    h.click(task, "edit");
+    assert.equal(h.agentModels.getModel().id, input.modelId);
+    assert.deepEqual(plain(h.agentParameters.getCurrent()), input.parameters);
+    assert.deepEqual(plain(h.agentReferences.getAssets()), saved.references);
+    const resolved = h.window.REELAY_CANVAS_PROMPT_DOCUMENT.resolve(h.editor().getDocument(), h.agentReferences.getEntries());
+    assert.equal(resolved.valid, true);
+    assert.deepEqual(plain(resolved.document), input.promptDocument);
+    assert.equal(task.status, status);
+    assert.equal(task.refunded, 0);
+    assert.equal(h.service.list().length, 1);
+    assert.equal(h.state.account.credits, 2976);
+    h.draft("改写恢复的提示词");
+    h.agentReferences.restoreAssets([], h.agentReferences.captureScope(), { replace: true });
+    assert.deepEqual(plain(task.input), input, "editing the recovered draft must not mutate the sent snapshot");
+    h.advance(11000 - elapsed);
+    assert.equal(task.status, "succeeded", "the original generation retains its original completion schedule");
+    assert.ok(task.addedNodeId);
+    assert.equal(h.editor().getText(), "改写恢复的提示词");
+    assert.equal(h.state.account.credits, 2976);
+    assert.equal(h.state.account.consumedCredits, 24);
+  });
+}
+
 test("success automatically places once without changing existing selection or viewport; undo does not regenerate it", (t) => {
   const h = harness(t);
   const existing = h.window.defaultGeneratorNode(20, 30, "image");
@@ -626,6 +665,70 @@ test("terminal record deletion retains its added canvas result and does not refu
   assert.ok(h.first.nodes.find((node) => node.id === nodeId));
   assert.equal(h.state.account.credits, 2976);
   assert.equal(h.state.account.consumedCredits, 24);
+});
+
+test("batch record deletion confirms the terminal selection and preserves draft, canvas and billing", async (t) => {
+  const h = harness(t);
+  const succeeded = h.send("成功记录");
+  h.service.complete(succeeded);
+  const failed = h.send("失败记录");
+  h.service.fail(failed, "模拟失败");
+  const running = h.send("仍在生成");
+  h.draft("保留下一条草稿");
+  const canvas = plain(h.window.createCanvasDocumentSnapshot());
+  const account = plain(h.state.account);
+  const select = h.document.querySelector("#agentRecordSelectBtn");
+  select.click();
+  const checkbox = (task) => h.record(task).querySelector('[data-generation-selection="record"]');
+  assert.equal(checkbox(running).disabled, true);
+  h.document.querySelector('[data-generation-selection="all"]').click();
+  assert.equal(checkbox(succeeded).checked, true);
+  assert.equal(checkbox(failed).checked, true);
+  assert.equal(checkbox(running).checked, false);
+  h.document.querySelector('[data-generation-selection="remove"]').click();
+  assert.match(h.document.querySelector(".confirm-layer").textContent, /删除 2 条生成记录/);
+  h.document.querySelector(".confirm-cancel").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.service.list().length, 3);
+  assert.equal(checkbox(succeeded).checked, true);
+  h.document.querySelector('[data-generation-selection="remove"]').click();
+  h.document.querySelector(".confirm-ok").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(plain(h.service.list().map((task) => task.id)), [running.id]);
+  assert.equal(h.document.querySelector(".generation-record-selection-toolbar"), null);
+  assert.equal(select.getAttribute("aria-pressed"), "false");
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), canvas);
+  assert.deepEqual(plain(h.state.account), account);
+  assert.equal(h.editor().getText(), "保留下一条草稿");
+  h.service.complete(running);
+  assert.equal(running.status, "succeeded");
+  assert.ok(running.addedNodeId);
+});
+
+test("batch selection ends on collapse or conversation change and a stale confirmation cannot delete", async (t) => {
+  const h = harness(t);
+  const task = h.send();
+  h.service.complete(task);
+  const select = h.document.querySelector("#agentRecordSelectBtn");
+  select.click();
+  h.document.querySelector('[data-generation-selection="all"]').click();
+  h.window.setAgentOpen(false);
+  assert.equal(h.document.querySelector(".generation-record-selection-toolbar"), null);
+  assert.equal(h.record(task).querySelector(".generation-record-surface").inert, false);
+  h.window.setAgentOpen(true);
+  select.click();
+  assert.equal(h.document.querySelector('[data-generation-selection="record"]').checked, false);
+  h.document.querySelector('[data-generation-selection="all"]').click();
+  h.document.querySelector('[data-generation-selection="remove"]').click();
+  h.agentHistory.startNew();
+  h.document.querySelector(".confirm-ok").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.service.get(task.id), task);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
+  assert.equal(select.disabled, true);
+  h.agentHistory.select(task.scope.conversationId);
+  assert.ok(h.record(task));
+  assert.equal(select.getAttribute("aria-pressed"), "false");
 });
 
 test("ordinary renders and panel resize retain the generated media element and playback position", (t) => {

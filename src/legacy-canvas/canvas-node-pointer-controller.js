@@ -29,7 +29,7 @@
       if (event.button !== 0) return "ignored";
       event.stopPropagation();
 
-      const target = event.target;
+      const target = pointerOptions.target || event.target;
       const node = options.getNode(nodeId);
       if (!node) return "missing-node";
 
