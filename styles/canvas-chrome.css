@@ -724,50 +724,99 @@ html[data-theme="light"] {
   bottom: calc(var(--canvas-viewport-toolbar-height) + var(--canvas-chrome-panel-gap));
 }
 
-/* Agent is the only persistent control in the top-right corner. */
 .agent-launcher {
+  position: fixed;
   top: 18px;
   right: 18px;
+  display: grid;
+  place-items: center;
   width: 54px;
   height: 54px;
-  border-color: var(--canvas-chrome-border);
+  padding: 0;
+  border: 1px solid var(--canvas-chrome-border);
   border-radius: 50%;
   background: var(--canvas-chrome-bg);
   box-shadow: var(--canvas-chrome-shadow);
-  backdrop-filter: blur(18px) saturate(120%);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 150ms ease, border-color 150ms ease;
 }
-
-.agent-launcher:hover,
-.agent-launcher:focus-visible {
+.agent-launcher:is(:hover, :focus-visible) {
   border-color: color-mix(in srgb, var(--text) 30%, var(--canvas-chrome-border));
-  box-shadow:
-    var(--canvas-chrome-shadow),
-    0 0 0 4px color-mix(in srgb, var(--text) 8%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, var(--canvas-chrome-bg));
 }
-
+.agent-dock.open .agent-launcher {
+  visibility: hidden;
+  pointer-events: none;
+}
 .agent-logo {
+  display: grid;
+  place-items: center;
   width: 34px;
   height: 34px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  pointer-events: none;
+  transform-origin: 50% 65%;
+  transition: transform 180ms cubic-bezier(.2, .7, .3, 1);
+}
+.agent-logo-body {
+  position: relative;
+  display: block;
+  width: 32px;
+  aspect-ratio: 309 / 274;
+  transform-origin: 50% 70%;
+}
+.agent-logo img { display: block; width: 100%; height: 100%; }
+html[data-theme="dark"] .agent-logo-body { filter: invert(1); }
+/* Eye cutouts in the original 309 × 274 brand asset, with a 2px source overlap
+   to cover anti-aliased edges. The brand silhouette is never redrawn. */
+.agent-logo-eye {
+  position: absolute;
+  top: 41.24%;
+  width: 12.95%;
+  height: 28.1%;
+}
+.agent-logo-eye-left { left: 30.42%; }
+.agent-logo-eye-right { left: 52.75%; }
+.agent-logo-lid {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 44%;
+  background: #000;
+  transform: scaleY(0);
+}
+.agent-logo-lid-top { top: 0; transform-origin: center top; }
+.agent-logo-lid-bottom { bottom: 0; transform-origin: center bottom; }
+.agent-launcher:is(:hover, :focus-visible) .agent-logo {
+  transform: translateY(-2px) rotate(-5deg) scale(1.06);
+}
+.agent-launcher:active .agent-logo {
+  transform: translateY(1px) scale(.97);
+  transition-duration: 90ms;
 }
 
-.agent-logo img {
-  width: 28px;
-  height: 28px;
-}
-
-html[data-theme="dark"] .agent-logo img {
-  filter: invert(1);
+.agent-launcher:focus-visible {
+  outline: 2px solid var(--ui-focus-ring);
+  outline-offset: 2px;
 }
 
 .agent-tooltip {
+  position: absolute;
   top: calc(100% + 9px);
+  right: 0;
+  width: max-content;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--canvas-popover-bg);
+  color: var(--canvas-popover-text);
+  box-shadow: var(--canvas-popover-shadow);
+  font: 400 11px/1.5 var(--font-family-ui);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition: opacity 150ms ease, transform 150ms ease;
 }
-
-.agent-launcher:focus-visible .agent-tooltip {
+.agent-launcher:is(:hover, :focus-visible) .agent-tooltip {
   opacity: 1;
   transform: translateY(0);
 }
@@ -782,10 +831,7 @@ html[data-theme="dark"] .agent-logo img {
     bottom: 10px;
   }
 
-  .agent-launcher {
-    top: 10px;
-    right: 10px;
-  }
+  .agent-launcher { top: 10px; right: 10px; }
 }
 
 @media (max-width: 480px) {
@@ -818,8 +864,12 @@ html[data-theme="dark"] .agent-logo img {
   .rail-button-tip,
   .canvas-tool-button,
   .canvas-zoom-control,
-  .canvas-zoom-value,
-  .agent-launcher {
+  .canvas-zoom-value {
     transition: none;
   }
+
+  .agent-launcher, .agent-tooltip, .agent-logo {
+    transition: none;
+  }
+  .agent-launcher:is(:hover, :focus-visible, :active) .agent-logo { transform: none; }
 }

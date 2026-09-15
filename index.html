@@ -472,122 +472,131 @@
 
       <aside class="agent-dock collapsed" id="agentDock" style="--agent-width: 560px; --agent-top-inset: 0px; --agent-bottom-inset: 0px">
         <button class="agent-launcher" id="agentLauncher" type="button" aria-label="展开 Reelay Agent" aria-controls="agentPanel" aria-expanded="false">
-          <span class="agent-tooltip">Reelay Agent</span>
           <span class="agent-logo" aria-hidden="true">
-            <img src="./assets/reelay-logo.png" alt="" />
+            <span class="agent-logo-body">
+              <img src="./assets/reelay-logo.png" alt="" />
+              <span class="agent-logo-eye agent-logo-eye-left"><span class="agent-logo-lid agent-logo-lid-top"></span><span class="agent-logo-lid agent-logo-lid-bottom"></span></span>
+              <span class="agent-logo-eye agent-logo-eye-right"><span class="agent-logo-lid agent-logo-lid-top"></span><span class="agent-logo-lid agent-logo-lid-bottom"></span></span>
+            </span>
           </span>
+          <span class="agent-tooltip">Reelay Agent</span>
         </button>
 
-        <section class="agent-panel" id="agentPanel" aria-label="Agent 对话栏" aria-hidden="true" inert>
-          <div class="agent-resize-handle" id="agentResizeHandle" aria-hidden="true"></div>
-          <div class="agent-height-resize-handle agent-height-resize-handle-top" id="agentTopResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 顶部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 顶部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
-          <div class="agent-height-resize-handle agent-height-resize-handle-bottom" id="agentBottomResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 底部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 底部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
-          <header class="agent-header">
-            <button class="agent-title-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话" aria-label="历史对话" aria-controls="agentHistoryMenu" aria-haspopup="dialog" aria-expanded="false">
-              <span class="agent-title" id="agentConversationTitle">新对话</span>
-              <i data-lucide="chevron-down" aria-hidden="true"></i>
-            </button>
-            <div class="agent-actions">
-              <div class="agent-new-group" aria-label="对话操作">
+        <div class="agent-panel-shell">
+          <section class="agent-panel" id="agentPanel" aria-label="Agent 对话栏" aria-hidden="true" inert>
+            <div class="agent-resize-handle" id="agentResizeHandle" aria-hidden="true"></div>
+            <div class="agent-height-resize-handle agent-height-resize-handle-top" id="agentTopResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 顶部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 顶部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
+            <div class="agent-height-resize-handle agent-height-resize-handle-bottom" id="agentBottomResizeHandle" role="separator" tabindex="0" aria-label="调整 Agent 底部边缘" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Agent 底部贴合屏幕" title="拖动调整高度；双击恢复贴边"></div>
+            <header class="agent-header">
+              <div class="agent-heading">
+                <button class="agent-icon-button" id="agentCloseBtn" type="button" title="收起对话" aria-label="收起 Reelay Agent" aria-controls="agentPanel">
+                  <i data-lucide="panel-right-close" aria-hidden="true"></i>
+                </button>
+                <button class="agent-title-button history-toggle-button" id="agentHistoryBtn" type="button" title="历史对话" aria-label="历史对话" aria-controls="agentHistoryMenu" aria-haspopup="dialog" aria-expanded="false">
+                  <span class="agent-title" id="agentConversationTitle">新对话</span>
+                  <i data-lucide="chevron-down" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="agent-actions" role="group" aria-label="对话操作">
+                <button class="agent-icon-button" id="agentRecordSelectBtn" type="button" title="多选生成记录" aria-label="多选生成记录" aria-pressed="false" aria-controls="agentGenerationRecords" disabled>
+                  <i data-lucide="square-check-big" aria-hidden="true"></i>
+                </button>
                 <button class="agent-icon-button new-chat-button" id="agentNewChatBtn" type="button" title="新建对话" aria-label="新建对话">
                   <i data-lucide="message-square-plus" aria-hidden="true"></i>
                 </button>
               </div>
-              <button class="agent-icon-button close-chat-button" id="agentCloseBtn" type="button" title="收起 Reelay Agent" aria-label="收起 Reelay Agent">
-                <i data-lucide="arrow-right-from-line" aria-hidden="true"></i>
-              </button>
+            </header>
+
+            <div class="agent-history-menu hidden" id="agentHistoryMenu" role="dialog" aria-label="历史对话">
+              <button class="history-new-chat" id="agentHistoryNewChatBtn" type="button"><i data-lucide="plus" aria-hidden="true"></i><span>新建对话</span></button>
+              <div class="history-list" id="agentHistoryList"></div>
             </div>
-          </header>
 
-          <div class="agent-history-menu hidden" id="agentHistoryMenu" role="dialog" aria-label="历史对话">
-            <button class="history-new-chat" id="agentHistoryNewChatBtn" type="button"><i data-lucide="plus" aria-hidden="true"></i><span>新建对话</span></button>
-            <div class="history-list" id="agentHistoryList"></div>
-          </div>
+            <div class="agent-messages" id="agentMessages"></div>
+            <div class="agent-messages" id="agentGenerationRecords" aria-label="生成记录" hidden></div>
 
-          <div class="agent-messages" id="agentMessages"></div>
-          <div class="agent-messages" id="agentGenerationRecords" aria-label="生成记录" hidden></div>
-
-          <div class="agent-composer prompt-composer-surface" id="agentComposer">
-            <section class="agent-advanced-settings hidden" id="agentAdvancedSettings" aria-label="高级设置" aria-hidden="true">
-              <div class="agent-advanced-title advanced-settings-title">高级设置</div>
-              <div class="agent-setting-row advanced-setting-row">
-                <div class="advanced-setting-label">
-                  <span>定时任务</span>
-                  <button class="agent-setting-info advanced-setting-info" type="button" aria-label="定时任务说明" title="定时任务将在任务系统接入后开放"><span aria-hidden="true">i</span></button>
-                </div>
-                <button class="agent-schedule-button advanced-schedule-button" id="agentScheduleBtn" type="button" aria-label="定时任务暂未开放" aria-disabled="true" disabled>
-                  <i class="advanced-schedule-icon" data-lucide="calendar-days" aria-hidden="true"></i>
-                </button>
-              </div>
-              <div class="agent-setting-row advanced-setting-row">
-                <div class="advanced-setting-label">
-                  <span>自动校验素材</span>
-                  <button class="agent-setting-info advanced-setting-info" type="button" aria-label="自动校验素材说明" title="自动提交尚未审核的图片与视频素材"><span aria-hidden="true">i</span></button>
-                </div>
-                <button class="agent-setting-switch advanced-setting-switch" id="agentAssetValidationBtn" type="button" role="switch" aria-label="自动校验素材" aria-checked="false">
-                  <span aria-hidden="true"></span>
-                </button>
-              </div>
-            </section>
-
-            <div class="agent-composer-stage prompt-composer-layout">
-              <div class="prompt-input" id="agentInput" aria-label="给 Reelay Agent 的消息" data-placeholder="描述你想生成的内容，或输入 @ 引用"></div>
-              <div class="agent-composer-topbar">
-                <button class="agent-add-button asset-drop" id="agentAddBtn" type="button" title="添加附件" aria-label="添加附件">
-                  <i data-lucide="plus" aria-hidden="true"></i>
-                </button>
-                <div class="agent-reference-shelf asset-shelf" id="agentReferenceShelf" role="group" aria-label="参考素材，拖动可排序" hidden></div>
-                <div class="agent-reference-menu hidden" id="agentReferenceMenu" role="menu" aria-label="添加参考素材">
-                  <button type="button" role="menuitem" data-agent-reference-source="local"><i data-lucide="upload" aria-hidden="true"></i>本地上传</button>
-                  <button type="button" role="menuitem" data-agent-reference-source="library"><i data-lucide="folder-open" aria-hidden="true"></i>从资产库添加</button>
-                  <button type="button" role="menuitem" data-agent-reference-source="canvas"><i data-lucide="scan" aria-hidden="true"></i>添加画布选中素材</button>
-                </div>
-                <div class="agent-composer-top-actions">
-                  <button class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn" type="button" title="输入提示词后优化" aria-label="提示词优化" aria-busy="false" disabled>
-                    <i class="prompt-optimization-icon" data-lucide="wand-sparkles" aria-hidden="true"></i>
-                    <span class="prompt-optimization-spinner" aria-hidden="true"></span>
-                  </button>
-                  <button class="agent-advanced-button control-chip composer-tool-button advanced-settings-chip" id="agentAdvancedBtn" type="button" title="高级设置" aria-label="高级设置" aria-controls="agentAdvancedSettings" aria-expanded="false">
-                    <i class="advanced-settings-icon" data-lucide="sliders-horizontal" aria-hidden="true"></i>
+            <div class="agent-composer prompt-composer-surface" id="agentComposer">
+              <section class="agent-advanced-settings hidden" id="agentAdvancedSettings" aria-label="高级设置" aria-hidden="true">
+                <div class="agent-advanced-title advanced-settings-title">高级设置</div>
+                <div class="agent-setting-row advanced-setting-row">
+                  <div class="advanced-setting-label">
+                    <span>定时任务</span>
+                    <button class="agent-setting-info advanced-setting-info" type="button" aria-label="定时任务说明" title="定时任务将在任务系统接入后开放"><span aria-hidden="true">i</span></button>
+                  </div>
+                  <button class="agent-schedule-button advanced-schedule-button" id="agentScheduleBtn" type="button" aria-label="定时任务暂未开放" aria-disabled="true" disabled>
+                    <i class="advanced-schedule-icon" data-lucide="calendar-days" aria-hidden="true"></i>
                   </button>
                 </div>
-              </div>
-
-              <div class="agent-composer-bar control-bar">
-                <div class="agent-mode-wrap">
-                  <button class="agent-mode control-chip has-divider" id="agentModeBtn" type="button" title="当前模式：生成模式" aria-label="当前模式：生成模式" aria-controls="agentModeMenu" aria-haspopup="menu" aria-expanded="false">
-                    <i data-agent-mode-icon data-lucide="sparkles" aria-hidden="true"></i>
-                    <span class="control-chip-label" data-agent-mode-label>生成模式</span>
+                <div class="agent-setting-row advanced-setting-row">
+                  <div class="advanced-setting-label">
+                    <span>自动校验素材</span>
+                    <button class="agent-setting-info advanced-setting-info" type="button" aria-label="自动校验素材说明" title="自动提交尚未审核的图片与视频素材"><span aria-hidden="true">i</span></button>
+                  </div>
+                  <button class="agent-setting-switch advanced-setting-switch" id="agentAssetValidationBtn" type="button" role="switch" aria-label="自动校验素材" aria-checked="false">
+                    <span aria-hidden="true"></span>
                   </button>
-                  <div class="agent-mode-menu hidden" id="agentModeMenu" role="menu" aria-label="选择生成模式">
-                    <button class="active" type="button" role="menuitemradio" data-agent-mode="generation" aria-checked="true">
-                      <i data-lucide="sparkles" aria-hidden="true"></i><span>生成模式</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                </div>
+              </section>
+
+              <div class="agent-composer-stage prompt-composer-layout">
+                <div class="prompt-input" id="agentInput" aria-label="给 Reelay Agent 的消息" data-placeholder="描述你想生成的内容，或输入 @ 引用"></div>
+                <div class="agent-composer-topbar">
+                  <button class="agent-add-button asset-drop" id="agentAddBtn" type="button" title="添加附件" aria-label="添加附件">
+                    <i data-lucide="plus" aria-hidden="true"></i>
+                  </button>
+                  <div class="agent-reference-shelf asset-shelf" id="agentReferenceShelf" role="group" aria-label="参考素材，拖动可排序" hidden></div>
+                  <div class="agent-reference-menu hidden" id="agentReferenceMenu" role="menu" aria-label="添加参考素材">
+                    <button type="button" role="menuitem" data-agent-reference-source="local"><i data-lucide="upload" aria-hidden="true"></i>本地上传</button>
+                    <button type="button" role="menuitem" data-agent-reference-source="library"><i data-lucide="folder-open" aria-hidden="true"></i>从资产库添加</button>
+                    <button type="button" role="menuitem" data-agent-reference-source="canvas"><i data-lucide="scan" aria-hidden="true"></i>添加画布选中素材</button>
+                  </div>
+                  <div class="agent-composer-top-actions">
+                    <button class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn" type="button" title="输入提示词后优化" aria-label="提示词优化" aria-busy="false" disabled>
+                      <i class="prompt-optimization-icon" data-lucide="wand-sparkles" aria-hidden="true"></i>
+                      <span class="prompt-optimization-spinner" aria-hidden="true"></span>
                     </button>
-                    <button type="button" role="menuitemradio" data-agent-mode="agent" aria-checked="false">
-                      <i data-lucide="workflow" aria-hidden="true"></i><span>Agent 模式</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                    <button class="agent-advanced-button control-chip composer-tool-button advanced-settings-chip" id="agentAdvancedBtn" type="button" title="高级设置" aria-label="高级设置" aria-controls="agentAdvancedSettings" aria-expanded="false">
+                      <i class="advanced-settings-icon" data-lucide="sliders-horizontal" aria-hidden="true"></i>
                     </button>
                   </div>
                 </div>
-                <div class="agent-model-wrap">
-                  <button class="agent-model-button control-chip model-chip has-divider" id="agentModelBtn" type="button" title="选择模型" aria-label="选择模型" aria-controls="agentModelMenu" aria-haspopup="dialog" aria-expanded="false">
-                    <span class="agent-model-button-label control-chip-label">Seedance 2.0</span>
+
+                <div class="agent-composer-bar control-bar">
+                  <div class="agent-mode-wrap">
+                    <button class="agent-mode control-chip has-divider" id="agentModeBtn" type="button" title="当前模式：生成模式" aria-label="当前模式：生成模式" aria-controls="agentModeMenu" aria-haspopup="menu" aria-expanded="false">
+                      <i data-agent-mode-icon data-lucide="sparkles" aria-hidden="true"></i>
+                      <span class="control-chip-label" data-agent-mode-label>生成模式</span>
+                    </button>
+                    <div class="agent-mode-menu hidden" id="agentModeMenu" role="menu" aria-label="选择生成模式">
+                      <button class="active" type="button" role="menuitemradio" data-agent-mode="generation" aria-checked="true">
+                        <i data-lucide="sparkles" aria-hidden="true"></i><span>生成模式</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                      </button>
+                      <button type="button" role="menuitemradio" data-agent-mode="agent" aria-checked="false">
+                        <i data-lucide="workflow" aria-hidden="true"></i><span>Agent 模式</span><i class="agent-mode-check" data-lucide="check" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="agent-model-wrap">
+                    <button class="agent-model-button control-chip model-chip has-divider" id="agentModelBtn" type="button" title="选择模型" aria-label="选择模型" aria-controls="agentModelMenu" aria-haspopup="dialog" aria-expanded="false">
+                      <span class="agent-model-button-label control-chip-label">Seedance 2.0</span>
+                    </button>
+                    <div class="agent-model-menu hidden" id="agentModelMenu" role="dialog" aria-label="选择模型"></div>
+                  </div>
+                  <button class="agent-param-summary control-chip param-chip" id="agentParamSummary" type="button" aria-label="当前生成参数" aria-controls="agentParamMenu" aria-haspopup="dialog" aria-expanded="false">
+                    <span class="control-chip-label param-chip-label"><span class="param-summary-before">全能参考 · </span><span class="param-summary-aspect">16:9</span><span class="param-summary-after"> · 720p · 4s</span></span>
+                    <i data-lucide="volume-2" aria-hidden="true"></i>
                   </button>
-                  <div class="agent-model-menu hidden" id="agentModelMenu" role="dialog" aria-label="选择模型"></div>
+                  <div class="agent-composer-spacer control-spacer"></div>
+                  <button class="agent-send generate-button" type="button" title="发送；本次消耗待估算" aria-label="发送；本次消耗待估算">
+                    <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span id="agentCreditValue">—</span></span>
+                    <span class="send-arrow"><i class="send-arrow-icon" data-lucide="arrow-up" aria-hidden="true"></i></span>
+                  </button>
                 </div>
-                <button class="agent-param-summary control-chip param-chip" id="agentParamSummary" type="button" aria-label="当前生成参数" aria-controls="agentParamMenu" aria-haspopup="dialog" aria-expanded="false">
-                  <span class="control-chip-label param-chip-label"><span class="param-summary-before">全能参考 · </span><span class="param-summary-aspect">16:9</span><span class="param-summary-after"> · 720p · 4s</span></span>
-                  <i data-lucide="volume-2" aria-hidden="true"></i>
-                </button>
-                <div class="agent-composer-spacer control-spacer"></div>
-                <button class="agent-send generate-button" type="button" title="发送；本次消耗待估算" aria-label="发送；本次消耗待估算">
-                  <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span id="agentCreditValue">—</span></span>
-                  <span class="send-arrow"><i class="send-arrow-icon" data-lucide="arrow-up" aria-hidden="true"></i></span>
-                </button>
+                <div class="agent-param-menu" id="agentParamMenu" role="dialog" aria-label="综合参数" hidden></div>
               </div>
-              <div class="agent-param-menu" id="agentParamMenu" role="dialog" aria-label="综合参数" hidden></div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </aside>
 
     </main>
@@ -624,6 +633,7 @@
     <script src="./src/legacy-canvas/canvas-generation-media.js"></script>
     <script src="./src/legacy-canvas/canvas-generation-reference-preview.js"></script>
     <script src="./src/legacy-canvas/canvas-generation-record-view.js"></script>
+    <script src="./src/legacy-canvas/canvas-generation-selection.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-generation-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-result-placement.js"></script>
     <script src="./src/legacy-canvas/canvas-spatial-selection.js"></script>
@@ -672,6 +682,7 @@
     <script src="./src/application/prompt-optimization-service.js"></script>
     <script src="./src/legacy-canvas/canvas-prompt-optimization-view.js"></script>
     <script src="./src/legacy-canvas/canvas-prompt-optimization-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-agent-launcher-motion.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

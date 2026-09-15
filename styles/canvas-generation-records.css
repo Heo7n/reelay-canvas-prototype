@@ -30,6 +30,67 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
   --record-cover-height: 68px;
   min-width: 0; font-size: 14px; font-weight: 400; line-height: 1.5;
 }
+
+#agentGenerationRecords.is-selecting-records { padding-top: 0; }
+.generation-record-selection-toolbar {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0 -4px 18px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--agent-panel-line);
+  background: var(--agent-panel-bg);
+  color: var(--agent-panel-text);
+  font-size: 12px;
+}
+.generation-record-selection-toolbar[hidden] { display: none; }
+.generation-record-selection-toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.generation-record-selection-toolbar input,
+.generation-record-select-overlay input {
+  width: 16px; height: 16px; margin: 0;
+  accent-color: var(--agent-panel-text); cursor: pointer;
+}
+.generation-record-selection-count { margin-right: auto; color: var(--agent-panel-muted); white-space: nowrap; }
+.generation-record-selection-toolbar button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 30px; padding: 0 9px;
+  border: 0; border-radius: 7px;
+  background: var(--agent-panel-raised); color: var(--agent-panel-text);
+  font: inherit; white-space: nowrap; cursor: pointer;
+}
+.generation-record-selection-toolbar button svg { width: 14px; height: 14px; stroke-width: 1.75; }
+.generation-record-selection-toolbar button:not(:disabled):hover { background: var(--agent-panel-hover); }
+.generation-record-selection-toolbar button:disabled { opacity: .4; cursor: default; }
+.generation-record-selection-toolbar input:disabled { cursor: default; }
+.generation-record.is-selecting {
+  position: relative;
+  padding-left: 28px;
+}
+.generation-record-select-overlay {
+  position: absolute; z-index: 3; inset: -10px -8px;
+  display: block; border: 1px solid transparent; border-radius: 10px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.generation-record-select-overlay input { position: absolute; top: 12px; left: 8px; }
+.generation-record-select-overlay:hover { background: color-mix(in srgb, var(--agent-panel-text) 3%, transparent); }
+.generation-record.is-record-selected .generation-record-select-overlay {
+  border-color: color-mix(in srgb, var(--agent-panel-text) 26%, transparent);
+  background: color-mix(in srgb, var(--agent-panel-text) 4%, transparent);
+}
+.generation-record-select-overlay:has(input:disabled) { cursor: default; background: transparent; }
+.generation-record-select-overlay:has(input:disabled) input { cursor: default; opacity: .45; }
+.generation-record-select-overlay:has(input:focus-visible),
+.generation-record-selection-toolbar :is(input, button):focus-visible {
+  outline: 2px solid var(--ui-focus-ring); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .generation-record-select-overlay { transition: none; }
+}
 .generation-record [hidden], .generation-record-new[hidden] { display: none !important; }
 .generation-record-surface {
   min-width: 0;

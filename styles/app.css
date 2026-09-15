@@ -4923,85 +4923,25 @@ html[data-theme="light"] .duration-range-input::-moz-range-thumb {
   right: 0;
   bottom: var(--agent-bottom-inset, 0px);
   width: var(--agent-width);
+  --agent-motion: 260ms cubic-bezier(.22, .75, .25, 1);
   pointer-events: none;
 }
 
-.agent-launcher {
-  position: fixed;
-  top: 18px;
-  right: 20px;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border: 1px solid color-mix(in srgb, var(--text) 11%, transparent);
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 28% 22%, color-mix(in srgb, var(--accent, #5f8cff) 22%, transparent), transparent 38%),
-    color-mix(in srgb, var(--floating-bg) 92%, transparent);
-  box-shadow:
-    0 12px 34px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
-  cursor: pointer;
-  pointer-events: auto;
-  transform: none;
-  backdrop-filter: blur(18px);
-  transition:
-    border-color 0.14s ease,
-    box-shadow 0.14s ease,
-    transform 0.14s ease;
-}
-
-.agent-launcher:hover,
-.agent-launcher:focus-visible {
-  border-color: color-mix(in srgb, var(--accent, #5f8cff) 42%, var(--floating-line));
-  box-shadow:
-    0 16px 42px rgba(0, 0, 0, 0.22),
-    0 0 0 5px color-mix(in srgb, var(--accent, #5f8cff) 10%, transparent);
-  outline: 0;
-}
-
-.agent-logo {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, #fff 92%, var(--surface));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent);
-  overflow: hidden;
-}
-
-.agent-logo img {
-  width: 23px;
-  height: 23px;
-  object-fit: contain;
-}
-
-.agent-tooltip {
+.agent-panel-shell {
   position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: max-content;
-  padding: 6px 9px;
-  border-radius: 7px;
-  background: rgba(39, 40, 44, 0.96);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 720;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-3px);
-  transition:
-    opacity 0.16s ease,
-    transform 0.16s ease;
+  inset: 0;
+  opacity: 1;
+  transform: translateX(0);
+  transition: transform var(--agent-motion), opacity 180ms ease;
 }
 
-.agent-launcher:hover .agent-tooltip {
-  opacity: 1;
-  transform: translateY(0);
+.agent-dock.collapsed .agent-panel-shell {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-dock .agent-panel-shell { transition: none; }
 }
 
 html[data-theme="light"] .media-frame {
@@ -5086,9 +5026,6 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
-  transition:
-    transform 0.22s ease,
-    opacity 0.18s ease;
 }
 
 .agent-dock.is-inset-top .agent-panel {
@@ -5102,13 +5039,6 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
 }
 
 .agent-dock.collapsed .agent-panel {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(calc(100% + 24px));
-}
-
-.agent-dock.open .agent-launcher {
-  opacity: 0;
   pointer-events: none;
 }
 
@@ -5206,12 +5136,19 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
   padding: 0 var(--agent-content-inset);
 }
 
+.agent-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .agent-title-button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  max-width: min(320px, calc(100% - 88px));
+  max-width: 320px;
   height: var(--agent-control-size);
   padding: 0 8px;
   border: 0;
@@ -5268,15 +5205,27 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
   cursor: pointer;
 }
 
-.agent-icon-button:hover {
+.agent-icon-button:not(:disabled):hover,
+.agent-icon-button[aria-pressed="true"] {
   background: var(--agent-panel-hover);
   color: var(--agent-panel-text);
+}
+
+.agent-icon-button:disabled {
+  color: var(--agent-panel-muted);
+  cursor: default;
+  opacity: 0.5;
 }
 
 .agent-icon-button .lucide {
   width: var(--agent-icon-size);
   height: var(--agent-icon-size);
   stroke-width: var(--agent-icon-stroke);
+}
+
+.agent-header .agent-icon-button .lucide {
+  width: 16px;
+  height: 16px;
 }
 
 .agent-panel :is(.agent-icon-button, .agent-title-button, .agent-add-button, .composer-tool-button, .history-new-chat):focus-visible {
@@ -5504,24 +5453,12 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
   flex: 0 0 auto;
 }
 
-.agent-new-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-}
-
 .history-toggle-button .lucide {
   transition: transform 0.16s ease;
 }
 
 .history-toggle-button[aria-expanded="true"] .lucide {
   transform: rotate(180deg);
-}
-
-.close-chat-button {
-  margin-left: 0;
 }
 
 .agent-history-menu {
@@ -6404,11 +6341,6 @@ html[data-theme="light"] .confirm-layer {
   .top-actions {
     top: 10px;
     right: 62px;
-  }
-
-  .agent-launcher {
-    top: 10px;
-    right: 10px;
   }
 
   .app-shell.agent-open .top-actions {

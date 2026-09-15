@@ -667,6 +667,70 @@ test("terminal record deletion retains its added canvas result and does not refu
   assert.equal(h.state.account.consumedCredits, 24);
 });
 
+test("batch record deletion confirms the terminal selection and preserves draft, canvas and billing", async (t) => {
+  const h = harness(t);
+  const succeeded = h.send("成功记录");
+  h.service.complete(succeeded);
+  const failed = h.send("失败记录");
+  h.service.fail(failed, "模拟失败");
+  const running = h.send("仍在生成");
+  h.draft("保留下一条草稿");
+  const canvas = plain(h.window.createCanvasDocumentSnapshot());
+  const account = plain(h.state.account);
+  const select = h.document.querySelector("#agentRecordSelectBtn");
+  select.click();
+  const checkbox = (task) => h.record(task).querySelector('[data-generation-selection="record"]');
+  assert.equal(checkbox(running).disabled, true);
+  h.document.querySelector('[data-generation-selection="all"]').click();
+  assert.equal(checkbox(succeeded).checked, true);
+  assert.equal(checkbox(failed).checked, true);
+  assert.equal(checkbox(running).checked, false);
+  h.document.querySelector('[data-generation-selection="remove"]').click();
+  assert.match(h.document.querySelector(".confirm-layer").textContent, /删除 2 条生成记录/);
+  h.document.querySelector(".confirm-cancel").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.service.list().length, 3);
+  assert.equal(checkbox(succeeded).checked, true);
+  h.document.querySelector('[data-generation-selection="remove"]').click();
+  h.document.querySelector(".confirm-ok").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(plain(h.service.list().map((task) => task.id)), [running.id]);
+  assert.equal(h.document.querySelector(".generation-record-selection-toolbar"), null);
+  assert.equal(select.getAttribute("aria-pressed"), "false");
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), canvas);
+  assert.deepEqual(plain(h.state.account), account);
+  assert.equal(h.editor().getText(), "保留下一条草稿");
+  h.service.complete(running);
+  assert.equal(running.status, "succeeded");
+  assert.ok(running.addedNodeId);
+});
+
+test("batch selection ends on collapse or conversation change and a stale confirmation cannot delete", async (t) => {
+  const h = harness(t);
+  const task = h.send();
+  h.service.complete(task);
+  const select = h.document.querySelector("#agentRecordSelectBtn");
+  select.click();
+  h.document.querySelector('[data-generation-selection="all"]').click();
+  h.window.setAgentOpen(false);
+  assert.equal(h.document.querySelector(".generation-record-selection-toolbar"), null);
+  assert.equal(h.record(task).querySelector(".generation-record-surface").inert, false);
+  h.window.setAgentOpen(true);
+  select.click();
+  assert.equal(h.document.querySelector('[data-generation-selection="record"]').checked, false);
+  h.document.querySelector('[data-generation-selection="all"]').click();
+  h.document.querySelector('[data-generation-selection="remove"]').click();
+  h.agentHistory.startNew();
+  h.document.querySelector(".confirm-ok").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.service.get(task.id), task);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
+  assert.equal(select.disabled, true);
+  h.agentHistory.select(task.scope.conversationId);
+  assert.ok(h.record(task));
+  assert.equal(select.getAttribute("aria-pressed"), "false");
+});
+
 test("ordinary renders and panel resize retain the generated media element and playback position", (t) => {
   const h = harness(t);
   const task = h.send();

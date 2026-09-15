@@ -118,6 +118,7 @@ const selectionLayoutTrigger = document.querySelector(".selection-layout-trigger
 let selectionLayoutSession = null;
 const agentDock = document.querySelector("#agentDock");
 const agentLauncher = document.querySelector("#agentLauncher");
+const agentLauncherMotion = window.REELAY_AGENT_LAUNCHER_MOTION.createController({ document, launcher: agentLauncher });
 const agentPanel = document.querySelector("#agentPanel");
 const agentResizeHandle = document.querySelector("#agentResizeHandle");
 const agentTopResizeHandle = document.querySelector("#agentTopResizeHandle");
@@ -7589,6 +7590,14 @@ const agentResultPlacement = window.REELAY_AGENT_RESULT_PLACEMENT.createControll
 
 agentGeneration = window.REELAY_AGENT_GENERATION.createController({
   document, container: document.querySelector("#agentGenerationRecords"), chatContainer: agentMessages,
+  selectionTrigger: document.querySelector("#agentRecordSelectBtn"),
+  beforeSelection: closeAgentPopovers,
+  confirmRemoveRecords: ({ count }) => new Promise((resolve) => showConfirmDialog({
+    title: `删除 ${count} 条生成记录？`,
+    body: "记录删除后无法恢复，画布中的生成结果会保留。",
+    confirmText: "删除记录", danger: true,
+    onConfirm: () => resolve(true), onCancel: () => resolve(false),
+  })),
   getScope: () => ({ projectId: state.projectId, conversationId: agentHistory.getActiveId(), canvasId: state.activeCanvasId }),
   isGenerationMode: () => agentModels.getMode() === "generation",
   isEditable: () => requireCanvasMutation({ notify: false }),
@@ -7950,6 +7959,7 @@ function setAgentOpen(open) {
   appShell?.classList.toggle("agent-open", open);
   agentDock.classList.toggle("collapsed", !open);
   agentDock.classList.toggle("open", open);
+  agentLauncherMotion.setPanelOpen(open);
   if (open && isAssetLibraryOpen()) reconcileDualPanelWidths("agent");
   else if (!open && isAssetLibraryOpen()) {
     setAssetLibraryWidth(state.assetLibraryPreferredWidth, { remember: false });
@@ -7978,8 +7988,12 @@ function setAgentOpen(open) {
   if (open) { mountAgentPrompt(); agentComposerResize?.sync(); }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
   syncPromptPanelLayouts();
-  if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => focusAgentPrompt());
-  if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => agentLauncher?.focus());
+  if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => {
+    if (state.agentOpen) focusAgentPrompt();
+  });
+  if (shouldRestoreLauncherFocus) window.requestAnimationFrame(() => {
+    if (!state.agentOpen) agentLauncher?.focus();
+  });
 }
 
 function getProjectShareUrl() {
@@ -11365,6 +11379,7 @@ window.addEventListener("pagehide", (event) => {
   promptOptimization?.close();
   canvasTheme.clearFeedback();
   if (!event.persisted) {
+    agentLauncherMotion.dispose();
     canvasTheme.dispose();
     assetLibraryItemMenu.dispose();
     canvasToolbarMenus.dispose();

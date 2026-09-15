@@ -1424,7 +1424,7 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
   );
   assert.match(
     agentMarkup,
-    /id="agentCloseBtn"[^>]*aria-label="收起 Reelay Agent"[^>]*>[\s\S]*?data-lucide="arrow-right-from-line" aria-hidden="true"/,
+    /id="agentCloseBtn"[^>]*aria-label="收起 Reelay Agent"[^>]*>[\s\S]*?data-lucide="panel-right-close" aria-hidden="true"/,
   );
 
   assert.match(appCss, /\.agent-panel\s*\{[^}]*grid-template-rows:\s*52px 1fr auto;/);
