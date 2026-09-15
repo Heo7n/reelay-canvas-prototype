@@ -62,6 +62,7 @@
   --relation-stroke-ready: rgba(255, 255, 255, 0.84);
   --relation-halo: rgba(255, 255, 255, 0.07);
   --connection-port-size: 34px;
+  --connection-port-offset: 38px;
   --connection-port-stroke: 2px;
   --connection-port-mark-width: 20px;
   --connection-port-mark-height: 2.4px;
@@ -3813,20 +3814,15 @@ html:not([data-theme="light"]) .model-brand-monochrome img {
   margin-right: 4px;
 }
 
-.prompt-optimization-icon,
-.advanced-settings-icon {
-  width: 20px;
-  height: 20px;
+.composer-tool-button > svg:is(.prompt-optimization-icon, .advanced-settings-icon) {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.55;
-}
-
-.prompt-optimization-icon .prompt-sparkle {
-  fill: currentColor;
-  stroke: none;
+  stroke-width: 1.8;
 }
 
 .advanced-settings-chip.active {
@@ -5290,7 +5286,6 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
 
 .agent-composer.prompt-composer-surface {
   --agent-add-size: 48px;
-  --agent-tool-icon-size: 22px;
   --node-panel-bg: var(--agent-panel-bg);
   --node-panel-line: var(--agent-panel-line);
   --node-panel-shadow: none;
@@ -5409,13 +5404,6 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
   color: color-mix(in srgb, var(--agent-panel-text) 85%, transparent);
 }
 
-.agent-composer-top-actions .prompt-optimization-icon,
-.agent-composer-top-actions .advanced-settings-icon {
-  width: var(--agent-tool-icon-size);
-  height: var(--agent-tool-icon-size);
-  stroke-width: var(--agent-icon-stroke);
-}
-
 .agent-composer-top-actions[hidden],
 .agent-composer-top-actions button[hidden],
 .agent-reference-shelf[hidden] {
@@ -5509,7 +5497,7 @@ html[data-theme="light"] .canvas-node.grouped.selected .media-frame {
   min-width: 0;
 }
 
-.lucide {
+:where(.lucide) {
   display: block;
   width: 16px;
   height: 16px;

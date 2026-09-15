@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
@@ -97,6 +98,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   });
   t.after(() => dom.window.close());
   const { window } = dom;
+  window.eval(canvasIconsSource);
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
   const postedMessages = [];
   const hostWindow = { postMessage(message) { postedMessages.push(message); } };

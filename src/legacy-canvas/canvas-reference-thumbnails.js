@@ -6,8 +6,8 @@
   function renderVideo(asset, { sanitizeUrl, escapeHtml }) {
     const poster = sanitizeUrl(asset.posterUrl) || sanitizeUrl(asset.thumbnailUrl);
     const source = sanitizeUrl(asset.url);
-    const play = '<span class="reference-video-play" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m6 4 6 4-6 4Z"/></svg></span>';
-    if (!poster && !source) return '<svg class="agent-reference-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8 6 4-6 4Z"/></svg>';
+    const play = `<span class="reference-video-play" aria-hidden="true">${global.REELAY_ICONS.markup("play", { fill: "currentColor" })}</span>`;
+    if (!poster && !source) return global.REELAY_ICONS.markup("square-play", { class: "agent-reference-glyph" });
     const media = poster
       ? `<img class="reference-video-frame" src="${escapeHtml(poster)}" alt="" draggable="false" loading="lazy"/>`
       : `<video class="reference-video-frame" data-reference-video-src="${escapeHtml(source)}" muted playsinline preload="metadata" tabindex="-1" aria-hidden="true" draggable="false"></video>`;

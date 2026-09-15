@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
+import { installCanvasIcons } from './helpers/canvas-icons.mjs';
 const [viewSource, modelSource] = await Promise.all(['canvas-prompt-optimization-view.js', 'canvas-prompt-document.js'].map(name => readFile(new URL(`../src/legacy-canvas/${name}`, import.meta.url), 'utf8')));
 function fixture(t) {
   const dom = new JSDOM('<!doctype html><body><button id="trigger">优化</button></body>', { runScripts: 'outside-only' });
   const { window } = dom; const { document } = window;
+  installCanvasIcons(window);
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   window.HTMLDialogElement.prototype.close = function () { this.open = false; };
   let installed, replacements = 0, destroyed = false, released = false, paused = 0;
@@ -85,13 +87,14 @@ test('source renders reference bindings and suggestion editor receives the same 
   assert.equal(f.editor.options.getReferences()[0].key, 'asset:one'); assert.equal(f.editor.options.isMentionEnabled(), true);
   f.editor.options.onChange(f.model.normalize('修改')); assert.equal(f.calls.at(-1)[0], 'edit');
 });
-test('comparison headings omit versions, summaries and mock labels and use the shared icon sprite', t => {
+test('comparison headings omit versions, summaries and mock labels and use the shared Lucide runtime', t => {
   const f = fixture(t); f.open({ ...f.base, version: 23, summary: ['不应展示的摘要'] });
   assert.deepEqual([...f.document.querySelectorAll('.prompt-optimization-columns h3')].map(el => el.textContent), ['优化前（原文）', '优化后']);
   assert.doesNotMatch(f.document.querySelector('dialog').textContent, /不应展示的摘要|第.*版|模拟|表达整理|画面细化|镜头与动作|简洁|适中|详细/);
-  const uses = [...f.document.querySelectorAll('button svg use')];
-  assert.ok(uses.length >= 4);
-  assert.ok(uses.every(el => el.getAttribute('href').startsWith('./assets/icons/prompt-optimization.svg#')));
+  const icons = [...f.document.querySelectorAll('button svg')];
+  assert.ok(icons.length >= 4);
+  assert.ok(icons.every(el => el.classList.contains('lucide') && el.getAttribute('aria-hidden') === 'true'));
+  assert.equal(f.document.querySelector('button svg use'), null);
 });
 test('nested media preview closes before the dialog and releases playback', t => {
   const f = fixture(t); const prompt = { version: 1, content: [{ type: 'reference', key: 'asset:clip', mediaType: 'video', fallbackLabel: '视频1' }] };

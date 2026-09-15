@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createContext, Script } from "node:vm";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "../tests/helpers/canvas-icons.mjs";
 import { build, loadConfigFromFile } from "vite";
 import { buildLegacyCanvas, bundleClassicScripts, generationPreviewAssets } from "./copy-legacy-canvas.mjs";
 
@@ -202,7 +203,7 @@ test("the real combined classic script boots with the same state and exported gl
   const html = await readFile(path.join(root, "index.html"), "utf8");
   const scripts = await Promise.all([...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(async ([, reference]) => {
     const name = reference.split(/[?#]/)[0].replace(/^\.\//, "");
-    return { name, source: await readFile(path.join(root, name), "utf8") };
+    return { name, source: name === "assets/canvas-icons.js" ? canvasIconsSource : await readFile(path.join(root, name), "utf8") };
   }));
   const separate = runCanvas(t, html, scripts);
   const bundled = runCanvas(t, html, [{ name: "bundle.js", source: bundleClassicScripts(scripts) }]);

@@ -17,7 +17,7 @@
 | 画布边缘工具与面板 | `styles/canvas-chrome.css` | `--canvas-edge-*`、`--canvas-chrome-*` |
 | 生成记录、引用与优化 | `styles/canvas-generation-*.css`、`styles/canvas-prompt-*.css` | 先消费基础变量，再使用功能内语义别名 |
 | React 应用壳与工作台 | `src/app/app-shell.css`、`src/pages/home/WorkspacePages.module.css`、`src/shared/ui/` | 字体继承、`--workspace-*`、已有共享组件 |
-| 模型品牌与通用图标 | `data/model-catalog.js`、`lucide-react`、`assets/icons/` | 模型目录的本地品牌资源及现有 Lucide 图标 |
+| 模型品牌与通用图标 | `data/model-catalog.js`、`lucide-react`、`src/icons/index.js`、`assets/icons/` | 模型目录的本地品牌资源及现有 Lucide 图标 |
 
 工作台和画布允许不同表面材质；相同语义的正文、控件和状态需要可追溯的共同准则。公共 token 的后续提取应同时接入消费者并删除被替代定义，不新增无人使用的“统一层”，不借局部修改全仓改色。
 
@@ -36,7 +36,7 @@
 
 - 同一操作层的按钮保持一致高度、圆角、图标尺度和行高。画布已有紧凑操作高 `32px`、工具栏按钮 `36px` / 圆角 `8px`；工作台主要导航命中区高 `44px`。按所在层复用，不把不同密度场景强制改成同一尺寸。新图标操作的命中区至少 `24 × 24px`，主要高频操作优先 `32px` 以上。
 - 输入使用一层明确表面与边界，label、placeholder、帮助和错误各有职责；字符计数不得遮挡文本。焦点反馈不能导致尺寸跳动，错误不清空已填内容，输入法组合不误提交。
-- 通用图标库统一使用 **Lucide**：React 从已安装的 `lucide-react` 按需导入，版本以锁文件为准；legacy 画布复用本地 Lucide SVG / 路径子集并保留许可证，新增子集记录来源版本。不为单个页面另引图标库，不加载完整图标包或外部 CDN。品牌图标和积分资产继续使用产品专用资源；这项选型已确定，不需要每次开发重新讨论。
+- 通用图标库统一使用 **Lucide**：React 从已安装的 `lucide-react` 按需导入，版本以锁文件为准；legacy 画布通过 `src/icons/index.js` 按需导入官方 `lucide` 包，共用图标创建 / 刷新入口；编辑器直接按需导入同一官方包。禁止在业务文件手写、复制维护通用图标路径或另建 SVG sprite。新增图标登记官方导出名称，保持两套包版本一致；构建保留许可证。不为单个页面另引图标库，不加载完整图标包或外部 CDN。品牌图标和积分资产继续使用产品专用资源；这项选型已确定，不需要每次开发重新讨论。
 - 通用线性图标优先 `16 / 20px`，相同控件组统一 stroke、viewBox、端点和视觉重量；继承 `currentColor`，不拿 emoji、Unicode 字符或临时拼线替代成熟图标。纯图标按钮有可访问名称，装饰图标对辅助技术隐藏。
 - 实现覆盖该控件适用的默认、hover、pressed、selected / expanded、focus-visible、disabled、loading、error 状态，不要求每次微调另写状态清单。hover 不替代焦点；disabled 不伪装为可点击；loading 只限制冲突操作，不能无理由锁住整个输入区。
 - 列表和任务明确区分加载中、空数据、筛选无结果、失败、成功与取消。toast 只承载短反馈，持久错误与需要用户处理的状态留在相关区域；不重复常识性提示或把模拟实现细节塞进产品界面。

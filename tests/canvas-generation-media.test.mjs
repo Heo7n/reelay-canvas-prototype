@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-generation-media.js", import.meta.url), "utf8");
 const settled = () => new Promise((resolve) => setImmediate(resolve));
@@ -35,6 +36,7 @@ function fixture(t, options = {}) {
     document.exitFullscreen = async () => { calls.exit++; fullscreenElement = null; document.dispatchEvent(new window.Event("fullscreenchange")); };
   }
   const messages = [];
+  window.eval(canvasIconsSource);
   window.eval(source);
   const mountOptions = { document, container, video, showMessage: (message) => messages.push(message) };
   const controller = window.REELAY_GENERATION_MEDIA.mount(mountOptions);

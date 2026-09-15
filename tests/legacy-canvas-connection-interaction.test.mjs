@@ -21,47 +21,68 @@ const registry = interaction.buildPortRegistry([
   { id: "node-b:right", nodeId: "node-b", side: "right", anchor: { x: 600, y: 120 }, targetRect: { left: 500, right: 600, top: 70, bottom: 170 } },
 ]);
 
-test("buildPortRegistry creates a frame-external half-ellipse field", () => {
+test("buildPortRegistry separates the external start field from the wider target fields", () => {
   assert.equal(registry.length, 4);
   assert.deepEqual(plain(registry[1].activationRect), {
     left: 200,
-    right: 348,
-    top: -8,
-    bottom: 208,
+    right: 272,
+    top: 60,
+    bottom: 140,
   });
   assert.equal(registry[1].restCenter.x, 238);
+  assert.equal(registry[1].hitHorizontalRadius, 34);
+  assert.equal(registry[1].hitOutwardRadius, 72);
+  assert.equal(registry[1].hitVerticalRadius, 40);
   assert.equal(registry[1].fieldOutwardRadius, 148);
   assert.equal(registry[1].fieldVerticalRadius, 108);
   assert.equal(registry[1].snapOutwardRadius, 104);
   assert.equal(registry[1].snapVerticalRadius, 78);
-  assert.equal(registry[1].snapExitPadding, 18);
+  assert.equal(registry[1].snapExitPadding, 12);
   assert.equal(registry[1].portMinOutside, 17);
+  assert.equal(interaction.isPointInPortHitArea({ x: 238, y: 139 }, registry[1]), true);
+  assert.equal(interaction.isPointInPortHitArea({ x: 271, y: 139 }, registry[1]), false);
+  assert.equal(interaction.isPointInPortHitArea({ x: 201, y: 100 }, registry[1]), false);
 });
 
-test("port fields scale with the canvas while retaining far-zoom screen floors", () => {
-  const farGeometry = interaction.getScaledPortGeometry(0.4);
-  const nearGeometry = interaction.getScaledPortGeometry(2);
-  const far = interaction.buildPortRegistry([
-    { id: "far:right", nodeId: "far", side: "right", anchor: { x: 100, y: 100 }, options: farGeometry },
-  ])[0];
-  const near = interaction.buildPortRegistry([
-    { id: "near:right", nodeId: "near", side: "right", anchor: { x: 100, y: 100 }, options: nearGeometry },
-  ])[0];
-
-  assert.equal(far.restCenter.x, 115.2);
-  assert.equal(near.restCenter.x, 176);
+test("single-port visual proportions scale with the media while invisible targets stay usable at far zoom", () => {
+  for (const scale of [0.1, 0.2, 0.4, 0.5, 1, 2, 4]) {
+    const geometry = interaction.getScaledPortGeometry(scale);
+    assert.ok(Math.abs(geometry.visualSize / scale - 34) < 1e-9, `world disk size at ${scale}`);
+    assert.ok(Math.abs(geometry.portOffset / scale - 38) < 1e-9, `world offset at ${scale}`);
+    assert.ok(Math.abs(geometry.portMinOutside / scale - 17) < 1e-9, `world radius at ${scale}`);
+    assert.ok(geometry.hitHorizontalRadius >= 22, `comfortable invisible width at ${scale}`);
+    assert.ok(geometry.hitVerticalRadius >= 22, `comfortable invisible height at ${scale}`);
+    assert.equal(geometry.snapExitPadding, 12);
+    const port = interaction.buildPortRegistry([{
+      id: "target:right", nodeId: "target", side: "right", anchor: { x: 100, y: 100 }, options: geometry,
+    }])[0];
+    assert.deepEqual(plain(port.restCenter), { x: 100 + 38 * scale, y: 100 });
+    assert.notEqual(interaction.clampPointerToPort({ x: port.restCenter.x + 20, y: 100 }, port), null);
+    assert.equal(interaction.clampPointerToPort({ x: port.activationRect.right + 1, y: 100 }, port), null);
+  }
+  const far = interaction.getScaledPortGeometry(0.2);
   assert.equal(far.fieldOutwardRadius, 64);
-  assert.ok(Math.abs(far.fieldVerticalRadius - 43.2) < 1e-9);
+  assert.equal(far.fieldVerticalRadius, 24);
   assert.equal(far.snapOutwardRadius, 52);
-  assert.ok(Math.abs(far.snapVerticalRadius - 31.2) < 1e-9);
+  assert.equal(far.snapVerticalRadius, 20);
+  const near = interaction.getScaledPortGeometry(2);
+  assert.equal(near.hitHorizontalRadius, 68);
+  assert.equal(near.hitVerticalRadius, 80);
   assert.equal(near.fieldOutwardRadius, 296);
   assert.equal(near.fieldVerticalRadius, 216);
   assert.equal(near.snapOutwardRadius, 208);
   assert.equal(near.snapVerticalRadius, 156);
-  assert.ok(Math.abs(far.portMinOutside - 6.8) < 1e-9);
-  assert.equal(near.portMinOutside, 34);
-  assert.equal(far.snapExitPadding, 18);
-  assert.equal(near.snapExitPadding, 18);
+});
+
+test("missing or invalid scale still produces finite usable port geometry", () => {
+  for (const scale of [undefined, NaN, Infinity, -1, 0]) {
+    const geometry = interaction.getScaledPortGeometry(scale);
+    assert.ok(Object.values(geometry).every(Number.isFinite));
+    assert.ok(geometry.visualSize > 0);
+    assert.ok(geometry.portOffset > geometry.portMinOutside);
+    assert.ok(geometry.hitHorizontalRadius >= 22);
+    assert.ok(geometry.hitVerticalRadius >= 22);
+  }
 });
 
 test("aggregate ports keep a readable screen disk and external hit target across zoom levels", () => {
@@ -104,32 +125,99 @@ test("aggregate geometry remains finite for missing and invalid scale without ch
   }
 });
 
-test("clampPointerToPort follows the pointer only inside the external half ellipse", () => {
-  const rightPort = registry[1];
-  assert.deepEqual(
-    plain(interaction.clampPointerToPort({ x: 220, y: 106 }, rightPort)),
-    { x: 220, y: 106 },
-  );
-  assert.deepEqual(
-    plain(interaction.clampPointerToPort({ x: 348, y: 100 }, rightPort)),
-    { x: 348, y: 100 },
-  );
-  assert.equal(interaction.clampPointerToPort({ x: 199.9, y: 100 }, rightPort), null);
-  assert.equal(interaction.clampPointerToPort({ x: 340, y: 190 }, rightPort), null);
-  assert.equal(interaction.clampPointerToPort({ x: 349, y: 100 }, rightPort), null);
+test("the inner magnet area aligns the port with the pointer on both sides at every zoom", () => {
+  for (const scale of [0.2, 0.5, 1, 2]) {
+    for (const side of ["left", "right"]) {
+      const geometry = interaction.getScaledPortGeometry(scale);
+      const port = interaction.buildPortRegistry([{
+        id: `target:${side}`, nodeId: "target", side, anchor: { x: 100, y: 100 }, options: geometry,
+      }])[0];
+      const direction = side === "left" ? -1 : 1;
+      const pointer = { x: port.restCenter.x + direction * 10 * scale, y: port.restCenter.y + 4 * scale };
+      assert.deepEqual(plain(interaction.clampPointerToPort(pointer, port)), pointer);
+      assert.deepEqual(plain(interaction.clampPointerToPort(port.restCenter, port)), plain(port.restCenter));
+      assert.equal(interaction.clampPointerToPort({ x: port.anchor.x - direction, y: 100 }, port), null);
+    }
+  }
+});
 
-  const leftPort = registry[0];
-  assert.deepEqual(
-    plain(interaction.clampPointerToPort({ x: 80, y: 92 }, leftPort)),
-    { x: 80, y: 92 },
-  );
+test("magnetic entry and exit settle continuously at rest instead of jumping at the outer boundary", () => {
+  for (const port of [registry[0], registry[1]]) {
+    const direction = port.side === "left" ? -1 : 1;
+    const edgeX = port.restCenter.x + direction * port.hitHorizontalRadius;
+    const atEdge = interaction.clampPointerToPort({ x: edgeX, y: 100 }, port);
+    const justInside = interaction.clampPointerToPort({ x: edgeX - direction * 0.01, y: 100 }, port);
+    assert.deepEqual(plain(atEdge), plain(port.restCenter));
+    assert.ok(Math.hypot(justInside.x - atEdge.x, justInside.y - atEdge.y) < 0.01);
+    assert.equal(interaction.clampPointerToPort({ x: edgeX + direction * 0.01, y: 100 }, port), null);
+    assert.deepEqual(plain(interaction.clampPointerToPort({ x: edgeX + direction * 30, y: 100 }, port, { requireActivation: false })), plain(port.restCenter));
+    const outer = interaction.clampPointerToPort({ x: edgeX - direction * 4, y: 100 }, port);
+    assert.ok(Math.hypot(outer.x - port.restCenter.x, outer.y - port.restCenter.y) < 4);
+    const beforeCoreBoundary = interaction.clampPointerToPort({ x: port.restCenter.x + direction * 15.29, y: 100 }, port);
+    const afterCoreBoundary = interaction.clampPointerToPort({ x: port.restCenter.x + direction * 15.31, y: 100 }, port);
+    assert.ok(Math.hypot(afterCoreBoundary.x - beforeCoreBoundary.x, afterCoreBoundary.y - beforeCoreBoundary.y) < 0.03);
+  }
+});
+
+test("left and right ports give mirrored feedback throughout the magnetic area", () => {
+  for (const [dx, dy] of [[0, 0], [10, 4], [-10, 4], [25, 10], [30, -10], [0, 39]]) {
+    const left = registry[0];
+    const right = registry[1];
+    const leftPoint = interaction.clampPointerToPort({ x: left.restCenter.x - dx, y: left.restCenter.y + dy }, left);
+    const rightPoint = interaction.clampPointerToPort({ x: right.restCenter.x + dx, y: right.restCenter.y + dy }, right);
+    assert.ok(leftPoint && rightPoint);
+    assert.ok(Math.abs((leftPoint.x - left.restCenter.x) + (rightPoint.x - right.restCenter.x)) < 1e-9);
+    assert.ok(Math.abs(leftPoint.y - rightPoint.y) < 1e-9);
+  }
+});
+
+test("magnetic movement keeps the visible disk within the hit area and outside the media at every zoom", () => {
+  for (const scale of [0.2, 0.5, 1, 2]) {
+    const geometry = interaction.getScaledPortGeometry(scale);
+    for (const side of ["left", "right"]) {
+      const port = interaction.buildPortRegistry([{
+        id: `target:${side}`, nodeId: "target", side, anchor: { x: 100, y: 100 }, options: geometry,
+      }])[0];
+      const direction = side === "left" ? -1 : 1;
+      for (let step = 0; step < 36; step += 1) {
+        const angle = step * Math.PI / 18;
+        const pointer = {
+          x: port.restCenter.x + geometry.hitHorizontalRadius * 0.55 * Math.cos(angle),
+          y: port.restCenter.y + geometry.hitVerticalRadius * 0.55 * Math.sin(angle),
+        };
+        if (!interaction.isPointInPortHitArea(pointer, port)) continue;
+        const center = interaction.clampPointerToPort(pointer, port);
+        assert.ok(center);
+        for (let edge = 0; edge < 36; edge += 1) {
+          const edgeAngle = edge * Math.PI / 18;
+          const point = {
+            x: center.x + geometry.visualSize / 2 * Math.cos(edgeAngle),
+            y: center.y + geometry.visualSize / 2 * Math.sin(edgeAngle),
+          };
+          assert.ok(direction * (point.x - port.anchor.x) >= -1e-9, `disk avoids media at ${scale}`);
+          assert.equal(interaction.isPointInPortHitArea(point, port), true, `visible circumference is clickable at ${scale}`);
+        }
+      }
+    }
+  }
 });
 
 test("findHoveredPort chooses the nearest active port from the cached registry", () => {
-  const hovered = interaction.findHoveredPort({ x: 480, y: 118 }, registry);
+  const hovered = interaction.findHoveredPort({ x: 470, y: 118 }, registry);
   assert.equal(hovered.portId, "node-b:left");
-  assert.deepEqual(plain(hovered.point), { x: 480, y: 118 });
+  assert.deepEqual(plain(hovered.point), { x: 470, y: 118 });
   assert.equal(interaction.findHoveredPort({ x: 350, y: -20 }, registry), null);
+});
+
+test("overlapping start fields choose the nearest rest center regardless of registry order", () => {
+  const closeRegistry = interaction.buildPortRegistry([
+    { id: "first:left", nodeId: "first", side: "left", anchor: { x: 300, y: 100 } },
+    { id: "second:left", nodeId: "second", side: "left", anchor: { x: 320, y: 100 } },
+  ]);
+  for (const ports of [closeRegistry, [...closeRegistry].reverse()]) {
+    assert.equal(interaction.findHoveredPort({ x: 265, y: 100 }, ports).portId, "first:left");
+    assert.equal(interaction.findHoveredPort({ x: 290, y: 100 }, ports).portId, "second:left");
+  }
 });
 
 test("selectSnapCandidate uses nested enter and exit half ellipses for hysteresis", () => {
@@ -163,7 +251,7 @@ test("selectSnapCandidate uses nested enter and exit half ellipses for hysteresi
   ), true);
 
   const released = interaction.selectSnapCandidate({
-    pointer: { x: 377.9, y: 120 },
+    pointer: { x: 383.9, y: 120 },
     origin,
     registry,
     previousTargetId: enter.targetPortId,
@@ -252,7 +340,7 @@ test("overlapping node bodies prefer the top visual target", () => {
   assert.equal(candidate.targetPortId, "upper:left");
 });
 
-test("far-zoom hover keeps an outer floor while snap uses its nested ellipse", () => {
+test("dragging can find and snap a target outside the smaller start field", () => {
   const farRegistry = interaction.buildPortRegistry([
     { id: "origin:right", nodeId: "origin", side: "right", anchor: { x: 100, y: 100 }, options: interaction.getScaledPortGeometry(0.4) },
     { id: "target:left", nodeId: "target", side: "left", anchor: { x: 300, y: 100 }, options: interaction.getScaledPortGeometry(0.4) },
@@ -263,21 +351,23 @@ test("far-zoom hover keeps an outer floor while snap uses its nested ellipse", (
     registry: farRegistry,
   });
   assert.equal(candidate.targetPortId, "target:left");
-  assert.equal(candidate.distance, 0);
-  assert.deepEqual(plain(candidate.point), { x: 250, y: 100 });
+  assert.equal(interaction.clampPointerToPort({ x: 250, y: 100 }, farRegistry[1]), null);
+  assert.deepEqual(plain(candidate.point), { x: 284.8, y: 100 });
+  assert.ok(candidate.distance > 0);
   assert.equal(interaction.selectSnapCandidate({
-    pointer: { x: 247.9, y: 100 },
+    pointer: { x: 238, y: 100 },
     origin: farRegistry[0],
     registry: farRegistry,
   }), null);
+  assert.equal(interaction.clampPointerToPort({ x: 238, y: 100 }, farRegistry[1]), null);
   assert.equal(interaction.selectSnapProximity({
-    pointer: { x: 240, y: 100 },
+    pointer: { x: 238, y: 100 },
     origin: farRegistry[0],
     registry: farRegistry,
   }).targetPortId, "target:left");
 });
 
-test("snap proximity follows the pointer only inside the outer external half ellipse", () => {
+test("target proximity works outside the start area while snapped feedback stays at rest", () => {
   const origin = registry[1];
   const near = interaction.selectSnapProximity({
     pointer: { x: 360, y: 120 },
@@ -285,7 +375,7 @@ test("snap proximity follows the pointer only inside the outer external half ell
     registry,
   });
   assert.equal(near.targetPortId, "node-b:left");
-  assert.deepEqual(plain(near.point), { x: 360, y: 120 });
+  assert.deepEqual(plain(near.point), { x: 462, y: 120 });
   assert.ok(near.strength > 0 && near.strength < 0.1);
 
   const boundary = interaction.selectSnapProximity({
@@ -310,6 +400,11 @@ test("snap proximity follows the pointer only inside the outer external half ell
     origin,
     registry,
   }), null);
+  for (const pointer of [{ x: 440, y: 120 }, { x: 478, y: 145 }, { x: 485, y: 115 }]) {
+    const snapped = interaction.selectSnapCandidate({ pointer, origin, registry });
+    assert.equal(snapped.targetPortId, "node-b:left");
+    assert.deepEqual(plain(snapped.point), { x: 462, y: 120 });
+  }
 });
 
 test("snap selection ranks overlapping candidates by stable rest distance", () => {
@@ -326,7 +421,7 @@ test("snap selection ranks overlapping candidates by stable rest distance", () =
   assert.equal(selected.targetPortId, "second:left");
 
   const switched = interaction.selectSnapCandidate({
-    pointer: { x: 282, y: 100 },
+    pointer: { x: 290, y: 100 },
     origin: closeRegistry[0],
     registry: closeRegistry,
     previousTargetId: "first:left",

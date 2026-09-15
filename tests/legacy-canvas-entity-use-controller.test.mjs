@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const [viewSource, controllerSource, mediaPreviewSource] = await Promise.all([
   readFile(new URL("../src/legacy-canvas/canvas-entity-use-view.js", import.meta.url), "utf8"),
@@ -19,6 +20,7 @@ function createHarness(t) {
     <div id="picker" hidden inert aria-hidden="true"></div>
   </body>`, { runScripts: "outside-only", url: "https://reelay.test/" });
   const { window } = dom;
+  window.eval(canvasIconsSource);
   window.eval(mediaPreviewSource);
   const document = window.document;
   let serial = 0;

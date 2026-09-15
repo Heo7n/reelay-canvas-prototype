@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
-import vm from "node:vm";
+import test, { after } from "node:test";
 import { JSDOM } from "jsdom";
+import { installCanvasIcons } from "./helpers/canvas-icons.mjs";
 
 const source = await readFile(
   new URL("../src/legacy-canvas/canvas-entity-editor-view.js", import.meta.url),
   "utf8",
 );
-const context = vm.createContext({});
-new vm.Script(source, { filename: "canvas-entity-editor-view.js" }).runInContext(context);
+const dom = new JSDOM('<!doctype html><body></body>', { runScripts: "outside-only" });
+const context = dom.window;
+installCanvasIcons(context);
+context.eval(source);
 const view = context.REELAY_CANVAS_ENTITY_EDITOR_VIEW;
+after(() => dom.window.close());
 
 const media = [
   {
@@ -63,7 +66,9 @@ test("create mode keeps the title 新建主体 and renders the complete empty dr
   assert.match(markup, /role="region" aria-labelledby="canvasEntityEditorTitle"/);
   assert.match(markup, /data-entity-editor-mode="create"/);
   assert.match(markup, /<h2 id="canvasEntityEditorTitle" title="新建主体">新建主体<\/h2>/);
-  assert.match(markup, /class="entity-editor-title">\s*<svg[^>]*data-entity-editor-icon="square-user-round"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg>\s*<h2 id="canvasEntityEditorTitle"/);
+  const headingIcon = JSDOM.fragment(markup).querySelector('.entity-editor-title > svg[data-entity-editor-icon="square-user-round"]');
+  assert.equal(headingIcon.getAttribute('aria-hidden'), 'true');
+  assert.equal(headingIcon.nextElementSibling.id, 'canvasEntityEditorTitle');
   assert.match(markup, /data-entity-editor-name="true"/);
   assert.match(markup, /value="正在输入的名称"/);
   assert.match(markup, /required aria-required="true"/);
@@ -173,7 +178,9 @@ test("image, video, and audio previews use only structured safe Media fields", (
 
   assert.match(image, /<img src="https:\/\/cdn\.example\/portrait\.jpg\?x=1&amp;y=2" alt="正面照">/);
   for (const [markup, expectedIcon] of [[image, "image"], [video, "square-play"], [audio, "audio-lines"]]) {
-    assert.match(markup, new RegExp(`entity-editor-preview-kind-icon[^]*<svg[^>]*data-entity-editor-icon="${expectedIcon}"[^>]*stroke-width="1.8"[^>]*aria-hidden="true"`));
+    const previewIcon = JSDOM.fragment(markup).querySelector(`.entity-editor-preview-kind-icon > svg[data-entity-editor-icon="${expectedIcon}"]`);
+    assert.equal(previewIcon.getAttribute('aria-hidden'), 'true');
+    assert.ok(previewIcon.classList.contains('lucide'));
   }
   assert.match(image, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<button class="entity-editor-cover-control entity-editor-cover-action"[^>]*data-entity-editor-set-cover="portrait"[^>]*>设为封面<\/button>/);
   assert.match(video, /<video src="blob:https:\/\/reelay\.example\/video-1" poster="\/thumbs\/turnaround\.webp" controls playsinline/);

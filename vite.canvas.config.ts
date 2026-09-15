@@ -5,7 +5,7 @@ import { promptEditorPlugin } from "./src/dev/prompt-editor-plugin";
 import { generationSimulatorPlugin } from "./src/dev/generation-simulator-plugin";
 
 export default defineConfig({
-  plugins: [canvasLayoutTunerPlugin(), promptEditorPlugin(), generationSimulatorPlugin()],
+  plugins: [canvasLayoutTunerPlugin(), promptEditorPlugin(), promptEditorPlugin("icons"), generationSimulatorPlugin()],
   server: {
     host: "127.0.0.1",
     port: 5194,

@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
-import vm from "node:vm";
+import test, { after } from "node:test";
+import { JSDOM } from "jsdom";
+import { installCanvasIcons } from "./helpers/canvas-icons.mjs";
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-entity-use-view.js", import.meta.url), "utf8");
 const entityUseCss = await readFile(new URL("../styles/canvas-entity-use.css", import.meta.url), "utf8");
-const context = vm.createContext({});
-new vm.Script(source, { filename: "canvas-entity-use-view.js" }).runInContext(context);
+const dom = new JSDOM('<!doctype html><body></body>', { runScripts: "outside-only" });
+const context = dom.window;
+installCanvasIcons(context);
+context.eval(source);
 const view = context.REELAY_CANVAS_ENTITY_USE_VIEW;
+after(() => dom.window.close());
 
 const media = [
   { id: "wide", name: "远景.png", mediaKind: "image", thumbnailUrl: "https://cdn.example/wide.webp" },
@@ -241,7 +245,7 @@ test("picker selection affordance stays at the image top-left with translucent a
     selectedIds: ["selected"],
   });
 
-  assert.match(markup, /data-entity-use-picker-card="selected" data-selected="true"[^]*?<span class="entity-use-picker-check" aria-hidden="true"><i data-lucide="check"/);
+  assert.ok(JSDOM.fragment(markup).querySelector('[data-entity-use-picker-card="selected"][data-selected="true"] .entity-use-picker-check > svg.lucide-check'));
   assert.match(markup, /data-entity-use-picker-card="idle" data-selected="false"[^]*?<span class="entity-use-picker-check" aria-hidden="true"><\/span>/);
   assert.match(entityUseCss, /\.entity-use-picker-check \{[^}]*top: 7px;[^}]*left: 7px;[^}]*background: rgb\(255 255 255 \/ 34%\);/);
   assert.match(entityUseCss, /\.entity-use-picker-card\.is-selected \.entity-use-picker-check \{[^}]*background: #fff;[^}]*color: #202124;/);

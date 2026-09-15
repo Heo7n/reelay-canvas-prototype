@@ -231,8 +231,8 @@
 .node-port-zone {
   position: absolute;
   top: 50%;
-  width: var(--port-zone-outward, 148px);
-  height: var(--port-zone-height, 216px);
+  width: var(--port-zone-outward, 72px);
+  height: var(--port-zone-height, 80px);
   translate: 0 -50%;
   pointer-events: none;
   touch-action: none;
@@ -261,7 +261,7 @@
 }
 
 .node-port-zone-input::before {
-  clip-path: ellipse(100% 50% at 100% 50%);
+  clip-path: ellipse(var(--port-hit-radius-x, 34px) 50% at calc(100% - var(--connection-port-offset)) 50%);
 }
 
 .node-port-zone-output {
@@ -269,7 +269,7 @@
 }
 
 .node-port-zone-output::before {
-  clip-path: ellipse(100% 50% at 0 50%);
+  clip-path: ellipse(var(--port-hit-radius-x, 34px) 50% at var(--connection-port-offset) 50%);
 }
 
 .node-port {
@@ -295,8 +295,8 @@
   translate: calc(-50% + var(--port-enter-x)) -50%;
   scale: 1;
   transition:
-    left 36ms linear,
-    top 36ms linear,
+    left 100ms ease-out,
+    top 100ms ease-out,
     opacity 105ms ease-out,
     translate 150ms cubic-bezier(0.2, 0.85, 0.2, 1),
     scale 130ms cubic-bezier(0.2, 0.85, 0.2, 1),
@@ -330,16 +330,16 @@
 }
 
 .node-port-input {
-  --port-x: calc(100% - 38px - var(--node-media-border-width));
+  --port-x: calc(100% - var(--connection-port-offset) - var(--node-media-border-width));
   --port-enter-x: 8px;
 }
 
 .node-port-output {
-  --port-x: calc(38px + var(--node-media-border-width));
+  --port-x: calc(var(--connection-port-offset) + var(--node-media-border-width));
   --port-enter-x: -8px;
 }
 
-.node-port-zone:hover .node-port,
+.node-port.is-pointer-near,
 .media-frame:hover .node-port,
 .canvas-node.selected .node-port,
 .canvas-shell.connecting .node-port.is-connectable-target,
@@ -350,9 +350,10 @@
   opacity: 1;
 }
 
-.node-port-zone:hover .node-port {
+.node-port.is-pointer-near {
   --port-stroke-color: var(--relation-stroke);
   --port-mark-color: var(--relation-stroke-strong);
+  transition: opacity 105ms ease-out, box-shadow 120ms ease;
   box-shadow:
     inset 0 0 0 var(--port-stroke) var(--port-stroke-color),
     0 1px 4px rgb(0 0 0 / 12%);
@@ -388,6 +389,10 @@
 
 .canvas-shell.multi-selection-active .canvas-node.selected .node-port-zone {
   opacity: 0;
+  pointer-events: none;
+}
+
+.canvas-shell.multi-selection-active .canvas-node.selected .node-port-zone::before {
   pointer-events: none;
 }
 
@@ -839,6 +844,10 @@ html[data-theme="dark"] .connection-cut-surface {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .node-port {
+    transition: none;
+  }
+
   .node-create-menu,
   .connection-create-menu {
     animation: none;

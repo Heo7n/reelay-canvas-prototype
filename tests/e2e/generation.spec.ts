@@ -46,6 +46,11 @@ test("canceling queued sidebar generation refunds once and does not create a res
   await canvas.locator(".agent-send").click();
   const record = canvas.locator("#agentGenerationRecords .generation-record").filter({ hasText: prompt });
   await expect(canvas.locator("#railCreditValue")).toHaveText(String(3000 - cost));
+  const cancel = record.getByRole("button", { name: "取消生成", exact: true });
+  await expect(record.getByRole("button", { name: "重新编辑", exact: true })).toBeVisible();
+  await cancel.hover();
+  await expect.poll(() => cancel.evaluate((element) => getComputedStyle(element, "::after").opacity)).toBe("1");
+  await expect(cancel).toHaveAttribute("aria-description", "发送后 7 秒内可取消，取消后返还本次积分");
   await record.getByRole("button", { name: "取消生成", exact: true }).click();
   await expect(record).toHaveAttribute("data-status", "canceled");
   await expect(record).toContainText("积分已返还");
@@ -58,4 +63,26 @@ test("canceling queued sidebar generation refunds once and does not create a res
   await expect(record).toHaveAttribute("data-status", "canceled");
   await expect(canvas.locator("#railCreditValue")).toHaveText("3000");
   await expect(canvas.locator(".canvas-node")).toHaveCount(before);
+});
+
+test("cancel deadline keeps re-edit available and returns keyboard focus", async ({ page }) => {
+  const canvas = await openCanvas(page, "角色动画短片_第 3 版");
+  await page.clock.install();
+  const prompt = `取消窗口到期 ${Date.now()}`;
+  await canvas.locator('#agentInput [contenteditable="true"]').fill(prompt);
+  await canvas.locator(".agent-send").click();
+  const record = canvas.locator("#agentGenerationRecords .generation-record").filter({ hasText: prompt });
+  const edit = record.getByRole("button", { name: "重新编辑", exact: true });
+  const cancel = record.getByRole("button", { name: "取消生成", exact: true });
+  await edit.focus();
+  await page.keyboard.press("Tab");
+  await expect(cancel).toBeFocused();
+  await expect.poll(() => cancel.evaluate((element) => getComputedStyle(element, "::after").opacity)).toBe("1");
+  await page.clock.fastForward(7_100);
+  await expect(cancel).toBeHidden();
+  await expect(edit).toBeFocused();
+  await expect(record).toHaveAttribute("data-status", "running");
+  await edit.click();
+  await expect(canvas.locator('#agentInput [contenteditable="true"]')).toHaveText(prompt);
+  await expect(record).toHaveAttribute("data-status", "running");
 });

@@ -81,7 +81,6 @@ test("generator nodes keep their creation modality and only expose compatible mo
   assert.match(appSource, /function omniReferenceTaskTypeParameterSection\(node, canvas = true\)[\s\S]*?data-action="omni-reference-task-type"/);
   assert.match(appSource, /function getParamLabelParts\(node\)[\s\S]*?getOmniReferenceTaskTypeLabel\(node\)/);
   assert.match(agentModelsSource, /modelIconMarkup\(model, "agent-model-provider"\)/);
-  assert.match(appSource, /"box":\s*'<path/);
   assert.match(appSource, /commitGenerationUndoBoundary\(canvas, node\.id\)/);
   assert.doesNotMatch(appSource, /"node-update"/);
   assert.match(appCss, /\.model-mode-contract/);
@@ -1025,8 +1024,8 @@ test("connection ports keep their external field while media frames accept body 
   assert.doesNotMatch(connectionStyles, /\.node-port-zone\s*\{[\s\S]*?\bzoom\s*:/);
   assert.match(connectionStyles, /\.node-port-zone\s*\{[\s\S]*?width:\s*var\(--port-zone-outward[\s\S]*?height:\s*var\(--port-zone-height[\s\S]*?pointer-events:\s*none/);
   assert.match(connectionStyles, /\.node-port-zone::before\s*\{[\s\S]*?pointer-events:\s*auto/);
-  assert.match(connectionStyles, /\.node-port-zone-input::before\s*\{[\s\S]*?ellipse\(100% 50% at 100% 50%\)/);
-  assert.match(connectionStyles, /\.node-port-zone-output::before\s*\{[\s\S]*?ellipse\(100% 50% at 0 50%\)/);
+  assert.match(connectionStyles, /\.node-port-zone-input::before\s*\{[\s\S]*?ellipse\(var\(--port-hit-radius-x, 34px\) 50% at calc\(100% - var\(--connection-port-offset\)\) 50%\)/);
+  assert.match(connectionStyles, /\.node-port-zone-output::before\s*\{[\s\S]*?ellipse\(var\(--port-hit-radius-x, 34px\) 50% at var\(--connection-port-offset\) 50%\)/);
   assert.match(appCss, /--connection-port-size:\s*34px/);
   assert.match(appCss, /--connection-port-stroke:\s*2px/);
   assert.match(connectionStyles, /--port-size:\s*var\(--connection-port-size\)/);
@@ -1035,13 +1034,14 @@ test("connection ports keep their external field while media frames accept body 
   assert.doesNotMatch(connectionStyles, /html\[data-theme="dark"\] \.node-port/);
   assert.match(connectionStyles, /\.node-port::before,[\s\S]*?width:\s*var\(--connection-port-mark-width\)[\s\S]*?height:\s*var\(--connection-port-mark-height\)/);
   assert.match(connectionStyles, /\.node-port\.is-valid-target\s*\{[\s\S]*?background:\s*transparent/);
-  assert.match(connectionStyles, /\.node-port-input\s*\{[\s\S]*?--port-x:\s*calc\(100% - 38px - var\(--node-media-border-width\)\)/);
-  assert.match(connectionStyles, /\.node-port-output\s*\{[\s\S]*?--port-x:\s*calc\(38px \+ var\(--node-media-border-width\)\)/);
+  assert.match(connectionStyles, /\.node-port-input\s*\{[\s\S]*?--port-x:\s*calc\(100% - var\(--connection-port-offset\) - var\(--node-media-border-width\)\)/);
+  assert.match(connectionStyles, /\.node-port-output\s*\{[\s\S]*?--port-x:\s*calc\(var\(--connection-port-offset\) \+ var\(--node-media-border-width\)\)/);
   assert.match(interactionSource, /portOffset:\s*38/);
   assert.match(interactionSource, /fieldOutwardRadius:\s*148/);
   assert.match(interactionSource, /fieldVerticalRadius:\s*108/);
   assert.match(interactionSource, /snapOutwardRadius:\s*104/);
   assert.match(interactionSource, /snapVerticalRadius:\s*78/);
+  assert.doesNotMatch(appSource, /setProperty\("--connection-port-(?:size|offset|stroke|mark-width|mark-height)"/);
   assert.match(interactionSource, /coordinates\.outward >= 0/);
   assert.doesNotMatch(interactionSource, /activationInside/);
   assert.match(connectionStyles, /\.node-port\.is-snap-near/);
@@ -1233,9 +1233,8 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appCss, /\.advanced-setting-tooltip\[data-placement\^="bottom"\]::after/);
   assert.doesNotMatch(appSource, /settingsPanel\(|settings-panel|settings-utilities/);
   assert.match(appSource, /class="credit-semantic-icon" src="\.\/assets\/icons\/credit-prism\.svg"/);
-  const sendArrow = /class="send-arrow-icon"[^>]*><path d="([^"]+)"/;
-  assert.ok(appSource.match(sendArrow));
-  assert.equal(appSource.match(sendArrow)[1], html.match(sendArrow)[1]);
+  assert.match(appSource, /REELAY_ICONS\.markup\("arrow-up", \{ class: "send-arrow-icon" \}\)/);
+  assert.match(html, /class="send-arrow-icon" data-lucide="arrow-up"/);
   assert.match(appCss, /html\[data-theme="light"\]\s*\{[\s\S]*?--node-send-bg:\s*var\(--agent-send-bg\)[\s\S]*?--node-send-text:\s*var\(--agent-send-text\)/);
   assert.match(appCss, /\.credit-mark\s*\{[^}]*font-variant-numeric:\s*tabular-nums/);
   assert.match(appCss, /\.generate-button\.disabled \.credit-mark,[\s\S]*?opacity:\s*1/);
@@ -1298,7 +1297,6 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.doesNotMatch(appCss, /model-logo-(?:seed|nano|kling)[^\{]*img\s*\{[\s\S]*?filter:/);
   assert.match(appSource, /class="model-check" data-lucide="check"/);
   assert.match(appCss, /\.model-option\.active \.model-check\s*\{[\s\S]*?opacity:\s*1/);
-  assert.match(appSource, /sourceIcon\?\.classList\?\.forEach\(\(className\) => svg\.classList\.add\(className\)\)/);
   assert.match(appCss, /\.control-chip\.has-divider::after\s*\{[\s\S]*?width:\s*1px[\s\S]*?height:\s*20px/);
   assert.doesNotMatch(appCss, /promptPanelReveal|\.generator-node\.selected \.prompt-panel\s*\{[\s\S]*?animation:/);
   assert.doesNotMatch(appSource, /toggle-large|promptLarge|promptInputHeight|expand-corner/);
@@ -1406,10 +1404,12 @@ test("blank connection drops retain a pending preview for single and selection m
   assert.match(appSource, /"创建共同下游节点"/);
 });
 
-test("the hosted legacy canvas uses its local icon subset instead of the full vendor bundle", () => {
+test("the hosted legacy canvas loads the shared official icon runtime before its entry", () => {
   assert.doesNotMatch(html, /vendor\/lucide/i);
-  assert.match(appSource, /const fallbackIconPaths = \{/);
-  assert.match(appSource, /function renderFallbackIcons\(\)/);
+  assert.ok(html.indexOf("./assets/canvas-icons.js") >= 0);
+  assert.ok(html.indexOf("./assets/canvas-icons.js") < html.indexOf("./app.js"));
+  assert.match(appSource, /window\.REELAY_ICONS\.refresh\(root\)/);
+  assert.doesNotMatch(appSource, /fallbackIconPaths|createFallbackIcon|renderFallbackIcons/);
 });
 
 test("the Agent composer keeps its icon, disclosure, and accessibility contracts", () => {
@@ -1426,8 +1426,6 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
     agentMarkup,
     /id="agentCloseBtn"[^>]*aria-label="收起 Reelay Agent"[^>]*>[\s\S]*?data-lucide="arrow-right-from-line" aria-hidden="true"/,
   );
-  assert.match(appSource, /"message-square-plus":\s*'<path/);
-  assert.match(appSource, /"arrow-right-from-line":\s*'<path/);
 
   assert.match(appCss, /\.agent-panel\s*\{[^}]*grid-template-rows:\s*52px 1fr auto;/);
 
@@ -1518,8 +1516,7 @@ test("the editable empty canvas invites open-ended creation", () => {
 });
 
 test("empty generator media uses a larger centered modality icon", () => {
-  assert.match(appSource, /class="upload-icon video-placeholder-icon"/);
-  assert.match(appSource, /class="upload-icon image-placeholder-icon"/);
+  assert.match(appSource, /class: `upload-icon \$\{node\.mode === "video" \? "video" : "image"\}-placeholder-icon`/);
   assert.match(
     appCss,
     /\.upload-icon\s*\{[^}]*display:\s*block;[^}]*width:\s*64px;[^}]*height:\s*64px;[^}]*margin:\s*0 auto;/s,

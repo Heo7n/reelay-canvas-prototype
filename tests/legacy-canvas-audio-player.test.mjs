@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-audio-player.js", import.meta.url), "utf8");
 const settlePlayback = () => new Promise((resolve) => setImmediate(resolve));
@@ -11,6 +12,7 @@ function fixture(t, { ready = true, initialDuration, mediaDuration = 20, sourceU
     runScripts: "outside-only", url: "https://reelay.test/",
   });
   const view = dom.window;
+  view.eval(canvasIconsSource);
   const document = view.document;
   const root = document.querySelector("#root");
   const states = new WeakMap();

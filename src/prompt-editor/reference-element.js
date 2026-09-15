@@ -1,8 +1,21 @@
-const paths = {
-  image: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
-  video: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8 6 4-6 4z"/>',
-  audio: '<path d="M9 18V5l12-2v13M9 8l12-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="18" cy="16" rx="3" ry="3"/>',
-};
+import { Image, SquarePlay, Music2 } from 'lucide';
+
+const referenceIcons = { image: Image, video: SquarePlay, audio: Music2 };
+
+// Render official icon nodes in the editor's document, including iframe editors.
+// Lucide's DOM helper otherwise always uses the global document.
+function createReferenceIcon(document, mediaType) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const attributes = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+    'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' };
+  for (const [name, value] of Object.entries(attributes)) svg.setAttribute(name, String(value));
+  for (const [tag, attrs] of referenceIcons[mediaType] || Image) {
+    const child = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [name, value] of Object.entries(attrs)) child.setAttribute(name, String(value));
+    svg.append(child);
+  }
+  return svg;
+}
 
 export function createReferenceElement(document, atom, reference) {
   const element = document.createElement('span');
@@ -43,7 +56,7 @@ export function updateReferenceElement(element, atom, reference) {
       img.alt = ''; img.src = thumbnail; img.loading = 'lazy'; img.draggable = false;
       thumb.append(img);
     } else {
-      thumb.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[atom.mediaType] || paths.image}</svg>`;
+      thumb.append(createReferenceIcon(element.ownerDocument, atom.mediaType));
     }
   }
 }

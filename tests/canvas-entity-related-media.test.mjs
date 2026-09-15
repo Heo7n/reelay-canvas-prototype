@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
@@ -106,7 +107,7 @@ const sourceDocument = new JSDOM(html);
 const paths = [...sourceDocument.window.document.querySelectorAll("script[src]")]
   .map((script) => script.getAttribute("src")).filter((path) => path.startsWith("./"));
 sourceDocument.window.close();
-const scripts = await Promise.all(paths.map(async (path) => ({ path, source: await readFile(new URL(path.split("?")[0], root), "utf8") })));
+const scripts = await Promise.all(paths.map(async (path) => ({ path, source: path.split("?")[0] === "./assets/canvas-icons.js" ? canvasIconsSource : await readFile(new URL(path.split("?")[0], root), "utf8") })));
 const promptSource = await buildPromptEditor(fileURLToPath(root));
 
 function harness(t) {

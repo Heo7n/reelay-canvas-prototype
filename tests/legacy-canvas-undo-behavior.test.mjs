@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 import { fileURLToPath } from "node:url";
 import { webcrypto } from "node:crypto";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
@@ -17,7 +18,7 @@ const scriptPaths = [...scriptDocument.window.document.querySelectorAll("script[
 scriptDocument.window.close();
 const scripts = await Promise.all(scriptPaths.map(async (path) => ({
   path,
-  source: await readFile(new URL(path, root), "utf8"),
+  source: path === "./assets/canvas-icons.js" ? canvasIconsSource : await readFile(new URL(path, root), "utf8"),
 })));
 
 // Load the real entry and controllers; only browser scheduling/media APIs are stubbed.

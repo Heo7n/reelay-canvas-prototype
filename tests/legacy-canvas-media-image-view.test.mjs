@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-media-image-view.js", import.meta.url), "utf8");
 const origin = "http://reelay.test";
@@ -202,7 +203,7 @@ test("real canvas asset and generator images follow zoom without replacing live 
   const paths = [...window.document.querySelectorAll("script[src]")]
     .map((script) => script.getAttribute("src"))
     .filter((path) => path.startsWith("./")).map((path) => path.split("?")[0]);
-  const scripts = await Promise.all(paths.map(async (path) => ({ path, source: await readFile(new URL(path, projectRoot), "utf8") })));
+  const scripts = await Promise.all(paths.map(async (path) => ({ path, source: path === "./assets/canvas-icons.js" ? canvasIconsSource : await readFile(new URL(path, projectRoot), "utf8") })));
   for (const script of scripts) window.eval(script.source + (script.path === "./app.js"
     ? "\nwindow.imageTest = { state, canvasRuntimeStore };" : ""));
   const { state, canvasRuntimeStore } = window.imageTest;

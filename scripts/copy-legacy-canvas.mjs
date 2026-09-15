@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 import ts from "typescript";
+import { buildCanvasIcons } from "./build-canvas-icons.mjs";
 import { buildPromptEditor } from "./build-prompt-editor.mjs";
 
 function localPath(root, reference) {
@@ -158,6 +159,7 @@ export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(wo
   const scripts = await Promise.all(scriptTags.map(async ([tag]) => {
     const match = tag.match(/^<script src="([^"]+)"><\/script>$/);
     if (!match) throw new Error(`Only synchronous external classic scripts can be bundled: ${tag}`);
+    if (match[1] === "./assets/canvas-icons.js") return { name: "assets/canvas-icons.js", source: await buildCanvasIcons(workspaceRoot) };
     const filename = localPath(workspaceRoot, match[1]);
     return { name: path.relative(workspaceRoot, filename).split(path.sep).join("/"), source: await readFile(filename, "utf8") };
   }));

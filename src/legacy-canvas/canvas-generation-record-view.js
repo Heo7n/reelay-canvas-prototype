@@ -3,19 +3,6 @@
 
   const TYPES = { image: "图片", video: "视频", audio: "音频" };
   const ICONS = { image: "image", video: "square-play", audio: "audio-lines" };
-  // Local Lucide primitives keep record actions consistent with media symbols.
-  const LOCAL_ICON_PATHS = Object.freeze({
-    "image": '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-4 4-2-2-5 5"/>',
-    "square-play": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4z"/>',
-    "audio-lines": '<path d="M4 10v4"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 8v8"/><path d="M20 10v4"/>',
-    "circle-alert": '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
-    "circle-minus": '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
-    "info": '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
-    "copy": '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
-    "pencil": '<path d="m16 3 5 5M4 16 16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1z"/>',
-    "rotate-cw": '<path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1 6.7 2.8L21 8"/><path d="M21 3v5h-5"/>',
-    "locate": '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>',
-  });
   let nextPopover = 0;
 
   function createController({ document, container, getScope, getTasks, getTask, onAction,
@@ -63,8 +50,7 @@
       return busy(task) && (canCancel ? canCancel(task) : now() < Number(task.cancelUntil || 0));
     }
     function icon(name) {
-      if (LOCAL_ICON_PATHS[name]) return `<svg data-generation-icon="${name}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${LOCAL_ICON_PATHS[name]}</svg>`;
-      return `<i data-lucide="${name}" aria-hidden="true"></i>`;
+      return global.REELAY_ICONS.markup(name, { "data-generation-icon": name });
     }
     function references(input) {
       const raw = Array.isArray(input.referenceSnapshot) ? input.referenceSnapshot
@@ -153,8 +139,9 @@
       <div class="generation-record-output"></div>
       <footer class="generation-record-footer">
         <div class="generation-record-actions">
-          <button type="button" data-generation-action="cancel" class="generation-record-cancel">取消生成</button>
-          <span class="generation-record-terminal-actions"><button type="button" data-generation-action="edit">${icon("pencil")}重新编辑</button><button type="button" data-generation-action="again">${icon("rotate-cw")}再次生成</button><button type="button" data-generation-action="locate" class="generation-record-icon-action" aria-label="定位画布中的生成结果" title="定位生成结果" hidden>${icon("locate")}</button><button type="button" data-record-popover="menu" class="generation-record-more" aria-label="更多操作" aria-expanded="false">${icon("more-horizontal")}</button><span data-record-delete-reveal hidden inert><button type="button" data-generation-action="remove">${icon("trash-2")}<span>删除此记录</span></button></span></span>
+          <button type="button" data-generation-action="edit">${icon("square-pen")}重新编辑</button>
+          <button type="button" data-generation-action="cancel" class="generation-record-cancel" aria-label="取消生成" aria-description="发送后 7 秒内可取消，取消后返还本次积分" data-tooltip="发送后 7 秒内可取消，取消后返还本次积分">${icon("x")}取消生成</button>
+          <span class="generation-record-terminal-actions"><button type="button" data-generation-action="again">${icon("rotate-ccw")}再次生成</button><button type="button" data-generation-action="locate" class="generation-record-icon-action" aria-label="定位画布中的生成结果" title="定位生成结果" hidden>${icon("locate-fixed")}</button><button type="button" data-record-popover="menu" class="generation-record-more" aria-label="更多操作" aria-expanded="false">${icon("ellipsis")}</button><span data-record-delete-reveal hidden inert><button type="button" data-generation-action="remove">${icon("trash-2")}<span>删除此记录</span></button></span></span>
         </div></footer>`;
       list.append(article);
       const card = { taskId: task.id, element: article, entries, signature: "", input: task.input, start: 0, pageSize: 0 };
@@ -224,7 +211,11 @@
       }
       article.querySelector(".generation-record-terminal-actions").hidden = busy(task);
       const cancel = article.querySelector('[data-generation-action="cancel"]');
+      const cancelFocused = document.activeElement === cancel;
       cancel.hidden = !cancellable(task);
+      if (cancel.hidden && cancelFocused) {
+        article.querySelector('[data-generation-action="edit"]').focus({ preventScroll: true });
+      }
       const locate = article.querySelector('[data-generation-action="locate"]');
       locate.hidden = task.status !== "succeeded";
       locate.setAttribute("aria-disabled", String(!task.addedNodeId));
@@ -658,6 +649,7 @@
       if (action && (list.contains(action) || popover.contains(action))) {
         const name = action.dataset.generationAction;
         if (name === "cancel" && !cancellable(task)) return;
+        if (name === "again" && busy(task)) return;
         if (name === "remove" && (busy(task) || action.closest("[data-record-delete-reveal]")?.hidden)) return;
         if (name === "locate" && (task.status !== "succeeded" || !task.addedNodeId)) return;
         event.preventDefault(); event.stopPropagation(); if (name === "remove") dismiss();

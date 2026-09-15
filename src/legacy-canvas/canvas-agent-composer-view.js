@@ -221,8 +221,8 @@
         const label = available ? entry.label : `${part.fallbackLabel} · 已移除`;
         const title = available ? `${entry.label}：${entry.name}` : label;
         const thumb = available && entry.mediaType === "image" ? assetPreview(entry.asset)
-          : `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${part.mediaType === "video" ? "m6 4 6 4-6 4Z"
-            : part.mediaType === "audio" ? "M3 6v4m3-7v10m4-9v8m3-6v4" : "M3 3h10v10H3zM3 10l3-3 4 6m-1-4 2-2 2 3"}"/></svg>`;
+          : global.REELAY_ICONS.markup(part.mediaType === "video" ? "square-play"
+            : part.mediaType === "audio" ? "audio-lines" : "image");
         return `<span class="prompt-reference${available ? "" : " is-missing"}" data-reference-key="${escapeHtml(part.key)}"
           data-media-type="${part.mediaType}" contenteditable="false" role="button" tabindex="0"
           title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}${available ? "，预览" : ""}"><span class="prompt-reference-thumb" aria-hidden="true">${thumb}</span><span class="prompt-reference-label">${escapeHtml(label)}</span></span>`;

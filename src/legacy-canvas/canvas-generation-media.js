@@ -3,16 +3,16 @@
 
   const mounted = new WeakMap();
   const icons = {
-    play: '<path d="m9 5 11 7-11 7Z"/>',
-    pause: '<path d="M8 5v14M16 5v14"/>',
-    volume: '<path d="m11 5-6 4H2v6h3l6 4ZM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
-    muted: '<path d="m11 5-6 4H2v6h3l6 4ZM17 9l5 6M22 9l-5 6"/>',
-    expand: '<path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/>',
-    collapse: '<path d="M3 8h5V3M21 8h-5V3M16 21v-5h5M8 21v-5H3"/>',
+    play: "play",
+    pause: "pause",
+    volume: "volume-2",
+    muted: "volume-x",
+    expand: "maximize",
+    collapse: "minimize",
   };
 
   function icon(name) {
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
+    return root.REELAY_ICONS.markup(icons[name]);
   }
 
   function timeLabel(value) {

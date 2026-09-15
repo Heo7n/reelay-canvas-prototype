@@ -136,7 +136,7 @@
           card.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight");
           card.innerHTML = `<div class="asset-thumb">${assetPreview(entry.asset)}</div>
             <span class="reference-number" aria-hidden="true"></span>
-            <button class="asset-remove" type="button" data-reference-remove="${escapeHtml(entry.asset.id)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>`;
+            <button class="asset-remove" type="button" data-reference-remove="${escapeHtml(entry.asset.id)}">${global.REELAY_ICONS.markup("x")}</button>`;
           cards.set(entry.key, card);
         }
         card.dataset.referenceLocked = String(locked);

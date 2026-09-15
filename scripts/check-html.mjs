@@ -37,7 +37,10 @@ for (const contract of pageContracts) {
 
   for (const reference of localReferences) {
     const cleanPath = reference.split(/[?#]/, 1)[0];
-    await access(new URL(cleanPath, root));
+    if (cleanPath === "./assets/canvas-icons.js") {
+      await access(new URL("src/icons/index.js", root));
+      await access(new URL("scripts/build-canvas-icons.mjs", root));
+    } else await access(new URL(cleanPath, root));
   }
 
   // The editor is a lazy dev endpoint and a hashed build output, not a

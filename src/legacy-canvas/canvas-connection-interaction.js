@@ -18,28 +18,17 @@
   });
 
   const DEFAULTS = Object.freeze({
+    hitOutwardRadius: 72,
+    hitHorizontalRadius: 34,
+    hitVerticalRadius: 40,
     fieldOutwardRadius: 148,
     fieldVerticalRadius: 108,
     snapOutwardRadius: 104,
     snapVerticalRadius: 78,
-    snapExitPadding: 18,
+    snapExitPadding: 12,
     portOffset: 38,
     portMinOutside: 17,
     snapSwitchBias: 10,
-  });
-
-  const PORT_GEOMETRY = Object.freeze({
-    fieldOutwardRadius: 148,
-    fieldVerticalRadius: 108,
-    minScreenOutwardRadius: 64,
-    minScreenVerticalRadius: 24,
-    snapOutwardRadius: 104,
-    snapVerticalRadius: 78,
-    minScreenSnapOutwardRadius: 52,
-    minScreenSnapVerticalRadius: 20,
-    snapExitPadding: 18,
-    portOffset: 38,
-    portMinOutside: 17,
   });
 
   const AGGREGATE_PORT_GEOMETRY = Object.freeze({
@@ -62,6 +51,9 @@
   function mergeOptions(options) {
     const source = options && typeof options === "object" ? options : {};
     const merged = {
+      hitOutwardRadius: positive(source.hitOutwardRadius, DEFAULTS.hitOutwardRadius),
+      hitHorizontalRadius: positive(source.hitHorizontalRadius, DEFAULTS.hitHorizontalRadius),
+      hitVerticalRadius: positive(source.hitVerticalRadius, DEFAULTS.hitVerticalRadius),
       fieldOutwardRadius: positive(source.fieldOutwardRadius, DEFAULTS.fieldOutwardRadius),
       fieldVerticalRadius: positive(source.fieldVerticalRadius, DEFAULTS.fieldVerticalRadius),
       snapOutwardRadius: positive(source.snapOutwardRadius, DEFAULTS.snapOutwardRadius),
@@ -73,6 +65,9 @@
     };
     merged.fieldOutwardRadius = Math.max(0.01, merged.portMinOutside, merged.fieldOutwardRadius);
     merged.fieldVerticalRadius = Math.max(0.01, merged.fieldVerticalRadius);
+    merged.hitOutwardRadius = Math.max(0.01, merged.hitOutwardRadius);
+    merged.hitHorizontalRadius = Math.max(0.01, merged.hitHorizontalRadius);
+    merged.hitVerticalRadius = Math.max(0.01, merged.hitVerticalRadius);
     merged.snapOutwardRadius = clamp(
       Math.max(0.01, merged.snapOutwardRadius),
       0.01,
@@ -93,33 +88,30 @@
 
   function getScaledPortGeometry(canvasScale) {
     const scale = Math.max(0.01, finite(canvasScale, 1));
+    const portOffset = DEFAULTS.portOffset * scale;
+    const hitHorizontalRadius = Math.max(22, DEFAULTS.hitHorizontalRadius * scale);
+    // The visible port belongs to the node. Only invisible target tolerances
+    // retain a small screen floor when the canvas is zoomed out.
     return {
-      fieldOutwardRadius: Math.max(
-        PORT_GEOMETRY.minScreenOutwardRadius,
-        PORT_GEOMETRY.fieldOutwardRadius * scale,
-      ),
-      fieldVerticalRadius: Math.max(
-        PORT_GEOMETRY.minScreenVerticalRadius,
-        PORT_GEOMETRY.fieldVerticalRadius * scale,
-      ),
-      snapOutwardRadius: Math.max(
-        PORT_GEOMETRY.minScreenSnapOutwardRadius,
-        PORT_GEOMETRY.snapOutwardRadius * scale,
-      ),
-      snapVerticalRadius: Math.max(
-        PORT_GEOMETRY.minScreenSnapVerticalRadius,
-        PORT_GEOMETRY.snapVerticalRadius * scale,
-      ),
-      snapExitPadding: PORT_GEOMETRY.snapExitPadding,
-      portOffset: PORT_GEOMETRY.portOffset * scale,
-      portMinOutside: PORT_GEOMETRY.portMinOutside * scale,
+      ...DEFAULTS,
+      portOffset,
+      portMinOutside: DEFAULTS.portMinOutside * scale,
+      visualSize: DEFAULTS.portMinOutside * 2 * scale,
+      hitHorizontalRadius,
+      hitOutwardRadius: portOffset + hitHorizontalRadius,
+      hitVerticalRadius: Math.max(22, DEFAULTS.hitVerticalRadius * scale),
+      fieldOutwardRadius: Math.max(64, DEFAULTS.fieldOutwardRadius * scale),
+      fieldVerticalRadius: Math.max(24, DEFAULTS.fieldVerticalRadius * scale),
+      snapOutwardRadius: Math.max(52, DEFAULTS.snapOutwardRadius * scale),
+      snapVerticalRadius: Math.max(20, DEFAULTS.snapVerticalRadius * scale),
     };
   }
 
   function getAggregatePortGeometry(canvasScale) {
     const scaled = getScaledPortGeometry(canvasScale);
+    const scale = Math.max(0.01, finite(canvasScale, 1));
     const visualSize = clamp(
-      scaled.portMinOutside * 2,
+      34 * scale,
       AGGREGATE_PORT_GEOMETRY.minVisualSize,
       AGGREGATE_PORT_GEOMETRY.maxVisualSize,
     );
@@ -128,7 +120,7 @@
       ...scaled,
       // Aggregate chrome is in screen space; keep its disk and complete hit target outside the frame.
       portOffset: clamp(
-        scaled.portOffset,
+        38 * scale,
         hitSize / 2 + AGGREGATE_PORT_GEOMETRY.frameHitGap,
         AGGREGATE_PORT_GEOMETRY.maxOffset,
       ),
@@ -190,16 +182,16 @@
     };
     const activationRect = side === "left"
       ? {
-        left: anchor.x - settings.fieldOutwardRadius,
+        left: anchor.x - settings.hitOutwardRadius,
         right: anchor.x,
-        top: anchor.y - settings.fieldVerticalRadius,
-        bottom: anchor.y + settings.fieldVerticalRadius,
+        top: anchor.y - settings.hitVerticalRadius,
+        bottom: anchor.y + settings.hitVerticalRadius,
       }
       : {
         left: anchor.x,
-        right: anchor.x + settings.fieldOutwardRadius,
-        top: anchor.y - settings.fieldVerticalRadius,
-        bottom: anchor.y + settings.fieldVerticalRadius,
+        right: anchor.x + settings.hitOutwardRadius,
+        top: anchor.y - settings.hitVerticalRadius,
+        bottom: anchor.y + settings.hitVerticalRadius,
       };
 
     return Object.freeze({
@@ -209,6 +201,9 @@
       anchor: Object.freeze(anchor),
       restCenter: Object.freeze(restCenter),
       activationRect: Object.freeze(activationRect),
+      hitOutwardRadius: settings.hitOutwardRadius,
+      hitHorizontalRadius: settings.hitHorizontalRadius,
+      hitVerticalRadius: settings.hitVerticalRadius,
       fieldOutwardRadius: settings.fieldOutwardRadius,
       fieldVerticalRadius: settings.fieldVerticalRadius,
       snapOutwardRadius: settings.snapOutwardRadius,
@@ -260,25 +255,32 @@
     if (!nextPointer || !port || port.disabled) return null;
     const requireActivation = options?.requireActivation !== false;
     const coordinates = getPortFieldCoordinates(nextPointer, port);
-    const { direction, outward, vertical } = coordinates;
+    const { outward } = coordinates;
     if (outward < 0) return null;
-    const insideActivation = isPointInPortField(nextPointer, port);
+    const insideActivation = isPointInPortHitArea(nextPointer, port);
     if (requireActivation && !insideActivation) return null;
 
-    const clampedOutward = clamp(
-      outward,
-      port.portMinOutside,
-      port.fieldOutwardRadius,
-    );
-    const outwardRatio = clampedOutward / port.fieldOutwardRadius;
-    const verticalLimit = port.fieldVerticalRadius * Math.sqrt(Math.max(
-      0,
-      1 - (outwardRatio ** 2),
-    ));
+    const dx = nextPointer.x - port.restCenter.x;
+    const dy = nextPointer.y - port.restCenter.y;
+    const radius = Math.hypot(dx / port.hitHorizontalRadius, dy / port.hitVerticalRadius);
+    const fade = clamp((radius - 0.45) / 0.55, 0, 1);
+    const attraction = 1 - fade * fade * (3 - 2 * fade);
+    const travel = Math.hypot(dx, dy) * attraction;
+    const maxTravel = Math.max(0, Math.min(port.hitHorizontalRadius, port.hitVerticalRadius) - port.portMinOutside);
+    const follow = travel > maxTravel ? attraction * maxTravel / travel : attraction;
+    const direction = port.side === "left" ? -1 : 1;
     return {
-      x: port.anchor.x + direction * clampedOutward,
-      y: port.anchor.y + clamp(vertical, -verticalLimit, verticalLimit),
+      x: port.anchor.x + direction * Math.max(port.portMinOutside, direction * (port.restCenter.x + dx * follow - port.anchor.x)),
+      y: port.restCenter.y + dy * follow,
     };
+  }
+
+  function isPointInPortHitArea(pointer, port) {
+    const coordinates = getPortFieldCoordinates(pointer, port);
+    if (!coordinates) return false;
+    return coordinates.outward >= 0
+      && ((pointer.x - port.restCenter.x) / port.hitHorizontalRadius) ** 2
+        + ((pointer.y - port.restCenter.y) / port.hitVerticalRadius) ** 2 <= 1;
   }
 
   function findHoveredPort(pointer, registry) {
@@ -290,9 +292,7 @@
       if (!point) continue;
       const distance = distanceBetween(nextPointer, point);
       const restDistance = distanceBetween(nextPointer, port.restCenter);
-      if (!nearest
-        || distance < nearest.distance
-        || (distance === nearest.distance && restDistance < nearest.restDistance)) {
+      if (!nearest || restDistance < nearest.restDistance) {
         nearest = {
           portId: port.id,
           nodeId: port.nodeId,
@@ -332,8 +332,7 @@
     const direction = resolveConnectionDirection(origin, port);
     if (!direction || (canConnect && !canConnect(direction, port, origin))) return null;
     if (!isPointInPortField(pointer, port, radii?.outward, radii?.vertical)) return null;
-    const point = clampPointerToPort(pointer, port, { requireActivation: false });
-    if (!point) return null;
+    const point = port.restCenter;
     return {
       targetPortId: port.id,
       targetNodeId: port.nodeId,
@@ -545,6 +544,7 @@
     getAggregatePortGeometry,
     getScaledPortGeometry,
     isPointInPortField,
+    isPointInPortHitArea,
     resolveConnectionDirection,
     selectNodeBodyCandidate,
     selectSnapCandidate,

@@ -1,31 +1,18 @@
 #agentGenerationRecords[hidden], #agentMessages[hidden] { display: none !important; }
 #agentGenerationRecords { padding: 24px 16px; }
 .generation-record-list, .generation-record-popover {
-  --record-surface-line: rgb(255 255 255 / 4%);
-  --record-ink: #e3e5e9;
-  --record-secondary: #999fa9;
-  --record-chip: #282c32;
-  --record-chip-hover: #343942;
-  --record-chip-ink: #c8cfd9;
-  --record-hairline: rgb(255 255 255 / 9%);
-  --record-accent: #a4c7f1;
-  --record-accent-bg: #25344a;
-  --record-accent-line: #3a4d65;
+  --record-surface-line: var(--agent-panel-line);
+  --record-ink: var(--agent-panel-text);
+  --record-secondary: var(--muted);
+  --record-chip: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 5%);
+  --record-chip-hover: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 9%);
+  --record-chip-ink: var(--color-canvas-text);
+  --record-hairline: var(--agent-panel-line);
   --record-danger: #d8a2a7;
   --record-danger-bg: #302529;
   --record-danger-line: #51383e;
 }
 html[data-theme="light"] :is(.generation-record-list, .generation-record-popover) {
-  --record-surface-line: rgb(99 129 171 / 9%);
-  --record-ink: #414958;
-  --record-secondary: #7a8398;
-  --record-chip: #eff4fc;
-  --record-chip-hover: #e5eefb;
-  --record-chip-ink: #566c91;
-  --record-hairline: #e1e5ec;
-  --record-accent: #527fb5;
-  --record-accent-bg: #eaf2fe;
-  --record-accent-line: #d5e4f8;
   --record-danger: #aa676b;
   --record-danger-bg: #fff8f8;
   --record-danger-line: #eddde0;
@@ -82,7 +69,7 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
 /* Keep metadata on the cover without contributing another layout row. */
 .generation-record-counts {
   position: absolute; inset: auto 0 0;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
   box-sizing: border-box; min-width: 0; padding: 18px 5px 5px;
   border-radius: 0 0 9px 9px;
   background: linear-gradient(transparent, rgb(0 0 0 / 58%));
@@ -104,11 +91,11 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
   /* Let the number's text line define the baseline, rather than the first
      flex item's synthetic (thumbnail) baseline. Keep each reference atomic. */
   display: inline-block; margin: 0; padding: 0 6px 0 2px; border: 0; border-radius: 6px;
-  background: var(--record-chip); box-shadow: inset 0 0 0 1px var(--record-surface-line);
+  background: transparent; box-shadow: inset 0 0 0 1px var(--record-hairline);
   color: var(--record-chip-ink);
   font: inherit; font-size: 12px; font-weight: 500; line-height: 20px; white-space: nowrap;
   vertical-align: baseline; cursor: pointer; user-select: text;
-  transition: background .15s ease, color .15s ease;
+  transition: box-shadow .15s ease, color .15s ease;
 }
 .generation-record-prompt .prompt-reference-thumb,
 .generation-record-full-prompt .prompt-reference-thumb {
@@ -131,7 +118,7 @@ html[data-theme="light"] :is(.generation-record-list, .generation-record-popover
 .generation-record-prompt .prompt-reference:hover .prompt-reference-label,
 .generation-record-full-prompt .prompt-reference:hover .prompt-reference-label { color: var(--record-ink); }
 .generation-record-prompt .prompt-reference:hover,
-.generation-record-full-prompt .prompt-reference:hover { background: var(--record-chip-hover); }
+.generation-record-full-prompt .prompt-reference:hover { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--record-ink) 24%, transparent); }
 .generation-record-prompt .prompt-reference:focus-visible,
 .generation-record-full-prompt .prompt-reference:focus-visible {
   outline: 1px solid var(--canvas-popover-focus-line); outline-offset: 2px;
@@ -174,17 +161,33 @@ audio.generation-record-media { width: 100%; height: 42px; }
 .generation-record-separator { opacity: .5; }
 .generation-record-refund { display: inline-block; margin-left: 9px; }
 .generation-record-outcome button { padding: 0 0 0 10px; border: 0; background: none; color: var(--record-ink); font: inherit; cursor: pointer; }
-.generation-record-footer { display: flex; align-items: center; width: 100%; margin: 10px 0 0; min-height: 38px; }
-.generation-record-actions { min-height: 32px; min-width: 0; display: flex; align-items: center; }
+.generation-record-footer { display: flex; align-items: center; width: 100%; margin: 10px 0 0; min-height: 32px; }
+.generation-record-actions { --record-action-bg: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 3%); min-height: 32px; min-width: 0; display: flex; align-items: center; gap: 8px; }
 .generation-record-terminal-actions { display: flex; gap: 8px; align-items: center; min-width: 0; }
-.generation-record-actions button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--record-hairline); min-height: 38px; padding: 7px 12px; border-radius: 10px; color: var(--record-chip-ink); background: var(--record-surface); font: inherit; font-size: var(--agent-control-font-size); font-weight: 500; line-height: 22px; white-space: nowrap; cursor: pointer; transition: background .15s ease, color .15s ease; }
-.generation-record-actions button > svg { flex: 0 0 17px; width: 17px; height: 17px; stroke-width: 1.8; }
-.generation-record-actions button:hover { background: var(--agent-panel-hover); color: var(--record-ink); }
-.generation-record-actions button[aria-disabled="true"] { color: var(--record-secondary); background: var(--record-surface); opacity: .5; cursor: default; }
-.generation-record-actions button[data-generation-action="edit"] { color: var(--record-accent); background: var(--record-accent-bg); border-color: var(--record-accent-line); }
-.generation-record-actions button[data-generation-action="edit"]:hover { background: color-mix(in srgb, var(--record-accent-bg), var(--record-accent) 9%); }
-.generation-record-actions button:is(.generation-record-more, .generation-record-icon-action) { padding: 4px; width: 38px; display: grid; place-items: center; }
-.generation-record-more svg { width: 17px; height: 17px; }
+.generation-record-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; height: 32px; padding: 0 10px; border-radius: 8px; color: var(--record-ink); background: var(--record-action-bg); font: inherit; font-size: var(--agent-control-font-size); font-weight: 400; line-height: 20px; white-space: nowrap; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.generation-record-actions button > svg { flex: 0 0 16px; width: 16px; height: 16px; stroke-width: 1.8; }
+.generation-record-actions button:hover { background: var(--record-chip-hover); }
+.generation-record-actions button:active { background: color-mix(in srgb, var(--agent-panel-bg), var(--agent-panel-text) 12%); }
+.generation-record-actions button[aria-expanded="true"] { background: var(--record-chip-hover); }
+.generation-record-actions button[aria-disabled="true"] { color: var(--record-secondary); background: transparent; opacity: .5; cursor: default; }
+.generation-record-actions button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
+.generation-record-cancel { position: relative; }
+.generation-record-cancel::after {
+  content: attr(data-tooltip); position: absolute; bottom: calc(100% + 8px); left: 50%;
+  width: max-content; max-width: 230px; padding: 8px 10px; border: 1px solid var(--canvas-popover-line);
+  border-radius: 8px; background: var(--canvas-popover-bg); color: var(--record-ink);
+  box-shadow: var(--canvas-popover-shadow); font-size: 12px; font-weight: 400; line-height: 1.6;
+  white-space: normal; text-align: left; pointer-events: none; visibility: hidden; opacity: 0;
+  transform: translate(-50%, 3px); transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+  z-index: 1;
+}
+.generation-record-cancel:is(:hover, :focus-visible)::after {
+  visibility: visible; opacity: 1; transform: translate(-50%, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .generation-record-cancel::after { transition: none; }
+}
+.generation-record-actions button:is(.generation-record-more, .generation-record-icon-action) { padding: 0; width: 32px; display: grid; place-items: center; }
 .generation-record [data-record-delete-reveal] { display: inline-flex; min-width: 0; overflow: hidden; animation: generation-record-delete-reveal .18s ease-out; }
 .generation-record [data-record-delete-reveal] button { display: inline-flex; align-items: center; gap: 5px; color: var(--record-danger); background: var(--record-danger-bg); border-color: var(--record-danger-line); }
 .generation-record [data-record-delete-reveal] svg { flex: 0 0 13px; width: 13px; height: 13px; }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { canvasIconsSource } from "./helpers/canvas-icons.mjs";
 import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
@@ -13,7 +14,7 @@ const paths = [...scriptDocument.window.document.querySelectorAll("script[src]")
   .filter((src) => src.startsWith("./"))
   .map((src) => src.split("?")[0]);
 scriptDocument.window.close();
-const sources = await Promise.all(paths.map(async (path) => ({ path, source: await readFile(new URL(path, root), "utf8") })));
+const sources = await Promise.all(paths.map(async (path) => ({ path, source: path === "./assets/canvas-icons.js" ? canvasIconsSource : await readFile(new URL(path, root), "utf8") })));
 const promptEditorSource = await buildPromptEditor(fileURLToPath(root));
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -354,6 +355,44 @@ test("edit restores original model, parameters and stable @ bindings and protect
   assert.equal(resolved.valid, true);
   assert.deepEqual(plain(resolved.document), plain(task.input.promptDocument));
 });
+
+for (const elapsed of [0, 7000]) {
+  test(`editing an active task at ${elapsed}ms restores a snapshot without canceling, charging or changing the original task`, (t) => {
+    const h = harness(t);
+    const saved = withReferences(h);
+    const task = h.send(null);
+    const input = plain(task.input);
+    h.advance(elapsed);
+    const status = task.status;
+    h.agentModels.setGenerationModel("gpt-image-2");
+    h.draft("保留当前尚未发送的草稿");
+    h.click(task, "edit");
+    assert.equal(h.editor().getText(), "保留当前尚未发送的草稿");
+    assert.equal(h.agentModels.getModel().id, "gpt-image-2");
+    assert.equal(task.status, status);
+    h.draft("");
+    h.click(task, "edit");
+    assert.equal(h.agentModels.getModel().id, input.modelId);
+    assert.deepEqual(plain(h.agentParameters.getCurrent()), input.parameters);
+    assert.deepEqual(plain(h.agentReferences.getAssets()), saved.references);
+    const resolved = h.window.REELAY_CANVAS_PROMPT_DOCUMENT.resolve(h.editor().getDocument(), h.agentReferences.getEntries());
+    assert.equal(resolved.valid, true);
+    assert.deepEqual(plain(resolved.document), input.promptDocument);
+    assert.equal(task.status, status);
+    assert.equal(task.refunded, 0);
+    assert.equal(h.service.list().length, 1);
+    assert.equal(h.state.account.credits, 2976);
+    h.draft("改写恢复的提示词");
+    h.agentReferences.restoreAssets([], h.agentReferences.captureScope(), { replace: true });
+    assert.deepEqual(plain(task.input), input, "editing the recovered draft must not mutate the sent snapshot");
+    h.advance(11000 - elapsed);
+    assert.equal(task.status, "succeeded", "the original generation retains its original completion schedule");
+    assert.ok(task.addedNodeId);
+    assert.equal(h.editor().getText(), "改写恢复的提示词");
+    assert.equal(h.state.account.credits, 2976);
+    assert.equal(h.state.account.consumedCredits, 24);
+  });
+}
 
 test("success automatically places once without changing existing selection or viewport; undo does not regenerate it", (t) => {
   const h = harness(t);

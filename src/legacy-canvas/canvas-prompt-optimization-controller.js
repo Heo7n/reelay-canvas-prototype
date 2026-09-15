@@ -82,7 +82,7 @@
       toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
       const status = document.createElement("span"); status.className = "prompt-optimization-toast-status";
       status.setAttribute("aria-hidden", "true");
-      status.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="./assets/icons/prompt-optimization.svg#${tone === "success" ? "check" : "info"}"/></svg>`;
+      status.innerHTML = root.REELAY_ICONS.markup(tone === "success" ? "check" : "info");
       const content = document.createElement("span"); content.className = "prompt-optimization-toast-content"; content.textContent = text; toast.append(status, content);
       if (label && action) {
         const button = document.createElement("button"); button.type = "button"; button.textContent = label;

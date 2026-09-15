@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { installCanvasIcons } from "./helpers/canvas-icons.mjs";
 
 const [source, placement, mediaPlayer, referencePreview] = await Promise.all([
   "canvas-generation-record-view.js", "canvas-popover-placement.js", "canvas-generation-media.js", "canvas-generation-reference-preview.js",
@@ -10,6 +11,7 @@ const [source, placement, mediaPlayer, referencePreview] = await Promise.all([
 function fixture(t, options = {}) {
   const dom = new JSDOM('<!doctype html><body><div id="records"></div><button id="outside">其他</button></body>', { runScripts: "outside-only" });
   const { window } = dom; const { document } = window;
+  installCanvasIcons(window);
   // jsdom lacks the native reflected inert property used by the inline actions.
   if (!("inert" in window.HTMLElement.prototype)) {
     Object.defineProperty(window.HTMLElement.prototype, "inert", {
@@ -105,16 +107,38 @@ test("record video controls dispose on result removal while hiding only pauses p
   assert.equal(current.textContent, "0:03", "removed player releases its media event listeners");
 });
 
-test("busy record exposes cancellation for seven seconds with no countdown or delete action", (t) => {
-  const f = fixture(t); const task = f.task(); f.setTasks([task]);
-  const cancel = f.query('[data-generation-action="cancel"]');
-  assert.equal(cancel.hidden, false); assert.equal(cancel.textContent, "取消生成");
-  assert.equal(f.query(".generation-record-terminal-actions").hidden, true);
-  assert.equal(f.timers.size, 0, "service owns task deadline timers");
-  f.advance(6999); assert.equal(cancel.hidden, false);
-  f.advance(2); f.controller.render(); assert.equal(cancel.hidden, true);
-  cancel.click(); assert.equal(f.actions.length, 0);
-  assert.ok(f.query(".generation-record-wait"));
+for (const status of ["queued", "running"]) {
+  test(`${status} record offers edit before cancellation, then keeps edit after the seven-second deadline`, (t) => {
+    const f = fixture(t); const task = f.task({ status }); f.setTasks([task]);
+    const edit = f.query('[data-generation-action="edit"]');
+    const cancel = f.query('[data-generation-action="cancel"]');
+    const visibleActions = () => f.all('[data-generation-action]').filter((button) => !button.closest("[hidden], [inert]"));
+    assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["edit", "cancel"]);
+    assert.equal(cancel.textContent.trim(), "取消生成");
+    assert.match(cancel.dataset.tooltip, /发送后\s*7\s*秒内可取消/);
+    assert.match(cancel.getAttribute("aria-description"), /取消后返还本次积分/);
+    assert.equal(f.timers.size, 0, "service owns task deadline timers");
+    edit.click(); assert.deepEqual(f.actions.map(([action]) => action), ["edit"]);
+    f.query('[data-generation-action="again"]').click();
+    f.query('[data-generation-action="remove"]').click();
+    assert.deepEqual(f.actions.map(([action]) => action), ["edit"], "hidden terminal actions cannot submit duplicate tasks or delete active ones");
+    f.advance(6999); f.controller.render(); assert.equal(cancel.hidden, false);
+    cancel.focus();
+    f.advance(1); f.controller.render();
+    assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["edit"]);
+    assert.equal(f.document.activeElement, edit, "expiration returns focus from the disappearing cancel action");
+    cancel.click(); assert.equal(f.actions.length, 1);
+    edit.click(); assert.deepEqual(f.actions.map(([action]) => action), ["edit", "edit"]);
+    assert.ok(f.query(".generation-record-wait"));
+  });
+}
+
+test("the cancellation deadline does not steal focus from another control", (t) => {
+  const f = fixture(t); f.setTasks([f.task()]);
+  const outside = f.query("#outside"); outside.focus();
+  f.advance(7000); f.controller.render();
+  assert.equal(f.query('[data-generation-action="cancel"]').hidden, true);
+  assert.equal(f.document.activeElement, outside);
 });
 
 test("cancel and failure collapse output and only confirmed refund is displayed", (t) => {
@@ -950,9 +974,10 @@ test("media counts reuse existing icons and task affordances do not degrade to f
   f.setTasks([task]);
   assert.ok(f.query('.generation-record-counts svg[data-generation-icon="square-play"]'));
   assert.ok(f.query('.generation-record-counts svg[data-generation-icon="audio-lines"]'));
-  assert.ok(f.query('.generation-record-more [data-lucide="more-horizontal"]'));
+  assert.ok(f.query('.generation-record-more svg[data-generation-icon="ellipsis"]'));
   task.status = "failed"; f.controller.render();
-  assert.ok(f.query('.generation-record-outcome svg[data-generation-icon="circle-alert"] path'));
+  const statusIcon = f.query('.generation-record-outcome svg[data-generation-icon="circle-alert"]');
+  assert.equal(statusIcon.outerHTML, f.window.REELAY_ICONS.markup('circle-alert', { 'data-generation-icon': 'circle-alert' }));
   assert.ok(f.query('[data-record-popover="details"]'));
   f.query('[data-record-popover="details"]').click();
   assert.ok(f.query('.generation-record-details-popover [data-generation-icon="copy"]'));
