@@ -222,7 +222,7 @@ test("pending media is a deeply immutable independent draft without network or r
 
 test("disables unavailable capabilities, a single node, and progressive catalog failure", () => {
   const options = { nodes: [node("a"), node("b")], personalMedia: [media("a"), media("b")] };
-  assert.equal(plan({ ...options, canCreate: false }).reason, "当前画布不可新建素材组");
+  assert.equal(plan({ ...options, canCreate: false }).reason, "当前画布不可新建主体");
   assert.equal(plan({ ...options, nodes: [node("a")] }).reason, "请先选择至少 2 个节点");
   assert.equal(plan({ ...options, catalogStatus: "loading" }).reason, "个人素材库加载中，请稍后重试");
   assert.equal(plan({ ...options, catalogStatus: "unavailable" }).reason, "个人素材库暂不可用，请稍后重试");

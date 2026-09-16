@@ -16,16 +16,16 @@
       close();
       const groupsOnly = items.every((item) => item.kind === "entity");
       const folder = items.length === 1 && items[0].kind === "folder";
-      const noun = folder ? "文件夹" : groupsOnly ? "素材组"
+      const noun = folder ? "文件夹" : groupsOnly ? "主体"
         : items.every((item) => item.kind === "media") ? "素材" : "资产";
       const owner = { scope: options.getScopeKey(), space, items: items.map((item) => ({ ...item })), pending: false };
       active = owner;
       owner.dismiss = options.confirm({
         title: `删除${items.length > 1 ? ` ${items.length} 个` : ""}${noun}？`,
         body: folder
-          ? `「${folderName}」及其子文件夹中的素材将从${space === "organization" ? "组织" : "个人"}空间移除。已放到画布上的内容会保留；仍被素材组引用时无法删除。此操作无法撤销。`
-          : groupsOnly ? "素材组将从当前空间移除，组内素材和已放到画布上的内容会保留。此操作无法撤销。"
-            : "所选资产将从当前空间移除，已放到画布上的内容会保留。仍被未选中素材组引用时无法删除。此操作无法撤销。",
+          ? `「${folderName}」及其子文件夹中的素材将从${space === "organization" ? "组织" : "个人"}空间移除。已放到画布上的内容会保留；仍被主体引用时无法删除。此操作无法撤销。`
+          : groupsOnly ? "主体将从当前空间移除，组内素材和已放到画布上的内容会保留。此操作无法撤销。"
+            : "所选资产将从当前空间移除，已放到画布上的内容会保留。仍被未选中主体引用时无法删除。此操作无法撤销。",
         confirmText: `删除${noun}`,
         danger: true,
         waitForConfirm: true,

@@ -38,6 +38,185 @@ afterEach(() => {
 });
 
 describe("ExperienceAssetStore", () => {
+  it("saves subject tags with content, preserves omitted tags, clears explicitly and rejects stale editor snapshots", async () => {
+    const instance = store();
+    const base = { workspaceId, space: "personal" as const };
+    const catalog = await instance.library.list(workspaceId);
+    const assetId = catalog.entries[0]!.assetId;
+    const custom = await instance.library.createTag({ ...base, name: "Subject tag" });
+    const organization = await instance.library.createTag({ ...base, space: "organization", name: "Foreign tag" });
+    const input = { workspaceId, idempotencyKey: "experience-subject-tags", name: "Subject", description: "", assetIds: [assetId], coverAssetId: assetId, tagIds: [custom.id] };
+    const created = await instance.entities.create(input);
+    expect(created.libraryTagIds).toEqual([custom.id]);
+    await expect(instance.entities.create(input)).resolves.toEqual(created);
+    await expect(instance.entities.create({ ...input, tagIds: [] })).rejects.toMatchObject({ code: "conflict" });
+    const update = { workspaceId, entityId: created.id, expectedVersion: 1, name: "Updated", description: "", assetIds: [assetId], coverAssetId: assetId, tagIds: ["builtin:character"], expectedTagIds: [custom.id] };
+    await expect(instance.entities.update({ ...update, tagIds: [organization.id] })).rejects.toMatchObject({ serviceCode: "tag_not_found" });
+    await instance.library.updateTags({ ...base, operation: "add", tagIds: ["builtin:scene"], items: [{ kind: "entity", id: created.id }] });
+    await expect(instance.entities.update(update)).rejects.toMatchObject({ serviceCode: "placement_changed" });
+    expect((await instance.entities.get(workspaceId, created.id)).name).toBe("Subject");
+    const saved = await instance.entities.update({ ...update, expectedTagIds: [custom.id, "builtin:scene"] });
+    expect(saved.libraryTagIds).toEqual(["builtin:character"]);
+    const preserved = await instance.entities.update({ ...update, expectedVersion: 2, tagIds: undefined, expectedTagIds: undefined });
+    expect(preserved.libraryTagIds).toEqual(["builtin:character"]);
+    const cleared = await instance.entities.update({ ...update, expectedVersion: 3, tagIds: [], expectedTagIds: ["builtin:character"] });
+    expect(cleared.libraryTagIds).toEqual([]);
+    expect((await instance.library.list(workspaceId)).entityEntries!.find((entry) => entry.entityId === created.id)!.tagIds).toEqual([]);
+    expect((await instance.library.list(workspaceId)).entries).toEqual(catalog.entries);
+  });
+
+  it("detaches legacy subject locations when deleting directories while retaining subjects and their members", async () => {
+    const instance = store();
+    const context = { workspaceId, space: "personal" as const };
+    const before = await instance.library.list(workspaceId);
+    const assetId = before.entries[0]!.assetId;
+    const folder = await instance.library.createFolder({ ...context, parentId: null, name: "Group folder" });
+    const destination = await instance.library.createFolder({ ...context, parentId: null, name: "Destination" });
+    const creation = { workspaceId, folderId: folder.id, idempotencyKey: "placed-group", name: "Group", description: "", assetIds: [assetId], coverAssetId: assetId };
+    const group = await instance.entities.create(creation);
+    await instance.library.updateTags({ ...context, operation: "add", tagIds: ["builtin:object"], items: [{ kind: "entity", id: group.id }] });
+    const request = { ...context, folderId: destination.id, items: [{ entityId: group.id, expectedFolderId: folder.id }] };
+    const moved = await instance.library.moveEntities(request);
+    expect(moved.entries).toEqual(before.entries);
+    expect(moved.entityEntries!.find((entry) => entry.entityId === group.id)).toMatchObject({ folderId: destination.id, tagIds: ["builtin:object"] });
+    expect(await instance.library.moveEntities(request)).toEqual(moved);
+    expect(await instance.entities.create(creation)).toEqual({ ...group, libraryTagIds: ["builtin:object"] });
+    await expect(instance.library.moveEntities({ ...request, folderId: null })).rejects.toMatchObject({ serviceCode: "placement_changed" });
+    const result = await instance.library.delete({ ...context, items: [{ kind: "folder", id: destination.id }] });
+    expect(result.entries).toEqual(before.entries);
+    expect(result.entityEntries!.find((entry) => entry.entityId === group.id)).toEqual({ ...moved.entityEntries!.find((entry) => entry.entityId === group.id), folderId: null });
+    expect(await instance.entities.get(workspaceId, group.id)).toEqual({ ...group, libraryTagIds: ["builtin:object"] });
+    expect(result.folders.some((entry) => entry.id === destination.id)).toBe(false);
+    expect(await instance.library.delete({ ...context, items: [{ kind: "folder", id: destination.id }] })).toEqual(result);
+    await expect(instance.entities.create({ ...creation, idempotencyKey: "bad-folder", folderId: "missing" })).rejects.toMatchObject({ serviceCode: "folder_not_found" });
+    instance.reset();
+    expect(await instance.library.list(workspaceId)).toEqual(before);
+  });
+
+  it("does not delete a directory whose media is used by a subject historically placed in the same directory", async () => {
+    const instance = store();
+    const context = { workspaceId, space: "personal" as const };
+    const imported = await instance.importFile(upload());
+    const folder = await instance.library.createFolder({ ...context, parentId: null, name: "Legacy" });
+    await instance.library.save({ ...context, projectId: "project-one", folderId: folder.id, tagIds: [],
+      items: [{ assetId: imported.asset.id, displayName: "Member", action: "move", expectedFolderId: null }] });
+    const group = await instance.entities.create({ workspaceId, folderId: folder.id, idempotencyKey: "protected-subject", name: "Subject", description: "", assetIds: [imported.asset.id], coverAssetId: imported.asset.id });
+    const before = await instance.library.list(workspaceId);
+    await expect(instance.library.delete({ ...context, items: [{ kind: "folder", id: folder.id }] })).rejects.toMatchObject({ serviceCode: "library_item_in_use" });
+    expect(await instance.library.list(workspaceId)).toEqual(before);
+    expect(await instance.entities.get(workspaceId, group.id)).toEqual(group);
+    const after = await instance.library.delete({ ...context, items: [{ kind: "entity", id: group.id, expectedVersion: group.version }, { kind: "folder", id: folder.id }] });
+    expect(after.entityEntries!.some((entry) => entry.entityId === group.id)).toBe(false);
+    expect(after.entries.some((entry) => entry.assetId === imported.asset.id)).toBe(false);
+  });
+
+  it("deletes custom tags and every scoped association atomically while retaining media and group content", async () => {
+    const instance = store();
+    const [group] = await instance.entities.listPersonal(workspaceId);
+    const assetId = group!.mediaRefs[0]!.assetId;
+    const base = { workspaceId, space: "personal" as const };
+    const custom = await instance.library.createTag({ ...base, name: "精选" });
+    const other = await instance.library.createTag({ ...base, space: "organization", name: "精选" });
+    await instance.library.save({ ...base, projectId: "project-one", space: "organization", folderId: null,
+      tagIds: [other.id], items: [{ assetId, displayName: "组织素材", action: "add" }] });
+    await instance.library.updateTags({ ...base, operation: "add", tagIds: [custom.id],
+      items: [{ kind: "media", id: assetId }, { kind: "entity", id: group!.id }] });
+    const before = await instance.library.list(workspaceId);
+    const request = { ...base, tagId: custom.id, expectedUsageCount: 2 };
+    for (const invalid of [{ ...request, expectedUsageCount: 1 }, { ...request, tagId: "builtin:character" }]) {
+      await expect(instance.library.deleteTag(invalid)).rejects.toMatchObject({ serviceCode: invalid.tagId === custom.id ? "tag_usage_changed" : "preset_tag" });
+      expect(await instance.library.list(workspaceId)).toEqual(before);
+    }
+    await expect(instance.library.deleteTag({ ...request, workspaceId: "foreign" })).rejects.toMatchObject({ code: "not_found" });
+    const after = await instance.library.deleteTag(request);
+    expect(after.tags).toEqual(before.tags.filter((tag) => tag.id !== custom.id));
+    expect(after.entries).toEqual(before.entries.map((entry) => entry.space === "personal" ? { ...entry, tagIds: entry.tagIds.filter((id) => id !== custom.id) } : entry));
+    expect(after.entityEntries).toEqual(before.entityEntries!.map((entry) => ({ ...entry, tagIds: entry.tagIds.filter((id) => id !== custom.id) })));
+    expect(after.folders).toEqual(before.folders);
+    expect(await instance.entities.get(workspaceId, group!.id)).toEqual(group);
+    expect(await instance.library.deleteTag(request)).toEqual(after);
+    expect(await instance.library.deleteTag({ ...request, tagId: other.id })).toEqual(after);
+    after.entries[0]!.tagIds.push("caller-mutation");
+    expect((await instance.library.list(workspaceId)).entries[0]!.tagIds).not.toContain("caller-mutation");
+  });
+
+  it("applies tag deltas to selected placements independently of group contents and other spaces", async () => {
+    const instance = store();
+    const initial = await instance.library.list(workspaceId);
+    const [group] = await instance.entities.listPersonal(workspaceId);
+    const assetId = group!.mediaRefs[0]!.assetId;
+    const base = { workspaceId, space: "personal" as const };
+    const custom = await instance.library.createTag({ ...base, name: "精选" });
+    await instance.library.save({ ...base, projectId: "project-one", space: "organization", folderId: null,
+      tagIds: ["builtin:object"], items: [{ assetId, displayName: "组织素材", action: "add" }] });
+    const before = await instance.library.list(workspaceId);
+    const originalAsset = before.entries.find((entry) => entry.assetId === assetId && entry.space === "personal")!;
+    const mixed = { ...base, operation: "add" as const, tagIds: [custom.id, "builtin:scene", custom.id],
+      items: [{ kind: "media" as const, id: assetId }, { kind: "entity" as const, id: group!.id }] };
+    const added = await instance.library.updateTags(mixed);
+    expect(await instance.library.updateTags(mixed)).toEqual(added);
+    expect(added.entries.find((entry) => entry.assetId === assetId && entry.space === "personal"))
+      .toEqual({ ...originalAsset, tagIds: [...new Set([...originalAsset.tagIds, "builtin:scene", custom.id])].sort() });
+    expect(added.entries.filter((entry) => entry.assetId !== assetId || entry.space === "organization"))
+      .toEqual(before.entries.filter((entry) => entry.assetId !== assetId || entry.space === "organization"));
+    expect(added.entityEntries!.find((entry) => entry.entityId === group!.id)!.tagIds)
+      .toEqual(["builtin:character", "builtin:scene", custom.id].sort());
+    const removed = await instance.library.updateTags({ ...base, operation: "remove", tagIds: ["builtin:scene", "builtin:character"],
+      items: [{ kind: "entity", id: group!.id }] });
+    expect(removed.entityEntries!.find((entry) => entry.entityId === group!.id)!.tagIds).toEqual([custom.id]);
+    expect(removed.entries).toEqual(added.entries);
+    expect(await instance.entities.get(workspaceId, group!.id)).toEqual({ ...group, libraryTagIds: [custom.id] });
+    removed.entityEntries![0]!.tagIds.push("caller-mutation");
+    expect((await instance.library.list(workspaceId)).entityEntries![0]!.tagIds).not.toContain("caller-mutation");
+    instance.reset();
+    expect(await instance.library.list(workspaceId)).toEqual(initial);
+  });
+
+  it("rejects an entire tag batch when any target or tag is outside the current placement scope", async () => {
+    const instance = store();
+    const initial = await instance.library.list(workspaceId);
+    const assetId = initial.entries[0]!.assetId;
+    const groupId = initial.entityEntries![0]!.entityId;
+    const foreign = await instance.library.createTag({ workspaceId, space: "organization", name: "组织专用" });
+    const before = await instance.library.list(workspaceId);
+    const base = { workspaceId, space: "personal" as const, operation: "add" as const,
+      tagIds: ["builtin:scene"], items: [{ kind: "media" as const, id: assetId }] };
+    const attempts = [
+      { input: { ...base, items: [...base.items, { kind: "entity" as const, id: "missing" }] }, code: "library_item_not_found" },
+      { input: { ...base, space: "organization" as const }, code: "library_item_not_found" },
+      { input: { ...base, tagIds: [foreign.id] }, code: "tag_not_found" },
+      { input: { ...base, tagIds: ["builtin:sound"] }, code: "tag_not_found" },
+      { input: { ...base, items: [...base.items, ...base.items] }, code: "invalid_request" },
+      { input: { ...base, tagIds: [] }, code: "invalid_request" },
+      { input: { ...base, space: "organization" as const, items: [{ kind: "entity" as const, id: groupId }] }, code: "unsupported" },
+    ];
+    for (const { input, code } of attempts) {
+      await expect(instance.library.updateTags(input)).rejects.toMatchObject({ serviceCode: code });
+      expect(await instance.library.list(workspaceId)).toEqual(before);
+    }
+    await expect(instance.library.updateTags({ ...base, workspaceId: "foreign-workspace" })).rejects.toMatchObject({ code: "not_found" });
+    expect(await instance.library.list(workspaceId)).toEqual(before);
+    const group = await instance.entities.get(workspaceId, groupId);
+    await instance.library.delete({ workspaceId, space: "personal", items: [{ kind: "entity", id: groupId, expectedVersion: group.version }] });
+    const deleted = await instance.library.list(workspaceId);
+    expect(deleted.entityEntries!.some((entry) => entry.entityId === groupId)).toBe(false);
+    await expect(instance.library.updateTags({ ...base, items: [...base.items, { kind: "entity", id: groupId }] }))
+      .rejects.toMatchObject({ serviceCode: "library_item_not_found" });
+    expect(await instance.library.list(workspaceId)).toEqual(deleted);
+  });
+
+  it("keeps new group tags empty even when its name and referenced media suggest a category", async () => {
+    const instance = store();
+    const catalog = await instance.library.list(workspaceId);
+    const assetId = catalog.entries[0]!.assetId;
+    await instance.library.updateTags({ workspaceId, space: "personal", operation: "add",
+      tagIds: ["builtin:scene"], items: [{ kind: "media", id: assetId }] });
+    const group = await instance.entities.create({ workspaceId, idempotencyKey: "untagged-new-group", name: "角色场景", description: "",
+      assetIds: [assetId], coverAssetId: assetId });
+    expect((await instance.library.list(workspaceId)).entityEntries!.find((entry) => entry.entityId === group.id))
+      .toEqual({ entityId: group.id, space: "personal", folderId: null, addedAt: group.createdAt, tagIds: [] });
+  });
+
   it("reports the actual temporary 4 MB policy and supports library SVG and WebM without expanding legacy canvas intake", async () => {
     const instance = store();
     const policy = await instance.media.getUploadPolicy(workspaceId);
@@ -179,8 +358,11 @@ describe("ExperienceAssetStore", () => {
     expect(["默认目录", ...path]).toHaveLength(5);
     expect(path).toEqual(example.path);
     expect(selected.displayName).toBe(example.displayName);
-    expect(selected.tagIds).toContain(example.builtinTagId);
-    expect(catalog.tags.filter((tag) => selected.tagIds.includes(tag.id)).map((tag) => tag.name)).toEqual([example.customTagName]);
+    expect(selected.tagIds).toEqual([example.builtinTagId]);
+    expect(catalog.tags).toEqual([]);
+    expect(catalog.entityEntries).toEqual(DEMO_ENTITY_FIXTURES.map((fixture) => ({
+      entityId: `experience-${fixture.staticEntityId}`, space: "personal", folderId: null, addedAt: "2026-09-07T00:00:00.000Z", tagIds: ["builtin:character"],
+    })));
     const fixture = DEMO_ASSET_FIXTURES.find((asset) => asset.key === example.assetKey)!;
     const projectAsset = await instance.media.attachToProject("project-one", selected.assetId);
     expect(projectAsset.displayName).toBe(fixture.displayName);

@@ -29,8 +29,10 @@ export async function seedDemoLibraryDirectoryExample(
       [DEMO_WORKSPACE_ID, assetId, DEMO_ACTOR_ID],
     );
     const placement = existing.rows[0];
+    const hasInitialTags = placement?.tag_ids.length === 0
+      || (placement?.tag_ids.length === 1 && placement.tag_ids[0] === DEMO_LIBRARY_DIRECTORY_EXAMPLE.builtinTagId);
     if (!placement || !placement.untouched || placement.folder_id !== null
-      || placement.display_name !== expectedDisplayName || placement.tag_ids.length > 0) {
+      || placement.display_name !== expectedDisplayName || !hasInitialTags) {
       await client.query("COMMIT");
       return;
     }
@@ -47,17 +49,10 @@ export async function seedDemoLibraryDirectoryExample(
       );
       parentId = result.rows[0].id;
     }
-    const tag = await client.query<{ id: string }>(
-      `INSERT INTO media_library_tags (id, workspace_id, scope_kind, owner_user_id, name, name_key)
-       VALUES ($1, $2, 'personal', $3, $4, $5)
-       ON CONFLICT (workspace_id, scope_kind, scope_owner, name_key)
-       DO UPDATE SET name_key = EXCLUDED.name_key RETURNING id`,
-      [`tag-${randomUUID()}`, DEMO_WORKSPACE_ID, DEMO_ACTOR_ID, example.customTagName, libraryNameKey(example.customTagName)],
-    );
     await client.query(
       `UPDATE media_asset_placements SET display_name = $4, folder_id = $5, tag_ids = $6, updated_at = now()
        WHERE workspace_id = $1 AND asset_id = $2 AND scope_kind = 'personal' AND owner_user_id = $3`,
-      [DEMO_WORKSPACE_ID, assetId, DEMO_ACTOR_ID, example.displayName, parentId, [example.builtinTagId, tag.rows[0].id]],
+      [DEMO_WORKSPACE_ID, assetId, DEMO_ACTOR_ID, example.displayName, parentId, [example.builtinTagId]],
     );
     await client.query("COMMIT");
   } catch (error) {

@@ -54,19 +54,19 @@ test("editor initially displays the thumbnail while retaining the original as it
 
 test("registers a frozen pure Entity editor and Media picker API", () => {
   assert.ok(Object.isFrozen(view));
-  assert.deepEqual(Object.keys(view).sort(), ["renderEntityEditor", "renderMediaPicker"]);
+  assert.deepEqual(Object.keys(view).sort(), ["renderEntityEditor", "renderEntityTagOptions", "renderMediaPicker"]);
   assert.equal(typeof view.renderEntityEditor, "function");
   assert.equal(typeof view.renderMediaPicker, "function");
   assert.equal(view.renderEntityEditor({ visible: false }), "");
   assert.equal(view.renderMediaPicker({ visible: false }), "");
 });
 
-test("create mode keeps the title 新建素材组 and renders the complete empty draft", () => {
+test("create mode keeps the title 新建主体 and renders the complete empty draft", () => {
   const markup = view.renderEntityEditor({ mode: "create", name: "正在输入的名称" });
 
   assert.match(markup, /role="region" aria-labelledby="canvasEntityEditorTitle"/);
   assert.match(markup, /data-entity-editor-mode="create"/);
-  assert.match(markup, /<h2 id="canvasEntityEditorTitle" title="新建素材组">新建素材组<\/h2>/);
+  assert.match(markup, /<h2 id="canvasEntityEditorTitle" title="新建主体">新建主体<\/h2>/);
   const headingIcon = JSDOM.fragment(markup).querySelector('.entity-editor-title > svg[data-entity-editor-icon="square-user-round"]');
   assert.equal(headingIcon.getAttribute('aria-hidden'), 'true');
   assert.equal(headingIcon.nextElementSibling.id, 'canvasEntityEditorTitle');
@@ -74,8 +74,8 @@ test("create mode keeps the title 新建素材组 and renders the complete empty
   assert.match(markup, /value="正在输入的名称"/);
   assert.match(markup, /required aria-required="true"/);
   assert.match(markup, /data-entity-editor-description="true"/);
-  assert.match(markup, /<h3 id="canvasEntityEditorMediaTitle">添加素材<\/h3>/);
-  assert.match(markup, /class="entity-editor-media-heading">\s*<h3[^>]*>添加素材<\/h3>\s*<\/div>\s*<div class="entity-editor-media-toolbar">[\s\S]*?class="entity-editor-media-filters"[\s\S]*?class="entity-editor-media-actions"/);
+  assert.match(markup, /<h3 class="sr-only" id="canvasEntityEditorMediaTitle">参考素材<\/h3>/);
+  assert.match(markup, /class="entity-editor-media-toolbar">[\s\S]*?class="entity-editor-media-filters"[\s\S]*?class="entity-editor-media-actions"/);
   assert.match(markup, /data-entity-editor-add-from-library="true"/);
   assert.match(markup, />从素材库添加<\/span>/);
   assert.match(markup, /data-entity-editor-upload="true"/);
@@ -84,7 +84,7 @@ test("create mode keeps the title 新建素材组 and renders the complete empty
   }
   assert.match(markup, /还没有添加素材/);
   assert.match(markup, /data-entity-editor-cancel="true"/);
-  assert.match(markup, /data-entity-editor-submit="true" disabled aria-disabled="true">创建<\/button>/);
+  assert.match(markup, /data-entity-editor-submit="true" disabled aria-disabled="true">新建主体<\/button>/);
 });
 
 test("edit mode uses the live Entity name as its title and exposes save state", () => {
@@ -120,8 +120,8 @@ test("edit mode uses the live Entity name as its title and exposes save state", 
 test("model-shaped state can drive title, values, counts, filter, and preview directly", () => {
   const markup = view.renderEntityEditor({
     mode: "edit",
-    title: "重命名后的素材组",
-    name: "重命名后的素材组",
+    title: "重命名后的主体",
+    name: "重命名后的主体",
     description: "草稿描述",
     filter: "image",
     filteredMedia: [media[0]],
@@ -130,8 +130,8 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
     coverMediaId: "portrait",
   });
 
-  assert.match(markup, /title="重命名后的素材组">重命名后的素材组<\/h2>/);
-  assert.match(markup, /value="重命名后的素材组"/);
+  assert.match(markup, /title="重命名后的主体">重命名后的主体<\/h2>/);
+  assert.match(markup, /value="重命名后的主体"/);
   assert.match(markup, />草稿描述<\/textarea>/);
   assert.match(markup, /data-entity-editor-filter-active="image"/);
   assert.match(markup, /aria-selected="true"[^>]*data-entity-editor-filter="image"/);
@@ -146,7 +146,7 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
 test("filtering limits the Media grid while preserving live category counts", () => {
   const markup = view.renderEntityEditor({
     mode: "create",
-    name: "素材组",
+    name: "主体",
     media,
     filter: "image",
     selectedMediaId: "portrait",
@@ -157,7 +157,7 @@ test("filtering limits the Media grid while preserving live category counts", ()
   assert.doesNotMatch(markup, /data-entity-editor-media="turnaround"/);
   assert.doesNotMatch(markup, /data-entity-editor-media="voice"/);
   assert.match(markup, /aria-label="3 个">\(3\)<\/span>/);
-  assert.match(markup, /data-entity-editor-submit="true">创建<\/button>/);
+  assert.match(markup, /data-entity-editor-submit="true">新建主体<\/button>/);
 });
 
 test("image, video, and audio previews use only structured safe Media fields", () => {
@@ -197,7 +197,7 @@ test("media card and preview names preserve suffixes while keeping original name
   const name = '角色定妆 & <正面>.Version2.PNG';
   const dom = new JSDOM(view.renderEntityEditor({
     mode: "edit",
-    name: "素材组.png",
+    name: "主体.png",
     media: [{ id: "portrait", name, mediaKind: "image" }],
     selectedMediaId: "portrait",
   }));
@@ -215,15 +215,15 @@ test("media card and preview names preserve suffixes while keeping original name
   assert.equal(preview.title, "双击重命名文件（扩展名保持不变）");
   assert.equal(preview.getAttribute("aria-label"), `文件名称 ${name}，双击或按 F2 重命名`);
   assert.equal(preview.dataset.entityEditorPreviewName, "portrait");
-  assert.equal(doc.querySelector("#canvasEntityEditorTitle").textContent, "素材组.png");
+  assert.equal(doc.querySelector("#canvasEntityEditorTitle").textContent, "主体.png");
   assert.equal(doc.querySelector("#canvasEntityEditorTitle .entity-editor-file-name-extension"), null);
-  assert.equal(doc.querySelector("#canvasEntityEditorName").value, "素材组.png");
+  assert.equal(doc.querySelector("#canvasEntityEditorName").value, "主体.png");
 });
 
 test("preview filename rename keeps the suffix fixed in a horizontal inline control", () => {
   const markup = view.renderEntityEditor({
     mode: "edit",
-    name: "素材组",
+    name: "主体",
     media: [{ id: "portrait", name: "角色.正面.webp", mediaKind: "image" }],
     selectedMediaId: "portrait",
     renamingMediaId: "portrait",
@@ -258,9 +258,9 @@ test("the editor escapes all user content and renders accessible validation erro
 });
 
 test("read-only and submitting states disable every mutation affordance", () => {
-  const readOnly = view.renderEntityEditor({ mode: "edit", name: "素材组", media, mutable: false });
-  const submitting = view.renderEntityEditor({ mode: "edit", name: "素材组", media, submitting: true });
-  const uploading = view.renderEntityEditor({ mode: "edit", name: "素材组", media, uploading: true });
+  const readOnly = view.renderEntityEditor({ mode: "edit", name: "主体", media, mutable: false });
+  const submitting = view.renderEntityEditor({ mode: "edit", name: "主体", media, submitting: true });
+  const uploading = view.renderEntityEditor({ mode: "edit", name: "主体", media, uploading: true });
 
   assert.match(readOnly, /data-entity-editor-name="true" disabled/);
   assert.match(readOnly, /data-entity-editor-description="true" disabled/);
@@ -282,7 +282,7 @@ test("read-only and submitting states disable every mutation affordance", () => 
 test("editor capability flags disable unavailable add paths before interaction", () => {
   const markup = view.renderEntityEditor({
     mode: "edit",
-    name: "素材组",
+    name: "主体",
     media,
     canAddFromLibrary: false,
     canUpload: false,
@@ -294,7 +294,7 @@ test("editor capability flags disable unavailable add paths before interaction",
 });
 
 test("four Media filters expose a roving tab relationship for keyboard control", () => {
-  const editor = view.renderEntityEditor({ mode: "edit", name: "素材组", media, filter: "video" });
+  const editor = view.renderEntityEditor({ mode: "edit", name: "主体", media, filter: "video" });
   const picker = view.renderMediaPicker({ media, filter: "audio" });
 
   assert.match(editor, /role="tablist" aria-label="已添加素材类型"/);
@@ -350,7 +350,7 @@ test("Media picker normalizes invalid state, escapes search, and disables an emp
 
 test("deduplicates repeated Media records before rendering editor and picker cards", () => {
   const repeated = [media[0], { ...media[0], name: "重复项" }];
-  const editor = view.renderEntityEditor({ mode: "edit", name: "素材组", media: repeated });
+  const editor = view.renderEntityEditor({ mode: "edit", name: "主体", media: repeated });
   const picker = view.renderMediaPicker({ media: repeated });
 
   assert.equal(editor.match(/data-entity-editor-media="portrait"/g)?.length, 1);
@@ -366,19 +366,85 @@ test("dedicated CSS covers theme parity, visible hover removal, focus, and defen
   assert.match(css, /html\[data-theme="light"\] \.canvas-entity-editor/);
   assert.match(css, /\.entity-editor-media-card:hover \.entity-editor-media-remove/);
   assert.match(css, /\.entity-editor-media-card:focus-within \.entity-editor-media-remove/);
-  assert.match(css, /\.entity-editor-details-scroll\s*\{[^}]*padding:\s*18px 20px 0;[^}]*overflow:\s*hidden;[^}]*flex-direction:\s*column;/s);
-  assert.match(css, /\.entity-editor-media-section\s*\{[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;[^}]*flex:\s*1 1 0;/s);
-  assert.match(css, /\.entity-editor-media-grid\s*\{[^}]*padding:\s*0 3px 14px 0;[^}]*overflow-y:\s*auto;[^}]*grid-auto-rows:\s*max-content;[^}]*flex:\s*1 1 0;/s);
+  assert.match(css, /\.entity-editor-details-scroll\s*\{[^}]*overflow:\s*hidden;[^}]*flex-direction:\s*column;/s);
+  assert.match(css, /\.entity-editor-media-grid\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto;[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/s);
   assert.match(css, /\.entity-editor-preview-meta\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
   assert.match(css, /\.entity-editor-preview > header \.entity-editor-cover-control\s*\{[^}]*width:\s*80px;[^}]*min-width:\s*80px;[^}]*max-width:\s*80px;[^}]*height:\s*30px;[^}]*appearance:\s*none;[^}]*font-size:\s*12px;/s);
   assert.match(css, /\.entity-editor-cover-status\s*\{[^}]*pointer-events:\s*none;/s);
   assert.doesNotMatch(css, /\.entity-editor-cover-badge svg/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /\.entity-media-picker\s*\{/);
-  assert.match(css, /\.canvas-entity-editor\s*\{[^}]*background: var\(--entity-editor-bg\);/s);
+  assert.match(css, /\.canvas-entity-editor\s*\{[^}]*background: var\(--entity-editor-panel\);/s);
   assert.match(css, /\.entity-picker-footer\s*\{[^}]*flex-wrap: wrap;/s);
-  assert.match(css, /\.entity-editor-details\s*\{[^}]*container-type: inline-size;[^}]*container-name: entity-editor-details;/s);
-  assert.match(css, /@container entity-editor-details \(max-width: 520px\)[\s\S]*?\.entity-editor-media-toolbar\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\);/s);
-  assert.match(css, /@media \(max-width: 720px\)/);
+  assert.match(css, /\.entity-editor-preview\s*\{[^}]*min-height:\s*0;[^}]*flex:\s*1 1 0;/s);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+test("subject editor keeps metadata, media and preview in one form with its footer outside the content area", () => {
+  const fragment = JSDOM.fragment(view.renderEntityEditor({ name: "主体", media }));
+  const editor = fragment.querySelector(".canvas-entity-editor");
+  const form = editor.querySelector("form");
+  assert.equal(editor.children.length, 1);
+  assert.equal(editor.firstElementChild, form);
+  const content = form.querySelector(".entity-editor-details-scroll");
+  assert.deepEqual([...content.children].map((node) => node.className), [
+    "entity-editor-metadata", "entity-editor-media-section", "entity-editor-preview",
+  ]);
+  assert.equal(content.querySelector(".entity-editor-footer"), null);
+  assert.equal(form.lastElementChild.className, "entity-editor-footer");
+  const card = content.querySelector(".entity-editor-media-card");
+  assert.equal(card.querySelector(".entity-editor-media-thumbnail").nextElementSibling.className, "entity-editor-media-name");
+});
+
+test("editor metadata exposes optional draft tags without mixing them into the name or description", () => {
+  const fragment = JSDOM.fragment(view.renderEntityEditor({
+    name: "莉瑞尔",
+    description: "精灵角色",
+    tagIds: ["character", "custom", "character"],
+    tagOptions: [{ id: "character", name: "角色" }, { id: "custom", name: "精灵" }],
+    tagPickerOpen: true,
+  }));
+  const metadata = fragment.querySelector(".entity-editor-metadata");
+  assert.equal(metadata.querySelector(".entity-editor-name-field input").value, "莉瑞尔");
+  assert.equal(metadata.querySelector(".entity-editor-description-field textarea").value, "精灵角色");
+  assert.equal(metadata.querySelector("[data-entity-editor-tags-toggle]").getAttribute("aria-expanded"), "true");
+  assert.equal(metadata.querySelector("label[for='canvasEntityEditorTagsToggle']").textContent, "标签");
+  assert.equal(metadata.querySelector("[data-entity-editor-tags-toggle]").textContent, "角色、精灵");
+  assert.equal(metadata.querySelector("[data-entity-editor-tags-toggle]").title, "角色、精灵");
+  assert.equal(metadata.querySelector("[data-entity-editor-tag-remove]"), null);
+  assert.equal(metadata.querySelector('[data-entity-editor-tag-toggle="custom"]').getAttribute("aria-pressed"), "true");
+  assert.equal(metadata.querySelector("[data-entity-editor-tag-popover]").getAttribute("role"), "dialog");
+  assert.equal(metadata.querySelector("[data-entity-editor-tag-query]").value, "");
+});
+
+test("tag option projection filters safely and preserves independent selection", () => {
+  const options = {
+    tagIds: ["custom"],
+    tagOptions: [{ id: "role", name: "角色" }, { id: "custom", name: 'Forest <Elf> "2"' }],
+    tagQuery: "FOREST",
+  };
+  const fragment = JSDOM.fragment(view.renderEntityTagOptions(options));
+  const choices = fragment.querySelectorAll("button");
+  assert.equal(choices.length, 1);
+  assert.equal(choices[0].textContent, 'Forest <Elf> "2"');
+  assert.equal(choices[0].getAttribute("aria-pressed"), "true");
+  assert.equal(fragment.querySelector("elf"), null);
+  assert.match(view.renderEntityTagOptions({ ...options, tagQuery: "没有" }), /没有匹配的标签/);
+  assert.match(view.renderEntityTagOptions({ tagOptions: [] }), /暂无可用标签/);
+});
+
+test("missing tags stay visible and removable while read-only or busy editors prohibit all tag mutations", () => {
+  const selected = { tagIds: ["deleted"], tagOptions: [], tagPickerOpen: true, tagError: "请选择有效标签" };
+  const fragment = JSDOM.fragment(view.renderEntityEditor(selected));
+  assert.equal(fragment.querySelector("[data-entity-editor-tags-toggle]").textContent, "标签已移除");
+  assert.equal(fragment.querySelector('[data-entity-editor-tag-toggle="deleted"]').getAttribute("aria-pressed"), "true");
+  assert.equal(fragment.querySelector("#canvasEntityEditorTagsError").textContent, "请选择有效标签");
+  assert.equal(fragment.querySelector("[data-entity-editor-tags-toggle]").getAttribute("aria-describedby"), "canvasEntityEditorTagsError");
+  for (const state of [{ mutable: false }, { submitting: true }, { uploading: true }]) {
+    const blocked = JSDOM.fragment(view.renderEntityEditor({ ...selected, ...state }));
+    assert.equal(blocked.querySelector("[data-entity-editor-tags-toggle]").disabled, true);
+    assert.equal(blocked.querySelector("[data-entity-editor-tag-remove]"), null);
+    assert.equal(blocked.querySelector("[data-entity-editor-tag-popover]"), null);
+    assert.equal(blocked.querySelector("[data-entity-editor-tags-toggle]").textContent, "标签已移除");
+  }
 });

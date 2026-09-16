@@ -15,7 +15,7 @@ function createHarness(t) {
     <main id="background"><div id="grid">
       <article data-library-entity="one"><button class="asset-library-card-preview">一</button></article>
       <article data-library-entity="two"><button class="asset-library-card-preview">二</button></article>
-    </div><div id="nodes"><button data-node="node-one">素材组</button></div></main>
+    </div><div id="nodes"><button data-node="node-one">主体</button></div></main>
     <div id="detail" hidden inert aria-hidden="true"></div>
     <div id="picker" hidden inert aria-hidden="true"></div>
   </body>`, { runScripts: "outside-only", url: "https://reelay.test/" });
@@ -152,6 +152,20 @@ test("hover and focus detail sessions retain card-to-detail traversal and pinned
   assert.equal(h.detail.hidden, true);
 });
 
+test("returning from group contents restores the source without opening an unsolicited preview", (t) => {
+  const h = createHarness(t);
+  const source = h.grid.querySelector('[data-library-entity="one"] button');
+  assert.equal(h.controller.restoreSourceFocus("one"), true);
+  assert.equal(h.document.activeElement, source);
+  h.flushFrames();
+  h.tick(200);
+  assert.equal(h.detail.hidden, true);
+  assert.equal(h.controller.restoreSourceFocus("missing"), false);
+  source.blur();
+  source.focus();
+  assert.equal(h.detail.hidden, false, "a subsequent deliberate focus still opens its preview");
+});
+
 test("detail centers using its rendered dimensions and remeasures when content changes", (t) => {
   const h = createHarness(t);
   h.environment.avoidRects = [];
@@ -282,7 +296,7 @@ test("picker restores original background attributes and refocuses the newly ren
   assert.equal(h.background.inert, true);
   assert.equal(h.background.getAttribute("aria-hidden"), "true");
   assert.equal(h.document.activeElement, h.picker.querySelector("input"));
-  h.document.querySelector("#nodes").innerHTML = '<button data-node="node-one">新的素材组入口</button>';
+  h.document.querySelector("#nodes").innerHTML = '<button data-node="node-one">新的主体入口</button>';
   h.click('[data-entity-use-action="cancel-picker"]');
   h.flushFrames();
   assert.equal(h.document.activeElement, h.document.querySelector("[data-node]"));

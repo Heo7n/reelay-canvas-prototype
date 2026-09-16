@@ -57,6 +57,17 @@ test("unpersisted media renames are draft edits and cancellation restores their 
   assert.equal(draft.isDirty(), false, "persisted global renames are separate from Entity draft edits");
 });
 
+test("subjects create centrally regardless of the source directory and editing preserves prior placement", () => {
+  const draft = createDraft({ folderId: "folder-a", initialMediaRefs: ["portrait"] });
+  assert.equal(draft.isDirty(), false);
+  assert.equal(Object.hasOwn(draft.getState(), "folderId"), false);
+  assert.equal(Object.hasOwn(draft, "setFolderId"), false);
+  draft.setName("角色设定");
+  assert.equal(draft.createCommitPayload().folderId, null);
+  const edit = editDraft();
+  assert.equal(Object.hasOwn(edit.createCommitPayload(), "folderId"), false);
+});
+
 test("creates an empty draft with the fixed creation title and isolated initial state", () => {
   assert.ok(Object.isFrozen(model));
   assert.deepEqual(plain(Object.keys(model)), ["createCanvasEntityEditorDraft"]);
@@ -66,9 +77,10 @@ test("creates an empty draft with the fixed creation title and isolated initial 
   assert.deepEqual(plain(draft.getState()), {
     mode: "create",
     entityId: null,
-    title: "新建素材组",
+    title: "新建主体",
     name: "",
     description: "",
+    tagIds: [],
     mediaRefs: [],
     coverMediaId: null,
     selectedPreviewId: null,
@@ -78,10 +90,10 @@ test("creates an empty draft with the fixed creation title and isolated initial 
     expectedVersion: null,
     dirty: false,
     valid: false,
-    errors: { name: "素材组名称不能为空。", media: "请至少添加一个素材。" },
+    errors: { name: "主体名称不能为空。", media: "请至少添加一个素材。" },
   });
-  draft.setName("新素材组");
-  assert.equal(draft.getTitle(), "新建素材组");
+  draft.setName("新主体");
+  assert.equal(draft.getTitle(), "新建主体");
 });
 
 test("seeded creation uses ordered references as a clean baseline and still requires a name", () => {
@@ -127,7 +139,7 @@ test("validates the trimmed name and creates an isolated atomic commit payload",
     () => draft.createCommitPayload(),
     (error) => {
       assert.equal(error.code, "invalid");
-      assert.deepEqual(plain(error.errors), { name: "素材组名称不能为空。", media: "请至少添加一个素材。" });
+      assert.deepEqual(plain(error.errors), { name: "主体名称不能为空。", media: "请至少添加一个素材。" });
       return true;
     },
   );
@@ -139,7 +151,9 @@ test("validates the trimmed name and creates an isolated atomic commit payload",
   const payload = draft.createCommitPayload();
   assert.deepEqual(plain(payload), {
     name: "Lirael",
+    folderId: null,
     description: "  保留描述的输入格式\n",
+    tagIds: [],
     mediaRefs: [
       { mediaId: "portrait", order: 0 },
       { mediaId: "voice", order: 1 },
@@ -154,7 +168,7 @@ test("validates the trimmed name and creates an isolated atomic commit payload",
 
 test("deduplicates existing and uploaded Media by id while preserving first-reference order", () => {
   const draft = createDraft();
-  draft.setName("素材组");
+  draft.setName("主体");
   assert.equal(draft.addMedia("voice").added, true);
   assert.equal(draft.addMedia({ mediaId: "portrait" }).added, true);
   assert.equal(draft.addMedia("voice").added, false);
@@ -278,4 +292,22 @@ test("fails closed for invalid initialization and malformed Media boundaries", (
     /non-negative integer/,
   );
   assert.throws(() => createDraft().addMedia("missing"), /Media not found/);
+});
+
+
+test("subject tag edits are isolated, unordered, optional and carry the original CAS baseline", () => {
+  const draft = editDraft({ tagIds: ["custom:b", "builtin:character"] });
+  draft.setTagIds(["builtin:character", "custom:b", "custom:b"]);
+  assert.equal(draft.isDirty(), false);
+  draft.setTagIds([]);
+  assert.equal(draft.isDirty(), true);
+  assert.deepEqual(plain(draft.createCommitPayload().expectedTagIds), ["builtin:character", "custom:b"]);
+  assert.deepEqual(plain(draft.createCommitPayload().tagIds), []);
+  draft.cancel();
+  assert.deepEqual(plain(draft.getState().tagIds), ["builtin:character", "custom:b"]);
+  const exposed = draft.getState();
+  exposed.tagIds.length = 0;
+  assert.equal(draft.getState().tagIds.length, 2);
+  draft.setTagIds(Array.from({length: 51}, (_, i) => `tag:${i}`));
+  assert.equal(draft.getValidation().valid, false);
 });

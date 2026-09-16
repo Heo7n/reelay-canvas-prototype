@@ -57,9 +57,12 @@ test("organization group preview and use resolve the selected placement's names 
 test("delete result projects a mixed group and media removal before the later Host workspace catalog", () => {
   const errors = [];
   const context = vm.createContext({ URL, Set,
-    window: { location: { href: "http://localhost:5182/app", origin: "http://localhost:5182" } },
-    state: { libraryFolderId: null, libraryEntityFilter: { entityId: "remove-group" } },
+    window: { location: { href: "http://localhost:5182/app", origin: "http://localhost:5182" }, REELAY_CANVAS_SAVE_MEDIA_DIALOG: { BUILTIN_TAGS: [{ id: "builtin:object", name: "物品" }] } },
+    state: { librarySpace: "personal", libraryFolderId: null, libraryEntityFilter: { entityId: "remove-group" },
+      libraryTagFilter: { tagIds: ["removed-tag", "builtin:object"], untagged: false }, libraryTagFilterByContext: {}, libraryFilterDraft: null },
     hostPersonalMediaIds: new Set(),
+    canvasLibraryNavigation: { pruneTags() {} },
+    canvasLibrarySearch: { pruneTags() {} },
     sanitizeRuntimeMediaUrl: (url) => url, libraryImagePreviewUrl: (url) => url.href,
     renderAssetLibrary() {}, renderSelectionToolbar() {}, clearAssetLibrarySelection() {}, restoreTransientCanvasMedia() {},
     showActionToast: (message) => errors.push(message),
@@ -76,6 +79,7 @@ test("delete result projects a mixed group and media removal before the later Ho
     description: "", mediaRefs: [{ assetId: asset.assetId, order: 0 }], coverAssetId: asset.assetId }));
   const entries = assets.map((asset) => ({ ...asset, space: "personal", folderId: null, tagIds: [] }));
   context.registerHostWorkspaceAssetCatalog({ assets, entities, libraryCatalog: { folders: [], tags: [], entries } });
+  assert.deepEqual(Array.from(context.state.libraryTagFilter.tagIds), ["builtin:object"]);
   const result = { folders: [], tags: [], entries: [entries[1]] };
   context.onDeleted(result, [{ kind: "entity", id: entities[0].id, expectedVersion: 1 }, { kind: "media", id: assets[0].assetId }]);
   assert.deepEqual(Array.from(context.hostPersonalMediaIds), ["keep"]);

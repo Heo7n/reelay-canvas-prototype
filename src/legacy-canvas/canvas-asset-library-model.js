@@ -8,6 +8,20 @@
   const coverMediaKinds = new Set(["image"]);
   const MAX_DIRECTORY_LEVELS = 5;
   const MAX_FOLDER_DEPTH = MAX_DIRECTORY_LEVELS - 1;
+  const builtinTagNames = new Map([
+    ["builtin:character", "角色"], ["builtin:scene", "场景"], ["builtin:object", "物品"],
+  ]);
+
+  function normalizeTagIds(value) {
+    return [...new Set((Array.isArray(value) ? value : []).map((id) => String(id).trim()).filter(Boolean))];
+  }
+
+  function matchesTags(placement, { tagIds = [], untagged = false } = {}) {
+    const ownIds = normalizeTagIds(placement.tagIds);
+    if (untagged) return ownIds.length === 0;
+    const selected = normalizeTagIds(tagIds);
+    return !selected.length || selected.some((id) => ownIds.includes(id));
+  }
 
   function cloneValue(value) {
     if (Array.isArray(value)) return value.map(cloneValue);
@@ -61,13 +75,14 @@
     return { kind, id };
   }
 
-  function createAssetLibraryStore({ media = [], entities = [], folders = [], placements = [] } = {}) {
+  function createAssetLibraryStore({ media = [], entities = [], folders = [], placements = [], entityEntries = [] } = {}) {
     const mediaById = new Map();
     const entitiesById = new Map();
     const foldersById = new Map();
     const placementsByKey = new Map();
     const reviewRequests = new Map();
     const persistedEntityIds = new Set();
+    const entityEntriesByKey = new Map();
     let generatedMediaId = 0;
     let generatedEntityId = 0;
     let generatedFolderId = 0;
@@ -75,6 +90,30 @@
 
     function placementKey(item, space) {
       return `${space}:${item.kind}:${item.id}`;
+    }
+
+    for (const entry of entityEntries) {
+      const space = resolveSpace(entry.space);
+      const entityId = String(entry.entityId || "").trim();
+      if (!entityId) continue;
+      entityEntriesByKey.set(placementKey({ kind: "entity", id: entityId }, space), {
+        entityId, space, folderId: entry.folderId ?? null, addedAt: entry.addedAt, tagIds: normalizeTagIds(entry.tagIds),
+        tags: Array.isArray(entry.tags) ? entry.tags.map(String) : [],
+      });
+    }
+
+    function entityPlacement(placement) {
+      const entry = entityEntriesByKey.get(placementKey(placement.item, placement.space));
+      return entry ? { ...placement, folderId: entry.folderId, addedAt: entry.addedAt ?? placement.addedAt, tagIds: [...entry.tagIds], tags: [...entry.tags] } : placement;
+    }
+
+    function legacyPlacementTags(item, space, values = getRecord(item)?.tags) {
+      const tags = [...new Set((Array.isArray(values) ? values : []).map(String).filter(Boolean))];
+      return {
+        tags,
+        tagIds: tags.map((name) => [...builtinTagNames].find(([, label]) => label === name)?.[0]
+          || `legacy:${space}:${encodeURIComponent(name)}`),
+      };
     }
 
     function getRecord(item) {
@@ -213,9 +252,12 @@
       const item = resolveItemRef(source.item || source);
       const space = resolveSpace(source.space);
       const folderId = source.folderId == null ? null : String(source.folderId);
-      return { item, space, folderId,
+      const labels = Object.prototype.hasOwnProperty.call(source, "tagIds")
+        ? { tagIds: normalizeTagIds(source.tagIds), tags: Array.isArray(source.tags) ? source.tags.map(String) : [] }
+        : legacyPlacementTags(item, space, source.tags ?? getRecord(item)?.tags);
+      return { item, space, folderId, ...labels, ...(source.addedAt ? { addedAt: source.addedAt } : {}),
         ...(source.persisted ? { persisted: true, displayName: String(source.displayName || ""),
-          tags: Array.isArray(source.tags) ? source.tags.map(String) : [] } : {}),
+          tags: Array.isArray(source.tags) ? source.tags.map(String) : labels.tags } : {}),
       };
     }
 
@@ -223,7 +265,7 @@
       if (folderId == null) return null;
       const folder = foldersById.get(String(folderId));
       if (!folder) throw new Error(`Folder not found: ${String(folderId)}`);
-      if (folder.space !== space || folder.kind !== kind) {
+      if (folder.space !== space || (folder.kind !== kind && !(kind === "entity" && folder.kind === "media"))) {
         throw new Error(`Folder ${folder.id} does not belong to ${space}/${kind}.`);
       }
       return folder;
@@ -349,7 +391,7 @@
       const key = placementKey(item, space);
       if (placementsByKey.has(key)) return false;
       validateMediaPlacementBoundary(item, space);
-      placementsByKey.set(key, { item: { ...item }, space, folderId });
+      placementsByKey.set(key, entityPlacement({ item: { ...item }, space, folderId, ...legacyPlacementTags(item, space) }));
       return true;
     }
 
@@ -372,13 +414,13 @@
       if (Number.isInteger(record.version) && record.version > 0) persistedEntityIds.add(record.id);
     }
     for (const input of placements) {
-      const placement = normalizePlacementRecord(input);
+      const placement = entityPlacement(normalizePlacementRecord(input));
       requireRecord(placement.item);
       const key = placementKey(placement.item, placement.space);
       if (!createPlacement(placement.item, placement.space, placement.folderId)) {
         throw new Error(`Duplicate placement: ${key}`);
       }
-      placementsByKey.set(key, placement);
+      placementsByKey.set(key, placement.item.kind === "entity" ? entityPlacement(placement) : placement);
     }
 
     function validateEntityVisibility(entity, space, placementMap = placementsByKey, mediaMap = mediaById) {
@@ -433,9 +475,10 @@
 
     function placementRecord(placement) {
       const record = requireRecord(placement.item);
-      return placement.persisted && placement.item.kind === "media"
-        ? { ...record, name: placement.displayName, displayName: placement.displayName, tags: placement.tags }
-        : record;
+      return { ...record, tagIds: normalizeTagIds(placement.tagIds), tags: placement.tags || [],
+        ...(placement.persisted && placement.item.kind === "media"
+          ? { name: placement.displayName, displayName: placement.displayName } : {}),
+      };
     }
 
     // Replace only server-owned projections; browser-only fixtures and Entity ownership remain independent.
@@ -447,32 +490,40 @@
       foldersById.set(folder.id, folder);
     }
 
-    function syncPersistedCatalog({ media = [], folders = [], entries = [], tags = [], removedEntityIds = [] }) {
+    function syncPersistedCatalog({ media = [], folders = [], entries = [], tags = [], entityEntries, removedEntityIds = [] }) {
       const current = snapshot();
       const records = new Map(current.media.map((item) => [item.id, item]));
       media.forEach((item) => records.set(item.id, { ...records.get(item.id), ...item }));
-      const names = new Map([
-        ["builtin:character", "角色"], ["builtin:scene", "场景"], ["builtin:object", "物品"], ["builtin:sound", "音效"],
-        ...tags.map((item) => [item.id, item.name]),
-      ]);
+      const names = new Map(tags.map((item) => [`${item.space}:${item.id}`, item.name]));
+      const labels = (item) => ({ tagIds: normalizeTagIds(item.tagIds), tags: normalizeTagIds(item.tagIds)
+        .map((id) => builtinTagNames.get(id) || names.get(`${item.space}:${id}`) || "") });
       const ids = new Set([...mediaById.values()].filter((item) => item.workspaceAssetId).map((item) => item.id));
       media.forEach((item) => ids.add(item.id));
       // A deletion response can precede the Host's separate Entity catalog. Stage
       // both placement removals together so the projection never contains a group without its media.
       const removed = new Set(removedEntityIds);
+      if (Array.isArray(entityEntries)) {
+        const personalIds = new Set(entityEntries.filter((entry) => entry.space === "personal").map((entry) => entry.entityId));
+        for (const entityId of persistedEntityIds) if (!personalIds.has(entityId)) removed.add(entityId);
+      }
+      const nextEntityEntries = (Array.isArray(entityEntries) ? entityEntries.map((item) => ({ ...item, ...labels(item) }))
+        : current.entityEntries).filter((item) => !(item.space === "personal" && removed.has(item.entityId)));
       const remainingPlacements = current.placements.filter((item) => !(item.item.kind === "entity"
-        && item.space === "personal" && removed.has(item.item.id)));
+        && item.space === "personal" && removed.has(item.item.id)))
+        .map((item) => item.item.kind === "entity" && Array.isArray(entityEntries) && mutableSpaces.has(item.space)
+          ? { ...item, tagIds: [], tags: [] } : item);
       const remainingEntities = current.entities.filter((entity) => !removed.has(entity.id)
         || remainingPlacements.some((placement) => placement.item.kind === "entity" && placement.item.id === entity.id));
       const next = createAssetLibraryStore({
         media: [...records.values()], entities: remainingEntities,
+        entityEntries: nextEntityEntries,
         folders: [...current.folders.filter((item) => !item.persisted),
           ...folders.map((item) => ({ ...item, kind: "media", persisted: true }))],
         placements: [...remainingPlacements.filter((item) => !(item.item.kind === "media" && ids.has(item.item.id)
           && mutableSpaces.has(item.space))),
           ...entries.map((item) => ({ item: { kind: "media", id: item.assetId }, space: item.space,
-            folderId: item.folderId, displayName: item.displayName,
-            tags: item.tagIds.map((id) => names.get(id)).filter(Boolean), persisted: true }))],
+            folderId: item.folderId, addedAt: item.addedAt, displayName: item.displayName,
+            ...labels(item), persisted: true }))],
       }).snapshot();
       mediaById.clear();
       next.media.forEach((item) => mediaById.set(item.id, item));
@@ -486,6 +537,8 @@
       next.folders.forEach((item) => foldersById.set(item.id, item));
       placementsByKey.clear();
       next.placements.forEach((item) => placementsByKey.set(placementKey(item.item, item.space), item));
+      entityEntriesByKey.clear();
+      next.entityEntries.forEach((item) => entityEntriesByKey.set(placementKey({ kind: "entity", id: item.entityId }, item.space), item));
     }
 
     function listItems(options = {}) {
@@ -494,19 +547,26 @@
       const hasFolderFilter = Object.prototype.hasOwnProperty.call(options, "folderId");
       const folderId = options.folderId == null ? null : String(options.folderId);
       if (hasFolderFilter) validateFolder(folderId, space, kind === "all" ? getFolder(folderId)?.kind : kind);
+      const includeDescendants = hasFolderFilter && options.includeDescendants === true;
+      const folderScope = includeDescendants && folderId
+        ? new Set(listFolderSubtreeInternal(folderId).filter((folder) => folder.space === space).map((folder) => folder.id))
+        : null;
       const requestedMediaKind = options.mediaKind || options.type || "all";
       const searchValues = (record) => [
         record.name, record.displayName, record.mediaKind, record.type, record.description, record.tags,
       ];
       const items = [...placementsByKey.values()]
         .filter((placement) => placement.space === space && (kind === "all" || placement.item.kind === kind))
-        .filter((placement) => !hasFolderFilter || placement.folderId === folderId)
+        .filter((placement) => !hasFolderFilter || (includeDescendants
+          ? folderId === null || folderScope.has(placement.folderId)
+          : placement.folderId === folderId))
+        .filter((placement) => matchesTags(placement, options))
         .map((placement) => ({ placement, record: placementRecord(placement) }))
         .filter(({ placement, record }) => {
-          if (kind === "all" && placement.item.kind === "entity") {
+          if (placement.item.kind === "entity") {
             const visibleMedia = record.mediaRefs
               .filter((ref) => hasPlacementInternal({ kind: "media", id: ref.mediaId }, space))
-              .map((ref) => mediaById.get(ref.mediaId))
+              .map((ref) => placementRecord(placementsByKey.get(placementKey({ kind: "media", id: ref.mediaId }, space))))
               .filter((media) => media && media.visible !== false && media.hidden !== true)
               .filter((media) => requestedMediaKind === "all" || media.mediaKind === requestedMediaKind);
             if (requestedMediaKind !== "all" && !visibleMedia.length) return false;
@@ -521,10 +581,11 @@
           kind: placement.item.kind,
           placement: cloneValue(placement),
         }));
-      if ((kind === "media" || kind === "all") && options.sort === "recent") {
+      if (options.sort === "recent") {
         const timestamp = (item) => {
-          if (item.createdAt == null || item.createdAt === "") return -Infinity;
-          const value = typeof item.createdAt === "number" ? item.createdAt : Date.parse(item.createdAt);
+          const addedAt = item.placement?.addedAt ?? item.createdAt;
+          if (addedAt == null || addedAt === "") return -Infinity;
+          const value = typeof addedAt === "number" ? addedAt : Date.parse(addedAt);
           return Number.isFinite(value) ? value : -Infinity;
         };
         items.sort((left, right) => {
@@ -534,6 +595,26 @@
         });
       }
       return items;
+    }
+
+    function searchLibrary({ space = "personal", query = "", mediaKind = "all", tagIds = [], untagged = false } = {}) {
+      const resolvedSpace = resolveSpace(space);
+      const normalizedQuery = normalizeSearch(query);
+      if (!normalizedQuery) return { folders: [], media: [], entities: [] };
+      const filters = { space: resolvedSpace, query: normalizedQuery, tagIds, untagged, sort: "recent" };
+      const hasContentFilter = mediaKind !== "all" || normalizeTagIds(tagIds).length > 0 || untagged;
+      const folders = hasContentFilter ? [] : listFolders({ space: resolvedSpace, kind: "media" })
+        .filter((folder) => {
+          const names = getFolderPathInternal(folder.id).map((entry) => entry.name);
+          return matchesSearch([names, names.join(" / ")], normalizedQuery);
+        });
+      return {
+        folders,
+        media: listItems({ ...filters, kind: "media", mediaKind }),
+        // Subject type is independent of its members' media formats; its own
+        // placement tags still determine whether it belongs in filtered results.
+        entities: resolvedSpace === "personal" ? listItems({ ...filters, kind: "entity" }) : [],
+      };
     }
 
     function getMedia(item) {
@@ -547,7 +628,8 @@
     function getEntity(item) {
       const ref = resolveItemRef(item, "entity");
       const record = entitiesById.get(ref.id);
-      return record ? cloneValue(record) : null;
+      const placement = placementsByKey.get(placementKey(ref, item?.space || "personal"));
+      return record ? cloneValue(placement ? placementRecord(placement) : record) : null;
     }
 
     function getEntityMedia(item) {
@@ -556,10 +638,10 @@
       return entity.mediaRefs.map((ref) => getMedia({ kind: "media", id: ref.mediaId, space: item?.space || "personal" })).filter(Boolean);
     }
 
-    function listEntityMedia({ entityId, space = "personal", query = "", mediaKind = "all" } = {}) {
+    function listEntityMedia({ entityId, space = "personal", query = "", mediaKind = "all", tagIds = [], untagged = false } = {}) {
       const resolvedSpace = resolveSpace(space);
       const id = String(entityId || "").trim();
-      const entity = id ? getEntity({ kind: "entity", id }) : null;
+      const entity = id ? getEntity({ kind: "entity", id, space: resolvedSpace }) : null;
       if (!entity || resolvedSpace === "platform" || !hasPlacementInternal({ kind: "entity", id: entity.id }, resolvedSpace)) {
         return { entity: null, status: "unavailable", allItems: [], items: [], unavailableCount: 0 };
       }
@@ -567,13 +649,15 @@
       const allItems = entity.mediaRefs.map(({ mediaId }) => {
         const record = mediaById.get(mediaId);
         const placement = placementsByKey.get(placementKey({ kind: "media", id: mediaId }, resolvedSpace));
-        return record && placement ? { ...cloneValue(placementRecord(placement)), kind: "media", placement: cloneValue(placement) } : null;
+        return record && record.visible !== false && record.hidden !== true && placement
+          ? { ...cloneValue(placementRecord(placement)), kind: "media", placement: cloneValue(placement) } : null;
       }).filter(Boolean);
       return {
         entity,
         status: "ready",
         allItems,
         items: allItems.filter((item) => mediaKind === "all" || item.mediaKind === mediaKind)
+          .filter((item) => matchesTags(item.placement, { tagIds, untagged }))
           .filter((item) => matchesSearch([item.name, item.displayName, item.mediaKind, item.type, item.description, item.tags], query)),
         unavailableCount: entity.mediaRefs.length - allItems.length,
       };
@@ -581,6 +665,19 @@
 
     function listAllMedia() {
       return [...mediaById.values()].map(cloneValue);
+    }
+
+    function getTagOptions(space = "personal") {
+      const resolvedSpace = resolveSpace(space);
+      const options = new Map();
+      for (const placement of placementsByKey.values()) {
+        if (placement.space !== resolvedSpace) continue;
+        normalizeTagIds(placement.tagIds).forEach((id, index) => {
+          const name = builtinTagNames.get(id) || placement.tags?.[index];
+          if (name && !options.has(id)) options.set(id, { id, name, space: resolvedSpace });
+        });
+      }
+      return [...options.values()].map(cloneValue);
     }
 
     function resolveMediaItems({ items = [], space = "personal", existingMedia = [] } = {}) {
@@ -753,9 +850,7 @@
       if (input.space != null && resolveSpace(input.space) !== "personal") {
         throw new Error("Persisted Entity projection currently supports only personal space.");
       }
-      if (input.folderId != null) {
-        throw new Error("Persisted Entity projection belongs in the personal root directory.");
-      }
+      if (input.folderId != null) validateFolder(input.folderId, "personal", "entity");
       const entity = normalizePersistedEntityRecord(input);
       validatePersistedEntityCandidate(entity);
       const previous = entitiesById.get(entity.id) || null;
@@ -766,13 +861,29 @@
       const updated = previous != null && entity.version > previous.version;
       entitiesById.set(entity.id, entity);
       persistedEntityIds.add(entity.id);
-      placementsByKey.set(key, { item, space: "personal", folderId: null });
+      placementsByKey.set(key, entityPlacement({ ...previousPlacement, item, space: "personal", folderId: input.folderId ?? previousPlacement?.folderId ?? null, addedAt: previousPlacement?.addedAt ?? entity.createdAt }));
+      const libraryTagIds = (input.entity || input).libraryTagIds;
+      if (Array.isArray(libraryTagIds)) syncEntityPlacementTags(item, libraryTagIds, input.tagOptions);
       return {
         entity: cloneValue(entity),
         created,
         updated,
         placementCreated: previousPlacement == null,
       };
+    }
+
+    function syncEntityPlacementTags(item, tagIds, tagOptions = []) {
+      const key = placementKey(item, "personal");
+      const placement = placementsByKey.get(key);
+      if (!placement) return;
+      const ids = normalizeTagIds(tagIds);
+      const names = new Map([...getTagOptions("personal"), ...tagOptions].map((tag) => [tag.id, tag.name]));
+      const tags = ids.map((id) => builtinTagNames.get(id) || names.get(id) || "");
+      placementsByKey.set(key, { ...placement, tagIds: ids, tags });
+      entityEntriesByKey.set(key, {
+        ...entityEntriesByKey.get(key), entityId: item.id, space: "personal",
+        folderId: placement.folderId, addedAt: placement.addedAt, tagIds: ids, tags,
+      });
     }
 
     function syncPersistedEntities(input = {}) {
@@ -790,6 +901,7 @@
       for (const entityId of removedEntityIds) {
         const item = { kind: "entity", id: entityId };
         placementsByKey.delete(placementKey(item, "personal"));
+        entityEntriesByKey.delete(placementKey(item, "personal"));
         const hasOtherPlacement = [...placementsByKey.values()].some(
           (placement) => placement.item.kind === "entity" && placement.item.id === entityId,
         );
@@ -802,7 +914,8 @@
         const item = { kind: "entity", id: entity.id };
         entitiesById.set(entity.id, entity);
         persistedEntityIds.add(entity.id);
-        placementsByKey.set(placementKey(item, "personal"), { item, space: "personal", folderId: null });
+        const key = placementKey(item, "personal");
+        placementsByKey.set(key, entityPlacement({ ...placementsByKey.get(key), item, space: "personal", folderId: placementsByKey.get(key)?.folderId ?? null, addedAt: placementsByKey.get(key)?.addedAt ?? entity.createdAt }));
       }
       return {
         entities: [...staged.values()].map(cloneValue),
@@ -823,6 +936,12 @@
       if (input.expectedVersion !== current.version) {
         throw createEntityVersionConflict(current.version);
       }
+      if (Array.isArray(input.tagIds)) {
+        const currentTags = normalizeTagIds(placementsByKey.get(placementKey({ kind: "entity", id: entityId }, "personal"))?.tagIds).sort();
+        if (!Array.isArray(input.expectedTagIds) || JSON.stringify(normalizeTagIds(input.expectedTagIds).sort()) !== JSON.stringify(currentTags)) {
+          throw createEntityVersionConflict(current.version, "主体标签已在其他窗口更新，请重新打开后再试");
+        }
+      }
       const mediaRefs = Object.prototype.hasOwnProperty.call(input, "mediaRefs")
         ? input.mediaRefs
         : current.mediaRefs;
@@ -842,6 +961,7 @@
       });
       validateEntityVisibility(next, "personal");
       entitiesById.set(entityId, next);
+      if (Array.isArray(input.tagIds)) syncEntityPlacementTags({ kind: "entity", id: entityId }, input.tagIds, input.tagOptions);
       return cloneValue(next);
     }
 
@@ -934,7 +1054,10 @@
         validateFolder(folderId, resolvedSpace, item.kind);
         if (!hasPlacementInternal(item, resolvedSpace)) throw new Error(`${item.kind} ${item.id} is not visible in ${resolvedSpace}.`);
       }
-      for (const item of refs) placementsByKey.get(placementKey(item, resolvedSpace)).folderId = folderId;
+      for (const item of refs) {
+        const placement = placementsByKey.get(placementKey(item, resolvedSpace));
+        if (placement.folderId !== folderId) { placement.folderId = folderId; placement.addedAt = new Date().toISOString(); }
+      }
       return refs.map((item) => cloneValue(placementsByKey.get(placementKey(item, resolvedSpace))));
     }
 
@@ -1111,9 +1234,14 @@
       const subtree = listFolderSubtreeInternal(folder.id);
       const subtreeIds = new Set(subtree.map((entry) => entry.id));
       const items = [...placementsByKey.values()]
-        .filter((placement) => placement.space === resolvedSpace && subtreeIds.has(placement.folderId))
+        .filter((placement) => placement.space === resolvedSpace && placement.item.kind === "media" && subtreeIds.has(placement.folderId))
         .map((placement) => placement.item);
       if (items.length) removePlacements({ items, space: resolvedSpace });
+      for (const placement of placementsByKey.values()) {
+        if (placement.space === resolvedSpace && placement.item.kind === "entity" && subtreeIds.has(placement.folderId)) {
+          placement.folderId = null;
+        }
+      }
       for (const entry of subtree.reverse()) foldersById.delete(entry.id);
       return { folders: subtree.map(cloneValue), items: items.map(cloneValue) };
     }
@@ -1124,6 +1252,7 @@
         entities: [...entitiesById.values()],
         folders: [...foldersById.values()],
         placements: [...placementsByKey.values()],
+        entityEntries: [...entityEntriesByKey.values()],
         reviews: [...reviewRequests.values()],
       });
     }
@@ -1133,11 +1262,13 @@
       getFolder,
       getFolderPath,
       listItems,
+      searchLibrary,
       getMedia,
       getEntity,
       getEntityMedia,
       listEntityMedia,
       listAllMedia,
+      getTagOptions,
       resolveMediaItems,
       hasPlacement,
       snapshot,

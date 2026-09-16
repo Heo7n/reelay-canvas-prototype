@@ -25,6 +25,40 @@ const document = {
 };
 
 describe("legacy canvas bridge", () => {
+  it("validates tag deletion confirmation without allowing canvas-owned workspace authority", () => {
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: "instance", requestId: "delete-tag", command: "delete-tag", space: "personal", tagId: "custom", expectedUsageCount: 2 };
+    expect(parseCanvasMessage(command)).toEqual(command);
+    for (const invalid of [{ workspaceId: "forged" }, { space: "platform" }, { tagId: "" },
+      { expectedUsageCount: -1 }, { expectedUsageCount: 0.5 }, { expectedUsageCount: "2" }, { expectedUsageCount: undefined }]) {
+      expect(parseCanvasMessage({ ...command, ...invalid })).toBeNull();
+    }
+    const response = { source: "reelay-shell", type: "host:media-library-result", protocolVersion: 1,
+      instanceId: "instance", requestId: "delete-tag", command: "delete-tag", result: { folders: [], tags: [], entries: [] } };
+    expect(hostMediaLibraryResultMessageSchema.parse(response)).toEqual(response);
+    expect(hostMediaLibraryResultMessageSchema.safeParse({ ...response, result: { id: "custom", name: "tag", space: "personal" } }).success).toBe(false);
+  });
+
+  it("accepts bounded tag deltas for media and groups and rejects forged scope or replacement fields", () => {
+    const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
+      instanceId: "instance", requestId: "tags", command: "update-tags", space: "personal", operation: "add",
+      tagIds: ["builtin:scene"], items: [{ kind: "media", id: "asset" }, { kind: "entity", id: "group" }] };
+    expect(parseCanvasMessage(command)).toEqual(command);
+    expect(parseCanvasMessage({ ...command, operation: "remove" })).not.toBeNull();
+    for (const invalid of [{ workspaceId: "forged" }, { projectId: "forged" }, { space: "platform" },
+      { operation: "replace" }, { tagIds: [] }, { tagIds: [null] }, { tagIds: Array.from({ length: 51 }, () => "tag") },
+      { items: [] }, { items: [{ kind: "folder", id: "folder" }] }, { items: [{ kind: "entity", id: "group", tagIds: [] }] },
+      { items: Array.from({ length: 101 }, (_, index) => ({ kind: "media", id: `asset-${index}` })) }]) {
+      expect(parseCanvasMessage({ ...command, ...invalid })).toBeNull();
+    }
+    const response = { source: "reelay-shell", type: "host:media-library-result", protocolVersion: 1,
+      instanceId: "instance", requestId: "tags", command: "update-tags",
+      result: { folders: [], tags: [], entries: [], entityEntries: [{ entityId: "group", space: "personal", tagIds: ["builtin:scene"] }] } };
+    expect(hostMediaLibraryResultMessageSchema.parse(response)).toEqual(response);
+    expect(hostMediaLibraryResultMessageSchema.safeParse({ ...response,
+      result: { ...response.result, entityEntries: [{ entityId: "group", space: "platform", tagIds: [] }] } }).success).toBe(false);
+  });
+
   it("validates library commands and keeps workspace/project authority out of canvas messages", () => {
     const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
       instanceId: "instance", requestId: "request", command: "save", space: "organization", folderId: null,

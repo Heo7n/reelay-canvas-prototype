@@ -97,6 +97,9 @@ beforeAll(async () => {
       "0012_workspace_entities.sql",
       "0013_entity_personal_media_bindings.sql",
       "0014_media_library_catalog.sql",
+      "0015_entity_library_deletions.sql",
+      "0016_media_storage_ownership.sql",
+      "0017_entity_library_tags.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);

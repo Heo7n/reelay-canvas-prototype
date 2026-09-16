@@ -2,56 +2,58 @@
   "use strict";
 
   function create(options = {}) {
-    const { panel, spaceTabs, searchRegion, searchInput, searchToggle, searchClose, commands, onSpaceChange, onQueryChange } = options;
-    if (![panel, spaceTabs, searchRegion, searchInput, searchToggle, searchClose, commands].every((element) => element?.addEventListener)
-      || typeof onSpaceChange !== "function" || typeof onQueryChange !== "function") {
+    const { panel, spaceTabs, searchRegion, searchInput, searchClear, onSpaceChange, onQueryChange, onSearchOpenChange } = options;
+    if (![panel, spaceTabs, searchRegion, searchInput, searchClear].every((element) => element?.addEventListener)
+      || typeof onSpaceChange !== "function" || typeof onQueryChange !== "function" || typeof onSearchOpenChange !== "function") {
       throw new TypeError("Asset library header dependencies are incomplete.");
     }
-    const document = panel.ownerDocument;
     const listeners = [];
     let disposed = false;
-    let open = false;
-    let visible = true;
+    let visible = false;
+    let expanded = false;
     let currentSpace = null;
-    let pointerInside = false;
-    let leaveTimer = null;
-
-    function clearLeaveTimer() {
-      if (leaveTimer !== null) document.defaultView.clearTimeout(leaveTimer);
-      leaveTimer = null;
-    }
 
     function listen(element, type, listener) {
       element.addEventListener(type, listener);
       listeners.push(() => element.removeEventListener(type, listener));
     }
 
-    function setOpen(value) {
-      const permanent = currentSpace === "platform";
-      open = visible && (permanent || value);
-      panel.classList.toggle("is-searching", open);
-      searchRegion.inert = !open;
-      searchRegion.toggleAttribute("inert", !open);
-      searchRegion.setAttribute("aria-hidden", String(!open));
-      const overlay = open && !permanent;
-      commands.inert = overlay;
-      commands.toggleAttribute("inert", overlay);
-      commands.setAttribute("aria-hidden", String(overlay));
-      searchClose.setAttribute("aria-label", permanent ? "清除搜索" : "关闭搜索");
-      searchClose.title = permanent ? "清除搜索" : "关闭搜索";
-      searchClose.hidden = permanent && !searchInput.value;
-      searchToggle.setAttribute("aria-expanded", String(open));
+    function syncSearch() {
+      const active = visible && expanded;
+      panel.classList.toggle("is-search-open", active);
+      searchRegion.inert = !active;
+      searchRegion.toggleAttribute("inert", !active);
+      searchRegion.setAttribute("aria-hidden", String(!active));
+      searchClear.hidden = !active || (currentSpace === "platform" && !searchInput.value);
+      searchClear.setAttribute("aria-label", currentSpace === "platform" ? "清空搜索" : "关闭搜索");
+      searchClear.setAttribute("title", currentSpace === "platform" ? "清空搜索" : "关闭搜索");
+      for (const toggle of panel.querySelectorAll("[data-library-search-toggle]")) {
+        toggle.setAttribute("aria-expanded", String(active));
+        if (searchRegion.id) toggle.setAttribute("aria-controls", searchRegion.id);
+      }
+      for (const covered of panel.querySelectorAll("[data-library-search-covered]")) {
+        covered.inert = active;
+        covered.toggleAttribute("inert", active);
+        if (active) covered.setAttribute("aria-hidden", "true");
+        else covered.removeAttribute("aria-hidden");
+      }
     }
 
-    function close({ restoreFocus = false } = {}) {
+    function requestSearchOpen(nextExpanded) {
+      if (disposed || !visible || expanded === nextExpanded) return;
+      onSearchOpenChange(nextExpanded);
+      if (disposed || !visible || expanded !== nextExpanded) return;
+      const target = expanded ? searchInput : panel.querySelector("[data-library-search-toggle], [data-library-selection-cancel]");
+      if (target?.isConnected && !target.disabled) target.focus({ preventScroll: true });
+    }
+
+    function clear({ restoreFocus = true } = {}) {
       if (disposed) return;
-      clearLeaveTimer();
       const hadQuery = searchInput.value !== "";
       searchInput.value = "";
-      setOpen(false);
+      syncSearch();
       if (hadQuery) onQueryChange("");
-      const focusTarget = currentSpace === "platform" ? searchInput : searchToggle;
-      if (restoreFocus && visible && focusTarget.isConnected) focusTarget.focus({ preventScroll: true });
+      if (restoreFocus && visible && expanded && searchInput.isConnected) searchInput.focus({ preventScroll: true });
     }
 
     function tabs() {
@@ -64,15 +66,11 @@
       if (tab.dataset.librarySpace !== currentSpace) onSpaceChange(tab.dataset.librarySpace);
     }
 
-    function sync({ space = "personal", query = "", visible: nextVisible = true } = {}) {
+    function sync({ space = "personal", query = "", visible: nextVisible = true, expanded: nextExpanded = false } = {}) {
       if (disposed) return;
-      const changedSpace = currentSpace !== space;
-      if (changedSpace || !nextVisible) {
-        clearLeaveTimer();
-        pointerInside = false;
-      }
       currentSpace = space;
       visible = Boolean(nextVisible);
+      expanded = space === "platform" || Boolean(nextExpanded);
       spaceTabs.setAttribute("role", "tablist");
       for (const tab of tabs()) {
         const selected = tab.dataset.librarySpace === space;
@@ -83,11 +81,19 @@
       }
       const value = String(query ?? "");
       if (searchInput.value !== value) searchInput.value = value;
-      setOpen(Boolean(value) || (!changedSpace && open));
+      syncSearch();
     }
 
     listen(spaceTabs, "click", (event) => activate(event.target.closest?.("[data-library-space]")));
+    listen(panel, "click", (event) => {
+      const toggle = event.target.closest?.("[data-library-search-toggle]");
+      if (!toggle || !panel.contains(toggle) || toggle.disabled || !visible) return;
+      event.preventDefault();
+      event.stopPropagation();
+      requestSearchOpen(true);
+    });
     listen(spaceTabs, "keydown", (event) => {
+      if (!visible) return;
       const availableTabs = tabs();
       const index = availableTabs.indexOf(event.target.closest?.("[data-library-space]"));
       if (index < 0 || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -101,58 +107,53 @@
       event.stopPropagation();
       activate(availableTabs[nextIndex], { focus: true });
     });
-    listen(searchToggle, "click", () => {
-      if (!visible) return;
-      clearLeaveTimer();
-      setOpen(true);
-      searchInput.focus({ preventScroll: true });
+    listen(panel, "keydown", (event) => {
+      if (!visible || event.altKey || event.ctrlKey || event.metaKey) return;
+      const toggle = event.target.closest?.('[data-library-add-toggle]');
+      const menu = event.target.closest?.('.asset-library-add-menu');
+      if (toggle && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+        const items = [...panel.querySelectorAll('.asset-library-add-menu button:not(:disabled)')];
+        (event.key === "ArrowUp" ? items.at(-1) : items[0])?.focus();
+      } else if (menu && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const items = [...menu.querySelectorAll('button:not(:disabled)')];
+        const index = items.indexOf(event.target.closest('button'));
+        const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+          : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        items[next]?.focus();
+      }
     });
-    function pointerEnter(event) {
-      if (!visible || event.pointerType === "touch") return;
-      clearLeaveTimer();
-      pointerInside = true;
-      setOpen(true);
-    }
-    function pointerLeave(event) {
-      if (searchRegion.contains(event.relatedTarget) || searchToggle.contains(event.relatedTarget)) return;
-      pointerInside = false;
-      clearLeaveTimer();
-      leaveTimer = document.defaultView.setTimeout(() => {
-        leaveTimer = null;
-        if (!disposed && !searchInput.value && !searchRegion.contains(document.activeElement)) setOpen(false);
-      }, 140);
-    }
-    for (const element of [searchToggle, searchRegion]) {
-      listen(element, "pointerenter", pointerEnter);
-      listen(element, "pointerleave", pointerLeave);
-    }
-    listen(searchClose, "click", () => close({ restoreFocus: true }));
-    listen(searchInput, "input", () => onQueryChange(searchInput.value));
+    listen(searchClear, "click", () => {
+      if (currentSpace === "platform") clear();
+      else requestSearchOpen(false);
+    });
+    listen(searchInput, "input", () => {
+      if (!visible || !expanded) return;
+      syncSearch();
+      onQueryChange(searchInput.value);
+    });
     listen(searchRegion, "keydown", (event) => {
-      if (event.key !== "Escape" || event.isComposing || !open) return;
+      if (!visible || !expanded || event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
       event.preventDefault();
       event.stopPropagation();
-      close({ restoreFocus: true });
+      if (currentSpace === "platform") clear();
+      else requestSearchOpen(false);
     });
-    listen(searchRegion, "focusout", (event) => {
-      if (searchRegion.contains(event.relatedTarget) || event.relatedTarget === searchToggle) return;
-      // Null relatedTarget occurs when focus leaves the document; inspect after the
-      // browser finishes its focus transition without closing during internal moves.
-      document.defaultView.queueMicrotask(() => {
-        if (!disposed && open && !pointerInside && !searchInput.value && !searchRegion.contains(document.activeElement)) setOpen(false);
-      });
-    });
-    setOpen(false);
+    syncSearch();
 
     return Object.freeze({
       sync,
-      close,
+      clear,
       destroy() {
         if (disposed) return;
-        clearLeaveTimer();
-        visible = false;
         listeners.splice(0).forEach((remove) => remove());
-        setOpen(false);
+        visible = false;
+        expanded = false;
+        syncSearch();
         disposed = true;
       },
     });

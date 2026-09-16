@@ -60,6 +60,7 @@ function createHarness(overrides = {}) {
     persistedFiles: [],
     renamedMedia: [],
     saved: [],
+    savedContexts: [],
     savePayloads: [],
     visibility: [],
     exitStarts: 0,
@@ -85,17 +86,19 @@ function createHarness(overrides = {}) {
     model: window.REELAY_CANVAS_ENTITY_EDITOR_MODEL,
     view: window.REELAY_CANVAS_ENTITY_EDITOR_VIEW,
     getAvailableMedia,
+    getTagOptions: overrides.getTagOptions,
     persistFiles,
     renameMedia,
     saveEntity,
     getMediaSaveNotice: overrides.getMediaSaveNotice,
+    getFolders: overrides.getFolders,
     confirmDiscard: async () => {
       calls.confirms += 1;
       return overrides.confirmDiscard ? overrides.confirmDiscard() : confirmResult;
     },
     onExitStart: () => { calls.exitStarts += 1; },
     onVisibilityChange: (visible) => calls.visibility.push(visible),
-    onSaved: (entity) => calls.saved.push(entity),
+    onSaved: (entity, context) => { calls.saved.push(entity); calls.savedContexts.push(context); },
     onError: (error) => calls.errors.push(error),
     refreshIcons: () => undefined,
   });
@@ -141,6 +144,38 @@ async function flushAsync() {
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+test("create enters the subject area without reading or choosing source directories", async () => {
+  const h = createHarness({ getFolders: () => { throw new Error("subject creation does not require directories"); } });
+  h.controller.open({ mode: "create", initialMedia: [media[0]], folderId: "folder-5" });
+  assert.equal(h.controller.getDraftState().dirty, false);
+  assert.equal(h.host.querySelector("[data-entity-editor-location-toggle]"), null);
+  assert.equal(h.host.querySelector("[data-entity-editor-folder]"), null);
+  h.input("[data-entity-editor-name]", "套装");
+  await h.controller.submit();
+  assert.equal(h.calls.savePayloads[0].folderId, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls.savedContexts[0])), { mode: "create", folderId: null });
+  h.controller.destroy();
+});
+
+test("subject creation retains scope protection and editing never changes existing directory placement", async () => {
+  let valid = true;
+  const h = createHarness();
+  h.controller.open({ initialMedia: [media[0]], folderId: "deleted-source-folder", isContextValid: () => valid });
+  h.input("[data-entity-editor-name]", "套装");
+  valid = false;
+  await h.controller.submit();
+  assert.equal(h.calls.savePayloads.length, 0);
+  valid = true;
+  await h.controller.submit();
+  assert.equal(h.calls.savePayloads[0].folderId, null);
+  h.controller.open({ mode: "edit", entity: { ...editEntity, folderId: "original-folder" }, media });
+  assert.equal(h.host.querySelector("[data-entity-editor-location-toggle]"), null);
+  await h.controller.submit();
+  assert.equal(Object.hasOwn(h.calls.savePayloads[1], "folderId"), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls.savedContexts[1])), { mode: "edit" });
+  h.controller.destroy();
+});
 
 test("save receives live scope guard and stable keys for unchanged create retries", async () => {
   const attempts = [];
@@ -250,7 +285,7 @@ function mockExitAnimations(harness) {
   return animations;
 }
 
-test("closing keeps the real panels visible and inert until every exit animation settles", async () => {
+test("closing keeps the single panel visible and inert until its exit animation settles", async () => {
   const harness = createHarness();
   const animations = mockExitAnimations(harness);
   harness.controller.open({ mode: "edit", entity: editEntity, media });
@@ -266,12 +301,9 @@ test("closing keeps the real panels visible and inert until every exit animation
   await harness.controller.submit();
   assert.equal(harness.controller.getDraftState().name, editEntity.name);
   assert.equal(harness.calls.savePayloads.length, 0);
-  assert.equal(animations.length, 3);
-  animations[2].finish();
-  await flushAsync();
-  assert.equal(harness.controller.isOpen(), true);
+  assert.equal(animations.length, 1);
+  assert.equal(animations[0].target, panel);
   animations[0].finish();
-  animations[1].finish();
   assert.equal(await closing, true);
   assert.equal(harness.host.hidden, true);
   assert.equal(harness.host.innerHTML, "");
@@ -344,12 +376,12 @@ test("a completed save cannot start an exit on a replacement editor", async () =
   harness.controller.destroy();
 });
 
-test("create keeps 新建素材组 while edit follows the current Entity name", () => {
+test("create keeps 新建主体 while edit follows the current Entity name", () => {
   const create = createHarness();
   create.controller.open({ mode: "create", media });
-  assert.equal(create.host.querySelector("#canvasEntityEditorTitle")?.textContent, "新建素材组");
-  create.input("[data-entity-editor-name]", "输入中的素材组名");
-  assert.equal(create.host.querySelector("#canvasEntityEditorTitle")?.textContent, "新建素材组");
+  assert.equal(create.host.querySelector("#canvasEntityEditorTitle")?.textContent, "新建主体");
+  create.input("[data-entity-editor-name]", "输入中的主体名");
+  assert.equal(create.host.querySelector("#canvasEntityEditorTitle")?.textContent, "新建主体");
   create.controller.destroy();
 
   const edit = createHarness();
@@ -483,7 +515,7 @@ test("filter tabs support roving keyboard navigation in the editor and picker", 
 test("picker adds selected personal Media and excludes them when reopened", () => {
   const harness = createHarness();
   harness.controller.open({ mode: "create", media });
-  harness.input("[data-entity-editor-name]", "新素材组");
+  harness.input("[data-entity-editor-name]", "新主体");
 
   harness.click("[data-entity-editor-add-from-library]");
   assert.equal(harness.pickerHost.hidden, false);
@@ -522,7 +554,7 @@ test("upload persists selected files and appends returned Media to the current d
     },
   });
   harness.controller.open({ mode: "create", media });
-  harness.input("[data-entity-editor-name]", "上传素材组");
+  harness.input("[data-entity-editor-name]", "上传主体");
   const file = new harness.window.File(["image"], "uploaded.png", { type: "image/png" });
   Object.defineProperty(harness.uploadInput, "files", { configurable: true, value: [file] });
   harness.uploadInput.dispatchEvent(new harness.window.Event("change", { bubbles: true }));
@@ -603,7 +635,7 @@ test("submit sends one complete create payload, reports the saved Entity, and cl
   const harness = createHarness();
   harness.controller.open({ mode: "create", media });
   harness.input("[data-entity-editor-name]", "  Lirael  ");
-  harness.input("[data-entity-editor-description]", "素材组描述");
+  harness.input("[data-entity-editor-description]", "主体描述");
   harness.click("[data-entity-editor-add-from-library]");
   harness.click('[data-entity-picker-toggle="portrait"]', harness.pickerHost);
   harness.click('[data-entity-picker-toggle="voice"]', harness.pickerHost);
@@ -614,8 +646,10 @@ test("submit sends one complete create payload, reports the saved Entity, and cl
   assert.deepEqual(JSON.parse(JSON.stringify(harness.calls.savePayloads)), [{
     mode: "create",
     entityId: null,
+    folderId: null,
     name: "Lirael",
-    description: "素材组描述",
+    description: "主体描述",
+    tagIds: [],
     mediaRefs: [{ mediaId: "portrait", order: 0 }, { mediaId: "voice", order: 1 }],
     coverMediaId: "portrait",
     expectedVersion: null,
@@ -817,12 +851,12 @@ test("late rename completion preserves a replacement draft and its own pending r
       } });
       try {
         harness.controller.open({ mode: "edit", entity: editEntity, media });
-        beginTestRename(harness, "上一素材组名称");
+        beginTestRename(harness, "上一主体名称");
         harness.controller.open({ mode: "edit", entity: { ...editEntity, id: "replacement", name: "新草稿" }, media });
         beginTestRename(harness, "本次名称");
         assert.equal(received.length, 2);
-        if (outcome === "resolve") oldOperation.resolve({ displayName: "上一素材组名称.png" });
-        else oldOperation.reject(new Error("上一素材组重命名失败"));
+        if (outcome === "resolve") oldOperation.resolve({ displayName: "上一主体名称.png" });
+        else oldOperation.reject(new Error("上一主体重命名失败"));
         await flushAsync();
 
         assert.equal(harness.controller.getDraftState().entityId, "replacement");
@@ -858,7 +892,7 @@ test("late upload completion preserves a replacement draft and its own pending u
         beginTestUpload(harness, "current.png");
         assert.equal(received.length, 2);
         if (outcome === "resolve") oldOperation.resolve([{ id: "old-upload", mediaKind: "image", displayName: "old.png", url: "/old.png" }]);
-        else oldOperation.reject(new Error("上一素材组上传失败"));
+        else oldOperation.reject(new Error("上一主体上传失败"));
         await flushAsync();
 
         assert.equal(harness.controller.getDraftState().name, "新草稿");
@@ -872,4 +906,74 @@ test("late upload completion preserves a replacement draft and its own pending u
       } finally { harness.controller.destroy(); }
     });
   }
+});
+
+
+test("subject tags remain draft-only until save and searching preserves the composition input", async () => {
+  const h = createHarness({ getTagOptions: () => [{id: "builtin:character", name: "角色"}, {id: "custom:1", name: "奇幻"}] });
+  h.controller.open({ mode: "edit", entity: {...editEntity, tagIds: ["builtin:character"]}, media });
+  h.click('[data-entity-editor-tags-toggle]');
+  const input = h.input('[data-entity-editor-tag-query]', '奇');
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-query]'), input);
+  const composingEnter = new h.window.KeyboardEvent('keydown', {key: 'Enter', isComposing: true, bubbles: true, cancelable: true});
+  input.dispatchEvent(composingEnter);
+  assert.equal(composingEnter.defaultPrevented, false);
+  assert.equal(h.calls.savePayloads.length, 0);
+  h.click('[data-entity-editor-tag-toggle="custom:1"]');
+  assert.equal(h.controller.getDraftState().dirty, true);
+  assert.equal(h.calls.savePayloads.length, 0);
+  h.host.querySelector('[data-entity-editor-tag-query]').dispatchEvent(new h.window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+  assert.equal(h.controller.isOpen(), true);
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-popover]'), null);
+  assert.equal(h.window.document.activeElement, h.host.querySelector('[data-entity-editor-tags-toggle]'));
+  await h.controller.submit();
+  assert.deepEqual(Array.from(h.calls.savePayloads[0].tagIds), ['builtin:character', 'custom:1']);
+  assert.deepEqual(Array.from(h.calls.savePayloads[0].expectedTagIds), ['builtin:character']);
+  h.controller.destroy();
+});
+
+test("cancelling edited tags leaves the original entity untouched", async () => {
+  const h = createHarness({ getTagOptions: () => [{id:'builtin:character',name:'角色'}] });
+  const original = {...editEntity, tagIds: ['builtin:character']};
+  h.controller.open({mode:'edit',entity:original,media});
+  h.click('[data-entity-editor-tags-toggle]');
+  h.click('[data-entity-editor-tag-toggle="builtin:character"]');
+  await h.controller.requestClose();
+  assert.equal(h.calls.confirms, 1);
+  assert.equal(h.calls.savePayloads.length, 0);
+  assert.deepEqual(original.tagIds, ['builtin:character']);
+  h.controller.destroy();
+});
+
+test("unavailable selected tags can only be removed from the choices and cannot be selected again", async () => {
+  const h = createHarness({ getTagOptions: () => [{ id: 'builtin:character', name: '角色' }] });
+  h.controller.open({ mode: 'edit', entity: { ...editEntity, tagIds: ['deleted-tag'] }, media });
+  h.click('[data-entity-editor-tags-toggle]');
+  const missing = h.host.querySelector('[data-entity-editor-tag-toggle="deleted-tag"]');
+  assert.equal(missing.textContent, '标签已移除');
+  assert.equal(missing.getAttribute('aria-pressed'), 'true');
+  h.click('[data-entity-editor-tag-toggle="deleted-tag"]');
+  assert.deepEqual(Array.from(h.controller.getDraftState().tagIds), []);
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-toggle="deleted-tag"]'), null);
+  assert.equal(h.host.querySelector('[data-entity-editor-tags-toggle]').textContent, '选择标签');
+  assert.equal(h.window.document.activeElement, h.host.querySelector('[data-entity-editor-tag-query]'));
+  await h.controller.submit();
+  assert.deepEqual(Array.from(h.calls.savePayloads[0].tagIds), []);
+  h.controller.destroy();
+});
+
+
+test("media-grid scroll survives preview and cover changes and resets when changing type", () => {
+  const h = createHarness();
+  h.controller.open({ mode: 'edit', entity: { ...editEntity, mediaRefs: media.map((item) => ({ mediaId: item.id })) }, media });
+  const grid = () => h.host.querySelector('.entity-editor-media-grid');
+  grid().scrollTop = 180;
+  h.click('[data-entity-editor-media-select="detail"]');
+  assert.equal(grid().scrollTop, 180);
+  assert.equal(h.window.document.activeElement.dataset.entityEditorMediaSelect, 'detail');
+  h.click('[data-entity-editor-set-cover="detail"]');
+  assert.equal(grid().scrollTop, 180);
+  h.click('[data-entity-editor-filter="image"]');
+  assert.equal(grid().scrollTop, 0);
+  h.controller.destroy();
 });

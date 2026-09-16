@@ -1,7 +1,7 @@
 (function registerMediaLibraryCoordinator(root) {
   "use strict";
 
-  const commands = new Set(["list", "rename-folder", "create-folder", "create-tag", "save", "delete"]);
+  const commands = new Set(["list", "rename-folder", "create-folder", "create-tag", "save", "delete", "update-tags", "delete-tag", "move-entities"]);
   const spaces = new Set(["personal", "organization"]);
   const text = (value) => typeof value === "string" && value.trim().length > 0;
   const folder = (value) => Boolean(value && text(value.id) && text(value.name)
@@ -13,7 +13,9 @@
       && Array.isArray(value.entries) && value.entries.every((entry) => entry && text(entry.assetId)
         && text(entry.displayName) && spaces.has(entry.space) && ["image", "video", "audio"].includes(entry.mediaKind)
         && text(entry.contentUrl) && Number.isInteger(entry.assetVersion) && entry.assetVersion > 0
-        && (entry.folderId === null || text(entry.folderId)) && Array.isArray(entry.tagIds) && entry.tagIds.every(text)));
+        && (entry.folderId === null || text(entry.folderId)) && Array.isArray(entry.tagIds) && entry.tagIds.every(text))
+      && (value.entityEntries === undefined || (Array.isArray(value.entityEntries) && value.entityEntries.every((entry) => entry
+        && text(entry.entityId) && spaces.has(entry.space) && Array.isArray(entry.tagIds) && entry.tagIds.every(text)))));
   }
 
   function createMediaLibraryCoordinator(options) {
@@ -31,7 +33,7 @@
     }
     function request(command, payload = {}) {
       if (!commands.has(command)) return Promise.reject(new Error("不支持的素材库操作"));
-      if (!isHosted()) return Promise.reject(new Error(command === "delete" ? "请从项目画布打开资产库后删除" : command === "rename-folder" ? "请从项目画布打开资产库后重命名" : "请从项目画布打开素材保存"));
+      if (!isHosted()) return Promise.reject(new Error(command === "delete" ? "请从项目画布打开资产库后删除" : command === "rename-folder" ? "请从项目画布打开资产库后重命名" : (command === "update-tags" || command === "delete-tag") ? "请从项目画布打开资产库后修改标签" : "请从项目画布打开素材保存"));
       const requestId = makeRequestId();
       return new Promise((resolve, reject) => {
         const timer = setTimer(() => finish(requestId, new Error("素材请求超时，请重试")), 120_000);
@@ -46,7 +48,10 @@
       if (!message || message.source !== "reelay-shell" || message.protocolVersion !== 1
         || message.instanceId !== instanceId || !pending.has(message.requestId)) return false;
       if (message.type === "host:asset-command-error") {
-        return finish(message.requestId, new Error(message.message || "素材库操作暂未完成，请重试"));
+        const error = new Error(message.message || "素材库操作暂未完成，请重试");
+        if (typeof message.code === "string") error.code = message.code;
+        if (typeof message.serviceCode === "string") error.serviceCode = message.serviceCode;
+        return finish(message.requestId, error);
       }
       const operation = pending.get(message.requestId);
       if (message.type !== "host:media-library-result" || message.command !== operation.command) return false;

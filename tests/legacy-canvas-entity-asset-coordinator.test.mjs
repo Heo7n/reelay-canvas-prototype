@@ -14,7 +14,7 @@ const asset = {
   contentUrl: "/api/workspaces/workspace-1/media-assets/asset-1/content",
 };
 const entity = {
-  id: "entity-1", name: "Lirael", description: "角色素材组",
+  id: "entity-1", name: "Lirael", description: "角色主体",
   mediaRefs: [{ assetId: "asset-1", order: 0 }], coverAssetId: "asset-1", version: 1,
 };
 
@@ -74,7 +74,7 @@ test("accepts one correlated catalog and projects Entity Media references", () =
 test("coordinates create and update commands with correlated results", async () => {
   const { coordinator, dispatch, posted, entities } = harness();
   const created = coordinator.createEntity({
-    name: " Lirael ", description: "角色素材组",
+    name: " Lirael ", description: "角色主体",
     mediaRefs: [{ mediaId: "asset-1", order: 0 }], coverMediaId: "asset-1",
   });
   const createMessage = posted[0];
@@ -123,4 +123,21 @@ test("fails closed for invalid drafts, untrusted events and host conflicts", asy
     requestId: message.requestId, instanceId: "instance-1", code: "conflict",
   }), true);
   await assert.rejects(pending, (error) => error.code === "conflict");
+});
+
+
+test("passes tag snapshots through one entity command and returns authoritative placement tags", async () => {
+  const { coordinator, dispatch, posted } = harness();
+  const payload = { entityId: "entity-1", expectedVersion: 1, name: "Subject", mediaRefs: [{ mediaId: "asset-1", order: 0 }], tagIds: ["builtin:scene", "builtin:scene"], expectedTagIds: ["builtin:character"] };
+  const saving = coordinator.updateEntity(payload);
+  assert.deepEqual(JSON.parse(JSON.stringify(posted[0].tagIds)), ["builtin:scene"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(posted[0].expectedTagIds)), ["builtin:character"]);
+  dispatch({ source: "reelay-shell", type: "host:entity-command-result", protocolVersion: 1, instanceId: "instance-1", requestId: posted[0].requestId, entity: { ...entity, libraryTagIds: ["builtin:scene"] } });
+  assert.deepEqual(JSON.parse(JSON.stringify((await saving).libraryTagIds)), ["builtin:scene"]);
+  assert.throws(() => coordinator.updateEntity({ ...payload, expectedTagIds: undefined }), { code: "invalid" });
+  assert.throws(() => coordinator.updateEntity({ ...payload, tagIds: Array(51).fill("builtin:scene") }), { code: "invalid" });
+  const creating = coordinator.createEntity({ name: "Subject", mediaRefs: payload.mediaRefs, tagIds: [], idempotencyKey: "subject-tags-create" });
+  assert.deepEqual(JSON.parse(JSON.stringify(posted[1].tagIds)), []);
+  dispatch({ source: "reelay-shell", type: "host:entity-command-result", protocolVersion: 1, instanceId: "instance-1", requestId: posted[1].requestId, entity: { ...entity, libraryTagIds: [] } });
+  assert.deepEqual(JSON.parse(JSON.stringify((await creating).libraryTagIds)), []);
 });

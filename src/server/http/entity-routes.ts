@@ -1,3 +1,4 @@
+import { MediaLibraryError } from "../../domain/asset/media-library";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { EntityValidationError, type WorkspaceEntity } from "../../domain/asset/entity";
@@ -45,6 +46,7 @@ function entityDto(entity: WorkspaceEntity) {
     workspaceId: entity.workspaceId,
     name: entity.name,
     description: entity.description,
+    ...(entity.libraryTagIds !== undefined ? { libraryTagIds: entity.libraryTagIds } : {}),
     mediaRefs: entity.mediaRefs.map(({ mediaAssetId, order }) => ({ assetId: mediaAssetId, order })),
     coverAssetId: entity.coverMediaId,
     version: entity.version,
@@ -54,6 +56,7 @@ function entityDto(entity: WorkspaceEntity) {
 }
 
 function entityError(reply: FastifyReply, error: unknown): FastifyReply | null {
+  if (error instanceof MediaLibraryError) return reply.code(error.code === "placement_changed" ? 409 : error.code === "invalid_request" ? 400 : 404).send({ error: { code: error.code, message: error.message } });
   if (error instanceof EntityValidationError) {
     return reply.code(400).send({ error: { code: "invalid_entity", message: "主体信息无效。" } });
   }
@@ -128,6 +131,8 @@ export async function registerEntityRoutes(
         actorId: actor.id,
         workspaceId: params.data.workspaceId,
         idempotencyKey: body.data.idempotencyKey,
+        folderId: body.data.folderId,
+        tagIds: body.data.tagIds,
         name: body.data.name,
         description: body.data.description,
         mediaAssetIds: body.data.assetIds,
@@ -179,6 +184,8 @@ export async function registerEntityRoutes(
         workspaceId: params.data.workspaceId,
         entityId: params.data.entityId,
         expectedVersion: body.data.expectedVersion,
+        tagIds: body.data.tagIds,
+        expectedTagIds: body.data.expectedTagIds,
         name: body.data.name,
         description: body.data.description,
         mediaAssetIds: body.data.assetIds,

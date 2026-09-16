@@ -5,12 +5,12 @@
     { id: "builtin:character", name: "角色", space: "builtin" },
     { id: "builtin:scene", name: "场景", space: "builtin" },
     { id: "builtin:object", name: "物品", space: "builtin" },
-    { id: "builtin:sound", name: "音效", space: "builtin" },
   ]);
   // Lucide 1.25.0 paths, ISC; see assets/icons/LUCIDE-LICENSE.txt.
   const ICONS = {
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
     plus: '<path d="M5 12h14M12 5v14"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
     pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zM15 5l4 4"/>',
     trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>',
     check: '<path d="m20 6-11 11-5-5"/>',
@@ -68,6 +68,7 @@
     let tagIds = new Set();
     let expanded = new Set(["root"]);
     let popup = null;
+    let uploadHelpMode = null;
     let folderDraft = null;
     let tagDraft = null;
     let busy = null;
@@ -110,8 +111,23 @@
     title.id = "save-media-title";
     title.tabIndex = -1;
     const itemCount = element("span", "save-media-item-count");
+    const uploadHelp = element("div", "save-media-upload-help");
+    uploadHelp.hidden = true;
+    const uploadHelpButton = button("格式与限制", "save-media-upload-help-button");
+    uploadHelpButton.replaceChildren(element("span", "", "格式与限制"), icon("info"));
+    uploadHelpButton.setAttribute("aria-expanded", "false");
+    uploadHelpButton.setAttribute("aria-controls", "save-media-upload-hint");
+    uploadHelpButton.setAttribute("aria-describedby", "save-media-upload-hint");
+    const uploadHint = element("section", "save-media-upload-hint");
+    uploadHint.id = "save-media-upload-hint";
+    uploadHint.setAttribute("role", "tooltip");
+    uploadHint.setAttribute("aria-label", "支持的文件格式");
+    uploadHint.hidden = true;
+    const uploadHintContent = element("div", "save-media-upload-hint-content");
+    uploadHint.append(uploadHintContent);
+    uploadHelp.append(uploadHelpButton, uploadHint);
     const closeButton = button("关闭保存到素材", "save-media-close", "x");
-    header.append(title, itemCount, closeButton);
+    header.append(title, itemCount, uploadHelp, closeButton);
     const body = element("div", "save-media-body");
     const preview = element("section", "save-media-preview");
     preview.setAttribute("aria-label", "素材预览");
@@ -158,20 +174,14 @@
     locationGroup.append(locationLabel, locationButton, fullPath);
     const tagsGroup = element("div", "save-media-field-group");
     tagsGroup.append(element("span", "save-media-label", "标签"));
-    const tagsField = element("div", "save-media-tags-field save-media-input");
-    const chips = element("div", "save-media-tag-chips");
-    const tagsButton = button("选择标签", "save-media-tags-toggle");
+    const tagsButton = button("选择标签", "save-media-tags-toggle save-media-input");
     tagsButton.setAttribute("aria-haspopup", "dialog");
     tagsButton.setAttribute("aria-expanded", "false");
-    tagsField.append(chips, tagsButton);
-    tagsGroup.append(tagsField);
+    tagsGroup.append(tagsButton);
     const status = element("div", "save-media-status");
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
-    const uploadHint = element("section", "save-media-upload-hint");
-    uploadHint.setAttribute("aria-label", "支持的文件格式");
-    uploadHint.hidden = true;
-    fields.append(nameGroup, locationGroup, tagsGroup, uploadHint);
+    fields.append(nameGroup, locationGroup, tagsGroup);
     body.append(preview, batchPreview, fields);
     const footer = element("footer", "save-media-footer");
     const cancelButton = button("取消", "save-media-button");
@@ -280,20 +290,10 @@
     }
 
     function updateTags() {
-      chips.replaceChildren();
-      for (const tag of availableTags().filter((tag) => tagIds.has(tag.id))) {
-        const chip = element("span", "save-media-tag-chip");
-        chip.append(element("span", "", tag.name));
-        const remove = button(`移除标签 ${tag.name}`, "save-media-chip-remove", "x");
-        remove.disabled = Boolean(busy);
-        remove.addEventListener("click", () => { tagIds.delete(tag.id); updateTags(); if (popup === "tags") renderTags(); focus(tagsButton); });
-        chip.append(remove);
-        chips.append(chip);
-      }
-      chips.hidden = chips.childElementCount === 0;
-      tagsButton.replaceChildren();
-      if (!chips.childElementCount) tagsButton.append(element("span", "save-media-placeholder", "选择标签"));
-      tagsButton.append(icon("down"));
+      const selectedNames = availableTags().filter((tag) => tagIds.has(tag.id)).map((tag) => tag.name).join("、");
+      const label = element("span", selectedNames ? "save-media-tags-value" : "save-media-tags-value save-media-placeholder", selectedNames || "选择标签");
+      tagsButton.title = selectedNames;
+      tagsButton.replaceChildren(label, icon("down"));
     }
 
     function pausePreview() {
@@ -406,7 +406,7 @@
 
     function positionPopup() {
       if (!popup || !active) return;
-      const anchor = (popup === "location" ? locationButton : tagsField).getBoundingClientRect();
+      const anchor = (popup === "location" ? locationButton : tagsButton).getBoundingClientRect();
       const viewportHeight = window.innerHeight;
       const below = viewportHeight - anchor.bottom - 16;
       const above = anchor.top - 16;
@@ -437,6 +437,7 @@
 
     function openPopup(kind) {
       if (!ready || busy) return;
+      closeUploadHelp();
       if (popup === kind) { closePopup(true); return; }
       closePopup();
       popup = kind;
@@ -448,6 +449,21 @@
       const selected = popupHost.querySelector(kind === "location" ? ".save-media-folder-row.is-selected .save-media-folder-select" : '[aria-checked="true"]');
       focus(selected || popupHost.querySelector("button"));
       selected?.scrollIntoView?.({ block: "nearest" });
+    }
+
+    function closeUploadHelp() {
+      uploadHelpMode = null;
+      uploadHint.hidden = true;
+      uploadHelpButton.setAttribute("aria-expanded", "false");
+    }
+
+    function openUploadHelp(mode) {
+      if (!active || uploadHelp.hidden || (popup && mode !== "pinned")) return;
+      // Hovering over help must not discard an in-progress directory/tag edit.
+      if (mode === "pinned") closePopup();
+      if (uploadHelpMode !== "pinned") uploadHelpMode = mode;
+      uploadHint.hidden = false;
+      uploadHelpButton.setAttribute("aria-expanded", "true");
     }
 
     function expandAncestors(id) {
@@ -805,6 +821,7 @@
       session += 1;
       dismissConfirmation?.(); dismissConfirmation = null;
       closePopup();
+      closeUploadHelp();
       pausePreview();
       batchGrid.replaceChildren();
       batchCards.clear();
@@ -832,10 +849,11 @@
       dialog.classList.toggle("is-upload", intent === "upload");
       if (intent === "upload") fields.append(footer);
       else dialog.insertBefore(footer, popupHost);
-      uploadHint.replaceChildren();
-      uploadHint.hidden = intent !== "upload" || !input.uploadPolicy?.library?.formats.length;
-      if (!uploadHint.hidden) {
-        uploadHint.append(element("p", "save-media-upload-hint-title", "支持的文件格式"));
+      closeUploadHelp();
+      uploadHintContent.replaceChildren();
+      uploadHelp.hidden = intent !== "upload" || !input.uploadPolicy?.library?.formats.length;
+      if (!uploadHelp.hidden) {
+        uploadHintContent.append(element("p", "save-media-upload-hint-title", "支持的文件格式"));
         const formats = element("ul", "save-media-upload-formats");
         const kindNames = { image: "图片", video: "视频", audio: "音频" };
         for (const { mediaKind, extensions } of input.uploadPolicy.library.formats) {
@@ -845,13 +863,13 @@
           row.append(icon(mediaKind), element("span", "", names.join(" / ").toUpperCase()));
           formats.append(row);
         }
-        uploadHint.append(formats);
+        uploadHintContent.append(formats);
         const { library, maxFileBytesByContentType } = input.uploadPolicy;
         const exceptions = library.formats.flatMap((group) => Object.entries(group.extensions)
           .filter(([, type]) => maxFileBytesByContentType[type] < library.maxFileBytes)
           .map(([extension, type]) => `${extension.toUpperCase()} ${maxFileBytesByContentType[type] / (1024 * 1024)} MB`));
         const limitText = `单个文件不超过 ${library.maxFileBytes / (1024 * 1024)} MB${exceptions.length ? `（${exceptions.join("、")}）` : ""}`;
-        uploadHint.append(element("p", "save-media-upload-hint-limit", limitText));
+        uploadHintContent.append(element("p", "save-media-upload-hint-limit", limitText));
       }
       title.textContent = intent === "upload" ? "上传资产" : "保存到素材";
       closeButton.setAttribute("aria-label", intent === "upload" ? "关闭上传资产" : "关闭保存到素材");
@@ -892,14 +910,34 @@
     listen(saveButton, "click", () => { void submit(); });
     listen(locationButton, "click", () => openPopup("location"));
     listen(tagsButton, "click", () => openPopup("tags"));
-    listen(tagsField, "click", (event) => { if (event.target === tagsField || event.target === chips) openPopup("tags"); });
     listen(nameInput, "input", updateBusy);
-    listen(dialog, "cancel", (event) => { event.preventDefault(); if (popup && !busy) closePopup(true); else if (busy !== "save") close(); });
+    listen(uploadHelp, "pointerenter", () => openUploadHelp("hover"));
+    listen(uploadHelp, "pointerleave", () => {
+      if (uploadHelpMode !== "pinned" && !uploadHelp.contains(document.activeElement)) closeUploadHelp();
+    });
+    listen(uploadHelp, "focusin", () => openUploadHelp("focus"));
+    listen(uploadHelp, "focusout", (event) => {
+      if (!uploadHelp.contains(event.relatedTarget) && (event.relatedTarget || uploadHelpMode !== "pinned")) closeUploadHelp();
+    });
+    listen(uploadHelpButton, "click", () => {
+      if (uploadHelpMode === "pinned") closeUploadHelp();
+      else openUploadHelp("pinned");
+    });
+    function dismissTopLayer() {
+      if (uploadHelpMode) closeUploadHelp();
+      else if (popup && !busy) closePopup(true);
+      else if (busy !== "save") close();
+    }
+    listen(dialog, "cancel", (event) => { event.preventDefault(); dismissTopLayer(); });
     listen(dialog, "keydown", (event) => {
       event.stopPropagation();
-      if (event.key === "Escape" && !event.isComposing) { event.preventDefault(); if (popup && !busy) closePopup(true); else if (busy !== "save") close(); }
+      if (event.key === "Escape" && !event.isComposing) { event.preventDefault(); dismissTopLayer(); }
     });
-    listen(dialog, "pointerdown", (event) => { event.stopPropagation(); if (popup && !busy && !popupHost.contains(event.target) && !locationButton.contains(event.target) && !tagsField.contains(event.target)) closePopup(); });
+    listen(dialog, "pointerdown", (event) => {
+      event.stopPropagation();
+      if (!uploadHelp.contains(event.target)) closeUploadHelp();
+      if (popup && !busy && !popupHost.contains(event.target) && !locationButton.contains(event.target) && !tagsButton.contains(event.target)) closePopup();
+    });
     listen(dialog, "click", (event) => event.stopPropagation());
     listen(dialog, "wheel", (event) => event.stopPropagation(), { passive: true });
     listen(body, "scroll", positionPopup, { passive: true });

@@ -33,6 +33,7 @@
         }
         else if (catalog && command === "create-tag" && !result.id.startsWith("builtin:")) catalog = { ...catalog,
           tags: [...catalog.tags.filter((tag) => tag.id !== result.id), result] };
+        if (command === "create-tag") options.onTag?.(result);
       }
       assertCurrent(owner);
       return result;

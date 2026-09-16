@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { DEMO_ASSET_TAG_IDS } from "../../config/demo-asset-tags";
 import { DEMO_LIBRARY_DIRECTORY_EXAMPLE } from "../../config/media-library-directory-example";
 import { InMemoryObjectStore } from "../infrastructure/InMemoryObjectStore";
 import { PostgresAssetStore } from "../infrastructure/PostgresAssetStore";
@@ -106,6 +107,7 @@ beforeEach(async () => {
       TRUNCATE TABLE
         media_library_folders,
         media_library_tags,
+        entity_library_deletions,
         entity_personal_media_bindings,
         entity_placements,
         entity_media_references,
@@ -113,7 +115,8 @@ beforeEach(async () => {
         project_asset_references,
         media_asset_placements,
         asset_upload_intents,
-        workspace_media_assets
+        workspace_media_assets,
+        media_storage_accounts
     `);
     await pool.query("DELETE FROM canvas_documents WHERE canvas_id = 'fixture-retention-test'");
   } finally {
@@ -258,6 +261,35 @@ function expectCanonicalEntityContents(
 }
 
 describe("demo asset library seed", () => {
+  it("labels canonical media on creation and preserves removed or customized labels on replay", async () => {
+    const pool = createPool();
+    const assetStore = new PostgresAssetStore(pool);
+    const dependencies = { pool, assetStore, entityStore: new PostgresEntityStore(pool), objectStore: new InMemoryObjectStore() };
+    const context = { actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID };
+    try {
+      const seeded = await seedDemoAssetLibrary(dependencies, { personalOnly: true });
+      const initial = await assetStore.listLibrary(context);
+      expect(Object.keys(DEMO_ASSET_TAG_IDS).sort()).toEqual(DEMO_ASSET_FIXTURES.map(({ key }) => key).sort());
+      for (const [index, fixture] of DEMO_ASSET_FIXTURES.entries()) {
+        expect(initial.entries.find(({ assetId }) => assetId === seeded.assets[index].id)?.tagIds)
+          .toEqual(DEMO_ASSET_TAG_IDS[fixture.key]);
+      }
+      expect(initial.entries.filter(({ tagIds }) => tagIds.includes("builtin:character"))).toHaveLength(8);
+      expect(initial.entries.filter(({ tagIds }) => tagIds.includes("builtin:object"))).toHaveLength(4);
+
+      const equipmentIndex = DEMO_ASSET_FIXTURES.findIndex(({ key }) => key === DEMO_LIBRARY_DIRECTORY_EXAMPLE.assetKey);
+      await assetStore.updateLibraryTags({ ...context, space: "personal", operation: "remove", tagIds: ["builtin:object"],
+        items: [{ kind: "media", id: seeded.assets[equipmentIndex].id }] });
+      const customTag = await assetStore.createLibraryTag({ ...context, space: "personal", name: "已选定" });
+      await assetStore.updateLibraryTags({ ...context, space: "personal", operation: "add", tagIds: [customTag.id],
+        items: [{ kind: "media", id: seeded.assets[0].id }] });
+      const customized = await assetStore.listLibrary(context);
+      await seedDemoAssetLibrary(dependencies, { personalOnly: true, withDirectoryExample: true });
+      expect(await assetStore.listLibrary(context)).toEqual(customized);
+      expect(customized.folders).toHaveLength(0);
+    } finally { await pool.end(); }
+  });
+
   it("opts into exactly one reusable five-level directory example and preserves later user placement changes", async () => {
     const pool = createPool();
     const assetStore = new PostgresAssetStore(pool);
@@ -272,7 +304,7 @@ describe("demo asset library seed", () => {
       await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
       const example = await assetStore.listLibrary(context);
       expect(example.folders).toHaveLength(4);
-      expect(example.tags).toHaveLength(1);
+      expect(example.tags).toHaveLength(0);
       let parentId: string | null = null;
       for (const name of DEMO_LIBRARY_DIRECTORY_EXAMPLE.path) {
         const folder = example.folders.find((candidate) => candidate.parentId === parentId && candidate.name === name);
@@ -281,14 +313,16 @@ describe("demo asset library seed", () => {
         parentId = folder!.id;
       }
       const entry = example.entries.find(({ assetId }) => assetId === sample.id);
-      expect(entry).toMatchObject({ folderId: parentId, displayName: DEMO_LIBRARY_DIRECTORY_EXAMPLE.displayName, tagIds: [DEMO_LIBRARY_DIRECTORY_EXAMPLE.builtinTagId, example.tags[0].id] });
+      expect(entry).toMatchObject({ folderId: parentId, displayName: DEMO_LIBRARY_DIRECTORY_EXAMPLE.displayName, tagIds: [DEMO_LIBRARY_DIRECTORY_EXAMPLE.builtinTagId] });
       expect(example.entries.filter(({ folderId }) => folderId !== null)).toHaveLength(1);
-      expect(example.tags[0].name).toBe(DEMO_LIBRARY_DIRECTORY_EXAMPLE.customTagName);
+      expect(example.entityEntries).toEqual(seeded.entities.map((entity) => ({ entityId: entity.id, space: "personal", folderId: null, addedAt: entity.createdAt, tagIds: ["builtin:character"] })).sort((left, right) => left.entityId.localeCompare(right.entityId)));
       await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
       expect(await assetStore.listLibrary(context)).toEqual(example);
       expect((await assetStore.listProjectAssets({ actorId: DEMO_ACTOR_ID, projectId: DEMO_PROJECT_ID })).find(({ asset }) => asset.id === sample.id)?.asset.displayName).toBe(DEMO_ASSET_FIXTURES[fixtureIndex].displayName);
       await assetStore.saveLibrary({ ...context, projectId: DEMO_PROJECT_ID, space: "personal", folderId: null, tagIds: [], items: [{ assetId: sample.id, displayName: "用户的收藏", action: "move", expectedFolderId: parentId }] });
       const customized = await assetStore.listLibrary(context);
+      await assetStore.updateLibraryTags({ ...context, space: "personal", operation: "remove", tagIds: ["builtin:character"], items: seeded.entities.map((entity) => ({ kind: "entity", id: entity.id })) });
+      customized.entityEntries = customized.entityEntries?.map((entry) => ({ ...entry, tagIds: [] }));
       await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
       expect(await assetStore.listLibrary(context)).toEqual(customized);
     } finally { await pool.end(); }

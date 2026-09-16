@@ -3,6 +3,49 @@ import { HttpMediaLibraryRepository } from "./HttpMediaLibraryRepository";
 import { HttpResponseValidationError } from "./HttpApiClient";
 
 describe("HttpMediaLibraryRepository", () => {
+  it("moves groups with observed locations and parses directory dates while retaining conflict details", async () => {
+    const catalog = { folders: [], tags: [], entries: [], entityEntries: [{ entityId: "group", space: "personal", folderId: "folder", addedAt: "2026-09-16T00:00:00.000Z", tagIds: [] }] };
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ catalog }))
+      .mockResolvedValueOnce(Response.json({ error: { code: "placement_changed", message: "素材组已被移动" } }, { status: 409 }));
+    const repository = new HttpMediaLibraryRepository({ fetch });
+    const input = { workspaceId: "scope/name", space: "personal" as const, folderId: "folder", items: [{ entityId: "group", expectedFolderId: null }] };
+    expect(await repository.moveEntities(input)).toEqual(catalog);
+    expect(fetch.mock.calls[0]![0]).toBe("/api/workspaces/scope%2Fname/media-library/move-entities");
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ space: "personal", folderId: "folder", items: input.items });
+    await expect(repository.moveEntities(input)).rejects.toMatchObject({ code: "conflict", serviceCode: "placement_changed" });
+  });
+
+  it("deletes a scoped tag with its observed usage and preserves count conflicts", async () => {
+    const catalog = { folders: [], tags: [], entries: [], entityEntries: [] };
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ catalog }))
+      .mockResolvedValueOnce(Response.json({ catalog: { entries: [] } }))
+      .mockResolvedValueOnce(Response.json({ error: { code: "tag_usage_changed", message: "标签使用情况已更新" } }, { status: 409 }));
+    const repository = new HttpMediaLibraryRepository({ fetch });
+    const input = { workspaceId: "scope/name", space: "personal" as const, tagId: "custom", expectedUsageCount: 2 };
+    expect(await repository.deleteTag(input)).toEqual(catalog);
+    expect(fetch.mock.calls[0]![0]).toBe("/api/workspaces/scope%2Fname/media-library/tags/delete");
+    expect(fetch.mock.calls[0]![1]).toMatchObject({ method: "POST", credentials: "include" });
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ space: "personal", tagId: "custom", expectedUsageCount: 2 });
+    await expect(repository.deleteTag(input)).rejects.toBeInstanceOf(HttpResponseValidationError);
+    await expect(repository.deleteTag(input)).rejects.toMatchObject({ code: "conflict", serviceCode: "tag_usage_changed" });
+  });
+
+  it("posts tag deltas in the URL-owned scope and validates independent group tags in the result", async () => {
+    const catalog = { folders: [], tags: [], entries: [], entityEntries: [{ entityId: "group", space: "personal", tagIds: ["builtin:scene"] }] };
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ catalog }))
+      .mockResolvedValueOnce(Response.json({ catalog: { ...catalog, entityEntries: [{ entityId: "group", tagIds: [] }] } }))
+      .mockResolvedValueOnce(Response.json({ error: { code: "tag_not_found", message: "标签不属于当前空间" } }, { status: 400 }));
+    const repository = new HttpMediaLibraryRepository({ fetch });
+    const input = { workspaceId: "scope/name", space: "personal" as const, operation: "add" as const,
+      tagIds: ["builtin:scene"], items: [{ kind: "media" as const, id: "asset" }, { kind: "entity" as const, id: "group" }] };
+    expect(await repository.updateTags(input)).toEqual(catalog);
+    expect(fetch.mock.calls[0]![0]).toBe("/api/workspaces/scope%2Fname/media-library/tags/update");
+    expect(fetch.mock.calls[0]![1]).toMatchObject({ method: "POST", credentials: "include" });
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ space: input.space, operation: input.operation, tagIds: input.tagIds, items: input.items });
+    await expect(repository.updateTags(input)).rejects.toBeInstanceOf(HttpResponseValidationError);
+    await expect(repository.updateTags(input)).rejects.toMatchObject({ serviceCode: "tag_not_found", message: "标签不属于当前空间" });
+  });
+
   it("sends scoped requests and validates catalog and creation envelopes", async () => {
     const catalog = { folders: [], tags: [], entries: [] };
     const folder = { id: "folder", space: "organization", name: "参考", parentId: null };

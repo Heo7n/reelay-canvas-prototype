@@ -11,6 +11,8 @@ export interface EntityMediaReference {
 }
 
 export interface WorkspaceEntity {
+  /** Personal placement tags projected for the current actor; not Entity content. */
+  libraryTagIds?: string[];
   id: EntityId;
   workspaceId: WorkspaceId;
   name: string;

@@ -42,6 +42,7 @@
     if (!value || typeof value !== "object" || !isNonEmptyString(value.id)
       || !isNonEmptyString(value.name, 200) || typeof value.description !== "string"
       || value.description.length > 2_000 || !Number.isInteger(value.version) || value.version < 1) return null;
+    if (value.libraryTagIds !== undefined && (!Array.isArray(value.libraryTagIds) || value.libraryTagIds.length > 50 || value.libraryTagIds.some((id) => !isNonEmptyString(id)))) return null;
     const mediaRefs = normalizeRefs(value.mediaRefs);
     if (!mediaRefs) return null;
     const coverMediaId = value.coverAssetId == null ? null : String(value.coverAssetId).trim();
@@ -53,7 +54,17 @@
       mediaRefs,
       coverMediaId,
       version: value.version,
+      ...(value.libraryTagIds !== undefined ? { libraryTagIds: normalizeTagIds(value.libraryTagIds) } : {}),
     };
+  }
+
+  function normalizeTagIds(value) {
+    if (!Array.isArray(value) || value.length > 50 || value.some((id) => !isNonEmptyString(id))) {
+      const error = new Error("主体标签无效");
+      error.code = "invalid";
+      throw error;
+    }
+    return [...new Set(value.map((id) => id.trim()))].sort();
   }
 
   function createCanvasEntityAssetCoordinator(options = {}) {
@@ -72,7 +83,7 @@
     const seenCatalogRequests = new Set();
 
     function commandError(code, message) {
-      const error = new Error(message || "素材组请求失败");
+      const error = new Error(message || "主体请求失败");
       error.code = code;
       return error;
     }
@@ -94,6 +105,8 @@
     }
 
     function normalizeCommandPayload(input, mode) {
+      const tagFields = input?.tagIds === undefined ? {} : { tagIds: normalizeTagIds(input.tagIds) };
+      if (mode === "update" && input?.tagIds !== undefined) tagFields.expectedTagIds = normalizeTagIds(input.expectedTagIds);
       const name = String(input?.name || "").trim();
       const description = String(input?.description || "");
       const refs = Array.isArray(input?.mediaRefs) ? input.mediaRefs : [];
@@ -108,24 +121,25 @@
       const coverAssetId = input?.coverMediaId == null ? null : String(input.coverMediaId).trim() || null;
       if (!name || name.length > 200 || description.length > 2_000 || assetIds.length < 1 || assetIds.length > 100
         || (coverAssetId && !seen.has(coverAssetId))) {
-        throw commandError("invalid", "素材组名称、素材或封面不符合要求");
+        throw commandError("invalid", "主体名称、素材或封面不符合要求");
       }
       if (mode === "update") {
         const entityId = String(input?.entityId || "").trim();
         if (!entityId || !Number.isInteger(input?.expectedVersion) || input.expectedVersion < 1) {
-          throw commandError("invalid", "素材组版本信息无效");
+          throw commandError("invalid", "主体版本信息无效");
         }
-        return { entityId, expectedVersion: input.expectedVersion, name, description, assetIds, coverAssetId };
+        return { entityId, expectedVersion: input.expectedVersion, name, description, assetIds, coverAssetId, ...tagFields };
       }
-      return { name, description, assetIds, coverAssetId };
+      if (input?.folderId != null && !isNonEmptyString(input.folderId)) throw commandError("invalid", "保存目录无效");
+      return { name, description, assetIds, coverAssetId, ...tagFields, ...(input?.folderId !== undefined ? { folderId: input.folderId } : {}) };
     }
 
     function start(type, payload) {
-      if (!isHosted()) return Promise.reject(commandError("unsupported", "当前画布未连接素材组持久化服务"));
+      if (!isHosted()) return Promise.reject(commandError("unsupported", "当前画布未连接主体持久化服务"));
       const requestId = String(makeRequestId()).trim();
-      if (!requestId || pending.has(requestId)) return Promise.reject(commandError("invalid", "无法创建唯一的素材组请求"));
+      if (!requestId || pending.has(requestId)) return Promise.reject(commandError("invalid", "无法创建唯一的主体请求"));
       return new Promise((resolve, reject) => {
-        const timeoutId = setTimer(() => finish(requestId, commandError("network", "素材组请求已超时")), requestTimeoutMs);
+        const timeoutId = setTimer(() => finish(requestId, commandError("network", "主体请求已超时")), requestTimeoutMs);
         pending.set(requestId, { resolve, reject, timeoutId });
         send(type, { requestId, ...payload });
       });
@@ -134,7 +148,7 @@
     function createEntity(input) {
       const payload = normalizeCommandPayload(input, "create");
       const idempotencyKey = String(input?.idempotencyKey ?? makeRequestId()).trim();
-      if (!isNonEmptyString(idempotencyKey)) return Promise.reject(commandError("invalid", "无法创建素材组幂等标识"));
+      if (!isNonEmptyString(idempotencyKey)) return Promise.reject(commandError("invalid", "无法创建主体幂等标识"));
       return start("canvas:create-entity", { idempotencyKey, ...payload });
     }
 
@@ -174,12 +188,12 @@
     function acceptError(message) {
       if (message.instanceId !== instanceId || !pending.has(message.requestId) || !ERROR_CODES.has(message.code)) return false;
       const messages = {
-        invalid: "素材组内容不符合要求",
-        forbidden: "没有权限修改此素材组",
-        missing: "素材组或素材已不存在",
-        conflict: "素材组已在其他窗口更新，请重新打开后再试",
-        network: "素材组暂时保存失败",
-        unsupported: "当前环境尚未接入素材组持久化",
+        invalid: "主体内容不符合要求",
+        forbidden: "没有权限修改此主体",
+        missing: "主体或素材已不存在",
+        conflict: "主体已在其他窗口更新，请重新打开后再试",
+        network: "主体暂时保存失败",
+        unsupported: "当前环境尚未接入主体持久化",
       };
       return finish(message.requestId, commandError(message.code, messages[message.code]));
     }
@@ -195,7 +209,7 @@
     }
 
     function dispose() {
-      for (const requestId of [...pending.keys()]) finish(requestId, commandError("network", "素材组协调器已停止"));
+      for (const requestId of [...pending.keys()]) finish(requestId, commandError("network", "主体协调器已停止"));
       seenCatalogRequests.clear();
     }
 

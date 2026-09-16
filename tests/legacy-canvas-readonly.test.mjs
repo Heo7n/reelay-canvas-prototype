@@ -9,7 +9,7 @@ import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 const root = new URL("../", import.meta.url);
 const fileName = await readFile(new URL("src/legacy-canvas/canvas-file-name.js", root), "utf8");
 const themeController = await readFile(new URL("src/legacy-canvas/canvas-theme-controller.js", root), "utf8");
-const saveMediaModules = await Promise.all(["canvas-media-library-coordinator", "canvas-save-media-dialog", "canvas-save-media-controller", "canvas-library-upload-controller", "canvas-library-delete-controller", "canvas-library-directory-controller"]
+const saveMediaModules = await Promise.all(["canvas-media-library-coordinator", "canvas-save-media-dialog", "canvas-save-media-controller", "canvas-library-upload-controller", "canvas-library-delete-controller", "canvas-library-navigation", "canvas-library-search-session", "canvas-library-tags-controller", "canvas-library-directory-controller"]
   .map((name) => readFile(new URL(`src/legacy-canvas/${name}.js`, root), "utf8")));
 const [promptDocument, promptController, promptEditor] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-prompt-document.js", root), "utf8"),
@@ -404,7 +404,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   window.document.querySelector("[data-library-filter-toggle]")
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true, composed: true }));
-  assert.ok(window.document.querySelector(".asset-library-toolbar-menu.compact"));
+  assert.ok(window.document.querySelector('[role="dialog"][aria-label="筛选"]'));
   assert.equal(
     window.document.querySelector("[data-library-filter-toggle]").getAttribute("aria-expanded"),
     "true",

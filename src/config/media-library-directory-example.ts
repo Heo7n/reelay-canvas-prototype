@@ -4,5 +4,4 @@ export const DEMO_LIBRARY_DIRECTORY_EXAMPLE = {
   assetKey: "xuanling-equipment",
   displayName: "玄翎武器设定",
   builtinTagId: "builtin:object",
-  customTagName: "Others",
 } as const;

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkspaceMediaAssetStore } from "../application/WorkspaceMediaAssetStore";
 import type { ProjectAssetReferenceStore } from "../application/ProjectAssetReferenceStore";
 import type { EntityStore } from "../application/EntityStore";
-import type { SaveLibraryInput } from "../../domain/asset/media-library";
+import { BUILTIN_LIBRARY_TAGS, type SaveLibraryInput, type UpdateLibraryTagsInput } from "../../domain/asset/media-library";
 
 export interface LibraryTestFixture { store: WorkspaceMediaAssetStore & ProjectAssetReferenceStore; entities: EntityStore; workspaceId: string; projectId: string; otherProjectId: string; owner: string; editor: string; outsider: string; external: string }
 let uploadNumber = 0;
@@ -14,6 +14,286 @@ async function upload(fixture: LibraryTestFixture, actorId = fixture.owner) {
   const intent=await store.createUploadIntent({ actorId,workspaceId,idempotencyKey:uploadKey,mediaKind:"image",displayName:"Source.png",contentType:"image/png",byteSize:12,checksumSha256 });
   await store.recordUpload({ actorId,workspaceId,uploadIntentId:intent.id,objectKey:intent.objectKey,contentType:"image/png",byteSize:12,checksumSha256,etag:checksumSha256 });
   return store.finalizeUpload({ actorId,workspaceId,uploadIntentId:intent.id });
+}
+
+export function verifyMediaLibraryTagDeletion(createFixture: () => Promise<LibraryTestFixture>) {
+  describe("library tag deletion", () => {
+    it("removes a custom label from mixed placements, preserving files, group content, folders and other labels", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, projectId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const first = await upload(fixture), second = await upload(fixture);
+      const folder = await store.createLibraryFolder({ ...context, parentId: null, name: "Preserved" });
+      const tag = await store.createLibraryTag({ ...context, name: "Delete me" });
+      await store.saveLibrary({ ...context, projectId, folderId: folder.id, tagIds: [tag.id, "builtin:object"], items: [{ assetId: first.id, displayName: "Preserved.png", action: "move", expectedFolderId: null }] });
+      const group = await entities.createPersonalEntity({ ...context, idempotencyKey: "delete-tag-group", name: "Group", description: "Preserved", mediaAssetIds: [first.id, second.id], coverMediaId: first.id });
+      await store.updateLibraryTags({ ...context, operation: "add", tagIds: [tag.id, "builtin:character"], items: [{ kind: "entity", id: group.id }] });
+      const before = await store.listLibrary(context);
+      const request = { ...context, tagId: tag.id, expectedUsageCount: 2 };
+      await expect(store.deleteLibraryTag({ ...request, expectedUsageCount: 1 })).rejects.toMatchObject({ code: "tag_usage_changed" });
+      expect(await store.listLibrary(context)).toEqual(before);
+      const after = await store.deleteLibraryTag(request);
+      expect(after.tags).toEqual([]);
+      expect(after.folders).toEqual(before.folders);
+      expect(after.entries).toEqual(before.entries.map((entry) => ({ ...entry, tagIds: entry.tagIds.filter((id) => id !== tag.id) })));
+      expect(after.entityEntries).toEqual([{ entityId: group.id, space: "personal", folderId: null, addedAt: group.createdAt, tagIds: ["builtin:character"] }]);
+      await expect(entities.getPersonalEntity({ ...context, entityId: group.id })).resolves.toEqual({ ...group, libraryTagIds: ["builtin:character"] });
+      await expect(store.getPersonalAsset({ ...context, assetId: first.id })).resolves.toMatchObject({ id: first.id, objectKey: first.objectKey, checksumSha256: first.checksumSha256, byteSize: first.byteSize, displayName: "Preserved.png" });
+      await expect(store.deleteLibraryTag(request)).resolves.toEqual(after);
+      await expect(store.deleteLibraryTag({ ...request, expectedUsageCount: 0 })).resolves.toEqual(after);
+      await expect(store.updateLibraryTags({ ...context, operation: "add", tagIds: [tag.id], items: [{ kind: "media", id: first.id }] })).rejects.toMatchObject({ code: "tag_not_found" });
+      const recreated = await store.createLibraryTag({ ...context, name: tag.name });
+      expect(recreated.id).not.toBe(tag.id);
+      expect((await store.listLibrary(context)).entries).toEqual(after.entries);
+    });
+
+    it("isolates personal owners and spaces and checks membership/manager permission before idempotency", async () => {
+      const fixture = await createFixture();
+      const { store, workspaceId, projectId, owner, editor, external } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const own = await store.createLibraryTag({ ...context, name: "Same name" });
+      const other = await store.createLibraryTag({ ...context, actorId: editor, name: "Same name" });
+      const org = await store.createLibraryTag({ ...context, space: "organization", name: "Same name" });
+      const asset = await upload(fixture);
+      await store.saveLibrary({ ...context, projectId, space: "organization", folderId: null, tagIds: [org.id], items: [{ assetId: asset.id, displayName: "Shared", action: "add" }] });
+      await store.updateLibraryTags({ ...context, operation: "add", tagIds: [own.id], items: [{ kind: "media", id: asset.id }] });
+      const before = await store.listLibrary(context);
+      await store.deleteLibraryTag({ ...context, tagId: other.id, expectedUsageCount: 0 });
+      await store.deleteLibraryTag({ ...context, tagId: org.id, expectedUsageCount: 0 });
+      expect(await store.listLibrary(context)).toEqual(before);
+      expect((await store.listLibrary({ ...context, actorId: editor })).tags).toContainEqual(other);
+      await expect(store.deleteLibraryTag({ ...context, actorId: external, tagId: "missing", expectedUsageCount: 0 })).rejects.toMatchObject({ name: "AssetWorkspaceUnavailableError" });
+      for (const tagId of [org.id, "missing"]) await expect(store.deleteLibraryTag({ ...context, actorId: editor, space: "organization", tagId, expectedUsageCount: 1 })).rejects.toMatchObject({ code: "forbidden" });
+      const after = await store.deleteLibraryTag({ ...context, space: "organization", tagId: org.id, expectedUsageCount: 1 });
+      expect(after.entries.find((entry) => entry.space === "organization")?.tagIds).toEqual([]);
+      expect(after.entries.find((entry) => entry.space === "personal")?.tagIds).toEqual([own.id]);
+      expect(after.tags).toEqual([own]);
+    });
+
+    it("protects builtins, validates counts and deletes unused labels", async () => {
+      const { store, workspaceId, owner } = await createFixture();
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const tag = await store.createLibraryTag({ ...context, name: "Unused" });
+      for (const tagId of [...BUILTIN_LIBRARY_TAGS.map((value) => value.id), "builtin:sound"]) {
+        await expect(store.deleteLibraryTag({ ...context, tagId, expectedUsageCount: 0 })).rejects.toMatchObject({ code: "preset_tag" });
+      }
+      for (const expectedUsageCount of [-1, 1.5, NaN]) await expect(store.deleteLibraryTag({ ...context, tagId: tag.id, expectedUsageCount })).rejects.toMatchObject({ code: "invalid_request" });
+      await expect(store.deleteLibraryTag({ ...context, tagId: tag.id, expectedUsageCount: 1 })).rejects.toMatchObject({ code: "tag_usage_changed" });
+      expect((await store.deleteLibraryTag({ ...context, tagId: tag.id, expectedUsageCount: 0 })).tags).toEqual([]);
+    });
+
+    it("serializes deletion against new tag assignments without allowing orphan references", async () => {
+      const fixture = await createFixture();
+      const { store, workspaceId, projectId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const asset = await upload(fixture);
+      for (const throughSave of [false, true]) {
+        const tag = await store.createLibraryTag({ ...context, name: `Concurrent ${throughSave}` });
+        const add = () => throughSave
+          ? store.saveLibrary({ ...context, projectId, folderId: null, tagIds: [tag.id], items: [{ assetId: asset.id, displayName: "Source.png", action: "move", expectedFolderId: null }] })
+          : store.updateLibraryTags({ ...context, operation: "add", tagIds: [tag.id], items: [{ kind: "media", id: asset.id }] });
+        const results = await Promise.allSettled([add(), store.deleteLibraryTag({ ...context, tagId: tag.id, expectedUsageCount: 0 })]);
+        const catalog = await store.listLibrary(context);
+        const present = catalog.tags.some((value) => value.id === tag.id);
+        if (present) {
+          expect(results[1]).toMatchObject({ status: "rejected", reason: { code: "tag_usage_changed" } });
+          expect(catalog.entries[0].tagIds).toContain(tag.id);
+          await store.deleteLibraryTag({ ...context, tagId: tag.id, expectedUsageCount: 1 });
+        } else {
+          expect(results[0]).toMatchObject({ status: "rejected", reason: { code: "tag_not_found" } });
+          expect(catalog.entries[0].tagIds).not.toContain(tag.id);
+        }
+      }
+    });
+  });
+}
+
+export function verifyMediaLibraryTagUpdates(createFixture: () => Promise<LibraryTestFixture>) {
+  describe("library tag updates", () => {
+    it("saves subject content and placement tags atomically, preserving members and allowing explicit clearing", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner, editor } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const asset = await upload(fixture);
+      const custom = await store.createLibraryTag({ ...context, name: "Subject custom" });
+      const foreign = await store.createLibraryTag({ ...context, actorId: editor, name: "Other owner" });
+      const creation = { ...context, idempotencyKey: "subject-editor-with-tags", name: "Subject", mediaAssetIds: [asset.id], tagIds: [custom.id, "builtin:character", custom.id] };
+      const created = await entities.createPersonalEntity(creation);
+      const initialTags = ["builtin:character", custom.id].sort();
+      expect(created.libraryTagIds).toEqual(initialTags);
+      expect((await store.listLibrary(context)).entityEntries).toEqual([expect.objectContaining({ entityId: created.id, tagIds: initialTags })]);
+      await expect(entities.createPersonalEntity(creation)).resolves.toEqual(created);
+      await expect(entities.createPersonalEntity({ ...creation, tagIds: [] })).rejects.toMatchObject({ reason: "idempotency_key_reused" });
+      const update = { ...context, entityId: created.id, expectedVersion: created.version, name: "Revised subject", mediaAssetIds: [asset.id], expectedTagIds: initialTags, tagIds: ["builtin:scene"] };
+      await expect(entities.updatePersonalEntity({ ...update, tagIds: [foreign.id] })).rejects.toMatchObject({ code: "tag_not_found" });
+      await expect(entities.updatePersonalEntity({ ...update, tagIds: ["builtin:sound"] })).rejects.toMatchObject({ code: "tag_not_found" });
+      await expect(entities.updatePersonalEntity({ ...update, expectedTagIds: undefined })).rejects.toMatchObject({ code: "invalid_request" });
+      await expect(entities.getPersonalEntity({ ...context, entityId: created.id })).resolves.toEqual(created);
+      const updated = await entities.updatePersonalEntity(update);
+      expect(updated).toMatchObject({ name: "Revised subject", version: 2, libraryTagIds: ["builtin:scene"], mediaRefs: created.mediaRefs });
+      const preserved = await entities.updatePersonalEntity({ ...update, expectedVersion: 2, tagIds: undefined, expectedTagIds: undefined });
+      expect(preserved.libraryTagIds).toEqual(["builtin:scene"]);
+      const cleared = await entities.updatePersonalEntity({ ...update, expectedVersion: 3, expectedTagIds: ["builtin:scene"], tagIds: [] });
+      expect(cleared.libraryTagIds).toEqual([]);
+      const catalog = await store.listLibrary(context);
+      expect(catalog.entityEntries![0].tagIds).toEqual([]);
+      expect(catalog.entries[0].tagIds).toEqual([]);
+    });
+
+    it("rejects a stale editor after independent tag changes without saving any subject content", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const asset = await upload(fixture);
+      const creation = { ...context, idempotencyKey: "subject-editor-stale-tags", name: "Subject", mediaAssetIds: [asset.id], tagIds: ["builtin:character"] };
+      const created = await entities.createPersonalEntity(creation);
+      await store.updateLibraryTags({ ...context, operation: "add", tagIds: ["builtin:scene"], items: [{ kind: "entity", id: created.id }] });
+      await expect(entities.updatePersonalEntity({ ...creation, entityId: created.id, expectedVersion: 1, expectedTagIds: ["builtin:character"], tagIds: [], name: "Must not save" })).rejects.toMatchObject({ code: "placement_changed" });
+      const after = await entities.getPersonalEntity({ ...context, entityId: created.id });
+      expect(after).toEqual({ ...created, libraryTagIds: ["builtin:character", "builtin:scene"] });
+    });
+
+    it("serializes subject saves with custom tag deletion so deleted dictionary entries cannot be revived", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const asset = await upload(fixture);
+      const tag = await store.createLibraryTag({ ...context, name: "Racing subject tag" });
+      const creation = { ...context, idempotencyKey: "subject-editor-tag-race", name: "Subject", mediaAssetIds: [asset.id], tagIds: [] };
+      const created = await entities.createPersonalEntity(creation);
+      const results = await Promise.allSettled([
+        entities.updatePersonalEntity({ ...creation, entityId: created.id, expectedVersion: 1, expectedTagIds: [], tagIds: [tag.id] }),
+        store.deleteLibraryTag({ ...context, tagId: tag.id, expectedUsageCount: 0 }),
+      ]);
+      const catalog = await store.listLibrary(context);
+      if (catalog.tags.some((entry) => entry.id === tag.id)) {
+        expect(results[0].status).toBe("fulfilled");
+        expect(results[1]).toMatchObject({ status: "rejected", reason: { code: "tag_usage_changed" } });
+        expect(catalog.entityEntries![0].tagIds).toEqual([tag.id]);
+      } else {
+        expect(results[0]).toMatchObject({ status: "rejected", reason: { code: "tag_not_found" } });
+        expect(catalog.entityEntries![0].tagIds).toEqual([]);
+      }
+    });
+
+    it("updates mixed placements without changing group content, members, media metadata, folders or other tags", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, projectId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const first = await upload(fixture), second = await upload(fixture);
+      const folder = await store.createLibraryFolder({ ...context, parentId: null, name: "Preserved folder" });
+      await store.saveLibrary({ ...context, projectId, folderId: folder.id, tagIds: ["builtin:scene"], items: [{ assetId: first.id, displayName: "Preserved name", action: "move", expectedFolderId: null }] });
+      const createGroup = { ...context, idempotencyKey: "tag-independent-group", name: "Group name", description: "Group description", mediaAssetIds: [first.id, second.id], coverMediaId: first.id };
+      const group = await entities.createPersonalEntity(createGroup);
+      const tag = await store.createLibraryTag({ ...context, name: "Custom" });
+      const before = await store.listLibrary(context);
+      const groupOnly = await store.updateLibraryTags({ ...context, operation: "add", tagIds: ["builtin:character"], items: [{ kind: "entity", id: group.id }] });
+      expect(groupOnly.entries).toEqual(before.entries);
+      const request: UpdateLibraryTagsInput & { actorId: string } = { ...context, operation: "add", tagIds: [tag.id, tag.id], items: [{ kind: "media", id: first.id }, { kind: "entity", id: group.id }] };
+      const updated = await store.updateLibraryTags(request);
+      expect(updated.folders).toEqual(before.folders);
+      expect(updated.tags).toEqual(before.tags);
+      expect(updated.entries.find((entry) => entry.assetId === first.id)).toEqual({ ...before.entries.find((entry) => entry.assetId === first.id), tagIds: ["builtin:scene", tag.id].sort() });
+      expect(updated.entries.find((entry) => entry.assetId === second.id)).toEqual(before.entries.find((entry) => entry.assetId === second.id));
+      expect(updated.entityEntries).toEqual([{ entityId: group.id, space: "personal", folderId: null, addedAt: group.createdAt, tagIds: ["builtin:character", tag.id].sort() }]);
+      await expect(store.updateLibraryTags(request)).resolves.toEqual(updated);
+      await expect(entities.getPersonalEntity({ ...context, entityId: group.id })).resolves.toEqual({ ...group, libraryTagIds: ["builtin:character", tag.id].sort() });
+      await expect(entities.createPersonalEntity(createGroup)).resolves.toEqual({ ...group, libraryTagIds: ["builtin:character", tag.id].sort() });
+      expect((await store.listLibrary(context)).entityEntries).toEqual(updated.entityEntries);
+      await expect(store.getPersonalAsset({ ...context, assetId: second.id })).resolves.toEqual(second);
+      const removal = { ...request, operation: "remove" as const };
+      const removed = await store.updateLibraryTags(removal);
+      expect(removed.entries).toEqual(before.entries);
+      expect(removed.entityEntries).toEqual(groupOnly.entityEntries);
+      await expect(store.updateLibraryTags(removal)).resolves.toEqual(removed);
+    });
+
+    it("isolates owners and tag namespaces while only managers may organize shared placements", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, projectId, owner, editor, external } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const own = await upload(fixture), other = await upload(fixture, editor);
+      const group = await entities.createPersonalEntity({ ...context, idempotencyKey: "private-tag-group", name: "Private", description: "", mediaAssetIds: [own.id], coverMediaId: own.id });
+      const personalTag = await store.createLibraryTag({ ...context, name: "Shared spelling" });
+      const orgTag = await store.createLibraryTag({ ...context, space: "organization", name: "Shared spelling" });
+      const otherTag = await store.createLibraryTag({ ...context, actorId: editor, name: "Shared spelling" });
+      expect(new Set([personalTag.id, orgTag.id, otherTag.id]).size).toBe(3);
+      await store.saveLibrary({ ...context, projectId, space: "organization", folderId: null, tagIds: [], items: [{ assetId: own.id, displayName: "Shared name", action: "add" }] });
+      const before = await store.listLibrary(context);
+      const request: UpdateLibraryTagsInput & { actorId: string } = { ...context, operation: "add", tagIds: [personalTag.id], items: [{ kind: "media", id: own.id }] };
+      await expect(store.updateLibraryTags({ ...request, tagIds: [orgTag.id] })).rejects.toMatchObject({ code: "tag_not_found" });
+      await expect(store.updateLibraryTags({ ...request, tagIds: [otherTag.id] })).rejects.toMatchObject({ code: "tag_not_found" });
+      await expect(store.updateLibraryTags({ ...request, items: [{ kind: "media", id: other.id }] })).rejects.toMatchObject({ code: "library_item_not_found" });
+      await expect(store.updateLibraryTags({ ...request, actorId: editor, tagIds: ["builtin:scene"], items: [{ kind: "entity", id: group.id }] })).rejects.toMatchObject({ code: "library_item_not_found" });
+      await expect(store.updateLibraryTags({ ...request, actorId: external })).rejects.toMatchObject({ name: "AssetWorkspaceUnavailableError" });
+      await expect(store.updateLibraryTags({ ...request, actorId: editor, space: "organization", tagIds: [orgTag.id] })).rejects.toMatchObject({ code: "forbidden" });
+      await expect(store.updateLibraryTags({ ...request, space: "organization", tagIds: [orgTag.id], items: [{ kind: "entity", id: group.id }] })).rejects.toMatchObject({ code: "unsupported" });
+      expect(await store.listLibrary(context)).toEqual(before);
+      const updated = await store.updateLibraryTags({ ...request, space: "organization", tagIds: [orgTag.id] });
+      expect(updated.entries.filter((entry) => entry.space === "personal")).toEqual(before.entries.filter((entry) => entry.space === "personal"));
+      expect(updated.entries.find((entry) => entry.space === "organization")?.tagIds).toEqual([orgTag.id]);
+      expect((await store.listLibrary({ ...context, actorId: editor })).entityEntries).toEqual([]);
+    });
+
+    it("rejects missing, deleted, wrong-kind and invalid targets atomically", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const asset = await upload(fixture);
+      const group = await entities.createPersonalEntity({ ...context, idempotencyKey: "deleted-tag-group", name: "Deleted", description: "", mediaAssetIds: [asset.id], coverMediaId: asset.id });
+      await store.deleteLibrary({ ...context, items: [{ kind: "entity", id: group.id, expectedVersion: group.version }] });
+      const before = await store.listLibrary(context);
+      const request: UpdateLibraryTagsInput & { actorId: string } = { ...context, operation: "add", tagIds: ["builtin:object"], items: [{ kind: "media", id: asset.id }] };
+      for (const target of [{ kind: "entity" as const, id: group.id }, { kind: "entity" as const, id: asset.id }, { kind: "media" as const, id: "missing" }]) {
+        await expect(store.updateLibraryTags({ ...request, items: [...request.items, target] })).rejects.toMatchObject({ code: "library_item_not_found" });
+        expect(await store.listLibrary(context)).toEqual(before);
+      }
+      await expect(store.updateLibraryTags({ ...request, items: [...request.items, ...request.items] })).rejects.toMatchObject({ code: "invalid_request" });
+      await expect(store.updateLibraryTags({ ...request, tagIds: [] })).rejects.toMatchObject({ code: "invalid_request" });
+      await expect(store.updateLibraryTags({ ...request, operation: "remove", tagIds: ["unknown"] })).rejects.toMatchObject({ code: "tag_not_found" });
+      await store.deleteLibrary({ ...context, items: [{ kind: "media", id: asset.id }] });
+      await expect(store.updateLibraryTags(request)).rejects.toMatchObject({ code: "library_item_not_found" });
+      expect((await store.listLibrary(context)).entries).toEqual([]);
+    });
+
+    it("composes concurrent deltas on media and groups without replacing unselected labels", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      const asset = await upload(fixture);
+      const group = await entities.createPersonalEntity({ ...context, idempotencyKey: "concurrent-tag-group", name: "Original", description: "", mediaAssetIds: [asset.id], coverMediaId: asset.id });
+      const items: UpdateLibraryTagsInput["items"] = [{ kind: "media", id: asset.id }, { kind: "entity", id: group.id }];
+      await Promise.all(["builtin:character", "builtin:scene"].map((tag) => store.updateLibraryTags({ ...context, operation: "add", tagIds: [tag], items })));
+      let catalog = await store.listLibrary(context);
+      expect(catalog.entries[0].tagIds).toEqual(["builtin:character", "builtin:scene"]);
+      expect(catalog.entityEntries?.[0].tagIds).toEqual(["builtin:character", "builtin:scene"]);
+      await Promise.all([
+        store.updateLibraryTags({ ...context, operation: "add", tagIds: ["builtin:object"], items }),
+        store.updateLibraryTags({ ...context, operation: "remove", tagIds: ["builtin:character"], items }),
+        entities.updatePersonalEntity({ ...context, entityId: group.id, expectedVersion: group.version, name: "Edited group", description: "Still independent", mediaAssetIds: [asset.id], coverMediaId: asset.id }),
+      ]);
+      catalog = await store.listLibrary(context);
+      expect(catalog.entries[0].tagIds).toEqual(["builtin:object", "builtin:scene"]);
+      expect(catalog.entityEntries?.[0].tagIds).toEqual(["builtin:object", "builtin:scene"]);
+      expect(await entities.getPersonalEntity({ ...context, entityId: group.id })).toMatchObject({ name: "Edited group", version: 2 });
+    });
+
+    it("keeps only three defaults and permits ordinary scoped sound and Others labels", async () => {
+      const fixture = await createFixture();
+      const { store, workspaceId, owner } = fixture;
+      const context = { workspaceId, actorId: owner, space: "personal" as const };
+      expect(BUILTIN_LIBRARY_TAGS.map((tag) => tag.id)).toEqual(["builtin:character", "builtin:scene", "builtin:object"]);
+      const sound = await store.createLibraryTag({ ...context, name: "音效" });
+      const others = await store.createLibraryTag({ ...context, name: "Others" });
+      expect(sound.id.startsWith("builtin:")).toBe(false);
+      const asset = await upload(fixture);
+      const request: UpdateLibraryTagsInput & { actorId: string } = { ...context, operation: "add", tagIds: [sound.id, others.id], items: [{ kind: "media", id: asset.id }] };
+      const catalog = await store.updateLibraryTags(request);
+      expect(catalog.entries[0].tagIds).toEqual([sound.id, others.id].sort());
+      await expect(store.updateLibraryTags({ ...request, tagIds: ["builtin:sound"] })).rejects.toMatchObject({ code: "tag_not_found" });
+      expect(await store.listLibrary(context)).toEqual(catalog);
+    });
+  });
 }
 export function verifyMediaLibraryStore(createFixture: () => Promise<LibraryTestFixture>) {
   describe("media library contract", () => {
@@ -235,7 +515,7 @@ export function verifyMediaLibraryDeletion(createFixture: () => Promise<LibraryT
       expect(await store.listLibrary(context)).toEqual(before);
       await store.deleteLibrary({ ...context, space: "personal", items: [{ kind: "entity", id: group.id, expectedVersion: group.version }] });
       expect(await entities.listPersonalEntities(context)).toEqual([]);
-      expect(await store.listLibrary(context)).toEqual(before);
+      expect(await store.listLibrary(context)).toEqual({ ...before, entityEntries: [] });
       await expect(entities.createPersonalEntity({ ...context, idempotencyKey: "group-delete", name: "Group", description: "", mediaAssetIds: [first.id], coverMediaId: first.id })).rejects.toMatchObject({ name: "EntityCreateConflictError" });
       await store.deleteLibrary({ ...context, space: "personal", items: [{ kind: "folder", id: folder.id }] });
       expect((await store.listLibrary(context)).entries).toEqual([]);
@@ -314,6 +594,122 @@ export function verifyMediaLibraryFolderRename(createFixture: () => Promise<Libr
       const results = await Promise.allSettled(["First", "Second"].map((name) => store.renameLibraryFolder({ ...context, folderId: folder.id, expectedName: folder.name, name })));
       expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
       expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { code: "folder_changed" } });
+    });
+  });
+}
+
+
+export function verifyLibraryGroupDirectories(createFixture: () => Promise<LibraryTestFixture>) {
+  describe("group directory placement", () => {
+    it("creates directly in a personal folder, moves only the placement and retries without resetting tags, version or ordering", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner } = fixture;
+      const context = { actorId: owner, workspaceId, space: "personal" as const };
+      const asset = await upload(fixture);
+      const left = await store.createLibraryFolder({ ...context, parentId: null, name: "Left" });
+      const right = await store.createLibraryFolder({ ...context, parentId: null, name: "Right" });
+      const creation = { ...context, folderId: left.id, idempotencyKey: "directory-group", name: "Group", description: "", mediaAssetIds: [asset.id], coverMediaId: asset.id };
+      const group = await entities.createPersonalEntity(creation);
+      const before = await store.listLibrary(context);
+      expect(before.entityEntries).toEqual([expect.objectContaining({ entityId: group.id, folderId: left.id, addedAt: group.createdAt })]);
+      await store.updateLibraryTags({ ...context, operation: "add", tagIds: ["builtin:object"], items: [{ kind: "entity", id: group.id }] });
+      const request = { ...context, folderId: right.id, items: [{ entityId: group.id, expectedFolderId: left.id }] };
+      const moved = await store.moveLibraryEntities(request);
+      expect(moved.entries).toEqual(before.entries);
+      expect(moved.entityEntries).toEqual([expect.objectContaining({ entityId: group.id, folderId: right.id, tagIds: ["builtin:object"] })]);
+      expect(await entities.getPersonalEntity({ ...context, entityId: group.id })).toEqual({ ...group, libraryTagIds: ["builtin:object"] });
+      expect(await store.moveLibraryEntities(request)).toEqual(moved);
+      expect(await entities.createPersonalEntity(creation)).toEqual({ ...group, libraryTagIds: ["builtin:object"] });
+      expect(await store.listLibrary(context)).toEqual(moved);
+      await expect(entities.createPersonalEntity({ ...creation, folderId: right.id })).rejects.toMatchObject({ name: "EntityCreateConflictError" });
+      await expect(store.moveLibraryEntities({ ...request, folderId: null })).rejects.toMatchObject({ code: "placement_changed" });
+    });
+
+    it("rejects inaccessible destinations and validates the entire batch before changing anything", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner, editor } = fixture;
+      const context = { actorId: owner, workspaceId, space: "personal" as const };
+      const asset = await upload(fixture);
+      const privateFolder = await store.createLibraryFolder({ ...context, actorId: editor, parentId: null, name: "Private" });
+      const shared = await store.createLibraryFolder({ ...context, space: "organization", parentId: null, name: "Shared" });
+      const destination = await store.createLibraryFolder({ ...context, parentId: null, name: "Destination" });
+      const creation = { ...context, idempotencyKey: "rejected-directory-group", name: "Group", description: "", mediaAssetIds: [asset.id], coverMediaId: asset.id };
+      for (const folderId of [privateFolder.id, shared.id, "missing"]) await expect(entities.createPersonalEntity({ ...creation, folderId })).rejects.toMatchObject({ code: "folder_not_found" });
+      expect(await entities.listPersonalEntities(context)).toEqual([]);
+      const group = await entities.createPersonalEntity(creation);
+      const before = await store.listLibrary(context);
+      const request = { ...context, folderId: destination.id, items: [{ entityId: group.id, expectedFolderId: null }] };
+      await expect(store.moveLibraryEntities({ ...request, items: [...request.items, { entityId: "missing", expectedFolderId: null }] })).rejects.toMatchObject({ code: "library_item_not_found" });
+      for (const folderId of [privateFolder.id, shared.id]) await expect(store.moveLibraryEntities({ ...request, folderId })).rejects.toMatchObject({ code: "folder_not_found" });
+      expect(await store.listLibrary(context)).toEqual(before);
+      const alternate = await store.createLibraryFolder({ ...context, parentId: null, name: "Alternate" });
+      const outcomes = await Promise.allSettled([store.moveLibraryEntities(request), store.moveLibraryEntities({ ...request, folderId: alternate.id })]);
+      expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+      expect(outcomes.find((outcome) => outcome.status === "rejected")).toMatchObject({ reason: { code: "placement_changed" } });
+    });
+
+    it("preserves subjects when their historical directory is removed without changing tags, ordering or members", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, owner } = fixture;
+      const context = { actorId: owner, workspaceId, space: "personal" as const };
+      const member = await upload(fixture);
+      const parent = await store.createLibraryFolder({ ...context, parentId: null, name: "Parent" });
+      const child = await store.createLibraryFolder({ ...context, parentId: parent.id, name: "Child" });
+      const creation = { ...context, folderId: child.id, idempotencyKey: "detached-subject", name: "Subject", description: "Unchanged", mediaAssetIds: [member.id], coverMediaId: member.id };
+      const subject = await entities.createPersonalEntity(creation);
+      await store.updateLibraryTags({ ...context, operation: "add", tagIds: ["builtin:character"], items: [{ kind: "entity", id: subject.id }] });
+      const before = await store.listLibrary(context);
+      const request = { ...context, items: [{ kind: "folder" as const, id: parent.id }] };
+      const result = await store.deleteLibrary(request);
+      expect(result.folders).toEqual([]);
+      expect(result.entries).toEqual(before.entries);
+      expect(result.entityEntries).toEqual(before.entityEntries!.map((entry) => ({ ...entry, folderId: null })));
+      expect(await entities.getPersonalEntity({ ...context, entityId: subject.id })).toEqual({ ...subject, libraryTagIds: ["builtin:character"] });
+      expect(await entities.createPersonalEntity(creation)).toEqual({ ...subject, libraryTagIds: ["builtin:character"] });
+      expect(await store.deleteLibrary(request)).toEqual(result);
+      const deleted = await store.deleteLibrary({ ...context, items: [{ kind: "entity", id: subject.id, expectedVersion: subject.version }] });
+      expect(deleted.entityEntries).toEqual([]);
+      expect(deleted.entries).toEqual(before.entries);
+    });
+
+    it("blocks directory deletion while any surviving subject references its media, including a subject with a legacy location inside it", async () => {
+      const fixture = await createFixture();
+      const { store, entities, workspaceId, projectId, owner } = fixture;
+      const context = { actorId: owner, workspaceId, space: "personal" as const };
+      const inside = await upload(fixture), outside = await upload(fixture);
+      const parent = await store.createLibraryFolder({ ...context, parentId: null, name: "Parent" });
+      const child = await store.createLibraryFolder({ ...context, parentId: parent.id, name: "Child" });
+      await store.saveLibrary({ ...context, projectId, folderId: child.id, tagIds: [], items: [{ assetId: inside.id, displayName: inside.displayName, action: "move", expectedFolderId: null }] });
+      const create = { ...context, name: "Group", description: "", mediaAssetIds: [inside.id, outside.id], coverMediaId: inside.id };
+      const contained = await entities.createPersonalEntity({ ...create, idempotencyKey: "contained", folderId: child.id });
+      const survivor = await entities.createPersonalEntity({ ...create, idempotencyKey: "surviving" });
+      const before = await store.listLibrary(context);
+      const deletion = { ...context, items: [{ kind: "folder" as const, id: parent.id }] };
+      await expect(store.deleteLibrary(deletion)).rejects.toMatchObject({ code: "library_item_in_use" });
+      expect(await store.listLibrary(context)).toEqual(before);
+      const partiallySelected = { ...deletion, items: [...deletion.items, { kind: "entity" as const, id: survivor.id, expectedVersion: survivor.version }] };
+      await expect(store.deleteLibrary(partiallySelected)).rejects.toMatchObject({ code: "library_item_in_use" });
+      expect(await store.listLibrary(context)).toEqual(before);
+      const result = await store.deleteLibrary({ ...deletion, items: [...partiallySelected.items, { kind: "entity", id: contained.id, expectedVersion: contained.version }] });
+      expect(result.entityEntries).toEqual([]);
+      expect(result.entries).toEqual([expect.objectContaining({ assetId: outside.id, folderId: null })]);
+      expect(await entities.getPersonalEntity({ ...context, entityId: contained.id })).toBeNull();
+      expect(await store.deleteLibrary(deletion)).toEqual(result);
+    });
+
+    it("preserves media directory dates on rename/tag changes and same-directory save retries", async () => {
+      const fixture = await createFixture();
+      const { store, workspaceId, projectId, owner } = fixture;
+      const context = { actorId: owner, workspaceId, space: "personal" as const };
+      const asset = await upload(fixture);
+      const folder = await store.createLibraryFolder({ ...context, parentId: null, name: "Folder" });
+      const request = { ...context, projectId, folderId: folder.id, tagIds: [], items: [{ assetId: asset.id, displayName: "Moved", action: "move" as const, expectedFolderId: null }] };
+      const moved = await store.saveLibrary(request);
+      const entry = moved.entries.find((entry) => entry.assetId === asset.id)!;
+      expect(entry.addedAt).toBeTruthy();
+      expect((await store.saveLibrary(request)).entries).toEqual(moved.entries);
+      const changed = await store.saveLibrary({ ...request, tagIds: ["builtin:scene"], items: [{ ...request.items[0], expectedFolderId: folder.id, displayName: "Renamed" }] });
+      expect(changed.entries[0]).toMatchObject({ addedAt: entry.addedAt, createdAt: entry.createdAt, displayName: "Renamed" });
     });
   });
 }

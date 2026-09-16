@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EntityLibraryTagIdsSchema } from "../../domain/asset/entity-library-tags";
 
 const IdentifierSchema = z.string().trim().min(1).max(200);
 const EntityNameSchema = z.string().trim().min(1).max(200);
@@ -20,7 +21,9 @@ export const PersonalEntityQuerySchema = z.object({
 }).strict();
 
 export const CreatePersonalEntityBodySchema = z.object({
+  folderId: z.string().trim().min(1).max(200).nullable().optional(),
   idempotencyKey: z.string().trim().min(8).max(200),
+  tagIds: EntityLibraryTagIdsSchema.optional(),
   name: EntityNameSchema,
   description: EntityDescriptionSchema,
   assetIds: EntityAssetIdsSchema,
@@ -29,6 +32,8 @@ export const CreatePersonalEntityBodySchema = z.object({
 
 export const UpdatePersonalEntityBodySchema = z.object({
   expectedVersion: z.number().int().positive(),
+  tagIds: EntityLibraryTagIdsSchema.optional(),
+  expectedTagIds: EntityLibraryTagIdsSchema.optional(),
   name: EntityNameSchema,
   description: EntityDescriptionSchema,
   assetIds: EntityAssetIdsSchema,

@@ -6,6 +6,10 @@
   const FILTERS = new Set(["all", ...MEDIA_KINDS]);
   const COVER_MEDIA_KINDS = new Set(["image"]);
 
+  function normalizeTagIds(values) {
+    return [...new Set((Array.isArray(values) ? values : []).map(String).map((id) => id.trim()).filter(Boolean))].sort();
+  }
+
   function cloneValue(value) {
     if (Array.isArray(value)) return value.map(cloneValue);
     if (!value || typeof value !== "object") return value;
@@ -120,6 +124,7 @@
     const baseline = {
       name: mode === "edit" ? String(source.name || source.displayName || "").trim() : "",
       description: mode === "edit" ? String(source.description || "") : "",
+      tagIds: normalizeTagIds(options.tagIds ?? (mode === "edit" ? source.tagIds ?? source.libraryTagIds : [])),
       mediaIds: [...initialMediaIds],
       coverMediaId: initialCoverMediaId,
     };
@@ -136,6 +141,7 @@
       return {
         name: String(value.name || "").trim(),
         description: String(value.description || ""),
+        tagIds: [...value.tagIds],
         mediaIds: [...value.mediaIds],
         coverMediaId: value.coverMediaId,
       };
@@ -170,24 +176,25 @@
     }
 
     function getTitle() {
-      if (mode === "create") return "新建素材组";
+      if (mode === "create") return "新建主体";
       return String(draft.name || "").trim() || baseline.name;
     }
 
     function getValidation() {
       const errors = {};
       const normalizedName = String(draft.name || "").trim();
-      if (!normalizedName) errors.name = "素材组名称不能为空。";
-      else if (normalizedName.length > 200) errors.name = "素材组名称不能超过 200 个字符。";
-      if (String(draft.description || "").length > 2_000) errors.description = "素材组描述不能超过 2000 个字符。";
+      if (!normalizedName) errors.name = "主体名称不能为空。";
+      else if (normalizedName.length > 200) errors.name = "主体名称不能超过 200 个字符。";
+      if (String(draft.description || "").length > 2_000) errors.description = "主体描述不能超过 2000 个字符。";
+      if (draft.tagIds.length > 50) errors.tags = "一个主体最多选择 50 个标签。";
       if (draft.mediaIds.length === 0) errors.media = "请至少添加一个素材。";
-      else if (draft.mediaIds.length > 100) errors.media = "一个素材组最多添加 100 个素材。";
+      else if (draft.mediaIds.length > 100) errors.media = "一个主体最多添加 100 个素材。";
       if (draft.coverMediaId != null) {
         const cover = mediaById.get(draft.coverMediaId);
         if (!draft.mediaIds.includes(draft.coverMediaId)) {
-          errors.coverMediaId = "素材组封面必须属于当前素材组。";
+          errors.coverMediaId = "主体封面必须属于当前主体。";
         } else if (!cover || !COVER_MEDIA_KINDS.has(cover.mediaKind)) {
-          errors.coverMediaId = "素材组封面必须是图片。";
+          errors.coverMediaId = "主体封面必须是图片。";
         }
       }
       return { valid: Object.keys(errors).length === 0, errors };
@@ -201,6 +208,7 @@
         title: getTitle(),
         name: draft.name,
         description: draft.description,
+        tagIds: [...draft.tagIds],
         mediaRefs: draft.mediaIds.map((mediaId, order) => ({ mediaId, order })),
         coverMediaId: draft.coverMediaId,
         selectedPreviewId,
@@ -221,6 +229,11 @@
 
     function setDescription(value) {
       draft.description = String(value == null ? "" : value);
+      return getState();
+    }
+
+    function setTagIds(value) {
+      draft.tagIds = normalizeTagIds(value);
       return getState();
     }
 
@@ -309,7 +322,10 @@
       }
       return {
         name: String(draft.name).trim(),
+        ...(mode === "create" ? { folderId: null } : {}),
         description: String(draft.description),
+        tagIds: [...draft.tagIds],
+        ...(mode === "edit" ? { expectedTagIds: [...baseline.tagIds] } : {}),
         mediaRefs: draft.mediaIds.map((mediaId, order) => ({ mediaId, order })),
         coverMediaId: draft.coverMediaId,
         expectedVersion,
@@ -321,6 +337,7 @@
       stagedNameBaselines.clear();
       draft.name = baseline.name;
       draft.description = baseline.description;
+      draft.tagIds = [...baseline.tagIds];
       draft.mediaIds = [...baseline.mediaIds];
       draft.coverMediaId = baseline.coverMediaId;
       selectedPreviewId = baseline.coverMediaId || baseline.mediaIds[0] || null;
@@ -346,6 +363,7 @@
       setDescription,
       setFilter,
       setName,
+      setTagIds,
     });
   }
 

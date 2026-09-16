@@ -1,3 +1,4 @@
+import type { MoveLibraryEntitiesInput } from "../../domain/asset/media-library";
 import { randomUUID } from "node:crypto";
 
 import type { Pool, PoolClient, QueryResultRow } from "pg";
@@ -38,7 +39,7 @@ import {
 } from "../application/WorkspaceMediaAssetStore";
 
 import { PostgresMediaLibrary } from "./PostgresMediaLibrary";
-import type { RenameLibraryFolderInput, DeleteLibraryInput, CreateLibraryFolderInput, CreateLibraryTagInput, SaveLibraryInput } from "../../domain/asset/media-library";
+import type { DeleteLibraryTagInput, RenameLibraryFolderInput, DeleteLibraryInput, CreateLibraryFolderInput, CreateLibraryTagInput, SaveLibraryInput, UpdateLibraryTagsInput } from "../../domain/asset/media-library";
 import type { LibraryActorInput } from "../application/MediaLibraryStore";
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -250,6 +251,9 @@ export class PostgresAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
   renameLibraryFolder(input: RenameLibraryFolderInput & { actorId: string }) { return this.library.renameLibraryFolder(input); }
   createLibraryTag(input: CreateLibraryTagInput & { actorId: string }) { return this.library.createLibraryTag(input); }
   deleteLibrary(input: DeleteLibraryInput & { actorId: string }) { return this.library.deleteLibrary(input); }
+  deleteLibraryTag(input: DeleteLibraryTagInput & { actorId: string }) { return this.library.deleteLibraryTag(input); }
+  updateLibraryTags(input: UpdateLibraryTagsInput & { actorId: string }) { return this.library.updateLibraryTags(input); }
+  moveLibraryEntities(input: MoveLibraryEntitiesInput & { actorId: string }) { return this.library.moveLibraryEntities(input); }
   saveLibrary(input: SaveLibraryInput & { actorId: string }) { return this.library.saveLibrary(input); }
 
   async getLibraryAsset(input: LibraryActorInput & { assetId: string }): Promise<WorkspaceMediaAsset | null> {

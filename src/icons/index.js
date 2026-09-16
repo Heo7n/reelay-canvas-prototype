@@ -20,11 +20,12 @@ import {
   SquarePen, SquarePlay, SquarePlus, SquareUserRound, Sun, Timer,
   Trash2, Type, Ungroup, Upload, UserRound, UserRoundPlus,
   Users, UsersRound, Video, Volume2, VolumeX, Workflow,
-  X, CircleUserRound, LibraryBig, PanelRightClose,
+  X, CircleUserRound, LibraryBig, PanelRightClose, Tags,
 } from "lucide";
 
 // Import only the icons used by the canvas. Historical names map to official icons.
 const icons = Object.freeze({
+  "tags": Tags,
   "circle-user-round": CircleUserRound,
   "library-big": LibraryBig,
   "panel-right-close": PanelRightClose,

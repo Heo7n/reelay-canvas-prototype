@@ -72,6 +72,7 @@ function bridgeWorkspaceEntity(entity: WorkspaceEntity) {
     id: entity.id,
     name: entity.name,
     description: entity.description,
+    ...(entity.libraryTagIds !== undefined ? { libraryTagIds: entity.libraryTagIds } : {}),
     mediaRefs: entity.mediaRefs,
     coverAssetId: entity.coverAssetId,
     version: entity.version,
@@ -599,8 +600,8 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           sendAssetError(message.requestId, message.instanceId, "forbidden", "当前项目为只读，无法保存素材。");
           return;
         }
-        if ((message.command === "delete" || message.command === "rename-folder") && message.space === "organization" && !["owner", "admin"].includes(safeContext.workspace.role)) {
-          sendAssetError(message.requestId, message.instanceId, "forbidden", message.command === "rename-folder" ? "只有组织所有者或管理员可以重命名组织文件夹。" : "只有组织所有者或管理员可以删除组织素材。");
+        if ((message.command === "delete" || message.command === "rename-folder" || message.command === "update-tags" || message.command === "delete-tag") && message.space === "organization" && !["owner", "admin"].includes(safeContext.workspace.role)) {
+          sendAssetError(message.requestId, message.instanceId, "forbidden", message.command === "rename-folder" ? "只有组织所有者或管理员可以重命名组织文件夹。" : (message.command === "update-tags" || message.command === "delete-tag") ? "只有组织所有者或管理员可以修改组织素材标签。" : "只有组织所有者或管理员可以删除组织素材。");
           return;
         }
         const operationKey = `${message.instanceId}:${message.requestId}`;
@@ -615,12 +616,15 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           const base = { workspaceId: safeContext.workspaceId };
           switch (message.command) {
             case "list": return library.list(base.workspaceId);
+            case "delete-tag": return library.deleteTag({ ...base, space: message.space, tagId: message.tagId, expectedUsageCount: message.expectedUsageCount });
+            case "update-tags": return library.updateTags({ ...base, space: message.space,
+              operation: message.operation, tagIds: message.tagIds, items: message.items });
             case "delete": {
               const catalog = await library.delete({ ...base, space: message.space, items: message.items });
               if (!stillActive()) return catalog;
               const refreshToken = ++entityCatalogTokenRef.current;
               const deletedEntityIds = new Set(message.space === "personal" ? message.items.filter((item) => item.kind === "entity").map((item) => item.id) : []);
-              setWorkspaceEntities((current) => current.filter((entity) => !deletedEntityIds.has(entity.id)));
+              setWorkspaceEntities((current) => current.filter((entity) => catalog.entityEntries ? catalog.entityEntries.some((entry) => entry.entityId === entity.id && entry.space === "personal") : !deletedEntityIds.has(entity.id)));
               setWorkspaceAssets((current) => current.filter((asset) => catalog.entries.some((entry) => entry.space === "personal" && entry.assetId === asset.id)));
               if (entityRepository) {
                 try {
@@ -638,6 +642,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
             }
             case "create-folder": return library.createFolder({ ...base,
               space: message.space, parentId: message.parentId, name: message.name });
+            case "move-entities": return library.moveEntities({ ...base, space: message.space, folderId: message.folderId, items: message.items });
             case "rename-folder": return library.renameFolder({ ...base, space: message.space, folderId: message.folderId, name: message.name, expectedName: message.expectedName });
             case "create-tag": return library.createTag({ ...base, space: message.space, name: message.name });
             case "save": return library.save({ ...base, projectId: safeContext.projectId,
@@ -666,7 +671,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           if (response.command === "list") {
             setLibraryCatalog(response.result);
             setLibraryStatus("ready");
-          } else if (response.command === "save" || response.command === "delete") {
+          } else if (response.command === "move-entities" || response.command === "save" || response.command === "delete" || response.command === "update-tags" || response.command === "delete-tag") {
             setLibraryCatalog(response.result);
             setLibraryStatus("ready");
           } else if (response.command === "create-folder" || response.command === "rename-folder") {
@@ -683,7 +688,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           if (!stillActive()) return;
           if (message.command === "list" && libraryReadTokenRef.current === commandReadToken) setLibraryStatus("unavailable");
           sendAssetError(message.requestId, message.instanceId, assetErrorCode(error),
-            isApplicationError(error) ? error.message : "暂时无法完成，请重试；已填写的内容会保留。");
+            isApplicationError(error) ? error.message : "暂时无法完成，请重试；已填写的内容会保留。", assetErrorServiceCode(error));
         }).finally(() => pendingAssetCommandIdsRef.current.delete(operationKey));
         libraryCommandQueueRef.current = completion;
         void completion;
@@ -968,6 +973,8 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           ? entityRepository.create({
               workspaceId: safeContext.workspaceId,
               idempotencyKey: message.idempotencyKey,
+              folderId: message.folderId,
+              tagIds: message.tagIds,
               name: message.name,
               description: message.description,
               assetIds: message.assetIds,
@@ -977,6 +984,8 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
               workspaceId: safeContext.workspaceId,
               entityId: message.entityId,
               expectedVersion: message.expectedVersion,
+              tagIds: message.tagIds,
+              expectedTagIds: message.expectedTagIds,
               name: message.name,
               description: message.description,
               assetIds: message.assetIds,
@@ -994,6 +1003,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
               ...current.filter((candidate) => candidate.id !== entity.id),
               entity,
             ]);
+            refreshLibraryCatalog(message.instanceId, sourceFrame);
             postToCanvas(hostEntityCommandResultMessageSchema.parse({
               source: "reelay-shell",
               type: "host:entity-command-result",

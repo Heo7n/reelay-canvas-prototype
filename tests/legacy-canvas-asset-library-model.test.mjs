@@ -14,6 +14,168 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 const mediaRef = (id) => ({ kind: "media", id });
 const entityRef = (id) => ({ kind: "entity", id });
 
+test("group placements share media directories and sort by arrival without moving their members", () => {
+  const folder = { id: "design", name: "设计", parentId: null, space: "personal" };
+  const media = [{ id: "image", workspaceAssetId: "image", type: "image", name: "原图.png", createdAt: "2026-09-01T00:00:00Z" }];
+  const entries = [{ assetId: "image", space: "personal", folderId: "design", displayName: "原图.png", tagIds: [], addedAt: "2026-09-15T00:00:00Z" }];
+  const entity = { id: "group", name: "组合", version: 1, assetIds: ["image"], coverAssetId: "image", createdAt: "2026-09-02T00:00:00Z" };
+  const entityEntries = [{ entityId: "group", space: "personal", folderId: "design", addedAt: "2026-09-16T00:00:00Z", tagIds: [] }];
+  const store = model.createAssetLibraryStore();
+  store.syncPersistedCatalog({ media, folders: [folder], entries, entityEntries });
+  store.syncPersistedEntities({ entities: [entity] });
+  const ordered = () => plain(store.listItems({ space: "personal", kind: "all", folderId: "design", sort: "recent" }).map(({ id }) => id));
+  assert.deepEqual(ordered(), ["group", "image"]);
+  store.registerPersistedEntity({ entity: { ...entity, name: "改名", version: 2, updatedAt: "2099-01-01T00:00:00Z" } });
+  assert.deepEqual(ordered(), ["group", "image"]);
+  store.syncPersistedCatalog({ media, folders: [folder], entries, entityEntries: [{ ...entityEntries[0], folderId: null }] });
+  assert.deepEqual(ordered(), ["image"]);
+  assert.deepEqual(plain(store.listEntityMedia({ entityId: "group" }).items.map(({ id }) => id)), ["image"]);
+  assert.equal(store.listItems({ kind: "entity", folderId: null })[0].id, "group");
+  store.syncPersistedCatalog({ media, folders: [folder], entries, entityEntries: [] });
+  assert.equal(store.getEntity("group"), null);
+  assert.equal(store.listItems({ kind: "media", folderId: "design" })[0].id, "image");
+});
+
+test("recursive filtering spans the selected subtree without mixing siblings or spaces", () => {
+  const store = model.createAssetLibraryStore({
+    media: ["root", "parent", "leaf", "sibling", "organization"].map((id) => ({ id, type: "image", name: `武器-${id}` })),
+    folders: [
+      { id: "parent-folder", name: "父目录", space: "personal", kind: "media" },
+      { id: "leaf-folder", name: "子目录", parentId: "parent-folder", space: "personal", kind: "media" },
+      { id: "sibling-folder", name: "旁支", space: "personal", kind: "media" },
+    ],
+    placements: [
+      { item: mediaRef("root"), space: "personal", folderId: null, tagIds: ["builtin:object"] },
+      { item: mediaRef("parent"), space: "personal", folderId: "parent-folder", tagIds: ["builtin:object"] },
+      { item: mediaRef("leaf"), space: "personal", folderId: "leaf-folder", tagIds: ["builtin:object"] },
+      { item: mediaRef("sibling"), space: "personal", folderId: "sibling-folder", tagIds: ["builtin:object"] },
+      { item: mediaRef("organization"), space: "organization", tagIds: ["builtin:object"] },
+    ],
+  });
+  const before = plain(store.snapshot());
+  const list = (options) => plain(store.listItems({ space: "personal", kind: "all", ...options })).map((item) => item.id);
+  assert.deepEqual(list({ folderId: null }), ["root"]);
+  assert.deepEqual(list({ folderId: null, includeDescendants: true, tagIds: ["builtin:object"] }), ["root", "parent", "leaf", "sibling"]);
+  assert.deepEqual(list({ folderId: "parent-folder", includeDescendants: true, query: "武器", mediaKind: "image" }), ["parent", "leaf"]);
+  assert.deepEqual(list({ folderId: "leaf-folder", includeDescendants: true }), ["leaf"]);
+  assert.deepEqual(list({ folderId: "parent-folder" }), ["parent"]);
+  assert.throws(() => list({ folderId: "missing", includeDescendants: true }), /Folder not found/);
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
+function createSearchFixtureStore() {
+  return model.createAssetLibraryStore({
+    media: [
+      { id: "root", type: "image", name: "武器正面.png" },
+      { id: "leaf", type: "video", name: "武器转台.mp4" },
+      { id: "sibling", type: "audio", name: "武器音效.wav" },
+      { id: "hidden", type: "image", name: "未公开附件.png", hidden: true },
+      { id: "organization", type: "image", name: "武器组织图.png" },
+      { id: "platform", type: "image", name: "武器平台图.png" },
+      { id: "unplaced", type: "image", name: "武器未入库.png" },
+    ],
+    entities: [
+      { id: "equipment", name: "装备设定", description: "武器道具参考", mediaRefs: ["root", "leaf", "hidden"] },
+      { id: "sound", name: "音效设定", mediaRefs: ["sibling"] },
+      { id: "organization-subject", name: "武器组织主体", mediaRefs: ["organization"] },
+      { id: "platform-subject", name: "武器平台主体", mediaRefs: ["platform"] },
+    ],
+    folders: [
+      { id: "design", name: "武器设计", space: "personal", kind: "media" },
+      { id: "detail", name: "细节", parentId: "design", space: "personal", kind: "media" },
+      { id: "sibling", name: "旁支", space: "personal", kind: "media" },
+      { id: "legacy-subjects", name: "武器旧主体目录", space: "personal", kind: "entity" },
+      { id: "organization", name: "武器组织目录", space: "organization", kind: "media" },
+      { id: "platform", name: "武器平台目录", space: "platform", kind: "media" },
+    ],
+    placements: [
+      { item: mediaRef("root"), space: "personal", tagIds: ["member"], tags: ["成员标签"] },
+      { item: mediaRef("leaf"), space: "personal", folderId: "detail", tagIds: ["builtin:object"], tags: ["物品"] },
+      { item: mediaRef("sibling"), space: "personal", folderId: "sibling", tagIds: [] },
+      { item: mediaRef("hidden"), space: "personal", tagIds: [] },
+      { item: entityRef("equipment"), space: "personal", folderId: "legacy-subjects", tagIds: ["builtin:object"], tags: ["物品"] },
+      { item: entityRef("sound"), space: "personal", tagIds: [] },
+      { item: mediaRef("organization"), space: "organization", folderId: "organization" },
+      { item: entityRef("organization-subject"), space: "organization" },
+      { item: mediaRef("platform"), space: "platform", folderId: "platform" },
+      { item: entityRef("platform-subject"), space: "platform" },
+    ],
+  });
+}
+
+test("global library search groups all directory depths without changing the catalog or returned item format", () => {
+  const store = createSearchFixtureStore();
+  const before = plain(store.snapshot());
+  const results = store.searchLibrary({ space: "personal", query: " 武器 " });
+  assert.deepEqual(plain(results.folders.map(({ id }) => id)), ["design", "detail"]);
+  assert.deepEqual(plain(results.media.map(({ id }) => id)), ["root", "leaf", "sibling"]);
+  assert.deepEqual(plain(results.entities.map(({ id }) => id)), ["equipment", "sound"]);
+  assert.deepEqual(plain(results.media), plain(store.listItems({ space: "personal", kind: "media", query: "武器", sort: "recent" })));
+  assert.deepEqual(plain(results.entities), plain(store.listItems({ space: "personal", kind: "entity", query: "武器", sort: "recent" })));
+  results.folders[0].name = "outside mutation";
+  results.media[0].placement.tagIds.length = 0;
+  results.entities[0].mediaRefs.length = 0;
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
+test("global library search matches complete folder paths and omits obsolete subject directories", () => {
+  const store = createSearchFixtureStore();
+  const ids = (query) => plain(store.searchLibrary({ query }).folders.map(({ id }) => id));
+  assert.deepEqual(ids("细节"), ["detail"]);
+  assert.deepEqual(ids("武器设计 / 细节"), ["detail"]);
+  assert.deepEqual(ids("武器设计 细节"), ["detail"]);
+  assert.deepEqual(ids("旧主体"), []);
+});
+
+test("global library search respects each space and only exposes subjects in personal space", () => {
+  const store = createSearchFixtureStore();
+  for (const space of ["organization", "platform"]) {
+    const results = plain(store.searchLibrary({ space, query: "武器" }));
+    assert.deepEqual(results.folders.map(({ id }) => id), [space]);
+    assert.deepEqual(results.media.map(({ id }) => id), [space]);
+    assert.deepEqual(results.entities, []);
+  }
+  assert.deepEqual(plain(store.searchLibrary({ space: "official", query: "武器" })),
+    plain(store.searchLibrary({ space: "platform", query: "武器" })));
+  assert.throws(() => store.searchLibrary({ space: "unknown", query: "武器" }), /Unknown asset library space/);
+});
+
+test("global search applies media type only to media and own tags to each result kind", () => {
+  const store = createSearchFixtureStore();
+  const typed = plain(store.searchLibrary({ query: "武器", mediaKind: "audio" }));
+  assert.deepEqual(typed.folders, []);
+  assert.deepEqual(typed.media.map(({ id }) => id), ["sibling"]);
+  assert.deepEqual(typed.entities.map(({ id }) => id), ["equipment", "sound"]);
+  const tagged = plain(store.searchLibrary({ query: "武器", tagIds: ["builtin:object"], mediaKind: "audio" }));
+  assert.deepEqual(tagged.folders, []);
+  assert.deepEqual(tagged.media, []);
+  assert.deepEqual(tagged.entities.map(({ id }) => id), ["equipment"]);
+  const memberTag = plain(store.searchLibrary({ query: "武器", tagIds: ["member"] }));
+  assert.deepEqual(memberTag.media.map(({ id }) => id), ["root"]);
+  assert.deepEqual(memberTag.entities, []);
+  const untagged = plain(store.searchLibrary({ query: "武器", untagged: true }));
+  assert.deepEqual(untagged.folders, []);
+  assert.deepEqual(untagged.media.map(({ id }) => id), ["sibling"]);
+  assert.deepEqual(untagged.entities.map(({ id }) => id), ["sound"]);
+});
+
+test("global subject search retains own description and tags plus accessible member search", () => {
+  const store = createSearchFixtureStore();
+  const ids = (query) => plain(store.searchLibrary({ query }).entities.map(({ id }) => id));
+  assert.deepEqual(ids("道具参考"), ["equipment"]);
+  assert.deepEqual(ids("物品"), ["equipment"]);
+  assert.deepEqual(ids("转台"), ["equipment"]);
+  assert.deepEqual(ids("成员标签"), ["equipment"]);
+  assert.deepEqual(ids("未公开附件"), []);
+});
+
+test("empty global search leaves the existing navigation view in charge", () => {
+  const store = createSearchFixtureStore();
+  assert.deepEqual(plain(store.searchLibrary()), { folders: [], media: [], entities: [] });
+  assert.deepEqual(plain(store.searchLibrary({ query: "  ", tagIds: ["builtin:object"] })),
+    { folders: [], media: [], entities: [] });
+});
+
 function createFixtureStore() {
   return model.createAssetLibraryStore({
     media: [
@@ -180,7 +342,7 @@ test("unified type and search filters match groups through visible matching medi
   assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", mediaKind: "image", query: "台词" })), []);
   assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", mediaKind: "video" })), []);
   assert.deepEqual(plain(store.listItems({ space: "personal", kind: "all", query: "人像" })).map((item) => item.id), ["portrait", "hero"]);
-  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "entity", query: "人像" })), []);
+  assert.deepEqual(plain(store.listItems({ space: "personal", kind: "entity", query: "人像" })).map((item) => item.id), ["hero"]);
   assert.throws(() => store.createFolder({ space: "personal", kind: "all", name: "不允许的目录" }), /Unknown asset library item kind/);
   const hiddenSnapshot = plain(store.snapshot());
   hiddenSnapshot.media.find((media) => media.id === "voice").hidden = true;
@@ -314,6 +476,8 @@ test("registers persisted Entities idempotently in the personal root without wea
     description: "角色说明",
     coverMediaId: "portrait",
     version: 1,
+    tagIds: [],
+    tags: [],
   });
   assert.equal(store.hasPlacement(entityRef("persisted-hero"), "personal", null), true);
   const beforeUnsupportedCommands = plain(store.snapshot());
@@ -669,6 +833,18 @@ test("submits idempotent review requests without changing target placements", ()
   );
 });
 
+test("deleting an old subject directory preserves subjects and protects their referenced media", () => {
+  const store = createFixtureStore();
+  const entity = plain(store.getEntity("hero"));
+  store.removeFolder({ folderId: "personal-entity", space: "personal" });
+  assert.equal(store.getEntity("hero").name, entity.name);
+  assert.deepEqual(plain(store.getEntity("hero").mediaRefs), entity.mediaRefs);
+  assert.equal(store.hasPlacement(entityRef("hero"), "personal", null), true);
+  const before = plain(store.snapshot());
+  assert.throws(() => store.removeFolder({ folderId: "personal-media", space: "personal" }), /still referenced/);
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
 test("copies a personal folder tree to organization by placement and removes a folder tree atomically", () => {
   const store = createFixtureStore();
   store.createFolder({ id: "reference", name: "参考", space: "personal", kind: "media" });
@@ -891,4 +1067,144 @@ test("projects a confirmed mixed group and media deletion atomically before the 
   store.syncPersistedEntities({ entities: [kept] });
   store.syncPersistedCatalog(deletionResult);
   assert.deepEqual(plain(store.snapshot()), after);
+});
+
+test("tag filters OR stable placement IDs, AND media type, and keep spaces independent", () => {
+  const store = model.createAssetLibraryStore({
+    media: [
+      { id: "image", type: "image", name: "same", tags: ["source label"] },
+      { id: "video", type: "video", name: "same" },
+      { id: "audio", type: "audio", name: "same" },
+    ],
+    placements: [
+      { item: mediaRef("image"), space: "personal", tagIds: ["personal-a"], tags: ["同名"] },
+      { item: mediaRef("video"), space: "personal", tagIds: ["personal-b"], tags: ["同名"] },
+      { item: mediaRef("audio"), space: "personal", tagIds: [] },
+      { item: mediaRef("image"), space: "organization", tagIds: ["organization-a"], tags: ["同名"] },
+    ],
+  });
+  const ids = (options) => plain(store.listItems({ space: "personal", ...options })).map((item) => item.id);
+  assert.deepEqual(ids({ tagIds: ["personal-a", "personal-b"] }), ["image", "video"]);
+  assert.deepEqual(ids({ tagIds: ["personal-a", "personal-b"], mediaKind: "image" }), ["image"]);
+  assert.deepEqual(ids({ tagIds: ["同名"] }), []);
+  assert.deepEqual(ids({ tagIds: ["personal-a"], space: "organization" }), []);
+  assert.deepEqual(ids({ tagIds: ["organization-a"], space: "organization" }), ["image"]);
+  assert.deepEqual(ids({ untagged: true }), ["audio"]);
+  assert.deepEqual(ids({ untagged: true, tagIds: ["personal-a"] }), ["audio"]);
+  assert.deepEqual(ids({ untagged: true, mediaKind: "video" }), []);
+  assert.deepEqual(ids({ tagIds: [] }), ["image", "video", "audio"]);
+});
+
+test("group tags belong to the group while media type and group browsing use accessible members", () => {
+  const store = model.createAssetLibraryStore({
+    media: [
+      { id: "image", type: "image", name: "图" },
+      { id: "video", type: "video", name: "视频" },
+      { id: "hidden", type: "audio", name: "隐藏音频", hidden: true },
+    ],
+    entities: [
+      { id: "group", name: "素材组", mediaRefs: ["image", "video", "hidden"] },
+      { id: "untagged-group", name: "未标记素材组", mediaRefs: ["image"] },
+    ],
+    placements: [
+      { item: mediaRef("image"), space: "personal", tagIds: ["child-tag"] },
+      { item: mediaRef("video"), space: "personal", tagIds: [] },
+      { item: mediaRef("hidden"), space: "personal", tagIds: ["hidden-tag"] },
+      { item: entityRef("group"), space: "personal", tagIds: ["group-tag"] },
+      { item: entityRef("untagged-group"), space: "personal", tagIds: [] },
+    ],
+  });
+  const groups = (options) => plain(store.listItems({ space: "personal", kind: "all", ...options }))
+    .filter((item) => item.kind === "entity").map((item) => item.id);
+  assert.deepEqual(groups({ tagIds: ["child-tag"] }), []);
+  assert.deepEqual(groups({ tagIds: ["group-tag"], mediaKind: "video" }), ["group"]);
+  assert.deepEqual(groups({ tagIds: ["group-tag"], mediaKind: "audio" }), []);
+  assert.deepEqual(groups({ untagged: true }), ["untagged-group"]);
+  assert.deepEqual(groups({ kind: "entity", query: "视频" }), ["group"]);
+  assert.deepEqual(groups({ kind: "entity", query: "视频", mediaKind: "video" }), ["group"]);
+  assert.deepEqual(groups({ kind: "entity", query: "视频", mediaKind: "image" }), []);
+  assert.deepEqual(groups({ kind: "entity", query: "隐藏音频" }), []);
+  assert.deepEqual(plain(store.listItems({ kind: "entity", mediaKind: "audio" })), []);
+  const members = (options) => plain(store.listEntityMedia({ entityId: "group", ...options }).items).map((item) => item.id);
+  assert.deepEqual(members({ tagIds: ["child-tag"] }), ["image"]);
+  assert.deepEqual(members({ tagIds: ["group-tag"] }), []);
+  assert.deepEqual(members({ tagIds: ["hidden-tag"] }), []);
+  assert.deepEqual(members({ untagged: true }), ["video"]);
+  assert.deepEqual(members({ tagIds: ["child-tag"], mediaKind: "video" }), []);
+});
+
+test("Entity catalog tags arrive independently and survive content refresh without entering Entity versions", () => {
+  const store = model.createAssetLibraryStore();
+  const media = [{ id: "image", workspaceAssetId: "image", type: "image", name: "源名称", tags: ["source"] }];
+  const entries = [{ assetId: "image", space: "personal", folderId: null, displayName: "个人名称", tagIds: [] }];
+  const entity = { id: "group", name: "组", version: 1, assetIds: ["image"], coverAssetId: "image" };
+  const tags = [{ id: "custom", space: "personal", name: "初始标签" }];
+  const entityEntries = [{ entityId: "group", space: "personal", tagIds: ["custom"] }];
+  store.syncPersistedCatalog({ media, entries, tags, entityEntries });
+  assert.equal(store.getEntity("group"), null);
+  store.syncPersistedEntities({ entities: [entity] });
+  assert.deepEqual(plain(store.getEntity("group").tagIds), ["custom"]);
+  assert.deepEqual(plain(store.getEntity("group").tags), ["初始标签"]);
+  assert.deepEqual(plain(store.getMedia("image").tagIds), []);
+  assert.deepEqual(plain(store.getMedia("image").tags), []);
+  store.registerPersistedEntity({ entity: { ...entity, name: "新组名", version: 2 } });
+  store.syncPersistedEntities({ entities: [{ ...entity, name: "新组名", version: 2 }] });
+  assert.deepEqual(plain(store.getEntity("group").tagIds), ["custom"]);
+  assert.equal(store.getEntity("group").version, 2);
+  assert.equal(Object.hasOwn(store.snapshot().entities[0], "tagIds"), false);
+  store.syncPersistedCatalog({ media, entries, tags: [{ ...tags[0], name: "标签改名" }], entityEntries });
+  assert.deepEqual(plain(store.getEntity("group").tags), ["标签改名"]);
+  assert.equal(store.getEntity("group").version, 2);
+  store.syncPersistedCatalog({ media, entries });
+  assert.deepEqual(plain(store.getEntity("group").tagIds), ["custom"]);
+  store.syncPersistedCatalog({ media, entries, entityEntries: [{ ...entityEntries[0], tagIds: [] }] });
+  assert.deepEqual(plain(store.getEntity("group").tagIds), []);
+  store.syncPersistedEntities({ entities: [{ ...entity, name: "新组名", version: 2 }] });
+  assert.deepEqual(plain(store.getEntity("group").tagIds), []);
+});
+
+test("explicit legacy tags receive deterministic scoped IDs without inferring labels from content", () => {
+  const store = model.createAssetLibraryStore({
+    media: [
+      { id: "platform", type: "image", name: "场景图", tags: ["角色", "电影感", "电影感"] },
+      { id: "plain", type: "image", name: "角色", description: "场景、物品" },
+    ],
+    placements: [
+      { item: mediaRef("platform"), space: "platform" },
+      { item: mediaRef("plain"), space: "platform" },
+    ],
+  });
+  const options = plain(store.getTagOptions("platform"));
+  assert.deepEqual(options, [
+    { id: "builtin:character", name: "角色", space: "platform" },
+    { id: `legacy:platform:${encodeURIComponent("电影感")}`, name: "电影感", space: "platform" },
+  ]);
+  assert.deepEqual(plain(store.getTagOptions("personal")), []);
+  assert.deepEqual(plain(store.listItems({ space: "platform", tagIds: [options[1].id] })).map((item) => item.id), ["platform"]);
+  assert.deepEqual(plain(store.listItems({ space: "platform", untagged: true })).map((item) => item.id), ["plain"]);
+  const restored = model.createAssetLibraryStore(plain(store.snapshot()));
+  assert.deepEqual(plain(restored.getTagOptions("platform")), options);
+});
+
+
+test("editor tag projection preserves member metadata and rejects stale tag changes atomically", () => {
+  const store = createFixtureStore();
+  const memberBefore = plain(store.listItems({ kind: 'media', space: 'personal' }));
+  const entity = { id: 'tagged-edit', name: '编辑前', version: 1, mediaRefs: [{ mediaId: 'portrait', order: 0 }], coverMediaId: 'portrait', libraryTagIds: ['builtin:character'] };
+  store.registerPersistedEntity({ entity });
+  const subject = () => plain(store.listItems({ kind: 'entity', space: 'personal' })).find((item) => item.id === entity.id);
+  assert.deepEqual(subject().tagIds, ['builtin:character']);
+  const beforeConflict = plain(store.snapshot());
+  assert.throws(() => store.updateEntity({ entityId: entity.id, expectedVersion: 1, name: '不应保存', tagIds: [], expectedTagIds: [] }), (error) => error.code === 'conflict');
+  assert.deepEqual(plain(store.snapshot()), beforeConflict);
+  store.updateEntity({ entityId: entity.id, expectedVersion: 1, name: '编辑后', tagIds: ['custom:style'], expectedTagIds: ['builtin:character'], tagOptions: [{ id: 'custom:style', name: '风格' }] });
+  assert.deepEqual(subject().tagIds, ['custom:style']);
+  assert.deepEqual(subject().tags, ['风格']);
+  assert.equal(subject().name, '编辑后');
+  assert.equal(subject().addedAt, beforeConflict.placements.find((item) => item.item.id === entity.id).addedAt);
+  store.syncPersistedEntities({ entities: [{ ...entity, version: 2, name: '编辑后' }] });
+  assert.deepEqual(subject().tagIds, ['custom:style']);
+  store.registerPersistedEntity({ entity: { ...entity, version: 3, libraryTagIds: [] } });
+  assert.deepEqual(subject().tagIds, []);
+  assert.deepEqual(plain(store.listItems({ kind: 'media', space: 'personal' })), memberBefore);
 });

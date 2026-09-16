@@ -1,3 +1,4 @@
+import { validateLibraryEntityMove, type MoveLibraryEntitiesInput } from "../../domain/asset/media-library";
 import type { InMemoryEntityStore } from "./InMemoryEntityStore";
 import { randomUUID } from "node:crypto";
 import { MediaStorageQuotaExceededError, mediaStorageLimit, mediaStorageSnapshot, type MediaStorageLimits, type MediaStorageOwner } from "../../domain/asset/media-storage";
@@ -37,10 +38,10 @@ import {
   type FindAssetUploadIntentInput,
 } from "../application/WorkspaceMediaAssetStore";
 
-import { BUILTIN_LIBRARY_TAGS, MediaLibraryError, libraryNameKey, normalizeLibraryName, planLibraryDeletion, type DeleteLibraryInput, type RenameLibraryFolderInput, validateLibraryFolderRename, validateLibraryFolder, validateLibrarySave, type CreateLibraryFolderInput, type CreateLibraryTagInput, type LibraryFolder, type LibraryTag, type LibrarySpace, type MediaLibraryCatalog, type SaveLibraryInput } from "../../domain/asset/media-library";
+import { BUILTIN_LIBRARY_TAGS, MediaLibraryError, libraryNameKey, normalizeLibraryName, planLibraryDeletion, planLibraryTagUpdate, planLibraryTagDeletion, type DeleteLibraryTagInput, type UpdateLibraryTagsInput, type DeleteLibraryInput, type RenameLibraryFolderInput, validateLibraryFolderRename, validateLibraryFolder, validateLibrarySave, type CreateLibraryFolderInput, type CreateLibraryTagInput, type LibraryFolder, type LibraryTag, type LibrarySpace, type MediaLibraryCatalog, type SaveLibraryInput } from "../../domain/asset/media-library";
 import type { LibraryActorInput } from "../application/MediaLibraryStore";
 
-type MemoryPlacement = { id: string; workspaceId: string; assetId: string; scopeKind: LibrarySpace; ownerActorId: string | null; createdByActorId: string; createdAt: string; displayName?: string; folderId?: string | null; tagIds?: string[]; updatedAt?: string };
+type MemoryPlacement = { id: string; workspaceId: string; assetId: string; scopeKind: LibrarySpace; ownerActorId: string | null; createdByActorId: string; createdAt: string; addedAt?: string; displayName?: string; folderId?: string | null; tagIds?: string[]; updatedAt?: string };
 type ScopedFolder = LibraryFolder & { workspaceId: string; ownerActorId: string | null };
 type ScopedTag = LibraryTag & { workspaceId: string; ownerActorId: string | null };
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -450,10 +451,24 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
 
   connectLibraryEntities(entities: InMemoryEntityStore): void {
     this.entityStore = entities;
+    entities.connectLibraryTags((workspaceId, actorId, tagId) => {
+      const tag = this.libraryTags.get(tagId);
+      return !!tag && tag.workspaceId === workspaceId && tag.space === "personal" && tag.ownerActorId === actorId;
+    });
+    entities.connectLibraryFolders((workspaceId, actorId, folderId) => {
+      const folder = this.libraryFolders.get(folderId);
+      return !!folder && folder.workspaceId === workspaceId && folder.space === "personal" && folder.ownerActorId === actorId;
+    });
     entities.connectLibraryMedia((workspaceId, actorId, assetId) => {
       const asset = this.placements.has(this.personalPlacementKey(workspaceId, assetId, actorId)) ? this.assets.get(assetId) : undefined;
       return asset && asset.workspaceId === workspaceId ? { id: asset.id, workspaceId, mediaKind: asset.mediaKind, finalized: true } : null;
     });
+  }
+
+  async moveLibraryEntities(input: MoveLibraryEntitiesInput & { actorId: string }): Promise<MediaLibraryCatalog> {
+    const normalized = validateLibraryEntityMove(this.readLibraryCatalog(input), input);
+    this.entityStore?.moveLibraryPlacements(input.workspaceId, input.actorId, normalized.items.map((item) => item.entityId), normalized.folderId, this.now().toISOString());
+    return this.readLibraryCatalog(input);
   }
 
   async deleteLibrary(input: DeleteLibraryInput & { actorId: string }): Promise<MediaLibraryCatalog> {
@@ -462,6 +477,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     const plan = planLibraryDeletion(catalog, this.entityStore?.libraryBindings(input.workspaceId, input.actorId) ?? [], input);
     // All validation above is synchronous; no interleaving can expose a partial in-memory batch.
     this.entityStore?.removeLibraryPlacements(input.workspaceId, input.actorId, plan.entityIds);
+    if (input.space === "personal") this.entityStore?.detachLibraryFolders(input.workspaceId, input.actorId, plan.folderIds);
     for (const id of plan.assetIds) this.placements.delete(this.personalPlacementKey(input.workspaceId, id, input.space === "personal" ? input.actorId : "@organization"));
     for (const id of plan.folderIds) this.libraryFolders.delete(id);
     return this.readLibraryCatalog(input);
@@ -469,18 +485,52 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
 
   async listLibrary(input: LibraryActorInput): Promise<MediaLibraryCatalog> { return this.readLibraryCatalog(input); }
 
+  async deleteLibraryTag(input: DeleteLibraryTagInput & { actorId: string }): Promise<MediaLibraryCatalog> {
+    const catalog = this.readLibraryCatalog(input);
+    if (input.space === "organization" && !["owner", "admin"].includes(this.workspaceRoles.get(`${input.workspaceId}\u0000${input.actorId}`) ?? "member")) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以删除组织标签。");
+    const result = planLibraryTagDeletion(catalog, input);
+    if (result === catalog) return catalog;
+    // Validate before this synchronous batch; all placement changes and dictionary removal are atomic.
+    this.entityStore?.updateLibraryPlacementTags(input.workspaceId, input.actorId,
+      (result.entityEntries ?? []).filter((entry) => entry.space === input.space).map((entry) => ({ id: entry.entityId, tagIds: entry.tagIds })));
+    for (const entry of result.entries) {
+      if (entry.space !== input.space) continue;
+      const key = this.personalPlacementKey(input.workspaceId, entry.assetId, input.space === "personal" ? input.actorId : "@organization");
+      const placement = this.placements.get(key)!;
+      if (placement.tagIds?.includes(input.tagId)) this.placements.set(key, { ...placement, tagIds: entry.tagIds, updatedAt: this.now().toISOString() });
+    }
+    this.libraryTags.delete(input.tagId);
+    return this.readLibraryCatalog(input);
+  }
+
+  async updateLibraryTags(input: UpdateLibraryTagsInput & { actorId: string }): Promise<MediaLibraryCatalog> {
+    const catalog = this.readLibraryCatalog(input);
+    if (input.space === "organization" && !["owner", "admin"].includes(this.workspaceRoles.get(`${input.workspaceId}\u0000${input.actorId}`) ?? "member")) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以整理组织素材标签。");
+    const plan = planLibraryTagUpdate(catalog, input);
+    // Resolve all targets first, then apply the complete delta without an asynchronous gap.
+    this.entityStore?.updateLibraryPlacementTags(input.workspaceId, input.actorId, plan.items.filter((item) => item.kind === "entity"));
+    for (const item of plan.items) {
+      if (item.kind !== "media") continue;
+      const key = this.personalPlacementKey(input.workspaceId, item.id, plan.space === "personal" ? input.actorId : "@organization");
+      const placement = this.placements.get(key)!;
+      if (JSON.stringify(placement.tagIds ?? []) !== JSON.stringify(item.tagIds)) this.placements.set(key, { ...placement, tagIds: item.tagIds, updatedAt: this.now().toISOString() });
+    }
+    return this.readLibraryCatalog(input);
+  }
+
   private readLibraryCatalog(input: LibraryActorInput): MediaLibraryCatalog {
     this.requireWorkspaceMembership(input.workspaceId, input.actorId);
     const visible = (record: { workspaceId: string; ownerActorId: string | null }) => record.workspaceId === input.workspaceId && (record.ownerActorId === null || record.ownerActorId === input.actorId);
     return clone({
       folders: [...this.libraryFolders.values()].filter(visible).map(({ id, name, parentId, space }) => ({ id, name, parentId, space })),
       tags: [...this.libraryTags.values()].filter(visible).map(({ id, name, space }) => ({ id, name, space })),
+      entityEntries: this.entityStore?.libraryEntries(input.workspaceId, input.actorId) ?? [],
       entries: [...this.placements.values()].filter(visible).flatMap((placement) => {
         const asset = this.assets.get(placement.assetId);
         return asset ? [{ assetId: asset.id, assetVersion: asset.objectVersion, mediaKind: asset.mediaKind, displayName: placement.displayName ?? asset.displayName,
           contentType: asset.contentType, byteSize: asset.byteSize, checksumSha256: asset.checksumSha256,
           contentUrl: `/api/workspaces/${encodeURIComponent(input.workspaceId)}/media-assets/${encodeURIComponent(asset.id)}/content`,
-          createdAt: placement.createdAt, space: placement.scopeKind, folderId: placement.folderId ?? null, tagIds: placement.tagIds ?? [] }] : [];
+          createdAt: placement.createdAt, addedAt: placement.addedAt ?? placement.createdAt, space: placement.scopeKind, folderId: placement.folderId ?? null, tagIds: placement.tagIds ?? [] }] : [];
       }),
     });
   }
@@ -532,7 +582,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
       if (existing && item.action === "add") continue;
       this.placements.set(key, { id: existing?.id ?? `placement-${this.createId()}`, workspaceId: input.workspaceId, assetId: item.assetId, scopeKind: input.space,
         ownerActorId: input.space === "personal" ? input.actorId : null, createdByActorId: existing?.createdByActorId ?? input.actorId,
-        createdAt: existing?.createdAt ?? timestamp, displayName: item.displayName, folderId: input.folderId, tagIds: normalized.tagIds, updatedAt: timestamp });
+        createdAt: existing?.createdAt ?? timestamp, addedAt: existing && (existing.folderId ?? null) === input.folderId ? existing.addedAt ?? existing.createdAt : timestamp, displayName: item.displayName, folderId: input.folderId, tagIds: normalized.tagIds, updatedAt: timestamp });
     }
     return this.listLibrary(input);
   }

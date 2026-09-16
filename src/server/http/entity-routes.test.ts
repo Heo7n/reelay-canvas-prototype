@@ -126,6 +126,34 @@ describe("Entity persistence routes", () => {
     }));
   });
 
+
+  it("round-trips optional placement tags and rejects stale tag snapshots before changing content", async () => {
+    const session = await login(app, "creator@reelay.test");
+    const url = `/api/workspaces/${workspaceId}/entities`;
+    const headers = { cookie: session };
+    const input = { idempotencyKey: "subject-tags-http", name: "Subject", assetIds: ["asset-front"], tagIds: ["builtin:character"] };
+    const created = await app.inject({ method: "POST", url, headers, payload: input });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().entity.libraryTagIds).toEqual(["builtin:character"]);
+    const entityUrl = `${url}/${created.json().entity.id}`;
+    const update = { expectedVersion: 1, name: "Updated", assetIds: ["asset-front"], tagIds: ["builtin:scene"], expectedTagIds: ["builtin:character"] };
+    const stale = await app.inject({ method: "PATCH", url: entityUrl, headers, payload: { ...update, expectedTagIds: [] } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe("placement_changed");
+    const missing = await app.inject({ method: "PATCH", url: entityUrl, headers, payload: { ...update, expectedTagIds: undefined } });
+    expect(missing.statusCode).toBe(400);
+    const invalid = await app.inject({ method: "PATCH", url: entityUrl, headers, payload: { ...update, tagIds: ["builtin:sound"] } });
+    expect(invalid.statusCode).toBe(404);
+    const saved = await app.inject({ method: "PATCH", url: entityUrl, headers, payload: update });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().entity).toMatchObject({ name: "Updated", version: 2, libraryTagIds: ["builtin:scene"] });
+    const cleared = await app.inject({ method: "PATCH", url: entityUrl, headers, payload: { ...update, expectedVersion: 2, expectedTagIds: ["builtin:scene"], tagIds: [] } });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().entity.libraryTagIds).toEqual([]);
+    const read = await app.inject({ method: "GET", url: entityUrl, headers });
+    expect(read.json().entity.libraryTagIds).toEqual([]);
+  });
+
   it("keeps personal Entity and media visibility actor-scoped", async () => {
     const ownerSession = await login(app, "creator@reelay.test");
     const otherSession = await login(app, "linjing@reelay.test");

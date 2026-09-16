@@ -1616,7 +1616,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(assetLibraryCss, /\.asset-library-panel\s*\{[\s\S]*?--asset-panel-bg:\s*var\(--surface\);[\s\S]*?--asset-panel-subtle:\s*var\(--surface-2\);[\s\S]*?--asset-panel-line:\s*var\(--floating-line\);/);
   assert.doesNotMatch(assetLibraryCss, /--asset-panel-bg:\s*#(?:fff|ffffff)\b/i);
   assert.doesNotMatch(appCss, /html\[data-theme="light"\] \.canvas-tool-row/);
-  assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*var\(--canvas-side-panel-top,\s*50px\)[\s\S]*?bottom:\s*var\(--canvas-side-panel-bottom,\s*50px\)/);
+  assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*var\(--canvas-side-panel-top,\s*50px\)[\s\S]*?bottom:\s*var\(--canvas-edge-inset,\s*8px\)/);
   assert.match(appCss, /\.agent-dock\s*\{[\s\S]*?top:\s*var\(--agent-top-inset,\s*0px\)[\s\S]*?right:\s*0;[\s\S]*?bottom:\s*var\(--agent-bottom-inset,\s*0px\)/);
   assert.match(appCss, /\.agent-panel\s*\{[\s\S]*?border:\s*0;[\s\S]*?border-left:\s*1px solid var\(--agent-panel-line\);[\s\S]*?border-radius:\s*0/);
   assert.match(appCss, /\.agent-dock\.is-inset-top \.agent-panel\s*\{[\s\S]*?border-top-left-radius:\s*14px/);
@@ -1636,9 +1636,6 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   const renderAssetLibraryStart = appSource.indexOf("function renderAssetLibrary()");
   const renderAssetLibraryEnd = appSource.indexOf("\nfunction findLibraryAsset", renderAssetLibraryStart);
   const renderAssetLibrarySource = appSource.slice(renderAssetLibraryStart, renderAssetLibraryEnd);
-  const createFolderStart = appSource.indexOf("function createAssetLibraryFolder()");
-  const createFolderEnd = appSource.indexOf("\nfunction projectAssetToLibraryMedia", createFolderStart);
-  const createFolderSource = appSource.slice(createFolderStart, createFolderEnd);
   const runLibraryActionStart = appSource.indexOf("function runAssetLibraryAction(action, items)");
   const runLibraryActionEnd = appSource.indexOf("\nfunction deleteAssetLibraryFolder", runLibraryActionStart);
   const runLibraryActionSource = appSource.slice(runLibraryActionStart, runLibraryActionEnd);
@@ -1652,7 +1649,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(html, /canvas-media-asset-coordinator\.js"/);
   assert.match(html, /app\.js"/);
   assert.match(html, /class="asset-library-command-slot" id="assetLibraryCommandBar"/);
-  assert.match(html, /id="assetLibrarySearchToggleBtn"[\s\S]*?id="assetLibraryCommandBar"[\s\S]*?id="assetLibrarySearchRegion"[\s\S]*?id="assetLibrarySearchInput"/);
+  assert.match(html, /id="assetLibrarySearchRegion"[\s\S]*?id="assetLibrarySearchInput"[\s\S]*?id="assetLibrarySearchClearBtn"[\s\S]*?id="assetLibraryCommandBar"/);
   assert.match(html, /canvas-asset-library-header-controller\.js"/);
   assert.doesNotMatch(html, /class="asset-library-commandbar" id="assetLibraryCommandBar"/);
 
@@ -1694,16 +1691,12 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.doesNotMatch(appSource, /function persistAssetLibraryFiles\(/);
   assert.match(appSource, /event\.target\.closest\("\[data-library-batch-toggle\]"\)[\s\S]*?state\.librarySelectedIds\.size === 0[\s\S]*?state\.libraryToolbarMenu = null/);
 
-  assert.match(appSource, /function getVisibleAssetLibraryContent\(\)[\s\S]*?const kind = "all"/);
-  assert.match(appSource, /flatPlatformResults = state\.librarySpace === "platform"[\s\S]*?flatPlatformResults \? \[\]/);
-  assert.match(renderAssetLibrarySource, /const canManageFolders = mutable;[\s\S]*?data-library-folder-capability", canManageFolders \? "true" : "false"/);
+  assert.match(renderAssetLibrarySource, /const canManageFolders = !platform;[\s\S]*?data-library-folder-capability", canManageFolders \? "true" : "false"/);
   assert.doesNotMatch(renderAssetLibrarySource, /canManageFolders\s*=\s*mutable\s*&&\s*section\s*===\s*"media"/);
-  assert.match(createFolderSource, /canCreateAssetLibraryFolder\(\)[\s\S]*?canvasLibraryDirectory\.beginCreate\(state\.libraryFolderId\)/);
-  assert.doesNotMatch(createFolderSource, /state\.librarySection === "entity"/);
   assert.match(renderAssetLibrarySource, /allowedBatchActions:/);
   assert.doesNotMatch(renderAssetLibrarySource, /section === "entity"\s*\?\s*\[\]/);
   assert.match(renderAssetLibrarySource, /allowedActions:/);
-  assert.match(runLibraryActionSource, /if \(includesPersistedEntity && \["move", "share-organization"\]\.includes\(action\)\)/);
+  assert.match(runLibraryActionSource, /if \(includesPersistedEntity && action === "share-organization"\)/);
   assert.match(appSource, /function addPlatformMediaToCanvas\(items\)[\s\S]*?hasPlacement\(item, "platform"\)[\s\S]*?addLibraryAssetsToCanvas/);
   assert.match(appSource, /action === "save-personal"[\s\S]*?保存平台素材到个人素材库尚未接入/);
   assert.doesNotMatch(appSource, /savePlatformMediaToPersonal|savePlatformSelectionToPersonal|save-material/);

@@ -142,6 +142,7 @@ export const PersonalMediaAssetsResponseDtoSchema = z.object({
 }).strict();
 
 export const WorkspaceEntityDtoSchema = z.object({
+  libraryTagIds: z.array(IdentifierSchema).max(50).optional(),
   id: IdentifierSchema,
   workspaceId: IdentifierSchema,
   name: z.string().trim().min(1).max(200),

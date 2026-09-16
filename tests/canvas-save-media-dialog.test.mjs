@@ -26,6 +26,10 @@ test("upload format hint is projected from actual policy with SVG override and n
   f.controller.open({ items: [], intent: "upload", uploadPolicy: buildMediaUploadPolicy(64 * 1024 * 1024) });
   await settle();
   const hint = f.document.querySelector('[aria-label="支持的文件格式"]');
+  assert.equal(hint.hidden, true);
+  assert.ok(f.document.querySelector(".save-media-header").contains(f.button("格式与限制")));
+  assert.equal(f.document.querySelector(".save-media-fields").contains(hint), false);
+  f.button("格式与限制").click();
   assert.equal(hint.hidden, false);
   assert.equal(hint.querySelectorAll("li").length, 3);
   assert.match(hint.textContent, /SVG/); assert.match(hint.textContent, /WEBM/);
@@ -36,6 +40,66 @@ test("upload format hint is projected from actual policy with SVG override and n
   assert.match(hint.textContent, /单个文件不超过 4 MB$/);
   f.controller.close(); await f.open();
   assert.equal(hint.hidden, true);
+  assert.equal(f.document.querySelector(".save-media-upload-help").hidden, true);
+});
+
+test("upload help supports hover, pinned reading and layered Escape without losing the upload draft", async (t) => {
+  const f = fixture(t);
+  f.controller.open({ items: [sampleItem], intent: "upload", uploadPolicy: buildMediaUploadPolicy(64 * 1024 * 1024) });
+  await settle();
+  const help = f.document.querySelector(".save-media-upload-help");
+  const hint = f.document.getElementById("save-media-upload-hint");
+  const trigger = f.button("格式与限制");
+  const enter = () => help.dispatchEvent(new f.window.MouseEvent("pointerenter"));
+  const leave = () => help.dispatchEvent(new f.window.MouseEvent("pointerleave"));
+  enter();
+  assert.equal(hint.hidden, false);
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  leave();
+  assert.equal(hint.hidden, true);
+  enter(); trigger.click(); leave();
+  assert.equal(hint.hidden, false, "a click pins the already hovered content");
+  trigger.click();
+  assert.equal(hint.hidden, true);
+  trigger.focus();
+  assert.equal(hint.hidden, false, "keyboard focus reveals the policy");
+  f.key(trigger, "Escape");
+  assert.equal(hint.hidden, true);
+  assert.equal(f.controller.isOpen(), true);
+  assert.equal(f.document.activeElement, trigger);
+  assert.equal(f.document.querySelectorAll(".save-media-batch-item").length, 1);
+  trigger.click();
+  f.document.querySelector(".save-media-body").dispatchEvent(new f.window.MouseEvent("pointerdown", { bubbles: true }));
+  assert.equal(hint.hidden, true);
+  assert.equal(f.saved.length, 0);
+  f.controller.close();
+  f.controller.open({ items: [], intent: "upload", uploadPolicy: buildMediaUploadPolicy(4 * 1024 * 1024) });
+  assert.equal(hint.hidden, true, "reopening never retains a pinned tooltip");
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+});
+
+test("upload help respects directory and tag popups and closes on keyboard departure", async (t) => {
+  const f = fixture(t);
+  f.controller.open({ items: [], intent: "upload", uploadPolicy: buildMediaUploadPolicy(64 * 1024 * 1024) });
+  await settle();
+  const hint = f.document.getElementById("save-media-upload-hint");
+  const trigger = f.button("格式与限制");
+  trigger.focus();
+  assert.equal(hint.hidden, false);
+  f.button("选择本地文件").focus();
+  assert.equal(hint.hidden, true);
+  trigger.click();
+  f.location();
+  assert.equal(hint.hidden, true);
+  assert.equal(f.document.querySelector(".save-media-popup").hidden, false);
+  f.document.querySelector(".save-media-upload-help").dispatchEvent(new f.window.MouseEvent("pointerenter"));
+  assert.equal(hint.hidden, true, "incidental hovering cannot dismiss an active directory editor");
+  trigger.click();
+  assert.equal(hint.hidden, false);
+  assert.equal(f.document.querySelector(".save-media-popup").hidden, true);
+  f.tags();
+  assert.equal(hint.hidden, true);
+  assert.equal(f.document.querySelector(".save-media-popup").hidden, false);
 });
 
 function fixture(t, overrides = {}) {
@@ -175,20 +239,20 @@ test("folder plus creates at its row and the fifth directory level has no furthe
   assert.equal(f.document.querySelector(".save-media-location").title, "个人 / 角色参考 / 主角 / 服装 / 夏季");
 });
 
-test("tags offer four builtins, reuse matching tags, and drop personal custom choices when switching spaces", async (t) => {
+test("tags offer three builtins, reuse matching tags, and drop personal custom choices when switching spaces", async (t) => {
   const f = fixture(t);
   await f.open(); f.tags();
-  assert.deepEqual([...f.document.querySelectorAll('[data-tag-id^="builtin:"]')].map((node) => node.textContent), ["角色", "场景", "物品", "音效"]);
+  assert.deepEqual([...f.document.querySelectorAll('[data-tag-id^="builtin:"]')].map((node) => node.textContent), ["角色", "场景", "物品"]);
   f.button("角色").click(); f.button("私人收藏").click();
   f.button("新建标签").click(); f.input("标签名称", "角色"); f.button("确认新建标签").click();
   assert.equal(f.tagsCreated.length, 0);
   f.button("新建标签").click(); f.input("标签名称", "纪录片"); f.button("确认新建标签").click(); await settle();
   assert.equal(f.tagsCreated[0].space, "personal");
-  assert.ok(f.button("移除标签 纪录片"));
+  assert.equal(f.document.querySelector(".save-media-tags-value").textContent, "角色、私人收藏、纪录片");
+  assert.equal(f.document.querySelector(".save-media-tags-toggle").title, "角色、私人收藏、纪录片");
   f.location(); f.button("组织").click();
-  assert.ok(f.button("移除标签 角色"));
-  assert.equal(f.button("移除标签 私人收藏"), undefined);
-  assert.equal(f.button("移除标签 纪录片"), undefined);
+  assert.equal(f.document.querySelector(".save-media-tags-value").textContent, "角色");
+  assert.equal(f.document.querySelectorAll(".save-media-tag-chip, .save-media-chip-remove").length, 0);
   f.button("保存到 品牌").click();
   f.button("保存").click(); await settle();
   assert.equal(f.saved[0].space, "organization");
@@ -447,7 +511,7 @@ test("upload does not hydrate existing metadata or offer an implicit move when c
   assert.equal(f.document.querySelector(".save-media-primary").disabled, true);
   assert.equal(f.document.getElementById("save-media-name").value, "海边镜头");
   assert.equal(f.document.querySelector(".save-media-location").title, "个人 / 角色参考 / 主角 / 服装 / 夏季");
-  assert.equal(f.button("移除标签 场景"), undefined);
+  assert.equal(f.document.querySelector(".save-media-tags-value").textContent.includes("场景"), false);
   f.location(); f.button("组织").click();
   assert.equal(f.document.querySelector(".save-media-primary").disabled, false);
   f.button("保存").click(); await settle();
@@ -530,7 +594,7 @@ test("appending and removing upload items preserves directory, tags, loaded card
   assert.equal(scrollArea.scrollTop, 120);
   assert.equal(f.document.querySelectorAll(".save-media-batch-grid > li").length, 3);
   assert.equal(f.document.querySelector(".save-media-location").title, "个人 / 角色参考 / 主角 / 服装 / 夏季");
-  assert.ok(f.button("移除标签 场景"));
+  assert.equal(f.document.querySelector(".save-media-tags-value").textContent, "场景");
   firstRemove.click();
   assert.deepEqual(removed, ["node-1"]);
   assert.equal(f.document.activeElement, f.button("移除 城市镜头"));
@@ -540,7 +604,7 @@ test("appending and removing upload items preserves directory, tags, loaded card
   assert.equal(f.document.querySelector(".save-media-primary").disabled, true);
   assert.equal(f.document.querySelector(".save-media-item-count").hidden, true);
   assert.equal(f.document.querySelectorAll(".save-media-batch-grid > li").length, 1);
-  assert.ok(f.button("移除标签 场景"));
+  assert.equal(f.document.querySelector(".save-media-tags-value").textContent, "场景");
   assert.equal(reads, 1);
 });
 

@@ -1,5 +1,6 @@
-import type { LibraryEntityBinding } from "../../domain/asset/media-library";
+import { MediaLibraryError, type LibraryEntityBinding, type LibraryEntityEntry } from "../../domain/asset/media-library";
 import { randomUUID } from "node:crypto";
+import { normalizeEntityLibraryTags, validateEntityLibraryTags, requireExpectedEntityLibraryTags } from "../../domain/asset/entity-library-tags";
 
 import {
   normalizeEntityContent,
@@ -64,9 +65,12 @@ export class InMemoryEntityStore implements EntityStore {
   private readonly assets = new Map<string, InMemoryEntityAsset>();
   private readonly personalAssetPlacements: Set<string>;
   private readonly entities = new Map<string, WorkspaceEntity>();
-  private readonly personalEntityPlacements = new Set<string>();
+  private readonly personalEntityPlacements = new Map<string, { tagIds: string[]; folderId: string | null; addedAt: string }>();
   private personalMediaReader?: (workspaceId: string, actorId: string, assetId: string) => InMemoryEntityAsset | null;
   private readonly deletedLibraryEntities = new Set<string>();
+  private personalTagExists?: (workspaceId: string, actorId: string, tagId: string) => boolean;
+  private personalFolderExists?: (workspaceId: string, actorId: string, folderId: string) => boolean;
+  private readonly createCommandFolders = new Map<string, string | null>();
   private readonly createCommandEntities = new Map<string, string>();
 
   constructor(
@@ -93,19 +97,23 @@ export class InMemoryEntityStore implements EntityStore {
     this.requireWorkspaceMembership(input.workspaceId, input.actorId);
     const idempotencyKey = normalizeEntityIdempotencyKey(input.idempotencyKey);
     const content = normalizeEntityContent(input);
+    const tagIds = normalizeEntityLibraryTags(input.tagIds ?? []);
     const commandKey = this.createCommandKey(input.workspaceId, input.actorId, idempotencyKey);
     const existingId = this.createCommandEntities.get(commandKey);
     if (existingId) {
       const existing = this.entities.get(existingId);
-      if (!existing || this.deletedLibraryEntities.has(this.personalEntityPlacementKey(input.workspaceId, existingId, input.actorId)) || !sameContent(existing, content)) {
+      if (!existing || (this.createCommandFolders.get(commandKey) ?? null) !== (input.folderId ?? null) || this.deletedLibraryEntities.has(this.personalEntityPlacementKey(input.workspaceId, existingId, input.actorId)) || !sameContent(existing, content)) {
         throw new EntityCreateConflictError("idempotency_key_reused");
       }
+      const existingTags = this.personalEntityPlacements.get(this.personalEntityPlacementKey(input.workspaceId, existing.id, input.actorId))?.tagIds ?? [];
+      if (input.tagIds !== undefined && JSON.stringify(normalizeEntityLibraryTags(existingTags)) !== JSON.stringify(tagIds)) throw new EntityCreateConflictError("idempotency_key_reused");
       this.requirePersonalMedia(input.workspaceId, input.actorId, content);
-      this.personalEntityPlacements.add(
-        this.personalEntityPlacementKey(input.workspaceId, existing.id, input.actorId),
-      );
-      return clone(existing);
+      const placementKey = this.personalEntityPlacementKey(input.workspaceId, existing.id, input.actorId);
+      if (!this.personalEntityPlacements.has(placementKey)) this.personalEntityPlacements.set(placementKey, { tagIds: [], folderId: null, addedAt: existing.createdAt });
+      return { ...clone(existing), libraryTagIds: [...existingTags] };
     }
+    validateEntityLibraryTags(tagIds, (id) => this.personalTagExists?.(input.workspaceId, input.actorId, id) ?? false);
+    if (input.folderId && !this.personalFolderExists?.(input.workspaceId, input.actorId, input.folderId)) throw new MediaLibraryError("folder_not_found", "保存目录不存在或不可访问，请重新选择。");
     this.requirePersonalMedia(input.workspaceId, input.actorId, content);
 
     const timestamp = this.now().toISOString();
@@ -122,9 +130,10 @@ export class InMemoryEntityStore implements EntityStore {
       updatedAt: timestamp,
     };
     this.entities.set(entity.id, entity);
-    this.personalEntityPlacements.add(this.personalEntityPlacementKey(input.workspaceId, entity.id, input.actorId));
+    this.personalEntityPlacements.set(this.personalEntityPlacementKey(input.workspaceId, entity.id, input.actorId), { tagIds: [...tagIds], folderId: input.folderId ?? null, addedAt: timestamp });
     this.createCommandEntities.set(commandKey, entity.id);
-    return clone(entity);
+    this.createCommandFolders.set(commandKey, input.folderId ?? null);
+    return { ...clone(entity), libraryTagIds: [...tagIds] };
   }
 
   async listPersonalEntities(input: ListPersonalEntitiesInput): Promise<WorkspaceEntity[]> {
@@ -137,7 +146,7 @@ export class InMemoryEntityStore implements EntityStore {
         )
       ))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id))
-      .map(clone);
+      .map((entity) => ({ ...clone(entity), libraryTagIds: [...this.personalEntityPlacements.get(this.personalEntityPlacementKey(input.workspaceId, entity.id, input.actorId))!.tagIds] }));
   }
 
   async getPersonalEntity(input: ReadPersonalEntityInput): Promise<WorkspaceEntity | null> {
@@ -148,7 +157,7 @@ export class InMemoryEntityStore implements EntityStore {
       && this.personalEntityPlacements.has(
         this.personalEntityPlacementKey(input.workspaceId, input.entityId, input.actorId),
       )
-      ? clone(entity)
+      ? { ...clone(entity), libraryTagIds: [...this.personalEntityPlacements.get(this.personalEntityPlacementKey(input.workspaceId, entity.id, input.actorId))!.tagIds] }
       : null;
   }
 
@@ -167,6 +176,13 @@ export class InMemoryEntityStore implements EntityStore {
 
     const content = normalizeEntityContent(input);
     this.requirePersonalMedia(input.workspaceId, input.actorId, content);
+    const placementKey = this.personalEntityPlacementKey(input.workspaceId, input.entityId, input.actorId);
+    const placement = this.personalEntityPlacements.get(placementKey)!;
+    let tagIds = placement.tagIds;
+    if (input.tagIds !== undefined) {
+      requireExpectedEntityLibraryTags(placement.tagIds, input.expectedTagIds);
+      tagIds = validateEntityLibraryTags(input.tagIds, (id) => this.personalTagExists?.(input.workspaceId, input.actorId, id) ?? false);
+    }
     const updated: WorkspaceEntity = {
       ...entity,
       name: content.name,
@@ -177,8 +193,13 @@ export class InMemoryEntityStore implements EntityStore {
       updatedAt: this.now().toISOString(),
     };
     this.entities.set(updated.id, updated);
-    return clone(updated);
+    this.personalEntityPlacements.set(placementKey, { ...placement, tagIds: [...tagIds] });
+    return { ...clone(updated), libraryTagIds: [...tagIds] };
   }
+
+  connectLibraryTags(exists: (workspaceId: string, actorId: string, tagId: string) => boolean): void { this.personalTagExists = exists; }
+
+  connectLibraryFolders(exists: (workspaceId: string, actorId: string, folderId: string) => boolean): void { this.personalFolderExists = exists; }
 
   connectLibraryMedia(reader: (workspaceId: string, actorId: string, assetId: string) => InMemoryEntityAsset | null): void {
     this.personalMediaReader = reader;
@@ -187,6 +208,32 @@ export class InMemoryEntityStore implements EntityStore {
   libraryBindings(workspaceId: string, actorId: string): LibraryEntityBinding[] {
     return [...this.entities.values()].filter((entity) => entity.workspaceId === workspaceId && this.personalEntityPlacements.has(this.personalEntityPlacementKey(workspaceId, entity.id, actorId)))
       .map((entity) => ({ id: entity.id, version: entity.version, assetIds: entity.mediaRefs.map((ref) => ref.mediaAssetId) }));
+  }
+
+  libraryEntries(workspaceId: string, actorId: string): LibraryEntityEntry[] {
+    return this.libraryBindings(workspaceId, actorId).map((entity) => ({ entityId: entity.id, space: "personal", ...structuredClone(this.personalEntityPlacements.get(this.personalEntityPlacementKey(workspaceId, entity.id, actorId))!) }));
+  }
+
+  updateLibraryPlacementTags(workspaceId: string, actorId: string, updates: Array<{ id: string; tagIds: string[] }>): void {
+    const placements = updates.map((update) => ({ ...update, key: this.personalEntityPlacementKey(workspaceId, update.id, actorId) }));
+    if (placements.some(({ key }) => !this.personalEntityPlacements.has(key))) throw new MediaLibraryError("library_item_not_found", "所选素材组不存在或不可访问。");
+    for (const { key, tagIds } of placements) this.personalEntityPlacements.set(key, { ...this.personalEntityPlacements.get(key)!, tagIds: [...tagIds] });
+  }
+
+  moveLibraryPlacements(workspaceId: string, actorId: string, entityIds: string[], folderId: string | null, addedAt: string): void {
+    for (const entityId of entityIds) {
+      const key = this.personalEntityPlacementKey(workspaceId, entityId, actorId);
+      const current = this.personalEntityPlacements.get(key)!;
+      if (current.folderId !== folderId) this.personalEntityPlacements.set(key, { ...current, folderId, addedAt });
+    }
+  }
+
+  detachLibraryFolders(workspaceId: string, actorId: string, folderIds: string[]): void {
+    for (const entry of this.libraryEntries(workspaceId, actorId)) {
+      if (!entry.folderId || !folderIds.includes(entry.folderId)) continue;
+      const key = this.personalEntityPlacementKey(workspaceId, entry.entityId, actorId);
+      this.personalEntityPlacements.set(key, { ...this.personalEntityPlacements.get(key)!, folderId: null });
+    }
   }
 
   removeLibraryPlacements(workspaceId: string, actorId: string, entityIds: string[]): void {

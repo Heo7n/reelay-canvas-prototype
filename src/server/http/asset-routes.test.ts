@@ -110,6 +110,102 @@ describe("asset persistence routes", () => {
     expect((await app.inject({ method: "POST", url: `${base}/rename-folder`, headers, payload: organizationPayload })).statusCode).toBe(200);
   });
 
+  it("creates groups directly in folders and exposes strict, atomic, private group moves", async () => {
+    const headers = { cookie: await login(app, "creator@reelay.test") };
+    const workspace = "/api/workspaces/workspace-organization-reelay";
+    const base = `${workspace}/media-library`;
+    const body = Buffer.from("group-directory-content");
+    const intent = await app.inject({ method: "POST", url: `${workspace}/media-upload-intents`, headers,
+      payload: { idempotencyKey: "directory-upload", mediaKind: "image", displayName: "Source.png", contentType: "image/png", byteSize: body.byteLength, checksumSha256: createHash("sha256").update(body).digest("hex") } });
+    await app.inject({ method: "PUT", url: intent.json().upload.url, headers: { ...headers, "content-type": "application/octet-stream" }, payload: body });
+    const assetId = (await app.inject({ method: "POST", url: `${workspace}/media-upload-intents/${intent.json().uploadIntent.id}/finalize`, headers })).json().asset.id;
+    const folder = (await app.inject({ method: "POST", url: `${base}/folders`, headers, payload: { space: "personal", parentId: null, name: "Groups" } })).json().folder;
+    const creation = { idempotencyKey: "directory-group", folderId: folder.id, name: "Group", description: "", assetIds: [assetId], coverAssetId: assetId };
+    const groupResponse = await app.inject({ method: "POST", url: `${workspace}/entities`, headers, payload: creation });
+    expect(groupResponse.statusCode).toBe(201);
+    const group = groupResponse.json().entity;
+    expect((await app.inject({ method: "GET", url: base, headers })).json().catalog.entityEntries[0]).toMatchObject({ folderId: folder.id, addedAt: group.createdAt });
+    const payload = { space: "personal", folderId: null, items: [{ entityId: group.id, expectedFolderId: folder.id }] };
+    const url = `${base}/move-entities`;
+    expect((await app.inject({ method: "POST", url, payload })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...payload, actorId: "forged" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...payload, space: "organization" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...payload, items: [{ entityId: group.id }] } })).statusCode).toBe(400);
+    const moved = await app.inject({ method: "POST", url, headers, payload });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json().catalog.entityEntries[0]).toMatchObject({ entityId: group.id, folderId: null });
+    expect((await app.inject({ method: "POST", url, headers, payload })).json()).toEqual(moved.json());
+    expect((await app.inject({ method: "POST", url: `${workspace}/entities`, headers, payload: creation })).statusCode).toBe(201);
+    expect((await app.inject({ method: "POST", url: `${workspace}/entities`, headers, payload: { ...creation, idempotencyKey: "bad-directory", folderId: "missing" } })).statusCode).toBe(404);
+  });
+
+  it("organizes mixed group/media tags through strict authorized routes with all-or-nothing results", async () => {
+    const headers = { cookie: await login(app, "creator@reelay.test") };
+    const memberHeaders = { cookie: await login(app, "chenxi@reelay.test") };
+    const workspace = "/api/workspaces/workspace-organization-reelay";
+    const base = `${workspace}/media-library`;
+    const body = Buffer.from("organize-tags-content");
+    const intent = await app.inject({ method: "POST", url: `${workspace}/media-upload-intents`, headers,
+      payload: { idempotencyKey: "tag-route-upload", mediaKind: "image", displayName: "Source.png", contentType: "image/png", byteSize: body.byteLength, checksumSha256: createHash("sha256").update(body).digest("hex") } });
+    await app.inject({ method: "PUT", url: intent.json().upload.url, headers: { ...headers, "content-type": "application/octet-stream" }, payload: body });
+    const finalized = await app.inject({ method: "POST", url: `${workspace}/media-upload-intents/${intent.json().uploadIntent.id}/finalize`, headers });
+    const assetId = finalized.json().asset.id;
+    const groupResponse = await app.inject({ method: "POST", url: `${workspace}/entities`, headers,
+      payload: { idempotencyKey: "tag-route-group", name: "Group", description: "Preserve", assetIds: [assetId], coverAssetId: assetId } });
+    expect(groupResponse.statusCode).toBe(201);
+    const group = groupResponse.json().entity;
+    const tag = (await app.inject({ method: "POST", url: `${base}/tags`, headers, payload: { space: "personal", name: "Custom" } })).json().tag;
+    const payload = { space: "personal", operation: "add", tagIds: [tag.id, "builtin:scene"], items: [{ kind: "media", id: assetId }, { kind: "entity", id: group.id }] };
+    const url = `${base}/tags/update`;
+    expect((await app.inject({ method: "POST", url, payload })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...payload, actorId: "another-actor" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...payload, tagIds: [] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url, headers: memberHeaders, payload: { ...payload, tagIds: ["builtin:scene"] } })).statusCode).toBe(404);
+    const before = (await app.inject({ method: "GET", url: base, headers })).json();
+    const failed = await app.inject({ method: "POST", url, headers, payload: { ...payload, items: [...payload.items, { kind: "media", id: "missing" }] } });
+    expect(failed.statusCode).toBe(404);
+    expect(failed.json().error.code).toBe("library_item_not_found");
+    expect((await app.inject({ method: "GET", url: base, headers })).json()).toEqual(before);
+    const updated = await app.inject({ method: "POST", url, headers, payload });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.headers["cache-control"]).toBe("private, no-store");
+    expect(updated.json().catalog.entries[0]).toMatchObject({ assetId, displayName: "Source.png", folderId: null, tagIds: ["builtin:scene", tag.id].sort() });
+    expect(updated.json().catalog.entityEntries).toEqual([{ entityId: group.id, space: "personal", folderId: null, addedAt: group.createdAt, tagIds: ["builtin:scene", tag.id].sort() }]);
+    expect((await app.inject({ method: "POST", url, headers, payload })).json()).toEqual(updated.json());
+    expect((await app.inject({ method: "GET", url: `${workspace}/entities`, headers })).json().entities).toEqual([{ ...group, libraryTagIds: ["builtin:scene", tag.id].sort() }]);
+    expect((await app.inject({ method: "POST", url, headers: memberHeaders, payload: { ...payload, space: "organization", items: [{ kind: "media", id: assetId }] } })).statusCode).toBe(403);
+    const removed = await app.inject({ method: "POST", url, headers, payload: { ...payload, operation: "remove", tagIds: [tag.id] } });
+    expect(removed.json().catalog.entries[0].tagIds).toEqual(["builtin:scene"]);
+    expect(removed.json().catalog.entityEntries[0].tagIds).toEqual(["builtin:scene"]);
+  });
+
+  it("deletes custom tags through a strict route with usage conflicts and permission checks", async () => {
+    const headers = { cookie: await login(app, "creator@reelay.test") };
+    const memberHeaders = { cookie: await login(app, "chenxi@reelay.test") };
+    const base = "/api/workspaces/workspace-organization-reelay/media-library";
+    const tag = (await app.inject({ method: "POST", url: `${base}/tags`, headers, payload: { space: "personal", name: "Remove custom" } })).json().tag;
+    const url = `${base}/tags/delete`;
+    const payload = { space: "personal", tagId: tag.id, expectedUsageCount: 0 };
+    expect((await app.inject({ method: "POST", url, payload })).statusCode).toBe(401);
+    for (const invalid of [{ ...payload, actorId: "other" }, { ...payload, expectedUsageCount: -1 }, { ...payload, expectedUsageCount: 0.5 }, { space: "personal", tagId: tag.id }]) {
+      expect((await app.inject({ method: "POST", url, headers, payload: invalid })).statusCode).toBe(400);
+    }
+    const preset = await app.inject({ method: "POST", url, headers, payload: { ...payload, tagId: "builtin:object" } });
+    expect(preset.statusCode).toBe(400);
+    expect(preset.json().error.code).toBe("preset_tag");
+    const before = (await app.inject({ method: "GET", url: base, headers })).json();
+    const stale = await app.inject({ method: "POST", url, headers, payload: { ...payload, expectedUsageCount: 1 } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe("tag_usage_changed");
+    expect((await app.inject({ method: "GET", url: base, headers })).json()).toEqual(before);
+    expect((await app.inject({ method: "POST", url, headers: memberHeaders, payload: { ...payload, space: "organization", tagId: "missing" } })).statusCode).toBe(403);
+    const removed = await app.inject({ method: "POST", url, headers, payload });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.headers["cache-control"]).toBe("private, no-store");
+    expect(removed.json().catalog.tags).toEqual([]);
+    expect((await app.inject({ method: "POST", url, headers, payload })).json()).toEqual(removed.json());
+  });
+
   it("deletes through the library route atomically without removing project media or source objects", async () => {
     const session = await login(app, "creator@reelay.test");
     const headers = { cookie: session };

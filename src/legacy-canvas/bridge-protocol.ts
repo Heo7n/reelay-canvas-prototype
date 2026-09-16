@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MediaUploadPolicySchema } from "../domain/asset/media-upload-policy";
-import { DeleteLibraryItemSchema, LibraryFolderSchema, LibraryTagSchema, MediaLibraryCatalogSchema } from "../domain/asset/media-library";
+import { DeleteLibraryTagInputSchema, DeleteLibraryItemSchema, LibraryFolderSchema, LibraryTagSchema, MediaLibraryCatalogSchema, UpdateLibraryTagsInputSchema } from "../domain/asset/media-library";
 
 export const bridgeCanvasDocumentSchema = z
   .object({
@@ -95,6 +95,7 @@ export const bridgeWorkspaceAssetSchema = z.object({
 }).strict();
 
 export const bridgeWorkspaceEntitySchema = z.object({
+  libraryTagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
   id: bridgeIdentifierSchema,
   name: z.string().trim().min(1).max(200),
   description: z.string().max(2_000),
@@ -290,11 +291,14 @@ export const canvasMediaLibraryCommandSchema = z.discriminatedUnion("command", [
   z.object({ ...libraryCommandFields, command: z.literal("create-folder"),
     space: librarySpaceSchema, parentId: bridgeIdentifierSchema.nullable(), name: z.string().trim().min(1).max(100),
   }).strict(),
+  z.object({ ...libraryCommandFields, command: z.literal("move-entities"), space: z.literal("personal"), folderId: bridgeIdentifierSchema.nullable(), items: z.array(z.object({ entityId: bridgeIdentifierSchema, expectedFolderId: bridgeIdentifierSchema.nullable() }).strict()).min(1).max(100) }).strict(),
   z.object({ ...libraryCommandFields, command: z.literal("rename-folder"), space: librarySpaceSchema, folderId: bridgeIdentifierSchema, name: z.string().trim().min(1).max(100), expectedName: z.string().min(1).max(100) }).strict(),
   z.object({ ...libraryCommandFields, command: z.literal("create-tag"),
     space: librarySpaceSchema, name: z.string().trim().min(1).max(40),
   }).strict(),
   z.object({ ...libraryCommandFields, command: z.literal("delete"), space: librarySpaceSchema, items: z.array(DeleteLibraryItemSchema).min(1).max(100) }).strict(),
+  DeleteLibraryTagInputSchema.omit({ workspaceId: true }).extend({ ...libraryCommandFields, command: z.literal("delete-tag") }).strict(),
+  UpdateLibraryTagsInputSchema.omit({ workspaceId: true }).extend({ ...libraryCommandFields, command: z.literal("update-tags") }).strict(),
   z.object({ ...libraryCommandFields, command: z.literal("save"),
     space: librarySpaceSchema, folderId: bridgeIdentifierSchema.nullable(),
     tagIds: z.array(bridgeIdentifierSchema).max(50),
@@ -312,6 +316,9 @@ const libraryResultFields = {
 export const hostMediaLibraryResultMessageSchema = z.discriminatedUnion("command", [
   z.object({ ...libraryResultFields, command: z.literal("list"), result: MediaLibraryCatalogSchema }).strict(),
   z.object({ ...libraryResultFields, command: z.literal("delete"), result: MediaLibraryCatalogSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("delete-tag"), result: MediaLibraryCatalogSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("update-tags"), result: MediaLibraryCatalogSchema }).strict(),
+  z.object({ ...libraryResultFields, command: z.literal("move-entities"), result: MediaLibraryCatalogSchema }).strict(),
   z.object({ ...libraryResultFields, command: z.literal("save"), result: MediaLibraryCatalogSchema }).strict(),
   z.object({ ...libraryResultFields, command: z.literal("create-folder"), result: LibraryFolderSchema }).strict(),
   z.object({ ...libraryResultFields, command: z.literal("rename-folder"), result: LibraryFolderSchema }).strict(),
@@ -442,6 +449,8 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:create-entity"),
+    tagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
+    folderId: bridgeIdentifierSchema.nullable().optional(),
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
     requestId: bridgeRequestIdSchema,
@@ -454,6 +463,8 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:update-entity"),
+    tagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
+    expectedTagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
     requestId: bridgeRequestIdSchema,

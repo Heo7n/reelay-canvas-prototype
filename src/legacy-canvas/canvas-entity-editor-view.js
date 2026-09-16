@@ -242,6 +242,45 @@
     `;
   }
 
+  function normalizeTags(options) {
+    return [...new Map((Array.isArray(options.tagOptions) ? options.tagOptions : [])
+      .filter((tag) => tag?.id && tag?.name)
+      .map((tag) => [String(tag.id), { id: String(tag.id), name: String(tag.name) }])).values()];
+  }
+
+  function renderEntityTagOptions(options = {}) {
+    const selected = new Set(normalizeIdList(options.tagIds));
+    const query = String(options.tagQuery || "").trim().toLocaleLowerCase();
+    const tags = normalizeTags(options);
+    const available = new Set(tags.map((tag) => tag.id));
+    const missing = [...selected].filter((id) => !available.has(id)).map((id) => ({ id, name: "标签已移除" }));
+    const matches = [...tags, ...missing].filter((tag) => tag.name.toLocaleLowerCase().includes(query));
+    return matches.length
+      ? matches.map((tag) => `<button type="button" class="entity-editor-tag-option" aria-pressed="${selected.has(tag.id)}" title="${escapeHtml(tag.name)}" data-entity-editor-tag-toggle="${escapeHtml(tag.id)}"><span>${escapeHtml(tag.name)}</span>${selected.has(tag.id) ? icon("check") : ""}</button>`).join("")
+      : `<span class="entity-editor-tags-empty">${query ? "没有匹配的标签" : "暂无可用标签"}</span>`;
+  }
+
+  function renderTagField(options, editable) {
+    const tags = normalizeTags(options);
+    const selectedIds = [...new Set(normalizeIdList(options.tagIds))];
+    const selectedText = selectedIds.map((id) => tags.find((tag) => tag.id === id)?.name || "标签已移除").join("、");
+    const query = String(options.tagQuery || "");
+    const open = Boolean(options.tagPickerOpen) && editable;
+    const error = String(options.tagError || options.errors?.tags || "");
+    return `
+      <div class="entity-editor-field entity-editor-tags-field" data-entity-editor-tags-field="true">
+        <label for="canvasEntityEditorTagsToggle">标签</label>
+        <button id="canvasEntityEditorTagsToggle" class="entity-editor-tags-toggle${error ? " is-invalid" : ""}" type="button" aria-label="选择主体标签" title="${escapeHtml(selectedText || "选择标签")}" aria-haspopup="dialog" aria-expanded="${open}"${open ? ' aria-controls="canvasEntityEditorTagPicker"' : ""}${error ? ' aria-invalid="true" aria-describedby="canvasEntityEditorTagsError"' : ""} data-entity-editor-tags-toggle="true"${editable ? "" : ' disabled aria-disabled="true"'}><span class="entity-editor-tags-value${selectedIds.length ? "" : " is-placeholder"}">${escapeHtml(selectedText || "选择标签")}</span>${icon("chevron-down")}</button>
+        ${error ? `<span class="entity-editor-field-error" id="canvasEntityEditorTagsError" role="alert">${escapeHtml(error)}</span>` : ""}
+        ${open ? `<div class="entity-editor-tag-picker" id="canvasEntityEditorTagPicker" role="dialog" aria-label="选择主体标签" data-entity-editor-tag-popover="true">
+          <div class="entity-editor-tag-search">${icon("search")}<input type="search" placeholder="搜索标签" aria-label="搜索主体标签" value="${escapeHtml(query)}" autocomplete="off" data-entity-editor-tag-query="true"></div>
+          <div class="entity-editor-tag-options" role="group" aria-label="可选标签" data-entity-editor-tag-options="true">
+            ${renderEntityTagOptions(options)}
+          </div>
+        </div>` : ""}
+      </div>`;
+  }
+
   function renderEntityEditor(options = {}) {
     if (options.visible === false) return "";
 
@@ -261,7 +300,7 @@
     const coverMediaId = requestedCoverId;
     const name = String(entity.name ?? entity.displayName ?? options.name ?? "");
     const description = String(entity.description ?? options.description ?? "");
-    const title = mode === "create" ? "新建素材组" : String(options.title ?? name).trim() || "未命名素材组";
+    const title = mode === "create" ? "新建主体" : String(options.title ?? name).trim() || "未命名主体";
     const mutable = options.mutable !== false;
     const submitting = Boolean(options.submitting);
     const uploading = Boolean(options.uploading);
@@ -293,7 +332,7 @@
         : selectedCanCover
           ? `<button class="entity-editor-cover-control entity-editor-cover-action" type="button" data-entity-editor-set-cover="${escapeHtml(selectedMedia.id)}"${editable ? "" : ' disabled aria-disabled="true"'}>设为封面</button>`
           : "";
-    const submitLabel = uploading ? "正在上传…" : submitting ? "正在保存…" : mode === "create" ? "创建" : "保存";
+    const submitLabel = uploading ? "正在上传…" : submitting ? "正在保存…" : mode === "create" ? "新建主体" : "保存";
     const emptyLabel = counts.all === 0
       ? "还没有添加素材"
       : `没有${MEDIA_KIND_LABELS[activeFilter] || "符合条件的"}素材`;
@@ -306,26 +345,28 @@
               ${headingIcon("square-user-round")}
               <h2 id="canvasEntityEditorTitle" title="${escapeHtml(title)}">${escapeHtml(title)}</h2>
             </div>
-            <button type="button" aria-label="关闭素材组编辑器" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>${icon("x")}</button>
+            <button type="button" aria-label="关闭主体编辑器" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>${icon("x")}</button>
           </header>
 
           <div class="entity-editor-details-scroll">
             ${options.sourceNotice ? `<p class="entity-editor-source-notice" role="status">${escapeHtml(options.sourceNotice)}</p>` : ""}
-            <div class="entity-editor-field">
+            <div class="entity-editor-metadata">
+            <div class="entity-editor-field entity-editor-name-field">
               <label for="canvasEntityEditorName">名称 <span aria-hidden="true">*</span></label>
               <input id="canvasEntityEditorName" type="text" name="name" maxlength="200" value="${escapeHtml(name)}" autocomplete="off" required aria-required="true"${safeNameError ? ' aria-invalid="true" aria-describedby="canvasEntityEditorNameError"' : ""} data-entity-editor-name="true"${editable ? "" : ' disabled aria-disabled="true"'}>
               ${safeNameError ? `<span class="entity-editor-field-error" id="canvasEntityEditorNameError" role="alert">${safeNameError}</span>` : ""}
             </div>
 
-            <div class="entity-editor-field">
+            ${renderTagField(options, editable)}
+
+            <div class="entity-editor-field entity-editor-description-field">
               <label for="canvasEntityEditorDescription">描述</label>
               <textarea id="canvasEntityEditorDescription" name="description" rows="4" maxlength="2000" data-entity-editor-description="true"${editable ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(description)}</textarea>
             </div>
+            </div>
 
             <section class="entity-editor-media-section" aria-labelledby="canvasEntityEditorMediaTitle">
-              <div class="entity-editor-media-heading">
-                <h3 id="canvasEntityEditorMediaTitle">添加素材</h3>
-              </div>
+              <h3 class="sr-only" id="canvasEntityEditorMediaTitle">参考素材</h3>
 
               <div class="entity-editor-media-toolbar">
                 ${renderFilterTabs(activeFilter, counts, {
@@ -334,12 +375,12 @@
                   panelId: "canvasEntityEditorMediaGrid",
                 })}
                 <div class="entity-editor-media-actions">
-                  <button type="button" data-entity-editor-add-from-library="true"${canAddFromLibrary ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持从素材库添加" : busy ? "请等待当前操作完成" : "当前素材组仅可查看"}"`}>
+                  <button type="button" data-entity-editor-add-from-library="true"${canAddFromLibrary ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持从素材库添加" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
                     ${icon("images")}
                     <span>从素材库添加</span>
                   </button>
                   <span aria-hidden="true"></span>
-                  <button type="button" data-entity-editor-upload="true"${canUpload ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持上传素材" : busy ? "请等待当前操作完成" : "当前素材组仅可查看"}"`}>
+                  <button type="button" data-entity-editor-upload="true"${canUpload ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持上传素材" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
                     ${icon("upload")}
                     <span>上传</span>
                   </button>
@@ -357,14 +398,6 @@
                   : `<div class="entity-editor-media-empty">${icon("image-plus")}<strong>${emptyLabel}</strong><span>${counts.all === 0 ? "可从素材库选择，或上传图片、视频和音频。" : "切换分类查看其他已添加素材。"}</span></div>`}
               </div>
             </section>
-          </div>
-
-          <footer class="entity-editor-footer">
-            <button type="button" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>取消</button>
-            <button class="primary" type="submit" data-entity-editor-submit="true"${canSubmit ? "" : ' disabled aria-disabled="true"'}>${submitLabel}</button>
-          </footer>
-        </form>
-
         <section class="entity-editor-preview" aria-labelledby="canvasEntityEditorPreviewTitle">
           <header>
             <div class="entity-editor-preview-meta">
@@ -393,6 +426,13 @@
             ${renderPreviewMedia(selectedMedia)}
           </div>
         </section>
+          </div>
+
+          <footer class="entity-editor-footer">
+            <button type="button" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>取消</button>
+            <button class="primary" type="submit" data-entity-editor-submit="true"${canSubmit ? "" : ' disabled aria-disabled="true"'}>${submitLabel}</button>
+          </footer>
+        </form>
       </section>
     `;
   }
@@ -470,5 +510,5 @@
     `;
   }
 
-  root.REELAY_CANVAS_ENTITY_EDITOR_VIEW = Object.freeze({ renderEntityEditor, renderMediaPicker });
+  root.REELAY_CANVAS_ENTITY_EDITOR_VIEW = Object.freeze({ renderEntityEditor, renderMediaPicker, renderEntityTagOptions });
 }(typeof globalThis === "object" ? globalThis : window));

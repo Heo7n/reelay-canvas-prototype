@@ -124,7 +124,7 @@
   }
 
   function entityName(entity) {
-    return String(entity?.displayName || entity?.name || "未命名素材组");
+    return String(entity?.displayName || entity?.name || "未命名主体");
   }
 
   function resolveCoverMedia(entity, media) {
@@ -162,11 +162,11 @@
     const addSupported = options.canAdd !== false && Boolean(entityId) && media.length > 0;
     const canAdd = addSupported && !busy;
     const unavailableReason = busy
-      ? "正在添加素材组"
+      ? "正在添加主体"
       : options.canAdd === false
         ? "当前画布不可编辑"
         : !entityId || !media.length
-          ? "素材组没有可添加的素材"
+          ? "主体没有可添加的素材"
           : "";
     const safeId = escapeHtml(entityId);
     const safeName = escapeHtml(name);
@@ -184,7 +184,7 @@
             <h2 id="entity-use-detail-title" title="${safeName}">${safeName}</h2>
             <span class="entity-use-detail-count">${media.length} 个素材</span>
           </div>
-          <p${description ? "" : ' class="muted"'}>${description ? safeDescription : "暂无素材组描述"}</p>
+          <p${description ? "" : ' class="muted"'}>${description ? safeDescription : "暂无主体描述"}</p>
         </div>
         <footer>
           <button class="entity-use-detail-add" type="button"${canAdd ? ` data-entity-use-action="add-canvas" data-entity-use-add-canvas="${safeId}"` : ` data-entity-use-unavailable="add-canvas" disabled aria-disabled="true" title="${escapeHtml(unavailableReason)}"`}>
@@ -387,27 +387,27 @@
     const selectable = options.canAdd !== false && !busy;
     const canAdd = selectable && selected.size > 0;
     const cards = visibleEntities.map((entity) => renderPickerCard(entity, selected.has(entity.id), selectable)).join("");
-    const emptyTitle = normalizedQuery ? "没有匹配的素材组" : `当前${activeSpace === "organization" ? "组织" : "个人"}空间还没有素材组`;
-    const emptyCopy = normalizedQuery ? "调整搜索关键词后再试。" : "先在资产库中创建素材组，再从这里添加。";
+    const emptyTitle = normalizedQuery ? "没有匹配的主体" : `当前${activeSpace === "organization" ? "组织" : "个人"}空间还没有主体`;
+    const emptyCopy = normalizedQuery ? "调整搜索关键词后再试。" : "先在资产库中创建主体，再从这里添加。";
 
     return `
       <div class="entity-use-picker-backdrop" data-entity-use-picker-backdrop="true">
         <section class="${classNames("entity-use-picker", busy && "is-busy")}" role="dialog" aria-modal="true" aria-labelledby="entity-use-picker-title" data-entity-use-picker="true" data-space="${activeSpace}"${busy ? ' aria-busy="true"' : ""}>
           <header>
-            <h2 id="entity-use-picker-title">选择素材组</h2>
+            <h2 id="entity-use-picker-title">选择主体</h2>
           </header>
           <div class="entity-use-picker-tools">
-            <div class="entity-use-picker-spaces" role="group" aria-label="素材组空间">
+            <div class="entity-use-picker-spaces" role="group" aria-label="主体空间">
               ${ENTITY_SPACES.map((space) => `
-                <button class="${space.id === activeSpace ? "active" : ""}" id="entity-use-space-${space.id}" type="button" aria-label="${space.label}，${spaceCounts[space.id]} 个素材组" aria-pressed="${space.id === activeSpace}" aria-controls="entity-use-picker-results"${busy ? ' disabled aria-disabled="true"' : ` data-entity-use-action="change-space" data-entity-use-space="${space.id}"`}>
+                <button class="${space.id === activeSpace ? "active" : ""}" id="entity-use-space-${space.id}" type="button" aria-label="${space.label}，${spaceCounts[space.id]} 个主体" aria-pressed="${space.id === activeSpace}" aria-controls="entity-use-picker-results"${busy ? ' disabled aria-disabled="true"' : ` data-entity-use-action="change-space" data-entity-use-space="${space.id}"`}>
                   <span>${space.label}</span>
                 </button>
               `).join("")}
             </div>
             <label class="entity-use-picker-search">
               ${icon("search")}
-              <span class="sr-only">搜索素材组</span>
-              <input type="search" value="${escapeHtml(query)}" placeholder="搜索素材组" autocomplete="off" data-entity-use-search="true"${busy ? " disabled" : ""}>
+              <span class="sr-only">搜索主体</span>
+              <input type="search" value="${escapeHtml(query)}" placeholder="搜索主体" autocomplete="off" data-entity-use-search="true"${busy ? " disabled" : ""}>
               ${query ? `<button type="button" aria-label="清除搜索"${busy ? ' disabled aria-disabled="true"' : ' data-entity-use-action="clear-search" data-entity-use-search-clear="true"'}>${icon("x")}</button>` : ""}
             </label>
           </div>

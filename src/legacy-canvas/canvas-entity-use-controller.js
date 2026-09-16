@@ -58,6 +58,15 @@
         .find((element) => element.dataset.libraryEntity === entityId) || null;
     }
 
+    function restoreSourceFocus(entityId) {
+      const source = findCard(entityId)?.querySelector(".asset-library-card-preview");
+      if (!source || disposed) return false;
+      restoringDetailFocus = true;
+      try { source.focus({ preventScroll: true }); }
+      finally { restoringDetailFocus = false; }
+      return true;
+    }
+
     function clearCloseTimer() {
       window.clearTimeout(closeTimer);
       closeTimer = 0;
@@ -89,12 +98,7 @@
           if (picker || detail || !isCurrentScope(previous.scope)) return;
           const context = options.getDetailContext();
           if (!context.eligible || context.space !== previous.space) return;
-          restoringDetailFocus = true;
-          try {
-            findCard(previous.entityId)?.querySelector(".asset-library-card-preview")?.focus({ preventScroll: true });
-          } finally {
-            restoringDetailFocus = false;
-          }
+          restoreSourceFocus(previous.entityId);
         });
       }
     }
@@ -431,7 +435,7 @@
       if (!event.persisted) dispose();
     });
 
-    return Object.freeze({ openDetail, closeDetail, openPicker, closePicker, refresh, refreshDetail, handleGlobalKeyDown, dispose });
+    return Object.freeze({ openDetail, closeDetail, restoreSourceFocus, openPicker, closePicker, refresh, refreshDetail, handleGlobalKeyDown, dispose });
   }
 
   root.REELAY_CANVAS_ENTITY_USE_CONTROLLER = Object.freeze({ createCanvasEntityUseController });

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { MediaLibraryRepository } from "../../application/assets/MediaLibraryRepository";
 import {
   LibraryFolderSchema, LibraryTagSchema, MediaLibraryCatalogSchema,
-  type RenameLibraryFolderInput, type DeleteLibraryInput, type CreateLibraryFolderInput, type CreateLibraryTagInput, type SaveLibraryInput,
+  type MoveLibraryEntitiesInput, type DeleteLibraryTagInput, type UpdateLibraryTagsInput, type RenameLibraryFolderInput, type DeleteLibraryInput, type CreateLibraryFolderInput, type CreateLibraryTagInput, type SaveLibraryInput,
 } from "../../domain/asset/media-library";
 import { HttpApiClient, type HttpAdapterOptions } from "./HttpApiClient";
 
@@ -45,6 +45,24 @@ export class HttpMediaLibraryRepository implements MediaLibraryRepository {
 
   async delete({ workspaceId, ...body }: DeleteLibraryInput) {
     return (await this.http.read(`${this.path(workspaceId)}/delete`, catalogResponse, {
+      method: "POST", body: JSON.stringify(body),
+    })).catalog;
+  }
+
+  async deleteTag({ workspaceId, ...body }: DeleteLibraryTagInput) {
+    return (await this.http.read(`${this.path(workspaceId)}/tags/delete`, catalogResponse, {
+      method: "POST", body: JSON.stringify(body),
+    })).catalog;
+  }
+
+  async updateTags({ workspaceId, ...body }: UpdateLibraryTagsInput) {
+    return (await this.http.read(`${this.path(workspaceId)}/tags/update`, catalogResponse, {
+      method: "POST", body: JSON.stringify(body),
+    })).catalog;
+  }
+
+  async moveEntities({ workspaceId, ...body }: MoveLibraryEntitiesInput) {
+    return (await this.http.read(`${this.path(workspaceId)}/move-entities`, catalogResponse, {
       method: "POST", body: JSON.stringify(body),
     })).catalog;
   }

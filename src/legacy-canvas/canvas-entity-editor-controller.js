@@ -17,6 +17,7 @@
       throw new TypeError("Canvas Entity editor controller dependencies are incomplete.");
     }
     const getAvailableMedia = requireFunction(options.getAvailableMedia, "getAvailableMedia");
+    const getTagOptions = typeof options.getTagOptions === "function" ? options.getTagOptions : () => [];
     const persistFiles = requireFunction(options.persistFiles, "persistFiles");
     const renameMedia = requireFunction(options.renameMedia, "renameMedia");
     const saveEntity = requireFunction(options.saveEntity, "saveEntity");
@@ -45,6 +46,8 @@
     let mediaRenameExtension = "";
     let errors = {};
     let pickerOpen = false;
+    let tagPickerOpen = false;
+    let tagQuery = "";
     let pickerQuery = "";
     let pickerFilter = "all";
     let pickerSelectedIds = new Set();
@@ -89,6 +92,8 @@
       }
       const state = draft.getState();
       const media = currentMedia();
+      const previousFilter = host.querySelector('[data-entity-editor]')?.dataset.entityEditorFilterActive;
+      const mediaScrollTop = previousFilter === state.filter ? host.querySelector('.entity-editor-media-grid')?.scrollTop || 0 : 0;
       const markup = view.renderEntityEditor({
         ...state,
         entity: { id: entityId, name: state.name, description: state.description, coverMediaId: state.coverMediaId },
@@ -103,9 +108,14 @@
         mediaRenameBusy,
         renamingMediaId,
         mediaRenameValue,
-        errors,
+        errors: { ...(state.errors.tags ? { tags: state.errors.tags } : {}), ...errors },
+        tagOptions: getTagOptions(),
+        tagPickerOpen,
+        tagQuery,
       });
       root.REELAY_CANVAS_MEDIA_PREVIEW.renderPreservingMedia(host, markup, "[data-entity-editor-preview]");
+      const mediaGrid = host.querySelector('.entity-editor-media-grid');
+      if (mediaGrid) mediaGrid.scrollTop = mediaScrollTop;
       setHostVisibility(host, true);
       refreshIcons();
       if (focus) {
@@ -270,6 +280,7 @@
 
     function openPicker() {
       if (!canEditDraft() || !permissions.canAddFromLibrary) return;
+      closeTagPicker();
       pickerOpen = true;
       pickerQuery = "";
       pickerFilter = "all";
@@ -295,6 +306,8 @@
       mediaRenameValue = "";
       mediaRenameExtension = "";
       errors = {};
+      tagPickerOpen = false;
+      tagQuery = "";
       closePicker();
       renderEditor();
       onVisibilityChange(false, { entityId: closedEntityId });
@@ -310,16 +323,10 @@
       onExitStart();
       const reducedMotion = root.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       if (panel?.animate && !reducedMotion) {
-        const style = root.getComputedStyle(panel);
-        const timing = { duration: 200, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" };
-        session.animations = [
-          panel.animate([{ backgroundColor: style.backgroundColor }, { backgroundColor: "transparent" }], timing),
-          panel.querySelector(".entity-editor-details").animate([{ opacity: 1 }, { opacity: 0 }], timing),
-          panel.querySelector(".entity-editor-preview").animate([
-            { opacity: 1, transform: "translate(0, 0)" },
-            { opacity: 0, transform: `translate(${style.getPropertyValue("--entity-exit-preview-x") || "12px"}, ${style.getPropertyValue("--entity-exit-preview-y") || "0px"})` },
-          ], { ...timing, duration: 160 }),
-        ];
+        session.animations = [panel.animate(
+          [{ opacity: 1, transform: "translateX(0)" }, { opacity: 0, transform: "translateX(-8px)" }],
+          { duration: 160, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" },
+        )];
         await Promise.allSettled(session.animations.map((animation) => animation.finished));
       }
       if (exitSession !== session || draft !== expectedDraft) return false;
@@ -351,6 +358,13 @@
         return;
       }
       if (!canEditDraft()) return;
+      const availableTagIds = new Set(getTagOptions().map((tag) => tag.id));
+      if (draft.getState().tagIds.some((id) => !availableTagIds.has(id))) {
+        errors = { ...errors, tags: "部分标签已被删除，请移除后重新保存。" };
+        renderEditor({ focus: "[data-entity-editor-tags-toggle]" });
+        return;
+      }
+      closeTagPicker();
       let payload;
       try {
         payload = draft.createCommitPayload();
@@ -378,7 +392,7 @@
           return;
         }
         entityId = entity.id;
-        onSaved(entity);
+        onSaved(entity, { mode, ...(mode === "create" ? { folderId: payload.folderId } : {}) });
         await exitEditor(savingDraft);
       } catch (error) {
         if (draft !== savingDraft) return;
@@ -391,6 +405,8 @@
     function open(input = {}) {
       if (draft) finishClose();
       mode = input.mode === "edit" ? "edit" : "create";
+      tagPickerOpen = false;
+      tagQuery = "";
       entityId = mode === "edit" ? String(input.entity?.id || "").trim() : null;
       errors = {};
       submitting = false;
@@ -412,6 +428,7 @@
         mode,
         entity: input.entity,
         media: Array.isArray(input.media) ? input.media : [],
+        tagIds: input.tagIds ?? input.entity?.tagIds ?? input.entity?.libraryTagIds ?? [],
       };
       if (mode === "create" && Array.isArray(input.initialMedia)) {
         draftOptions.media = input.initialMedia;
@@ -445,8 +462,30 @@
       return Boolean(nextFilter);
     }
 
+    function closeTagPicker({ restoreFocus = false } = {}) {
+      if (!tagPickerOpen) return;
+      tagPickerOpen = false;
+      tagQuery = "";
+      host.querySelector('[data-entity-editor-tag-popover]')?.remove();
+      const toggle = host.querySelector('[data-entity-editor-tags-toggle]');
+      toggle?.setAttribute('aria-expanded', 'false');
+      toggle?.removeAttribute('aria-controls');
+      if (restoreFocus) toggle?.focus({ preventScroll: true });
+    }
+
     host.addEventListener("keydown", (event) => {
       if (!draft) return;
+      if (event.target.matches?.('[data-entity-editor-tag-query]') && event.key === 'Enter') {
+        if (!event.isComposing && event.keyCode !== 229) event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (tagPickerOpen && event.key === 'Escape' && !event.isComposing && event.keyCode !== 229) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeTagPicker({ restoreFocus: true });
+        return;
+      }
       const renameInput = event.target.closest?.("[data-entity-editor-preview-rename]");
       if (renameInput) {
         if (event.key === "Enter") {
@@ -481,7 +520,14 @@
 
     host.addEventListener("input", (event) => {
       if (!canEditDraft()) return;
-      if (event.target.matches("[data-entity-editor-preview-rename]")) {
+      if (event.target.matches('[data-entity-editor-tag-query]')) {
+        tagQuery = event.target.value;
+        const list = host.querySelector('[data-entity-editor-tag-options]');
+        if (list) {
+          list.innerHTML = view.renderEntityTagOptions({ tagOptions: getTagOptions(), tagIds: draft.getState().tagIds, tagQuery, mutable: permissions.mutable });
+          refreshIcons();
+        }
+      } else if (event.target.matches("[data-entity-editor-preview-rename]")) {
         mediaRenameValue = event.target.value;
       } else if (event.target.matches("[data-entity-editor-name]")) {
         draft.setName(event.target.value);
@@ -519,6 +565,32 @@
         return;
       }
       if (isBusy()) return;
+      if (event.target.closest('[data-entity-editor-tags-toggle]')) {
+        if (!canEditDraft()) return;
+        if (tagPickerOpen) closeTagPicker({ restoreFocus: true });
+        else {
+          tagPickerOpen = true;
+          tagQuery = "";
+          renderEditor({ focus: '[data-entity-editor-tag-query]' });
+        }
+        return;
+      }
+      const tagToggle = event.target.closest('[data-entity-editor-tag-toggle]');
+      if (tagToggle) {
+        if (!canEditDraft()) return;
+        const tagId = tagToggle.dataset.entityEditorTagToggle;
+        const selected = new Set(draft.getState().tagIds);
+        if (selected.has(tagId)) selected.delete(tagId);
+        else if (getTagOptions().some((tag) => tag.id === tagId)) selected.add(tagId);
+        else return;
+        draft.setTagIds([...selected]);
+        clearErrors('tags');
+        renderEditor();
+        const target = [...host.querySelectorAll('[data-entity-editor-tag-toggle]')].find((button) => button.dataset.entityEditorTagToggle === tagId)
+          || host.querySelector('[data-entity-editor-tag-query]');
+        target?.focus({ preventScroll: true });
+        return;
+      }
       const filter = event.target.closest("[data-entity-editor-filter]")?.dataset.entityEditorFilter;
       if (filter) {
         draft.setFilter(filter);
@@ -529,6 +601,8 @@
       if (select) {
         draft.selectPreview(select);
         renderEditor();
+        [...host.querySelectorAll('[data-entity-editor-media-select]')]
+          .find((button) => button.dataset.entityEditorMediaSelect === select)?.focus({ preventScroll: true });
         return;
       }
       const remove = event.target.closest("[data-entity-editor-media-remove]")?.dataset.entityEditorMediaRemove;
@@ -638,15 +712,20 @@
     });
 
     const handleKeydown = (event) => {
-      if (!draft || isBusy() || event.key !== "Escape") return;
+      if (!draft || isBusy() || event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
       event.preventDefault();
       if (pickerOpen) closePicker();
       else void requestClose();
     };
     document.addEventListener("keydown", handleKeydown);
+    const handleTagOutsidePointer = (event) => {
+      if (tagPickerOpen && !event.target.closest?.('[data-entity-editor-tags-field]')) closeTagPicker();
+    };
+    document.addEventListener('pointerdown', handleTagOutsidePointer);
 
     function destroy() {
       document.removeEventListener("keydown", handleKeydown);
+      document.removeEventListener('pointerdown', handleTagOutsidePointer);
       finishClose();
     }
 

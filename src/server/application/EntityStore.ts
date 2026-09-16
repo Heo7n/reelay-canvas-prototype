@@ -10,6 +10,8 @@ export interface CreatePersonalEntityInput extends EntityContentInput {
   actorId: ActorId;
   workspaceId: WorkspaceId;
   idempotencyKey: string;
+  tagIds?: string[];
+  folderId?: string | null;
 }
 
 export interface ListPersonalEntitiesInput {
@@ -23,6 +25,8 @@ export interface ReadPersonalEntityInput extends ListPersonalEntitiesInput {
 
 export interface UpdatePersonalEntityInput extends ReadPersonalEntityInput, EntityContentInput {
   expectedVersion: number;
+  tagIds?: string[];
+  expectedTagIds?: string[];
 }
 
 export class EntityWorkspaceUnavailableError extends Error {

@@ -20,6 +20,7 @@ function harness(overrides = {}) {
   const imports = [];
   const snapshots = [];
   const folders = [];
+  const tags = [];
   let imported = null;
   let saveFails = false;
   let mutable = true;
@@ -39,9 +40,9 @@ function harness(overrides = {}) {
         return { importedCount: 1, idMap: new Map([[values[0].id, imported.id]]) };
       }, ...overrides.importer },
     inspectSource: () => ({ allowed: true }), getScopeKey: () => scope, isMutable: () => mutable,
-    onCatalog: (value) => { catalog = value; snapshots.push(value); }, onFolder: (value) => folders.push(value), notify: (value) => notices.push(value),
+    onCatalog: (value) => { catalog = value; snapshots.push(value); }, onFolder: (value) => folders.push(value), onTag: (value) => tags.push(value), notify: (value) => notices.push(value),
   });
-  return { controller, dialog, calls, notices, imports, snapshots, folders, get options() { return options; },
+  return { controller, dialog, calls, notices, imports, snapshots, folders, tags, get options() { return options; },
     setScope(value) { scope = value; }, setFailure(value) { saveFails = value; }, setMutable(value) { mutable = value; } };
 }
 
@@ -146,6 +147,20 @@ test("confirmed folder creation survives cancellation as an incremental result, 
     await rejected;
     assert.deepEqual(h.folders, changeScope ? [] : [folder]);
     assert.equal(h.snapshots.length, 1, "creation never replays the closed draft's full snapshot");
+  }
+});
+
+test("confirmed tag creation updates the shared dictionary after cancelling the save draft", async () => {
+  for (const changeScope of [false, true]) {
+    let finish;
+    const h = harness({ request: (command) => command === "list" ? empty() : new Promise((resolve) => { finish = resolve; }) });
+    h.controller.open([{ asset: media({ workspaceAssetId: "persisted" }) }]);
+    await h.options.getCatalog();
+    const rejected = assert.rejects(h.options.createTag({ space: "personal", name: "已确认" }), /画布或访问权限/);
+    h.controller.close(); if (changeScope) h.setScope("another-canvas");
+    finish({ id: "confirmed", space: "personal", name: "已确认" }); await rejected;
+    assert.equal(h.tags.length, changeScope ? 0 : 1);
+    assert.equal(h.calls.some((call) => call.command === "save"), false);
   }
 });
 

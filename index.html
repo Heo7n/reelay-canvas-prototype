@@ -184,32 +184,27 @@
         <div class="asset-library-body">
           <section class="asset-library-content">
             <div class="asset-library-directorybar">
-              <div class="asset-library-directory-shell">
+              <div class="asset-library-search" id="assetLibrarySearchRegion" role="search" aria-label="搜索资产">
+                <label for="assetLibrarySearchInput" aria-label="搜索资产">
+                  <i data-lucide="search" aria-hidden="true"></i>
+                </label>
+                <input id="assetLibrarySearchInput" type="search" aria-label="搜索资产" placeholder="搜索个人空间" autocomplete="off" />
+                <button class="asset-library-search-clear" id="assetLibrarySearchClearBtn" type="button" title="关闭搜索" aria-label="关闭搜索">
+                  <i data-lucide="x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="asset-library-directory-shell" data-library-search-covered>
                 <div class="asset-library-directory">
                   <button class="asset-library-directory-button" id="assetLibraryDirectoryButton" type="button" aria-haspopup="tree" aria-controls="assetLibraryDirectoryTreePopover" aria-expanded="false">
-                    <i data-lucide="chevron-down" aria-hidden="true"></i>
                     <strong id="assetLibraryDirectoryName">默认目录</strong>
-                  </button>
-                  <button class="asset-library-folder-create" id="assetLibraryCreateFolderBtn" type="button" title="在当前目录中新建文件夹" aria-label="在当前目录中新建文件夹">
-                    <i data-lucide="plus" aria-hidden="true"></i>
+                    <i data-lucide="chevron-down" aria-hidden="true"></i>
                   </button>
                 </div>
+                <button class="asset-library-subject-tab" id="assetLibrarySubjectsBtn" data-library-open-subjects="true" type="button" aria-label="主体库" aria-pressed="false" aria-controls="assetLibraryGrid" title="主体库">主体库</button>
                 <div class="asset-library-directory-tree-popover hidden" id="assetLibraryDirectoryTreePopover"></div>
               </div>
               <div class="asset-library-directory-actions">
-                <button class="asset-library-search-toggle" id="assetLibrarySearchToggleBtn" type="button" title="搜索资产" aria-label="搜索资产" aria-expanded="false" aria-controls="assetLibrarySearchRegion">
-                  <i data-lucide="search" aria-hidden="true"></i>
-                </button>
                 <div class="asset-library-command-slot" id="assetLibraryCommandBar"></div>
-                <div class="asset-library-search" id="assetLibrarySearchRegion" aria-hidden="true" inert>
-                  <label for="assetLibrarySearchInput" aria-label="搜索资产">
-                    <i data-lucide="search" aria-hidden="true"></i>
-                  </label>
-                  <input id="assetLibrarySearchInput" type="search" aria-label="搜索资产" placeholder="搜索素材或素材组" autocomplete="off" />
-                  <button class="asset-library-search-close" id="assetLibrarySearchCloseBtn" type="button" title="关闭搜索" aria-label="关闭搜索">
-                    <i data-lucide="x" aria-hidden="true"></i>
-                  </button>
-                </div>
               </div>
             </div>
             <div id="assetLibraryEntityFilter" hidden></div>
@@ -217,7 +212,7 @@
           </section>
         </div>
         <footer class="asset-library-footer">
-          <span class="asset-library-count" id="assetLibraryCount">共 0 个素材</span>
+          <span class="asset-library-count" id="assetLibraryCount">共 0 项</span>
         </footer>
         <div class="asset-library-overlay-layer" id="assetLibraryOverlayLayer"></div>
         <input id="assetLibraryUploadInput" type="file" multiple hidden />
@@ -366,10 +361,10 @@
             </div>
           </div>
           <span class="selection-toolbar-divider" aria-hidden="true"></span>
-          <button class="icon-toolbar-button text-button selection-toolbar-entity" type="button" data-selection-action="create-entity" aria-label="新建素材组" aria-describedby="selectionEntityTip">
+          <button class="icon-toolbar-button text-button selection-toolbar-entity" type="button" data-selection-action="create-entity" aria-label="新建主体" aria-describedby="selectionEntityTip">
             <i data-lucide="square-user-round" aria-hidden="true"></i>
-            <span>新建素材组</span>
-            <span class="toolbar-tip" id="selectionEntityTip">用选中素材新建素材组</span>
+            <span>新建主体</span>
+            <span class="toolbar-tip" id="selectionEntityTip">用选中素材新建主体</span>
           </button>
           <button class="icon-toolbar-button text-button selection-toolbar-group" type="button" data-selection-action="group" data-canvas-mutation aria-label="打组">
             <i data-lucide="combine" aria-hidden="true"></i>
@@ -674,6 +669,9 @@
     <script src="./src/legacy-canvas/canvas-save-media-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-library-upload-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-library-delete-controller.js"></script>
+    <script src="./src/legacy-canvas/canvas-library-navigation.js"></script>
+    <script src="./src/legacy-canvas/canvas-library-search-session.js"></script>
+    <script src="./src/legacy-canvas/canvas-library-tags-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-library-directory-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-launcher-motion.js"></script>
     <script src="./app.js"></script>

@@ -6,6 +6,7 @@ export interface WorkspaceEntityMediaReference {
 }
 
 export interface WorkspaceEntity {
+  libraryTagIds?: string[];
   id: string;
   workspaceId: WorkspaceId;
   name: string;
@@ -20,6 +21,8 @@ export interface WorkspaceEntity {
 export interface CreateWorkspaceEntityInput {
   workspaceId: WorkspaceId;
   idempotencyKey: string;
+  tagIds?: string[];
+  folderId?: string | null;
   name: string;
   description: string;
   assetIds: string[];
@@ -30,6 +33,8 @@ export interface UpdateWorkspaceEntityInput {
   workspaceId: WorkspaceId;
   entityId: string;
   expectedVersion: number;
+  tagIds?: string[];
+  expectedTagIds?: string[];
   name: string;
   description: string;
   assetIds: string[];

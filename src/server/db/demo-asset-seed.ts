@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import type { Pool } from "pg";
 
+import { DEMO_ASSET_TAG_IDS } from "../../config/demo-asset-tags";
 import { DEMO_LIBRARY_DIRECTORY_EXAMPLE } from "../../config/media-library-directory-example";
 import type { WorkspaceEntity } from "../../domain/asset/entity";
 import type { WorkspaceMediaAsset } from "../../domain/asset/workspace-media-asset";
@@ -129,6 +130,18 @@ async function seedAsset(
     workspaceId: DEMO_WORKSPACE_ID,
     uploadIntentId: intent.id,
   });
+  const initialTagIds = DEMO_ASSET_TAG_IDS[fixture.key];
+  if (intent.status !== "finalized" && initialTagIds) {
+    // Initial fixture metadata leaves the placement pristine for optional directory setup.
+    // Finalized intent replay must never restore labels a user has removed.
+    await dependencies.pool.query(
+      `UPDATE media_asset_placements SET tag_ids = $4
+       WHERE workspace_id = $1 AND asset_id = $2 AND scope_kind = 'personal' AND owner_user_id = $3
+         AND folder_id IS NULL AND cardinality(tag_ids) = 0
+         AND (updated_at IS NULL OR updated_at = created_at)`,
+      [DEMO_WORKSPACE_ID, asset.id, DEMO_ACTOR_ID, initialTagIds],
+    );
+  }
   return asset;
 }
 
@@ -201,11 +214,12 @@ export async function seedDemoAssetLibrary(
     assetsByKey,
   );
 
+  const existingEntityIds = new Set((await dependencies.entityStore.listPersonalEntities({ actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID })).map((entity) => entity.id));
   const entities: WorkspaceEntity[] = [];
   for (const fixture of DEMO_ENTITY_FIXTURES) {
     const mediaAssets = fixture.assetKeys.map((key) => requireAsset(assetsByKey, key));
     const coverAsset = requireAsset(assetsByKey, fixture.coverAssetKey);
-    entities.push(await dependencies.entityStore.createPersonalEntity({
+    const entity = await dependencies.entityStore.createPersonalEntity({
       actorId: DEMO_ACTOR_ID,
       workspaceId: DEMO_WORKSPACE_ID,
       idempotencyKey: fixture.createIdempotencyKey,
@@ -213,7 +227,13 @@ export async function seedDemoAssetLibrary(
       description: fixture.description,
       mediaAssetIds: mediaAssets.map(({ id }) => id),
       coverMediaId: coverAsset.id,
-    }));
+    });
+    entities.push(entity);
+    // Only these published fixtures are character groups; replay preserves users' tag edits.
+    if (!existingEntityIds.has(entity.id) && ["umbra", "baixi", "xuanling"].includes(fixture.key)) await dependencies.assetStore.updateLibraryTags({
+      actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID, space: "personal", operation: "add",
+      tagIds: ["builtin:character"], items: [{ kind: "entity", id: entity.id }],
+    });
   }
 
   if (!options.personalOnly) {
