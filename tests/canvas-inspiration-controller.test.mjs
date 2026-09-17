@@ -334,3 +334,59 @@ test("selected shot prompts retain independent edits on reopen and copy only the
   assert.deepEqual(c.copied, ['单镜头侧向跟拍']);
   assert.equal(c.calls.length, 0);
 });
+
+
+test("matched shots seek without autoplay or automatic analysis and keep the complete segment range", async (t) => {
+  const c = setup(t);
+  const shot = c.clip.shots[1];
+  c.controller.open(c.clip.id, c.trigger, { shotId: shot.id });
+  const d = c.document.querySelector('dialog'); const video = d.querySelector('video');
+  Object.defineProperty(video, 'duration', { value: c.clip.duration });
+  video.dispatchEvent(new c.window.Event('loadedmetadata'));
+  assert.equal(video.currentTime, shot.start);
+  assert.equal(c.mediaCalls.play, 0);
+  assert.equal(c.jobs.size, 0);
+  assert.equal(d.querySelector('[data-inspiration-results]').hidden, true);
+  assert.equal(d.querySelector('[data-inspiration-start]').valueAsNumber, 0);
+  assert.equal(d.querySelector('[data-inspiration-end]').valueAsNumber, c.clip.duration);
+  d.querySelector('[data-inspiration-play-match]').click(); await Promise.resolve();
+  assert.equal(video.currentTime, shot.start);
+  assert.equal(c.mediaCalls.play, 1);
+  video.currentTime = shot.end + 0.1; video.dispatchEvent(new c.window.Event('timeupdate'));
+  assert.equal(video.currentTime, shot.end);
+  analyze(c, d);
+  assert.equal(d.querySelector('.inspiration-shot-card.active').dataset.inspirationShot, shot.id);
+  assert.equal(c.calls.length, 0);
+});
+
+test("matched entry keeps existing independent edited drafts and ignores stale shot ids", (t) => {
+  const c = setup(t); let d = c.open(); analyze(c, d);
+  editPrompt(c, d, '整段草稿');
+  const shot = c.clip.shots[1];
+  d.querySelector(`[data-inspiration-shot="${shot.id}"]`).click();
+  editPrompt(c, d, '我的镜头草稿');
+  c.controller.close();
+  c.controller.open(c.clip.id, c.trigger, { shotId: shot.id });
+  d = c.document.querySelector('dialog');
+  assert.equal(d.querySelector('[data-inspiration-prompt]').value, '我的镜头草稿');
+  assert.equal(c.jobs.size, 0);
+  d.querySelector('[data-inspiration-shot=""]').click();
+  assert.equal(d.querySelector('[data-inspiration-prompt]').value, '整段草稿');
+  c.controller.close();
+  c.controller.open(c.clip.id, c.trigger, { shotId: 'removed-shot' });
+  d = c.document.querySelector('dialog');
+  assert.equal(d.querySelector('[data-inspiration-play-match]'), null);
+  assert.equal(d.querySelector('[data-inspiration-prompt]').value, '整段草稿');
+});
+
+test("matched shot is not selected outside an explicit analysis range and playback respects media failure", (t) => {
+  const c = setup(t); const shot = c.clip.shots[1];
+  c.controller.open(c.clip.id, c.trigger, { shotId: shot.id });
+  const d = c.document.querySelector('dialog');
+  setField(c, d, '[data-inspiration-end]', 1);
+  analyze(c, d);
+  assert.equal(d.querySelector('.inspiration-shot-card.active'), null);
+  assert.equal(d.querySelector('[data-inspiration-shot=""]').getAttribute('aria-pressed'), 'true');
+  d.querySelector('video').dispatchEvent(new c.window.Event('error'));
+  assert.equal(d.querySelector('[data-inspiration-play-match]').disabled, true);
+});

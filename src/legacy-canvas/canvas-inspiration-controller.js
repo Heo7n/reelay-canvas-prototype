@@ -47,7 +47,7 @@
       activeScope = nextScope;
     }
 
-    function open(id, trigger = document.activeElement) {
+    function open(id, trigger = document.activeElement, { shotId } = {}) {
       if (disposed) return false;
       syncContext();
       const clip = catalog.get(id);
@@ -55,17 +55,19 @@
       close({ restoreFocus: false });
       const key = clipKey(clip);
       const saved = drafts.get(key);
+      const matchedShot = clip.shots?.find((shot) => shot.id === shotId);
+      const matchedAnalysisShot = saved?.analysis?.shots.find((shot) => shot.id === matchedShot?.id);
       const dialog = document.createElement("dialog");
       dialog.className = "canvas-inspiration-dialog";
       dialog.setAttribute("aria-labelledby", "inspirationDetailTitle");
       dialog.dataset.wheelScope = "local";
       dialog.innerHTML = view.renderDetail({ clip, start: 0, end: clip.duration, canUse: canUse(), attributionUrl: catalog.attributionUrl,
-        discoveryTags: catalog.getDiscoveryTags?.(clip) });
+        discoveryTags: catalog.getDiscoveryTags?.(clip), matchedShot });
       document.body.append(dialog);
       const video = dialog.querySelector("[data-inspiration-video]");
       const current = { dialog, video, clip, key, scope: scopeKey(), trigger, cleanup: [], canUse: canUse(),
         playback: null, playRequest: 0, mediaFailed: false, analysis: saved?.analysis || null, prompts: { ...saved?.prompts }, pending: null, reveal: null,
-        activeShotId: saved?.activeShotId || "", tab: saved?.tab || "analysis", confirmReplace: false,
+        activeShotId: matchedAnalysisShot?.id || saved?.activeShotId || "", tab: saved?.tab || "analysis", confirmReplace: false,
         copyRequest: null, copiedPrompt: null };
       session = current;
       const startInput = dialog.querySelector("[data-inspiration-start]");
@@ -206,7 +208,7 @@
             const firstResult = !current.analysis;
             current.analysis = catalog.getAnalysis(values);
             current.prompts = {};
-            current.activeShotId = "";
+            current.activeShotId = current.analysis.shots.find((shot) => shot.id === matchedShot?.id)?.id || "";
             current.tab = "analysis";
             renderResults();
             if (firstResult) revealResults();
@@ -267,6 +269,10 @@
           const input = mark.dataset.inspirationMark === "start" ? startInput : endInput;
           input.value = String(Math.min(clip.duration, Math.max(0, Math.round(video.currentTime * 10) / 10)));
           updateRange();
+          return;
+        }
+        if (event.target.closest("[data-inspiration-play-match]") && matchedShot) {
+          await playRange({ start: matchedShot.start, end: matchedShot.end });
           return;
         }
         if (event.target.closest("[data-inspiration-play-range]")) {
@@ -337,7 +343,8 @@
         } catch (error) { if (session === current) showError(error.message || "操作未完成，请重试"); }
       });
       listen(video, "loadedmetadata", () => {
-        if (saved?.playhead && Number.isFinite(video.duration)) video.currentTime = Math.min(saved.playhead, video.duration);
+        const playhead = matchedShot?.start ?? saved?.playhead;
+        if (Number.isFinite(playhead) && Number.isFinite(video.duration)) video.currentTime = Math.min(playhead, video.duration);
       });
       listen(video, "timeupdate", () => {
         if (current.playback && video.currentTime >= current.playback.end) {
@@ -362,7 +369,7 @@
         const notice = dialog.querySelector("[data-inspiration-media-error]");
         notice.textContent = "视频暂时无法加载，请关闭后重试";
         notice.hidden = false;
-        dialog.querySelectorAll('[data-inspiration-action="canvas"], [data-inspiration-analyze], [data-inspiration-play-range], [data-inspiration-mark]')
+        dialog.querySelectorAll('[data-inspiration-action="canvas"], [data-inspiration-analyze], [data-inspiration-play-range], [data-inspiration-play-match], [data-inspiration-mark]')
           .forEach((button) => { button.disabled = true; });
       });
       updateRange();

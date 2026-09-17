@@ -5,7 +5,7 @@
   const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 
   function create({ document, host, grid, catalog, onChange, refreshIcons = () => {}, getScope = () => "", getTrigger = () => null,
-    schedule = (fn, delay) => root.setTimeout(fn, delay), cancel = (id) => root.clearTimeout(id) }) {
+    schedule = (fn, delay) => root.setTimeout(fn, delay), cancel = (id) => root.clearTimeout(id), filterCandidates = (clips) => clips }) {
     let selected = [];
     let expanded = "";
     let open = false;
@@ -76,7 +76,7 @@
         .filter(({ tag, total }) => total > 0 && normalize([tag.label, ...(tag.aliases || [])].join(" ")).includes(term))
         .sort((a, b) => facet.id === "duration" ? a.index - b.index : b.total - a.total || a.index - b.index);
       list.innerHTML = options.map(({ tag }) => {
-        const matching = catalog.search({ query, facets: [...other, tag.id] }).length;
+        const matching = filterCandidates(catalog.search({ query, facets: [...other, tag.id] })).length;
         return `<button type="button" data-discovery-facet="${escape(tag.id)}" aria-pressed="${selected.includes(tag.id)}" title="${escape(tag.description || tag.label)}"${matching ? "" : ' class="is-empty"'}><span>${escape(tag.label)}</span><small>${matching}</small><span class="inspiration-facet-check">${selected.includes(tag.id) ? icon("check") : ""}</span></button>`;
       }).join("") || '<p class="inspiration-facet-empty" role="status">没有匹配的选项</p>';
     }
@@ -101,7 +101,7 @@
         renderOptions(facet);
       }
       host.querySelector("[data-discovery-reset]").disabled = !selected.length;
-      host.querySelector("[data-discovery-results]").textContent = `${catalog.search({ query, facets: selected }).length} 个片段`;
+      host.querySelector("[data-discovery-results]").textContent = `${filterCandidates(catalog.search({ query, facets: selected })).length} 个片段`;
       refreshIcons();
       if (focusId) host.querySelector(focusId)?.focus({ preventScroll: true });
     }
@@ -168,14 +168,34 @@
         preview = video;
         video.className = "inspiration-card-motion";
         video.muted = true;
-        video.loop = true;
+        const card = button.closest(".inspiration-card");
+        const matchedShot = clip.shots?.find((shot) => shot.id === card?.dataset.inspirationMatchShot);
+        video.loop = !matchedShot;
         video.playsInline = true;
         video.setAttribute("aria-hidden", "true");
         video.src = clip.url;
         button.append(video);
-        video.addEventListener("loadeddata", () => { if (preview === video) video.classList.add("is-ready"); }, { once: true });
+        const play = () => Promise.resolve(video.play()).catch(() => { if (preview === video) stopPreview(); });
+        const showFrame = () => { if (preview === video) video.classList.add("is-ready"); };
         video.addEventListener("error", () => { if (preview === video) stopPreview(); }, { once: true });
-        Promise.resolve(video.play()).catch(() => { if (preview === video) stopPreview(); });
+        if (matchedShot) {
+          video.addEventListener(matchedShot.start > 0 ? "seeked" : "loadeddata", showFrame, { once: true });
+          video.addEventListener("loadedmetadata", () => {
+            if (preview !== video) return;
+            video.currentTime = matchedShot.start;
+            play();
+          }, { once: true });
+          const repeatShot = () => {
+            if (preview !== video) return;
+            video.currentTime = matchedShot.start;
+            play();
+          };
+          video.addEventListener("timeupdate", () => { if (video.currentTime >= matchedShot.end) repeatShot(); });
+          video.addEventListener("ended", repeatShot);
+        } else {
+          video.addEventListener("loadeddata", showFrame, { once: true });
+          play();
+        }
       }, 180);
     }
     function leavePreview(event) {
@@ -201,6 +221,7 @@
     listen(grid, "dragstart", stopPreview);
     listen(document, "visibilitychange", stopPreview);
     return Object.freeze({
+      reset() { selected = []; expanded = ""; open = false; optionQueries.clear(); stopPreview(); syncVisibility(); },
       results(text) { syncScope(); return catalog.search({ query: text, facets: selected }); },
       sync(options) {
         syncScope();

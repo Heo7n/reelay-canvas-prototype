@@ -1,0 +1,50 @@
+.inspiration-match-context {
+  flex: 0 0 auto;
+  margin: 0 14px 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--asset-panel-subtle);
+  color: var(--text);
+}
+
+.inspiration-match-context[hidden] { display: none; }
+.inspiration-match-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.inspiration-match-heading > [data-match-label] { flex: 1; min-width: 0; font-size: 12px; font-weight: 550; }
+.inspiration-match-heading button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.inspiration-match-heading button:hover:not(:disabled) { background: var(--asset-panel-hover); }
+.inspiration-match-heading button:disabled { opacity: 0.4; cursor: default; }
+.inspiration-match-heading button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
+.inspiration-match-heading button svg { width: 14px; height: 14px; }
+.inspiration-match-context p { margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.5; opacity: 0.65; }
+.composer-tool-button > .inspiration-search-icon { width: 16px; height: 16px; flex: 0 0 16px; }
+
+.inspiration-match-priority-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 6px; min-height: 22px; font-size: 12px; }
+.inspiration-match-priority-heading small { margin-left: 6px; font-size: 11px; opacity: 0.6; }
+.inspiration-match-priority-heading button { border: 0; padding: 2px 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.inspiration-match-priority-heading button:hover { text-decoration: underline; }
+.inspiration-match-terms { display: flex; flex-wrap: wrap; gap: 6px; max-height: 114px; overflow-y: auto; padding: 2px; margin: -2px; }
+.inspiration-match-term { display: inline-flex; align-items: center; border: 1px solid var(--asset-panel-line); border-radius: 6px; background: var(--asset-panel-bg); }
+.inspiration-match-term.is-focused { border-color: var(--text); background: var(--asset-panel-hover); }
+.inspiration-match-term button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 26px; border: 0; border-radius: 5px; padding: 0 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.inspiration-match-term button:hover { background: var(--asset-panel-hover); }
+.inspiration-match-term [data-match-action="remove"] { padding: 0 4px; opacity: 0.6; }
+.inspiration-match-term [data-match-action="remove"]:hover { opacity: 1; }
+.inspiration-match-term svg { width: 12px; height: 12px; }
+.inspiration-match-priority-mark { width: 7px; font-size: 7px; }
+.inspiration-match-term.is-focused [data-match-action="focus"] { font-weight: 550; }
+.inspiration-match-terms-empty { font-size: 12px; line-height: 1.5; opacity: 0.65; }
+.inspiration-match-priority-heading button:focus-visible,
+.inspiration-match-term button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 1px; }

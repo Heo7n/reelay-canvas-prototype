@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 const sources = await Promise.all(["src/config/inspiration-catalog.js", "src/legacy-canvas/canvas-inspiration-discovery.js"]
   .map((file) => readFile(new URL(`../${file}`, import.meta.url), "utf8")));
-function setup(t) {
+function setup(t, options = {}) {
   const dom = new JSDOM('<body><button id="trigger">筛选</button><input id="outside"><section id="host"></section><div id="grid"><button class="inspiration-card-preview" data-library-preview="inspiration-coast"><img></button></div></body>', { runScripts: "outside-only" });
   const { window } = dom;
   const document = window.document;
@@ -26,6 +26,7 @@ function setup(t) {
   const controller = window.REELAY_CANVAS_INSPIRATION_DISCOVERY.create({ document, host, grid, catalog,
     getTrigger: () => document.getElementById("trigger"), getScope: () => scope, onChange: () => { count++; },
     schedule: (fn) => { const id = ++nextJob; jobs.set(id, fn); return id; }, cancel: (id) => jobs.delete(id),
+    ...options,
   });
   controller.sync({ active: true });
   assert.equal(host.hidden, true);
@@ -55,6 +56,21 @@ test("facet rows retain combined choices, summaries and keyboard focus", (t) => 
   assert.equal(s.controller.count, 1);
   s.click('[data-discovery-reset]');
   assert.equal(s.controller.results("").length, 12);
+});
+
+test("matching context narrows displayed counts while retaining the catalog facet vocabulary", (t) => {
+  const s = setup(t, { filterCandidates: (clips) => clips.filter((clip) => clip.id === "inspiration-coast") });
+  assert.equal(s.host.querySelector('[data-discovery-results]').textContent, "1 个片段");
+  assert.equal(s.host.querySelector('[data-discovery-facet="movement:tracking"] small').textContent, "1");
+  const color = s.host.querySelector('[data-discovery-facet="light:colored"]');
+  assert.ok(color);
+  assert.equal(color.querySelector('small').textContent, "0");
+  assert.equal(color.classList.contains("is-empty"), true);
+  color.click();
+  assert.equal(s.host.querySelector('[data-discovery-results]').textContent, "0 个片段");
+  s.click('[data-discovery-reset]');
+  s.controller.sync({ active: true, query: "雪山" });
+  assert.equal(s.host.querySelector('[data-discovery-results]').textContent, "0 个片段");
 });
 test("filter state survives space changes and resets for a different canvas", (t) => {
   const s = setup(t);
@@ -155,4 +171,39 @@ test("card feature refines results without opening details, toggling off or chan
   button.dataset.discoveryCardFacet = "light:backlight";
   button.click();
   assert.equal(s.controller.count, 1);
+});
+
+
+test("matched hover previews start and loop within the real shot without flashing the segment opening", (t) => {
+  const s = setup(t);
+  const button = s.grid.querySelector('button');
+  const shot = s.catalog.clips[0].shots[1];
+  const card = s.document.createElement('article');
+  card.className = 'inspiration-card'; card.dataset.inspirationMatchShot = shot.id;
+  button.replaceWith(card); card.append(button);
+  let plays = 0;
+  s.window.HTMLMediaElement.prototype.play = () => { plays++; return Promise.resolve(); };
+  button.dispatchEvent(new s.window.MouseEvent('pointerover', { bubbles: true })); s.flush();
+  const video = card.querySelector('video');
+  assert.equal(video.loop, false);
+  assert.equal(plays, 0);
+  video.dispatchEvent(new s.window.Event('loadedmetadata'));
+  assert.equal(video.currentTime, shot.start);
+  assert.equal(plays, 1);
+  video.dispatchEvent(new s.window.Event('loadeddata'));
+  assert.equal(video.classList.contains('is-ready'), false);
+  video.dispatchEvent(new s.window.Event('seeked'));
+  assert.equal(video.classList.contains('is-ready'), true);
+  video.currentTime = shot.end + 0.05; video.dispatchEvent(new s.window.Event('timeupdate'));
+  assert.equal(video.currentTime, shot.start);
+  assert.equal(plays, 2);
+  video.dispatchEvent(new s.window.Event('ended'));
+  assert.equal(plays, 3);
+  s.controller.stopPreview();
+  video.dispatchEvent(new s.window.Event('ended'));
+  assert.equal(plays, 3);
+  card.dataset.inspirationMatchShot = 'missing';
+  button.dispatchEvent(new s.window.MouseEvent('pointerover', { bubbles: true })); s.flush();
+  assert.equal(card.querySelector('video').loop, true);
+  assert.equal(plays, 4);
 });

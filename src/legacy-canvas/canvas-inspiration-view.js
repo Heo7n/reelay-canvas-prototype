@@ -53,6 +53,7 @@
     const shortDescription = description.length > 180 ? `${description.slice(0, 180)}…` : description;
     const discoveryTags = tagLabels(options.discoveryTags, 4);
     const shotCount = Array.isArray(clip.shots) ? clip.shots.length : 0;
+    const matchedShot = clip.shots?.find((shot) => shot.id === options.matchedShot?.id);
     return `<header class="inspiration-header">
       <h2 id="inspirationDetailTitle">${escape(clip.title || "未命名片段")}</h2>
       <button type="button" class="inspiration-close" data-inspiration-close aria-label="关闭创作参考">${icon("x")}</button>
@@ -64,6 +65,7 @@
           <video data-inspiration-video controls preload="metadata" playsinline${url ? ` src="${url}"` : ""}${poster ? ` poster="${poster}"` : ""}></video>
           <p class="inspiration-media-error" data-inspiration-media-error role="status" hidden></p>
         </div>
+        ${matchedShot ? `<button type="button" class="inspiration-match-cue" data-inspiration-play-match aria-label="播放匹配镜头 ${escape(matchedShot.title || "")}">${icon("play")}<span>匹配镜头 ${String(clip.shots.indexOf(matchedShot) + 1).padStart(2, "0")}</span><span>${timecode(matchedShot.start)} – ${timecode(matchedShot.end)}</span></button>` : ""}
         <div class="inspiration-range">
           <div class="inspiration-section-heading"><h3>参考范围</h3><span data-inspiration-range-label>${time(start)} – ${time(end)}</span></div>
           <div class="inspiration-range-controls">
@@ -125,18 +127,21 @@
     const clip = options.clip || {};
     const id = escape(media.id || "");
     const title = escape(clip.title || media.name || "未命名片段");
-    const poster = safeUrl(clip.posterUrl || media.thumbnailUrl);
+    const matchedShot = clip.shots?.find((shot) => shot.id === options.match?.shotId);
+    const matchReasons = matchedShot ? tagLabels(options.match?.reasons, 2) : [];
+    const matchLabel = matchedShot ? [...matchReasons, timecode(matchedShot.start)].join(" · ") : "";
+    const poster = safeUrl(matchedShot?.posterUrl || clip.posterUrl || media.thumbnailUrl);
     const selected = Boolean(options.selected);
     const disabled = options.selectionDisabled ? ' disabled title="仅可同时选择同类结果"' : "";
     const classes = ["asset-library-card", "asset-library-media-card", "inspiration-card", "readonly", options.selectionMode && "selection-mode", selected && "selected"].filter(Boolean).join(" ");
     const tags = (options.discoveryTags || clip.tags || []).slice(0, 2).map((tag) => typeof tag === "string" ? { label: tag } : tag).filter((tag) => tag?.label);
     const shotCount = Array.isArray(clip.shots) ? clip.shots.length : 0;
-    return `<article class="${classes}" draggable="true" data-library-media="${id}" data-library-space="platform" data-library-media-kind="video">
+    return `<article class="${classes}" draggable="true" data-library-media="${id}" data-library-space="platform" data-library-media-kind="video"${matchedShot ? ` data-inspiration-match-shot="${escape(matchedShot.id)}"` : ""}>
       <button type="button" class="asset-library-card-preview inspiration-card-preview" data-library-preview="${id}" data-library-item-kind="media" aria-label="查看片段 ${title}"${options.selectionMode ? disabled : ""}>
         ${poster ? `<img src="${poster}" alt="" loading="lazy" draggable="false">` : icon("video")}
         <span class="inspiration-card-play">${icon("play")}</span><span class="inspiration-card-duration">${time(clip.duration)}</span>
       </button>
-      <div class="inspiration-card-copy"><div class="inspiration-card-title" title="${title}">${title}</div><div class="inspiration-card-source">${escape([clip.sourceLabel, shotCount ? `${shotCount} 个镜头` : ""].filter(Boolean).join(" · "))}</div>${tags.length ? `<div class="inspiration-card-tags">${tags.map((tag) => tag.id && !options.selectionMode ? `<button type="button" data-discovery-card-facet="${escape(tag.id)}" aria-label="查找${escape(tag.label)}片段" title="查找${escape(tag.label)}片段">${escape(tag.label)}</button>` : `<span>${escape(tag.label)}</span>`).join('<span aria-hidden="true"> · </span>')}</div>` : ""}</div>
+      <div class="inspiration-card-copy"><div class="inspiration-card-title" title="${title}">${title}</div><div class="inspiration-card-source">${escape([clip.sourceLabel, shotCount ? `${shotCount} 个镜头` : ""].filter(Boolean).join(" · "))}</div>${matchedShot ? `<div class="inspiration-card-match" title="${escape(matchLabel)}">${escape(matchLabel)}</div>` : tags.length ? `<div class="inspiration-card-tags">${tags.map((tag) => tag.id && !options.selectionMode ? `<button type="button" data-discovery-card-facet="${escape(tag.id)}" aria-label="查找${escape(tag.label)}片段" title="查找${escape(tag.label)}片段">${escape(tag.label)}</button>` : `<span>${escape(tag.label)}</span>`).join('<span aria-hidden="true"> · </span>')}</div>` : ""}</div>
       <button type="button" class="asset-library-selection-button${selected ? " active" : ""}" data-library-select="media:${id}" data-library-item-kind="media" aria-label="${selected ? "取消选择" : "选择"} ${title}" aria-pressed="${selected}"${disabled}>${icon("check")}</button>
     </article>`;
   }

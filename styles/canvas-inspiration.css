@@ -44,6 +44,9 @@ html[data-theme="light"] .canvas-inspiration-dialog { --inspiration-error: #b423
 .inspiration-player { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: #111214; }
 .inspiration-player video { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
 .inspiration-media-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; margin: 0; background: #111214; color: #e2e3e6; text-align: center; }
+.inspiration-match-cue { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 32px; margin-top: 6px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--inspiration-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.inspiration-match-cue:hover:not(:disabled) { background: var(--inspiration-hover); color: var(--canvas-popover-text); }
+.inspiration-match-cue svg { width: 14px; height: 14px; }
 .inspiration-range { margin-top: 12px; }
 .inspiration-section-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .inspiration-section-heading h3 { margin: 0; color: var(--inspiration-muted); font-size: 12px; font-weight: 400; }
@@ -136,7 +139,7 @@ html[data-theme="light"] .canvas-inspiration-dialog { --inspiration-error: #b423
 .inspiration-card-copy { min-width: 0; text-align: left; }
 .inspiration-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.5; }
 .inspiration-card-source { margin-top: 3px; color: var(--muted); font-size: 11px; }
-.inspiration-card-tags { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+.inspiration-card-match, .inspiration-card-tags { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
 @keyframes inspiration-spin { to { transform: rotate(360deg); } }
 @keyframes inspiration-panel-in { from { opacity: .65; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {

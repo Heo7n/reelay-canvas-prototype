@@ -182,3 +182,22 @@ test("disabled selection prevents mixed selections and hostile card metadata is 
   assert.equal(page.querySelector("[data-library-select]").disabled, true);
   assert.equal(page.querySelectorAll("script,img,[onpointerdown]").length, 0);
 });
+
+
+test("matched cards use the actual shot thumbnail and time with one compact reason line", () => {
+  const shot = { id: 'shot-2', start: 3.2, end: 5.7, posterUrl: '/shot.webp', title: '跟随人物' };
+  const matchedClip = { ...clip, shots: [shot], tags: ['重复标签'] };
+  const card = parse(view.renderCard({ clip: matchedClip, match: { shotId: shot.id, start: 999, end: 1000, reasons: ['跟拍', '<逆光>'] } }));
+  assert.equal(card.querySelector('article').dataset.inspirationMatchShot, shot.id);
+  assert.equal(card.querySelector('img').getAttribute('src'), shot.posterUrl);
+  assert.equal(card.querySelector('.inspiration-card-match').textContent, '跟拍 · <逆光> · 0:03.2');
+  assert.equal(card.querySelector('.inspiration-card-tags'), null);
+  assert.equal(card.querySelectorAll('逆光').length, 0);
+  const detail = parse(view.renderDetail({ clip: matchedClip, matchedShot: { ...shot, start: 999 } }));
+  assert.match(detail.querySelector('[data-inspiration-play-match]').textContent, /匹配镜头 01.*0:03.2 – 0:05.7/);
+  assert.equal(detail.querySelector('[data-inspiration-start]').value, '0');
+  assert.equal(detail.querySelector('[data-inspiration-end]').value, String(clip.duration));
+  const ordinary = parse(view.renderCard({ clip: matchedClip, match: { shotId: 'missing', reasons: ['无依据'] } }));
+  assert.equal(ordinary.querySelector('.inspiration-card-match'), null);
+  assert.equal(ordinary.querySelector('article').hasAttribute('data-inspiration-match-shot'), false);
+});

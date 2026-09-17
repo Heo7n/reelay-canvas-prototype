@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
 const root = new URL("../", import.meta.url);
-const inspirationModules = await Promise.all(["src/config/inspiration-catalog.js", "src/legacy-canvas/canvas-inspiration-view.js", "src/legacy-canvas/canvas-inspiration-controller.js", "src/legacy-canvas/canvas-inspiration-discovery.js"]
+const inspirationModules = await Promise.all(["src/config/inspiration-catalog.js", "src/legacy-canvas/canvas-inspiration-view.js", "src/legacy-canvas/canvas-inspiration-controller.js", "src/legacy-canvas/canvas-inspiration-discovery.js", "src/legacy-canvas/canvas-inspiration-matching-model.js", "src/legacy-canvas/canvas-inspiration-matching.js"]
   .map((path) => readFile(new URL(path, root), "utf8")));
 const fileName = await readFile(new URL("src/legacy-canvas/canvas-file-name.js", root), "utf8");
 const themeController = await readFile(new URL("src/legacy-canvas/canvas-theme-controller.js", root), "utf8");

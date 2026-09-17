@@ -143,6 +143,7 @@ const agentAddBtn = document.querySelector("#agentAddBtn");
 const agentReferenceShelf = document.querySelector("#agentReferenceShelf");
 const agentReferenceMenu = document.querySelector("#agentReferenceMenu");
 const agentPromptOptimizationBtn = document.querySelector("#agentPromptOptimizationBtn");
+const agentInspirationBtn = document.querySelector("#agentInspirationBtn");
 const agentAdvancedBtn = document.querySelector("#agentAdvancedBtn");
 const agentAdvancedSettings = document.querySelector("#agentAdvancedSettings");
 const agentAssetValidationBtn = document.querySelector("#agentAssetValidationBtn");
@@ -455,6 +456,7 @@ const canvasInspiration = window.REELAY_CANVAS_INSPIRATION_CONTROLLER.create({
 const canvasInspirationDiscovery = window.REELAY_CANVAS_INSPIRATION_DISCOVERY.create({
   document, host: document.getElementById("inspirationDiscovery"), grid: assetLibraryGrid,
   catalog: inspirationCatalog, refreshIcons,
+  filterCandidates: (clips) => canvasInspirationMatching.results(clips),
   getTrigger: () => assetLibraryCommandBar.querySelector("[data-library-filter-toggle]"),
   getScope: () => JSON.stringify([state.projectId, getActiveCanvas()?.id]),
   onChange({ filtersOnly = false } = {}) {
@@ -466,6 +468,35 @@ const canvasInspirationDiscovery = window.REELAY_CANVAS_INSPIRATION_DISCOVERY.cr
   },
 });
 const hostPersonalMediaIds = new Set();
+const canvasInspirationMatching = window.REELAY_CANVAS_INSPIRATION_MATCHING.create({
+  host: document.getElementById("inspirationMatchContext"),
+  model: window.REELAY_CANVAS_INSPIRATION_MATCHING_MODEL, clips: inspirationCatalog.clips,
+  getScope: () => JSON.stringify([state.projectId, getActiveCanvas()?.id]),
+  readSource(target) {
+    if (target.kind === "node") {
+      return state.nodes.includes(target.node)
+        ? { text: getNodePromptText(target.node), label: "节点文字" } : null;
+    }
+    return getConversation() === target.conversation && agentModels.getMode() === "generation"
+      ? { text: getAgentPromptText(), label: "对话文字" } : null;
+  },
+  onChange() { clearAssetLibrarySelection(); assetLibraryGrid.scrollTop = 0; renderAssetLibrary(); },
+  onExit() { assetLibrarySearchInput?.focus({ preventScroll: true }); },
+  refreshIcons,
+});
+
+function findInspiration(target) {
+  const text = target.kind === "node" ? getNodePromptText(target.node) : getAgentPromptText();
+  if (!text.trim()) return false;
+  openAssetLibrary();
+  switchAssetLibraryContext({ space: "platform" });
+  state.librarySearch = "";
+  canvasInspirationDiscovery.reset();
+  if (!canvasInspirationMatching.begin(target)) return false;
+  renderAssetLibrary();
+  assetLibraryGrid.scrollTop = 0;
+  return true;
+}
 const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
 if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
 const canvasNodeLayoutTransition = canvasNodeLayoutTransitionFactory.createNodeLayoutTransitionController({
@@ -3634,6 +3665,7 @@ function clearAssetLibrarySelection({ keepMode = false } = {}) {
 }
 
 function switchAssetLibraryContext({ space = state.librarySpace } = {}) {
+  if (space !== "platform") canvasInspirationMatching.clear();
   const query = canvasLibrarySearch.isOpen() ? state.librarySearch : null;
   if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
   canvasEntityUse.closeDetail();
@@ -3854,8 +3886,9 @@ function getAssetLibraryFolderDescendantIds(folderId) {
 function getVisibleAssetLibraryContent() {
   if (state.librarySpace === "platform") {
     const allItems = assetLibraryStore.listItems({ space: "platform", kind: "media" });
-    const ids = new Set(canvasInspirationDiscovery.results(state.librarySearch).map((clip) => clip.id));
-    return { folders: [], allItems, items: allItems.filter((item) => ids.has(item.id)) };
+    const candidates = canvasInspirationMatching.results(canvasInspirationDiscovery.results(state.librarySearch));
+    const byId = new Map(allItems.map((item) => [item.id, item]));
+    return { folders: [], allItems, items: candidates.map((clip) => byId.get(clip.id)).filter(Boolean) };
   }
   if (state.librarySpace !== "platform" && getPersonalCatalogStatus({ includeEntities: isSubjectLibraryZone() || isGlobalLibrarySearch() })) {
     return { folders: [], allItems: [], items: [] };
@@ -3944,6 +3977,8 @@ function renderAssetLibrary() {
   const mutable = isAssetLibraryMutable();
   const space = state.librarySpace;
   const platform = space === "platform";
+  if (platform) canvasInspirationMatching.sync();
+  else canvasInspirationMatching.clear();
   const searching = !platform && isGlobalLibrarySearch();
   const subjectZone = !searching && isSubjectLibraryZone() && !state.libraryEntityFilter;
   const section = searching ? "all" : subjectZone ? "entity" : "media";
@@ -4111,6 +4146,7 @@ function renderAssetLibrary() {
       }
       if (platform && inspirationCatalog.get(item.id)) return window.REELAY_CANVAS_INSPIRATION_VIEW.renderCard({
         ...common, media: item, clip: inspirationCatalog.get(item.id),
+        match: canvasInspirationMatching.matchFor(item.id),
         discoveryTags: inspirationCatalog.getDiscoveryTags(item.id)
           .filter((tag) => !["content", "duration"].includes(tag.groupId))
           .sort((a, b) => Number(canvasInspirationDiscovery.selectedIds.includes(b.id)) - Number(canvasInspirationDiscovery.selectedIds.includes(a.id)) || Number(a.groupId === "scale") - Number(b.groupId === "scale")),
@@ -4139,7 +4175,7 @@ function renderAssetLibrary() {
     ? `<div class="asset-library-empty" role="status"><strong>${catalogStatus === "loading"
       ? "正在加载资产库…" : "资产库暂时无法加载"}</strong><span>${catalogStatus === "loading"
       ? "画布可继续编辑" : "重新进入项目后重试"}</span></div>` : "";
-  canvasAssetLibraryView.syncGrid(assetLibraryGrid, catalogNotice || itemMarkup || canvasAssetLibraryView.renderEmptyState({
+  canvasAssetLibraryView.syncGrid(assetLibraryGrid, catalogNotice || itemMarkup || (platform && canvasInspirationMatching.active ? canvasInspirationMatching.emptyMarkup() : canvasAssetLibraryView.renderEmptyState({
     section,
     space,
     subjectZone,
@@ -4148,7 +4184,7 @@ function renderAssetLibrary() {
     canCreateEntity,
     canUploadMedia,
     entityFilterStatus: entityFilter?.status,
-  }));
+  })));
 
   if (assetLibraryCount) {
     if (catalogStatus) {
@@ -4386,7 +4422,7 @@ function addEntityToCanvas({ scope, entityId, space }) {
 }
 
 function openAssetLibraryPreview(id) {
-  if (state.librarySpace === "platform" && canvasInspiration.open(id)) return;
+  if (state.librarySpace === "platform" && canvasInspiration.open(id, document.activeElement, { shotId: canvasInspirationMatching.matchFor(id)?.shotId })) return;
   const item = assetLibraryStore.getMedia({ kind: "media", id, space: state.librarySpace });
   if (!item || !assetLibraryPreviewDialog || !assetLibraryPreviewBody) return;
   state.libraryPreviewTarget = { kind: "media", id };
@@ -4507,6 +4543,7 @@ function openAssetLibrary(targetNodeId = null, { focus = false, agentScope = nul
 }
 
 function closeAssetLibrary({ restoreFocus = true } = {}) {
+  canvasInspirationMatching.clear();
   canvasInspirationDiscovery.sync({ active: false });
   if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
   assetLibraryHeader.sync({ space: state.librarySpace, query: state.librarySearch, visible: false });
@@ -5438,6 +5475,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
             ${getNodeGenerationMode(node) === "video" ? `<span class="control-chip-audio-separator" aria-hidden="true">·</span><i data-lucide="${node.audioEnabled ? "volume-2" : "volume-x"}" aria-label="${node.audioEnabled ? "音频开启" : "音频关闭"}"></i>` : ""}
           </button>
           <div class="control-spacer"></div>
+          <button class="control-chip composer-tool-button" data-action="find-inspiration" type="button" title="根据当前文字找灵感" aria-label="找灵感" ${!getNodePromptText(node).trim() ? "disabled" : ""}>${window.REELAY_ICONS.markup("scan-search", { class: "inspiration-search-icon" })}</button>
           ${`
             <button class="control-chip composer-tool-button prompt-optimization-button " data-action="prompt-optimization" data-canvas-mutation type="button" title="${getNodePromptText(node).trim() ? "优化提示词" : "输入提示词后优化"}" aria-label="提示词优化" aria-busy="false" ${node.generating || !getNodePromptText(node).trim() ? "disabled" : ""}>
               ${window.REELAY_ICONS.markup("wand-sparkles", { class: "prompt-optimization-icon" })}
@@ -6040,6 +6078,9 @@ function syncGenerateButton(button, node) {
 
 function syncPromptOptimizationButton(button, node) {
   if (!node) return;
+  const inspirationButton = nodeLayer.querySelector(`[data-id="${node.id}"] [data-action="find-inspiration"]`);
+  if (inspirationButton) inspirationButton.disabled = !getNodePromptText(node).trim();
+  if (canvasInspirationMatching.sync()) renderAssetLibrary();
   promptOptimization?.syncButton(button, node, {
     model: node.model,
     hasPrompt: Boolean(getNodePromptText(node).trim()), disabled: node.generating || !isCanvasMutationAllowed(),
@@ -6546,6 +6587,9 @@ function handleAction(node, action, value) {
     case "prompt-optimization":
       if (getNodeGenerationMode(node) !== "video") return;
       startPromptOptimization(node);
+      return;
+    case "find-inspiration":
+      findInspiration({ kind: "node", node });
       return;
     default:
       return;
@@ -8108,6 +8152,8 @@ function setAgentAssetValidationEnabled(enabled) {
 }
 
 function syncAgentPromptOptimizationControl() {
+  if (agentInspirationBtn) agentInspirationBtn.disabled = !getAgentPromptText().trim() || agentModels.getMode() !== "generation";
+  if (canvasInspirationMatching.sync()) renderAssetLibrary();
   promptOptimization?.syncButton(agentPromptOptimizationBtn, promptOptimization.getDraftOwner(getConversation()), {
     model: getAgentComposerModel(),
     hasPrompt: Boolean(getAgentPromptText().trim()),
@@ -11556,6 +11602,7 @@ agentHistoryMenu?.addEventListener("pointerdown", (event) => {
 });
 agentSendButton?.addEventListener("click", sendAgentMessage);
 agentPromptOptimizationBtn?.addEventListener("click", startAgentPromptOptimization);
+agentInspirationBtn?.addEventListener("click", () => findInspiration({ kind: "agent", conversation: getConversation() }));
 agentAdvancedBtn?.addEventListener("click", () => {
   setAgentAdvancedOpen(!state.agentAdvancedSettingsExpanded);
 });
@@ -11803,6 +11850,7 @@ window.addEventListener("pagehide", (event) => {
   if (!event.persisted) {
     canvasInspiration.destroy();
     canvasInspirationDiscovery.destroy();
+    canvasInspirationMatching.destroy();
     assetLibraryHeader.destroy();
     agentLauncherMotion.dispose();
     agentCloseMotion.dispose();

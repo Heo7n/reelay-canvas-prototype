@@ -7,6 +7,7 @@
     <link id="appFavicon" rel="icon" type="image/svg+xml" href="./assets/favicon-account.svg" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./styles/canvas-connections.css" />
+    <link rel="stylesheet" href="./styles/canvas-inspiration-matching.css" />
   </head>
   <body>
     <main class="app-shell">
@@ -209,6 +210,7 @@
               <section id="inspirationDiscovery" class="inspiration-discovery" role="dialog" aria-label="创作参考分类" hidden></section>
             </div>
             <div id="assetLibraryEntityFilter" hidden></div>
+            <section id="inspirationMatchContext" class="inspiration-match-context" aria-label="灵感匹配依据" hidden></section>
             <div class="asset-library-grid" id="assetLibraryGrid" role="region" aria-label="资产内容"></div>
           </section>
         </div>
@@ -532,6 +534,7 @@
                     <button class="reference-source-option" type="button" role="menuitem" data-agent-reference-source="library"><i data-lucide="folder-open" aria-hidden="true"></i><span>选择素材</span></button>
                   </div>
                   <div class="agent-composer-top-actions">
+                    <button class="control-chip composer-tool-button" id="agentInspirationBtn" type="button" title="根据当前文字找灵感" aria-label="找灵感" disabled><i class="inspiration-search-icon" data-lucide="scan-search" aria-hidden="true"></i></button>
                     <button class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn" type="button" title="输入提示词后优化" aria-label="提示词优化" aria-busy="false" disabled>
                       <i class="prompt-optimization-icon" data-lucide="wand-sparkles" aria-hidden="true"></i>
                       <span class="prompt-optimization-spinner" aria-hidden="true"></span>
@@ -641,6 +644,8 @@
     <script src="./src/legacy-canvas/canvas-inspiration-view.js"></script>
     <script src="./src/legacy-canvas/canvas-inspiration-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-inspiration-discovery.js"></script>
+    <script src="./src/legacy-canvas/canvas-inspiration-matching-model.js"></script>
+    <script src="./src/legacy-canvas/canvas-inspiration-matching.js"></script>
     <script src="./src/legacy-canvas/canvas-asset-library-menu-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-entity-editor-model.js"></script>
     <script src="./src/legacy-canvas/canvas-selection-entity-model.js"></script>
