@@ -46,7 +46,7 @@ test("generator Entity entry expands the chip rail only for supported prompt pan
   assert.match(entityUseCss, /\.generator-node \.entity-drop:focus-visible,\s*\.generator-node \.asset-drop:focus-visible/);
 });
 
-test("renders a cover-led Entity detail with inline metadata and the exact full-width canvas CTA", () => {
+test("renders an informational Entity tooltip without focusable actions", () => {
   const markup = view.renderEntityDetail({
     entity: {
       id: "courier",
@@ -59,20 +59,20 @@ test("renders a cover-led Entity detail with inline metadata and the exact full-
     placement: { left: 572, top: 174, width: 328, maxHeight: 650, side: "right" },
   });
 
-  assert.match(markup, /class="entity-use-detail is-pinned" role="dialog" aria-modal="false"/);
-  assert.match(markup, /data-entity-use-detail="courier" data-entity-use-state="pinned" data-pinned="true" data-placement="right"/);
+  assert.match(markup, /class="entity-use-detail" role="tooltip"/);
+  assert.match(markup, /data-entity-use-detail="courier" data-entity-use-state="preview" data-placement="right"/);
   assert.match(markup, /style="--entity-use-detail-left:572px;--entity-use-detail-top:174px;--entity-use-detail-width:328px;--entity-use-detail-max-height:650px"/);
   assert.match(markup, /class="entity-use-detail-cover" data-cover-kind="image" data-media-kind="image"[^>]*>\s*<img src="https:\/\/cdn\.example\/portrait\.png"/);
   assert.match(markup, /class="entity-use-detail-title-row">\s*<h2 id="entity-use-detail-title"[^>]*>雾森信使<\/h2>\s*<span class="entity-use-detail-count">5 个素材<\/span>/);
   assert.match(markup, /雨林中的稳定角色设定/);
-  assert.match(markup, /data-entity-use-action="add-canvas" data-entity-use-add-canvas="courier"/);
-  assert.match(markup, /<span>添加到画布<\/span>/);
+  assert.doesNotMatch(markup, /<button|tabindex=|data-entity-use-add-canvas|is-pinned/);
+  assert.doesNotMatch(markup, /添加到画布/);
   assert.doesNotMatch(markup, /主体详情|entity-use-detail-header|entity-use-detail-thumbnail|data-entity-use-detail-close/);
   assert.doesNotMatch(markup, /data-lucide="plus"/);
   assert.doesNotMatch(markup, /\bautoplay\b|<audio|<video| controls(?:\s|>)/);
 });
 
-test("detail preview remains non-interactive until pinned and fails closed without usable media", () => {
+test("detail preview stays informative for audio-only and empty subjects", () => {
   const preview = view.renderEntityDetail({
     entity: { id: "audio-only", name: "声音主体", media: [media[3]] },
   });
@@ -80,10 +80,10 @@ test("detail preview remains non-interactive until pinned and fails closed witho
     entity: { id: "empty", name: "空主体", media: [] },
   });
 
-  assert.match(preview, /data-entity-use-state="preview" data-pinned="false"/);
+  assert.match(preview, /data-entity-use-state="preview"/);
   assert.match(preview, /data-cover-kind="preview" data-media-kind="audio"/);
   assert.doesNotMatch(preview, /<audio|src="https:\/\/cdn\.example\/voice\.mp3"/);
-  assert.match(empty, /data-entity-use-unavailable="add-canvas" disabled aria-disabled="true" title="主体没有可添加的素材"/);
+  assert.doesNotMatch(empty, /<button|tabindex=/);
   assert.doesNotMatch(empty, /data-entity-use-action="add-canvas"|data-entity-use-add-canvas=/);
   assert.match(empty, /data-cover-kind="empty" data-media-kind="empty"/);
   assert.match(empty, /class="entity-use-detail-count">0 个素材<\/span>/);
@@ -323,7 +323,7 @@ test("explicit video covers are accepted as visual covers without embedding auto
   assert.doesNotMatch(markup, /<video|autoplay|src="https:\/\/cdn\.example\/motion\.mp4"/);
 });
 
-test("portal helpers synchronize visibility, fixed placement, pinning, and busy state without owning timers", () => {
+test("portal helpers synchronize passive preview placement and picker busy state without owning timers", () => {
   function fakePortal() {
     const attributes = new Map();
     const classes = new Set();
@@ -358,9 +358,9 @@ test("portal helpers synchronize visibility, fixed placement, pinning, and busy 
   assert.equal(detailPortal.hidden, false);
   assert.equal(detailPortal.inert, false);
   assert.equal(detailPortal.attributes.get("aria-hidden"), "false");
-  assert.equal(detailPortal.attributes.get("data-entity-use-state"), "pinned");
+  assert.equal(detailPortal.attributes.get("data-entity-use-state"), "preview");
   assert.ok(detailPortal.classes.has("is-open"));
-  assert.ok(detailPortal.classes.has("is-pinned"));
+  assert.equal(detailPortal.classes.has("is-pinned"), false);
   assert.equal(detailPortal.styles.get("--entity-use-detail-left"), "560px");
   assert.equal(detailPortal.styles.get("--entity-use-detail-top"), "91px");
 

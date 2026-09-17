@@ -69,6 +69,7 @@ export interface ReadPersonalAssetInput extends ListPersonalAssetsInput {
 }
 
 export interface RenamePersonalAssetInput extends ReadPersonalAssetInput {
+  space?: "personal" | "organization";
   displayName: string;
 }
 

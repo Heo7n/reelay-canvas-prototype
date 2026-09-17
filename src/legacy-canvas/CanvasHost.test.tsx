@@ -244,13 +244,13 @@ describe("CanvasHost media library", () => {
     act(() => dispatchProgressiveReady(frame));
     await waitFor(() => expect(library.list).toHaveBeenCalled());
     const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
-      instanceId: canvasInstanceId, requestId: "tag-edit", command: "update-tags", space: "personal", operation: "add",
-      tagIds: ["builtin:scene"], items: [{ kind: "entity", id: "group" }] };
+      instanceId: canvasInstanceId, requestId: "tag-edit", command: "update-tags", space: "personal", operation: "replace",
+      tagIds: ["builtin:scene"], expectedTagIds: [], items: [{ kind: "entity", id: "group" }] };
     act(() => dispatchCanvasMessage(frame, { ...command, workspaceId: "forged" }));
     expect(library.updateTags).not.toHaveBeenCalled();
     act(() => dispatchCanvasMessage(frame, command));
     await waitFor(() => expect(library.updateTags).toHaveBeenCalledExactlyOnceWith({ workspaceId: "organization-1",
-      space: "personal", operation: "add", tagIds: command.tagIds, items: command.items }));
+      space: "personal", operation: "replace", tagIds: command.tagIds, expectedTagIds: [], items: command.items }));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result",
       requestId: "tag-edit", command: "update-tags", result: latest }), window.location.origin));
     act(() => dispatchProgressiveReady(frame, "tagged-frame"));
@@ -427,6 +427,72 @@ describe("CanvasHost media library", () => {
     expect(library.renameFolder).not.toHaveBeenCalled();
   });
 
+
+  it.each([false, true])("does not register organization uploads as personal assets (transient=%s)", async (transient) => {
+    const { catalog, library, media } = libraryFixture();
+    const asset = { id: "org-upload", workspaceId: "organization-1", objectVersion: 1, mediaKind: "image" as const, displayName: "Team image", contentType: "image/png", byteSize: 4,
+      checksumSha256: "a".repeat(64), contentUrl: "/api/media/shared/content", createdAt: "2026-09-15T00:00:00.000Z", updatedAt: "2026-09-15T00:00:00.000Z" };
+    const importFile = vi.fn(async () => ({ asset, projectAsset: null }));
+    const createUploadIntent = vi.fn(async () => ({ uploadIntent: { id: "org-upload-intent", expiresAt: "2026-09-18T00:00:00Z" }, upload: { url: "/api/upload", method: "PUT", headers: {} } }));
+    render(<CanvasHost repository={repository} mediaAssetRepository={{ ...media, createUploadIntent, finalizeUpload: async () => asset } as never}
+      transientMediaRepository={{ importFile }} entityRepository={{ listPersonal: async () => [] } as never}
+      context={{ ...progressiveContext, capabilities: { ...progressiveContext.capabilities, transientMediaUpload: transient } }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    const organizationCatalog: MediaLibraryCatalog = { ...catalog, entries: [{ assetId: asset.id, assetVersion: 1, mediaKind: "image", displayName: asset.displayName,
+      contentType: asset.contentType, byteSize: 4, checksumSha256: asset.checksumSha256, contentUrl: asset.contentUrl, createdAt: asset.createdAt,
+      space: "organization", folderId: null, tagIds: [] }] };
+    library.list.mockResolvedValue(organizationCatalog);
+    const base = { source: "reelay-legacy-canvas", protocolVersion: 1, instanceId: canvasInstanceId, requestId: "org-file", target: "personal", storageSpace: "organization", uploadPurpose: "library", displayName: asset.displayName, mediaKind: "image", contentType: "image/png" };
+    act(() => dispatchCanvasMessage(frame, transient ? { ...base, type: "canvas:import-transient-media", body: new ArrayBuffer(4) }
+      : { ...base, type: "canvas:create-media-upload", idempotencyKey: "org-upload-key", byteSize: 4, checksumSha256: asset.checksumSha256 }));
+    if (!transient) {
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-upload-grant" }), window.location.origin));
+      act(() => dispatchCanvasMessage(frame, { source: base.source, protocolVersion: 1, instanceId: canvasInstanceId, requestId: "org-file", type: "canvas:finalize-media-upload", uploadId: "org-upload-intent" }));
+    }
+    await waitFor(() => expect(library.list).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", assets: [], libraryCatalog: organizationCatalog }), window.location.origin));
+  });
+
+  it.each(["owner", "admin", "member"] as const)("projects both subject spaces and guards organization editing for %s", async (role) => {
+    const { catalog, library, media } = libraryFixture();
+    const asset = { assetId: "shared-media", assetVersion: 1, mediaKind: "image" as const, displayName: "Team image", contentType: "image/png", byteSize: 8,
+      checksumSha256: "a".repeat(64), contentUrl: "/api/media/shared/content", createdAt: "2026-09-15T00:00:00.000Z", space: "organization" as const, folderId: null, tagIds: [] };
+    catalog.entries.push(asset, { ...asset, assetId: "private-media", space: "personal" });
+    const shared = { id: "shared-subject", space: "organization", name: "Team subject", description: "", version: 1, mediaRefs: [{ assetId: "shared-media", order: 0 }], coverAssetId: "shared-media" };
+    const personal = { ...shared, id: "personal-subject", space: "personal", mediaRefs: [{ assetId: "private-media", order: 0 }], coverAssetId: "private-media" };
+    media.listPersonalAssets.mockRejectedValue(new Error("use library"));
+    catalog.entityEntries = [shared, personal].map((entity) => ({ entityId: entity.id, space: entity.space as "personal" | "organization", folderId: null, tagIds: [], addedAt: asset.createdAt }));
+    const create = vi.fn(async () => ({ ...shared, id: "created-subject" }));
+    const update = vi.fn(async () => ({ ...shared, version: 2 }));
+    const listPersonal = vi.fn(async (_workspaceId: string, space = "personal") => space === "organization" ? [shared] : [personal]);
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never} entityRepository={{ listPersonal, create, update } as never}
+      context={{ ...progressiveContext, workspace: { ...progressiveContext.workspace, role } }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", entities: [personal, shared], libraryCatalog: catalog }), window.location.origin));
+    const command = { source: "reelay-legacy-canvas", protocolVersion: 1, instanceId: canvasInstanceId, space: "organization", name: "Team subject", description: "", assetIds: ["shared-media"], coverAssetId: "shared-media" };
+    act(() => dispatchCanvasMessage(frame, { ...command, type: "canvas:create-entity", requestId: "create-org", idempotencyKey: "create-org-subject" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "organization-1", space: "organization" })));
+    act(() => dispatchCanvasMessage(frame, { ...command, type: "canvas:update-entity", requestId: "update-org", entityId: shared.id, expectedVersion: 1 }));
+    if (role === "member") {
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:asset-command-error", requestId: "update-org", code: "forbidden" }), window.location.origin));
+      expect(update).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ entityId: shared.id, space: "organization" })));
+      library.delete.mockResolvedValue({ ...catalog, entityEntries: catalog.entityEntries.filter((entry) => entry.entityId !== shared.id) });
+      listPersonal.mockImplementation(async (_workspaceId: string, space = "personal") => space === "organization" ? [] : [personal]);
+      act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, instanceId: canvasInstanceId,
+        requestId: "delete-org", command: "delete", space: "organization", items: [{ kind: "entity", id: shared.id, expectedVersion: 2 }] }));
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result", command: "delete" }), window.location.origin));
+      act(() => dispatchProgressiveReady(frame, "after-org-delete"));
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", instanceId: "after-org-delete", entities: [personal] }), window.location.origin));
+    }
+  });
+
   it("refreshes personal groups after deletion and reports the confirmed scoped catalog without saving the canvas", async () => {
     const { catalog, library, media } = libraryFixture();
     const listPersonal = vi.fn(async () => []);
@@ -436,14 +502,14 @@ describe("CanvasHost media library", () => {
     const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
     act(() => dispatchProgressiveReady(frame));
-    await waitFor(() => expect(listPersonal).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(listPersonal).toHaveBeenCalledTimes(2));
     const items = [{ kind: "entity", id: "group", expectedVersion: 2 }, { kind: "folder", id: "folder-1" }];
     act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
       instanceId: canvasInstanceId, requestId: "delete-library", command: "delete", space: "personal", items }));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result",
       requestId: "delete-library", command: "delete", result: catalog }), window.location.origin));
     expect(library.delete).toHaveBeenCalledExactlyOnceWith({ workspaceId: "organization-1", space: "personal", items });
-    expect(listPersonal).toHaveBeenCalledTimes(2);
+    expect(listPersonal).toHaveBeenCalledTimes(4);
     expect(saveDocument).not.toHaveBeenCalled();
   });
 
@@ -462,12 +528,12 @@ describe("CanvasHost media library", () => {
     const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
     act(() => dispatchProgressiveReady(frame));
-    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", entities: [group] }), window.location.origin));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", entities: [{ ...group, space: "personal" }] }), window.location.origin));
     postMessage.mockClear();
     act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
       instanceId: canvasInstanceId, requestId: "delete-old-directory", command: "delete", space: "personal", items: [{ kind: "folder", id: "folder-1" }] }));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-library-result", command: "delete", result: updated }), window.location.origin));
-    expect(listPersonal).toHaveBeenCalledTimes(2);
+    expect(listPersonal).toHaveBeenCalledTimes(4);
     expect(library.delete).toHaveBeenCalledExactlyOnceWith({ workspaceId: "organization-1", space: "personal", items: [{ kind: "folder", id: "folder-1" }] });
   });
 
@@ -507,20 +573,67 @@ describe("CanvasHost media library", () => {
     expect(library.delete).not.toHaveBeenCalled();
   });
 
-  it("delivers the library when the separate entity catalog fails", async () => {
-    const { catalog, media } = libraryFixture();
+  it("retains the complete shared snapshot when a post-mutation organization refresh fails", async () => {
+    const { catalog, library, media } = libraryFixture();
+    catalog.entries = [{ assetId: "shared-media", assetVersion: 1, mediaKind: "image", displayName: "Shared", contentType: "image/png", byteSize: 4,
+      checksumSha256: "a".repeat(64), contentUrl: "/api/media/shared/content", createdAt: "2026-09-15T00:00:00.000Z", space: "organization", folderId: null, tagIds: [] }];
+    const shared = { id: "shared-subject", space: "organization", name: "Shared", description: "", version: 1, mediaRefs: [{ assetId: "shared-media", order: 0 }], coverAssetId: "shared-media" };
+    catalog.entityEntries = [{ entityId: shared.id, space: "organization", folderId: null, tagIds: [], addedAt: "2026-09-15T00:00:00.000Z" }];
+    const listPersonal = vi.fn(async (_workspace: string, space = "personal") => space === "organization" ? [shared] : []);
+    const create = vi.fn();
+    render(<CanvasHost repository={repository} mediaAssetRepository={media as never} entityRepository={{ listPersonal, create } as never} context={progressiveContext} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", entities: [shared] }), window.location.origin));
+    listPersonal.mockImplementation(async (_workspace, space = "personal") => { if (space === "organization") throw new Error("offline"); return []; });
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1, instanceId: canvasInstanceId,
+      requestId: "delete-folder", command: "delete", space: "personal", items: [{ kind: "folder", id: "folder-1" }] }));
+    await waitFor(() => expect(library.delete).toHaveBeenCalled());
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:asset-availability", workspaceCatalog: "unavailable" }), window.location.origin));
+    act(() => dispatchProgressiveReady(frame, "same-scope-reload"));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", instanceId: "same-scope-reload", entities: [shared] }), window.location.origin));
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:create-entity", protocolVersion: 1, instanceId: "same-scope-reload",
+      requestId: "create-after-failure", idempotencyKey: "create-after-failure", space: "organization", name: "New", description: "", assetIds: ["shared-media"], coverAssetId: "shared-media" }));
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each(["owner", "admin", "member"] as const)("scopes organization media renaming and enforces %s permissions", async (role) => {
+    const { media } = libraryFixture();
+    const asset = { id: "media", workspaceId: "organization-1", objectVersion: 1, mediaKind: "image", displayName: "Renamed.png", contentType: "image/png", byteSize: 4,
+      checksumSha256: "a".repeat(64), contentUrl: "/api/media/content", createdAt: "2026-09-15T00:00:00.000Z", updatedAt: "2026-09-15T00:00:00.000Z" };
+    const renamePersonalAsset = vi.fn(async () => asset);
+    render(<CanvasHost repository={repository} mediaAssetRepository={{ ...media, renamePersonalAsset } as never} entityRepository={{ listPersonal: async () => [] } as never}
+      context={{ ...progressiveContext, workspace: { ...progressiveContext.workspace, role } }} />);
+    const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchProgressiveReady(frame));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog" }), window.location.origin));
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:rename-media", protocolVersion: 1, instanceId: canvasInstanceId,
+      requestId: "org-rename", space: "organization", assetId: "media", displayName: "Renamed.png" }));
+    if (role === "member") {
+      expect(renamePersonalAsset).not.toHaveBeenCalled();
+      expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:asset-command-error", code: "forbidden" }), window.location.origin);
+    } else {
+      await waitFor(() => expect(renamePersonalAsset).toHaveBeenCalledExactlyOnceWith("organization-1", "media", "Renamed.png", "organization"));
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:media-rename-result" }), window.location.origin));
+      act(() => dispatchProgressiveReady(frame, "after-org-rename"));
+      await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:workspace-asset-catalog", instanceId: "after-org-rename", assets: [] }), window.location.origin));
+    }
+  });
+
+  it.each(["personal", "organization"])("keeps %s catalog failure unavailable rather than publishing an empty entity snapshot", async (failedSpace) => {
+    const { media } = libraryFixture();
     render(<CanvasHost repository={repository} mediaAssetRepository={media as never}
-      entityRepository={{ listPersonal: vi.fn(async () => { throw new Error("entity unavailable"); }) } as never}
+      entityRepository={{ listPersonal: vi.fn(async (_workspace: string, space = "personal") => { if (space === failedSpace) throw new Error("entity unavailable"); return []; }) } as never}
       context={progressiveContext} />);
     const frame = screen.getByTitle("Reelay 项目画布") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
     act(() => dispatchProgressiveReady(frame));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: "host:workspace-asset-catalog", libraryCatalog: catalog,
-    }), window.location.origin));
-    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: "host:asset-availability", workspaceCatalog: "unavailable", mediaLibrary: "ready",
-    }), window.location.origin);
+    }), window.location.origin));
+    expect(postMessage.mock.calls.some(([message]) => message.type === "host:workspace-asset-catalog")).toBe(false);
   });
 
   it("recovers personal media from the library projection when the older personal-list endpoint fails", async () => {
@@ -538,7 +651,7 @@ describe("CanvasHost media library", () => {
     act(() => dispatchProgressiveReady(frame));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: "host:workspace-asset-catalog", libraryCatalog: catalog,
-      assets: [expect.objectContaining({ assetId: "asset" })], entities: [entity],
+      assets: [expect.objectContaining({ assetId: "asset" })], entities: [{ ...entity, space: "personal" }],
     }), window.location.origin));
   });
 
@@ -826,7 +939,7 @@ describe("CanvasHost progressive asset loading", () => {
     await act(async () => initialDocument.resolve(loadedDocument));
     expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
     expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
-    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal.mock.calls).toEqual([["organization-1"], ["organization-1", "organization"]]);
     expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "host:document", document: loadedDocument }), window.location.origin);
     expect(postMessage.mock.calls.at(-1)![0]).toMatchObject({ type: "host:asset-availability", projectAssets: "loading", workspaceCatalog: "loading" });
 
@@ -866,7 +979,7 @@ describe("CanvasHost progressive asset loading", () => {
     await act(async () => retriedDocument.resolve(document));
     expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
     expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
-    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal.mock.calls).toEqual([["organization-1"], ["organization-1", "organization"]]);
   });
 
   it.each([
@@ -893,7 +1006,7 @@ describe("CanvasHost progressive asset loading", () => {
     await act(async () => current.resolve({ ...document, projectId: nextContext.projectId, id: nextContext.canvasId }));
     expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith(nextContext.projectId);
     expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith(nextContext.workspaceId);
-    expect(listPersonal).toHaveBeenCalledExactlyOnceWith(nextContext.workspaceId);
+    expect(listPersonal.mock.calls).toEqual([[nextContext.workspaceId], [nextContext.workspaceId, "organization"]]);
   });
 
   it("does not start catalogs when the host unmounts before its document arrives", async () => {
@@ -927,7 +1040,7 @@ describe("CanvasHost progressive asset loading", () => {
     await act(async () => initialDocument.resolve(document));
     expect(listProjectAssets).toHaveBeenCalledExactlyOnceWith("project-1");
     expect(listPersonalAssets).toHaveBeenCalledExactlyOnceWith("organization-1");
-    expect(listPersonal).toHaveBeenCalledExactlyOnceWith("organization-1");
+    expect(listPersonal.mock.calls).toEqual([["organization-1"], ["organization-1", "organization"]]);
   });
 
   it("rejects late discovery from a replaced project and only sends the current scope to its new instance", async () => {
@@ -1619,6 +1732,7 @@ describe("CanvasHost", () => {
       "organization-1",
       "asset-rename",
       "after.png",
+      "personal",
     ));
     dispatchCanvasMessage(frame, renameMessage);
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
@@ -1798,6 +1912,7 @@ describe("CanvasHost", () => {
       coverAssetId: "asset-front",
     });
     await waitFor(() => expect(create).toHaveBeenCalledWith({
+      space: "personal",
       workspaceId: "organization-1",
       idempotencyKey: "create-lirael-1",
       tagIds: ["builtin:character"],

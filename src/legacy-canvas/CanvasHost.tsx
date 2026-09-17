@@ -70,6 +70,7 @@ function bridgeWorkspaceAsset(asset: PersonalMediaAsset) {
 function bridgeWorkspaceEntity(entity: WorkspaceEntity) {
   return {
     id: entity.id,
+    space: entity.space ?? "personal",
     name: entity.name,
     description: entity.description,
     ...(entity.libraryTagIds !== undefined ? { libraryTagIds: entity.libraryTagIds } : {}),
@@ -97,6 +98,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     instanceId: string;
     uploadId: string;
     target: "project" | "personal";
+    storageSpace: "personal" | "organization";
   }>());
   const pendingAssetCommandIdsRef = useRef(new Set<string>());
   const entityCatalogTokenRef = useRef(0);
@@ -115,6 +117,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
   const [assetPersistenceAvailable, setAssetPersistenceAvailable] = useState(false);
   const [workspaceAssets, setWorkspaceAssets] = useState<PersonalMediaAsset[]>([]);
   const [workspaceEntities, setWorkspaceEntities] = useState<WorkspaceEntity[]>([]);
+  const [workspaceSnapshotAvailable, setWorkspaceSnapshotAvailable] = useState(false);
   const [libraryCatalog, setLibraryCatalog] = useState<MediaLibraryCatalog>();
   const [libraryStatus, setLibraryStatus] = useState<"loading" | "ready" | "unavailable">("loading");
   const [uploadPolicy, setUploadPolicy] = useState<MediaUploadPolicy | null>(null);
@@ -123,7 +126,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
   const [entityPersistenceAvailable, setEntityPersistenceAvailable] = useState(false);
   const assetAccessRef = useRef({ media: false, personal: false, entity: false });
   assetAccessRef.current = {
-    // Every finalized upload also creates personal placement; do not race its initial catalog.
+    // Uploads create a placement in their owning space; do not race initial discovery.
     media: assetPersistenceAvailable && (!progressiveAssetLoading || workspaceCatalogLoaded || libraryStatus === "ready"),
     personal: assetPersistenceAvailable && (mediaAssetRepository?.library
       ? libraryStatus === "ready" || (libraryStatus === "loading" && workspaceCatalogLoaded)
@@ -216,7 +219,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         projectAssets,
       }));
     }
-    if (!progressiveAssetLoading && safeContext.capabilities?.entityPersistence !== undefined && workspaceCatalogLoaded) {
+    if (!progressiveAssetLoading && safeContext.capabilities?.entityPersistence !== undefined && workspaceCatalogLoaded && workspaceSnapshotAvailable) {
       postToCanvas(hostWorkspaceAssetCatalogMessageSchema.parse({
         source: "reelay-shell",
         type: "host:workspace-asset-catalog",
@@ -231,7 +234,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     setPersistenceStatus(savingRef.current > 0
       ? "saving"
       : (dirtyRef.current ? "dirty" : "saved"));
-  }, [assetPersistenceAvailable, documentState, entityPersistenceAvailable, libraryCatalog, onLaunchPromptConsumed, postToCanvas, progressiveAssetLoading, projectAssets, safeContext, transientMediaRepository, workspaceAssets, workspaceCatalogLoaded, workspaceEntities]);
+  }, [assetPersistenceAvailable, documentState, entityPersistenceAvailable, libraryCatalog, onLaunchPromptConsumed, postToCanvas, progressiveAssetLoading, projectAssets, safeContext, transientMediaRepository, workspaceAssets, workspaceCatalogLoaded, workspaceEntities, workspaceSnapshotAvailable]);
 
   const refreshAuthoritativeDocument = useCallback((): void => {
     if (authoritativeRefreshInFlightRef.current) return;
@@ -292,6 +295,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     setAssetPersistenceAvailable(false);
     setWorkspaceAssets([]);
     setWorkspaceEntities([]);
+    setWorkspaceSnapshotAvailable(false);
     setLibraryCatalog(undefined);
     setUploadPolicy(null);
     setUploadPolicyStatus(mediaAssetRepository ? "loading" : "unavailable");
@@ -342,9 +346,10 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           void Promise.allSettled([
             mediaAssetRepository.listPersonalAssets(safeContext.workspaceId),
             entityRepository.listPersonal(safeContext.workspaceId),
+            entityRepository.listPersonal(safeContext.workspaceId, "organization"),
             mediaAssetRepository.library?.list(safeContext.workspaceId) ?? Promise.resolve(undefined),
           ]).then(
-            ([assets, entities, library]) => {
+            ([assets, entities, organizationEntities, library]) => {
               if (!active) return;
               const personalAssets = assets.status === "fulfilled" ? assets.value :
                 library.status === "fulfilled" && library.value ? library.value.entries
@@ -355,13 +360,22 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
                     byteSize: entry.byteSize, checksumSha256: entry.checksumSha256, contentUrl: entry.contentUrl,
                     createdAt: entry.createdAt, updatedAt: entry.createdAt,
                   })) : [];
+              const organizationIds = new Set(library.status === "fulfilled" ? library.value?.entries.filter((entry) => entry.space === "organization").map((entry) => entry.assetId) : []);
               const personalIds = new Set(personalAssets.map((asset) => asset.id));
               const personalAvailable = assets.status === "fulfilled" || (library.status === "fulfilled" && Boolean(library.value));
               const entitiesAvailable = personalAvailable && entities.status === "fulfilled"
-                && entities.value.every((entity) => entity.mediaRefs.every((reference) => personalIds.has(reference.assetId)));
+                && organizationEntities.status === "fulfilled"
+                && (!mediaAssetRepository.library || (library.status === "fulfilled" && Boolean(library.value)))
+                && entities.value.every((entity) => entity.mediaRefs.every((reference) => personalIds.has(reference.assetId)))
+                && organizationEntities.value.filter((entity) => entity.space === "organization")
+                  .every((entity) => entity.mediaRefs.every((reference) => organizationIds.has(reference.assetId)));
               if (entityCatalogTokenRef.current === initialEntityToken) {
-                setWorkspaceAssets(personalAssets);
-                setWorkspaceEntities(entitiesAvailable ? entities.value : []);
+                if (entitiesAvailable) {
+                  setWorkspaceAssets(personalAssets);
+                  setWorkspaceEntities([...entities.value, ...organizationEntities.value.filter((entity) => entity.space === "organization")]);
+                  setWorkspaceSnapshotAvailable(true);
+                }
+                // A failed space read is unavailable, never an authoritative empty library.
                 setEntityPersistenceAvailable(entitiesAvailable);
               }
               // A dialog may already have read or changed the library while Entity
@@ -374,8 +388,6 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
             },
             () => {
               if (!active) return;
-              setWorkspaceAssets([]);
-              setWorkspaceEntities([]);
               setLibraryStatus("unavailable");
               setEntityPersistenceAvailable(false);
               setWorkspaceCatalogLoaded(true);
@@ -452,7 +464,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     }
     if (workspaceCatalogLoaded && !delivered.workspace) {
       delivered.workspace = true;
-      if (entityPersistenceAvailable || libraryCatalog) postToCanvas(hostWorkspaceAssetCatalogMessageSchema.parse({
+      if (workspaceSnapshotAvailable) postToCanvas(hostWorkspaceAssetCatalogMessageSchema.parse({
         source: "reelay-shell", type: "host:workspace-asset-catalog", protocolVersion: 1,
         requestId: crypto.randomUUID(), instanceId,
         assets: workspaceAssets.map(bridgeWorkspaceAsset), entities: workspaceEntities.map(bridgeWorkspaceEntity),
@@ -473,7 +485,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     }
   }, [assetPersistenceAvailable, documentState.status, entityPersistenceAvailable, postToCanvas, progressiveAssetLoading,
     projectAssets, projectAssetsLoaded, readyGeneration, refreshingAuthoritativeDocument, sameScopeInFlightSaveCount,
-    libraryCatalog, libraryStatus, mediaAssetRepository, workspaceAssets, workspaceCatalogLoaded, workspaceEntities]);
+    libraryCatalog, libraryStatus, mediaAssetRepository, workspaceAssets, workspaceCatalogLoaded, workspaceEntities, workspaceSnapshotAvailable]);
 
   useEffect(() => {
     const flushIfNeeded = (): void => {
@@ -545,7 +557,6 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
       const library = mediaAssetRepository?.library;
       if (!library) return;
       const token = ++libraryReadTokenRef.current;
-      setLibraryCatalog(undefined);
       setLibraryStatus("loading");
       void library.list(safeContext.workspaceId).then((catalog) => {
         if (!active || token !== libraryReadTokenRef.current || sourceFrame !== frameRef.current?.contentWindow
@@ -555,7 +566,6 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         setLibraryStatus("ready");
       }).catch(() => {
         if (!active || token !== libraryReadTokenRef.current || instanceId !== activeCanvasInstanceIdRef.current) return;
-        setLibraryCatalog(undefined);
         setLibraryStatus("unavailable");
       });
     };
@@ -618,19 +628,22 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
             case "list": return library.list(base.workspaceId);
             case "delete-tag": return library.deleteTag({ ...base, space: message.space, tagId: message.tagId, expectedUsageCount: message.expectedUsageCount });
             case "update-tags": return library.updateTags({ ...base, space: message.space,
-              operation: message.operation, tagIds: message.tagIds, items: message.items });
+              operation: message.operation, tagIds: message.tagIds, items: message.items,
+              ...(message.expectedTagIds ? { expectedTagIds: message.expectedTagIds } : {}) });
             case "delete": {
               const catalog = await library.delete({ ...base, space: message.space, items: message.items });
               if (!stillActive()) return catalog;
               const refreshToken = ++entityCatalogTokenRef.current;
-              const deletedEntityIds = new Set(message.space === "personal" ? message.items.filter((item) => item.kind === "entity").map((item) => item.id) : []);
-              setWorkspaceEntities((current) => current.filter((entity) => catalog.entityEntries ? catalog.entityEntries.some((entry) => entry.entityId === entity.id && entry.space === "personal") : !deletedEntityIds.has(entity.id)));
+              const deletedEntityIds = new Set(message.items.filter((item) => item.kind === "entity").map((item) => item.id));
+              setWorkspaceEntities((current) => current.filter((entity) => catalog.entityEntries ? catalog.entityEntries.some((entry) => entry.entityId === entity.id && entry.space === (entity.space ?? "personal")) : !deletedEntityIds.has(entity.id)));
               setWorkspaceAssets((current) => current.filter((asset) => catalog.entries.some((entry) => entry.space === "personal" && entry.assetId === asset.id)));
               if (entityRepository) {
                 try {
-                  const entities = await entityRepository.listPersonal(base.workspaceId);
+                  const [personal, organization] = await Promise.all([entityRepository.listPersonal(base.workspaceId), entityRepository.listPersonal(base.workspaceId, "organization")]);
+                  const entities = [...personal, ...organization.filter((entity) => entity.space === "organization")];
                   if (stillActive() && entityCatalogTokenRef.current === refreshToken) {
                     setWorkspaceEntities(entities);
+                    setWorkspaceSnapshotAvailable(true);
                     setEntityPersistenceAvailable(true);
                   }
                 } catch {
@@ -724,7 +737,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
             sendAssetError(message.requestId, message.instanceId, "invalid");
             return;
           }
-          setWorkspaceAssets((current) => [...current.filter((candidate) => candidate.id !== asset.id), asset]);
+          if (message.storageSpace !== "organization") setWorkspaceAssets((current) => [...current.filter((candidate) => candidate.id !== asset.id), asset]);
           if (projectAsset) setProjectAssets((current) => [
             ...current.filter((candidate) => candidate.referenceId !== projectAsset.referenceId), projectAsset,
           ]);
@@ -785,6 +798,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
               instanceId: message.instanceId,
               uploadId: grant.uploadIntent.id,
               target: message.target,
+              storageSpace: message.storageSpace,
             });
             postToCanvas(hostMediaUploadGrantMessageSchema.parse({
               source: "reelay-shell",
@@ -858,7 +872,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
                   projectAsset,
                 ]);
               }
-              setWorkspaceAssets((current) => [
+              if (pending.storageSpace !== "organization") setWorkspaceAssets((current) => [
                 ...current.filter((candidate) => candidate.id !== asset.id),
                 asset,
               ]);
@@ -899,6 +913,10 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         return;
       }
       if (message.type === "canvas:rename-media") {
+        if (message.space === "organization" && !["owner", "admin"].includes(safeContext.workspace.role)) {
+          sendAssetError(message.requestId, message.instanceId, "forbidden");
+          return;
+        }
         if (!assetAccessRef.current.media || !assetAccessRef.current.personal || !mediaAssetRepository) {
           sendAssetError(message.requestId, message.instanceId, "unsupported");
           return;
@@ -920,6 +938,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           safeContext.workspaceId,
           message.assetId,
           message.displayName,
+          message.space,
         ).then(
           (renamedAsset) => {
             pendingAssetCommandIdsRef.current.delete(message.requestId);
@@ -928,7 +947,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
               && message.instanceId === activeCanvasInstanceIdRef.current;
             if (!stillActive) return;
             const asset = renamedAsset;
-            setWorkspaceAssets((current) => {
+            if (message.space === "personal") setWorkspaceAssets((current) => {
               const assetIndex = current.findIndex((candidate) => candidate.id === asset.id);
               if (assetIndex < 0) return [...current, asset];
               return current.map((candidate, index) => index === assetIndex ? asset : candidate);
@@ -963,6 +982,10 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           sendAssetError(message.requestId, message.instanceId, "forbidden");
           return;
         }
+        if (message.type === "canvas:update-entity" && message.space === "organization" && !["owner", "admin"].includes(safeContext.workspace.role)) {
+          sendAssetError(message.requestId, message.instanceId, "forbidden");
+          return;
+        }
         if (pendingAssetCommandIdsRef.current.has(message.requestId)) {
           sendAssetError(message.requestId, message.instanceId, "invalid");
           return;
@@ -973,6 +996,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           ? entityRepository.create({
               workspaceId: safeContext.workspaceId,
               idempotencyKey: message.idempotencyKey,
+              space: message.space,
               folderId: message.folderId,
               tagIds: message.tagIds,
               name: message.name,
@@ -983,6 +1007,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           : entityRepository.update({
               workspaceId: safeContext.workspaceId,
               entityId: message.entityId,
+              space: message.space,
               expectedVersion: message.expectedVersion,
               tagIds: message.tagIds,
               expectedTagIds: message.expectedTagIds,

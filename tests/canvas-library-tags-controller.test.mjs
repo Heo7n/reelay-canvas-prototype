@@ -151,6 +151,63 @@ test("tag edits capture exact targets and remain draft until Apply", async (t) =
   assert.equal(f.w.document.activeElement.id, "trigger");
 });
 
+test("single media opens with its existing tags selected and atomically applies the full edited selection", async (t) => {
+  const f = setup(t);
+  await f.open({ space: "personal", items: [{ kind: "media", id: "a" }] });
+  assert.equal(f.chip("builtin:object").getAttribute("aria-pressed"), "true");
+  assert.equal(f.chip("private").getAttribute("aria-pressed"), "true");
+  assert.equal(f.chip("builtin:scene").getAttribute("aria-pressed"), "false");
+  assert.equal(f.button("添加标签").hidden, true);
+  assert.equal(f.button("移除标签").hidden, true);
+  assert.equal(f.button("应用").disabled, true);
+  f.chip("private").click(); f.chip("builtin:scene").click();
+  f.button("应用").click(); await settle();
+  assert.deepEqual(f.calls[1], { command: "update-tags", payload: {
+    space: "personal", operation: "replace", tagIds: ["builtin:object", "builtin:scene"],
+    expectedTagIds: ["builtin:object", "private"], items: [{ kind: "media", id: "a" }],
+  } });
+  assert.equal(f.calls.length, 2);
+});
+
+test("single item can clear all tags and organization tags never inherit the personal placement", async (t) => {
+  const catalog = structuredClone(sample);
+  catalog.entries.push({ assetId: "a", space: "organization", tagIds: ["org"] });
+  const f = setup(t, () => catalog);
+  await f.open({ space: "organization", items: [{ kind: "media", id: "a" }] });
+  assert.equal(f.chip("org").getAttribute("aria-pressed"), "true");
+  assert.equal(f.chip("builtin:object").getAttribute("aria-pressed"), "false");
+  assert.equal(f.chip("private"), null);
+  f.chip("org").click(); f.button("应用").click(); await settle();
+  assert.deepEqual(f.calls[1].payload.tagIds, []);
+  assert.deepEqual(f.calls[1].payload.expectedTagIds, ["org"]);
+  await f.open({ space: "personal", items: [{ kind: "entity", id: "g" }] });
+  assert.equal(f.chip("builtin:character").getAttribute("aria-pressed"), "true");
+  assert.equal(f.chip("builtin:object").getAttribute("aria-pressed"), "false");
+});
+
+test("single tag replacement keeps its draft and original expected tags after a failed save", async (t) => {
+  let failed = true;
+  const f = setup(t, (command) => {
+    if (command === "update-tags" && failed) throw new Error("网络暂不可用");
+    return structuredClone(sample);
+  });
+  await f.open({ space: "personal", items: [{ kind: "media", id: "a" }] });
+  f.chip("private").click(); f.button("应用").click(); await settle();
+  assert.equal(f.chip("private").getAttribute("aria-pressed"), "false");
+  failed = false; f.button("应用").click(); await settle();
+  assert.deepEqual(f.calls[1], f.calls[2]);
+});
+
+test("single tag edit preserves pending changes when a custom tag is deleted in the manager", async (t) => {
+  const f = setup(t);
+  await f.open({ space: "personal", items: [{ kind: "media", id: "a" }] });
+  f.chip("builtin:scene").click();
+  f.c.syncCatalog({ ...sample, tags: [], entries: [{ ...sample.entries[0], tagIds: ["builtin:object"] }] });
+  f.button("应用").click(); await settle();
+  assert.deepEqual(f.calls[1].payload.tagIds, ["builtin:object", "builtin:scene"]);
+  assert.deepEqual(f.calls[1].payload.expectedTagIds, ["builtin:object"]);
+});
+
 test("remove choices are union of selected item labels, independent for groups and members", async (t) => {
   const f = setup(t); await f.open();
   f.button("移除标签").click();

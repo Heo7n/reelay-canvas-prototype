@@ -1,6 +1,7 @@
 import type {
   CreateWorkspaceEntityInput,
   EntityRepository,
+  EntitySpace,
   UpdateWorkspaceEntityInput,
   WorkspaceEntity,
 } from "../../application/assets/EntityRepository";
@@ -107,7 +108,7 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     }),
     delete: async (input) => this.libraryOperation(() => {
       this.requireWorkspace(input.workspaceId);
-      const entities = [...this.entityRecords.values()].filter((entity) => !this.deletedLibraryEntities.has(entity.id));
+      const entities = [...this.entityRecords.values()].filter((entity) => !this.deletedLibraryEntities.has(entity.id) && (entity.space ?? "personal") === input.space);
       const plan = planLibraryDeletion(this.catalog(), entities.map((entity) => ({ id: entity.id, version: entity.version, assetIds: entity.mediaRefs.map((ref) => ref.assetId) })), input);
       for (const id of plan.entityIds) {
         this.deletedLibraryEntities.add(id);
@@ -185,13 +186,13 @@ export class ExperienceAssetStore implements TransientMediaRepository {
       this.requireActive();
       throw invalid("体验素材请使用本页临时导入。", "transient_upload_required");
     },
-    renamePersonalAsset: async (workspaceId, assetId, displayName) => {
+    renamePersonalAsset: async (workspaceId, assetId, displayName, space = "personal") => {
       this.requireWorkspace(workspaceId);
       const current = this.requireAsset(assetId);
-      if (!this.libraryEntries.has(`personal:${assetId}`)) throw new ApplicationError("not_found", "素材不存在。");
+      if (!this.libraryEntries.has(`${space}:${assetId}`)) throw new ApplicationError("not_found", "素材不存在。");
       const asset = { ...current, displayName: normalizeDisplayName(displayName), updatedAt: new Date().toISOString() };
-      const entry = this.libraryEntries.get(`personal:${assetId}`);
-      if (entry) this.libraryEntries.set(`personal:${assetId}`, { ...entry, displayName: asset.displayName });
+      const entry = this.libraryEntries.get(`${space}:${assetId}`);
+      if (entry) this.libraryEntries.set(`${space}:${assetId}`, { ...entry, displayName: asset.displayName });
       return structuredClone(asset);
     },
     attachToProject: async (projectId, assetId) => {
@@ -213,13 +214,13 @@ export class ExperienceAssetStore implements TransientMediaRepository {
 
   readonly entities: EntityRepository = {
     create: async (input) => this.libraryOperation(() => this.createEntity(input)),
-    get: async (workspaceId, entityId) => {
+    get: async (workspaceId, entityId, space = "personal") => {
       this.requireWorkspace(workspaceId);
-      return this.entityWithTags(this.requireEntity(entityId));
+      return this.entityWithTags(this.requireEntity(entityId, space));
     },
-    listPersonal: async (workspaceId) => {
+    listPersonal: async (workspaceId, space = "personal") => {
       this.requireWorkspace(workspaceId);
-      return [...this.entityRecords.values()].filter((entity) => !this.deletedLibraryEntities.has(entity.id)).map((entity) => this.entityWithTags(entity));
+      return [...this.entityRecords.values()].filter((entity) => !this.deletedLibraryEntities.has(entity.id) && (entity.space ?? "personal") === space).map((entity) => this.entityWithTags(entity));
     },
     update: async (input) => this.libraryOperation(() => this.updateEntity(input)),
   };
@@ -277,7 +278,8 @@ export class ExperienceAssetStore implements TransientMediaRepository {
         updatedAt: timestamp,
       };
       this.assets.set(asset.id, asset);
-      this.libraryEntries.set(`personal:${asset.id}`, this.libraryEntry(asset));
+      const space = input.storageSpace ?? "personal";
+      this.libraryEntries.set(`${space}:${asset.id}`, { ...this.libraryEntry(asset), space });
       this.objectUrls.add(objectUrl);
       return {
         asset: structuredClone(asset),
@@ -342,7 +344,7 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     return structuredClone({ folders: [...this.libraryFolders.values()], tags: [...this.libraryTags.values()],
       entries: [...this.libraryEntries.values()],
       entityEntries: [...this.entityRecords.keys()].filter((id) => !this.deletedLibraryEntities.has(id))
-        .map((entityId) => ({ entityId, space: "personal" as const, tagIds: this.libraryEntityTags.get(entityId) ?? [], folderId: this.libraryEntityLocations.get(entityId)?.folderId ?? null, addedAt: this.libraryEntityLocations.get(entityId)?.addedAt ?? this.entityRecords.get(entityId)!.createdAt })) });
+        .map((entityId) => ({ entityId, space: this.entityRecords.get(entityId)!.space ?? "personal", tagIds: this.libraryEntityTags.get(entityId) ?? [], folderId: this.libraryEntityLocations.get(entityId)?.folderId ?? null, addedAt: this.libraryEntityLocations.get(entityId)?.addedAt ?? this.entityRecords.get(entityId)!.createdAt })) });
   }
 
   private resetLibraryDirectoryExample(): void {
@@ -394,9 +396,9 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     return asset;
   }
 
-  private requireEntity(entityId: string): WorkspaceEntity {
+  private requireEntity(entityId: string, space: EntitySpace = "personal"): WorkspaceEntity {
     const entity = this.entityRecords.get(entityId);
-    if (!entity || this.deletedLibraryEntities.has(entityId)) throw new ApplicationError("not_found", "主体不存在。");
+    if (!entity || (entity.space ?? "personal") !== space || this.deletedLibraryEntities.has(entityId)) throw new ApplicationError("not_found", "主体不存在。");
     return entity;
   }
 
@@ -438,7 +440,8 @@ export class ExperienceAssetStore implements TransientMediaRepository {
       });
       for (const ref of content.mediaRefs) {
         this.requireAsset(ref.mediaAssetId);
-        if (!this.libraryEntries.has(`personal:${ref.mediaAssetId}`)) throw new ApplicationError("not_found", "素材未保存在个人素材库中。");
+        const space = input.space ?? "personal";
+        if (!this.libraryEntries.has(`${space}:${ref.mediaAssetId}`)) throw new ApplicationError("not_found", "素材未保存在目标素材库中。");
       }
       return {
         name: content.name,
@@ -453,7 +456,7 @@ export class ExperienceAssetStore implements TransientMediaRepository {
   }
 
   private entityWithTags(entity: WorkspaceEntity): WorkspaceEntity {
-    return { ...structuredClone(entity), libraryTagIds: [...(this.libraryEntityTags.get(entity.id) ?? [])] };
+    return { ...structuredClone(entity), space: entity.space ?? "personal", libraryTagIds: [...(this.libraryEntityTags.get(entity.id) ?? [])] };
   }
 
   private createEntity(input: CreateWorkspaceEntityInput): WorkspaceEntity {
@@ -465,20 +468,23 @@ export class ExperienceAssetStore implements TransientMediaRepository {
       if (error instanceof EntityValidationError) throw invalid(error.message, error.reason);
       throw error;
     }
-    const previous = this.entityCreations.get(key);
+    const space = input.space ?? "personal";
+    const creationKey = `${space}:${key}`;
+    const previous = this.entityCreations.get(creationKey);
     if (previous && this.deletedLibraryEntities.has(previous.entityId)) throw new ApplicationError("conflict", "该素材组已删除，请重新发起创建。");
     const content = this.entityContent(input);
     const tagIds = normalizeEntityLibraryTags(input.tagIds ?? []);
-    const fingerprint = JSON.stringify({ ...content, folderId: input.folderId ?? null, tagIds });
+    const fingerprint = JSON.stringify({ ...content, space, folderId: input.folderId ?? null, tagIds });
     if (previous) {
       if (this.deletedLibraryEntities.has(previous.entityId) || previous.fingerprint !== fingerprint) throw new ApplicationError("conflict", "本次创建请求的内容已改变。");
-      return this.entityWithTags(this.requireEntity(previous.entityId));
+      return this.entityWithTags(this.requireEntity(previous.entityId, space));
     }
-    validateEntityLibraryTags(tagIds, (id) => this.catalog().tags.some((tag) => tag.id === id && tag.space === "personal"));
-    if (input.folderId && !this.catalog().folders.some((folder) => folder.id === input.folderId && folder.space === "personal")) throw new ApplicationError("not_found", "保存目录不存在或不可访问，请重新选择。", { serviceCode: "folder_not_found" });
+    validateEntityLibraryTags(tagIds, (id) => this.catalog().tags.some((tag) => tag.id === id && tag.space === (input.space ?? "personal")));
+    if (input.folderId && !this.catalog().folders.some((folder) => folder.id === input.folderId && folder.space === space)) throw new ApplicationError("not_found", "保存目录不存在或不可访问，请重新选择。", { serviceCode: "folder_not_found" });
     const timestamp = new Date().toISOString();
     const entity: WorkspaceEntity = {
       id: `experience-entity-${crypto.randomUUID()}`,
+      space,
       workspaceId: this.options.workspaceId,
       ...content,
       version: 1,
@@ -488,13 +494,13 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     this.entityRecords.set(entity.id, entity);
     this.libraryEntityLocations.set(entity.id, { folderId: input.folderId ?? null, addedAt: timestamp });
     this.libraryEntityTags.set(entity.id, tagIds);
-    this.entityCreations.set(key, { entityId: entity.id, fingerprint });
+    this.entityCreations.set(creationKey, { entityId: entity.id, fingerprint });
     return this.entityWithTags(entity);
   }
 
   private updateEntity(input: UpdateWorkspaceEntityInput): WorkspaceEntity {
     this.requireWorkspace(input.workspaceId);
-    const current = this.requireEntity(input.entityId);
+    const current = this.requireEntity(input.entityId, input.space ?? "personal");
     try {
       normalizeExpectedEntityVersion(input.expectedVersion);
     } catch (error) {
@@ -505,7 +511,7 @@ export class ExperienceAssetStore implements TransientMediaRepository {
     let tagIds = this.libraryEntityTags.get(current.id) ?? [];
     if (input.tagIds !== undefined) {
       requireExpectedEntityLibraryTags(tagIds, input.expectedTagIds);
-      tagIds = validateEntityLibraryTags(input.tagIds, (id) => this.catalog().tags.some((tag) => tag.id === id && tag.space === "personal"));
+      tagIds = validateEntityLibraryTags(input.tagIds, (id) => this.catalog().tags.some((tag) => tag.id === id && tag.space === (input.space ?? "personal")));
     }
     const entity: WorkspaceEntity = {
       ...current,

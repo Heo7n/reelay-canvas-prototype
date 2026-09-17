@@ -1,3 +1,4 @@
+import { MediaLibraryError } from "../../domain/asset/media-library";
 import type { MoveLibraryEntitiesInput } from "../../domain/asset/media-library";
 import { randomUUID } from "node:crypto";
 
@@ -578,23 +579,31 @@ export class PostgresAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
 
   async renamePersonalAsset(input: RenamePersonalAssetInput): Promise<WorkspaceMediaAsset> {
     const displayName = validDisplayName(input.displayName);
-    const result = await this.pool.query<AssetRow>(
-      `WITH renamed AS (
-         UPDATE media_asset_placements AS placement
-         SET display_name = $4, updated_at = $5
-         WHERE placement.workspace_id = $2 AND placement.asset_id = $3
-           AND placement.scope_kind = 'personal' AND placement.owner_user_id = $1
-           AND EXISTS (SELECT 1 FROM memberships WHERE workspace_id = $2 AND user_id = $1)
-         RETURNING placement.*
-       )
-       SELECT ${personalAssetColumns}
-       FROM renamed AS placement
-       JOIN workspace_media_assets AS asset
-         ON asset.workspace_id = placement.workspace_id AND asset.id = placement.asset_id`,
-      [input.actorId, input.workspaceId, input.assetId, displayName, this.now().toISOString()],
-    );
-    if (!result.rows[0]) throw new PersonalAssetUnavailableError();
-    return mapAsset(result.rows[0]);
+    const space = input.space ?? "personal";
+    return this.withTransaction(async (client) => {
+      const membership = await client.query<{role: string}>(
+        "SELECT role FROM memberships WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+        [input.workspaceId, input.actorId],
+      );
+      if (!membership.rows[0]) throw new AssetWorkspaceUnavailableError();
+      if (space === "organization" && !["owner", "admin"].includes(membership.rows[0].role)) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以重命名组织素材。");
+      const result = await client.query<AssetRow>(
+        `WITH renamed AS (
+           UPDATE media_asset_placements AS placement
+           SET display_name = $4, updated_at = $5
+           WHERE placement.workspace_id = $2 AND placement.asset_id = $3
+             AND placement.scope_kind = $6 AND placement.scope_owner = $1
+           RETURNING placement.*
+         )
+         SELECT ${personalAssetColumns}
+         FROM renamed AS placement
+         JOIN workspace_media_assets AS asset
+           ON asset.workspace_id = placement.workspace_id AND asset.id = placement.asset_id`,
+        [space === "personal" ? input.actorId : "", input.workspaceId, input.assetId, displayName, this.now().toISOString(), space],
+      );
+      if (!result.rows[0]) throw new PersonalAssetUnavailableError();
+      return mapAsset(result.rows[0]);
+    });
   }
 
   async attachAssetToProject(input: AttachAssetToProjectInput): Promise<ProjectAssetReference> {

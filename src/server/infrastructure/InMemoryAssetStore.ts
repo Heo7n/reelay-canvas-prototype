@@ -389,8 +389,10 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
 
   async renamePersonalAsset(input: RenamePersonalAssetInput): Promise<WorkspaceMediaAsset> {
     this.requireWorkspaceMembership(input.workspaceId, input.actorId);
+    const space = input.space ?? "personal";
+    if (space === "organization" && !["owner", "admin"].includes(this.workspaceRoles.get(`${input.workspaceId}\u0000${input.actorId}`) ?? "member")) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以重命名组织素材。");
     const displayName = validDisplayName(input.displayName);
-    const placement = this.placements.get(this.personalPlacementKey(input.workspaceId, input.assetId, input.actorId));
+    const placement = this.placements.get(this.personalPlacementKey(input.workspaceId, input.assetId, space === "personal" ? input.actorId : "@organization"));
     const asset = placement ? this.assets.get(input.assetId) : null;
     if (!asset || asset.workspaceId !== input.workspaceId) throw new PersonalAssetUnavailableError();
 
@@ -451,16 +453,17 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
 
   connectLibraryEntities(entities: InMemoryEntityStore): void {
     this.entityStore = entities;
-    entities.connectLibraryTags((workspaceId, actorId, tagId) => {
+    entities.connectLibraryMembership((workspaceId, actorId) => this.workspaceRoles.get(`${workspaceId}\u0000${actorId}`) ?? null);
+    entities.connectLibraryTags((workspaceId, actorId, tagId, space = "personal") => {
       const tag = this.libraryTags.get(tagId);
-      return !!tag && tag.workspaceId === workspaceId && tag.space === "personal" && tag.ownerActorId === actorId;
+      return !!tag && tag.workspaceId === workspaceId && tag.space === space && tag.ownerActorId === (space === "personal" ? actorId : null);
     });
-    entities.connectLibraryFolders((workspaceId, actorId, folderId) => {
+    entities.connectLibraryFolders((workspaceId, actorId, folderId, space = "personal") => {
       const folder = this.libraryFolders.get(folderId);
-      return !!folder && folder.workspaceId === workspaceId && folder.space === "personal" && folder.ownerActorId === actorId;
+      return !!folder && folder.workspaceId === workspaceId && folder.space === space && folder.ownerActorId === (space === "personal" ? actorId : null);
     });
-    entities.connectLibraryMedia((workspaceId, actorId, assetId) => {
-      const asset = this.placements.has(this.personalPlacementKey(workspaceId, assetId, actorId)) ? this.assets.get(assetId) : undefined;
+    entities.connectLibraryMedia((workspaceId, actorId, assetId, space = "personal") => {
+      const asset = this.placements.has(this.personalPlacementKey(workspaceId, assetId, space === "personal" ? actorId : "@organization")) ? this.assets.get(assetId) : undefined;
       return asset && asset.workspaceId === workspaceId ? { id: asset.id, workspaceId, mediaKind: asset.mediaKind, finalized: true } : null;
     });
   }
@@ -474,10 +477,10 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
   async deleteLibrary(input: DeleteLibraryInput & { actorId: string }): Promise<MediaLibraryCatalog> {
     const catalog = this.readLibraryCatalog(input);
     if (input.space === "organization" && !["owner", "admin"].includes(this.workspaceRoles.get(`${input.workspaceId}\u0000${input.actorId}`) ?? "member")) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以删除组织素材。");
-    const plan = planLibraryDeletion(catalog, this.entityStore?.libraryBindings(input.workspaceId, input.actorId) ?? [], input);
+    const plan = planLibraryDeletion(catalog, this.entityStore?.libraryBindings(input.workspaceId, input.actorId, input.space) ?? [], input);
     // All validation above is synchronous; no interleaving can expose a partial in-memory batch.
-    this.entityStore?.removeLibraryPlacements(input.workspaceId, input.actorId, plan.entityIds);
-    if (input.space === "personal") this.entityStore?.detachLibraryFolders(input.workspaceId, input.actorId, plan.folderIds);
+    this.entityStore?.removeLibraryPlacements(input.workspaceId, input.actorId, plan.entityIds, input.space);
+    this.entityStore?.detachLibraryFolders(input.workspaceId, input.actorId, plan.folderIds, input.space);
     for (const id of plan.assetIds) this.placements.delete(this.personalPlacementKey(input.workspaceId, id, input.space === "personal" ? input.actorId : "@organization"));
     for (const id of plan.folderIds) this.libraryFolders.delete(id);
     return this.readLibraryCatalog(input);
@@ -492,7 +495,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     if (result === catalog) return catalog;
     // Validate before this synchronous batch; all placement changes and dictionary removal are atomic.
     this.entityStore?.updateLibraryPlacementTags(input.workspaceId, input.actorId,
-      (result.entityEntries ?? []).filter((entry) => entry.space === input.space).map((entry) => ({ id: entry.entityId, tagIds: entry.tagIds })));
+      (result.entityEntries ?? []).filter((entry) => entry.space === input.space).map((entry) => ({ id: entry.entityId, tagIds: entry.tagIds })), input.space);
     for (const entry of result.entries) {
       if (entry.space !== input.space) continue;
       const key = this.personalPlacementKey(input.workspaceId, entry.assetId, input.space === "personal" ? input.actorId : "@organization");
@@ -508,7 +511,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     if (input.space === "organization" && !["owner", "admin"].includes(this.workspaceRoles.get(`${input.workspaceId}\u0000${input.actorId}`) ?? "member")) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以整理组织素材标签。");
     const plan = planLibraryTagUpdate(catalog, input);
     // Resolve all targets first, then apply the complete delta without an asynchronous gap.
-    this.entityStore?.updateLibraryPlacementTags(input.workspaceId, input.actorId, plan.items.filter((item) => item.kind === "entity"));
+    this.entityStore?.updateLibraryPlacementTags(input.workspaceId, input.actorId, plan.items.filter((item) => item.kind === "entity"), input.space);
     for (const item of plan.items) {
       if (item.kind !== "media") continue;
       const key = this.personalPlacementKey(input.workspaceId, item.id, plan.space === "personal" ? input.actorId : "@organization");
@@ -524,7 +527,7 @@ export class InMemoryAssetStore implements WorkspaceMediaAssetStore, ProjectAsse
     return clone({
       folders: [...this.libraryFolders.values()].filter(visible).map(({ id, name, parentId, space }) => ({ id, name, parentId, space })),
       tags: [...this.libraryTags.values()].filter(visible).map(({ id, name, space }) => ({ id, name, space })),
-      entityEntries: this.entityStore?.libraryEntries(input.workspaceId, input.actorId) ?? [],
+      entityEntries: this.entityStore ? [...this.entityStore.libraryEntries(input.workspaceId, input.actorId), ...this.entityStore.libraryEntries(input.workspaceId, input.actorId, "organization")] : [],
       entries: [...this.placements.values()].filter(visible).flatMap((placement) => {
         const asset = this.assets.get(placement.assetId);
         return asset ? [{ assetId: asset.id, assetVersion: asset.objectVersion, mediaKind: asset.mediaKind, displayName: placement.displayName ?? asset.displayName,

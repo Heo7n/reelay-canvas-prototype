@@ -87,6 +87,7 @@ function createHarness(overrides = {}) {
     view: window.REELAY_CANVAS_ENTITY_EDITOR_VIEW,
     getAvailableMedia,
     getTagOptions: overrides.getTagOptions,
+    createTag: overrides.createTag,
     persistFiles,
     renameMedia,
     saveEntity,
@@ -145,6 +146,72 @@ async function flushAsync() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+test("subject tag creation stays inline, preserves IME input and selects the created tag without saving the subject", async () => {
+  const tags = [{ id: "builtin:character", name: "角色" }];
+  const createdNames = [];
+  const h = createHarness({ getTagOptions: () => tags, createTag: async (name) => {
+    createdNames.push(name);
+    const tag = { id: "tag-new", name };
+    tags.push(tag);
+    return tag;
+  } });
+  h.controller.open({ mode: "edit", entity: editEntity, media });
+  h.click('[data-entity-editor-tags-toggle]');
+  h.click('[data-entity-editor-tag-create]');
+  const input = h.input('[data-entity-editor-tag-name]', ' 奇幻 ');
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-name]'), input);
+  input.dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+  assert.equal(createdNames.length, 0);
+  input.dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await flushAsync();
+  assert.deepEqual(createdNames, ['奇幻']);
+  assert.deepEqual(Array.from(h.controller.getDraftState().tagIds), ['tag-new']);
+  assert.equal(h.host.querySelector('[data-entity-editor-tags-toggle]').textContent, '奇幻');
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-toggle="tag-new"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(h.calls.savePayloads.length, 0);
+  h.click('[data-entity-editor-tag-toggle="tag-new"]');
+  assert.deepEqual(Array.from(h.controller.getDraftState().tagIds), []);
+  h.controller.destroy();
+});
+
+test("failed subject tag creation remains inline and allows retry or cancellation", async () => {
+  const h = createHarness({ createTag: async () => { throw new Error('标签创建失败'); } });
+  h.controller.open({ mode: 'edit', entity: editEntity, media });
+  h.click('[data-entity-editor-tags-toggle]');
+  h.click('[data-entity-editor-tag-create]');
+  h.input('[data-entity-editor-tag-name]', '新标签');
+  h.click('[data-entity-editor-tag-create-submit]');
+  await flushAsync();
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-error]').textContent, '标签创建失败');
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-name]').value, '新标签');
+  assert.equal(h.calls.errors.length, 0);
+  h.click('[data-entity-editor-tag-create-cancel]');
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-name]'), null);
+  assert.deepEqual(Array.from(h.controller.getDraftState().tagIds), []);
+  h.controller.destroy();
+});
+
+test("late tag creation never changes a replacement draft or invalid context", async () => {
+  for (const change of ['draft', 'context', 'popover']) {
+    const pending = deferredOperation();
+    let valid = true;
+    const h = createHarness({ createTag: () => pending.promise });
+    h.controller.open({ mode: 'edit', entity: editEntity, media, isContextValid: () => valid });
+    h.click('[data-entity-editor-tags-toggle]');
+    h.click('[data-entity-editor-tag-create]');
+    h.input('[data-entity-editor-tag-name]', '旧标签');
+    h.click('[data-entity-editor-tag-create-submit]');
+    if (change === 'draft') h.controller.open({ mode: 'edit', entity: { ...editEntity, id: 'replacement' }, media });
+    else if (change === 'context') valid = false;
+    else h.host.querySelector('[data-entity-editor-tag-name]').dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    pending.resolve({ id: 'old-tag', name: '旧标签' });
+    await flushAsync();
+    assert.deepEqual(Array.from(h.controller.getDraftState().tagIds), [], change);
+    assert.equal(h.calls.errors.length, 0);
+    h.controller.destroy();
+  }
+});
+
 test("create enters the subject area without reading or choosing source directories", async () => {
   const h = createHarness({ getFolders: () => { throw new Error("subject creation does not require directories"); } });
   h.controller.open({ mode: "create", initialMedia: [media[0]], folderId: "folder-5" });
@@ -155,6 +222,23 @@ test("create enters the subject area without reading or choosing source director
   await h.controller.submit();
   assert.equal(h.calls.savePayloads[0].folderId, null);
   assert.deepEqual(JSON.parse(JSON.stringify(h.calls.savedContexts[0])), { mode: "create", folderId: null });
+  h.controller.destroy();
+});
+
+test("creating an organization subject can permit composition without permitting source media rename", async () => {
+  const h = createHarness();
+  h.controller.open({ mode: 'create', space: 'organization', initialMedia: [media[0]], canRenameMedia: false });
+  const name = h.host.querySelector('[data-entity-editor-preview-name]');
+  assert.equal(name.disabled, true);
+  assert.doesNotMatch(name.getAttribute('aria-label'), /重命名/);
+  assert.equal(name.title, media[0].displayName);
+  name.dispatchEvent(new h.window.MouseEvent('dblclick', { bubbles: true }));
+  name.dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+  assert.equal(h.host.querySelector('[data-entity-editor-preview-rename]'), null);
+  assert.equal(h.calls.renamedMedia.length, 0);
+  h.input('[data-entity-editor-name]', 'Organization subject');
+  await h.controller.submit();
+  assert.equal(h.calls.savePayloads.length, 1);
   h.controller.destroy();
 });
 
@@ -909,20 +993,15 @@ test("late upload completion preserves a replacement draft and its own pending u
 });
 
 
-test("subject tags remain draft-only until save and searching preserves the composition input", async () => {
+test("subject tags remain draft-only until save without a search field", async () => {
   const h = createHarness({ getTagOptions: () => [{id: "builtin:character", name: "角色"}, {id: "custom:1", name: "奇幻"}] });
   h.controller.open({ mode: "edit", entity: {...editEntity, tagIds: ["builtin:character"]}, media });
   h.click('[data-entity-editor-tags-toggle]');
-  const input = h.input('[data-entity-editor-tag-query]', '奇');
-  assert.equal(h.host.querySelector('[data-entity-editor-tag-query]'), input);
-  const composingEnter = new h.window.KeyboardEvent('keydown', {key: 'Enter', isComposing: true, bubbles: true, cancelable: true});
-  input.dispatchEvent(composingEnter);
-  assert.equal(composingEnter.defaultPrevented, false);
-  assert.equal(h.calls.savePayloads.length, 0);
+  assert.equal(h.host.querySelector('[data-entity-editor-tag-query]'), null);
   h.click('[data-entity-editor-tag-toggle="custom:1"]');
   assert.equal(h.controller.getDraftState().dirty, true);
   assert.equal(h.calls.savePayloads.length, 0);
-  h.host.querySelector('[data-entity-editor-tag-query]').dispatchEvent(new h.window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+  h.host.querySelector('[data-entity-editor-tag-toggle]').dispatchEvent(new h.window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
   assert.equal(h.controller.isOpen(), true);
   assert.equal(h.host.querySelector('[data-entity-editor-tag-popover]'), null);
   assert.equal(h.window.document.activeElement, h.host.querySelector('[data-entity-editor-tags-toggle]'));
@@ -956,7 +1035,7 @@ test("unavailable selected tags can only be removed from the choices and cannot 
   assert.deepEqual(Array.from(h.controller.getDraftState().tagIds), []);
   assert.equal(h.host.querySelector('[data-entity-editor-tag-toggle="deleted-tag"]'), null);
   assert.equal(h.host.querySelector('[data-entity-editor-tags-toggle]').textContent, '选择标签');
-  assert.equal(h.window.document.activeElement, h.host.querySelector('[data-entity-editor-tag-query]'));
+  assert.equal(h.window.document.activeElement, h.host.querySelector('[data-entity-editor-tags-toggle]'));
   await h.controller.submit();
   assert.deepEqual(Array.from(h.calls.savePayloads[0].tagIds), []);
   h.controller.destroy();

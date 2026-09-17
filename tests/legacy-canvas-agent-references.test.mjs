@@ -314,6 +314,55 @@ test("removing unsent files revokes only owned URLs; dispose releases remaining 
   assert.equal(f.frames.size, 0);
 });
 
+test("batch reference removal closes preview, releases pending readers and owned files, and emits one change", (t) => {
+  const f = fixture(t);
+  const local = f.controller.addFiles([file("clip.mp4", "video/mp4"), file("voice.mp3", "audio/mpeg")]);
+  const [retained] = f.controller.addAssets([media("image")]);
+  const probes = [...f.mediaCreated];
+  f.hover(f.shelf.children[0]); f.tick(220);
+  assert.ok(f.document.querySelector(".reference-preview-popover"));
+  const changes = f.changes();
+  assert.equal(f.controller.removeAssets([local[0].id, local[1].id, local[0].id, "missing"]), 2);
+  assert.equal(f.changes(), changes + 1);
+  assert.deepEqual(plain(f.controller.getAssets().map((asset) => asset.id)), [retained.id]);
+  assert.deepEqual(f.revoked, plain(local.map((asset) => asset.url)));
+  assert.equal(f.document.querySelector(".reference-preview-popover"), null);
+  assert.equal(f.timers.size, 0);
+  for (const probe of probes) {
+    assert.equal(probe.getAttribute("src"), null);
+    probe.dispatchEvent(new f.view.Event("loadedmetadata"));
+  }
+  assert.equal(f.changes(), changes + 1);
+  assert.equal(f.controller.removeAssets(["missing", local[0].id]), 0);
+  assert.equal(f.changes(), changes + 1);
+});
+
+test("reference removal and editability respect captured conversation, epoch, project, and access", (t) => {
+  const f = fixture(t);
+  const first = f.conversation();
+  const [asset] = f.controller.addAssets([media("image")]);
+  const stale = f.controller.captureScope();
+  assert.equal(f.controller.canEditScope(stale), true);
+  f.setScope({ id: "conversation-b" });
+  assert.equal(f.controller.canEditScope(stale), false);
+  assert.equal(f.controller.removeAssets([asset.id], stale), 0);
+  f.setScope(first);
+  assert.equal(f.controller.canEditScope(stale), false);
+  assert.equal(f.controller.removeAssets([asset.id], stale), 0);
+  const current = f.controller.captureScope();
+  f.setEditable(false);
+  assert.equal(f.controller.canEditScope(current), false);
+  assert.equal(f.controller.removeAssets([asset.id], current), 0);
+  f.setEditable(true);
+  assert.equal(f.controller.canEditScope(current), true);
+  assert.equal(f.controller.removeAssets([asset.id], { ...current, projectId: "project-b" }), 0);
+  assert.equal(f.controller.getAssets().length, 1);
+  assert.equal(f.controller.removeAssets([asset.id], current), 1);
+  f.controller.dispose();
+  assert.equal(f.controller.canEditScope(current), false);
+  assert.equal(f.controller.removeAssets([asset.id], current), 0);
+});
+
 test("file and session memory caps include sent messages while remote references have no arbitrary item cap", (t) => {
   const f = fixture(t);
   const limit = 64 * 1024 * 1024;

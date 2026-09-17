@@ -127,13 +127,13 @@ test("global library search matches complete folder paths and omits obsolete sub
   assert.deepEqual(ids("旧主体"), []);
 });
 
-test("global library search respects each space and only exposes subjects in personal space", () => {
+test("global library search respects each space and exposes only subjects belonging to that space", () => {
   const store = createSearchFixtureStore();
   for (const space of ["organization", "platform"]) {
     const results = plain(store.searchLibrary({ space, query: "武器" }));
     assert.deepEqual(results.folders.map(({ id }) => id), [space]);
     assert.deepEqual(results.media.map(({ id }) => id), [space]);
-    assert.deepEqual(results.entities, []);
+    assert.deepEqual(results.entities.map(({ id }) => id), space === "organization" ? ["organization-subject"] : []);
   }
   assert.deepEqual(plain(store.searchLibrary({ space: "official", query: "武器" })),
     plain(store.searchLibrary({ space: "platform", query: "武器" })));
@@ -476,6 +476,7 @@ test("registers persisted Entities idempotently in the personal root without wea
     description: "角色说明",
     coverMediaId: "portrait",
     version: 1,
+    space: "personal",
     tagIds: [],
     tags: [],
   });
@@ -570,7 +571,7 @@ test("syncs the complete persisted Entity projection atomically and rejects stal
   assert.deepEqual(plain(store.snapshot()), beforeFailure);
 });
 
-test("syncing the personal Entity catalog preserves projections in other spaces", () => {
+test("syncing the full Entity catalog removes absent persisted subjects from both writable spaces", () => {
   const entity = {
     id: "persisted-shared",
     name: "已共享主体",
@@ -594,8 +595,8 @@ test("syncing the personal Entity catalog preserves projections in other spaces"
 
   assert.deepEqual(plain(result.removedEntityIds), [entity.id]);
   assert.equal(store.hasPlacement(entityRef(entity.id), "personal"), false);
-  assert.equal(store.hasPlacement(entityRef(entity.id), "organization"), true);
-  assert.equal(store.getEntity(entityRef(entity.id)).version, 1);
+  assert.equal(store.hasPlacement(entityRef(entity.id), "organization"), false);
+  assert.equal(store.getEntity(entityRef(entity.id)), null);
 });
 
 test("updates persisted Entity content only from the expected version and advances exactly once", () => {
@@ -1207,4 +1208,47 @@ test("editor tag projection preserves member metadata and rejects stale tag chan
   store.registerPersistedEntity({ entity: { ...entity, version: 3, libraryTagIds: [] } });
   assert.deepEqual(subject().tagIds, []);
   assert.deepEqual(plain(store.listItems({ kind: 'media', space: 'personal' })), memberBefore);
+});
+
+
+test("organization subjects and their media project atomically without personal placements and preserve scoped tags", () => {
+  const store = model.createAssetLibraryStore();
+  const media = [{ id: "org-image", workspaceAssetId: "org-image", type: "image", name: "封面.png" }];
+  const entity = { id: "org-entity", space: "organization", name: "组织主体", description: "", version: 1, mediaRefs: [{ mediaId: "org-image", order: 0 }], coverMediaId: "org-image" };
+  const catalog = { media, entries: [{ assetId: "org-image", space: "organization", folderId: null, tagIds: [] }],
+    entities: [entity], entityEntries: [{ entityId: entity.id, space: "organization", tagIds: ["org-tag"], folderId: null }],
+    tags: [{ id: "org-tag", name: "品牌", space: "organization" }], folders: [] };
+  store.syncPersistedCatalog(catalog);
+  assert.equal(store.hasPlacement(mediaRef("org-image"), "personal"), false);
+  assert.equal(store.hasPlacement(entityRef(entity.id), "personal"), false);
+  assert.equal(store.getEntity({ ...entityRef(entity.id), space: "organization" }).space, "organization");
+  assert.deepEqual(plain(store.getEntity({ ...entityRef(entity.id), space: "organization" }).tags), ["品牌"]);
+  const updated = store.updateEntity({ space: "organization", entityId: entity.id, expectedVersion: 1, name: "更新主体", tagIds: [], expectedTagIds: ["org-tag"] });
+  assert.equal(updated.version, 2);
+  const before = plain(store.snapshot());
+  assert.throws(() => store.syncPersistedCatalog(catalog), /backwards/);
+  assert.deepEqual(plain(store.snapshot()), before);
+  store.syncPersistedCatalog({ ...catalog, entities: [], entityEntries: [] });
+  assert.equal(store.getEntity(entityRef(entity.id)), null);
+  assert.equal(store.hasPlacement(mediaRef("org-image"), "organization"), true);
+});
+
+test("organization subjects reject media that only exist in personal space before mutating", () => {
+  const store = model.createAssetLibraryStore();
+  store.registerMedia({ media: { id: "private", type: "image", name: "私人图片" }, space: "personal" });
+  const before = plain(store.snapshot());
+  assert.throws(() => store.registerPersistedEntity({ entity: { id: "org", space: "organization", name: "主体", description: "", version: 1, mediaRefs: [{ mediaId: "private", order: 0 }] } }), /organization/);
+  assert.deepEqual(plain(store.snapshot()), before);
+});
+
+
+test("renaming a shared organization member only changes its organization display name", () => {
+  const store = model.createAssetLibraryStore();
+  const media = { id: "shared", workspaceAssetId: "shared", type: "image", displayName: "original.png", name: "original.png" };
+  store.registerMedia({ media, space: "personal" });
+  store.registerMedia({ media, space: "organization" });
+  const renamed = store.syncPersistedMedia({ media: { ...media, displayName: "org.png" }, space: "organization" });
+  assert.equal(renamed.name, "org.png");
+  assert.equal(store.getMedia({ ...mediaRef(media.id), space: "organization" }).name, "org.png");
+  assert.equal(store.getMedia({ ...mediaRef(media.id), space: "personal" }).name, "original.png");
 });

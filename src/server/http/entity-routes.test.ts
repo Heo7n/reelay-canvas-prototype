@@ -32,10 +32,12 @@ describe("Entity persistence routes", () => {
     const seed = createDemoSeed();
     const store = new InMemoryCollaborationStore(seed);
     const entityStore = new InMemoryEntityStore({
-      workspaceMemberships: seed.memberships.map(({ workspaceId: memberWorkspaceId, actorId }) => ({
+      workspaceMemberships: seed.memberships.map(({ workspaceId: memberWorkspaceId, actorId, role }) => ({
         workspaceId: memberWorkspaceId,
         actorId,
+        role,
       })),
+      organizationAssetPlacements: [{ workspaceId, assetId: "asset-front" }],
       assets: [
         { id: "asset-front", workspaceId, mediaKind: "image", finalized: true },
         { id: "asset-voice", workspaceId, mediaKind: "audio", finalized: true },
@@ -234,5 +236,38 @@ describe("Entity persistence routes", () => {
     });
     expect(videoCover.statusCode).toBe(400);
     expect(videoCover.json().error.code).toBe("invalid_entity_cover");
+  });
+});
+
+
+describe("organization Entity HTTP scope", () => {
+  it("validates scope, shares member-created subjects, and denies member edits", async () => {
+    const seed = createDemoSeed();
+    const entities = new InMemoryEntityStore({workspaceMemberships: seed.memberships,
+      assets: [{id: "shared", workspaceId, mediaKind: "image", finalized: true}],
+      organizationAssetPlacements: [{workspaceId, assetId: "shared"}], personalAssetPlacements: [],
+    });
+    const app = await buildServer({store: new InMemoryCollaborationStore(seed), entityStore: entities});
+    try {
+      const member = {cookie: await login(app, "chenxi@reelay.test")};
+      const admin = {cookie: await login(app, "linjing@reelay.test")};
+      const url = `/api/workspaces/${workspaceId}/entities`;
+      const body = {space: "organization", idempotencyKey: "shared-http-request", name: "Shared", assetIds: ["shared"]};
+      const created = await app.inject({method: "POST", url, headers: member, payload: body});
+      expect(created.statusCode).toBe(201);
+      expect(created.json().entity.space).toBe("organization");
+      const item = `${url}/${created.json().entity.id}`;
+      const listed = await app.inject({method: "GET", url: `${url}?scope=organization`, headers: admin});
+      expect(listed.json().entities).toHaveLength(1);
+      expect((await app.inject({method: "GET", url: `${item}?scope=organization`, headers: admin})).statusCode).toBe(200);
+      expect((await app.inject({method: "GET", url: item, headers: admin})).statusCode).toBe(404);
+      const update = {space: "organization", expectedVersion: 1, name: "Edited", assetIds: ["shared"]};
+      const denied = await app.inject({method: "PATCH", url: item, headers: member, payload: update});
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().error.code).toBe("entity_forbidden");
+      expect((await app.inject({method: "PATCH", url: item, headers: admin, payload: update})).statusCode).toBe(200);
+      expect((await app.inject({method: "GET", url: `${item}?scope=platform`, headers: admin})).statusCode).toBe(400);
+      expect((await app.inject({method: "POST", url, headers: member, payload: {...body, space: "platform"}})).statusCode).toBe(400);
+    } finally { await app.close(); }
   });
 });

@@ -4,7 +4,7 @@
   const TYPE_LABELS = { image: "图片", video: "视频", audio: "音频" };
 
   function createController({ document, composer, addButton, menu, messages, getScope, isBusy,
-    getSelectedAssets, onChooseFiles, onLibrary, onAddSelected, onDropFiles, onDropLibrary,
+    onChooseFiles, onLibrary, onDropFiles, onDropLibrary,
     hasLibraryDrag, closeOtherPopovers, escapeHtml, getAssetLabel, assetPreview, sanitizeUrl,
     referenceStrip, placeAnchoredPopover }) {
     const view = document.defaultView;
@@ -50,7 +50,6 @@
       if (!scope) return setMenuOpen(false);
       closeOtherPopovers();
       menuScope = scope;
-      menu.querySelector('[data-agent-reference-source="canvas"]').disabled = !getSelectedAssets().length;
       menu.hidden = false;
       menu.classList.remove("hidden");
       menu.style.position = "fixed";
@@ -105,7 +104,6 @@
       setMenuOpen(false);
       if (source === "local") onChooseFiles(scope);
       else if (source === "library") onLibrary(scope);
-      else if (source === "canvas") onAddSelected(getSelectedAssets(), scope);
     }
 
     function onOutsidePointer(event) {

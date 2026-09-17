@@ -125,11 +125,11 @@
       });
     }
 
-    async function renameMedia(assetIdValue, displayNameValue) {
+    async function renameMedia(assetIdValue, displayNameValue, space = "personal") {
       if (!isHosted()) throw commandError("unsupported", "当前画布未连接资产持久化服务");
       const assetId = String(assetIdValue || "").trim();
       const displayName = String(displayNameValue || "").trim();
-      if (!isNonEmptyString(assetId) || !isNonEmptyString(displayName, 300)) {
+      if (!["personal", "organization"].includes(space) || !isNonEmptyString(assetId) || !isNonEmptyString(displayName, 300)) {
         throw commandError("invalid", "素材名称不符合要求");
       }
       const requestId = String(makeRequestId()).trim();
@@ -137,7 +137,7 @@
       return new Promise((resolve, reject) => {
         const timeoutId = setTimer(() => finish(requestId, commandError("network", "素材重命名请求已超时")), requestTimeoutMs);
         pending.set(requestId, { assetId, resolve, reject, timeoutId, stage: "rename" });
-        send("canvas:rename-media", { requestId, assetId, displayName });
+        send("canvas:rename-media", { requestId, assetId, displayName, space });
       });
     }
 

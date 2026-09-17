@@ -302,6 +302,7 @@ test("correlates personal Media rename results by request, instance, and asset",
     requestId: "request-1",
     assetId: "asset-2",
     displayName: "renamed-portrait.png",
+    space: "personal",
   });
   assert.equal(dispatch({
     source: "reelay-shell", type: "host:media-rename-result", protocolVersion: 1,

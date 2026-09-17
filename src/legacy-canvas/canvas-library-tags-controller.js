@@ -9,6 +9,7 @@
     let catalog = null;
     let operation = "add";
     let selected = new Set();
+    let initialTagIds = [];
     let busy = "";
     const node = (tag, className, text) => {
       const result = document.createElement(tag);
@@ -71,11 +72,14 @@
     document.body.append(dialog);
 
     const current = (owner) => active === owner && owner?.scope === getScopeKey() && canEdit(owner.space);
-    const canApply = () => !busy && Boolean(catalog) && selected.size > 0 && createForm.hidden;
+    const isSingle = () => active?.items.length === 1;
+    const sameTags = (left, right) => left.length === right.length && left.every((id) => right.includes(id));
+    const canApply = () => !busy && Boolean(catalog) && createForm.hidden
+      && (isSingle() ? !sameTags([...selected], initialTagIds) : selected.size > 0);
     function dictionary() {
       if (!active || !catalog) return [];
       const tags = [...options.builtinTags, ...catalog.tags.filter((tag) => tag.space === active.space)];
-      if (operation === "add") return tags;
+      if (operation !== "remove") return tags;
       const ids = new Set(active.items.flatMap((item) => {
         const entries = item.kind === "entity" ? catalog.entityEntries || [] : catalog.entries;
         return entries.find((entry) => entry.space === active.space
@@ -85,6 +89,8 @@
     }
     function render() {
       const tags = dictionary();
+      add.hidden = remove.hidden = isSingle();
+      modes.hidden = isSingle() && !options.onManage;
       add.setAttribute("aria-pressed", String(operation === "add"));
       remove.setAttribute("aria-pressed", String(operation === "remove"));
       add.disabled = remove.disabled = Boolean(busy);
@@ -104,7 +110,7 @@
       }));
       empty.hidden = !catalog || tags.length > 0;
       empty.textContent = operation === "remove" ? "所选资产暂无标签" : "暂无标签";
-      create.hidden = operation !== "add" || !createForm.hidden;
+      create.hidden = operation === "remove" || !createForm.hidden;
       create.disabled = Boolean(busy) || !catalog;
       name.disabled = createConfirm.disabled = createCancel.disabled = Boolean(busy);
       apply.disabled = !canApply();
@@ -130,6 +136,15 @@
         const result = await request("list");
         if (!current(owner)) return;
         catalog = result;
+        if (isSingle()) {
+          const item = owner.items[0];
+          const entries = item.kind === "entity" ? result.entityEntries || [] : result.entries;
+          const entry = entries.find((entry) => entry.space === owner.space
+            && (item.kind === "entity" ? entry.entityId : entry.assetId) === item.id);
+          if (!entry) { catalog = null; throw new Error("所选素材不存在或不可访问，请关闭后重新选择"); }
+          initialTagIds = [...entry.tagIds];
+          selected = new Set(initialTagIds);
+        }
         onCatalog(result);
         status.textContent = "";
       } catch (error) {
@@ -161,7 +176,7 @@
       }
     }
     function chooseMode(next) {
-      if (busy) return;
+      if (busy || isSingle()) return;
       operation = next;
       selected.clear();
       createForm.hidden = true;
@@ -195,7 +210,8 @@
       status.textContent = "";
       render();
       try {
-        const result = await request("update-tags", { space: owner.space, operation, tagIds: [...selected], items: owner.items });
+        const result = await request("update-tags", { space: owner.space, operation, tagIds: [...selected], items: owner.items,
+          ...(isSingle() ? { expectedTagIds: initialTagIds } : {}) });
         if (!current(owner)) return;
         onCatalog(result);
         options.onApplied?.();
@@ -217,8 +233,9 @@
           items: items.map(({ kind, id }) => ({ kind, id })) };
         catalog = null;
         busy = "";
-        operation = "add";
+        operation = items.length === 1 ? "replace" : "add";
         selected = new Set();
+        initialTagIds = [];
         count.textContent = `${items.length} 项`;
         createForm.hidden = true;
         name.value = "";
@@ -233,6 +250,7 @@
         catalog = value;
         const ids = new Set([...options.builtinTags, ...value.tags.filter((tag) => tag.space === active.space)].map((tag) => tag.id));
         selected = new Set([...selected].filter((id) => ids.has(id)));
+        initialTagIds = initialTagIds.filter((id) => ids.has(id));
         render();
       },
       syncContext() { if (active && !current(active)) close(true); },

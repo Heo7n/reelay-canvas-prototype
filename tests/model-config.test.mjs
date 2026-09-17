@@ -110,12 +110,11 @@ test("Seedance 2.5 drives the reference parameter layout", () => {
         referenceVideoDurationRange: { min: 4, max: 30 },
         aspect: "adaptive",
         duration: -1,
-        hideDuration: true,
       },
       extend: {
         referenceVideoRequired: true,
         aspect: "adaptive",
-        hideDuration: true,
+        allowAutoDuration: true,
       },
     },
   });

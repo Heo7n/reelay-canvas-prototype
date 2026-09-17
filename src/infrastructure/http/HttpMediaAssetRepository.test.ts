@@ -57,3 +57,14 @@ describe("HttpMediaAssetRepository upload policy", () => {
     await expect(repository.cancelUpload("workspace", "upload")).rejects.toThrow();
   });
 });
+
+
+it("renames the explicitly selected organization placement through the existing media endpoint", async () => {
+  const asset = { id: "media", workspaceId: "workspace", objectVersion: 1, mediaKind: "image", displayName: "Organization.png", contentType: "image/png", byteSize: 4,
+    checksumSha256: "a".repeat(64), createdAt: "2026-09-17T00:00:00.000Z", updatedAt: "2026-09-17T00:00:00.000Z" };
+  const fetch = vi.fn().mockResolvedValue(Response.json({ asset }));
+  const repository = new HttpMediaAssetRepository({ fetch });
+  expect((await repository.renamePersonalAsset("workspace", "media", "Organization.png", "organization")).displayName).toBe("Organization.png");
+  expect(fetch.mock.calls[0][0]).toBe("/api/workspaces/workspace/media-assets/media");
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ displayName: "Organization.png", space: "organization" });
+});

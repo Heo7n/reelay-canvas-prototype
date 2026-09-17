@@ -26,7 +26,6 @@
   ]);
 
   const ENTITY_ACTIONS = Object.freeze([
-    { id: "view-media", icon: "images", label: "查看内容" },
     { id: "edit", icon: "pencil-line", label: "编辑主体" },
     { id: "rename", icon: "pencil", label: "重命名" },
     { id: "set-tags", icon: "tags", label: "设置标签" },
@@ -202,6 +201,7 @@
     const space = normalizeSpace(options.space);
     const section = space === "platform" ? "media" : options.subjectZone ? "entity" : normalizeSection(options.section);
     const mutable = canMutate(options.mutable, space);
+    const referencePicking = Boolean(options.referencePicking);
     const canCreateEntity = mutable && options.canCreateEntity !== false;
     const canUploadMedia = mutable && options.canUploadMedia !== false;
     const canCreateFolder = mutable && options.canCreateFolder === true;
@@ -217,7 +217,7 @@
     const batchActions = getBatchActions(space, reviewableSelection, section, options.allowedBatchActions);
     const hasBatchActions = batchActions.length > 0;
     const hasExecutableBatchActions = batchActions.some((action) => isBatchActionAvailable(action, space, options));
-    const selectionEnabled = hasBatchActions && hasExecutableBatchActions && (mutable || space === "platform");
+    const selectionEnabled = !referencePicking && hasBatchActions && hasExecutableBatchActions && (mutable || space === "platform");
     const selectionMode = selectionEnabled && Boolean(options.selectionMode);
     const hasSelection = selectedCount > 0;
     const menu = selectionMode && hasSelection && requestedMenu === "batch"
@@ -225,9 +225,9 @@
       : requestedMenu === "filter"
         ? "filter"
         : selectionMode && requestedMenu === "select-kind" ? "select-kind"
-          : !selectionMode && !options.entityFilter && section !== "entity" && (canUploadMedia || canCreateFolder) && requestedMenu === "add" ? "add" : "";
+          : !referencePicking && !selectionMode && !options.entityFilter && section !== "entity" && (canUploadMedia || canCreateFolder) && requestedMenu === "add" ? "add" : "";
 
-    const leadingCommand = selectionMode
+    const leadingCommand = referencePicking ? "" : selectionMode
       ? `<div class="asset-library-command-popover">
           <button class="asset-library-primary-command asset-library-batch-command" type="button" aria-haspopup="menu" aria-expanded="${menu === "batch"}" aria-label="${hasSelection ? `操作，已选 ${selectedCount} 项` : "操作，尚未选择资产"}" data-library-batch-toggle="true"${hasSelection ? "" : ' disabled aria-disabled="true"'}>
             ${icon("list-checks")}<span>操作</span>
@@ -288,7 +288,7 @@
       `;
 
     return `
-      <div class="${classNames("asset-library-commandbar", space === "platform" && "platform", selectionMode && "selection-mode", !mutable && "readonly")}" data-library-commandbar="${section}" data-library-space="${space}" data-library-active-filter="${filter}" data-library-open-menu="${menu}" data-library-selection-enabled="${selectionEnabled}" data-library-selection-mode="${selectionMode}">
+      <div class="${classNames("asset-library-commandbar", referencePicking && "reference-picking", space === "platform" && "platform", selectionMode && "selection-mode", !mutable && "readonly")}" data-library-commandbar="${section}" data-library-space="${space}" data-library-active-filter="${filter}" data-library-open-menu="${menu}" data-library-selection-enabled="${selectionEnabled}" data-library-selection-mode="${selectionMode}">
         ${leadingCommand ? `<div class="asset-library-leading-command"${selectionMode ? "" : " data-library-search-covered"}>${leadingCommand}</div>` : ""}
         ${selectionMode || space === "platform" ? "" : `<button class="asset-library-search-toggle" data-library-search-toggle type="button" aria-label="${options.searchReturn ? "返回搜索结果" : "搜索资产"}" title="${options.searchReturn ? "返回搜索结果" : "搜索资产"}" aria-controls="assetLibrarySearchRegion" aria-expanded="${Boolean(options.searchOpen)}">${icon("search")}</button>`}
         <div class="asset-library-command-popover">
@@ -552,7 +552,7 @@
       kind === "folder" ? FOLDER_ACTIONS : kind === "entity" ? ENTITY_ACTIONS : ITEM_ACTIONS,
       space,
       allowedActions,
-    ).filter((action) => mutable || (kind === "entity" && space !== "platform" && action.id === "view-media"))
+    ).filter(() => mutable)
       .filter((action) => action.id !== "review" || kind !== "media" || mediaKind !== "audio")
       .filter((action) => action.id !== "delete" || canDelete);
   }
@@ -603,22 +603,26 @@
     const name = options.name ?? media.name ?? "未命名素材";
     const space = resolveSpace(options.space, media);
     const mutable = canMutate(options.mutable, space);
-    const selectionEnabled = mutable || space === "platform";
+    const referencePicking = Boolean(options.referencePicking);
+    const referenceSelected = referencePicking && Boolean(options.referenceSelected);
+    const referenceDisabled = referencePicking && Boolean(options.referenceDisabled);
+    const selectionEnabled = !referencePicking && (mutable || space === "platform");
     const selectionMode = selectionEnabled && Boolean(options.selectionMode);
     const selected = selectionEnabled && Boolean(options.selected);
-    const menuOpen = !selectionMode && mutable && Boolean(options.menuOpen);
-    const renaming = mutable && Boolean(options.renaming);
+    const menuOpen = !referencePicking && !selectionMode && mutable && Boolean(options.menuOpen);
+    const renaming = !referencePicking && mutable && Boolean(options.renaming);
     const safeId = escapeHtml(id);
     const safeName = escapeHtml(name);
     const mediaKind = normalizeMediaKind(media);
 
     return `
-      <article class="${classNames("asset-library-card", "asset-library-media-card", selected && "selected", selectionMode && "selection-mode", menuOpen && "menu-open", renaming && "renaming", !mutable && "readonly")}" draggable="true" data-library-media="${safeId}" data-library-space="${space}" data-library-media-kind="${mediaKind}">
-        <button class="asset-library-card-preview" type="button" aria-label="预览 ${safeName}" data-library-preview="${safeId}" data-library-item-kind="media"${selectionMode && options.selectionDisabled ? ' disabled title="仅可同时选择同类结果"' : ""}>
+      <article class="${classNames("asset-library-card", "asset-library-media-card", referencePicking && "reference-picking", referenceSelected && "reference-selected", referenceDisabled && "reference-disabled", selected && "selected", selectionMode && "selection-mode", menuOpen && "menu-open", renaming && "renaming", !mutable && "readonly")}" draggable="${!referencePicking}" data-library-media="${safeId}" data-library-space="${space}" data-library-media-kind="${mediaKind}">
+        <button class="asset-library-card-preview" type="button" aria-label="${escapeHtml(referencePicking ? referenceSelected ? "取消参考" : "选择参考" : selectionMode ? "选择" : options.referenceAction || "预览")} ${safeName}"${referencePicking ? ` aria-pressed="${referenceSelected}"${referenceDisabled ? ` disabled aria-disabled="true" title="${escapeHtml(options.referenceHint || "当前素材不可添加为参考")}"` : ""}` : ""}${!referencePicking && !selectionMode && options.referenceAction ? ` title="${escapeHtml(options.referenceAction)}"` : ""} data-library-preview="${safeId}" data-library-item-kind="media"${selectionMode && options.selectionDisabled ? ' disabled title="仅可同时选择同类结果"' : ""}>
           ${renderStructuredPreview(media)}
+          ${referencePicking ? `<span class="asset-library-reference-check" aria-hidden="true">${icon("check")}</span>` : ""}
         </button>
-        ${renderNameBar({ id, kind: "media", name, meta: options.meta ?? "", renaming, mutable })}
-        ${renderCardControls({ id, kind: "media", selected, selectionMode, selectionDisabled: options.selectionDisabled, menuOpen, mutable, selectable: selectionEnabled, space, mediaKind, allowedActions: options.allowedActions, canDelete: options.canDelete })}
+        ${renderNameBar({ id, kind: "media", name, meta: options.meta ?? "", renaming, mutable: !referencePicking && mutable })}
+        ${referencePicking ? "" : renderCardControls({ id, kind: "media", selected, selectionMode, selectionDisabled: options.selectionDisabled, menuOpen, mutable, selectable: selectionEnabled, space, mediaKind, allowedActions: options.allowedActions, canDelete: options.canDelete })}
       </article>
     `;
   }
@@ -702,7 +706,8 @@
     const id = entity.id ?? "";
     const name = options.name ?? entity.name ?? "未命名主体";
     const space = resolveSpace(options.space, entity);
-    const mutable = canMutate(options.mutable, space);
+    const referencePicking = Boolean(options.referencePicking);
+    const mutable = !referencePicking && canMutate(options.mutable, space);
     const entityActions = getItemActions({ kind: "entity", space, allowedActions: options.allowedActions, mutable });
     const canRename = mutable && entityActions.some((action) => action.id === "rename");
     const selectionMode = mutable && Boolean(options.selectionMode);
@@ -720,15 +725,18 @@
     const safeId = escapeHtml(id);
     const safeName = escapeHtml(name);
     const cover = coverPreview ? renderStructuredPreview(coverPreview) : icon("images");
+    const canAddToCanvas = Boolean(options.canAddToCanvas) && !referencePicking
+      && !options.selectionMode && !options.menuOpen && !options.renaming;
 
     return `
       <article class="${classNames("asset-library-card", "asset-library-entity-card", selected && "selected", selectionMode && "selection-mode", menuOpen && "menu-open", renaming && "renaming", !mutable && "readonly")}" data-library-entity="${safeId}" data-library-space="${space}">
         <span class="asset-library-group-stack" aria-hidden="true"></span>
-        <button class="asset-library-card-preview" type="button" aria-label="打开主体 ${safeName}" data-library-preview="${safeId}" data-library-item-kind="entity"${selectionMode && options.selectionDisabled ? ' disabled title="仅可同时选择同类结果"' : ""}>
+        <button class="asset-library-card-preview" type="button" aria-label="${referencePicking ? "查看主体素材" : selectionMode ? selected ? "取消选择主体" : "选择主体" : "打开主体"} ${safeName}"${selectionMode ? ` aria-pressed="${selected}"` : ""} data-library-preview="${safeId}" data-library-item-kind="entity"${selectionMode && options.selectionDisabled ? ' disabled title="仅可同时选择同类结果"' : ""}>
           <span class="asset-library-entity-cover" data-library-entity-cover="${coverPreview ? "media" : "placeholder"}">${cover}</span>
         </button>
+        ${canAddToCanvas ? `<button class="asset-library-entity-add" type="button" data-library-entity-add="${safeId}" aria-label="添加 ${safeName} 到画布">${icon("plus")}<span>添加到画布</span></button>` : ""}
         ${renderNameBar({ id, kind: "entity", name, meta: "", renaming, mutable: canRename })}
-        ${renderCardControls({ id, kind: "entity", selected, selectionMode, selectionDisabled: options.selectionDisabled, menuOpen, mutable, space, allowedActions: options.allowedActions })}
+        ${referencePicking ? "" : renderCardControls({ id, kind: "entity", selected, selectionMode, selectable: selectionMode, selectionDisabled: options.selectionDisabled, menuOpen, mutable, space, allowedActions: options.allowedActions })}
       </article>
     `;
   }

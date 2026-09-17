@@ -5,7 +5,10 @@ export interface WorkspaceEntityMediaReference {
   order: number;
 }
 
+export type EntitySpace = "personal" | "organization";
+
 export interface WorkspaceEntity {
+  space?: EntitySpace;
   libraryTagIds?: string[];
   id: string;
   workspaceId: WorkspaceId;
@@ -19,6 +22,7 @@ export interface WorkspaceEntity {
 }
 
 export interface CreateWorkspaceEntityInput {
+  space?: EntitySpace;
   workspaceId: WorkspaceId;
   idempotencyKey: string;
   tagIds?: string[];
@@ -30,6 +34,7 @@ export interface CreateWorkspaceEntityInput {
 }
 
 export interface UpdateWorkspaceEntityInput {
+  space?: EntitySpace;
   workspaceId: WorkspaceId;
   entityId: string;
   expectedVersion: number;
@@ -43,7 +48,7 @@ export interface UpdateWorkspaceEntityInput {
 
 export interface EntityRepository {
   create(input: CreateWorkspaceEntityInput): Promise<WorkspaceEntity>;
-  get(workspaceId: WorkspaceId, entityId: string): Promise<WorkspaceEntity>;
-  listPersonal(workspaceId: WorkspaceId): Promise<WorkspaceEntity[]>;
+  get(workspaceId: WorkspaceId, entityId: string, space?: EntitySpace): Promise<WorkspaceEntity>;
+  listPersonal(workspaceId: WorkspaceId, space?: EntitySpace): Promise<WorkspaceEntity[]>;
   update(input: UpdateWorkspaceEntityInput): Promise<WorkspaceEntity>;
 }

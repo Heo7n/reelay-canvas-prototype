@@ -43,12 +43,14 @@
       || !isNonEmptyString(value.name, 200) || typeof value.description !== "string"
       || value.description.length > 2_000 || !Number.isInteger(value.version) || value.version < 1) return null;
     if (value.libraryTagIds !== undefined && (!Array.isArray(value.libraryTagIds) || value.libraryTagIds.length > 50 || value.libraryTagIds.some((id) => !isNonEmptyString(id)))) return null;
+    if (value.space !== undefined && !["personal", "organization"].includes(value.space)) return null;
     const mediaRefs = normalizeRefs(value.mediaRefs);
     if (!mediaRefs) return null;
     const coverMediaId = value.coverAssetId == null ? null : String(value.coverAssetId).trim();
     if (coverMediaId && !mediaRefs.some((ref) => ref.mediaId === coverMediaId)) return null;
     return {
       id: String(value.id),
+      space: value.space || "personal",
       name: String(value.name),
       description: value.description,
       mediaRefs,
@@ -105,6 +107,8 @@
     }
 
     function normalizeCommandPayload(input, mode) {
+      const space = input?.space || "personal";
+      if (!["personal", "organization"].includes(space)) throw commandError("invalid", "主体空间无效");
       const tagFields = input?.tagIds === undefined ? {} : { tagIds: normalizeTagIds(input.tagIds) };
       if (mode === "update" && input?.tagIds !== undefined) tagFields.expectedTagIds = normalizeTagIds(input.expectedTagIds);
       const name = String(input?.name || "").trim();
@@ -128,10 +132,10 @@
         if (!entityId || !Number.isInteger(input?.expectedVersion) || input.expectedVersion < 1) {
           throw commandError("invalid", "主体版本信息无效");
         }
-        return { entityId, expectedVersion: input.expectedVersion, name, description, assetIds, coverAssetId, ...tagFields };
+        return { space, entityId, expectedVersion: input.expectedVersion, name, description, assetIds, coverAssetId, ...tagFields };
       }
       if (input?.folderId != null && !isNonEmptyString(input.folderId)) throw commandError("invalid", "保存目录无效");
-      return { name, description, assetIds, coverAssetId, ...tagFields, ...(input?.folderId !== undefined ? { folderId: input.folderId } : {}) };
+      return { space, name, description, assetIds, coverAssetId, ...tagFields, ...(input?.folderId !== undefined ? { folderId: input.folderId } : {}) };
     }
 
     function start(type, payload) {
@@ -166,7 +170,7 @@
         || !message.assets.every(isWorkspaceAsset)) return false;
       const entities = message.entities.map(normalizeEntity);
       if (entities.some((entity) => entity == null)) return false;
-      const assetIds = new Set(message.assets.map((asset) => asset.assetId));
+      const assetIds = new Set([...message.assets, ...(message.libraryCatalog?.entries || [])].map((asset) => asset.assetId));
       if (entities.some((entity) => entity.mediaRefs.some((ref) => !assetIds.has(ref.mediaId)))) return false;
       seenCatalogRequests.add(message.requestId);
       onCatalog({

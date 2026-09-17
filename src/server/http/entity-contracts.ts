@@ -17,10 +17,11 @@ export const WorkspaceEntityItemParamsSchema = z.object({
 }).strict();
 
 export const PersonalEntityQuerySchema = z.object({
-  scope: z.literal("personal").optional().default("personal"),
+  scope: z.enum(["personal", "organization"]).optional().default("personal"),
 }).strict();
 
 export const CreatePersonalEntityBodySchema = z.object({
+  space: z.enum(["personal", "organization"]).optional().default("personal"),
   folderId: z.string().trim().min(1).max(200).nullable().optional(),
   idempotencyKey: z.string().trim().min(8).max(200),
   tagIds: EntityLibraryTagIdsSchema.optional(),
@@ -31,6 +32,7 @@ export const CreatePersonalEntityBodySchema = z.object({
 }).strict();
 
 export const UpdatePersonalEntityBodySchema = z.object({
+  space: z.enum(["personal", "organization"]).optional().default("personal"),
   expectedVersion: z.number().int().positive(),
   tagIds: EntityLibraryTagIdsSchema.optional(),
   expectedTagIds: EntityLibraryTagIdsSchema.optional(),

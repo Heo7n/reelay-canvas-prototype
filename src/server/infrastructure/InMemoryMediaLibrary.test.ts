@@ -1,6 +1,6 @@
 import { InMemoryAssetStore } from "./InMemoryAssetStore";
 import { InMemoryEntityStore } from "./InMemoryEntityStore";
-import { verifyLibraryGroupDirectories, verifyMediaLibraryTagDeletion, verifyMediaLibraryTagUpdates, verifyMediaLibraryFolderRename, verifyMediaLibraryDeletion, verifyMediaLibraryStore } from "./media-library-store-contract";
+import { verifyOrganizationSubjectLibrary, verifyLibraryGroupDirectories, verifyMediaLibraryTagDeletion, verifyMediaLibraryTagUpdates, verifyMediaLibraryFolderRename, verifyMediaLibraryDeletion, verifyMediaLibraryStore } from "./media-library-store-contract";
 
 async function createFixture() {
   const workspaceId="library-workspace",projectId="library-project",otherProjectId="other-project",owner="owner",editor="editor",outsider="outsider",external="external";
@@ -16,3 +16,5 @@ verifyMediaLibraryTagUpdates(createFixture);
 verifyMediaLibraryTagDeletion(createFixture);
 
 verifyLibraryGroupDirectories(createFixture);
+
+verifyOrganizationSubjectLibrary(createFixture);

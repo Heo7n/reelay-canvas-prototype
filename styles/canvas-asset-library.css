@@ -1,10 +1,21 @@
 /* Canvas asset library: media and reusable groups share one compact browsing surface. */
-.asset-library-panel {
+.asset-library-panel,
+.canvas-entity-editor,
+.entity-media-picker {
   --asset-panel-bg: var(--surface);
   --asset-panel-subtle: var(--surface-2);
   --asset-panel-preview: color-mix(in srgb, var(--surface-3) 74%, var(--surface-2));
   --asset-panel-line: var(--floating-line);
   --asset-panel-hover: color-mix(in srgb, var(--text) 7%, transparent);
+  --asset-panel-shadow: 0 22px 60px rgb(0 0 0 / 38%);
+}
+
+html[data-theme="light"] :is(.asset-library-panel, .canvas-entity-editor, .entity-media-picker) {
+  --asset-panel-preview: color-mix(in srgb, var(--surface) 72%, var(--surface-2));
+  --asset-panel-shadow: 0 14px 38px rgb(17 18 20 / 9%);
+}
+
+.asset-library-panel {
   --asset-card-size: 164px;
   --asset-command-width: 188px;
   --asset-command-gap: 4px;
@@ -26,17 +37,12 @@
   border-radius: 14px;
   background: var(--asset-panel-bg);
   color: var(--text);
-  box-shadow: 0 22px 60px rgb(0 0 0 / 38%);
+  box-shadow: var(--asset-panel-shadow);
   container-name: asset-library;
   container-type: inline-size;
   flex-direction: column;
   transform: translateX(calc(-100% - var(--canvas-edge-inset, 8px) - 32px));
   transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-html[data-theme="light"] .asset-library-panel {
-  --asset-panel-preview: color-mix(in srgb, var(--surface) 72%, var(--surface-2));
-  box-shadow: 0 14px 38px rgb(17 18 20 / 9%);
 }
 
 .asset-library-panel::after {
@@ -1232,6 +1238,56 @@ html[data-theme="light"] .asset-library-folder-preview {
   background: var(--asset-panel-subtle);
 }
 
+.asset-library-entity-card > .asset-library-card-preview {
+  grid-area: 1 / 1;
+}
+
+.asset-library-entity-card.selected .asset-library-entity-cover {
+  filter: brightness(0.72);
+}
+
+.asset-library-entity-add {
+  z-index: 2;
+  display: flex;
+  grid-area: 1 / 1;
+  align-self: end;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  margin: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--asset-panel-line);
+  border-radius: 7px;
+  background: var(--asset-panel-bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.asset-library-entity-add svg {
+  width: 15px;
+  height: 15px;
+}
+
+.asset-library-entity-card:hover > .asset-library-entity-add,
+.asset-library-entity-card:focus-within > .asset-library-entity-add {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.asset-library-entity-add:hover {
+  background: var(--asset-panel-hover);
+}
+
+.asset-library-entity-add:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
 .asset-library-entity-cover {
   display: grid;
   width: 100%;
@@ -1961,3 +2017,90 @@ html[data-theme="light"] .asset-library-folder-preview {
 .asset-library-search-folder small { font-size: 11px; color: var(--muted); }
 .asset-library-card-preview:disabled { opacity: 0.48; cursor: not-allowed; }
 .asset-library-selection-button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+
+/* Reference selection is a canvas mode, independent of library management. */
+.asset-library-panel.is-reference-picking { --asset-command-group-width: var(--asset-command-icon-width); }
+.asset-library-panel.is-reference-picking [data-library-space="platform"]:disabled { opacity: 0.4; cursor: not-allowed; }
+.library-reference-mode-bar {
+  position: fixed;
+  z-index: 80;
+  top: 12px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-canvas-action-text) 14%, transparent);
+  border-radius: 12px;
+  background: var(--color-canvas-action-background);
+  color: var(--color-canvas-action-text);
+  box-shadow: 0 6px 22px rgb(0 0 0 / 18%);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.library-reference-mode-bar[hidden] { display: none; }
+.library-reference-mode-bar svg { width: 16px; height: 16px; flex: 0 0 16px; }
+.library-reference-mode-bar > span:first-child { display: flex; flex: 0 0 auto; }
+.library-reference-mode-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.library-reference-mode-count { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.library-reference-mode-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.library-reference-mode-bar button:hover { background: color-mix(in srgb, currentColor 20%, transparent); }
+.library-reference-mode-bar button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.asset-library-commandbar.reference-picking .asset-library-command-group {
+  width: var(--asset-command-icon-width);
+}
+.asset-library-commandbar.reference-picking .asset-library-command-group > button { width: 100%; }
+
+.asset-library-reference-check {
+  position: absolute;
+  z-index: 3;
+  top: 6px;
+  left: 6px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 80%);
+  border-radius: 6px;
+  background: rgb(31 34 39 / 40%);
+  color: transparent;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  pointer-events: none;
+}
+.asset-library-reference-check svg { width: 14px; height: 14px; stroke-width: 2.5; }
+.asset-library-card.reference-selected .asset-library-card-preview::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(0 0 0 / 16%);
+  pointer-events: none;
+  content: "";
+}
+.asset-library-card.reference-selected .asset-library-reference-check {
+  background: #fff;
+  color: #18191d;
+}
+.asset-library-card.reference-disabled .asset-library-card-preview { cursor: not-allowed; }
+.asset-library-card.reference-disabled .asset-library-reference-check { opacity: 0.45; }

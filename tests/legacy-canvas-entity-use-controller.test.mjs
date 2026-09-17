@@ -60,12 +60,12 @@ function createHarness(t) {
     getDetailEntity: (id, space) => entities.find((entity) => entity.id === id && entity.spaces.includes(space)),
     getPickerEntities: () => entities,
     getAvoidRects: () => environment.avoidRects,
+    getDetailSourceRect: () => environment.sourceRect,
     isTargetAvailable: (id) => environment.target?.id === id && environment.target.supported && !environment.target.generating && !environment.target.promptOptimizing,
     isMutable: () => environment.mutable,
     requireMutation: () => environment.mutable,
     getPickerTrigger: (id) => document.querySelector(`[data-node="${id}"]`),
     onAddEntities: (submission) => calls.submissions.push(submission),
-    onAddToCanvas: (submission) => { calls.canvas.push(submission); return true; },
     refreshIcons: () => { calls.iconRefreshes += 1; },
   });
   t.after(() => { controller.dispose(); dom.window.close(); });
@@ -115,40 +115,63 @@ function assertPickerShellUnchanged(picker, shell) {
   }
 }
 
-test("hover and focus detail sessions retain card-to-detail traversal and pinned behavior", (t) => {
+test("passive hover detail closes immediately and switches without retaining stale content", (t) => {
   const h = createHarness(t);
-  const card = h.grid.querySelector('[data-library-entity="one"]');
-  h.pointer("pointerover", card);
+  const first = h.grid.querySelector('[data-library-entity="one"] button');
+  const second = h.grid.querySelector('[data-library-entity="two"] button');
+  h.environment.context.space = "organization";
+  h.pointer("pointerover", first);
   h.tick(129);
   assert.equal(h.detail.hidden, true);
   h.tick(1);
   assert.equal(h.detail.hidden, false);
-  h.pointer("pointerout", card, h.detail);
-  h.tick(170);
-  assert.equal(h.detail.hidden, false);
-  h.pointer("pointerleave", h.detail);
-  h.tick(169);
-  assert.equal(h.detail.hidden, false);
-  h.pointer("pointerenter", h.detail);
+  assert.equal(h.detail.querySelector("button, input, [tabindex], audio, video"), null);
+  h.pointer("pointerout", first, second);
+  assert.equal(h.detail.hidden, true);
+  h.pointer("pointerover", second, first);
+  h.tick(129);
+  assert.equal(h.detail.hidden, true);
   h.tick(1);
+  assert.ok(h.detail.querySelector('[data-entity-use-detail="two"]'));
+  h.pointer("pointerout", second, h.detail);
+  assert.equal(h.detail.hidden, true, "the passive portal cannot retain a hover session");
+  h.pointer("pointerenter", h.detail);
+  h.tick(300);
+  assert.equal(h.detail.hidden, true);
+  first.focus();
   assert.equal(h.detail.hidden, false);
-  h.pointer("pointerleave", h.detail);
+  h.grid.dispatchEvent(new h.window.Event("scroll"));
+  assert.equal(h.detail.hidden, true);
+});
+
+test("hover and focus target only the subject preview, leaving menu and rename controls independent", (t) => {
+  const h = createHarness(t);
+  const card = h.grid.querySelector('[data-library-entity="one"]');
+  const preview = card.querySelector("button");
+  const menu = h.document.createElement("button");
+  const rename = h.document.createElement("input");
+  card.append(menu, rename);
+  for (const control of [card, menu, rename]) {
+    h.pointer("pointerover", control);
+    control.focus();
+    h.tick(300);
+    assert.equal(h.detail.hidden, true);
+  }
+  h.pointer("pointerover", preview);
+  h.tick(100);
+  h.pointer("pointerout", preview, menu);
+  h.pointer("pointerover", menu, preview);
+  h.tick(300);
+  assert.equal(h.detail.hidden, true, "moving to the menu cancels a pending preview");
+  preview.focus();
+  assert.equal(h.detail.hidden, false);
+  menu.focus();
   h.tick(170);
   assert.equal(h.detail.hidden, true);
-  h.controller.openDetail("one", { pinned: true });
-  h.controller.openDetail("two");
-  h.pointer("pointerleave", h.detail);
-  h.tick(170);
-  assert.ok(h.detail.querySelector('[data-entity-use-detail="one"]'));
-  h.grid.dispatchEvent(new h.window.Event("scroll"));
+  preview.focus();
   assert.equal(h.detail.hidden, false);
-  const escape = new h.window.KeyboardEvent("keydown", { key: "Escape", cancelable: true });
-  assert.equal(h.controller.handleGlobalKeyDown(escape), true);
-  h.flushFrames();
-  assert.equal(h.document.activeElement, card.querySelector("button"));
-  assert.equal(h.detail.hidden, true, "returning focus does not reopen the dismissed detail");
-  h.controller.openDetail("one");
-  h.grid.dispatchEvent(new h.window.Event("scroll"));
+  rename.focus();
+  h.tick(170);
   assert.equal(h.detail.hidden, true);
 });
 
@@ -164,6 +187,29 @@ test("returning from group contents restores the source without opening an unsol
   source.blur();
   source.focus();
   assert.equal(h.detail.hidden, false, "a subsequent deliberate focus still opens its preview");
+});
+
+test("Escape dismisses hover details before the library and cancels pending opens", (t) => {
+  const h = createHarness(t);
+  const preview = h.grid.querySelector('[data-library-entity="one"] button');
+  const escape = () => new h.window.KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+  h.pointer("pointerover", preview);
+  h.tick(100);
+  const pendingEscape = escape();
+  assert.equal(h.controller.handleGlobalKeyDown(pendingEscape), true);
+  assert.equal(pendingEscape.defaultPrevented, true);
+  h.tick(300);
+  assert.equal(h.detail.hidden, true);
+  assert.equal(h.timers.size, 0);
+  h.pointer("pointerover", preview);
+  h.tick(130);
+  assert.equal(h.detail.hidden, false);
+  assert.equal(h.controller.handleGlobalKeyDown(escape()), true);
+  h.flushFrames();
+  h.tick(300);
+  assert.equal(h.document.activeElement, preview);
+  assert.equal(h.detail.hidden, true, "restored focus must not reopen the dismissed detail");
+  assert.equal(h.controller.handleGlobalKeyDown(escape()), false);
 });
 
 test("detail centers using its rendered dimensions and remeasures when content changes", (t) => {
@@ -212,6 +258,46 @@ test("detail centers using its rendered dimensions and remeasures when content c
   assert.equal(panel.style.getPropertyValue("--entity-use-detail-top"), "");
 });
 
+test("all library columns preview outside the panel and fit the free right corridor", (t) => {
+  const h = createHarness(t);
+  h.window.innerWidth = 1440;
+  h.window.innerHeight = 900;
+  h.environment.sourceRect = { left: 20, top: 100, right: 560, width: 540, height: 700 };
+  h.environment.avoidRects = [{ left: 1080, top: 0, width: 360, height: 900 }];
+  const card = h.grid.querySelector('[data-library-entity="one"]');
+  Object.defineProperties(h.window.HTMLElement.prototype, {
+    offsetWidth: { configurable: true, get() {
+      return this.matches(".entity-use-detail") ? Number.parseFloat(h.detail.style.getPropertyValue("--entity-use-detail-width")) : 0;
+    } },
+    offsetHeight: { configurable: true, get() { return this.matches(".entity-use-detail") ? 300 : 0; } },
+  });
+  for (const left of [30, 210, 390]) {
+    card.getBoundingClientRect = () => ({ left, top: 320, width: 160, height: 180 });
+    h.controller.openDetail("one");
+    assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-left"), "570px");
+    assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-top"), "260px");
+    assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-width"), "340px");
+  }
+  h.environment.avoidRects = [{ left: 850, top: 0, width: 590, height: 900 }];
+  h.controller.refreshDetail();
+  h.flushFrames();
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-width"), "270px");
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-left"), "570px");
+  h.environment.avoidRects[0].left = 700;
+  h.controller.refreshDetail();
+  h.flushFrames();
+  assert.equal(h.detail.hidden, true, "insufficient room before Agent omits the preview");
+  h.environment.avoidRects = [];
+  h.window.innerWidth = 822;
+  h.controller.openDetail("one");
+  assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-width"), "240px");
+  h.window.innerWidth = 821;
+  h.controller.refreshDetail();
+  h.flushFrames();
+  assert.equal(h.detail.hidden, true, "insufficient exterior space never moves the preview over library cards");
+  assert.equal(h.detail.innerHTML, "");
+});
+
 test("list detail recenters on resize and remains inside a short viewport", (t) => {
   const h = createHarness(t);
   h.environment.avoidRects = [];
@@ -252,7 +338,7 @@ test("list detail recenters on resize and remains inside a short viewport", (t) 
   assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-top"), "12px");
   assert.equal(h.detail.style.getPropertyValue("--entity-use-detail-max-height"), "136px");
   assert.equal(h.detail.querySelector(".entity-use-detail").offsetHeight, 136);
-  assert.ok(h.detail.querySelector("[data-entity-use-add-canvas]"));
+  assert.equal(h.detail.querySelector("button"), null);
 });
 
 test("pending detail timers and stale detail actions cannot cross library, canvas or project scopes", (t) => {
@@ -269,7 +355,7 @@ test("pending detail timers and stale detail actions cannot cross library, canva
   assert.equal(h.detail.hidden, true);
   h.controller.openDetail("one");
   h.environment.context.space = "organization";
-  h.click("[data-entity-use-add-canvas]", h.detail);
+  h.controller.refreshDetail();
   assert.equal(h.calls.canvas.length, 0);
   assert.equal(h.detail.hidden, true);
   h.controller.openDetail("one");
@@ -278,11 +364,9 @@ test("pending detail timers and stale detail actions cannot cross library, canva
   h.flushFrames();
   assert.equal(h.detail.hidden, true);
   h.controller.openDetail("one");
-  h.click("[data-entity-use-add-canvas]", h.detail);
-  assert.equal(h.calls.canvas.length, 1);
-  assert.deepEqual(JSON.parse(JSON.stringify(h.calls.canvas[0])), {
-    scope: { projectId: "project-two", canvasId: "canvas-two" }, entityId: "one", space: "organization",
-  });
+  h.controller.refreshDetail();
+  assert.equal(h.calls.canvas.length, 0);
+
 });
 
 test("picker restores original background attributes and refocuses the newly rendered trigger", (t) => {

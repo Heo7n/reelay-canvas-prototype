@@ -45,6 +45,10 @@ describe("legacy canvas bridge", () => {
       tagIds: ["builtin:scene"], items: [{ kind: "media", id: "asset" }, { kind: "entity", id: "group" }] };
     expect(parseCanvasMessage(command)).toEqual(command);
     expect(parseCanvasMessage({ ...command, operation: "remove" })).not.toBeNull();
+    const replacement = { ...command, operation: "replace", items: [{ kind: "media", id: "asset" }], tagIds: [], expectedTagIds: ["builtin:scene"] };
+    expect(parseCanvasMessage(replacement)).toEqual(replacement);
+    expect(parseCanvasMessage({ ...replacement, items: command.items })).toBeNull();
+    expect(parseCanvasMessage({ ...command, expectedTagIds: [] })).toBeNull();
     for (const invalid of [{ workspaceId: "forged" }, { projectId: "forged" }, { space: "platform" },
       { operation: "replace" }, { tagIds: [] }, { tagIds: [null] }, { tagIds: Array.from({ length: 51 }, () => "tag") },
       { items: [] }, { items: [{ kind: "folder", id: "folder" }] }, { items: [{ kind: "entity", id: "group", tagIds: [] }] },
@@ -375,6 +379,7 @@ describe("legacy canvas bridge", () => {
       displayName: "  renamed-cover.png  ",
     });
     expect(rename).toEqual({
+      space: "personal",
       source: "reelay-legacy-canvas",
       type: "canvas:rename-media",
       protocolVersion: 1,
@@ -436,5 +441,16 @@ describe("legacy canvas bridge", () => {
       section: "profile",
       unexpected: true,
     })).toBeNull();
+  });
+});
+
+
+describe("organization entity bridge", () => {
+  it("defaults legacy requests to personal and accepts organization without client workspace authority", () => {
+    const request = { source: "reelay-legacy-canvas", type: "canvas:create-entity", protocolVersion: 1, instanceId: "canvas-instance", requestId: "create-subject", idempotencyKey: "create-subject-key", name: "Subject", description: "", assetIds: ["asset"], coverAssetId: "asset" };
+    expect(parseCanvasMessage(request)).toMatchObject({ space: "personal" });
+    expect(parseCanvasMessage({ ...request, space: "organization" })).toMatchObject({ space: "organization" });
+    expect(parseCanvasMessage({ ...request, space: "platform" })).toBeNull();
+    expect(parseCanvasMessage({ ...request, space: "organization", workspaceId: "forged" })).toBeNull();
   });
 });

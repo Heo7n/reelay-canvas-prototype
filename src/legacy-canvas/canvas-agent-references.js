@@ -319,20 +319,28 @@
       if (scope) addFiles(files, scope);
     }
 
+    function removeAssets(ids, scope = captureScope()) {
+      if (!current(scope, true)) return 0;
+      const record = recordFor(scope);
+      if (!record) return 0;
+      const wanted = new Set(ids || []);
+      const removed = record.assets.filter((asset) => wanted.has(asset.id));
+      if (!removed.length) return 0;
+      strip.close();
+      record.assets = record.assets.filter((asset) => !wanted.has(asset.id));
+      for (const asset of removed) record.probes.get(asset.id)?.();
+      refreshOwnership(record);
+      changed(scope);
+      return removed.length;
+    }
+
     function onRemove(event) {
       const button = event.target.closest?.("[data-reference-remove]");
       if (!button || !shelf.contains(button)) return;
       event.preventDefault(); event.stopPropagation();
       const scope = captureScope();
-      if (!current(scope, true)) return;
-      const record = recordFor(scope);
-      const index = record?.assets.findIndex((asset) => asset.id === button.dataset.referenceRemove) ?? -1;
-      if (index < 0) return;
-      strip.close();
-      const [asset] = record.assets.splice(index, 1);
-      record.probes.get(asset.id)?.();
-      refreshOwnership(record);
-      changed(scope);
+      const index = recordFor(scope)?.assets.findIndex((asset) => asset.id === button.dataset.referenceRemove) ?? -1;
+      if (index < 0 || !removeAssets([button.dataset.referenceRemove], scope)) return;
       const next = shelf.children[Math.min(index, shelf.children.length - 1)];
       if (next && !shelf.hidden) next.focus({ preventScroll: true });
     }
@@ -408,7 +416,7 @@
     shelf.addEventListener("click", onRemove);
     view.addEventListener("pagehide", onPageHide);
     refresh();
-    return Object.freeze({ refresh, captureScope, chooseFiles, addFiles, addAssets, restoreAssets, getAssets, getEntries, hasDraft, takeForMessage,
+    return Object.freeze({ refresh, captureScope, canEditScope: (scope) => current(scope, true), chooseFiles, addFiles, addAssets, removeAssets, restoreAssets, getAssets, getEntries, hasDraft, takeForMessage,
       releaseConversation, close, dispose });
   }
 

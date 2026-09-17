@@ -5,6 +5,7 @@ import { EntityValidationError, type WorkspaceEntity } from "../../domain/asset/
 import type { SessionActor } from "../../domain/identity/session";
 import {
   EntityCreateConflictError,
+  EntityForbiddenError,
   EntityCoverMediaInvalidError,
   EntityMediaUnavailableError,
   EntityUnavailableError,
@@ -44,6 +45,7 @@ function entityDto(entity: WorkspaceEntity) {
   return {
     id: entity.id,
     workspaceId: entity.workspaceId,
+    space: entity.space ?? "personal",
     name: entity.name,
     description: entity.description,
     ...(entity.libraryTagIds !== undefined ? { libraryTagIds: entity.libraryTagIds } : {}),
@@ -56,6 +58,7 @@ function entityDto(entity: WorkspaceEntity) {
 }
 
 function entityError(reply: FastifyReply, error: unknown): FastifyReply | null {
+  if (error instanceof EntityForbiddenError) return reply.code(403).send({ error: { code: "entity_forbidden", message: "只有组织所有者或管理员可以编辑组织主体。" } });
   if (error instanceof MediaLibraryError) return reply.code(error.code === "placement_changed" ? 409 : error.code === "invalid_request" ? 400 : 404).send({ error: { code: error.code, message: error.message } });
   if (error instanceof EntityValidationError) {
     return reply.code(400).send({ error: { code: "invalid_entity", message: "主体信息无效。" } });
@@ -107,6 +110,7 @@ export async function registerEntityRoutes(
     }
     try {
       const entities = await dependencies.entities.listPersonalEntities({
+        space: query.data.scope,
         actorId: actor.id,
         workspaceId: params.data.workspaceId,
       });
@@ -128,6 +132,7 @@ export async function registerEntityRoutes(
     }
     try {
       const entity = await dependencies.entities.createPersonalEntity({
+        space: body.data.space,
         actorId: actor.id,
         workspaceId: params.data.workspaceId,
         idempotencyKey: body.data.idempotencyKey,
@@ -150,11 +155,14 @@ export async function registerEntityRoutes(
     const actor = await requireActor(request, reply, dependencies.sessions);
     if (!actor) return reply;
     const params = WorkspaceEntityItemParamsSchema.safeParse(request.params);
+    const query = PersonalEntityQuerySchema.safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: { code: "invalid_request", message: "主体查询无效。" } });
     if (!params.success) {
       return reply.code(404).send({ error: { code: "entity_not_found", message: "主体不存在。" } });
     }
     try {
       const entity = await dependencies.entities.getPersonalEntity({
+        space: query.data.scope,
         actorId: actor.id,
         workspaceId: params.data.workspaceId,
         entityId: params.data.entityId,
@@ -180,6 +188,7 @@ export async function registerEntityRoutes(
     }
     try {
       const entity = await dependencies.entities.updatePersonalEntity({
+        space: body.data.space,
         actorId: actor.id,
         workspaceId: params.data.workspaceId,
         entityId: params.data.entityId,

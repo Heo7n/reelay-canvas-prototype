@@ -772,7 +772,7 @@ test("dropping multiple library assets onto the real prompt editor adds referenc
   assert.equal(h.state.account.credits, 3000);
 });
 
-test("library media preview adds to the Agent reference destination while preserving the prompt draft", (t) => {
+test("library reference picking adds directly to the Agent destination while preserving the prompt draft", (t) => {
   const h = harness(t);
   h.draft("保留这段尚未发送的提示词");
   const fixture = { id: "preview-to-agent", type: "image", name: "角色全身图.png",
@@ -786,13 +786,12 @@ test("library media preview adds to the Agent reference destination while preser
   assert.ok(card);
   card.querySelector("[data-library-preview]").click();
   const preview = h.document.querySelector("#assetLibraryPreviewDialog");
-  assert.equal(preview.open, true);
-  assert.equal(h.state.libraryPreviewTarget.id, fixture.id);
-  assert.equal(preview.querySelector("img").src, fixture.url);
-  const use = h.document.querySelector("#assetLibraryPreviewUse");
-  assert.match(use.textContent, /加入对话参考/);
-  use.click();
+  assert.equal(preview.open, false);
+  assert.equal(h.state.libraryPreviewTarget, null);
+  assert.equal(h.window.isAssetLibraryOpen(), true);
+  assert.equal(card.querySelector("[data-library-preview]").getAttribute("aria-pressed"), "true");
   assert.deepEqual(plain(h.agentReferences.getAssets().map((asset) => asset.url)), [fixture.url]);
+  h.document.querySelector('[aria-label="退出参考选择"]').click();
   assert.equal(h.editor().getText(), "保留这段尚未发送的提示词");
   assert.equal(preview.open, false);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), before);

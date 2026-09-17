@@ -1,6 +1,7 @@
 import type {
   CreateWorkspaceEntityInput,
   EntityRepository,
+  EntitySpace,
   UpdateWorkspaceEntityInput,
   WorkspaceEntity,
 } from "../../application/assets/EntityRepository";
@@ -28,17 +29,17 @@ export class HttpEntityRepository implements EntityRepository {
     return response.entity;
   }
 
-  async get(workspaceId: WorkspaceId, entityId: string): Promise<WorkspaceEntity> {
+  async get(workspaceId: WorkspaceId, entityId: string, space: EntitySpace = "personal"): Promise<WorkspaceEntity> {
     const response = await this.http.read(
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/entities/${encodeURIComponent(entityId)}`,
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/entities/${encodeURIComponent(entityId)}${space === "organization" ? "?scope=organization" : ""}`,
       WorkspaceEntityResponseDtoSchema,
     );
     return response.entity;
   }
 
-  async listPersonal(workspaceId: WorkspaceId): Promise<WorkspaceEntity[]> {
+  async listPersonal(workspaceId: WorkspaceId, space: EntitySpace = "personal"): Promise<WorkspaceEntity[]> {
     const response = await this.http.read(
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/entities`,
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/entities${space === "organization" ? "?scope=organization" : ""}`,
       WorkspaceEntitiesResponseDtoSchema,
     );
     return response.entities;

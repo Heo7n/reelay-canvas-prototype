@@ -7,6 +7,7 @@ import type { ActorId } from "../../domain/identity/session";
 import type { WorkspaceId } from "../../domain/workspace/workspace";
 
 export interface CreatePersonalEntityInput extends EntityContentInput {
+  space?: "personal" | "organization";
   actorId: ActorId;
   workspaceId: WorkspaceId;
   idempotencyKey: string;
@@ -15,6 +16,7 @@ export interface CreatePersonalEntityInput extends EntityContentInput {
 }
 
 export interface ListPersonalEntitiesInput {
+  space?: "personal" | "organization";
   actorId: ActorId;
   workspaceId: WorkspaceId;
 }
@@ -33,6 +35,13 @@ export class EntityWorkspaceUnavailableError extends Error {
   constructor() {
     super("The workspace is unavailable or inaccessible to the actor.");
     this.name = "EntityWorkspaceUnavailableError";
+  }
+}
+
+export class EntityForbiddenError extends Error {
+  constructor() {
+    super("Only organization owners and administrators can edit organization entities.");
+    this.name = "EntityForbiddenError";
   }
 }
 

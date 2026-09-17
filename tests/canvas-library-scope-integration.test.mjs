@@ -17,6 +17,7 @@ test("personal asset readiness is independent of Entity failure but never hides 
   const context = vm.createContext({ state, window: { parent: {} } });
   new vm.Script(appFunction("getPersonalCatalogStatus")).runInContext(context);
   assert.equal(context.getPersonalCatalogStatus(), "");
+  assert.equal(context.getPersonalCatalogStatus({ includeEntities: true }), "unavailable");
   state.hostCapabilities.mediaLibrary = "unavailable";
   state.hostCapabilities.workspaceCatalog = "ready";
   assert.equal(context.getPersonalCatalogStatus(), "unavailable");
@@ -78,9 +79,10 @@ test("delete result projects a mixed group and media removal before the later Ho
   const entities = assets.map((asset) => ({ id: `${asset.assetId}-group`, name: `${asset.assetId} group`, version: 1,
     description: "", mediaRefs: [{ assetId: asset.assetId, order: 0 }], coverAssetId: asset.assetId }));
   const entries = assets.map((asset) => ({ ...asset, space: "personal", folderId: null, tagIds: [] }));
-  context.registerHostWorkspaceAssetCatalog({ assets, entities, libraryCatalog: { folders: [], tags: [], entries } });
+  const entityEntries = entities.map((entity) => ({ entityId: entity.id, space: "personal", folderId: null, tagIds: [] }));
+  context.registerHostWorkspaceAssetCatalog({ assets, entities, libraryCatalog: { folders: [], tags: [], entries, entityEntries } });
   assert.deepEqual(Array.from(context.state.libraryTagFilter.tagIds), ["builtin:object"]);
-  const result = { folders: [], tags: [], entries: [entries[1]] };
+  const result = { folders: [], tags: [], entries: [entries[1]], entityEntries: [entityEntries[1]] };
   context.onDeleted(result, [{ kind: "entity", id: entities[0].id, expectedVersion: 1 }, { kind: "media", id: assets[0].assetId }]);
   assert.deepEqual(Array.from(context.hostPersonalMediaIds), ["keep"]);
   assert.equal(context.assetLibraryStore.hasPlacement({ kind: "entity", id: "remove-group" }, "personal"), false);
@@ -88,4 +90,19 @@ test("delete result projects a mixed group and media removal before the later Ho
   context.registerHostWorkspaceAssetCatalog({ assets: [assets[1]], entities: [entities[1]], libraryCatalog: result });
   assert.deepEqual(errors, []);
   assert.deepEqual(JSON.parse(JSON.stringify(context.assetLibraryStore.listItems({ kind: "all", space: "personal" }).map((item) => item.id))).sort(), ["keep", "keep-group"]);
+});
+
+
+test("organization transient canvas references restore from scoped library entries without becoming personal assets", () => {
+  const restored = [];
+  const catalog = { entries: [{ assetId: "organization-image", contentUrl: "blob:organization-live", space: "organization" }], entityEntries: [], tags: [], folders: [] };
+  const context = vm.createContext({ Map, hostPersonalMediaIds: new Set(),
+    workspaceAssetToLibraryMedia: (asset) => ({ id: asset.assetId, url: asset.contentUrl }),
+    registerHostMediaLibrary() {}, restoreTransientCanvasMedia: (media) => restored.push(...media),
+    renderAssetLibrary() {}, renderSelectionToolbar() {}, showActionToast: (message) => { throw new Error(message); } });
+  new vm.Script(appFunction("registerHostWorkspaceAssetCatalog")).runInContext(context);
+  context.registerHostWorkspaceAssetCatalog({ assets: [], entities: [], libraryCatalog: catalog });
+  assert.deepEqual(restored.map((media) => media.id), ["organization-image"]);
+  assert.equal(restored[0].url, "blob:organization-live");
+  assert.equal(context.hostPersonalMediaIds.size, 0);
 });

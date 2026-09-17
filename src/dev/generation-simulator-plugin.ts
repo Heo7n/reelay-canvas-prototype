@@ -1,7 +1,7 @@
 import type { HtmlTagDescriptor, Plugin } from "vite";
 
-export function generationSimulatorTags(pathname: string): HtmlTagDescriptor[] {
-  if (pathname !== "/index.html") return [];
+export function generationSimulatorTags(pathname: string, enabled = false): HtmlTagDescriptor[] {
+  if (!enabled || pathname !== "/index.html") return [];
   return [
     { tag: "link", attrs: { rel: "stylesheet", href: "/src/dev/generation-simulator.css" }, injectTo: "head" },
     { tag: "script", attrs: { src: "/src/dev/generation-simulator.js", defer: true }, injectTo: "head" },
@@ -16,7 +16,7 @@ export function generationSimulatorPlugin(): Plugin {
     transformIndexHtml: {
       order: "post",
       handler(html, context) {
-        const tags = generationSimulatorTags(context.path);
+        const tags = generationSimulatorTags(context.path, process.env.REELAY_GENERATION_SIMULATOR === "1");
         return tags.length ? { html, tags } : html;
       },
     },

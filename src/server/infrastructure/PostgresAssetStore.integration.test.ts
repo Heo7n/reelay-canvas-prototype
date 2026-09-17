@@ -333,3 +333,25 @@ describe("PostgreSQL asset persistence", () => {
     }
   });
 });
+
+
+it("renames organization placement metadata independently of personal/source names and checks organization management", async () => {
+  const pool = createPool();
+  const actorId = "actor-tianmaochao";
+  const workspaceId = "workspace-organization-reelay";
+  const store = new PostgresAssetStore(pool);
+  try {
+    const checksumSha256 = "e".repeat(64);
+    const intent = await store.createUploadIntent({workspaceId, actorId, idempotencyKey: "rename-organization-media", mediaKind: "image", displayName: "Source.png", contentType: "image/png", byteSize: 10, checksumSha256});
+    await store.recordUpload({workspaceId, actorId, uploadIntentId: intent.id, objectKey: intent.objectKey, contentType: "image/png", byteSize: 10, checksumSha256, etag: checksumSha256});
+    const asset = await store.finalizeUpload({workspaceId, actorId, uploadIntentId: intent.id});
+    const folder = await store.createLibraryFolder({workspaceId, actorId, space: "organization", parentId: null, name: "Rename folder"});
+    await store.saveLibrary({workspaceId, actorId, projectId: "project-scifi-trailer", space: "organization", folderId: folder.id, tagIds: ["builtin:character"], items: [{assetId: asset.id, displayName: "Shared.png", action: "add"}]});
+    await expect(store.renamePersonalAsset({workspaceId, actorId: "actor-chenxi", assetId: asset.id, space: "organization", displayName: "Denied.png"})).rejects.toMatchObject({code: "forbidden"});
+    await expect(store.renamePersonalAsset({workspaceId, actorId: "actor-linjing", assetId: asset.id, space: "organization", displayName: "Changed.png"})).resolves.toMatchObject({displayName: "Changed.png"});
+    const catalog = await store.listLibrary({workspaceId, actorId});
+    expect(catalog.entries.find((entry) => entry.assetId === asset.id && entry.space === "organization")).toMatchObject({displayName: "Changed.png", folderId: folder.id, tagIds: ["builtin:character"]});
+    await expect(store.getPersonalAsset({workspaceId, actorId, assetId: asset.id})).resolves.toMatchObject({displayName: "Source.png"});
+    expect((await pool.query("SELECT display_name FROM workspace_media_assets WHERE id=$1", [asset.id])).rows[0].display_name).toBe("Source.png");
+  } finally { await pool.end(); }
+});

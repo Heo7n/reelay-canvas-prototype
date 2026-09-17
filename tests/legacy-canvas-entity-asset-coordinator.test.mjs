@@ -141,3 +141,19 @@ test("passes tag snapshots through one entity command and returns authoritative 
   dispatch({ source: "reelay-shell", type: "host:entity-command-result", protocolVersion: 1, instanceId: "instance-1", requestId: posted[1].requestId, entity: { ...entity, libraryTagIds: [] } });
   assert.deepEqual(JSON.parse(JSON.stringify((await creating).libraryTagIds)), []);
 });
+
+
+test("organization commands retain scope and accept media exclusively from the organization library catalog", async () => {
+  const { coordinator, posted, dispatch, catalogs } = harness();
+  const organizationEntity = { ...entity, space: "organization" };
+  assert.equal(dispatch({ source: "reelay-shell", type: "host:workspace-asset-catalog", protocolVersion: 1,
+    requestId: "org-catalog", instanceId: "instance-1", assets: [], entities: [organizationEntity],
+    libraryCatalog: { entries: [{ ...asset, space: "organization" }], entityEntries: [], tags: [], folders: [] } }), true);
+  assert.equal(catalogs[0].entities[0].space, "organization");
+  const operation = coordinator.createEntity({ space: "organization", name: "主体", mediaRefs: [{ mediaId: asset.assetId }] });
+  assert.equal(posted[0].space, "organization");
+  dispatch({ source: "reelay-shell", type: "host:entity-command-result", protocolVersion: 1,
+    requestId: posted[0].requestId, instanceId: "instance-1", entity: organizationEntity });
+  assert.equal((await operation).space, "organization");
+  assert.throws(() => coordinator.createEntity({ space: "platform", name: "主体", mediaRefs: [{ mediaId: asset.assetId }] }), /空间/);
+});

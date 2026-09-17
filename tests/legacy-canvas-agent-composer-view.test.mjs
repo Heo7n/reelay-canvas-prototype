@@ -13,8 +13,7 @@ function fixture(t) {
     <section id="composer"><textarea id="prompt">保留我的提示词</textarea>
       <button id="add">添加</button><div id="menu" class="hidden" role="menu">
         <button data-agent-reference-source="local">本地上传</button>
-        <button data-agent-reference-source="library">资产库</button>
-        <button data-agent-reference-source="canvas">画布选中素材</button></div>
+        <button data-agent-reference-source="library">选择素材</button></div>
       <div class="agent-composer-top-actions"><button id="agentPromptOptimizationBtn">优化</button>
       <button id="agentAdvancedBtn">高级设置</button></div>
     </section><div id="messages"></div><button id="outside">其他</button></body>`, { runScripts: "outside-only" });
@@ -32,7 +31,6 @@ function fixture(t) {
   let nextFrame = 0;
   let scope = { projectId: "project-a", conversation: { id: "conversation-a", messages: [] } };
   let busy = false;
-  let selected = [];
   let previewOptions;
   let previewClose = 0;
   let previewDispose = 0;
@@ -48,10 +46,9 @@ function fixture(t) {
     .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   const controller = view.REELAY_CANVAS_AGENT_COMPOSER_VIEW.createController({
     document, composer, addButton: add, menu, messages,
-    getScope: () => scope, isBusy: () => busy, getSelectedAssets: () => selected,
+    getScope: () => scope, isBusy: () => busy,
     onChooseFiles: (captured) => calls.push({ action: "local", scope: captured }),
     onLibrary: (captured) => calls.push({ action: "library", scope: captured }),
-    onAddSelected: (assets, captured) => calls.push({ action: "selected", assets, scope: captured }),
     onDropFiles: (files, captured) => calls.push({ action: "files", files, scope: captured }),
     onDropLibrary: (transfer, captured) => calls.push({ action: "drop-library", transfer, scope: captured }),
     hasLibraryDrag: (transfer) => transfer.types?.includes("application/reelay-assets"),
@@ -78,7 +75,7 @@ function fixture(t) {
   t.after(() => { controller.dispose(); view.close(); });
   return { view, document, composer, prompt, add, menu, messages, outside, calls, frames, controller, pointer, key, drag,
     get scope() { return scope; }, set scope(value) { scope = value; },
-    set busy(value) { busy = value; }, set selected(value) { selected = value; },
+    set busy(value) { busy = value; },
     get previews() { return previewOptions; }, get previewClose() { return previewClose; }, get previewDispose() { return previewDispose; },
     frame() { for (const [id, callback] of [...frames]) if (frames.delete(id)) callback(); },
   };
@@ -93,7 +90,7 @@ test("reference menu portals above its trigger, preserves prompt draft and route
   assert.equal(f.menu.style.position, "fixed");
   assert.equal(f.menu.dataset.placement, "top-start");
   assert.ok(Number.parseFloat(f.menu.style.left) <= 802);
-  assert.equal(f.menu.querySelector('[data-agent-reference-source="canvas"]').disabled, true);
+  assert.deepEqual([...f.menu.querySelectorAll("button")].map((button) => button.textContent), ["本地上传", "选择素材"]);
   assert.equal(f.document.activeElement, f.prompt);
   f.menu.querySelector('[data-agent-reference-source="local"]').click();
   assert.equal(f.menu.hidden, true);
@@ -104,11 +101,11 @@ test("reference menu portals above its trigger, preserves prompt draft and route
   assert.equal(f.prompt.selectionEnd, 5);
   assert.equal(f.prompt.scrollTop, 23);
   assert.equal(f.frames.size, 0);
-  f.selected = [{ id: "image", type: "image" }];
   f.controller.setMenuOpen(true);
-  f.menu.querySelector('[data-agent-reference-source="canvas"]').click();
-  assert.equal(f.calls.at(-1).action, "selected");
-  assert.equal(f.calls.at(-1).assets[0].id, "image");
+  f.menu.querySelector('[data-agent-reference-source="library"]').click();
+  assert.equal(f.calls.at(-1).action, "library");
+  assert.equal(f.calls.at(-1).scope.conversation, original.conversation);
+  assert.equal(f.calls.at(-1).scope.projectId, original.projectId);
 });
 
 test("menu supports keyboard navigation, Escape, outside click and focus dismissal without canvas side effects", (t) => {

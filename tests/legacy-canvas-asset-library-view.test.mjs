@@ -13,6 +13,20 @@ new vm.Script(await readFile(new URL("../src/legacy-canvas/canvas-file-name.js",
 new vm.Script(source, { filename: "canvas-asset-library-view.js" }).runInContext(context);
 const view = context.REELAY_CANVAS_ASSET_LIBRARY_VIEW;
 
+test("subject canvas action is a separate cover overlay and respects interaction modes", () => {
+  const options = { entity: { id: "hero", name: "角色" }, mutable: true, canAddToCanvas: true };
+  const card = JSDOM.fragment(view.renderEntityCard(options));
+  const add = card.querySelector("[data-library-entity-add]");
+  assert.equal(add.dataset.libraryEntityAdd, "hero");
+  assert.equal(add.parentElement, card.querySelector("article"));
+  assert.equal(card.querySelector("[data-library-preview] button"), null);
+  for (const mode of [{ referencePicking: true }, { selectionMode: true }, { menuOpen: true }, { renaming: true }, { canAddToCanvas: false }]) {
+    assert.equal(JSDOM.fragment(view.renderEntityCard({ ...options, ...mode })).querySelector("[data-library-entity-add]"), null);
+  }
+  // Using an organization subject does not require permission to manage it.
+  assert.ok(JSDOM.fragment(view.renderEntityCard({ ...options, mutable: false, space: "organization" })).querySelector("[data-library-entity-add]"));
+});
+
 test("multi-selection removes individual menus from media, groups and folders and restores them on exit", () => {
   const options = { space: "personal", mutable: true, menuOpen: true };
   for (const [render, item, selectable] of [
@@ -691,7 +705,7 @@ test("browse cards expose direct selection without exposing edits in read-only s
   assert.match(view.renderMediaCard({ media, mutable: true }), /data-library-select="media:video"/);
   assert.doesNotMatch(view.renderMediaCard({ media, mutable: false }), /data-library-select/);
   assert.match(view.renderMediaCard({ media, space: "platform", mutable: false }), /data-library-select="media:video"/);
-  assert.match(view.renderEntityCard({ entity: { id: "entity" }, mutable: true }), /data-library-select="entity:entity"/);
+  assert.doesNotMatch(view.renderEntityCard({ entity: { id: "entity" }, mutable: true }), /data-library-select=/);
   assert.doesNotMatch(view.renderEntityCard({ entity: { id: "entity" }, mutable: false }), /data-library-select/);
   assert.doesNotMatch(view.renderFolderCard({ folder: { id: "folder" } }), /data-library-select=/);
 });
@@ -868,7 +882,7 @@ test("Material groups render one cover and a count while retaining media identit
   assert.match(markup, /aria-label="打开主体 主角素材组"/);
   assert.doesNotMatch(markup, /asset-library-entity-collage/);
   assert.match(markup, /asset-library-card-namebar" data-library-rename="entity-1" data-library-item-kind="entity"/);
-  assert.match(markup, /data-library-select="entity:entity-1"/);
+  assert.doesNotMatch(markup, /data-library-select=/);
   for (const action of ["edit", "rename", "set-tags", "delete"]) {
     assert.match(markup, new RegExp(`data-library-menu-item="${action}"`));
   }
@@ -1230,12 +1244,13 @@ test("mixed search selection disables incompatible cards and offers separate sel
   ]) {
     const blocked = JSDOM.fragment(render({ selectionMode: true, selectionDisabled: true }));
     assert.equal(blocked.querySelector('[data-library-preview]').disabled, true);
-    assert.equal(blocked.querySelector('[data-library-select]').disabled, true);
-    assert.equal(blocked.querySelector('[data-library-select]').title, "仅可同时选择同类结果");
+    const selection = blocked.querySelector('[data-library-select]') || blocked.querySelector('[data-library-preview]');
+    assert.equal(selection.disabled, true);
+    assert.equal(selection.title, "仅可同时选择同类结果");
     assert.equal(blocked.querySelector('[data-library-menu-toggle]'), null);
     const permitted = JSDOM.fragment(render({ selectionMode: true, selectionDisabled: false }));
     assert.equal(permitted.querySelector('[data-library-preview]').disabled, false);
-    assert.equal(permitted.querySelector('[data-library-select]').disabled, false);
+    assert.equal((permitted.querySelector('[data-library-select]') || permitted.querySelector('[data-library-preview]')).disabled, false);
   }
   const chooser = JSDOM.fragment(view.renderCommandBar({
     mutable: true, selectionMode: true, menu: "select-kind",
@@ -1290,4 +1305,68 @@ test("subject details opened from search return to search results without losing
   assert.equal(back.title, "返回搜索结果");
   assert.equal(back.textContent, "搜索结果");
   assert.equal(fragment.querySelector('.asset-library-entity-filter-label strong').textContent, "人物设定");
+});
+
+
+test("reference picking uses one pressed preview control and hides library management", () => {
+  const options = {
+    media: { id: "reference", name: "角色.png", mediaKind: "image" },
+    mutable: true, selectionMode: true, selected: true, menuOpen: true, renaming: true,
+    referencePicking: true,
+  };
+  for (const referenceSelected of [false, true]) {
+    const fragment = JSDOM.fragment(view.renderMediaCard({ ...options, referenceSelected }));
+    const card = fragment.querySelector("article");
+    const button = card.querySelector("button");
+    assert.equal(card.draggable, false);
+    assert.equal(card.classList.contains("reference-selected"), referenceSelected);
+    assert.equal(button.getAttribute("aria-pressed"), String(referenceSelected));
+    assert.equal(button.getAttribute("aria-label"), `${referenceSelected ? "取消参考" : "选择参考"} 角色.png`);
+    assert.equal(button.dataset.libraryPreview, "reference");
+    assert.equal(card.querySelectorAll("button").length, 1);
+    assert.equal(card.querySelector("[data-library-select], [data-library-menu-toggle], input"), null);
+    assert.equal(card.querySelector(".asset-library-reference-check").getAttribute("aria-hidden"), "true");
+  }
+  const disabled = JSDOM.fragment(view.renderMediaCard({ ...options, referenceDisabled: true, referenceHint: "不支持音频" }));
+  assert.equal(disabled.querySelector("button").disabled, true);
+  assert.equal(disabled.querySelector("button").title, "不支持音频");
+});
+
+test("reference picking keeps subjects browsable and hides conflicting toolbar controls", () => {
+  const options = { referencePicking: true, mutable: true, selectionMode: true, selected: true, menuOpen: true, renaming: true };
+  const subject = JSDOM.fragment(view.renderEntityCard({ ...options, entity: { id: "subject", name: "角色设定" } }));
+  assert.equal(subject.querySelectorAll("button").length, 1);
+  assert.equal(subject.querySelector("button").getAttribute("aria-label"), "查看主体素材 角色设定");
+  assert.equal(subject.querySelector("article").classList.contains("selected"), false);
+  assert.equal(subject.querySelector("input"), null);
+  for (const section of ["media", "entity"]) {
+    const commands = JSDOM.fragment(view.renderCommandBar({ ...options, section, menu: "add", canCreateFolder: true }));
+    assert.ok(commands.querySelector("[data-library-search-toggle]"));
+    assert.ok(commands.querySelector("[data-library-filter-toggle]"));
+    assert.equal(commands.querySelector("[data-library-add-toggle], [data-library-create-entity], [data-library-selection-toggle], [data-library-select-all], [data-library-batch-toggle]"), null);
+    assert.equal(commands.querySelector(".asset-library-add-menu"), null);
+  }
+});
+
+test("live reference toggles retain preview playback and keyboard focus", (t) => {
+  const dom = new JSDOM("<div id='grid'></div>");
+  t.after(() => dom.window.close());
+  const grid = dom.window.document.querySelector("#grid");
+  const render = (referenceSelected) => view.renderMediaCard({
+    media: { id: "clip", name: "镜头", mediaKind: "video", url: "https://example.test/clip.mp4" },
+    referencePicking: true, referenceSelected,
+  });
+  view.syncGrid(grid, render(false));
+  const button = grid.querySelector("button");
+  const video = grid.querySelector("video");
+  video.currentTime = 2;
+  button.focus();
+  for (const selected of [true, false]) {
+    view.syncGrid(grid, render(selected));
+    assert.equal(grid.querySelector("button"), button);
+    assert.equal(grid.querySelector("video"), video);
+    assert.equal(video.currentTime, 2);
+    assert.equal(dom.window.document.activeElement, button);
+    assert.equal(button.getAttribute("aria-pressed"), String(selected));
+  }
 });

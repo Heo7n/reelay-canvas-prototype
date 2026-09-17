@@ -1,3 +1,4 @@
+import { MediaLibraryError } from "../../domain/asset/media-library";
 import { createHash } from "node:crypto";
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -591,9 +592,11 @@ export async function registerAssetRoutes(
         workspaceId: params.data.workspaceId,
         assetId: params.data.assetId,
         displayName: body.data.displayName,
+        space: body.data.space,
       });
       return { asset: workspaceAssetDto(asset) };
     } catch (error) {
+      if (error instanceof MediaLibraryError && error.code === "forbidden") return reply.code(403).send({ error: { code: "forbidden", message: "只有组织所有者或管理员可以重命名组织素材。" } });
       if (error instanceof PersonalAssetUnavailableError) {
         return reply.code(404).send({ error: { code: "asset_not_found", message: "素材不存在。" } });
       }

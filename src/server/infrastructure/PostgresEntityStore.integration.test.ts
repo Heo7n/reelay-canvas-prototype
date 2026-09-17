@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   EntityCoverMediaInvalidError,
+  EntityForbiddenError,
+  EntityWorkspaceUnavailableError,
   EntityMediaUnavailableError,
   EntityVersionConflictError,
 } from "../application/EntityStore";
@@ -27,6 +29,7 @@ const entityTables = [
   "entity_media_references",
   "entity_placements",
   "entity_personal_media_bindings",
+  "entity_organization_media_bindings",
 ];
 
 let adminPool: Pool;
@@ -113,6 +116,7 @@ describe("PostgreSQL Entity persistence", () => {
   it("migrates the Entity tables with server-only access", async () => {
     expect(appliedMigrations).toContain("0012_workspace_entities.sql");
     expect(appliedMigrations).toContain("0013_entity_personal_media_bindings.sql");
+    expect(appliedMigrations).toContain("0019_organization_entities.sql");
     const pool = createPool();
     try {
       const rls = await pool.query<{ relname: string; relrowsecurity: boolean }>(
@@ -395,4 +399,55 @@ describe("PostgreSQL Entity persistence", () => {
       await pool.end();
     }
   });
+});
+
+
+it("persists organization subjects with shared ownership, scoped idempotency, manager edits and binding protection", async () => {
+  const pool = createPool();
+  const workspaceId = "workspace-org-subjects";
+  const member = "actor-org-subject-member";
+  const admin = "actor-org-subject-admin";
+  try {
+    await pool.query("INSERT INTO users (id, display_name) VALUES ($1, 'Member'), ($2, 'Admin')", [member, admin]);
+    await pool.query("INSERT INTO workspaces (id, kind, name) VALUES ($1, 'organization', 'Shared subjects')", [workspaceId]);
+    await pool.query("INSERT INTO memberships (workspace_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'admin')", [workspaceId, member, admin]);
+    const media = await createPersonalAsset(new PostgresAssetStore(pool), member, workspaceId, "org-shared");
+    const entities = new PostgresEntityStore(pool);
+    const input = {workspaceId, actorId: member, idempotencyKey: "scoped-subject-request", name: "Shared subject", mediaAssetIds: [media.id]};
+    const personal = await entities.createPersonalEntity(input);
+    await expect(entities.createPersonalEntity({...input, space: "organization"})).rejects.toBeInstanceOf(EntityMediaUnavailableError);
+    await pool.query(`INSERT INTO media_asset_placements (id, workspace_id, asset_id, scope_kind, owner_user_id, created_by_user_id)
+      VALUES ('org-subject-media', $1, $2, 'organization', NULL, $3)`, [workspaceId, media.id, member]);
+    await pool.query(`INSERT INTO media_library_tags (id, workspace_id, scope_kind, owner_user_id, name, name_key)
+      VALUES ('org-subject-tag', $1, 'organization', NULL, 'Shared', 'shared'), ('private-subject-tag', $1, 'personal', $2, 'Private', 'private')`, [workspaceId, member]);
+    const sharedInput = {...input, space: "organization" as const, tagIds: ["org-subject-tag"]};
+    const shared = await entities.createPersonalEntity(sharedInput);
+    expect(shared.space).toBe("organization");
+    expect(shared.id).not.toBe(personal.id);
+    await expect(entities.createPersonalEntity(sharedInput)).resolves.toEqual(shared);
+    expect(await new PostgresEntityStore(pool).getPersonalEntity({workspaceId, actorId: admin, entityId: shared.id, space: "organization"})).toEqual(shared);
+    await expect(entities.getPersonalEntity({workspaceId, actorId: admin, entityId: shared.id})).resolves.toBeNull();
+    await expect(entities.createPersonalEntity({...sharedInput, idempotencyKey: "wrong-tag-scope", tagIds: ["private-subject-tag"]})).rejects.toMatchObject({code: "tag_not_found"});
+    const edit = {...sharedInput, entityId: shared.id, expectedVersion: 1, expectedTagIds: ["org-subject-tag"], tagIds: [], name: "Updated"};
+    await expect(entities.updatePersonalEntity(edit)).rejects.toBeInstanceOf(EntityForbiddenError);
+    await expect(entities.updatePersonalEntity({...edit, actorId: admin, expectedTagIds: []})).rejects.toMatchObject({code: "placement_changed"});
+    const results = await Promise.allSettled([
+      entities.updatePersonalEntity({...edit, actorId: admin}),
+      new PostgresEntityStore(pool).updatePersonalEntity({...edit, actorId: admin}),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({reason: expect.any(EntityVersionConflictError)});
+    await expect(pool.query("DELETE FROM media_asset_placements WHERE id='org-subject-media'")).rejects.toMatchObject({code: "23503", constraint: "entity_organization_media_bindings_organization_asset_fkey"});
+    await pool.query("DELETE FROM memberships WHERE workspace_id=$1 AND user_id=$2", [workspaceId, member]);
+    await expect(entities.listPersonalEntities({workspaceId, actorId: member, space: "organization"})).rejects.toBeInstanceOf(EntityWorkspaceUnavailableError);
+    await expect(new PostgresAssetStore(pool).getLibraryAsset({workspaceId, actorId: admin, assetId: media.id})).resolves.toMatchObject({id: media.id, storageOwner: {kind: "personal", id: member}});
+    await expect(new PostgresAssetStore(pool).getLibraryAsset({workspaceId, actorId: member, assetId: media.id})).resolves.toBeNull();
+    expect(await entities.getPersonalEntity({workspaceId, actorId: admin, entityId: shared.id, space: "organization"})).toMatchObject({id: shared.id, version: 2, libraryTagIds: []});
+    await pool.query("INSERT INTO entity_library_deletions (workspace_id, entity_id, scope_kind, owner_user_id) VALUES ($1,$2,'organization',NULL)", [workspaceId, shared.id]);
+    await pool.query("DELETE FROM entity_placements WHERE workspace_id=$1 AND entity_id=$2", [workspaceId, shared.id]);
+    await pool.query("INSERT INTO memberships (workspace_id, user_id, role) VALUES ($1,$2,'member')", [workspaceId, member]);
+    await expect(new PostgresEntityStore(pool).createPersonalEntity({...sharedInput, name: "Updated", tagIds: [], coverMediaId: null})).rejects.toMatchObject({reason: "idempotency_key_reused"});
+    expect((await pool.query("SELECT 1 FROM entity_organization_media_bindings WHERE workspace_id=$1 AND entity_id=$2", [workspaceId, shared.id])).rowCount).toBe(0);
+    await expect(pool.query("DELETE FROM media_asset_placements WHERE id='org-subject-media'")).resolves.toMatchObject({rowCount: 1});
+  } finally { await pool.end(); }
 });

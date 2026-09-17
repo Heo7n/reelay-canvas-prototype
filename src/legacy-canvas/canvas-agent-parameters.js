@@ -87,18 +87,13 @@
     });
     function onDuration(event) {
       const input = event.target.closest("[data-duration-range], [data-duration-number]");
-      if (!input || !current) return;
+      if (!input || input.disabled || input.readOnly || !current) return;
       if (input.value === "" && event.type === "input") return;
-      if (input.value !== "") update("duration", `${input.value}s`);
-      const seconds = Number.parseFloat(current.duration);
-      for (const control of menu.querySelectorAll("[data-duration-range], [data-duration-number]")) {
-        if (control !== input || event.type === "change") control.value = String(seconds);
-        if (control.matches("[data-duration-range]")) {
-          const progress = (seconds - Number(control.min)) / (Number(control.max) - Number(control.min)) * 100;
-          control.style.setProperty("--duration-progress", `${progress}%`);
-          control.setAttribute("aria-valuetext", `${seconds} 秒`);
-        }
-      }
+      const range = menu.querySelector("[data-duration-range]");
+      update("duration", root.REELAY_DURATION_CONTROLS.read(range, input));
+      root.REELAY_DURATION_CONTROLS.sync(range, current.duration, {
+        preserveNumber: input !== range && event.type === "input",
+      });
     }
     menu.addEventListener("input", onDuration);
     menu.addEventListener("change", onDuration);

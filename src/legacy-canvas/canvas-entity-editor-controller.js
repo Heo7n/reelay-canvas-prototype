@@ -17,6 +17,7 @@
       throw new TypeError("Canvas Entity editor controller dependencies are incomplete.");
     }
     const getAvailableMedia = requireFunction(options.getAvailableMedia, "getAvailableMedia");
+    const createTag = typeof options.createTag === "function" ? options.createTag : null;
     const getTagOptions = typeof options.getTagOptions === "function" ? options.getTagOptions : () => [];
     const persistFiles = requireFunction(options.persistFiles, "persistFiles");
     const renameMedia = requireFunction(options.renameMedia, "renameMedia");
@@ -33,10 +34,12 @@
       mutable: options.mutable !== false,
       canAddFromLibrary: options.canAddFromLibrary !== false,
       canUpload: options.canUpload !== false,
+      canRenameMedia: options.canRenameMedia !== false,
     });
 
     let draft = null;
     let mode = "create";
+    let space = "personal";
     let entityId = null;
     let submitting = false;
     let uploading = false;
@@ -47,7 +50,10 @@
     let errors = {};
     let pickerOpen = false;
     let tagPickerOpen = false;
-    let tagQuery = "";
+    let tagCreateOpen = false;
+    let tagCreateName = "";
+    let tagCreateError = "";
+    let tagCreateRequest = null;
     let pickerQuery = "";
     let pickerFilter = "all";
     let pickerSelectedIds = new Set();
@@ -61,7 +67,7 @@
     let createKeys = new Map();
 
     function isBusy() {
-      return submitting || uploading || mediaRenameBusy || Boolean(closeRequest) || Boolean(exitSession);
+      return submitting || uploading || mediaRenameBusy || Boolean(tagCreateRequest) || Boolean(closeRequest) || Boolean(exitSession);
     }
 
     function canEditDraft() {
@@ -103,6 +109,7 @@
         sourceNotice: [sourceNotice, getMediaSaveNotice(media, { mode })].filter(Boolean).join(" "),
         canAddFromLibrary: permissions.canAddFromLibrary,
         canUpload: permissions.canUpload,
+        canRenameMedia: permissions.canRenameMedia,
         submitting,
         uploading,
         mediaRenameBusy,
@@ -111,7 +118,11 @@
         errors: { ...(state.errors.tags ? { tags: state.errors.tags } : {}), ...errors },
         tagOptions: getTagOptions(),
         tagPickerOpen,
-        tagQuery,
+        canCreateTag: Boolean(createTag),
+        tagCreateOpen,
+        tagCreateName,
+        tagCreateError,
+        tagCreating: Boolean(tagCreateRequest),
       });
       root.REELAY_CANVAS_MEDIA_PREVIEW.renderPreservingMedia(host, markup, "[data-entity-editor-preview]");
       const mediaGrid = host.querySelector('.entity-editor-media-grid');
@@ -139,7 +150,7 @@
     }
 
     function startMediaRename(mediaId) {
-      if (!canEditDraft()) return;
+      if (!canEditDraft() || !permissions.canRenameMedia) return;
       const media = currentMedia().find((item) => item.id === mediaId);
       if (!media) return;
       const parts = splitFileName(media.name || media.displayName);
@@ -159,7 +170,7 @@
         renderEditor({ focus: "[data-entity-editor-preview-name]" });
         return false;
       }
-      if (!canEditDraft()) return false;
+      if (!canEditDraft() || !permissions.canRenameMedia) return false;
       const baseName = String(input?.value ?? mediaRenameValue).trim();
       if (!baseName) {
         onError(new Error("文件名称不能为空"));
@@ -245,6 +256,7 @@
       }
       pickerMedia = availablePickerMedia();
       pickerHost.innerHTML = view.renderMediaPicker({
+        space,
         media: pickerMedia,
         query: pickerQuery,
         filter: pickerFilter,
@@ -307,7 +319,7 @@
       mediaRenameExtension = "";
       errors = {};
       tagPickerOpen = false;
-      tagQuery = "";
+      resetTagCreation();
       closePicker();
       renderEditor();
       onVisibilityChange(false, { entityId: closedEntityId });
@@ -405,8 +417,9 @@
     function open(input = {}) {
       if (draft) finishClose();
       mode = input.mode === "edit" ? "edit" : "create";
+      space = input.space === "organization" ? "organization" : "personal";
       tagPickerOpen = false;
-      tagQuery = "";
+      resetTagCreation();
       entityId = mode === "edit" ? String(input.entity?.id || "").trim() : null;
       errors = {};
       submitting = false;
@@ -419,6 +432,7 @@
         mutable: basePermissions.mutable && input.mutable !== false,
         canAddFromLibrary: basePermissions.canAddFromLibrary && input.canAddFromLibrary !== false,
         canUpload: basePermissions.canUpload && input.canUpload !== false,
+        canRenameMedia: basePermissions.canRenameMedia && input.canRenameMedia !== false,
       };
       sourceNotice = String(input.sourceNotice || "");
       returnFocus = typeof input.returnFocus === "function" ? input.returnFocus : null;
@@ -462,22 +476,62 @@
       return Boolean(nextFilter);
     }
 
+    function resetTagCreation() {
+      tagCreateOpen = false;
+      tagCreateName = "";
+      tagCreateError = "";
+      tagCreateRequest = null;
+    }
+
+    async function submitTagCreation() {
+      if (!canEditDraft() || !createTag || !tagCreateOpen) return;
+      const name = tagCreateName.trim();
+      if (!name || name.length > 40) {
+        tagCreateError = "标签名称需为 1–40 个字符。";
+        renderEditor({ focus: '[data-entity-editor-tag-name]' });
+        return;
+      }
+      const request = { draft, contextValid: isContextValid };
+      tagCreateRequest = request;
+      tagCreateError = "";
+      renderEditor();
+      try {
+        const tag = await createTag(name);
+        if (draft !== request.draft || tagCreateRequest !== request) return;
+        if (!request.contextValid()) { resetTagCreation(); renderEditor(); return; }
+        if (!tag?.id) throw new Error("新建标签失败，请重试。");
+        draft.setTagIds([...new Set([...draft.getState().tagIds, tag.id])]);
+        clearErrors('tags');
+        resetTagCreation();
+        renderEditor({ focus: '[data-entity-editor-tag-create]' });
+      } catch (error) {
+        if (draft !== request.draft || tagCreateRequest !== request) return;
+        tagCreateRequest = null;
+        if (!request.contextValid()) { resetTagCreation(); renderEditor(); return; }
+        tagCreateError = error?.message || "新建标签失败，请重试。";
+        renderEditor({ focus: '[data-entity-editor-tag-name]' });
+      }
+    }
+
     function closeTagPicker({ restoreFocus = false } = {}) {
       if (!tagPickerOpen) return;
       tagPickerOpen = false;
-      tagQuery = "";
+      resetTagCreation();
       host.querySelector('[data-entity-editor-tag-popover]')?.remove();
       const toggle = host.querySelector('[data-entity-editor-tags-toggle]');
       toggle?.setAttribute('aria-expanded', 'false');
       toggle?.removeAttribute('aria-controls');
+      syncTextState();
       if (restoreFocus) toggle?.focus({ preventScroll: true });
     }
 
     host.addEventListener("keydown", (event) => {
       if (!draft) return;
-      if (event.target.matches?.('[data-entity-editor-tag-query]') && event.key === 'Enter') {
-        if (!event.isComposing && event.keyCode !== 229) event.preventDefault();
+      if (event.target.matches?.('[data-entity-editor-tag-name]') && event.key === 'Enter') {
         event.stopPropagation();
+        if (event.isComposing || event.keyCode === 229) return;
+        event.preventDefault();
+        void submitTagCreation();
         return;
       }
       if (tagPickerOpen && event.key === 'Escape' && !event.isComposing && event.keyCode !== 229) {
@@ -520,13 +574,10 @@
 
     host.addEventListener("input", (event) => {
       if (!canEditDraft()) return;
-      if (event.target.matches('[data-entity-editor-tag-query]')) {
-        tagQuery = event.target.value;
-        const list = host.querySelector('[data-entity-editor-tag-options]');
-        if (list) {
-          list.innerHTML = view.renderEntityTagOptions({ tagOptions: getTagOptions(), tagIds: draft.getState().tagIds, tagQuery, mutable: permissions.mutable });
-          refreshIcons();
-        }
+      if (event.target.matches('[data-entity-editor-tag-name]')) {
+        tagCreateName = event.target.value;
+        tagCreateError = "";
+        host.querySelector('[data-entity-editor-tag-error]')?.remove();
       } else if (event.target.matches("[data-entity-editor-preview-rename]")) {
         mediaRenameValue = event.target.value;
       } else if (event.target.matches("[data-entity-editor-name]")) {
@@ -570,9 +621,24 @@
         if (tagPickerOpen) closeTagPicker({ restoreFocus: true });
         else {
           tagPickerOpen = true;
-          tagQuery = "";
-          renderEditor({ focus: '[data-entity-editor-tag-query]' });
+          resetTagCreation();
+          renderEditor({ focus: '[data-entity-editor-tag-toggle]' });
         }
+        return;
+      }
+      if (event.target.closest('[data-entity-editor-tag-create]')) {
+        if (!canEditDraft() || !createTag) return;
+        tagCreateOpen = true;
+        renderEditor({ focus: '[data-entity-editor-tag-name]' });
+        return;
+      }
+      if (event.target.closest('[data-entity-editor-tag-create-cancel]')) {
+        resetTagCreation();
+        renderEditor({ focus: '[data-entity-editor-tag-create]' });
+        return;
+      }
+      if (event.target.closest('[data-entity-editor-tag-create-submit]')) {
+        void submitTagCreation();
         return;
       }
       const tagToggle = event.target.closest('[data-entity-editor-tag-toggle]');
@@ -587,7 +653,7 @@
         clearErrors('tags');
         renderEditor();
         const target = [...host.querySelectorAll('[data-entity-editor-tag-toggle]')].find((button) => button.dataset.entityEditorTagToggle === tagId)
-          || host.querySelector('[data-entity-editor-tag-query]');
+          || host.querySelector('[data-entity-editor-tag-create]') || host.querySelector('[data-entity-editor-tags-toggle]');
         target?.focus({ preventScroll: true });
         return;
       }

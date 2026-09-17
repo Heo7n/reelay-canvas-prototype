@@ -6,7 +6,7 @@ import { DEFAULT_LOCAL_DATABASE_URL } from "../db/config";
 import { runMigrations } from "../db/migrate";
 import { PostgresAssetStore } from "./PostgresAssetStore";
 import { PostgresEntityStore } from "./PostgresEntityStore";
-import { verifyLibraryGroupDirectories, verifyMediaLibraryTagDeletion, verifyMediaLibraryTagUpdates, verifyMediaLibraryFolderRename, verifyMediaLibraryDeletion, verifyMediaLibraryStore } from "./media-library-store-contract";
+import { verifyOrganizationSubjectLibrary, verifyLibraryGroupDirectories, verifyMediaLibraryTagDeletion, verifyMediaLibraryTagUpdates, verifyMediaLibraryFolderRename, verifyMediaLibraryDeletion, verifyMediaLibraryStore } from "./media-library-store-contract";
 
 const databaseName=`reelay_library_test_${process.pid}_${randomUUID().replaceAll("-","")}`;
 const adminUrl=new URL(process.env.TEST_DATABASE_ADMIN_URL ?? DEFAULT_LOCAL_DATABASE_URL);
@@ -212,3 +212,5 @@ it("migrates retired sound references into the exact scoped dictionary without r
 });
 
 verifyLibraryGroupDirectories(createFixture);
+
+verifyOrganizationSubjectLibrary(createFixture);

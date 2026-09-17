@@ -64,6 +64,7 @@ export interface MediaAssetRepository {
     workspaceId: WorkspaceId,
     assetId: string,
     displayName: string,
+    space?: "personal" | "organization",
   ): Promise<PersonalMediaAsset>;
   attachToProject(projectId: ProjectId, assetId: string): Promise<ProjectMediaAsset>;
   listPersonalAssets(workspaceId: WorkspaceId): Promise<PersonalMediaAsset[]>;

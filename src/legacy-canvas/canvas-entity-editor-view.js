@@ -250,21 +250,19 @@
 
   function renderEntityTagOptions(options = {}) {
     const selected = new Set(normalizeIdList(options.tagIds));
-    const query = String(options.tagQuery || "").trim().toLocaleLowerCase();
     const tags = normalizeTags(options);
     const available = new Set(tags.map((tag) => tag.id));
     const missing = [...selected].filter((id) => !available.has(id)).map((id) => ({ id, name: "标签已移除" }));
-    const matches = [...tags, ...missing].filter((tag) => tag.name.toLocaleLowerCase().includes(query));
+    const matches = [...tags, ...missing];
     return matches.length
-      ? matches.map((tag) => `<button type="button" class="entity-editor-tag-option" aria-pressed="${selected.has(tag.id)}" title="${escapeHtml(tag.name)}" data-entity-editor-tag-toggle="${escapeHtml(tag.id)}"><span>${escapeHtml(tag.name)}</span>${selected.has(tag.id) ? icon("check") : ""}</button>`).join("")
-      : `<span class="entity-editor-tags-empty">${query ? "没有匹配的标签" : "暂无可用标签"}</span>`;
+      ? matches.map((tag) => `<button type="button" class="entity-editor-tag-option" aria-pressed="${selected.has(tag.id)}" title="${escapeHtml(tag.name)}" data-entity-editor-tag-toggle="${escapeHtml(tag.id)}"${options.tagCreating ? " disabled" : ""}><span>${escapeHtml(tag.name)}</span>${selected.has(tag.id) ? icon("check") : ""}</button>`).join("")
+      : `<span class="entity-editor-tags-empty">暂无可用标签</span>`;
   }
 
   function renderTagField(options, editable) {
     const tags = normalizeTags(options);
     const selectedIds = [...new Set(normalizeIdList(options.tagIds))];
     const selectedText = selectedIds.map((id) => tags.find((tag) => tag.id === id)?.name || "标签已移除").join("、");
-    const query = String(options.tagQuery || "");
     const open = Boolean(options.tagPickerOpen) && editable;
     const error = String(options.tagError || options.errors?.tags || "");
     return `
@@ -273,10 +271,12 @@
         <button id="canvasEntityEditorTagsToggle" class="entity-editor-tags-toggle${error ? " is-invalid" : ""}" type="button" aria-label="选择主体标签" title="${escapeHtml(selectedText || "选择标签")}" aria-haspopup="dialog" aria-expanded="${open}"${open ? ' aria-controls="canvasEntityEditorTagPicker"' : ""}${error ? ' aria-invalid="true" aria-describedby="canvasEntityEditorTagsError"' : ""} data-entity-editor-tags-toggle="true"${editable ? "" : ' disabled aria-disabled="true"'}><span class="entity-editor-tags-value${selectedIds.length ? "" : " is-placeholder"}">${escapeHtml(selectedText || "选择标签")}</span>${icon("chevron-down")}</button>
         ${error ? `<span class="entity-editor-field-error" id="canvasEntityEditorTagsError" role="alert">${escapeHtml(error)}</span>` : ""}
         ${open ? `<div class="entity-editor-tag-picker" id="canvasEntityEditorTagPicker" role="dialog" aria-label="选择主体标签" data-entity-editor-tag-popover="true">
-          <div class="entity-editor-tag-search">${icon("search")}<input type="search" placeholder="搜索标签" aria-label="搜索主体标签" value="${escapeHtml(query)}" autocomplete="off" data-entity-editor-tag-query="true"></div>
           <div class="entity-editor-tag-options" role="group" aria-label="可选标签" data-entity-editor-tag-options="true">
             ${renderEntityTagOptions(options)}
           </div>
+          ${options.canCreateTag ? `<div class="entity-editor-tag-create-area">
+            ${options.tagCreateOpen ? `<div class="entity-editor-tag-create-row"><input type="text" maxlength="40" placeholder="标签名称" aria-label="新标签名称" value="${escapeHtml(options.tagCreateName || "")}" data-entity-editor-tag-name="true"${options.tagCreating ? " disabled" : ""}><button type="button" aria-label="创建标签" title="创建标签" data-entity-editor-tag-create-submit="true"${options.tagCreating ? " disabled" : ""}>${icon(options.tagCreating ? "loader-circle" : "check")}</button><button type="button" aria-label="取消新建标签" title="取消" data-entity-editor-tag-create-cancel="true"${options.tagCreating ? " disabled" : ""}>${icon("x")}</button></div>${options.tagCreateError ? `<span class="entity-editor-field-error" role="alert" data-entity-editor-tag-error="true">${escapeHtml(options.tagCreateError)}</span>` : ""}` : `<button type="button" class="entity-editor-tag-create" data-entity-editor-tag-create="true">${icon("plus")}<span>新建标签</span></button>`}
+          </div>` : ""}
         </div>` : ""}
       </div>`;
   }
@@ -312,14 +312,15 @@
     const safeNameError = errors.name ? escapeHtml(errors.name) : "";
     const safeMediaError = errors.media ? escapeHtml(errors.media) : "";
     const counts = normalizeCounts(options.counts, media);
-    const canSubmit = editable && options.valid !== false && Boolean(name.trim()) && counts.all > 0;
+    const canSubmit = editable && !options.tagCreating && options.valid !== false && Boolean(name.trim()) && counts.all > 0;
     const selectedId = selectedMedia?.id || "";
     const selectedIsCover = Boolean(selectedId && selectedId === coverMediaId);
     const selectedCanCover = selectedMedia?.mediaKind === "image";
     const selectedFileName = selectedMedia?.name || "";
     const selectedFileParts = splitFileName(selectedFileName);
+    const canRenameMedia = editable && options.canRenameMedia !== false;
     const renamingSelectedMedia = Boolean(
-      selectedMedia
+      selectedMedia && canRenameMedia
       && String(options.renamingMediaId || "") === selectedId,
     );
     const renameBaseName = renamingSelectedMedia
@@ -414,7 +415,7 @@
                     ${selectedFileParts.extension ? `<span aria-label="固定扩展名 ${escapeHtml(selectedFileParts.extension)}">${escapeHtml(selectedFileParts.extension)}</span>` : ""}
                   </label>
                 ` : `
-                    <button class="entity-editor-preview-filename" type="button" title="双击重命名文件（扩展名保持不变）" aria-label="文件名称 ${escapeHtml(selectedFileName)}，双击或按 F2 重命名" data-entity-editor-preview-name="${escapeHtml(selectedId)}"${editable ? "" : ' disabled aria-disabled="true"'}>${renderFileName(selectedFileName)}</button>
+                    <button class="entity-editor-preview-filename" type="button" title="${canRenameMedia ? "双击重命名文件（扩展名保持不变）" : escapeHtml(selectedFileName)}" aria-label="文件名称 ${escapeHtml(selectedFileName)}${canRenameMedia ? "，双击或按 F2 重命名" : ""}" data-entity-editor-preview-name="${escapeHtml(selectedId)}"${canRenameMedia ? "" : ' disabled aria-disabled="true"'}>${renderFileName(selectedFileName)}</button>
                 `}
               ` : `
                 <span class="entity-editor-preview-kind-icon">${headingIcon("image")}</span>
@@ -453,6 +454,7 @@
   }
 
   function renderMediaPicker(options = {}) {
+    const spaceLabel = options.space === "organization" ? "组织" : "个人";
     if (options.visible === false) return "";
     const media = normalizeMedia(options.media ?? options.items);
     const activeFilter = normalizeFilter(options.filter);
@@ -486,21 +488,21 @@
         <div class="entity-picker-toolbar">
           <label class="entity-picker-search">
             ${icon("search")}
-            <span class="sr-only">搜索个人素材</span>
-            <input type="search" value="${escapeHtml(query)}" placeholder="搜索个人素材" autocomplete="off" data-entity-picker-search="true">
+            <span class="sr-only">搜索${spaceLabel}素材</span>
+            <input type="search" value="${escapeHtml(query)}" placeholder="搜索${spaceLabel}素材" autocomplete="off" data-entity-picker-search="true">
           </label>
           ${renderFilterTabs(activeFilter, counts, {
             disabled: busy,
             hook: "picker",
             idPrefix: "canvasEntityPickerFilter",
             panelId: "canvasEntityPickerGrid",
-            label: "个人素材类型",
+            label: `${spaceLabel}素材类型`,
           })}
         </div>
-        <div class="entity-picker-grid" id="canvasEntityPickerGrid" role="listbox" aria-label="个人空间素材" aria-labelledby="canvasEntityPickerFilter-${activeFilter}" aria-multiselectable="true">
+        <div class="entity-picker-grid" id="canvasEntityPickerGrid" role="listbox" aria-label="${spaceLabel}空间素材" aria-labelledby="canvasEntityPickerFilter-${activeFilter}" aria-multiselectable="true">
           ${visibleMedia.length
             ? visibleMedia.map((item) => renderPickerCard(item, selectedIds.has(item.id))).join("")
-            : `<div class="entity-picker-empty">${icon(normalizedQuery ? "search-x" : "images")}<strong>${normalizedQuery ? "没有匹配的个人素材" : "暂无可用素材"}</strong><span>${normalizedQuery ? "尝试更换关键词或素材类型。" : "请先向个人空间上传素材。"}</span></div>`}
+            : `<div class="entity-picker-empty">${icon(normalizedQuery ? "search-x" : "images")}<strong>${normalizedQuery ? `没有匹配的${spaceLabel}素材` : "暂无可用素材"}</strong><span>${normalizedQuery ? "尝试更换关键词或素材类型。" : `请先向${spaceLabel}空间上传素材。`}</span></div>`}
         </div>
         <footer class="entity-picker-footer">
           <span aria-live="polite">已选择 ${selectedIds.size} 项</span>

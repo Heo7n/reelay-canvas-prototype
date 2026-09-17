@@ -37,14 +37,20 @@ export const LibraryEntrySchema = z.object({
 export const LibraryEntityEntrySchema = z.object({ entityId: IdentifierSchema, space: LibrarySpaceSchema, tagIds: z.array(IdentifierSchema), folderId: IdentifierSchema.nullable().optional(), addedAt: z.string().optional() }).strict();
 export const MediaLibraryCatalogSchema = z.object({ folders: z.array(LibraryFolderSchema), tags: z.array(LibraryTagSchema), entries: z.array(LibraryEntrySchema), entityEntries: z.array(LibraryEntityEntrySchema).optional() }).strict();
 export const UpdateLibraryTagsInputSchema = z.object({
-  workspaceId: IdentifierSchema, space: LibrarySpaceSchema, operation: z.enum(["add", "remove"]),
-  tagIds: z.array(IdentifierSchema).min(1).max(50),
+  workspaceId: IdentifierSchema, space: LibrarySpaceSchema, operation: z.enum(["add", "remove", "replace"]),
+  tagIds: z.array(IdentifierSchema).max(50),
+  expectedTagIds: z.array(IdentifierSchema).max(50).optional(),
   items: z.array(z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("media"), id: IdentifierSchema }).strict(),
     z.object({ kind: z.literal("entity"), id: IdentifierSchema }).strict(),
   ])).min(1).max(100),
 }).strict();
 export type UpdateLibraryTagsInput = z.infer<typeof UpdateLibraryTagsInputSchema>;
+export function isValidLibraryTagUpdate(input: Pick<UpdateLibraryTagsInput, "operation" | "items" | "tagIds" | "expectedTagIds">): boolean {
+  return input.operation === "replace"
+    ? input.items.length === 1 && input.expectedTagIds !== undefined
+    : input.tagIds.length > 0 && input.expectedTagIds === undefined;
+}
 export const DeleteLibraryTagInputSchema = z.object({
   workspaceId: IdentifierSchema, space: LibrarySpaceSchema, tagId: IdentifierSchema,
   expectedUsageCount: z.number().int().nonnegative(),
@@ -73,11 +79,13 @@ export interface LibraryTagUpdatePlan { space: LibrarySpace; items: Array<{ kind
 
 /** Resolve each placement before mutation. Group tags never read or change member tags. */
 export function planLibraryTagUpdate(catalog: MediaLibraryCatalog, input: UpdateLibraryTagsInput): LibraryTagUpdatePlan {
-  const parsed = UpdateLibraryTagsInputSchema.safeParse({ workspaceId: input.workspaceId, space: input.space, operation: input.operation, tagIds: input.tagIds, items: input.items });
+  const parsed = UpdateLibraryTagsInputSchema.safeParse({ workspaceId: input.workspaceId, space: input.space, operation: input.operation, tagIds: input.tagIds, items: input.items, expectedTagIds: input.expectedTagIds });
   if (!parsed.success) throw new MediaLibraryError("invalid_request", "整理标签的信息无效。");
   const normalized = parsed.data;
+  if (!isValidLibraryTagUpdate(normalized)) {
+    throw new MediaLibraryError("invalid_request", "整理标签的信息无效。");
+  }
   if (new Set(normalized.items.map((item) => `${item.kind}:${item.id}`)).size !== normalized.items.length) throw new MediaLibraryError("invalid_request", "整理列表包含重复条目。");
-  if (normalized.space === "organization" && normalized.items.some((item) => item.kind === "entity")) throw new MediaLibraryError("unsupported", "组织素材组暂不支持整理标签。");
   if (normalized.tagIds.some((id) => !BUILTIN_LIBRARY_TAGS.some((tag) => tag.id === id) && !catalog.tags.some((tag) => tag.id === id && tag.space === normalized.space))) throw new MediaLibraryError("tag_not_found", "标签不属于当前空间，请重新选择。");
   const selectedTags = new Set(normalized.tagIds);
   return { space: normalized.space, items: normalized.items.map((item) => {
@@ -85,7 +93,14 @@ export function planLibraryTagUpdate(catalog: MediaLibraryCatalog, input: Update
       ? catalog.entries.find((entry) => entry.assetId === item.id && entry.space === normalized.space)
       : catalog.entityEntries?.find((entry) => entry.entityId === item.id && entry.space === normalized.space);
     if (!entry) throw new MediaLibraryError("library_item_not_found", "所选素材不存在或不可访问，请刷新后重新选择。");
-    const tagIds = [...new Set(normalized.operation === "add" ? [...entry.tagIds, ...selectedTags] : entry.tagIds.filter((id) => !selectedTags.has(id)))].sort();
+    const tagIds = [...new Set(normalized.operation === "replace" ? [...selectedTags]
+      : normalized.operation === "add" ? [...entry.tagIds, ...selectedTags] : entry.tagIds.filter((id) => !selectedTags.has(id)))].sort();
+    if (normalized.operation === "replace") {
+      const sameTags = (left: string[], right: string[]) => JSON.stringify([...new Set(left)].sort()) === JSON.stringify([...new Set(right)].sort());
+      if (!sameTags(entry.tagIds, normalized.expectedTagIds!) && !sameTags(entry.tagIds, tagIds)) {
+        throw new MediaLibraryError("tag_selection_changed", "素材标签已发生变化，请关闭后重新打开设置标签。");
+      }
+    }
     if (tagIds.length > 50) throw new MediaLibraryError("tag_limit_exceeded", "每个条目最多保留 50 个标签，请先移除部分标签。");
     return { ...item, tagIds };
   }) };
@@ -128,7 +143,6 @@ export function planLibraryDeletion(catalog: MediaLibraryCatalog, entities: Libr
   const parsed = DeleteLibraryInputSchema.safeParse({ workspaceId: input.workspaceId, space: input.space, items: input.items });
   if (!parsed.success) throw new MediaLibraryError("invalid_request", "删除素材的信息无效。");
   if (new Set(input.items.map((item) => `${item.kind}:${item.id}`)).size !== input.items.length) throw new MediaLibraryError("invalid_request", "删除列表包含重复条目。");
-  if (input.space === "organization" && input.items.some((item) => item.kind === "entity")) throw new MediaLibraryError("unsupported", "组织素材组暂不支持删除。");
   const folders = catalog.folders.filter((folder) => folder.space === input.space);
   const folderIds = new Set(input.items.filter((item) => item.kind === "folder" && folders.some((folder) => folder.id === item.id)).map((item) => item.id));
   let expanded = true;
@@ -147,7 +161,7 @@ export function planLibraryDeletion(catalog: MediaLibraryCatalog, entities: Libr
     if (entity.version !== item.expectedVersion) throw new MediaLibraryError("entity_changed", "素材组已更新，请刷新后重新选择。");
     if (!entityIds.includes(entity.id)) entityIds.push(entity.id);
   }
-  if (input.space === "personal" && entities.some((entity) => !entityIds.includes(entity.id) && entity.assetIds.some((id) => assetIds.includes(id)))) throw new MediaLibraryError("library_item_in_use", "素材仍被主体引用，请先从主体中移除后再删除。");
+  if (entities.some((entity) => !entityIds.includes(entity.id) && entity.assetIds.some((id) => assetIds.includes(id)))) throw new MediaLibraryError("library_item_in_use", "素材仍被主体引用，请先从主体中移除后再删除。");
   return { folderIds: [...folderIds], assetIds, entityIds };
 }
 

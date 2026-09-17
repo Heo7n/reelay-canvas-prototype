@@ -121,7 +121,7 @@ test("parameter controls preserve canonical values and omit redundant workflow c
   const workflowSectionSource = sourceBetween(
     appSource,
     "function workflowParameterSection(node, canvas = true)",
-    "function durationParameterSection(node)",
+    "function durationParameterSection(node, canvas = true)",
   );
   const renderWorkflowSection = Function(
     "getWorkflowDefinitions",
@@ -162,18 +162,20 @@ test("parameter controls preserve canonical values and omit redundant workflow c
 
   const durationSectionSource = sourceBetween(
     appSource,
-    "function durationParameterSection(node)",
+    "function durationParameterSection(node, canvas = true)",
     "const advancedSettingHints",
   );
   const renderDurationSection = Function(
     "getOmniReferenceTaskTypeConstraint",
     "getDurationCapability",
     "getNormalizedDurationSeconds",
+    "getModel",
     `${durationSectionSource}; return durationParameterSection;`,
   )(
     (node) => node.taskTypeConstraint,
     () => ({ min: 4, max: 30, step: 1 }),
     () => 5,
+    () => ({ defaults: { duration: "10s" } }),
   );
   const autoDurationMarkup = renderDurationSection({
     omniReferenceTaskType: "auto",
@@ -184,7 +186,7 @@ test("parameter controls preserve canonical values and omit redundant workflow c
   assert.match(autoDurationMarkup, /min="4" max="30" step="1"/);
 });
 
-test("Seedance 2.5 task types render the intended compact and full parameter layouts", () => {
+test("Seedance 2.5 task types expose fixed editing duration and optional Auto extension", () => {
   const paramPanelSource = sourceBetween(
     appSource,
     "function paramPanel(node, { canvas = true } = {})",
@@ -201,6 +203,7 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     "getWorkflowDefinitions",
     "getDurationCapability",
     "getNormalizedDurationSeconds",
+    "getModel",
     "getCapabilityDisplayLabel",
     "escapeHtml",
     `${paramPanelSource}; return paramPanel;`,
@@ -222,6 +225,7 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     (node) => node.workflowDefinitions,
     () => ({ min: 4, max: 30, step: 1 }),
     () => 10,
+    () => ({ defaults: { duration: "10s" } }),
     (_node, _action, value) => String(value),
     Function(`${sourceBetween(appSource, "function escapeHtml(value)", "function sanitizeRuntimeMediaUrl(value)")}; return escapeHtml;`)(),
   );
@@ -230,8 +234,8 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
     labels: { auto: "全模态参考", edit: "视频编辑", extend: "视频延长" },
     descriptions: { auto: "根据提示词判断任务", edit: "修改参考视频", extend: "续写参考视频" },
     constraints: {
-      edit: { aspect: "adaptive", duration: -1, hideDuration: true },
-      extend: { aspect: "adaptive", hideDuration: true },
+      edit: { aspect: "adaptive", duration: -1 },
+      extend: { aspect: "adaptive", allowAutoDuration: true },
     },
   };
   const createNode = (omniReferenceTaskType) => ({
@@ -291,7 +295,7 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
   });
   assert.equal(escapedDom.window.document.querySelector("img"), null);
   escapedDom.window.close();
-  assert.match(autoMarkup, /class="panel-popover param-panel "/);
+  assert.match(autoMarkup, /class="panel-popover param-panel"/);
   assert.doesNotMatch(autoMarkup, /is-task-type-compact/);
   assert.match(autoMarkup, /data-omni-reference-task-type="auto"/);
   assert.match(autoMarkup, /class="parameter-task-details"/);
@@ -305,66 +309,94 @@ test("Seedance 2.5 task types render the intended compact and full parameter lay
 
   for (const taskType of ["edit", "extend"]) {
     const compactMarkup = renderParamPanel(createNode(taskType));
-    assert.match(compactMarkup, /class="panel-popover param-panel is-task-type-compact"/);
     assert.match(compactMarkup, new RegExp(`data-omni-reference-task-type="${taskType}"`));
     const aspectMarkup = parameterGroup(compactMarkup, "aspect");
     assert.match(aspectMarkup, /style="--option-columns: 1"/);
     assert.equal((aspectMarkup.match(/data-action="aspect"/g) || []).length, 1);
     assert.match(aspectMarkup, /data-value="adaptive">Auto<\/button>/);
     assert.doesNotMatch(aspectMarkup, /data-value="(?:21:9|16:9|4:3|1:1|3:4|9:16)"/);
-    assert.doesNotMatch(compactMarkup, /parameter-duration|data-duration-range|>时长</);
+    const durationMarkup = parameterGroup(compactMarkup, "duration");
+    assert.match(durationMarkup, /智能/);
+    if (taskType === "edit") {
+      const duration = new JSDOM(durationMarkup).window.document;
+      assert.equal(duration.querySelector('[data-duration-range]').disabled, true);
+      assert.equal(duration.querySelector('[data-duration-readonly]').value, "智能");
+      assert.equal(duration.querySelector('[data-duration-readonly]').readOnly, true);
+      assert.doesNotMatch(durationMarkup, /data-duration-number|data-action="duration"/);
+    } else {
+      assert.doesNotMatch(durationMarkup, /data-action="duration"/);
+      assert.match(durationMarkup, /data-duration-auto="4"/);
+      assert.match(durationMarkup, /data-duration-range/);
+      assert.match(durationMarkup, /data-duration-number/);
+    }
     assert.match(compactMarkup, /parameter-quality/);
     assert.match(compactMarkup, /parameter-audio/);
     assert.match(compactMarkup, /parameter-output-format/);
   }
+  const extendAuto = createNode("extend");
+  extendAuto.duration = "auto";
+  const extendAutoMarkup = parameterGroup(renderParamPanel(extendAuto), "duration");
+  assert.match(extendAutoMarkup, /智能/);
+  const autoDuration = new JSDOM(extendAutoMarkup).window.document;
+  assert.equal(autoDuration.querySelector('[data-duration-range]').disabled, false);
+  assert.equal(autoDuration.querySelector('[data-duration-range]').value, "0");
+  assert.equal(autoDuration.querySelector('[data-duration-range]').max, "27");
+  assert.equal(autoDuration.querySelector('[data-duration-number]').value, "智能");
+  assert.equal(autoDuration.querySelector('[data-duration-number]').readOnly, false);
+  for (const canvas of [true, false]) {
+    const dom = new JSDOM(renderParamPanel(extendAuto, { canvas }));
+    const buttons = [...dom.window.document.querySelectorAll('[data-action="duration"]')];
+    assert.equal(buttons.length, 0);
+    assert.equal(dom.window.document.querySelector('[data-duration-range]').getAttribute('aria-valuetext'), "智能");
+    dom.window.close();
+  }
 });
 
-test("Seedance 2.5 task type switches keep identical details still during the anchored transition", () => {
+test("Seedance 2.5 task type switches animate only the tab indicator", () => {
   const transitionSource = sourceBetween(
     appSource,
     "function captureTaskTypeParameterTransition(node, nextTaskType)",
     "function setCanvasZoom(nextScale, anchorClientX, anchorClientY)",
   );
-  assert.match(transitionSource, /shouldAnimate:\s*false/);
-  assert.match(transitionSource, /fromHeight:\s*panelRect\.height \/ compositeScale/);
-  assert.match(transitionSource, /fromLeft:\s*panelRect\.left/);
-  assert.match(transitionSource, /fromBottom:\s*panelRect\.bottom/);
-  assert.match(transitionSource, /querySelector\([\s\S]*?\.parameter-task-details:not\(\.parameter-task-details-outgoing\)/);
-  assert.match(transitionSource, /details\.cloneNode\(true\)/);
-  assert.match(transitionSource, /setAttribute\("aria-hidden",\s*"true"\)/);
-  assert.match(transitionSource, /clone\.inert = true/);
-  assert.match(transitionSource, /opacity:\s*getComputedStyle\(details\)\.opacity/);
-  assert.match(transitionSource, /fromDetailsSignature:\s*currentDetails\.innerHTML/);
-  assert.match(transitionSource, /fromSelectionOffset:\s*getTaskTypeSelectionOffset\(segmented, fromIndex\)/);
-  assert.match(transitionSource, /const targetHeight = panel\.offsetHeight/);
-  assert.match(transitionSource, /const detailsChanging = transition\.fromDetailsSignature !== details\.innerHTML/);
-  assert.match(transitionSource, /const outgoingDetails = detailsChanging \? transition\.outgoingDetails : \[\]/);
-  assert.match(transitionSource, /const startTranslateX = \(transition\.fromLeft - targetRect\.left\)/);
-  assert.match(transitionSource, /const startTranslateY = \(transition\.fromBottom - targetRect\.bottom\)[\s\S]*?targetHeight - transition\.fromHeight/);
-  assert.match(transitionSource, /panel\.append\(outgoing\.element\)/);
-  assert.match(transitionSource, /classList\.add\("is-task-type-transitioning",\s*"is-task-type-preparing"\)/);
-  assert.match(transitionSource, /if \(detailsChanging\) panel\.classList\.add\("is-task-type-details-changing"\)/);
-  assert.match(transitionSource, /panel\.style\.height = `\$\{transition\.fromHeight\}px`/);
-  assert.match(transitionSource, /panel\.getBoundingClientRect\(\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?panel\.style\.height = `\$\{targetHeight\}px`/);
-  assert.match(transitionSource, /--task-type-selection-offset[\s\S]*?transition\.fromSelectionOffset[\s\S]*?removeProperty\("--task-type-selection-offset"\)/);
-  assert.match(transitionSource, /removeProperty\("height"\)/);
-  assert.match(transitionSource, /outgoingDetails\.forEach\(\(outgoing\) => outgoing\.element\.remove\(\)\)/);
-  assert.match(transitionSource, /addEventListener\("transitionend", onTransitionEnd\)/);
-  assert.doesNotMatch(transitionSource, /function animateTaskTypeParameterTransition[\s\S]{0,120}requestAnimationFrame/);
-
-  const taskTypeActionSource = sourceBetween(
-    appSource,
-    'case "omni-reference-task-type":',
-    'case "audio":',
+  const offsets = new Map();
+  const classes = new Set();
+  const frames = [];
+  let focused = -1;
+  const segmented = {
+    style: {
+      setProperty: (key, value) => offsets.set(key, value),
+      removeProperty: (key) => offsets.delete(key),
+    },
+    querySelectorAll: () => [0, 1, 2].map((index) => ({ focus: () => { focused = index; } })),
+  };
+  const panel = {
+    offsetHeight: 350,
+    contains: () => true,
+    querySelector: () => segmented,
+    classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name) },
+    getBoundingClientRect: () => ({ width: 348, height: 350 }),
+  };
+  const element = { querySelector: () => panel };
+  const [capture, animate] = Function(
+    "getOmniReferenceTaskTypeCapability", "nodeLayer", "document", "reducedMotionQuery",
+    "getTaskTypeSelectionOffset", "syncNodeVisualLayout", "syncNodePopoverLayout", "requestAnimationFrame",
+    `${transitionSource}; return [captureTaskTypeParameterTransition, animateTaskTypeParameterTransition];`,
+  )(
+    () => ({ uiValues: ["auto", "edit", "extend"] }),
+    { querySelector: () => element }, { activeElement: { matches: () => true } }, { matches: false },
+    () => 42, () => {}, () => {}, (callback) => frames.push(callback),
   );
-  assert.match(taskTypeActionSource, /captureTaskTypeParameterTransition\(node, value\)[\s\S]*?draft\.omniReferenceTaskType = value/);
-  assert.match(appSource, /render\(\);[\s\S]*?if \(taskTypeTransition\) animateTaskTypeParameterTransition\(node, taskTypeTransition\)/);
-
-  assert.match(appCss, /\.param-panel\.is-task-type-transitioning\s*\{[\s\S]*?transform-origin:\s*left bottom[\s\S]*?height 240ms[\s\S]*?transform 240ms/);
-  assert.match(appCss, /\.is-task-type-details-changing[\s\S]*?\.parameter-task-details:not\(\.parameter-task-details-outgoing\)[\s\S]*?opacity:\s*0[\s\S]*?translateY\([\s\S]*?transition:/);
-  assert.match(appCss, /\.parameter-task-details-outgoing\s*\{[\s\S]*?position:\s*absolute[\s\S]*?opacity:\s*var\(--task-type-outgoing-start-opacity[\s\S]*?pointer-events:\s*none[\s\S]*?opacity 145ms/);
-  assert.match(appCss, /\.is-task-type-details-changing\.is-task-type-entered[\s\S]*?\.parameter-task-details-outgoing\s*\{[\s\S]*?opacity:\s*0[\s\S]*?translateY/);
-  assert.match(appCss, /\.is-task-type-preparing[\s\S]*?transition:\s*none !important/);
+  const node = { id: "video", panel: "params", omniReferenceTaskType: "auto" };
+  const transition = capture(node, "edit");
+  animate(node, transition);
+  assert.equal(focused, 1);
+  assert.equal(offsets.get("--task-type-selection-offset"), "42px");
+  assert.equal(classes.has("is-task-type-preparing"), true);
+  frames.shift()();
+  assert.equal(offsets.size, 0);
+  assert.equal(classes.size, 0);
+  assert.doesNotMatch(transitionSource, /cloneNode|outgoingDetails|panel\.style\.(?:height|transform)/);
+  assert.doesNotMatch(appCss, /parameter-task-details-outgoing|is-task-type-details-changing/);
   assert.match(appCss, /\.omni-reference-task-type-segmented::before\s*\{[\s\S]*?--task-type-selection-offset[\s\S]*?--task-type-selection-index[\s\S]*?transition:\s*transform 240ms/);
   assert.match(appCss, /@media \(prefers-reduced-motion: reduce\)/);
 });
@@ -622,7 +654,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
     mode: "video",
     taskTypeCapability: {},
     taskTypeLabel: "视频编辑",
-    taskTypeConstraint: { duration: -1, hideDuration: true },
+    taskTypeConstraint: { duration: -1 },
     workflows: [{ id: "omni-reference", label: "全能参考" }],
     workflowDefinition: { id: "omni-reference", label: "全能参考" },
     aspect: "adaptive",
@@ -632,7 +664,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
   }), {
     beforeAspect: "视频编辑 · ",
     aspect: "Auto",
-    afterAspect: " · 720P",
+    afterAspect: " · 720P · 智能",
   });
   assert.equal(getParamLabelParts({
     mode: "video",
@@ -1243,25 +1275,25 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appCss, /\.control-chip\.model-chip\s*\{[\s\S]*?flex:\s*0 1 auto[\s\S]*?width:\s*max-content/);
   assert.match(appCss, /\.param-chip\s*\{[\s\S]*?flex:\s*0 1 auto[\s\S]*?background:\s*transparent/);
   assert.match(appSource, /class="control-chip param-chip/);
-  const durationSectionStart = appSource.indexOf("function durationParameterSection(node)");
+  const durationSectionStart = appSource.indexOf("function durationParameterSection(node, canvas = true)");
   const durationSectionEnd = appSource.indexOf("const advancedSettingHints", durationSectionStart);
   assert.ok(durationSectionStart >= 0 && durationSectionEnd > durationSectionStart);
   const durationSectionSource = appSource.slice(durationSectionStart, durationSectionEnd);
   assert.match(durationSectionSource, /data-duration-range/);
   assert.match(durationSectionSource, /data-duration-number/);
-  assert.match(durationSectionSource, /type="range" min="\$\{range\.min\}" max="\$\{range\.max\}" step="\$\{range\.step\}"/);
-  assert.match(durationSectionSource, /aria-valuemin="\$\{range\.min\}"/);
-  assert.match(durationSectionSource, /\(seconds - range\.min\) \/ \(range\.max - range\.min\)/);
+  assert.match(durationSectionSource, /type="range" min="\$\{sliderMin\}" max="\$\{sliderMax\}"/);
+  assert.match(durationSectionSource, /const sliderMin = allowAuto \? 0 : range\.min/);
+  assert.match(durationSectionSource, /\(sliderValue - sliderMin\) \/ \(sliderMax - sliderMin\)/);
   assert.doesNotMatch(durationSectionSource, /data-duration-min|min="0"|duration-scale|scaleLabels|scaleMarks/);
   const durationInputStart = appSource.indexOf('durationRange?.addEventListener("input"');
   const durationInputEnd = appSource.indexOf('durationRange?.addEventListener("change"', durationInputStart);
   assert.ok(durationInputStart >= 0 && durationInputEnd > durationInputStart);
   const durationInputSource = appSource.slice(durationInputStart, durationInputEnd);
-  assert.match(durationInputSource, /normalizeDurationControlSeconds\(event\.currentTarget, event\.currentTarget\.value\)/);
-  assert.match(durationInputSource, /syncDurationRangeControl\(event\.currentTarget, seconds\)/);
+  assert.match(durationInputSource, /durationControls\.read\(durationRange, event\.currentTarget\)/);
+  assert.match(durationInputSource, /durationControls\.sync\(durationRange/);
   assert.doesNotMatch(durationInputSource, /dataset\.durationMin/);
-  assert.match(appSource, /function normalizeDurationControlSeconds\(input, value\)[\s\S]*?Number\(input\.min\)[\s\S]*?Number\(input\.max\)[\s\S]*?Math\.round\(\(base - min\) \/ step\)/);
-  assert.match(appSource, /durationNumber\?\.addEventListener\("change"[\s\S]*?handleAction\(node, "duration", `\$\{seconds\}s`\)/);
+  assert.match(appSource, /const durationControls = window\.REELAY_DURATION_CONTROLS/);
+  assert.match(appSource, /durationNumber\?\.addEventListener\("change"[\s\S]*?handleAction\(node, "duration", duration\)/);
   assert.match(appCss, /\.duration-control-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 44px 10px/);
   assert.match(appCss, /\.duration-range-input::\-webkit-slider-runnable-track\s*\{[\s\S]*?height:\s*4px/);
   assert.match(appCss, /\.duration-range-input::\-webkit-slider-thumb\s*\{[\s\S]*?width:\s*10px[\s\S]*?border-radius:\s*50%/);
@@ -1427,7 +1459,7 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
     /id="agentCloseBtn"[^>]*aria-label="收起 Reelay Agent"[^>]*>[\s\S]*?data-lucide="chevrons-right" aria-hidden="true"/,
   );
 
-  assert.match(appCss, /\.agent-panel\s*\{[^}]*grid-template-rows:\s*52px 1fr auto;/);
+  assert.match(appCss, /\.agent-panel\s*\{[^}]*grid-template-rows:\s*var\(--agent-header-height\) 1fr auto;/);
 
   assert.match(agentMarkup, /<div[^>]*class="prompt-input"[^>]*id="agentInput"[^>]*aria-label="给 Reelay Agent 的消息"/);
   assert.match(appSource, /promptEditors\.mount\(conversation, agentInput/);
@@ -1613,7 +1645,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(canvasChromeCss, /\.canvas-zoom-control\.value-visible \.canvas-zoom-value\s*\{[\s\S]*?width:\s*38px[\s\S]*?margin-left:\s*8px/);
   assert.match(assetLibraryCss, /top:\s*var\(--canvas-side-panel-top,\s*50px\)/);
   assert.match(assetLibraryCss, /bottom:\s*var\(--canvas-side-panel-bottom,\s*50px\)/);
-  assert.match(assetLibraryCss, /\.asset-library-panel\s*\{[\s\S]*?--asset-panel-bg:\s*var\(--surface\);[\s\S]*?--asset-panel-subtle:\s*var\(--surface-2\);[\s\S]*?--asset-panel-line:\s*var\(--floating-line\);/);
+  assert.match(assetLibraryCss, /\.asset-library-panel,\s*\.canvas-entity-editor,\s*\.entity-media-picker\s*\{[^}]*--asset-panel-bg:\s*var\(--surface\);[^}]*--asset-panel-subtle:\s*var\(--surface-2\);[^}]*--asset-panel-line:\s*var\(--floating-line\);/);
   assert.doesNotMatch(assetLibraryCss, /--asset-panel-bg:\s*#(?:fff|ffffff)\b/i);
   assert.doesNotMatch(appCss, /html\[data-theme="light"\] \.canvas-tool-row/);
   assert.match(entityEditorCss, /\.canvas-entity-editor\s*\{[\s\S]*?top:\s*var\(--canvas-side-panel-top,\s*50px\)[\s\S]*?bottom:\s*var\(--canvas-edge-inset,\s*8px\)/);
@@ -1628,7 +1660,7 @@ test("canvas chrome keeps compact left zones and an independently sized Agent do
   assert.match(appSource, /agentTopInset:\s*0,[\s\S]*?agentBottomInset:\s*0/);
   assert.match(appSource, /function setAgentTopInset\(top\)[\s\S]*?function setAgentBottomInset\(bottom\)/);
   assert.match(appSource, /bindAgentHeightResizeHandle\(agentTopResizeHandle, "top"\)[\s\S]*?bindAgentHeightResizeHandle\(agentBottomResizeHandle, "bottom"\)/);
-  assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*18px[\s\S]*?right:\s*18px/);
+  assert.match(canvasChromeCss, /\.agent-launcher\s*\{[\s\S]*?top:\s*calc\(\(var\(--agent-header-height\) - var\(--agent-launcher-size\)\) \/ 2 \+ var\(--agent-header-border\)\);[\s\S]*?right:\s*12px/);
   assert.doesNotMatch(canvasChromeCss, /group-frame|group-resize|multi-selection|selection-toolbar/);
 });
 
@@ -1667,7 +1699,8 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.match(entityUseModelSource, /function createEntityMediaPlan/);
   assert.match(entityUseModelSource, /function createCenteredGridPlan/);
   assert.match(entityUseViewSource, /data-entity-use-action="add-entities"/);
-  assert.match(entityUseViewSource, /data-entity-use-add-canvas/);
+  assert.doesNotMatch(entityUseViewSource, /data-entity-use-add-canvas/);
+  assert.match(appSource, /data-library-entity-add/);
   assert.match(appSource, /function addEntityToCanvas\(\{ scope, entityId, space \}\)[\s\S]*?pushUndoAction\(\{ type: "create"/);
   assert.match(appSource, /createCanvasEntityUseController\(\{[\s\S]*?onAddEntities: addSelectedEntitiesToGenerator/);
   assert.match(appSource, /function addSelectedEntitiesToGenerator\(\{ scope, nodeId, selections \}\)[\s\S]*?scope\.projectId !== state\.projectId[\s\S]*?scope\.canvasId !== state\.activeCanvasId[\s\S]*?node\.assets\.push\(\.\.\.additions\)/);
@@ -1684,7 +1717,7 @@ test("asset library actions stay scoped to their real controls and canvas drop t
   assert.doesNotMatch(appSource, /libraryDisplay|data-library-display/);
   assert.match(appSource, /const eventPath = typeof event\.composedPath === "function"/);
   assert.match(appSource, /function isCanvasDropTarget\(target\)[\s\S]*?closest\("#canvasShell"\)/);
-  assert.match(appSource, /hasSupportedPayload && !isCanvasDropTarget\(event\.target\)/);
+  assert.match(appSource, /hasSupportedPayload && !canvasReferenceDrop\.canDrop\(event\.target\)/);
   assert.doesNotMatch(appSource, /window\.prompt\("新建文件夹名称"/);
   assert.match(html, /canvas-library-upload-controller\.js"/);
   assert.match(html, /canvas-library-delete-controller\.js"/);

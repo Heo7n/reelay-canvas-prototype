@@ -186,6 +186,7 @@
         name: String(source.name || source.displayName || "未命名主体").trim() || "未命名主体",
         mediaRefs: refs,
       };
+      if (source.space != null) record.space = resolveSpace(source.space);
       if (source.displayName != null) record.displayName = String(source.displayName);
       if (source.description != null) record.description = String(source.description);
       if (Array.isArray(source.tags)) record.tags = source.tags.map((tag) => String(tag));
@@ -490,7 +491,7 @@
       foldersById.set(folder.id, folder);
     }
 
-    function syncPersistedCatalog({ media = [], folders = [], entries = [], tags = [], entityEntries, removedEntityIds = [] }) {
+    function syncPersistedCatalog({ media = [], folders = [], entries = [], tags = [], entityEntries, entities, removedEntityIds = [] }) {
       const current = snapshot();
       const records = new Map(current.media.map((item) => [item.id, item]));
       media.forEach((item) => records.set(item.id, { ...records.get(item.id), ...item }));
@@ -503,23 +504,36 @@
       // both placement removals together so the projection never contains a group without its media.
       const removed = new Set(removedEntityIds);
       if (Array.isArray(entityEntries)) {
-        const personalIds = new Set(entityEntries.filter((entry) => entry.space === "personal").map((entry) => entry.entityId));
-        for (const entityId of persistedEntityIds) if (!personalIds.has(entityId)) removed.add(entityId);
+        const catalogIds = new Set(entityEntries.map((entry) => entry.entityId));
+        for (const entityId of persistedEntityIds) if (!catalogIds.has(entityId)) removed.add(entityId);
       }
       const nextEntityEntries = (Array.isArray(entityEntries) ? entityEntries.map((item) => ({ ...item, ...labels(item) }))
-        : current.entityEntries).filter((item) => !(item.space === "personal" && removed.has(item.entityId)));
+        : current.entityEntries).filter((item) => !(mutableSpaces.has(item.space) && removed.has(item.entityId)));
       const remainingPlacements = current.placements.filter((item) => !(item.item.kind === "entity"
-        && item.space === "personal" && removed.has(item.item.id)))
+        && mutableSpaces.has(item.space) && removed.has(item.item.id)))
         .map((item) => item.item.kind === "entity" && Array.isArray(entityEntries) && mutableSpaces.has(item.space)
           ? { ...item, tagIds: [], tags: [] } : item);
       const remainingEntities = current.entities.filter((entity) => !removed.has(entity.id)
         || remainingPlacements.some((placement) => placement.item.kind === "entity" && placement.item.id === entity.id));
+      const incomingEntities = entities?.map((value) => {
+        const entity = normalizePersistedEntityRecord(value);
+        validatePersistedEntityVersion(entity);
+        if (!entityEntries?.some((entry) => entry.entityId === entity.id && entry.space === entity.space)) {
+          throw new Error(`Missing Entity placement: ${entity.id}`);
+        }
+        return entity;
+      });
+      const entityRecords = incomingEntities ? [...remainingEntities.filter((item) => !persistedEntityIds.has(item.id)), ...incomingEntities] : remainingEntities;
+      const entityPlacements = incomingEntities ? [
+        ...remainingPlacements.filter((item) => item.item.kind !== "entity" || !persistedEntityIds.has(item.item.id)),
+        ...incomingEntities.map((item) => ({ item: { kind: "entity", id: item.id }, space: item.space || "personal", folderId: null })),
+      ] : remainingPlacements;
       const next = createAssetLibraryStore({
-        media: [...records.values()], entities: remainingEntities,
+        media: [...records.values()], entities: entityRecords,
         entityEntries: nextEntityEntries,
         folders: [...current.folders.filter((item) => !item.persisted),
           ...folders.map((item) => ({ ...item, kind: "media", persisted: true }))],
-        placements: [...remainingPlacements.filter((item) => !(item.item.kind === "media" && ids.has(item.item.id)
+        placements: [...entityPlacements.filter((item) => !(item.item.kind === "media" && ids.has(item.item.id)
           && mutableSpaces.has(item.space))),
           ...entries.map((item) => ({ item: { kind: "media", id: item.assetId }, space: item.space,
             folderId: item.folderId, addedAt: item.addedAt, displayName: item.displayName,
@@ -613,7 +627,7 @@
         media: listItems({ ...filters, kind: "media", mediaKind }),
         // Subject type is independent of its members' media formats; its own
         // placement tags still determine whether it belongs in filtered results.
-        entities: resolvedSpace === "personal" ? listItems({ ...filters, kind: "entity" }) : [],
+        entities: mutableSpaces.has(resolvedSpace) ? listItems({ ...filters, kind: "entity" }) : [],
       };
     }
 
@@ -773,10 +787,14 @@
       if (next.mediaKind !== current.mediaKind || next.workspaceAssetId !== current.workspaceAssetId) {
         throw new Error(`Persisted Media identity cannot change: ${id}`);
       }
-      next.name = displayName;
-      next.displayName = displayName;
-      mediaById.set(id, next);
-      return cloneValue(next);
+      const space = resolveSpace(input.space || "personal");
+      assertMutable(space);
+      const key = placementKey({ kind: "media", id }, space);
+      const placement = placementsByKey.get(key);
+      if (!placement) throw new Error(`Media placement not found: ${space}:${id}`);
+      const renamedPlacement = { ...placement, displayName, persisted: true };
+      placementsByKey.set(key, renamedPlacement);
+      return cloneValue(placementRecord(renamedPlacement));
     }
 
     function createEntityVersionConflict(currentVersion, message = "Entity version conflict.") {
@@ -816,6 +834,8 @@
         coverMediaId: source.coverMediaId ?? source.coverAssetId ?? null,
         version,
       }, mediaRefs, id);
+      record.space = resolveSpace(source.space || input.space || "personal");
+      assertMutable(record.space);
       record.coverMediaId = source.coverMediaId == null && source.coverAssetId == null
         ? null
         : String(source.coverMediaId ?? source.coverAssetId).trim() || null;
@@ -832,9 +852,14 @@
     }
 
     function validatePersistedEntityCandidate(entity) {
-      validateEntityVisibility(entity, "personal");
+      validateEntityVisibility(entity, entity.space || "personal");
+      validatePersistedEntityVersion(entity);
+    }
+
+    function validatePersistedEntityVersion(entity) {
       const existing = entitiesById.get(entity.id);
       if (!existing) return;
+      if (existing.space && existing.space !== entity.space) throw new Error("Entity ownership cannot change.");
       if (!persistedEntityIds.has(entity.id)) {
         throw new Error(`Entity id already belongs to a page-local record: ${entity.id}`);
       }
@@ -847,23 +872,21 @@
     }
 
     function registerPersistedEntity(input = {}) {
-      if (input.space != null && resolveSpace(input.space) !== "personal") {
-        throw new Error("Persisted Entity projection currently supports only personal space.");
-      }
-      if (input.folderId != null) validateFolder(input.folderId, "personal", "entity");
       const entity = normalizePersistedEntityRecord(input);
+      const space = entity.space;
+      if (input.folderId != null) validateFolder(input.folderId, space, "entity");
       validatePersistedEntityCandidate(entity);
       const previous = entitiesById.get(entity.id) || null;
       const item = { kind: "entity", id: entity.id };
-      const key = placementKey(item, "personal");
+      const key = placementKey(item, space);
       const previousPlacement = placementsByKey.get(key) || null;
       const created = previous == null;
       const updated = previous != null && entity.version > previous.version;
       entitiesById.set(entity.id, entity);
       persistedEntityIds.add(entity.id);
-      placementsByKey.set(key, entityPlacement({ ...previousPlacement, item, space: "personal", folderId: input.folderId ?? previousPlacement?.folderId ?? null, addedAt: previousPlacement?.addedAt ?? entity.createdAt }));
+      placementsByKey.set(key, entityPlacement({ ...previousPlacement, item, space, folderId: input.folderId ?? previousPlacement?.folderId ?? null, addedAt: previousPlacement?.addedAt ?? entity.createdAt }));
       const libraryTagIds = (input.entity || input).libraryTagIds;
-      if (Array.isArray(libraryTagIds)) syncEntityPlacementTags(item, libraryTagIds, input.tagOptions);
+      if (Array.isArray(libraryTagIds)) syncEntityPlacementTags(item, libraryTagIds, input.tagOptions, space);
       return {
         entity: cloneValue(entity),
         created,
@@ -872,16 +895,16 @@
       };
     }
 
-    function syncEntityPlacementTags(item, tagIds, tagOptions = []) {
-      const key = placementKey(item, "personal");
+    function syncEntityPlacementTags(item, tagIds, tagOptions = [], space = "personal") {
+      const key = placementKey(item, space);
       const placement = placementsByKey.get(key);
       if (!placement) return;
       const ids = normalizeTagIds(tagIds);
-      const names = new Map([...getTagOptions("personal"), ...tagOptions].map((tag) => [tag.id, tag.name]));
+      const names = new Map([...getTagOptions(space), ...tagOptions].map((tag) => [tag.id, tag.name]));
       const tags = ids.map((id) => builtinTagNames.get(id) || names.get(id) || "");
       placementsByKey.set(key, { ...placement, tagIds: ids, tags });
       entityEntriesByKey.set(key, {
-        ...entityEntriesByKey.get(key), entityId: item.id, space: "personal",
+        ...entityEntriesByKey.get(key), entityId: item.id, space,
         folderId: placement.folderId, addedAt: placement.addedAt, tagIds: ids, tags,
       });
     }
@@ -900,8 +923,10 @@
       const removedEntityIds = [...persistedEntityIds].filter((entityId) => !staged.has(entityId));
       for (const entityId of removedEntityIds) {
         const item = { kind: "entity", id: entityId };
-        placementsByKey.delete(placementKey(item, "personal"));
-        entityEntriesByKey.delete(placementKey(item, "personal"));
+        for (const space of mutableSpaces) {
+          placementsByKey.delete(placementKey(item, space));
+          entityEntriesByKey.delete(placementKey(item, space));
+        }
         const hasOtherPlacement = [...placementsByKey.values()].some(
           (placement) => placement.item.kind === "entity" && placement.item.id === entityId,
         );
@@ -914,8 +939,8 @@
         const item = { kind: "entity", id: entity.id };
         entitiesById.set(entity.id, entity);
         persistedEntityIds.add(entity.id);
-        const key = placementKey(item, "personal");
-        placementsByKey.set(key, entityPlacement({ ...placementsByKey.get(key), item, space: "personal", folderId: placementsByKey.get(key)?.folderId ?? null, addedAt: placementsByKey.get(key)?.addedAt ?? entity.createdAt }));
+        const key = placementKey(item, entity.space);
+        placementsByKey.set(key, entityPlacement({ ...placementsByKey.get(key), item, space: entity.space, folderId: placementsByKey.get(key)?.folderId ?? null, addedAt: placementsByKey.get(key)?.addedAt ?? entity.createdAt }));
       }
       return {
         entities: [...staged.values()].map(cloneValue),
@@ -927,6 +952,8 @@
       const entityId = String(input.entityId || input.item?.id || "").trim();
       const current = entitiesById.get(entityId);
       if (!current) throw new Error(`Entity not found: ${entityId}`);
+      const space = resolveSpace(input.space || current.space || "personal");
+      if (!placementsByKey.has(placementKey({ kind: "entity", id: entityId }, space))) throw new Error("主体不在当前空间");
       if (!persistedEntityIds.has(entityId) || !Number.isInteger(current.version)) {
         throw new Error(`Entity ${entityId} does not have a persistent version.`);
       }
@@ -937,7 +964,7 @@
         throw createEntityVersionConflict(current.version);
       }
       if (Array.isArray(input.tagIds)) {
-        const currentTags = normalizeTagIds(placementsByKey.get(placementKey({ kind: "entity", id: entityId }, "personal"))?.tagIds).sort();
+        const currentTags = normalizeTagIds(placementsByKey.get(placementKey({ kind: "entity", id: entityId }, space))?.tagIds).sort();
         if (!Array.isArray(input.expectedTagIds) || JSON.stringify(normalizeTagIds(input.expectedTagIds).sort()) !== JSON.stringify(currentTags)) {
           throw createEntityVersionConflict(current.version, "主体标签已在其他窗口更新，请重新打开后再试");
         }
@@ -959,9 +986,9 @@
         version: current.version + 1,
         updatedAt: input.updatedAt ?? current.updatedAt,
       });
-      validateEntityVisibility(next, "personal");
+      validateEntityVisibility(next, space);
       entitiesById.set(entityId, next);
-      if (Array.isArray(input.tagIds)) syncEntityPlacementTags({ kind: "entity", id: entityId }, input.tagIds, input.tagOptions);
+      if (Array.isArray(input.tagIds)) syncEntityPlacementTags({ kind: "entity", id: entityId }, input.tagIds, input.tagOptions, space);
       return cloneValue(next);
     }
 

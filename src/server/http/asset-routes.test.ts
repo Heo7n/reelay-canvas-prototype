@@ -76,6 +76,17 @@ describe("asset persistence routes", () => {
     expect(saved.statusCode).toBe(200);
     expect(saved.json().catalog.entries).toEqual(expect.arrayContaining([expect.objectContaining({ assetId, space: "personal", displayName: "Source.png", folderId: null }), expect.objectContaining({ assetId, space: "organization", displayName: "Shared title", folderId, tagIds: ["builtin:character", tagId] })]));
     expect((await app.inject({ method: "POST", url: `${base}/save`, headers, payload })).json()).toEqual(saved.json());
+    const renameUrl = `/api/workspaces/workspace-organization-reelay/media-assets/${assetId}`;
+    expect((await app.inject({method: "PATCH", url: renameUrl, headers: {cookie: outsider}, payload: {space: "organization", displayName: "Denied.png"}})).statusCode).toBe(403);
+    const renamedShared = await app.inject({method: "PATCH", url: renameUrl, headers, payload: {space: "organization", displayName: "Renamed shared.png"}});
+    expect(renamedShared.statusCode).toBe(200);
+    expect(renamedShared.json().asset.displayName).toBe("Renamed shared.png");
+    expect((await app.inject({method: "PATCH", url: renameUrl, headers, payload: {space: "platform", displayName: "Denied.png"}})).statusCode).toBe(400);
+    const afterRename = await app.inject({method: "GET", url: base, headers});
+    expect(afterRename.json().catalog.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({assetId, space: "organization", displayName: "Renamed shared.png", folderId, tagIds: ["builtin:character", tagId]}),
+      expect.objectContaining({assetId, space: "personal", displayName: "Source.png"}),
+    ]));
     const shared = await app.inject({ method: "GET", url: base, headers: { cookie: outsider } });
     expect(shared.statusCode).toBe(200);
     expect(shared.json().catalog.entries).toHaveLength(1);

@@ -38,6 +38,48 @@ afterEach(() => {
 });
 
 describe("ExperienceAssetStore", () => {
+  it("isolates organization subjects and requires shared placements without confusing storage ownership", async () => {
+    const instance = store();
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:organization-file");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const original = await instance.library.list(workspaceId);
+    const personalId = original.entries[0]!.assetId;
+    const input = { workspaceId, space: "organization" as const, idempotencyKey: "org-subject", name: "Team subject", description: "", assetIds: [personalId], coverAssetId: personalId };
+    await expect(instance.entities.create(input)).rejects.toMatchObject({ code: "not_found" });
+    await instance.library.save({ workspaceId, projectId: "project-one", space: "organization", folderId: null, tagIds: [],
+      items: [{ assetId: personalId, displayName: "Shared reference", action: "add" }] });
+    const personalBeforeRename = (await instance.media.listPersonalAssets(workspaceId)).find((item) => item.id === personalId);
+    await instance.media.renamePersonalAsset(workspaceId, personalId, "Organization name.png", "organization");
+    expect((await instance.media.listPersonalAssets(workspaceId)).find((item) => item.id === personalId)).toEqual(personalBeforeRename);
+    expect((await instance.library.list(workspaceId)).entries.find((entry) => entry.assetId === personalId && entry.space === "organization")?.displayName).toBe("Organization name.png");
+    const shared = await instance.entities.create({ ...input, idempotencyKey: "shared-personal-source" });
+    expect(shared.space).toBe("organization");
+    expect(await instance.entities.get(workspaceId, shared.id, "organization")).toEqual(shared);
+    await instance.library.delete({ workspaceId, space: "organization", items: [{ kind: "entity", id: shared.id, expectedVersion: 1 }] });
+    const uploaded = await instance.importFile(upload({ storageSpace: "organization", uploadPurpose: "library" }));
+    const content = { ...input, assetIds: [uploaded.asset.id], coverAssetId: uploaded.asset.id, tagIds: ["builtin:character"] };
+    const created = await instance.entities.create(content);
+    expect(created.space).toBe("organization");
+    expect(await instance.entities.listPersonal(workspaceId, "organization")).toEqual([created]);
+    expect((await instance.entities.listPersonal(workspaceId)).some((entity) => entity.id === created.id)).toBe(false);
+    await expect(instance.entities.get(workspaceId, created.id)).rejects.toMatchObject({ code: "not_found" });
+    await expect(instance.entities.create(content)).resolves.toEqual(created);
+    const updated = await instance.entities.update({ ...content, entityId: created.id, expectedVersion: 1, expectedTagIds: ["builtin:character"], name: "Team subject edited" });
+    expect(updated.version).toBe(2);
+    await instance.library.delete({ workspaceId, space: "personal", items: [{ kind: "entity", id: created.id, expectedVersion: 2 }] });
+    expect(await instance.entities.get(workspaceId, created.id, "organization")).toEqual(updated);
+    const catalog = await instance.library.list(workspaceId);
+    expect(catalog.entityEntries!.find((entry) => entry.entityId === created.id)).toMatchObject({ space: "organization", tagIds: ["builtin:character"] });
+    expect(catalog.entries.some((entry) => entry.assetId === uploaded.asset.id && entry.space === "personal")).toBe(false);
+    await instance.library.delete({ workspaceId, space: "organization", items: [{ kind: "entity", id: created.id, expectedVersion: 2 }] });
+    expect(await instance.entities.listPersonal(workspaceId, "organization")).toEqual([]);
+    expect((await instance.library.list(workspaceId)).entries.some((entry) => entry.assetId === uploaded.asset.id)).toBe(true);
+    expect((await instance.entities.listPersonal(workspaceId)).length).toBe(original.entityEntries!.length);
+    await expect(instance.entities.create(content)).rejects.toMatchObject({ code: "conflict" });
+    instance.reset();
+    expect(await instance.entities.listPersonal(workspaceId, "organization")).toEqual([]);
+  });
+
   it("saves subject tags with content, preserves omitted tags, clears explicitly and rejects stale editor snapshots", async () => {
     const instance = store();
     const base = { workspaceId, space: "personal" as const };
@@ -188,7 +230,7 @@ describe("ExperienceAssetStore", () => {
       { input: { ...base, tagIds: ["builtin:sound"] }, code: "tag_not_found" },
       { input: { ...base, items: [...base.items, ...base.items] }, code: "invalid_request" },
       { input: { ...base, tagIds: [] }, code: "invalid_request" },
-      { input: { ...base, space: "organization" as const, items: [{ kind: "entity" as const, id: groupId }] }, code: "unsupported" },
+      { input: { ...base, space: "organization" as const, items: [{ kind: "entity" as const, id: groupId }] }, code: "library_item_not_found" },
     ];
     for (const { input, code } of attempts) {
       await expect(instance.library.updateTags(input)).rejects.toMatchObject({ serviceCode: code });

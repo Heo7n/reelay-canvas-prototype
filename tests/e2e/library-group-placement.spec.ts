@@ -118,7 +118,7 @@ test("subjects have a central area, retain member placement and restore nested m
   await expect(editor.locator('[data-entity-editor-location-toggle]')).toHaveCount(0);
   await editor.locator('[data-entity-editor-tags-toggle]').click();
   await editor.locator('[data-entity-editor-tag-toggle="builtin:character"]').click();
-  await editor.locator('[data-entity-editor-tag-query]').press('Escape');
+  await editor.locator('[data-entity-editor-tag-toggle="builtin:character"]').press('Escape');
   const createdResponse = page.waitForResponse((response) => response.url().endsWith(`${api}/entities`) && response.request().method() === "POST");
   await editor.locator('[data-entity-editor-submit]').click();
   const created = await createdResponse;
@@ -139,7 +139,7 @@ test("subjects have a central area, retain member placement and restore nested m
   await expect(editor.locator('[data-entity-editor-tags-toggle]')).toHaveText("角色");
   await editor.locator('[data-entity-editor-tags-toggle]').click();
   await editor.locator('[data-entity-editor-tag-toggle="builtin:character"]').click();
-  await editor.locator('[data-entity-editor-tag-query]').press('Escape');
+  await editor.locator('[data-entity-editor-tag-toggle="builtin:character"]').press('Escape');
   await editor.getByRole('button', { name: '取消', exact: true }).click();
   await canvas.getByRole('button', { name: '放弃修改', exact: true }).click();
   await expect(editor).toBeHidden();
@@ -148,7 +148,7 @@ test("subjects have a central area, retain member placement and restore nested m
   await expect(editor.locator('[data-entity-editor-tags-toggle]')).toHaveText("角色");
   await editor.locator('[data-entity-editor-tags-toggle]').click();
   await editor.locator('[data-entity-editor-tag-toggle="builtin:character"]').click();
-  await editor.locator('[data-entity-editor-tag-query]').press('Escape');
+  await editor.locator('[data-entity-editor-tag-toggle="builtin:character"]').press('Escape');
   await editor.locator('[data-entity-editor-description]').fill('主体描述与标签一起保存');
   await editor.locator('[data-entity-editor-submit]').click();
   await expect(editor).toBeHidden();
@@ -251,7 +251,7 @@ test("subjects have a central area, retain member placement and restore nested m
   await expect(editor.locator('[data-entity-editor-tags-toggle]')).toHaveText("选择标签");
   await editor.locator('[data-entity-editor-tags-toggle]').click();
   await editor.locator('[data-entity-editor-tag-toggle="builtin:scene"]').click();
-  await editor.locator('[data-entity-editor-tag-query]').press('Escape');
+  await editor.locator('[data-entity-editor-tag-toggle="builtin:character"]').press('Escape');
   await editor.locator('[data-entity-editor-submit]').click();
   await expect(editor).toBeHidden();
   expect((await readCatalog()).entityEntries?.find((entry) => entry.entityId === entity.id)?.tagIds).toEqual(['builtin:scene']);

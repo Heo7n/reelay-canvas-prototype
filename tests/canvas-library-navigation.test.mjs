@@ -35,7 +35,21 @@ test("subject browsing and deep media browsing retain independent filters and sc
   assert.deepEqual(f.view.tagFilter.tagIds, ["object"]);
 });
 
-test("spaces remember their own zones without offering subjects in organization or platform", () => {
+test("reference selection starts at the personal media root without stale search, tags or subject state", () => {
+  const f = fixture();
+  f.nav.switchSpace("organization");
+  f.nav.enterSubjects();
+  f.view.query = "旧筛选";
+  f.view.tagFilter.tagIds = ["object"];
+  f.nav.openMediaRoot();
+  assert.deepEqual(f.view, { space: "personal", zone: "media", folderId: null, query: "", filter: "all",
+    tagFilter: { tagIds: [], untagged: false }, scrollTop: 0 });
+  f.nav.switchSpace("organization");
+  assert.equal(f.view.zone, "subjects");
+  assert.equal(f.view.query, "旧筛选");
+});
+
+test("spaces remember their own zones with independent organization subjects and no platform subjects", () => {
   const f = fixture();
   f.nav.enterSubjects(); f.view.query = "幽影";
   f.nav.switchSpace("organization");
@@ -46,6 +60,16 @@ test("spaces remember their own zones without offering subjects in organization 
   assert.equal(f.view.query, "幽影");
   f.nav.switchSpace("organization");
   assert.equal(f.view.query, "场景");
+  f.nav.enterSubjects();
+  assert.equal(f.view.zone, "subjects");
+  f.view.query = "组织角色";
+  f.nav.switchSpace("personal");
+  assert.equal(f.view.query, "幽影");
+  f.nav.switchSpace("organization");
+  assert.equal(f.view.query, "组织角色");
+  f.nav.leaveSubjects();
+  assert.equal(f.view.query, "场景");
+  f.nav.switchSpace("platform");
   assert.equal(f.nav.enterSubjects(), false);
 });
 

@@ -11,7 +11,7 @@ import { InMemoryObjectStore } from "../../src/server/infrastructure/InMemoryObj
 // start.ts defaults. Browser writes live only until this test process exits.
 export async function startBrowserTestServer() {
   const seed = createDemoSeed();
-  const workspaceMemberships = seed.memberships.map(({ workspaceId, actorId }) => ({ workspaceId, actorId }));
+  const workspaceMemberships = seed.memberships.map(({ workspaceId, actorId, role }) => ({ workspaceId, actorId, role }));
   const app = await buildServer({
     store: new InMemoryCollaborationStore(seed),
     assetStore: new InMemoryAssetStore({

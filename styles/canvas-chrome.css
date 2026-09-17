@@ -725,13 +725,13 @@ html[data-theme="light"] {
 }
 
 .agent-launcher {
-  position: fixed;
-  top: 18px;
-  right: 18px;
+  position: absolute;
+  top: calc((var(--agent-header-height) - var(--agent-launcher-size)) / 2 + var(--agent-header-border));
+  right: 12px;
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
+  width: var(--agent-launcher-size);
+  height: var(--agent-launcher-size);
   padding: 0;
   border: 1px solid var(--canvas-chrome-border);
   border-radius: 50%;
@@ -854,7 +854,7 @@ html[data-theme="dark"] .agent-logo-body { filter: invert(1); }
     bottom: 10px;
   }
 
-  .agent-launcher { top: 10px; right: 10px; }
+  .agent-launcher { right: 10px; }
 }
 
 @media (max-width: 480px) {

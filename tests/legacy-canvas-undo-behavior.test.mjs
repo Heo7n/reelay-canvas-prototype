@@ -557,7 +557,7 @@ test("progressive asset arrival preserves the editable document, running task, s
   assert.equal(h.window.isCanvasMutationAllowed(), true);
   assert.equal(h.window.canPersistLibraryMedia(), false);
   h.window.openAssetLibrary();
-  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /正在加载个人资产/);
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /正在加载资产库/);
   assert.equal(h.window.isAssetLibraryMutable(), false);
   h.window.closeAssetLibrary();
 
@@ -610,7 +610,7 @@ test("progressive personal catalog failure exposes unavailable state without wri
   const instanceId = posted.findLast((message) => message.type === "canvas:ready").instanceId;
   dispatch({ type: "host:asset-availability", instanceId, projectAssets: "ready", workspaceCatalog: "unavailable" });
   h.window.openAssetLibrary();
-  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /个人资产暂时无法加载/);
+  assert.match(h.window.document.querySelector("#assetLibraryGrid").textContent, /资产库暂时无法加载/);
   assert.equal(h.window.isAssetLibraryMutable(), false);
   assert.equal(h.window.canPersistLibraryMedia(), false);
   assert.equal(h.window.canPersistLibraryEntities(), false);
@@ -1381,26 +1381,51 @@ test("dragging an unselected library card keeps the gesture single even during m
   assert.equal(first.undoStack.length, 1);
 });
 
-test("library dragover restores copy after crossing the panel to canvas or node destinations", (t) => {
+test("library dragover restores copy and highlights only the actual generator destination", (t) => {
   const h = createHarness(t);
-  h.install(h.canvas("library-dragover", [h.node("drop-target")]));
+  h.install(h.canvas("library-dragover", [h.node("drop-target"), h.node("other-node")]));
   const library = prepareLibraryDrag(h);
   library.card("drag-video").querySelector("[data-library-select]").click();
   library.card("drag-image").querySelector("[data-library-select]").click();
   const shell = h.window.document.querySelector("#canvasShell");
   const dataTransfer = library.drag("drag-video");
-  for (const destination of [shell, h.window.document.querySelector('[data-id="drop-target"]')]) {
+  const frame = h.window.document.querySelector('[data-id="drop-target"] .media-frame');
+  for (const destination of [shell, frame]) {
     const rejected = library.dispatch("dragover", library.card("drag-video"), dataTransfer);
     assert.equal(rejected.defaultPrevented, true);
     assert.equal(dataTransfer.dropEffect, "none");
-    assert.equal(shell.classList.contains("file-dragging"), false);
+    assert.equal(h.window.document.querySelector(".reference-drop-active"), null);
     const accepted = library.dispatch("dragover", destination, dataTransfer);
     assert.equal(accepted.defaultPrevented, true);
     assert.equal(dataTransfer.dropEffect, "copy", "drag must recover from the panel's rejected target");
-    assert.equal(shell.classList.contains("file-dragging"), true);
+    assert.deepEqual([...h.window.document.querySelectorAll(".reference-drop-active")], destination === frame ? [frame] : []);
   }
   library.dispatch("dragend", library.card("drag-video"), dataTransfer);
-  assert.equal(shell.classList.contains("file-dragging"), false);
+  assert.equal(h.window.document.querySelector(".reference-drop-active"), null);
+});
+
+test("generator reference drop feedback clears on generation and canvas transitions", (t) => {
+  const h = createHarness(t);
+  const node = h.node("drop-target");
+  h.install(h.canvas("drop-context", [node]));
+  const library = prepareLibraryDrag(h);
+  const payload = library.drag("drag-video");
+  const frame = () => h.window.document.querySelector('[data-id="drop-target"] .media-frame');
+  library.dispatch("dragover", frame(), payload);
+  assert.ok(frame().classList.contains("reference-drop-active"));
+  node.generating = true;
+  h.window.render();
+  assert.equal(h.window.document.querySelector(".reference-drop-active"), null);
+  library.dispatch("dragover", frame(), payload);
+  assert.equal(payload.dropEffect, "none");
+  library.dispatch("drop", frame(), payload);
+  assert.equal(node.assets.length, 0);
+  node.generating = false;
+  h.window.render();
+  library.dispatch("dragover", frame(), payload);
+  assert.ok(frame().classList.contains("reference-drop-active"));
+  h.install(h.canvas("other-canvas", [h.node("other")]));
+  assert.equal(h.window.document.querySelector(".reference-drop-active"), null);
 });
 
 test("library video cards retain their media when checking a corner box and clicking blank canvas", (t) => {
@@ -3640,7 +3665,147 @@ test("Agent video edit cost uses draft video duration and removal restores an un
   assert.equal(h.state.account.consumedCredits, 0);
 });
 
-test("Agent add menu imports selected canvas media as independent references", (t) => {
+test("node and conversation material menus expose the same two sources and preserve library destinations", (t) => {
+  const h = createHarness(t);
+  const node = h.node("reference-target", { expanded: true });
+  const other = h.node("other-target");
+  h.install(h.canvas("reference-menu", [node, other]));
+  h.window.setAgentOpen(true);
+  const { document } = h.window;
+  const references = h.window.canvasTest.agentReferences;
+  const fixture = { id: "shared-library-image", type: "image", name: "reference.png",
+    url: "https://example.test/reference.png", width: 600, height: 900 };
+  h.window.registerLibraryAssets([fixture], "personal");
+  h.window.switchAssetLibraryContext({ space: "personal" });
+  h.window.handleAction(node, "material-panel");
+  const nodeMenu = document.querySelector('.canvas-node[data-id="reference-target"] .material-panel');
+  const conversationMenu = document.querySelector("#agentReferenceMenu");
+  for (const menu of [nodeMenu, conversationMenu]) {
+    const choices = [...menu.querySelectorAll("button")];
+    assert.deepEqual(choices.map((button) => button.textContent.trim()), ["本地上传", "选择素材"]);
+    assert.deepEqual(choices.map((button) => button.dataset.value || button.dataset.agentReferenceSource), ["local", "library"]);
+    assert.ok(choices[0].querySelector("svg.lucide-upload"));
+    assert.ok(choices[1].querySelector("svg.lucide-folder-open"));
+  }
+  const otherBefore = plain(other);
+  const accountBefore = plain(h.state.account);
+  h.window.switchAssetLibraryContext({ space: "organization" });
+  h.state.librarySelectionMode = true;
+  nodeMenu.querySelector('[data-value="library"]').click();
+  assert.equal(h.state.libraryTarget?.kind, "node");
+  assert.equal(h.state.libraryTarget.nodeId, node.id);
+  assert.equal(h.state.librarySpace, "personal");
+  assert.equal(h.state.librarySelectionMode, false);
+  const nodePick = document.querySelector(`[data-library-media="${fixture.id}"] [data-library-preview]`);
+  assert.match(nodePick.getAttribute("aria-label"), /选择参考/);
+  nodePick.click();
+  assert.equal(document.querySelector("#assetLibraryPreviewDialog").open, false);
+  assert.deepEqual(plain(node.assets.map((asset) => asset.url)), [fixture.url]);
+  assert.equal(references.getAssets().length, 0);
+  assert.deepEqual(plain(other), otherBefore);
+  assert.equal(h.state.undoStack.length, 1);
+  assert.equal(h.window.isAssetLibraryOpen(), true);
+  assert.equal(nodePick.getAttribute("aria-pressed"), "true");
+  nodePick.click();
+  assert.equal(node.assets.length, 0);
+  assert.equal(nodePick.getAttribute("aria-pressed"), "false");
+  h.window.undoLastAction();
+  assert.equal(node.assets.length, 1);
+  assert.equal(nodePick.getAttribute("aria-pressed"), "true");
+  document.querySelector('[aria-label="退出参考选择"]').click();
+  assert.equal(h.state.libraryTarget, null);
+  assert.equal(node.assets.length, 1, "exit keeps actual references");
+
+  const add = document.querySelector("#agentAddBtn");
+  add.getBoundingClientRect = () => ({ left: 720, top: 550, right: 768, bottom: 598, width: 48, height: 48 });
+  conversationMenu.getBoundingClientRect = () => ({ left: 0, top: 0, right: 176, bottom: 82, width: 176, height: 82 });
+  add.click();
+  assert.equal(conversationMenu.hidden, false);
+  conversationMenu.querySelector('[data-agent-reference-source="library"]').click();
+  assert.equal(h.state.libraryTarget?.kind, "agent");
+  assert.equal(h.state.libraryTarget.scope.conversation, h.window.getConversation());
+  const canvasBefore = plain(h.window.createCanvasDocumentSnapshot());
+  const conversationPick = document.querySelector(`[data-library-media="${fixture.id}"] [data-library-preview]`);
+  assert.match(conversationPick.getAttribute("aria-label"), /选择参考/);
+  conversationPick.click();
+  assert.deepEqual(plain(references.getAssets().map((asset) => asset.url)), [fixture.url]);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), canvasBefore);
+  assert.deepEqual(plain(h.state.account), accountBefore);
+  assert.equal(h.state.undoStack.length, 1);
+  assert.equal(h.window.isAssetLibraryOpen(), true);
+  assert.equal(conversationPick.getAttribute("aria-pressed"), "true");
+  conversationPick.click();
+  assert.equal(references.getAssets().length, 0);
+  assert.equal(conversationPick.getAttribute("aria-pressed"), "false");
+  conversationPick.click();
+  references.removeAssets(references.getAssets().map((asset) => asset.id));
+  assert.equal(conversationPick.getAttribute("aria-pressed"), "false", "reference shelf removal updates the library selection");
+  assert.equal(document.querySelector(".library-reference-mode-count").textContent, "对话 · 0 项");
+  conversationPick.click();
+  document.querySelector('[aria-label="退出参考选择"]').click();
+  document.querySelector(`[data-library-media="${fixture.id}"] [data-library-preview]`).click();
+  assert.equal(document.querySelector("#assetLibraryPreviewDialog").open, true, "ordinary browsing still previews instead of adding");
+  assert.equal(references.getAssets().length, 1);
+});
+
+test("switching conversations ends reference selection without changing the previous draft", (t) => {
+  const h = createHarness(t);
+  h.install(h.canvas("reference-conversation-scope", []));
+  h.window.setAgentOpen(true);
+  const { document } = h.window;
+  const references = h.window.canvasTest.agentReferences;
+  const fixture = { id: "conversation-library-image", type: "image", name: "reference.png", url: "https://example.test/reference.png" };
+  h.window.registerLibraryAssets([fixture], "personal");
+  h.window.switchAssetLibraryContext({ space: "personal" });
+  const original = h.window.getConversation();
+  document.querySelector("#agentAddBtn").getBoundingClientRect = () => ({ left: 720, top: 550, right: 768, bottom: 598, width: 48, height: 48 });
+  document.querySelector("#agentReferenceMenu").getBoundingClientRect = () => ({ left: 0, top: 0, right: 176, bottom: 82, width: 176, height: 82 });
+  document.querySelector("#agentAddBtn").click();
+  document.querySelector('[data-agent-reference-source="library"]').click();
+  document.querySelector(`[data-library-media="${fixture.id}"] [data-library-preview]`).click();
+  assert.equal(references.getAssets().length, 1);
+  document.querySelector("#agentNewChatBtn").click();
+  assert.notEqual(h.window.getConversation(), original);
+  assert.equal(h.state.libraryTarget, null);
+  assert.equal(document.querySelector(".library-reference-mode-bar").hidden, true);
+  assert.equal(references.getAssets().length, 0);
+  assert.equal(references.hasDraft(original), true);
+  document.querySelector("#agentHistoryBtn").click();
+  document.querySelector(`#agentHistoryList [data-chat-id="${original.id}"] [data-history-action="select"]`).click();
+  assert.equal(references.getAssets().length, 1);
+  assert.equal(references.getAssets()[0].url, fixture.url);
+});
+
+test("reference picking ends without writing when the destination starts generating", (t) => {
+  const h = createHarness(t);
+  const node = h.node("pick-generating", { expanded: true });
+  h.install(h.canvas("pick-failure", [node]));
+  const fixture = { id: "pick-image", type: "image", name: "reference.png", url: "https://example.test/reference.png" };
+  h.window.registerLibraryAssets([fixture], "personal");
+  h.window.openAssetLibrary(node.id);
+  node.generating = true;
+  h.window.document.querySelector(`[data-library-media="${fixture.id}"] [data-library-preview]`).click();
+  assert.equal(node.assets.length, 0);
+  assert.equal(h.window.isAssetLibraryOpen(), true);
+  assert.equal(h.state.libraryTarget, null);
+  assert.equal(h.window.document.querySelector(".library-reference-mode-bar").hidden, true);
+  assert.equal(h.state.undoStack.length, 0);
+});
+
+test("removed and unknown node material sources cannot create placeholder references", (t) => {
+  const h = createHarness(t);
+  const node = h.node("invalid-material", { expanded: true });
+  h.install(h.canvas("invalid-material-source", [node]));
+  const before = plain(h.window.createCanvasDocumentSnapshot());
+  for (const source of ["canvas", "unknown", undefined]) {
+    h.window.handleAction(node, "material", source);
+    assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), before);
+    assert.equal(h.state.undoStack.length, 0);
+    assert.equal(h.state.libraryTarget, null);
+  }
+});
+
+test("selection toolbar imports selected canvas media as independent conversation references", (t) => {
   const h = createHarness(t);
   const assets = [
     { id: "canvas-image", type: "image", name: "image.png", url: "blob:http://reelay.test/canvas-image", width: 600, height: 900 },
@@ -3653,26 +3818,17 @@ test("Agent add menu imports selected canvas media as independent references", (
   h.install(h.canvas("selected-canvas-media", nodes));
   h.window.setAgentOpen(true);
   const { document } = h.window;
-  const add = document.querySelector("#agentAddBtn");
-  const menu = document.querySelector("#agentReferenceMenu");
-  add.getBoundingClientRect = () => ({ left: 720, top: 550, right: 756, bottom: 586, width: 36, height: 36 });
-  menu.getBoundingClientRect = () => ({ left: 0, top: 0, right: 216, bottom: 148, width: 216, height: 148 });
-  add.click();
-  assert.equal(menu.classList.contains("hidden"), false);
-  assert.equal(menu.querySelector('[data-agent-reference-source="canvas"]').disabled, true);
-  add.click();
   h.window.setSelection(nodes.map((node) => node.id), nodes[0].id);
+  h.window.render();
   const snapshot = plain(h.window.createCanvasDocumentSnapshot());
   const originalNodes = plain(nodes);
-  add.click();
-  const canvasChoice = menu.querySelector('[data-agent-reference-source="canvas"]');
-  assert.equal(canvasChoice.disabled, false);
-  canvasChoice.click();
+  const addToConversation = document.querySelector('#selectionToolbar [data-selection-action="add-conversation"]');
+  assert.equal(addToConversation.disabled, false);
+  addToConversation.click();
   const added = h.window.canvasTest.agentReferences.getAssets();
   assert.deepEqual(plain(added.map((asset) => asset.type)), ["image", "video", "audio"]);
   assert.deepEqual(plain(added.map((asset) => asset.url)), assets.map((asset) => asset.url));
   assert.ok(added.every((asset, index) => asset.id !== assets[index].id));
-  assert.equal(menu.classList.contains("hidden"), true);
   document.querySelector("#agentReferenceShelf [data-reference-remove]").click();
   assert.deepEqual(plain(nodes), originalNodes);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
@@ -3731,7 +3887,8 @@ for (const operation of ["switch", "add"]) {
     assert.deepEqual(plain(references.getAssets().map((asset) => asset.url)), [fixture.url]);
     assert.deepEqual(plain(h.state.canvases), canvases, "choosing a conversation reference must not add or alter canvas nodes");
     assert.deepEqual(plain(h.state.account), account);
-    assert.equal(h.window.isAssetLibraryOpen(), false);
+    assert.equal(h.window.isAssetLibraryOpen(), true);
+    assert.equal(h.window.document.querySelector('[data-library-selection-toggle]'), null);
   });
 }
 
@@ -3786,6 +3943,83 @@ test("Agent image references retain relative and signed external originals and u
   assert.equal(images[2].src, "http://reelay.test/api/workspaces/workspace-one/media-assets/image-one/content?version=2&preview=library");
 });
 
+test("Seedance 2.5 duration preserves Auto at the provider boundary and restores numeric choices with undo", (t) => {
+  const h = createHarness(t);
+  const node = h.node("duration", { model: "seedance-2-5", omniReferenceTaskType: "extend", duration: "12s" });
+  const canvas = h.canvas("duration", [node]);
+  h.install(canvas);
+
+  h.window.handleAction(node, "duration", "auto");
+  assert.equal(node.duration, "auto");
+  h.window.normalizeNodeParameters(node);
+  assert.equal(node.duration, "auto", "render-time normalization must not silently replace Auto with a numeric duration");
+  const snapshot = h.window.createGenerationParameterSnapshot(node);
+  assert.equal(snapshot.duration, "auto");
+  assert.equal(snapshot.providerParameters.duration, -1);
+  assert.match(h.window.getParamLabelParts(node).afterAspect, /智能/);
+  assert.equal(canvas.undoStack.length, 1);
+  h.window.undoLastAction();
+  assert.equal(node.duration, "12s");
+
+  h.window.handleAction(node, "omni-reference-task-type", "edit");
+  assert.equal(node.duration, "12s", "fixed editing duration must retain the numeric preference for other modes");
+  assert.equal(h.window.createGenerationParameterSnapshot(node).providerParameters.duration, -1);
+  assert.match(h.window.getParamLabelParts(node).afterAspect, /智能/);
+  h.window.undoLastAction();
+  assert.equal(node.omniReferenceTaskType, "extend");
+  assert.equal(node.duration, "12s");
+
+  for (const [input, expected] of [["1s", "4s"], ["99s", "30s"]]) {
+    h.window.handleAction(node, "duration", input);
+    assert.equal(node.duration, expected);
+    assert.equal(h.window.createGenerationParameterSnapshot(node).providerParameters.duration, Number.parseInt(expected, 10));
+    h.window.undoLastAction();
+    assert.equal(node.duration, "12s");
+  }
+  for (const legacyAuto of [-1, "-1"]) {
+    node.duration = legacyAuto;
+    h.window.normalizeNodeParameters(node);
+    assert.equal(node.duration, "auto");
+  }
+  h.window.handleAction(node, "omni-reference-task-type", "auto");
+  assert.equal(node.duration, "10s", "the full-reference mode falls back to the model default rather than an invalid sentinel");
+  assert.equal(h.window.createGenerationParameterSnapshot(node).providerParameters.duration, 10);
+  h.window.undoLastAction();
+  assert.equal(node.omniReferenceTaskType, "extend");
+  assert.equal(node.duration, "auto");
+});
+
+test("Seedance extension slider previews Auto and valid seconds and commits one undoable change", (t) => {
+  const h = createHarness(t);
+  const node = h.node("slider", { model: "seedance-2-5", omniReferenceTaskType: "extend", duration: "12s", expanded: true, panel: "params" });
+  const canvas = h.canvas("slider", [node]);
+  h.install(canvas);
+  const element = h.window.document.querySelector('[data-id="slider"]');
+  const range = element.querySelector('[data-duration-range]');
+  const number = element.querySelector('[data-duration-number]');
+  for (const [position, value, unit] of [["0", "智能", ""], ["1", "4", "s"], ["27", "30", "s"], ["0", "智能", ""]]) {
+    range.value = position;
+    range.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+    assert.equal(number.value, value);
+    assert.equal(element.querySelector('.duration-unit').textContent, unit);
+    assert.equal(node.duration, "12s", "drag preview does not commit node state");
+    assert.equal(canvas.undoStack.length, 0);
+  }
+  range.dispatchEvent(new h.window.Event("change", { bubbles: true }));
+  assert.equal(node.duration, "auto");
+  assert.equal(h.window.createGenerationParameterSnapshot(node).providerParameters.duration, -1);
+  assert.equal(canvas.undoStack.length, 1);
+  h.window.undoLastAction();
+  assert.equal(node.duration, "12s");
+  for (const [typed, expected] of [["0", "4s"], ["99", "30s"], ["智能", "auto"], ["", "auto"], ["invalid", "auto"], ["4", "4s"]]) {
+    const field = element.querySelector('[data-duration-number]');
+    field.value = typed;
+    field.dispatchEvent(new h.window.Event("change", { bubbles: true }));
+    assert.equal(node.duration, expected);
+    assert.notEqual(element.querySelector('[data-duration-range]').getAttribute('aria-valuetext'), "NaN 秒");
+  }
+});
+
 test("Agent video parameter clicks update the summary and constraints without touching canvas content or undo", (t) => {
   const h = createHarness(t);
   const node = h.node("video", { model: "seedance-2-5" });
@@ -3818,15 +4052,37 @@ test("Agent video parameter clicks update the summary and constraints without to
   controls.click("audio", "off");
   controls.click("output-format", "mov");
   controls.click("omni-reference-task-type", "edit");
-  assert.equal(controls.menu.querySelector("[data-duration-range]"), null);
+  assert.equal(controls.menu.querySelector("[data-duration-range]").disabled, true);
+  assert.equal(controls.menu.querySelector("[data-duration-readonly]").value, "智能");
   assert.deepEqual([...controls.menu.querySelectorAll('[data-action="aspect"]')].map((button) => button.dataset.value), ["adaptive"]);
   assert.match(controls.trigger.textContent, /视频编辑/);
+  assert.match(controls.trigger.textContent, /智能/);
   assert.doesNotMatch(controls.trigger.textContent, /30s/);
+  assert.equal(controls.menu.querySelector('[data-action="duration"]'), null);
   controls.click("omni-reference-task-type", "extend");
-  assert.equal(controls.menu.querySelector("[data-duration-number]"), null);
+  assert.equal(controls.menu.querySelector("[data-duration-number]").value, "30");
   assert.match(controls.trigger.textContent, /视频延长/);
+  const automaticRange = controls.menu.querySelector("[data-duration-range]");
+  assert.equal(automaticRange.disabled, false);
+  automaticRange.value = "0";
+  automaticRange.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(controls.menu.querySelector("[data-duration-number]").value, "智能");
+  assert.equal(controls.menu.querySelector(".duration-unit").textContent, "");
+  assert.equal(h.window.getAgentGenerationParameters().duration, "auto");
+  assert.match(controls.trigger.textContent, /智能/);
+  for (const [position, duration] of [["1", "4s"], ["27", "30s"], ["0", "auto"]]) {
+    automaticRange.value = position;
+    automaticRange.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+    assert.equal(h.window.getAgentGenerationParameters().duration, duration);
+    assert.equal(controls.menu.querySelector("[data-duration-range]"), automaticRange, "dragging keeps the live slider mounted");
+  }
+  controls.click("omni-reference-task-type", "edit");
+  assert.equal(controls.menu.querySelector('[data-action="duration"]'), null);
+  controls.click("omni-reference-task-type", "extend");
+  assert.equal(controls.menu.querySelector('[data-duration-number]').value, "智能");
   controls.click("omni-reference-task-type", "auto");
   assert.ok(controls.menu.querySelector("[data-duration-range]"));
+  assert.doesNotMatch(controls.trigger.textContent, /智能/);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
   assert.deepEqual(plain([first, second]), canvases);
 });

@@ -361,9 +361,11 @@ test("deduplicates repeated Media records before rendering editor and picker car
 
 test("dedicated CSS covers theme parity, visible hover removal, focus, and defensive layout", async () => {
   const css = await readFile(new URL("../styles/canvas-entity-editor.css", import.meta.url), "utf8");
+  const libraryCss = await readFile(new URL("../styles/canvas-asset-library.css", import.meta.url), "utf8");
 
   assert.match(css, /\.canvas-entity-editor\s*\{/);
-  assert.match(css, /html\[data-theme="light"\] \.canvas-entity-editor/);
+  assert.match(libraryCss, /html\[data-theme="light"\] :is\(\.asset-library-panel, \.canvas-entity-editor, \.entity-media-picker\)/);
+  assert.doesNotMatch(css, /--asset-panel-bg\s*:/);
   assert.match(css, /\.entity-editor-media-card:hover \.entity-editor-media-remove/);
   assert.match(css, /\.entity-editor-media-card:focus-within \.entity-editor-media-remove/);
   assert.match(css, /\.entity-editor-details-scroll\s*\{[^}]*overflow:\s*hidden;[^}]*flex-direction:\s*column;/s);
@@ -374,7 +376,7 @@ test("dedicated CSS covers theme parity, visible hover removal, focus, and defen
   assert.doesNotMatch(css, /\.entity-editor-cover-badge svg/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /\.entity-media-picker\s*\{/);
-  assert.match(css, /\.canvas-entity-editor\s*\{[^}]*background: var\(--entity-editor-panel\);/s);
+  assert.match(css, /\.canvas-entity-editor\s*\{[^}]*background: var\(--asset-panel-bg\);/s);
   assert.match(css, /\.entity-picker-footer\s*\{[^}]*flex-wrap: wrap;/s);
   assert.match(css, /\.entity-editor-preview\s*\{[^}]*min-height:\s*0;[^}]*flex:\s*1 1 0;/s);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
@@ -421,23 +423,44 @@ test("editor metadata exposes optional draft tags without mixing them into the n
   assert.equal(metadata.querySelector("[data-entity-editor-tag-remove]"), null);
   assert.equal(metadata.querySelector('[data-entity-editor-tag-toggle="custom"]').getAttribute("aria-pressed"), "true");
   assert.equal(metadata.querySelector("[data-entity-editor-tag-popover]").getAttribute("role"), "dialog");
-  assert.equal(metadata.querySelector("[data-entity-editor-tag-query]").value, "");
+  assert.equal(metadata.querySelector("[data-entity-editor-tag-query]"), null);
 });
 
-test("tag option projection filters safely and preserves independent selection", () => {
+test("tag option projection lists available tags safely and preserves independent selection", () => {
   const options = {
     tagIds: ["custom"],
     tagOptions: [{ id: "role", name: "角色" }, { id: "custom", name: 'Forest <Elf> "2"' }],
-    tagQuery: "FOREST",
   };
   const fragment = JSDOM.fragment(view.renderEntityTagOptions(options));
   const choices = fragment.querySelectorAll("button");
-  assert.equal(choices.length, 1);
-  assert.equal(choices[0].textContent, 'Forest <Elf> "2"');
-  assert.equal(choices[0].getAttribute("aria-pressed"), "true");
+  assert.equal(choices.length, 2);
+  assert.equal(choices[1].textContent, 'Forest <Elf> "2"');
+  assert.equal(choices[1].getAttribute("aria-pressed"), "true");
   assert.equal(fragment.querySelector("elf"), null);
-  assert.match(view.renderEntityTagOptions({ ...options, tagQuery: "没有" }), /没有匹配的标签/);
   assert.match(view.renderEntityTagOptions({ tagOptions: [] }), /暂无可用标签/);
+});
+
+test("tag creation is an inline row with escaped input, local errors and pending controls", () => {
+  const fragment = JSDOM.fragment(view.renderEntityEditor({
+    name: 'Subject', media: [{ id: 'image', mediaKind: 'image', name: 'Image' }],
+    tagPickerOpen: true, canCreateTag: true, tagCreateOpen: true,
+    tagCreateName: '<New>', tagCreateError: 'Try again', tagCreating: true,
+  }));
+  assert.equal(fragment.querySelector('[data-entity-editor-tag-name]').value, '<New>');
+  assert.equal(fragment.querySelector('[data-entity-editor-tag-name]').disabled, true);
+  assert.equal(fragment.querySelector('[data-entity-editor-tag-create-submit]').disabled, true);
+  assert.equal(fragment.querySelector('[data-entity-editor-tag-create-cancel]').disabled, true);
+  assert.equal(fragment.querySelector('[data-entity-editor-tag-error]').textContent, 'Try again');
+  assert.equal(fragment.querySelector('[data-entity-editor-submit]').disabled, true);
+  assert.equal(fragment.querySelector('input[type="search"]'), null);
+});
+
+test("organization media picker labels match its organization source", () => {
+  const fragment = JSDOM.fragment(view.renderMediaPicker({ space: 'organization', media: [] }));
+  assert.equal(fragment.querySelector('[data-entity-picker-search]').placeholder, '搜索组织素材');
+  assert.equal(fragment.querySelector('[role="listbox"]').getAttribute('aria-label'), '组织空间素材');
+  assert.match(fragment.textContent, /请先向组织空间上传素材/);
+  assert.doesNotMatch(fragment.textContent, /个人/);
 });
 
 test("missing tags stay visible and removable while read-only or busy editors prohibit all tag mutations", () => {

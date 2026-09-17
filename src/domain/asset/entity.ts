@@ -11,7 +11,8 @@ export interface EntityMediaReference {
 }
 
 export interface WorkspaceEntity {
-  /** Personal placement tags projected for the current actor; not Entity content. */
+  space?: "personal" | "organization";
+  /** Tags belong to the selected library placement, not Entity content. */
   libraryTagIds?: string[];
   id: EntityId;
   workspaceId: WorkspaceId;
@@ -29,8 +30,8 @@ export interface EntityPlacement {
   id: EntityPlacementId;
   workspaceId: WorkspaceId;
   entityId: EntityId;
-  scopeKind: "personal";
-  ownerActorId: ActorId;
+  scopeKind: "personal" | "organization";
+  ownerActorId: ActorId | null;
   createdByActorId: ActorId;
   createdAt: string;
 }

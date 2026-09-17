@@ -435,8 +435,8 @@ const runtimeAssetLibrarySeed = window.parent === window
   ? inspirationLibrarySeed
   : {
       ...inspirationLibrarySeed,
-      folders: Array.from(inspirationLibrarySeed.folders || []).filter((folder) => folder?.space !== "personal"),
-      placements: Array.from(inspirationLibrarySeed.placements || []).filter((placement) => placement?.space !== "personal"),
+      folders: Array.from(inspirationLibrarySeed.folders || []).filter((folder) => folder?.space === "platform"),
+      placements: Array.from(inspirationLibrarySeed.placements || []).filter((placement) => placement?.space === "platform"),
     };
 const assetLibraryStore = canvasAssetLibraryModel.createAssetLibraryStore(runtimeAssetLibrarySeed);
 const canvasInspiration = window.REELAY_CANVAS_INSPIRATION_CONTROLLER.create({
@@ -627,10 +627,11 @@ const canvasEntityUse = canvasEntityUseControllerFactory.createCanvasEntityUseCo
   getScope: () => ({ projectId: state.projectId, canvasId: state.activeCanvasId }),
   getDetailContext: () => ({
     space: state.librarySpace,
-    eligible: isAssetLibraryOpen() && !isSubjectLibraryZone() && !state.libraryEntityFilter
+    eligible: isAssetLibraryOpen() && !state.libraryTarget && !state.libraryEntityFilter
       && !state.librarySelectionMode && !state.libraryMenuTarget && !state.libraryRenameTarget,
   }),
   getDetailEntity: getEntityUseDetailPayload,
+  getDetailSourceRect: () => assetLibraryPanel.getBoundingClientRect(),
   getPickerEntities: getEntityUsePickerEntities,
   getAvoidRects: () => state.agentOpen && agentDock ? [agentDock.getBoundingClientRect()] : [],
   isTargetAvailable: (nodeId) => {
@@ -642,10 +643,10 @@ const canvasEntityUse = canvasEntityUseControllerFactory.createCanvasEntityUseCo
   requireMutation: requireCanvasMutation,
   getPickerTrigger: (nodeId) => nodeLayer.querySelector(`[data-id="${CSS.escape(nodeId)}"] .entity-drop`),
   onAddEntities: addSelectedEntitiesToGenerator,
-  onAddToCanvas: (submission) => addEntityToCanvas(submission).length > 0,
   refreshIcons,
 });
 let reopenAssetLibraryAfterEntityEditor = false;
+let entityEditorSpace = "personal";
 const canvasEntityMediaImport = window.REELAY_CANVAS_ENTITY_MEDIA_IMPORT.createEntityMediaImport({
   getPersonalMedia: getPersonalEntityMedia,
   getBaseUrl: () => window.location.href,
@@ -819,10 +820,17 @@ const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntit
   uploadInput: canvasEntityEditorUploadInput,
   model: canvasEntityEditorModel,
   view: canvasEntityEditorView,
-  getAvailableMedia: getPersonalEntityMedia,
+  getAvailableMedia: () => getPersonalEntityMedia(entityEditorSpace),
+  createTag: async (name) => {
+    const space = entityEditorSpace;
+    const scope = hostLaunchScope;
+    const tag = await canvasMediaLibrary.request("create-tag", { space, name });
+    if (scope === hostLaunchScope) registerLibraryTag(tag);
+    return tag;
+  },
   getTagOptions: getEntityEditorTagOptions,
   getMediaSaveNotice(media, { mode }) {
-    if (mode !== "create" || !media.length) return "";
+    if (entityEditorSpace === "organization" || mode !== "create" || !media.length) return "";
     const count = media.filter((asset) => !canvasEntityMediaImport.resolvePersonalMedia(asset)).length;
     return count
       ? `${count} 个新素材将在创建时加入个人素材库默认目录，已有素材保留原位置。`
@@ -830,18 +838,22 @@ const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntit
   },
   persistFiles: persistEntityEditorFiles,
   renameMedia: async ({ mediaId, displayName, media }) => {
-    const existing = canvasEntityMediaImport.resolvePersonalMedia(media);
+    const space = entityEditorSpace;
+    const scope = hostLaunchScope;
+    const existing = entityEditorSpace === "personal" ? canvasEntityMediaImport.resolvePersonalMedia(media)
+      : assetLibraryStore.getMedia({ kind: "media", id: mediaId, space: entityEditorSpace });
     if (!existing) return { id: mediaId, displayName, staged: true };
     if (window.parent === window) {
       return assetLibraryStore.renameItem({
         item: { kind: "media", id: existing.id },
         name: displayName,
-        space: "personal",
+        space: entityEditorSpace,
       });
     }
     if (!canPersistLibraryMedia()) throw new Error("当前项目尚未接入素材持久化");
-    const workspaceAsset = await canvasMediaAssets.renameMedia(existing.id, displayName);
-    const updated = assetLibraryStore.syncPersistedMedia(workspaceAssetToLibraryMedia(workspaceAsset));
+    const workspaceAsset = await canvasMediaAssets.renameMedia(existing.id, displayName, space);
+    if (scope !== hostLaunchScope) throw new Error("当前空间已变化，请重新打开主体");
+    const updated = assetLibraryStore.syncPersistedMedia({ media: workspaceAssetToLibraryMedia(workspaceAsset), space });
     renderAssetLibrary();
     return updated;
   },
@@ -853,7 +865,7 @@ const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntit
     if (window.parent !== window) syncHostEntity(entity);
     reopenAssetLibraryAfterEntityEditor = true;
     if (mode === "create") {
-      if (state.librarySpace !== "personal") canvasLibraryNavigation.switchSpace("personal");
+      if (state.librarySpace !== entityEditorSpace) canvasLibraryNavigation.switchSpace(entityEditorSpace);
       canvasLibraryNavigation.enterSubjects({ reset: true });
       rememberAssetLibraryContext();
     }
@@ -997,6 +1009,8 @@ function syncCanvasAccessUi() {
 }
 
 function applyCanvasAccessMode(mode) {
+  libraryReferencePicker.sync();
+  canvasReferenceDrop.syncContext();
   canvasInspiration.syncContext();
   canvasLibrarySearch.syncContext();
   canvasLibraryNavigation.syncContext();
@@ -1703,7 +1717,6 @@ function syncNodePopoverLayout(element) {
   const promptPanel = element?.querySelector(".prompt-panel");
   const popover = promptPanel?.querySelector("[data-node-popover]");
   if (!promptPanel || !popover) return;
-  if (popover.classList.contains("is-task-type-transitioning")) return;
   const anchorAction = popover.dataset.anchorAction;
   const anchor = promptPanel.querySelector(`[data-action="${anchorAction}"]`)
     || promptPanel.querySelector(".control-bar");
@@ -1810,54 +1823,15 @@ function captureTaskTypeParameterTransition(node, nextTaskType) {
   if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return null;
   const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
   const panel = element?.querySelector(".param-panel");
-  const currentDetails = panel?.querySelector(
-    ".parameter-task-details:not(.parameter-task-details-outgoing)",
-  );
-  const detailLayers = currentDetails ? [currentDetails] : [];
   const segmented = panel?.querySelector(".omni-reference-task-type-segmented");
-  if (!panel) return null;
-
-  const restoreFocus = panel.contains(document.activeElement)
-    && document.activeElement?.matches?.('[data-action="omni-reference-task-type"]');
-  if (reducedMotionQuery.matches || !panel.offsetHeight || !detailLayers.length || !segmented) {
-    return { fromIndex, toIndex, restoreFocus, shouldAnimate: false };
-  }
-
-  const panelRect = panel.getBoundingClientRect();
-  const compositeScale = panel.offsetWidth > 0 ? panelRect.width / panel.offsetWidth : 1;
-  if (!compositeScale) {
-    return { fromIndex, toIndex, restoreFocus, shouldAnimate: false };
-  }
-
-  const outgoingDetails = detailLayers.map((details) => {
-    const detailsRect = details.getBoundingClientRect();
-    const clone = details.cloneNode(true);
-    clone.classList.add("parameter-task-details-outgoing");
-    clone.setAttribute("aria-hidden", "true");
-    clone.inert = true;
-    [clone, ...clone.querySelectorAll("[id]")]
-      .forEach((item) => item.removeAttribute("id"));
-    return {
-      element: clone,
-      top: (detailsRect.top - panelRect.top) / compositeScale - panel.clientTop,
-      left: (detailsRect.left - panelRect.left) / compositeScale - panel.clientLeft,
-      width: detailsRect.width / compositeScale,
-      opacity: getComputedStyle(details).opacity,
-    };
-  });
+  if (!panel || !segmented) return null;
 
   return {
-    fromHeight: panelRect.height / compositeScale,
-    fromLeft: panelRect.left,
-    fromBottom: panelRect.bottom,
-    fromSelectionOffset: getTaskTypeSelectionOffset(segmented, fromIndex),
-    fromIndex,
     toIndex,
-    direction: Math.sign(toIndex - fromIndex) || 1,
-    restoreFocus,
-    shouldAnimate: true,
-    fromDetailsSignature: currentDetails.innerHTML,
-    outgoingDetails,
+    restoreFocus: panel.contains(document.activeElement)
+      && document.activeElement?.matches?.('[data-action="omni-reference-task-type"]'),
+    shouldAnimate: !reducedMotionQuery.matches && Boolean(panel.offsetHeight),
+    fromSelectionOffset: getTaskTypeSelectionOffset(segmented, fromIndex),
   };
 }
 
@@ -1865,91 +1839,25 @@ function animateTaskTypeParameterTransition(node, transition) {
   if (!transition) return;
   const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
   const panel = element?.querySelector(".param-panel");
-  const details = panel?.querySelector(
-    ".parameter-task-details:not(.parameter-task-details-outgoing)",
-  );
   const segmented = panel?.querySelector(".omni-reference-task-type-segmented");
-  if (!element || !panel || !details || !segmented) return;
+  if (!element || !panel || !segmented) return;
 
   syncNodeVisualLayout(node, element);
   syncNodePopoverLayout(element);
   const buttons = [...segmented.querySelectorAll('[data-action="omni-reference-task-type"]')];
-  const targetButton = buttons[transition.toIndex];
-  if (transition.restoreFocus) targetButton?.focus({ preventScroll: true });
+  if (transition.restoreFocus) buttons[transition.toIndex]?.focus({ preventScroll: true });
   if (!transition.shouldAnimate || reducedMotionQuery.matches) return;
 
-  const targetHeight = panel.offsetHeight;
-  const targetRect = panel.getBoundingClientRect();
-  const compositeScale = panel.offsetWidth > 0 ? targetRect.width / panel.offsetWidth : 1;
-  if (!targetHeight || !compositeScale) return;
-
-  const detailsChanging = transition.fromDetailsSignature !== details.innerHTML;
-  const startTranslateX = (transition.fromLeft - targetRect.left) / compositeScale;
-  const startTranslateY = (transition.fromBottom - targetRect.bottom) / compositeScale
-    + targetHeight - transition.fromHeight;
-  const outgoingDetails = detailsChanging ? transition.outgoingDetails : [];
-  outgoingDetails.forEach((outgoing) => {
-    outgoing.element.style.top = `${outgoing.top}px`;
-    outgoing.element.style.left = `${outgoing.left}px`;
-    outgoing.element.style.width = `${outgoing.width}px`;
-    outgoing.element.style.setProperty("--task-type-outgoing-start-opacity", outgoing.opacity);
-    outgoing.element.style.setProperty(
-      "--task-type-exit-offset",
-      `${transition.direction * -5}px`,
-    );
-    panel.append(outgoing.element);
-  });
-
-  panel.classList.add("is-task-type-transitioning", "is-task-type-preparing");
-  if (detailsChanging) panel.classList.add("is-task-type-details-changing");
-  panel.style.height = `${transition.fromHeight}px`;
-  panel.style.transform = `translate(${startTranslateX}px, ${startTranslateY}px)`;
-  if (detailsChanging) {
-    details.style.setProperty("--task-type-enter-offset", `${transition.direction * 7}px`);
-  }
+  // The three modes share one layout; only the selected tab moves.
+  panel.classList.add("is-task-type-preparing");
   segmented.style.setProperty(
     "--task-type-selection-offset",
     `${transition.fromSelectionOffset}px`,
   );
   panel.getBoundingClientRect();
-
-  let finished = false;
-  let fallbackTimer = 0;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    window.clearTimeout(fallbackTimer);
-    panel.classList.remove(
-      "is-task-type-transitioning",
-      "is-task-type-preparing",
-      "is-task-type-entered",
-      "is-task-type-details-changing",
-    );
-    panel.style.removeProperty("height");
-    panel.style.removeProperty("transform");
-    details.style.removeProperty("--task-type-enter-offset");
-    segmented.style.removeProperty("--task-type-selection-offset");
-    outgoingDetails.forEach((outgoing) => outgoing.element.remove());
-    if (panel.isConnected) scheduleNodePopoverLayouts();
-  };
-  const onTransitionEnd = (event) => {
-    if (event.target !== panel || event.propertyName !== "height") return;
-    panel.removeEventListener("transitionend", onTransitionEnd);
-    finish();
-  };
-  panel.addEventListener("transitionend", onTransitionEnd);
-
   requestAnimationFrame(() => {
-    if (!panel.isConnected) {
-      finish();
-      return;
-    }
     panel.classList.remove("is-task-type-preparing");
-    panel.classList.add("is-task-type-entered");
-    panel.style.height = `${targetHeight}px`;
-    panel.style.transform = "translate(0, 0)";
     segmented.style.removeProperty("--task-type-selection-offset");
-    fallbackTimer = window.setTimeout(finish, 360);
   });
 }
 
@@ -2369,6 +2277,9 @@ function getOmniReferenceTaskTypeIssue(node) {
 
 function getGenerationOutputDurationSeconds(node, referenceVideos) {
   const taskConstraint = getOmniReferenceTaskTypeConstraint(node);
+  // Auto extension has no known output duration before execution. The prototype
+  // uses the model default for its simulated output and estimated cost only;
+  // the provider request keeps -1 instead of silently forcing this estimate.
   if (taskConstraint?.duration !== -1) return getNormalizedDurationSeconds(node);
   const resolvedReferences = Array.isArray(referenceVideos)
     ? referenceVideos
@@ -2438,7 +2349,10 @@ function normalizeNodeParameters(node) {
   }
 
   const durationSeconds = getNormalizedDurationSeconds(node);
+  const durationConstraint = getOmniReferenceTaskTypeConstraint(node);
   if (durationSeconds === null) delete node.duration;
+  else if ((durationConstraint?.allowAutoDuration || durationConstraint?.duration === -1)
+    && ["auto", -1, "-1"].includes(node.duration)) node.duration = "auto";
   else node.duration = `${durationSeconds}s`;
 
   const counts = getCapabilityValues(node, "counts");
@@ -2512,13 +2426,13 @@ function getParamLabelParts(node) {
       : workflows.length > 1 ? workflow?.label : "";
     const aspect = getCapabilityDisplayLabel(node, "aspect", node.aspect);
     const quality = getCapabilityDisplayLabel(node, "quality", node.quality);
-    const duration = taskTypeConstraint?.duration === -1
-      ? "跟随原视频"
+    const duration = taskTypeConstraint?.duration === -1 || node.duration === "auto"
+      ? "智能"
       : node.duration;
     return {
       beforeAspect: modeLabel ? `${modeLabel} · ` : "",
       aspect,
-      afterAspect: ` · ${quality}${taskTypeConstraint?.hideDuration ? "" : ` · ${duration}`}`,
+      afterAspect: ` · ${quality} · ${duration}`,
     };
   }
   const quality = getCapabilityValues(node, "qualities").length ? ` · ${node.quality}` : "";
@@ -3694,7 +3608,7 @@ function setAssetLibrarySearchOpen(expanded) {
 
 function isGlobalLibrarySearch() { return canvasLibrarySearch.isOpen() && Boolean(state.librarySearch.trim()); }
 
-function isSubjectLibraryZone() { return state.librarySpace === "personal" && state.libraryZone === "subjects"; }
+function isSubjectLibraryZone() { return ["personal", "organization"].includes(state.librarySpace) && state.libraryZone === "subjects"; }
 
 function navigateAssetLibrarySubjects({ back = false, reset = false } = {}) {
   if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
@@ -3792,7 +3706,7 @@ function clearEntityRelatedMediaFilter() {
 function isAssetLibraryMutable() {
   return canvasAssetLibraryModel.isMutableSpace(state.librarySpace)
     && (window.parent === window || state.hostCapabilities.hostWritable)
-    && (state.librarySpace !== "personal" || !getPersonalCatalogStatus());
+    && (state.librarySpace === "platform" || !getPersonalCatalogStatus());
 }
 
 function canDeleteAssetLibraryItems(space = state.librarySpace) {
@@ -3811,8 +3725,9 @@ function canManageAssetLibraryFolder(space = state.librarySpace) {
     && (space === "personal" || ["owner", "admin"].includes(state.identity.workspaceRole));
 }
 
-function getPersonalCatalogStatus() {
-  const status = state.hostCapabilities.mediaLibrary ?? state.hostCapabilities.workspaceCatalog;
+function getPersonalCatalogStatus({ includeEntities = false } = {}) {
+  const { mediaLibrary, workspaceCatalog } = state.hostCapabilities;
+  const status = includeEntities && workspaceCatalog && workspaceCatalog !== "ready" ? workspaceCatalog : mediaLibrary ?? workspaceCatalog;
   return window.parent !== window && state.hostCapabilities.progressiveAssetLoading
     && status !== "ready" ? status : "";
 }
@@ -3823,6 +3738,10 @@ function canPersistLibraryMedia() {
     && state.hostCapabilities.assetPersistence
     && !getPersonalCatalogStatus()
   );
+}
+
+function canManageLibraryEntities(space = state.librarySpace) {
+  return canPersistLibraryEntities() && (space === "personal" || (space === "organization" && ["owner", "admin"].includes(state.identity.workspaceRole)));
 }
 
 function canPersistLibraryEntities() {
@@ -3938,7 +3857,7 @@ function getVisibleAssetLibraryContent() {
     const ids = new Set(canvasInspirationDiscovery.results(state.librarySearch).map((clip) => clip.id));
     return { folders: [], allItems, items: allItems.filter((item) => ids.has(item.id)) };
   }
-  if (state.librarySpace === "personal" && getPersonalCatalogStatus()) {
+  if (state.librarySpace !== "platform" && getPersonalCatalogStatus({ includeEntities: isSubjectLibraryZone() || isGlobalLibrarySearch() })) {
     return { folders: [], allItems: [], items: [] };
   }
   if (isGlobalLibrarySearch()) {
@@ -4003,8 +3922,8 @@ function renderAssetLibraryDirectory({ focusDraft = false } = {}) {
         currentFolderId: getAssetLibraryDisplayedFolder()?.id || null,
         expandedFolderIds: [...state.libraryExpandedFolderIds],
         rootExpanded: state.libraryDirectoryRootExpanded,
-        canCreate: canCreateAssetLibraryFolder(), canRename: canManageAssetLibraryFolder(),
-        canDelete: canDeleteAssetLibraryItems(), directoryDraft: draft,
+        canCreate: !state.libraryTarget && canCreateAssetLibraryFolder(), canRename: !state.libraryTarget && canManageAssetLibraryFolder(),
+        canDelete: !state.libraryTarget && canDeleteAssetLibraryItems(), directoryDraft: draft,
       }) : "";
   const input = assetLibraryDirectoryTreePopover.querySelector("[data-library-directory-draft-input]");
   if (input && !input.disabled && (focusDraft || focused)) {
@@ -4017,6 +3936,10 @@ function renderAssetLibraryDirectory({ focusDraft = false } = {}) {
 
 function renderAssetLibrary() {
   if (!assetLibraryGrid || !canvasAssetLibraryView || !isAssetLibraryOpen()) return;
+  libraryReferencePicker.sync();
+  const referencePicking = Boolean(state.libraryTarget);
+  assetLibraryPanel.classList.toggle("is-reference-picking", referencePicking);
+  assetLibraryPanel.querySelector('[data-library-space="platform"]')?.toggleAttribute("disabled", referencePicking);
   const previousRenameInput = assetLibraryGrid.querySelector("[data-library-rename-input]");
   const mutable = isAssetLibraryMutable();
   const space = state.librarySpace;
@@ -4024,8 +3947,8 @@ function renderAssetLibrary() {
   const searching = !platform && isGlobalLibrarySearch();
   const subjectZone = !searching && isSubjectLibraryZone() && !state.libraryEntityFilter;
   const section = searching ? "all" : subjectZone ? "entity" : "media";
-  const canCreateEntity = mutable && space === "personal" && canPersistLibraryEntities();
-  const canUploadMedia = !subjectZone && mutable && !platform && getAssetLibraryFolder()?.kind !== "entity" && canPersistLibraryMedia();
+  const canCreateEntity = !referencePicking && mutable && !platform && canPersistLibraryEntities();
+  const canUploadMedia = !referencePicking && !subjectZone && mutable && !platform && getAssetLibraryFolder()?.kind !== "entity" && canPersistLibraryMedia();
   const canDelete = canDeleteAssetLibraryItems(space);
   const canSetTags = canDelete;
   const tagFiltered = state.libraryTagFilter.untagged || state.libraryTagFilter.tagIds.length > 0;
@@ -4074,7 +3997,7 @@ function renderAssetLibrary() {
     }
   }
   if (assetLibrarySubjectsBtn) {
-    assetLibrarySubjectsBtn.hidden = space !== "personal";
+    assetLibrarySubjectsBtn.hidden = platform;
     assetLibrarySubjectsBtn.setAttribute("aria-pressed", String(isSubjectLibraryZone() || Boolean(entityFilter)));
   }
   if (assetLibraryDirectoryName) {
@@ -4097,6 +4020,7 @@ function renderAssetLibrary() {
 
   if (assetLibraryCommandBar) {
     assetLibraryCommandBar.innerHTML = canvasAssetLibraryView.renderCommandBar({
+      referencePicking,
       mutable,
       space,
       section,
@@ -4109,8 +4033,8 @@ function renderAssetLibrary() {
         ? ["add-canvas", "save-personal"]
         : ["add-canvas", ...(canCreateEntity && !subjectZone && !hasSelectedGroups ? ["create-group"] : []),
           ...(!hasSelectedGroups ? ["review", "move", "share-organization"] : []),
-          ...(canDelete && (!hasSelectedGroups || space === "personal") ? ["delete"] : []),
-          ...(canSetTags && (!hasSelectedGroups || space === "personal") ? ["set-tags"] : [])],
+          ...(canDelete && (!hasSelectedGroups || !platform) ? ["delete"] : []),
+          ...(canSetTags && (!hasSelectedGroups || !platform) ? ["set-tags"] : [])],
       addLabel: state.libraryTarget?.kind === "agent" ? "添加到对话参考"
         : state.libraryTarget?.kind === "node" ? "添加到当前节点" : hasSelectedGroups ? "使用所含素材" : "添加到画布",
       canImportPlatformAssets: false,
@@ -4127,7 +4051,7 @@ function renderAssetLibrary() {
       reviewableSelection,
       filter: state.libraryFilter,
       tagFilter: state.libraryTagFilter,
-      canManageTags: canSetTags && canPersistLibraryMedia(),
+      canManageTags: !referencePicking && canSetTags && canPersistLibraryMedia(),
       filterDraft: state.libraryFilterDraft,
       tags: space === "platform" ? assetLibraryStore.getTagOptions(space)
         : [...window.REELAY_CANVAS_SAVE_MEDIA_DIALOG.BUILTIN_TAGS, ...state.libraryTags.filter((tag) => tag.space === space)],
@@ -4144,14 +4068,16 @@ function renderAssetLibrary() {
       selectionMode: state.librarySelectionMode,
       renaming: renameKey === `folder:${item.id}`,
       menuOpen: menuKey === `folder:${item.id}`,
-      mutable: canManageAssetLibraryFolder(space),
+      mutable: !referencePicking && canManageAssetLibraryFolder(space),
       canDelete,
       space,
     }))
     .join("");
   const renderItem = (item) => {
+      const referenceSelection = referencePicking && item.kind !== "entity" ? libraryReferencePicker.selection(item) : null;
       const itemKey = `${item.kind}:${item.id}`;
       const common = {
+        referencePicking,
         selected: state.librarySelectedIds.has(itemKey),
         selectionMode: state.librarySelectionMode,
         selectionDisabled: Boolean(selectedKind && item.kind !== selectedKind),
@@ -4176,10 +4102,11 @@ function renderAssetLibrary() {
           name: item.name || "未命名主体",
           mediaPreviews: entityMedia.slice(0, 4),
           mediaCount: entityMedia.length,
+          canAddToCanvas: isCanvasMutationAllowed() && entityMedia.length > 0,
           coverPreview: entityMedia.find((media) => media.id === item.coverMediaId) || null,
           allowedActions: window.parent !== window
-            ? ["view-media", ...(space === "personal" && canPersistLibraryEntities() ? ["edit", "rename"] : []), ...(canDelete && space === "personal" ? ["delete", "set-tags"] : [])]
-            : ["view-media", "edit", "rename"],
+            ? [...(canManageLibraryEntities(space) ? ["edit", "rename"] : []), ...(canDelete ? ["delete", "set-tags"] : [])]
+            : ["edit", "rename"],
         });
       }
       if (platform && inspirationCatalog.get(item.id)) return window.REELAY_CANVAS_INSPIRATION_VIEW.renderCard({
@@ -4191,6 +4118,11 @@ function renderAssetLibrary() {
       return canvasAssetLibraryView.renderMediaCard({
         ...common,
         media: item,
+        ...(referencePicking ? {
+          referenceSelected: referenceSelection.selected,
+          referenceDisabled: referenceSelection.disabled,
+          referenceHint: referenceSelection.hint,
+        } : {}),
         allowedActions: ["rename", "review", "move", "share-organization", "delete", ...(canSetTags ? ["set-tags"] : [])],
         name: getAssetDisplayName(item),
         meta: `${assetTypeLabel(item.mediaKind || item.type)} · ${getAssetLibraryOriginLabel(item)}`,
@@ -4202,10 +4134,10 @@ function renderAssetLibrary() {
     entities: (searchResults?.entities || []).map(renderItem).join(""), entityCount: searchResults?.entities.length || 0,
   }) : folderMarkup + items.map(renderItem).join("");
 
-  const catalogStatus = space === "personal" ? getPersonalCatalogStatus() : "";
+  const catalogStatus = !platform ? getPersonalCatalogStatus({ includeEntities: subjectZone || searching }) : "";
   const catalogNotice = catalogStatus
     ? `<div class="asset-library-empty" role="status"><strong>${catalogStatus === "loading"
-      ? "正在加载个人资产…" : "个人资产暂时无法加载"}</strong><span>${catalogStatus === "loading"
+      ? "正在加载资产库…" : "资产库暂时无法加载"}</strong><span>${catalogStatus === "loading"
       ? "画布可继续编辑" : "重新进入项目后重试"}</span></div>` : "";
   canvasAssetLibraryView.syncGrid(assetLibraryGrid, catalogNotice || itemMarkup || canvasAssetLibraryView.renderEmptyState({
     section,
@@ -4286,7 +4218,7 @@ function hasPersonalLibraryPlacement(media) {
 
 function getEntityUseDetailPayload(entityId, space) {
   const entity = entityId
-    ? assetLibraryStore.getEntity({ kind: "entity", id: entityId })
+    ? assetLibraryStore.getEntity({ kind: "entity", id: entityId, space })
     : null;
   if (!entity) return null;
   if (!assetLibraryStore.hasPlacement({ kind: "entity", id: entity.id }, space)) return null;
@@ -4299,7 +4231,7 @@ function getEntityUseDetailPayload(entityId, space) {
 function getEntityUsePickerEntities() {
   const entitiesById = new Map();
   for (const space of ["personal", "organization"]) {
-    if (space === "personal" && getPersonalCatalogStatus()) continue;
+    if (getPersonalCatalogStatus()) continue;
     const entities = assetLibraryStore.listItems({ space, kind: "entity" });
     for (const entity of entities) {
       const existing = entitiesById.get(entity.id);
@@ -4320,7 +4252,7 @@ function getEntityUsePickerEntities() {
 
 function createEntityUseMediaPlan(entityIds, existingMedia, selectedSpaces) {
   const entities = entityIds
-    .map((entityId) => assetLibraryStore.getEntity({ kind: "entity", id: entityId }))
+    .map((entityId) => assetLibraryStore.getEntity({ kind: "entity", id: entityId, space: selectedSpaces.get(entityId) || "personal" }))
     .filter(Boolean);
   const mediaById = new Map();
   for (const entity of entities) {
@@ -4540,8 +4472,17 @@ function syncNarrowViewportIsolation({ focusPanel = false } = {}) {
 function openAssetLibrary(targetNodeId = null, { focus = false, agentScope = null } = {}) {
   if (state.agentOpen && !canShowAssetAndAgent()) setAgentOpen(false);
   state.libraryTarget = agentScope ? { kind: "agent", scope: agentScope }
-    : targetNodeId ? { kind: "node", nodeId: targetNodeId } : null;
-  if (state.libraryTarget) canvasLibraryNavigation.selectDirectory(null);
+    : targetNodeId ? { kind: "node", nodeId: targetNodeId, node: state.nodes.find((node) => node.id === targetNodeId),
+      canvas: getActiveCanvas(), projectId: state.projectId } : null;
+  if (state.libraryTarget) {
+    if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
+    canvasLibraryNavigation.openMediaRoot("personal");
+    clearAssetLibrarySelection();
+    state.libraryDirectoryMenuOpen = false;
+    state.libraryRenameTarget = null;
+    canvasLibraryDirectory.cancel();
+    if (assetLibraryGrid) assetLibraryGrid.scrollTop = 0;
+  }
   assetLibraryPanel?.classList.remove("hidden");
   if (assetLibraryPanel) {
     assetLibraryPanel.inert = false;
@@ -4573,6 +4514,7 @@ function closeAssetLibrary({ restoreFocus = true } = {}) {
   const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
   canvasEntityUse.closeDetail();
   state.libraryTarget = null;
+  libraryReferencePicker.sync();
   if (state.libraryEntityFilter) clearEntityRelatedMediaFilter();
   rememberAssetLibraryContext();
   state.libraryDirectoryMenuOpen = false;
@@ -4598,6 +4540,24 @@ function closeAssetLibrary({ restoreFocus = true } = {}) {
 
 function addAssetToGeneratorNode(node, sourceAsset) {
   return addAssetsToGeneratorNode(node, sourceAsset ? [sourceAsset] : [])[0] || null;
+}
+
+function removeAssetsFromGeneratorNode(node, assetIds) {
+  if (!requireCanvasMutation()) return 0;
+  if (!node || !state.nodes.includes(node) || node.kind !== "generator" || node.generating) return 0;
+  const ids = new Set(assetIds || []);
+  const removed = node.assets.flatMap((asset, index) => ids.has(asset.id) ? [{ asset, index }] : []);
+  if (!removed.length) return 0;
+  const previousActiveAssetId = node.activeAssetId;
+  node.assets = node.assets.filter((asset) => !ids.has(asset.id));
+  if (ids.has(node.activeAssetId)) node.activeAssetId = node.assets[0]?.id || null;
+  // Reference order may retain absent keys; its projection already ignores them.
+  // Keeping those keys restores their exact visual position when removal is undone.
+  pushUndoAction({ type: "node-assets-remove", nodeId: node.id, removed,
+    previousActiveAssetId, nextActiveAssetId: node.activeAssetId });
+  node.panel = null;
+  render();
+  return removed.length;
 }
 
 function addAssetsToGeneratorNode(node, sourceAssets) {
@@ -4665,23 +4625,23 @@ function addLibraryAssetsToCanvas(sourceAssets, clientX, clientY) {
 }
 
 function useLibraryAsset(assetId, clientX, clientY) {
+  if (state.libraryTarget) {
+    libraryReferencePicker.toggle(assetId, state.librarySpace);
+    return;
+  }
   const sourceAsset = findLibraryAsset(assetId);
   if (!sourceAsset) return;
-  if (state.libraryTarget?.kind === "agent") {
-    const scope = state.libraryTarget.scope;
-    const added = addAgentReferenceAssets([sourceAsset], scope);
-    closeAssetLibrary({ restoreFocus: false });
-    if (added) setAgentOpen(true);
-    return;
-  }
-  const targetNode = state.nodes.find((node) => node.id === state.libraryTarget?.nodeId);
-  if (state.libraryTarget?.kind === "node" && !targetNode) return;
-  if (targetNode?.kind === "generator") {
-    addAssetToGeneratorNode(targetNode, sourceAsset);
-    closeAssetLibrary();
-    return;
-  }
   addLibraryAssetToCanvas(sourceAsset, clientX, clientY);
+}
+
+function endAssetLibraryReferencePicking({ restoreFocus = false } = {}) {
+  const target = state.libraryTarget;
+  state.libraryTarget = null;
+  libraryReferencePicker.sync();
+  renderAssetLibrary();
+  if (!restoreFocus || !target) return;
+  if (target.kind === "agent" && agentReferences.canEditScope(target.scope)) { setAgentOpen(true); focusAgentPrompt(); }
+  else assetLibraryDirectoryButton?.focus({ preventScroll: true });
 }
 
 function readAssetMetadata(asset) {
@@ -4790,7 +4750,8 @@ function createGenerationParameterSnapshot(node) {
     snapshot.providerParameters = {
       [parameter]: node.omniReferenceTaskType,
       ratio: requestAspect,
-      duration: hasFixedDuration ? taskTypeConstraint.duration : getNormalizedDurationSeconds(node),
+      duration: hasFixedDuration ? taskTypeConstraint.duration
+        : taskTypeConstraint?.allowAutoDuration && node.duration === "auto" ? -1 : getNormalizedDurationSeconds(node),
     };
   }
   return snapshot;
@@ -4957,29 +4918,6 @@ async function addMediaNodesFromFiles(files, clientX, clientY) {
   return createdNodes;
 }
 
-function addVirtualAsset(node, source) {
-  if (!requireCanvasMutation()) return;
-  if (node.kind !== "generator" || node.generating) return;
-  const type = source === "canvas" ? "video" : "image";
-  const name = source === "canvas" ? "画布素材" : "资产库素材";
-  const asset = {
-    id: crypto.randomUUID(),
-    type,
-    name,
-    displayName: name,
-    url: "",
-    aspectRatio: type === "video" ? layoutRules.defaultRatio : null,
-    source,
-  };
-  node.assets.push(asset);
-  node.activeAssetId = asset.id;
-  node.expanded = true;
-  node.panel = null;
-  bringNodesToFront([node]);
-  setSelection([node.id], node.id);
-  render();
-}
-
 function openLocalAssetPicker(node) {
   if (!requireCanvasMutation()) return;
   if (node.kind !== "generator" || node.generating) return;
@@ -5025,12 +4963,44 @@ function isCanvasDropTarget(target) {
   return target instanceof Element && Boolean(target.closest("#canvasShell"));
 }
 
+const canvasReferenceDrop = window.REELAY_CANVAS_REFERENCE_DROP.createCanvasReferenceDropController({
+  window,
+  hasPayload: (event) => hasDraggedFiles(event) || hasDraggedLibraryAsset(event),
+  isCanvasTarget: isCanvasDropTarget,
+  isMutable: isCanvasMutationAllowed,
+  getNode: getNodeFromElement,
+  getScope: getActiveCanvas,
+});
+
+const libraryReferencePicker = window.REELAY_CANVAS_LIBRARY_REFERENCE_PICKER.create({
+  document, container: appShell,
+  getTarget: () => state.libraryTarget,
+  isValid: (target) => target.kind === "agent" ? agentReferences.canEditScope(target.scope)
+    : target.projectId === state.projectId && target.canvas === getActiveCanvas() && state.nodes.includes(target.node)
+      && target.node?.kind === "generator" && !target.node.generating && isCanvasMutationAllowed(),
+  getTargetLabel: (target) => target.kind === "agent" ? "为当前对话选择参考素材" : "为当前节点选择参考素材",
+  getEntries: (target) => target.kind === "agent" ? agentReferences.getAssets().map((asset) => ({ asset }))
+    : getNodeReferenceEntries(target.node),
+  identityKeys: (asset) => [...canvasEntityUseModel.getMediaIdentityKeys(asset), asset.sourceAssetId].filter(Boolean),
+  resolveMedia: (id, space) => ["personal", "organization"].includes(space)
+    && assetLibraryStore.hasPlacement({ kind: "media", id }, space)
+    ? assetLibraryStore.getMedia({ kind: "media", id, space }) : null,
+  add: (target, media) => target.kind === "agent" ? addAgentReferenceAssets([media], target.scope)
+    : addAssetsToGeneratorNode(target.node, [media]).length,
+  remove: (target, ids) => target.kind === "agent" ? agentReferences.removeAssets(ids, target.scope)
+    : removeAssetsFromGeneratorNode(target.node, ids),
+  exit: endAssetLibraryReferencePicking,
+  onChange: renderAssetLibrary,
+  notify: showActionToast,
+});
+
 function render() {
   renderCanvasView();
   scheduleCanvasDocumentSave();
 }
 
 function renderCanvasView() {
+  libraryReferencePicker.sync();
   canvasInspiration.syncContext();
   canvasLibrarySearch.syncContext();
   canvasLibraryNavigation.syncContext();
@@ -5043,6 +5013,7 @@ function renderCanvasView() {
   if (state.activeGroupId && !getGroupById(state.activeGroupId)) state.activeGroupId = null;
   canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
   canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
+  canvasReferenceDrop.syncContext();
   promptEditors.prune();
   if (agentPromptReady && state.agentOpen) mountAgentPrompt();
   canvasAudioPlayer.sync();
@@ -5505,30 +5476,26 @@ function createGeneratorNodeElement(node, existingElement = null) {
   if (promptInput) mountNodePrompt(node, promptInput, el);
   syncPromptOptimizationButton(el.querySelector(".prompt-optimization-button"), node);
 
-  const durationRange = el.querySelector("[data-duration-range]");
+  const durationRange = el.querySelector("[data-duration-range]:not(:disabled)");
   const durationNumber = el.querySelector("[data-duration-number]");
+  const durationControls = window.REELAY_DURATION_CONTROLS;
   durationRange?.addEventListener("input", (event) => {
-    const seconds = normalizeDurationControlSeconds(event.currentTarget, event.currentTarget.value);
-    syncDurationRangeControl(event.currentTarget, seconds);
-    if (durationNumber) durationNumber.value = String(seconds);
+    durationControls.sync(durationRange, durationControls.read(durationRange, event.currentTarget));
   });
   durationRange?.addEventListener("change", (event) => {
-    const seconds = normalizeDurationControlSeconds(event.currentTarget, event.currentTarget.value);
-    syncDurationRangeControl(event.currentTarget, seconds);
-    if (durationNumber) durationNumber.value = String(seconds);
-    handleAction(node, "duration", `${seconds}s`);
+    const duration = durationControls.read(durationRange, event.currentTarget);
+    durationControls.sync(durationRange, duration);
+    handleAction(node, "duration", duration);
   });
   durationNumber?.addEventListener("input", (event) => {
     if (!durationRange || event.currentTarget.value === "") return;
-    const seconds = normalizeDurationControlSeconds(durationRange, event.currentTarget.value);
-    syncDurationRangeControl(durationRange, seconds);
+    durationControls.sync(durationRange, durationControls.read(durationRange, event.currentTarget), { preserveNumber: true });
   });
   durationNumber?.addEventListener("change", (event) => {
     if (!durationRange) return;
-    const seconds = normalizeDurationControlSeconds(durationRange, event.currentTarget.value);
-    event.currentTarget.value = String(seconds);
-    syncDurationRangeControl(durationRange, seconds);
-    handleAction(node, "duration", `${seconds}s`);
+    const duration = durationControls.read(durationRange, event.currentTarget);
+    durationControls.sync(durationRange, duration);
+    handleAction(node, "duration", duration);
   });
   durationNumber?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -6015,7 +5982,7 @@ function commitGenerationUndoBoundary(canvas, nodeId) {
   const nextUndoStack = (canvas.undoStack || []).filter(
     (action) => !(
       (action.type === "prompt-update" && action.nodeId === nodeId)
-      || (action.type === "node-assets-add" && action.nodeId === nodeId)
+      || (["node-assets-add", "node-assets-remove"].includes(action.type) && action.nodeId === nodeId)
       || (action.kind === "canvas-command" && ["node-parameters", "node-name"].includes(action.command.type)
         && action.command.changes.some((change) => change.collection === "nodes" && change.id === nodeId))
     ),
@@ -6175,15 +6142,12 @@ function bindModelPanelEvents(element, node) {
 
 function materialPanel() {
   return `
-    <div class="material-panel" data-node-popover data-anchor-action="material-panel">
-      <button class="material-option" data-action="material" data-value="local" data-canvas-mutation type="button">
-        <span class="material-icon">↑</span><span>从本地上传</span>
+    <div class="material-panel reference-source-menu" data-node-popover data-anchor-action="material-panel" aria-label="添加参考素材">
+      <button class="reference-source-option" data-action="material" data-value="local" data-canvas-mutation type="button">
+        <i data-lucide="upload" aria-hidden="true"></i><span>本地上传</span>
       </button>
-      <button class="material-option" data-action="material" data-value="library" data-canvas-mutation type="button">
-        <span class="material-icon">◇</span><span>从资产库添加</span>
-      </button>
-      <button class="material-option" data-action="material" data-value="canvas" data-canvas-mutation type="button">
-        <span class="material-icon">⌖</span><span>从画布中选择</span>
+      <button class="reference-source-option" data-action="material" data-value="library" data-canvas-mutation type="button">
+        <i data-lucide="folder-open" aria-hidden="true"></i><span>选择素材</span>
       </button>
     </div>
   `;
@@ -6219,7 +6183,7 @@ function paramPanel(node, { canvas = true } = {}) {
     mode === "image" && getCapabilityValues(node, "qualities").length
       ? parameterSection(node, "生成质量", "quality", getCapabilityValues(node, "qualities"), canvas)
       : "",
-    mode === "video" && !taskTypeConstraint?.hideDuration ? durationParameterSection(node) : "",
+    mode === "video" ? durationParameterSection(node, canvas) : "",
     mode === "video" ? `
       <div class="parameter-footer-grid ${outputFormatSection ? "has-output-format" : ""}">
         ${audioSection}
@@ -6229,7 +6193,7 @@ function paramPanel(node, { canvas = true } = {}) {
   ];
   const taskType = taskTypeCapabilityValue(node);
   return `
-    <section class="panel-popover param-panel ${taskTypeConstraint?.hideDuration ? "is-task-type-compact" : ""}" ${canvas ? 'data-node-popover data-anchor-action="param-panel"' : ""} data-omni-reference-task-type="${escapeHtml(taskType)}" aria-label="综合参数">
+    <section class="panel-popover param-panel" ${canvas ? 'data-node-popover data-anchor-action="param-panel"' : ""} data-omni-reference-task-type="${escapeHtml(taskType)}" aria-label="综合参数">
       <div class="param-section">
         ${modeSections.join("")}
         <div class="parameter-task-details">${detailSections.join("")}</div>
@@ -6278,20 +6242,28 @@ function workflowParameterSection(node, canvas = true) {
   `;
 }
 
-function durationParameterSection(node) {
+function durationParameterSection(node, canvas = true) {
   const range = getDurationCapability(node);
   const seconds = getNormalizedDurationSeconds(node);
   if (!range || !Number.isFinite(seconds)) return "";
-  const progress = range.max > range.min
-    ? ((seconds - range.min) / (range.max - range.min)) * 100
-    : 100;
+  const constraint = getOmniReferenceTaskTypeConstraint(node);
+  const fixed = constraint?.duration === -1;
+  const allowAuto = Boolean(constraint?.allowAutoDuration);
+  const automatic = fixed || (allowAuto && node.duration === "auto");
+  const durationHint = fixed ? "时长跟随原视频，不可修改" : allowAuto ? `最左端为智能，向右选择 ${range.min}–${range.max} 秒` : `${range.min}–${range.max} 秒`;
+  const sliderMin = allowAuto ? 0 : range.min;
+  const sliderMax = allowAuto ? 1 + (range.max - range.min) / range.step : range.max;
+  const sliderValue = allowAuto ? automatic ? 0 : 1 + (seconds - range.min) / range.step : seconds;
+  const progress = automatic ? 0 : sliderMax > sliderMin ? ((sliderValue - sliderMin) / (sliderMax - sliderMin)) * 100 : 100;
   return `
     <section class="parameter-group parameter-duration">
-      <div class="param-heading">时长</div>
-      <div class="duration-control-row">
-        <input class="duration-range-input" data-duration-range type="range" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" style="--duration-progress: ${progress}%" aria-label="时长（秒）" aria-valuemin="${range.min}" aria-valuetext="${seconds} 秒" />
-        <input class="duration-number-input" data-duration-number type="number" min="${range.min}" max="${range.max}" step="${range.step}" value="${seconds}" inputmode="numeric" aria-label="时长（秒）" />
-        <span class="duration-unit" aria-hidden="true">s</span>
+      <div class="duration-heading"><div class="param-heading">时长</div></div>
+      <div class="duration-control-row" title="${durationHint}">
+        <input class="duration-range-input" data-duration-range ${allowAuto ? `data-duration-auto="${range.min}" data-duration-max="${range.max}"` : ""} type="range" min="${sliderMin}" max="${sliderMax}" step="${allowAuto ? 1 : range.step}" value="${sliderValue}" style="--duration-progress: ${progress}%" aria-label="${allowAuto ? "时长（智能或秒数）" : "时长（秒）"}" aria-valuetext="${automatic ? "智能" : `${seconds} 秒`}" ${fixed ? "disabled" : ""} />
+        ${fixed
+          ? `<input class="duration-number-input" data-duration-readonly type="text" value="智能" readonly tabindex="-1" aria-label="${durationHint}" />`
+          : `<input class="duration-number-input" data-duration-number type="${allowAuto ? "text" : "number"}" min="${range.min}" max="${range.max}" step="${range.step}" value="${automatic ? "智能" : seconds}" inputmode="numeric" aria-label="${allowAuto ? "时长（智能或秒数）" : "时长（秒）"}" />`}
+        <span class="duration-unit" aria-hidden="true">${automatic ? "" : "s"}</span>
       </div>
     </section>
   `;
@@ -6310,25 +6282,6 @@ function outputFormatParameterSection(node, canvas = true) {
       </div>
     </section>
   `;
-}
-
-function normalizeDurationControlSeconds(input, value) {
-  const min = Number(input.min);
-  const max = Number(input.max);
-  const step = Math.max(1, Number(input.step) || 1);
-  const requested = Number(value);
-  const fallback = Number(input.value);
-  const base = Number.isFinite(requested) ? requested : Number.isFinite(fallback) ? fallback : min;
-  return clamp(min + Math.round((base - min) / step) * step, min, max);
-}
-
-function syncDurationRangeControl(input, seconds) {
-  const min = Number(input.min);
-  const max = Number(input.max);
-  const progress = max > min ? ((seconds - min) / (max - min)) * 100 : 100;
-  input.value = String(seconds);
-  input.style.setProperty("--duration-progress", `${progress}%`);
-  input.setAttribute("aria-valuetext", `${seconds} 秒`);
 }
 
 const advancedSettingHints = Object.freeze({
@@ -6561,13 +6514,10 @@ function handleAction(node, action, value) {
         render();
         return;
       }
-      addVirtualAsset(node, value);
       return;
     case "remove-material":
-      node.assets = node.assets.filter((asset) => asset.id !== value);
-      if (node.activeAssetId === value) node.activeAssetId = node.assets[0]?.id || null;
-      node.panel = null;
-      break;
+      removeAssetsFromGeneratorNode(node, [value]);
+      return;
     case "focus-asset":
       node.activeAssetId = value;
       node.expanded = true;
@@ -7533,7 +7483,7 @@ function undoLastAction() {
   const action = state.undoStack.pop();
   if (!action) return;
 
-  if (["prompt-update", "node-assets-add", "asset-name-update"].includes(action.type)) {
+  if (["prompt-update", "node-assets-add", "node-assets-remove", "asset-name-update"].includes(action.type)) {
     const liveNode = state.nodes.find((node) => node.id === action.nodeId);
     if (liveNode?.generating) {
       state.undoStack.push(action);
@@ -7615,6 +7565,23 @@ function undoLastAction() {
       if (additions.has(node.activeAssetId)) {
         node.activeAssetId = node.assets.some((asset) => asset.id === action.previousActiveAssetId)
           ? action.previousActiveAssetId : node.assets[0]?.id || null;
+      }
+      setSelection([node.id], node.id);
+    }
+  }
+
+  if (action.type === "node-assets-remove") {
+    const node = state.nodes.find((item) => item.id === action.nodeId);
+    if (node) {
+      for (const { asset, index } of action.removed) {
+        if (!node.assets.some((current) => current.id === asset.id)) {
+          node.assets.splice(Math.min(index, node.assets.length), 0, asset);
+          hydrateAssetMetadata(asset, node.id);
+        }
+      }
+      if (node.activeAssetId === action.nextActiveAssetId
+        && node.assets.some((asset) => asset.id === action.previousActiveAssetId)) {
+        node.activeAssetId = action.previousActiveAssetId;
       }
       setSelection([node.id], node.id);
     }
@@ -7809,6 +7776,7 @@ const agentHistory = window.REELAY_AGENT_HISTORY.createController({
   hasDraft: (conversation) => Boolean(agentGeneration?.hasRecords(conversation.id) || promptDocument.toText(conversation.draftPrompt).trim() || agentReferences.hasDraft(conversation)
     || (conversation === getConversation() && getAgentPromptText().trim())),
   onBeforeSelect(previous) {
+    if (state.libraryTarget?.kind === "agent") endAssetLibraryReferencePicking();
     if (previous) promptEditors.unmount(previous);
   },
   onDelete: (conversation) => {
@@ -7900,17 +7868,18 @@ const agentReferences = window.REELAY_CANVAS_AGENT_REFERENCES.createController({
   referenceStrip: window.REELAY_CANVAS_REFERENCE_STRIP,
   placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover,
   showMessage: showActionToast,
-  onChange: () => { syncAgentModelButton(); syncAgentPromptOptimizationControl(); },
+  onChange: () => {
+    syncAgentModelButton(); syncAgentPromptOptimizationControl();
+    if (state.libraryTarget?.kind === "agent") { libraryReferencePicker.sync(); renderAssetLibrary(); }
+  },
 });
 
 const agentComposerView = window.REELAY_CANVAS_AGENT_COMPOSER_VIEW.createController({
   document, composer: agentComposer, addButton: agentAddBtn, menu: agentReferenceMenu, messages: agentMessages,
   getScope: () => ({ projectId: state.projectId, conversation: getConversation() }),
   isBusy: () => false,
-  getSelectedAssets: getAgentSelectedCanvasAssets,
   onChooseFiles: () => agentReferences.chooseFiles(),
   onLibrary: (scope) => openAssetLibrary(null, { focus: true, agentScope: scope }),
-  onAddSelected: addAgentReferenceAssets,
   onDropFiles: (files, scope) => agentReferences.addFiles(files, scope),
   onDropLibrary: (dataTransfer, scope) => addAgentReferenceAssets(getDraggedLibraryAssets({ dataTransfer }), scope),
   hasLibraryDrag: (dataTransfer) => hasDraggedLibraryAsset({ dataTransfer }),
@@ -9749,6 +9718,11 @@ window.addEventListener("keydown", (event) => {
     renderAssetLibrary();
     return;
   }
+  if (event.key === "Escape" && state.libraryTarget && isAssetLibraryOpen()) {
+    event.preventDefault();
+    endAssetLibraryReferencePicking({ restoreFocus: true });
+    return;
+  }
   if (event.key === "Escape" && !nodeCreateMenu?.classList.contains("hidden")) {
     event.preventDefault();
     closeNodeCreateMenu();
@@ -9828,38 +9802,18 @@ localAssetInput.addEventListener("change", (event) => {
   state.pendingCanvasUploadPoint = null;
 });
 
-window.addEventListener("dragover", (event) => {
-  if (!hasDraggedFiles(event) && !hasDraggedLibraryAsset(event)) return;
-  event.preventDefault();
-  if (!isCanvasDropTarget(event.target) || !isCanvasMutationAllowed()) {
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
-    shell.classList.remove("file-dragging");
-    return;
-  }
-  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-  shell.classList.add("file-dragging");
-});
-
-window.addEventListener("dragleave", (event) => {
-  if (event.clientX !== 0 && event.clientY !== 0) return;
-  shell.classList.remove("file-dragging");
-});
-
 window.addEventListener("dragend", () => {
-  shell.classList.remove("file-dragging");
   document.querySelectorAll(".asset-library-drag-preview").forEach((preview) => preview.remove());
 });
 
 window.addEventListener("drop", (event) => {
   const hasSupportedPayload = hasDraggedFiles(event) || hasDraggedLibraryAsset(event);
-  if (hasSupportedPayload && !isCanvasDropTarget(event.target)) {
+  if (hasSupportedPayload && !canvasReferenceDrop.canDrop(event.target)) {
     event.preventDefault();
-    shell.classList.remove("file-dragging");
     return;
   }
   if (hasDraggedLibraryAsset(event)) {
     event.preventDefault();
-    shell.classList.remove("file-dragging");
     if (!requireCanvasMutation()) return;
     const sourceAssets = getDraggedLibraryAssets(event);
     if (!sourceAssets.length) return;
@@ -9875,7 +9829,6 @@ window.addEventListener("drop", (event) => {
   const files = event.dataTransfer?.files;
   if (!files?.length) return;
   event.preventDefault();
-  shell.classList.remove("file-dragging");
 
   const targetNode = getNodeFromElement(event.target);
   if (targetNode?.kind === "generator") {
@@ -9945,7 +9898,7 @@ function startAssetLibraryRename(kind, id) {
     canvasLibraryDirectory.beginRename(id);
     return;
   }
-  if (kind === "entity" && !canPersistLibraryEntities()) return;
+  if (kind === "entity" && !canManageLibraryEntities()) return;
   state.libraryRenameTarget = { kind, id };
   state.libraryMenuTarget = null;
   state.libraryToolbarMenu = null;
@@ -9968,11 +9921,12 @@ async function finishAssetLibraryRename(input, { cancel = false } = {}) {
   }
   try {
     if (target.kind === "entity" && window.parent !== window) {
-      const entity = assetLibraryStore.getEntity({ kind: "entity", id: target.id });
+      const entity = assetLibraryStore.getEntity({ kind: "entity", id: target.id, space: state.librarySpace });
       if (!entity || !Number.isInteger(entity.version) || !canPersistLibraryEntities()) {
         throw new Error("当前主体尚未接入持久化重命名");
       }
       const updated = await canvasEntityAssets.updateEntity({
+        space: state.librarySpace,
         entityId: entity.id,
         expectedVersion: entity.version,
         name,
@@ -10060,7 +10014,7 @@ function registerLibraryTag(tag) {
   renderAssetLibrary();
 }
 
-function registerHostMediaLibrary(catalog, { removedEntityIds = [] } = {}) {
+function registerHostMediaLibrary(catalog, { removedEntityIds = [], entities } = {}) {
   state.libraryTags = catalog.tags.map((tag) => ({ ...tag }));
   const pruneTags = (filter, space) => {
     if (!filter || space === "platform") return;
@@ -10076,7 +10030,7 @@ function registerHostMediaLibrary(catalog, { removedEntityIds = [] } = {}) {
   }
   pruneTags(state.libraryEntityFilter?.returnContext?.tagFilter, state.libraryEntityFilter?.space);
   const media = catalog.entries.map(workspaceAssetToLibraryMedia);
-  assetLibraryStore.syncPersistedCatalog({ ...catalog, media, removedEntityIds });
+  assetLibraryStore.syncPersistedCatalog({ ...catalog, media, entities, removedEntityIds });
   hostPersonalMediaIds.clear();
   catalog.entries.filter((entry) => entry.space === "personal").forEach((entry) => hostPersonalMediaIds.add(entry.assetId));
   if (state.libraryFolderId && !assetLibraryStore.getFolder(state.libraryFolderId)) state.libraryFolderId = null;
@@ -10087,20 +10041,19 @@ function registerHostMediaLibrary(catalog, { removedEntityIds = [] } = {}) {
 function registerHostWorkspaceAssetCatalog({ assets = [], entities = [], libraryCatalog } = {}) {
   try {
     const media = assets.map(workspaceAssetToLibraryMedia);
-    media.forEach((asset) => {
-      assetLibraryStore.registerMedia({ media: asset, space: "personal", folderId: null });
-    });
-    assetLibraryStore.syncPersistedEntities({ entities });
-    if (libraryCatalog) registerHostMediaLibrary(libraryCatalog);
-    if (!libraryCatalog) {
+    if (libraryCatalog) registerHostMediaLibrary(libraryCatalog, { entities });
+    else {
+      media.forEach((asset) => assetLibraryStore.registerMedia({ media: asset, space: "personal", folderId: null }));
+      assetLibraryStore.syncPersistedEntities({ entities });
       hostPersonalMediaIds.clear();
       media.forEach((asset) => hostPersonalMediaIds.add(asset.id));
     }
-    restoreTransientCanvasMedia(media);
+    restoreTransientCanvasMedia([...new Map([...media, ...(libraryCatalog?.entries || []).map(workspaceAssetToLibraryMedia)]
+      .map((asset) => [asset.id, asset])).values()]);
     renderAssetLibrary();
     renderSelectionToolbar();
   } catch (error) {
-    showActionToast(error?.message || "个人资产目录同步失败");
+    showActionToast(error?.message || "资产目录同步失败");
   }
 }
 
@@ -10128,12 +10081,14 @@ function restoreTransientCanvasMedia(media) {
 }
 
 function syncHostEntity(entity) {
-  const result = assetLibraryStore.registerPersistedEntity({ entity, tagOptions: getEntityEditorTagOptions() });
+  const result = assetLibraryStore.registerPersistedEntity({ entity, tagOptions: getEntityEditorTagOptions(entity.space) });
   renderAssetLibrary();
   return result.entity;
 }
 
 async function persistEntityEditorFiles(files) {
+  const space = entityEditorSpace;
+  const scope = hostLaunchScope;
   const accepted = Array.from(files || [])
     .map((file) => ({ file, mediaKind: getAssetType(file) }))
     .filter((entry) => entry.mediaKind);
@@ -10149,31 +10104,38 @@ async function persistEntityEditorFiles(files) {
     : await Promise.all(accepted.map(async ({ file, mediaKind }) => {
         const workspaceAsset = await canvasMediaAssets.persistFile(file, {
           target: "personal",
+          storageSpace: space,
+          uploadPurpose: "library",
           mediaKind,
           displayName: fileDisplayName(file.name, assetTypeLabel(mediaKind)),
           contentType: file.type || defaultUploadContentType(mediaKind),
         });
         return workspaceAssetToLibraryMedia(workspaceAsset);
       }));
+  if (hostLaunchScope !== scope) throw new Error("当前空间已变化，请重新打开主体");
   const registered = media.map((asset) => assetLibraryStore.registerMedia({
     media: asset,
-    space: "personal",
+    space,
     folderId: null,
   }).media);
-  registered.forEach((asset) => hostPersonalMediaIds.add(asset.id));
+  if (space === "personal") registered.forEach((asset) => hostPersonalMediaIds.add(asset.id));
   registered.forEach((asset) => hydrateAssetMetadata(asset, null));
   renderAssetLibrary();
   return registered;
 }
 
 async function saveEntityEditorDraft(payload, { media = [], isContextValid = () => true, idempotencyKey } = {}) {
+  const space = entityEditorSpace;
+  payload = { ...payload, space };
   if (!isContextValid()) throw new Error("画布或权限已变化，请重新选择素材");
   if (window.parent !== window) {
     if (!canPersistLibraryEntities()) {
       throw new Error("当前项目尚未接入主体保存");
     }
     if (payload.mode === "edit") return canvasEntityAssets.updateEntity(payload);
-    const prepared = await canvasEntityMediaImport.prepareMedia(media, { isContextValid });
+    const prepared = space === "personal"
+      ? await canvasEntityMediaImport.prepareMedia(media, { isContextValid })
+      : { idMap: new Map(media.map((asset) => [asset.id, asset.id])) };
     if (!isContextValid()) throw new Error("画布或权限已变化，请重新选择素材");
     const mediaIds = [...new Set(payload.mediaRefs.map(({ mediaId }) => prepared.idMap.get(mediaId) || mediaId))];
     const created = await canvasEntityAssets.createEntity({
@@ -10188,9 +10150,10 @@ async function saveEntityEditorDraft(payload, { media = [], isContextValid = () 
   if (payload.mode === "create") {
     const registeredIds = new Map();
     for (const asset of media) {
-      const existing = canvasEntityMediaImport.resolvePersonalMedia(asset);
+      const existing = space === "personal" ? canvasEntityMediaImport.resolvePersonalMedia(asset)
+        : assetLibraryStore.getMedia({ kind: "media", id: asset.id, space });
       const registered = existing || assetLibraryStore.registerMedia({
-        media: { ...asset, createdAt: asset.createdAt || new Date().toISOString() }, space: "personal", folderId: null,
+        media: { ...asset, createdAt: asset.createdAt || new Date().toISOString() }, space, folderId: null,
       }).media;
       registeredIds.set(asset.id, registered.id);
     }
@@ -10199,6 +10162,7 @@ async function saveEntityEditorDraft(payload, { media = [], isContextValid = () 
       folderId: payload.folderId ?? null,
       tagOptions: getEntityEditorTagOptions(),
       entity: {
+        space,
         id: crypto.randomUUID(),
         name: payload.name,
         description: payload.description,
@@ -10211,6 +10175,7 @@ async function saveEntityEditorDraft(payload, { media = [], isContextValid = () 
     }).entity;
   }
   const updated = assetLibraryStore.updateEntity({
+    space,
     entityId: payload.entityId,
     expectedVersion: payload.expectedVersion,
     name: payload.name,
@@ -10228,7 +10193,7 @@ function confirmEntityEditorDiscard() {
   return new Promise((resolve) => {
     showConfirmDialog({
       title: "放弃未保存的修改？",
-      body: "主体名称、标签、描述和素材调整都不会保留，已入库的素材仍保留在个人素材库。",
+      body: "主体名称、标签、描述和素材调整都不会保留，已入库的素材仍保留在原素材库。",
       cancelText: "继续编辑",
       confirmText: "放弃修改",
       danger: true,
@@ -10241,7 +10206,7 @@ function confirmEntityEditorDiscard() {
 function prepareEntityEditorReturn() {
   document.body.classList.add("entity-editor-returning");
   if (!reopenAssetLibraryAfterEntityEditor) return;
-  state.librarySpace = "personal";
+  state.librarySpace = entityEditorSpace;
   openAssetLibrary();
   // Reveal the destination beneath the exiting workspace without accepting input yet.
   assetLibraryPanel.inert = true;
@@ -10280,7 +10245,7 @@ function setEntityEditorOpen(open, { entityId = null } = {}) {
   const shouldReopenLibrary = reopenAssetLibraryAfterEntityEditor;
   reopenAssetLibraryAfterEntityEditor = false;
   if (shouldReopenLibrary) {
-    state.librarySpace = "personal";
+    state.librarySpace = entityEditorSpace;
     openAssetLibrary();
     if (returning) {
       if (!canvasEntityUse.restoreSourceFocus(entityId)) {
@@ -10295,34 +10260,43 @@ function setEntityEditorOpen(open, { entityId = null } = {}) {
 }
 
 function openEntityEditorCreate(initialMedia = []) {
-  if (state.librarySpace !== "personal" || !isAssetLibraryMutable()) {
-    showActionToast("请在个人空间创建主体");
+  if (state.librarySpace === "platform" || !isAssetLibraryMutable()) {
+    showActionToast("请在个人或组织空间创建主体");
     return;
   }
   if (!canPersistLibraryEntities()) {
     showActionToast("当前项目尚未接入主体保存");
     return;
   }
+  entityEditorSpace = state.librarySpace;
+  const space = entityEditorSpace;
+  const scope = hostLaunchScope;
+  const projectId = state.projectId;
+  const canvas = getActiveCanvas();
   reopenAssetLibraryAfterEntityEditor = isAssetLibraryOpen();
   canvasEntityEditor.open({
+    space,
+    isContextValid: () => scope === hostLaunchScope && projectId === state.projectId && canvas === getActiveCanvas()
+      && entityEditorSpace === space && isCanvasMutationAllowed() && canPersistLibraryEntities(),
     mode: "create",
     initialMedia,
     mutable: true,
     canAddFromLibrary: true,
     canUpload: canPersistLibraryMedia(),
+    canRenameMedia: canManageLibraryEntities(space),
   });
 }
 
-function getPersonalEntityMedia() {
-  return assetLibraryStore.listItems({ space: "personal", kind: "media" })
-    .filter((media) => window.parent === window || hostPersonalMediaIds.has(media.id));
+function getPersonalEntityMedia(space = "personal") {
+  return assetLibraryStore.listItems({ space, kind: "media" })
+    .filter((media) => space !== "personal" || window.parent === window || hostPersonalMediaIds.has(media.id));
 }
 
-function getEntityEditorTagOptions() {
+function getEntityEditorTagOptions(space = entityEditorSpace) {
   return [...new Map([
     ...window.REELAY_CANVAS_SAVE_MEDIA_DIALOG.BUILTIN_TAGS,
-    ...state.libraryTags.filter((tag) => tag.space === "personal"),
-    ...(window.parent === window ? assetLibraryStore.getTagOptions("personal") : []),
+    ...state.libraryTags.filter((tag) => tag.space === space),
+    ...(window.parent === window ? assetLibraryStore.getTagOptions(space) : []),
   ].map((tag) => [tag.id, { id: tag.id, name: tag.name }])).values()];
 }
 
@@ -10349,9 +10323,11 @@ function openSelectionEntityEditor() {
   const canvas = getActiveCanvas();
   const isContextValid = () => state.projectId === projectId && getActiveCanvas() === canvas
     && isCanvasMutationAllowed() && canPersistLibraryEntities();
+  entityEditorSpace = "personal";
   reopenAssetLibraryAfterEntityEditor = false;
   setSelectionDownloadMenuOpen(false);
   canvasEntityEditor.open({
+    space: "personal",
     mode: "create",
     initialMedia: plan.media,
     sourceNotice: [
@@ -10373,13 +10349,9 @@ function openSelectionEntityEditor() {
 }
 
 function openEntityEditorEdit(entityId) {
-  const entity = assetLibraryStore.getEntity({ kind: "entity", id: entityId });
+  const space = state.librarySpace;
+  const entity = assetLibraryStore.getEntity({ kind: "entity", id: entityId, space });
   if (!entity) return;
-  const isPersonal = assetLibraryStore.hasPlacement({ kind: "entity", id: entityId }, "personal");
-  if (!isPersonal || state.librarySpace !== "personal") {
-    viewEntityRelatedMedia(entityId);
-    return;
-  }
   if (!canPersistLibraryEntities()) {
     viewEntityRelatedMedia(entityId);
     return;
@@ -10393,20 +10365,26 @@ function openEntityEditorEdit(entityId) {
     showActionToast("示例主体仅供预览；新建主体可完整编辑");
     return;
   }
+  entityEditorSpace = state.librarySpace;
   reopenAssetLibraryAfterEntityEditor = isAssetLibraryOpen();
   const projectId = state.projectId;
   const canvas = getActiveCanvas();
+  const scope = hostLaunchScope;
+  const editable = canManageLibraryEntities(space);
   canvasEntityEditor.open({
+    space,
     mode: "edit",
     entity,
-    media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entityId, space: "personal" }),
+    media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entityId, space }),
     expectedVersion: entity.version,
     tagIds: entity.tagIds || [],
-    isContextValid: () => state.projectId === projectId && getActiveCanvas() === canvas
-      && isCanvasMutationAllowed() && canPersistLibraryEntities(),
-    mutable: true,
-    canAddFromLibrary: true,
-    canUpload: canPersistLibraryMedia(),
+    isContextValid: () => scope === hostLaunchScope && state.projectId === projectId && getActiveCanvas() === canvas
+      && entityEditorSpace === space && isCanvasMutationAllowed() && canPersistLibraryEntities()
+      && (!editable || canManageLibraryEntities(space)),
+    mutable: canManageLibraryEntities(space),
+    canAddFromLibrary: canManageLibraryEntities(space),
+    canUpload: canManageLibraryEntities(space) && canPersistLibraryMedia(),
+    canRenameMedia: canManageLibraryEntities(space),
   });
 }
 
@@ -10428,7 +10406,7 @@ function deleteAssetLibraryItems(items) {
   canvasLibraryDelete.open({
     space: state.librarySpace,
     items: items.map((item) => item.kind === "entity"
-      ? { kind: "entity", id: item.id, expectedVersion: assetLibraryStore.getEntity(item)?.version }
+      ? { kind: "entity", id: item.id, expectedVersion: assetLibraryStore.getEntity({ ...item, space: state.librarySpace })?.version }
       : { kind: "media", id: item.id }),
   });
 }
@@ -10483,7 +10461,7 @@ function runAssetLibraryAction(action, items) {
   }
   const includesPersistedEntity = window.parent !== window && items.some((item) => {
     if (item.kind !== "entity") return false;
-    return Number.isInteger(assetLibraryStore.getEntity(item)?.version);
+    return Number.isInteger(assetLibraryStore.getEntity({ ...item, space: state.librarySpace })?.version);
   });
   if (includesPersistedEntity && action === "share-organization") {
     showActionToast("主体共享到组织空间尚未接入");
@@ -10626,7 +10604,7 @@ assetLibraryPanel?.addEventListener("pointerdown", (event) => {
 });
 assetLibraryPanel?.addEventListener("click", (event) => {
   if (event.target.closest("[data-library-open-subjects]")) {
-    if (state.librarySpace === "personal" && (!isSubjectLibraryZone() || state.libraryEntityFilter)) navigateAssetLibrarySubjects();
+    if (state.librarySpace !== "platform" && (!isSubjectLibraryZone() || state.libraryEntityFilter)) navigateAssetLibrarySubjects();
     return;
   }
   if (event.target.closest("[data-library-edit-current-group]")) {
@@ -10885,7 +10863,6 @@ assetLibraryPanel?.addEventListener("click", (event) => {
       || card?.dataset.libraryMedia;
     if (!id) return;
     if (kind === "folder") runAssetLibraryFolderAction(itemAction, id);
-    else if (kind === "entity" && itemAction === "view-media") viewEntityRelatedMedia(id);
     else if (kind === "entity" && itemAction === "edit") openEntityEditorEdit(id);
     else if (itemAction === "rename") startAssetLibraryRename(kind, id);
     else runAssetLibraryAction(itemAction, [getAssetLibraryItemRef(id, kind)]);
@@ -10897,13 +10874,28 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     selectAssetLibraryDirectory(folderCard.dataset.libraryFolder);
     return;
   }
+  const entityAdd = event.target.closest("[data-library-entity-add]");
+  if (entityAdd) {
+    if (state.libraryTarget || state.librarySelectionMode || state.libraryMenuTarget || state.libraryRenameTarget) return;
+    const card = entityAdd.closest("[data-library-entity]");
+    const entityId = card?.dataset.libraryEntity;
+    const space = card?.dataset.librarySpace;
+    if (!entityId || space !== state.librarySpace || !assetLibraryStore.hasPlacement({ kind: "entity", id: entityId }, space)) return;
+    canvasEntityUse.closeDetail();
+    addEntityToCanvas({ scope: { projectId: state.projectId, canvasId: state.activeCanvasId }, entityId, space });
+    return;
+  }
   const previewButton = event.target.closest("[data-library-preview]");
   const itemCard = previewButton?.closest("[data-library-media], [data-library-entity]");
   if (itemCard) {
     const kind = itemCard.hasAttribute("data-library-entity") ? "entity" : "media";
     const id = itemCard.dataset.libraryEntity || itemCard.dataset.libraryMedia;
     if (state.librarySelectionMode) toggleAssetLibrarySelection(`${kind}:${id}`);
-    else if (kind === "entity") openEntityEditorEdit(id);
+    else if (kind === "entity") {
+      if (state.libraryTarget) viewEntityRelatedMedia(id);
+      else openEntityEditorEdit(id);
+    }
+    else if (state.libraryTarget && state.librarySpace !== "platform") useLibraryAsset(id);
     else openAssetLibraryPreview(id);
   }
 });

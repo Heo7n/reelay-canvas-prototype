@@ -11,7 +11,7 @@ const inspirationModules = await Promise.all(["src/config/inspiration-catalog.js
   .map((path) => readFile(new URL(path, root), "utf8")));
 const fileName = await readFile(new URL("src/legacy-canvas/canvas-file-name.js", root), "utf8");
 const themeController = await readFile(new URL("src/legacy-canvas/canvas-theme-controller.js", root), "utf8");
-const saveMediaModules = await Promise.all(["canvas-media-library-coordinator", "canvas-save-media-dialog", "canvas-save-media-controller", "canvas-library-upload-controller", "canvas-library-delete-controller", "canvas-library-navigation", "canvas-library-search-session", "canvas-library-tags-controller", "canvas-library-directory-controller"]
+const saveMediaModules = await Promise.all(["canvas-media-library-coordinator", "canvas-save-media-dialog", "canvas-save-media-controller", "canvas-library-upload-controller", "canvas-library-delete-controller", "canvas-library-navigation", "canvas-library-reference-picker", "canvas-library-search-session", "canvas-library-tags-controller", "canvas-library-directory-controller"]
   .map((name) => readFile(new URL(`src/legacy-canvas/${name}.js`, root), "utf8")));
 const [promptDocument, promptController, promptEditor] = await Promise.all([
   readFile(new URL("src/legacy-canvas/canvas-prompt-document.js", root), "utf8"),
@@ -28,6 +28,7 @@ const toolbarMenuController = await readFile(new URL("src/legacy-canvas/canvas-t
 const parameterHelpController = await readFile(new URL("src/legacy-canvas/canvas-parameter-help-controller.js", root), "utf8");
 const referenceOrder = await readFile(new URL("src/legacy-canvas/canvas-reference-order.js", root), "utf8");
 const referenceStripController = await readFile(new URL("src/legacy-canvas/canvas-reference-strip-controller.js", root), "utf8");
+const referenceDropController = await readFile(new URL("src/legacy-canvas/canvas-reference-drop-controller.js", root), "utf8");
 const audioPlayer = await readFile(new URL("src/legacy-canvas/canvas-audio-player.js", root), "utf8");
 const agentComposerView = await readFile(new URL("src/legacy-canvas/canvas-agent-composer-view.js", root), "utf8");
 const agentReferences = await readFile(new URL("src/legacy-canvas/canvas-agent-references.js", root), "utf8");
@@ -147,6 +148,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(referenceOrder);
   window.eval(fileName);
   window.eval(referenceStripController);
+  window.eval(referenceDropController);
   window.eval(agentReferences);
   window.eval(agentComposerView);
   window.eval(audioPlayer);

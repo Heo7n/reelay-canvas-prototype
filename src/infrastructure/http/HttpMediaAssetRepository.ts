@@ -78,11 +78,12 @@ export class HttpMediaAssetRepository implements MediaAssetRepository {
     workspaceId: WorkspaceId,
     assetId: string,
     displayName: string,
+    space: "personal" | "organization" = "personal",
   ): Promise<PersonalMediaAsset> {
     const response = await this.http.read(
       `/api/workspaces/${encodeURIComponent(workspaceId)}/media-assets/${encodeURIComponent(assetId)}`,
       FinalizeMediaUploadResponseDtoSchema,
-      { method: "PATCH", body: JSON.stringify({ displayName }) },
+      { method: "PATCH", body: JSON.stringify({ displayName, ...(space === "organization" ? { space } : {}) }) },
     );
     return {
       ...response.asset,

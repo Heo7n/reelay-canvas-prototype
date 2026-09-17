@@ -492,6 +492,7 @@ describe("HttpMediaAssetRepository", () => {
 describe("HttpEntityRepository", () => {
   const entity = {
     id: "entity/one",
+    space: "personal",
     workspaceId: "workspace/one",
     name: "莉瑞尔",
     description: "精灵感角色",

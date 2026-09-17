@@ -485,11 +485,11 @@
                 </div>
               </div>
               <div class="agent-actions" role="group" aria-label="对话操作">
-                <button class="agent-icon-button" id="agentRecordSelectBtn" type="button" title="多选生成记录" aria-label="多选生成记录" aria-pressed="false" aria-controls="agentGenerationRecords" disabled>
-                  <i data-lucide="square-check-big" aria-hidden="true"></i>
-                </button>
                 <button class="agent-icon-button new-chat-button" id="agentNewChatBtn" type="button" title="新建对话" aria-label="新建对话">
                   <i data-lucide="message-square-plus" aria-hidden="true"></i>
+                </button>
+                <button class="agent-icon-button" id="agentRecordSelectBtn" type="button" title="多选生成记录" aria-label="多选生成记录" aria-pressed="false" aria-controls="agentGenerationRecords" disabled>
+                  <i data-lucide="square-check-big" aria-hidden="true"></i>
                 </button>
               </div>
             </header>
@@ -523,14 +523,13 @@
               <div class="agent-composer-stage prompt-composer-layout">
                 <div class="prompt-input" id="agentInput" aria-label="给 Reelay Agent 的消息" data-placeholder="描述你想生成的内容，或输入 @ 引用"></div>
                 <div class="agent-composer-topbar">
-                  <button class="agent-add-button asset-drop" id="agentAddBtn" type="button" title="添加附件" aria-label="添加附件">
+                  <button class="agent-add-button asset-drop" id="agentAddBtn" type="button" title="添加参考素材" aria-label="添加参考素材">
                     <i data-lucide="plus" aria-hidden="true"></i>
                   </button>
                   <div class="agent-reference-shelf asset-shelf" id="agentReferenceShelf" role="group" aria-label="参考素材，拖动可排序" hidden></div>
-                  <div class="agent-reference-menu hidden" id="agentReferenceMenu" role="menu" aria-label="添加参考素材">
-                    <button type="button" role="menuitem" data-agent-reference-source="local"><i data-lucide="upload" aria-hidden="true"></i>本地上传</button>
-                    <button type="button" role="menuitem" data-agent-reference-source="library"><i data-lucide="folder-open" aria-hidden="true"></i>从资产库添加</button>
-                    <button type="button" role="menuitem" data-agent-reference-source="canvas"><i data-lucide="scan" aria-hidden="true"></i>添加画布选中素材</button>
+                  <div class="agent-reference-menu reference-source-menu hidden" id="agentReferenceMenu" role="menu" aria-label="添加参考素材">
+                    <button class="reference-source-option" type="button" role="menuitem" data-agent-reference-source="local"><i data-lucide="upload" aria-hidden="true"></i><span>本地上传</span></button>
+                    <button class="reference-source-option" type="button" role="menuitem" data-agent-reference-source="library"><i data-lucide="folder-open" aria-hidden="true"></i><span>选择素材</span></button>
                   </div>
                   <div class="agent-composer-top-actions">
                     <button class="agent-prompt-optimization-button control-chip composer-tool-button prompt-optimization-button" id="agentPromptOptimizationBtn" type="button" title="输入提示词后优化" aria-label="提示词优化" aria-busy="false" disabled>
@@ -631,6 +630,7 @@
     <script src="./src/legacy-canvas/canvas-pointer-interaction-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-pointer-dispatch-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-panel-geometry.js"></script>
+    <script src="./src/legacy-canvas/canvas-duration-controls.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-parameters.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-models.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-composer-resize.js"></script>
@@ -675,10 +675,12 @@
     <script src="./src/legacy-canvas/canvas-library-upload-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-library-delete-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-library-navigation.js"></script>
+    <script src="./src/legacy-canvas/canvas-library-reference-picker.js"></script>
     <script src="./src/legacy-canvas/canvas-library-search-session.js"></script>
     <script src="./src/legacy-canvas/canvas-library-tags-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-library-directory-controller.js"></script>
     <script src="./src/legacy-canvas/canvas-agent-launcher-motion.js"></script>
+    <script src="./src/legacy-canvas/canvas-reference-drop-controller.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

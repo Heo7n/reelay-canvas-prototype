@@ -1,4 +1,4 @@
-import { MediaLibraryError } from "../../domain/asset/media-library";
+import { MediaLibraryError, type LibrarySpace } from "../../domain/asset/media-library";
 import { randomUUID } from "node:crypto";
 import { normalizeEntityLibraryTags, validateEntityLibraryTags, requireExpectedEntityLibraryTags } from "../../domain/asset/entity-library-tags";
 
@@ -13,6 +13,7 @@ import {
 } from "../../domain/asset/entity";
 import {
   EntityCreateConflictError,
+  EntityForbiddenError,
   EntityCoverMediaInvalidError,
   EntityMediaUnavailableError,
   EntityUnavailableError,
@@ -27,6 +28,7 @@ import {
 
 interface EntityRow extends QueryResultRow {
   library_tag_ids?: string[];
+  create_space: LibrarySpace;
   id: string;
   workspace_id: string;
   name: string;
@@ -61,6 +63,7 @@ function mapEntities(rows: EntityRow[]): WorkspaceEntity[] {
       entity = {
         ...(row.library_tag_ids !== undefined ? { libraryTagIds: row.library_tag_ids } : {}),
         id: row.id,
+        space: row.create_space,
         workspaceId: row.workspace_id,
         name: row.name,
         description: row.description,
@@ -91,6 +94,7 @@ function sameContent(entity: WorkspaceEntity, content: NormalizedEntityContent):
 
 const entityColumns = `
   entity.id,
+  entity.create_space,
   entity.workspace_id,
   entity.name,
   entity.description,
@@ -117,6 +121,8 @@ export class PostgresEntityStore implements EntityStore {
   ) {}
 
   async createPersonalEntity(input: CreatePersonalEntityInput): Promise<WorkspaceEntity> {
+    const space = input.space ?? "personal";
+    const owner = space === "personal" ? input.actorId : "";
     const idempotencyKey = normalizeEntityIdempotencyKey(input.idempotencyKey);
     const content = normalizeEntityContent(input);
     const tagIds = normalizeEntityLibraryTags(input.tagIds ?? []);
@@ -125,7 +131,7 @@ export class PostgresEntityStore implements EntityStore {
       await this.lockWorkspaceMembership(client, input.workspaceId, input.actorId);
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-        [JSON.stringify(["entity-create", input.workspaceId, input.actorId, idempotencyKey])],
+        [JSON.stringify(["entity-create", input.workspaceId, space, input.actorId, idempotencyKey])],
       );
 
       const existing = await this.readEntityByCreateCommand(
@@ -133,43 +139,46 @@ export class PostgresEntityStore implements EntityStore {
         input.workspaceId,
         input.actorId,
         idempotencyKey,
+        space,
       );
       if (existing) {
         const creation = await client.query<{ create_folder_id: string | null }>("SELECT create_folder_id FROM workspace_entities WHERE workspace_id=$1 AND id=$2", [input.workspaceId, existing.id]);
         if ((creation.rows[0]?.create_folder_id ?? null) !== (input.folderId ?? null)) throw new EntityCreateConflictError("idempotency_key_reused");
         if (!sameContent(existing, content)) throw new EntityCreateConflictError("idempotency_key_reused");
-        const placement = await client.query<{ tag_ids: string[] }>("SELECT tag_ids FROM entity_placements WHERE workspace_id=$1 AND entity_id=$2 AND scope_kind='personal' AND owner_user_id=$3", [input.workspaceId, existing.id, input.actorId]);
+        const placement = await client.query<{ tag_ids: string[] }>("SELECT tag_ids FROM entity_placements WHERE workspace_id=$1 AND entity_id=$2 AND scope_kind=$4 AND scope_owner=$3", [input.workspaceId, existing.id, owner, space]);
         if (input.tagIds !== undefined && JSON.stringify(normalizeEntityLibraryTags(placement.rows[0]?.tag_ids ?? [])) !== JSON.stringify(tagIds)) throw new EntityCreateConflictError("idempotency_key_reused");
-        const deleted = await client.query("SELECT 1 FROM entity_library_deletions WHERE workspace_id=$1 AND entity_id=$2 AND owner_user_id=$3", [input.workspaceId, existing.id, input.actorId]);
+        const deleted = await client.query("SELECT 1 FROM entity_library_deletions WHERE workspace_id=$1 AND entity_id=$2 AND scope_owner=$3 AND scope_kind=$4", [input.workspaceId, existing.id, owner, space]);
         if (deleted.rows.length) throw new EntityCreateConflictError("idempotency_key_reused");
-        await this.lockPersonalMedia(client, input.workspaceId, input.actorId, content);
-        await this.ensurePersonalEntityPlacement(
+        await this.lockLibraryMedia(client, input.workspaceId, input.actorId, content, space);
+        await this.ensureEntityPlacement(
           client,
           input.workspaceId,
           input.actorId,
           existing.id,
           this.now().toISOString(),
+          null,
+          space,
         );
-        await this.ensurePersonalMediaBindings(client, input.workspaceId, input.actorId, existing.id);
-        const restored = await this.readPersonalEntity(client, input.workspaceId, input.actorId, existing.id);
+        await this.ensureMediaBindings(client, input.workspaceId, input.actorId, existing.id, space);
+        const restored = await this.readScopedEntity(client, input.workspaceId, input.actorId, existing.id, space);
         if (!restored) throw new EntityUnavailableError();
         return restored;
       }
 
-      await this.validatePersonalTags(client, input.workspaceId, input.actorId, tagIds);
+      await this.validateLibraryTags(client, input.workspaceId, input.actorId, tagIds, space);
       if (input.folderId) {
-        const folder = await client.query("SELECT 1 FROM media_library_folders WHERE workspace_id=$1 AND scope_kind='personal' AND owner_user_id=$2 AND id=$3", [input.workspaceId, input.actorId, input.folderId]);
+        const folder = await client.query("SELECT 1 FROM media_library_folders WHERE workspace_id=$1 AND scope_kind=$4 AND scope_owner=$2 AND id=$3", [input.workspaceId, owner, input.folderId, space]);
         if (!folder.rows.length) throw new MediaLibraryError("folder_not_found", "保存目录不存在或不可访问，请重新选择。");
       }
-      await this.lockPersonalMedia(client, input.workspaceId, input.actorId, content);
+      await this.lockLibraryMedia(client, input.workspaceId, input.actorId, content, space);
       const timestamp = this.now().toISOString();
       const entityId = `entity-${this.createId()}`;
       await client.query(
         `INSERT INTO workspace_entities (
            id, workspace_id, name, description, cover_asset_id, version,
-           create_idempotency_key, created_by_user_id, created_at, updated_at, create_folder_id
-         ) VALUES ($1, $2, $3, $4, NULL, 1, $5, $6, $7, $7, $8)`,
-        [entityId, input.workspaceId, content.name, content.description, idempotencyKey, input.actorId, timestamp, input.folderId ?? null],
+           create_idempotency_key, created_by_user_id, created_at, updated_at, create_folder_id, create_space
+         ) VALUES ($1, $2, $3, $4, NULL, 1, $5, $6, $7, $7, $8, $9)`,
+        [entityId, input.workspaceId, content.name, content.description, idempotencyKey, input.actorId, timestamp, input.folderId ?? null, space],
       );
       await this.insertMediaReferences(client, input.workspaceId, entityId, content);
       if (content.coverMediaId) {
@@ -178,16 +187,18 @@ export class PostgresEntityStore implements EntityStore {
           [input.workspaceId, entityId, content.coverMediaId],
         );
       }
-      await this.ensurePersonalEntityPlacement(client, input.workspaceId, input.actorId, entityId, timestamp, input.folderId ?? null);
-      await client.query("UPDATE entity_placements SET tag_ids=$4 WHERE workspace_id=$1 AND entity_id=$2 AND scope_kind='personal' AND owner_user_id=$3", [input.workspaceId, entityId, input.actorId, tagIds]);
-      await this.ensurePersonalMediaBindings(client, input.workspaceId, input.actorId, entityId);
-      const created = await this.readPersonalEntity(client, input.workspaceId, input.actorId, entityId);
+      await this.ensureEntityPlacement(client, input.workspaceId, input.actorId, entityId, timestamp, input.folderId ?? null, space);
+      await client.query("UPDATE entity_placements SET tag_ids=$4 WHERE workspace_id=$1 AND entity_id=$2 AND scope_kind=$5 AND scope_owner=$3", [input.workspaceId, entityId, owner, tagIds, space]);
+      await this.ensureMediaBindings(client, input.workspaceId, input.actorId, entityId, space);
+      const created = await this.readScopedEntity(client, input.workspaceId, input.actorId, entityId, space);
       if (!created) throw new EntityUnavailableError();
       return created;
     });
   }
 
   async listPersonalEntities(input: ListPersonalEntitiesInput): Promise<WorkspaceEntity[]> {
+    const space = input.space ?? "personal";
+    const owner = space === "personal" ? input.actorId : "";
     return this.withTransaction(async (client) => {
       await this.lockWorkspaceMembership(client, input.workspaceId, input.actorId);
       const result = await client.query<EntityRow>(
@@ -200,28 +211,32 @@ export class PostgresEntityStore implements EntityStore {
            ON reference.workspace_id = entity.workspace_id
           AND reference.entity_id = entity.id
          WHERE placement.workspace_id = $1
-           AND placement.scope_kind = 'personal'
-           AND placement.owner_user_id = $2
+           AND placement.scope_kind = $3
+           AND placement.scope_owner = $2
          ORDER BY entity.updated_at DESC, entity.id, reference.position`,
-        [input.workspaceId, input.actorId],
+        [input.workspaceId, owner, space],
       );
       return mapEntities(result.rows);
     });
   }
 
   async getPersonalEntity(input: ReadPersonalEntityInput): Promise<WorkspaceEntity | null> {
+    const space = input.space ?? "personal";
     return this.withTransaction(async (client) => {
       await this.lockWorkspaceMembership(client, input.workspaceId, input.actorId);
-      return this.readPersonalEntity(client, input.workspaceId, input.actorId, input.entityId);
+      return this.readScopedEntity(client, input.workspaceId, input.actorId, input.entityId, space);
     });
   }
 
   async updatePersonalEntity(input: UpdatePersonalEntityInput): Promise<WorkspaceEntity> {
+    const space = input.space ?? "personal";
+    const owner = space === "personal" ? input.actorId : "";
     const expectedVersion = normalizeExpectedEntityVersion(input.expectedVersion);
     const content = normalizeEntityContent(input);
     return this.withTransaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`media-library:${input.workspaceId}`]);
       await this.lockWorkspaceMembership(client, input.workspaceId, input.actorId);
+      if (space === "organization") await this.requireOrganizationManager(client, input.workspaceId, input.actorId);
       const locked = await client.query<LockedEntityRow>(
         `SELECT entity.version, placement.tag_ids
          FROM entity_placements AS placement
@@ -230,10 +245,10 @@ export class PostgresEntityStore implements EntityStore {
           AND entity.id = placement.entity_id
          WHERE placement.workspace_id = $1
            AND placement.entity_id = $2
-           AND placement.scope_kind = 'personal'
-           AND placement.owner_user_id = $3
+           AND placement.scope_kind = $4
+           AND placement.scope_owner = $3
          FOR UPDATE OF entity, placement`,
-        [input.workspaceId, input.entityId, input.actorId],
+        [input.workspaceId, input.entityId, owner, space],
       );
       const current = locked.rows[0];
       if (!current) throw new EntityUnavailableError();
@@ -241,10 +256,10 @@ export class PostgresEntityStore implements EntityStore {
       let tagIds: string[] | undefined;
       if (input.tagIds !== undefined) {
         requireExpectedEntityLibraryTags(current.tag_ids, input.expectedTagIds);
-        tagIds = await this.validatePersonalTags(client, input.workspaceId, input.actorId, input.tagIds);
+        tagIds = await this.validateLibraryTags(client, input.workspaceId, input.actorId, input.tagIds, space);
       }
 
-      await this.lockPersonalMedia(client, input.workspaceId, input.actorId, content);
+      await this.lockLibraryMedia(client, input.workspaceId, input.actorId, content, space);
       await client.query(
         "UPDATE workspace_entities SET cover_asset_id = NULL WHERE workspace_id = $1 AND id = $2",
         [input.workspaceId, input.entityId],
@@ -254,7 +269,7 @@ export class PostgresEntityStore implements EntityStore {
         [input.workspaceId, input.entityId],
       );
       await this.insertMediaReferences(client, input.workspaceId, input.entityId, content);
-      await this.ensurePersonalMediaBindings(client, input.workspaceId, input.actorId, input.entityId);
+      await this.ensureMediaBindings(client, input.workspaceId, input.actorId, input.entityId, space);
       const updatedAt = this.now().toISOString();
       await client.query(
         `UPDATE workspace_entities
@@ -273,18 +288,23 @@ export class PostgresEntityStore implements EntityStore {
           updatedAt,
         ],
       );
-      if (tagIds !== undefined) await client.query("UPDATE entity_placements SET tag_ids=$4 WHERE workspace_id=$1 AND entity_id=$2 AND scope_kind='personal' AND owner_user_id=$3", [input.workspaceId, input.entityId, input.actorId, tagIds]);
-      const updated = await this.readPersonalEntity(client, input.workspaceId, input.actorId, input.entityId);
+      if (tagIds !== undefined) await client.query("UPDATE entity_placements SET tag_ids=$4 WHERE workspace_id=$1 AND entity_id=$2 AND scope_kind=$5 AND scope_owner=$3", [input.workspaceId, input.entityId, owner, tagIds, space]);
+      const updated = await this.readScopedEntity(client, input.workspaceId, input.actorId, input.entityId, space);
       if (!updated) throw new EntityUnavailableError();
       return updated;
     });
   }
 
-  private async validatePersonalTags(client: PoolClient, workspaceId: string, actorId: string, tagIds: readonly string[]): Promise<string[]> {
+  private async validateLibraryTags(client: PoolClient, workspaceId: string, actorId: string, tagIds: readonly string[], space: LibrarySpace): Promise<string[]> {
     const normalized = normalizeEntityLibraryTags(tagIds);
-    const available = await client.query<{ id: string }>("SELECT id FROM media_library_tags WHERE workspace_id=$1 AND scope_kind='personal' AND owner_user_id=$2 AND id=ANY($3::text[])", [workspaceId, actorId, normalized]);
+    const available = await client.query<{ id: string }>("SELECT id FROM media_library_tags WHERE workspace_id=$1 AND scope_kind=$4 AND scope_owner=$2 AND id=ANY($3::text[])", [workspaceId, space === "personal" ? actorId : "", normalized, space]);
     const ids = new Set(available.rows.map((row) => row.id));
     return validateEntityLibraryTags(normalized, (id) => ids.has(id));
+  }
+
+  private async requireOrganizationManager(client: PoolClient, workspaceId: string, actorId: string): Promise<void> {
+    const result = await client.query<{ role: string }>("SELECT role FROM memberships WHERE workspace_id=$1 AND user_id=$2 FOR SHARE", [workspaceId, actorId]);
+    if (!["owner", "admin"].includes(result.rows[0]?.role ?? "")) throw new EntityForbiddenError();
   }
 
   private async lockWorkspaceMembership(client: PoolClient, workspaceId: string, actorId: string): Promise<void> {
@@ -298,11 +318,12 @@ export class PostgresEntityStore implements EntityStore {
     if (!membership.rows[0]) throw new EntityWorkspaceUnavailableError();
   }
 
-  private async lockPersonalMedia(
+  private async lockLibraryMedia(
     client: PoolClient,
     workspaceId: string,
     actorId: string,
     content: NormalizedEntityContent,
+    space: LibrarySpace,
   ): Promise<void> {
     const assetIds = content.mediaRefs.map(({ mediaAssetId }) => mediaAssetId);
     const available = await client.query<{ id: string; media_kind: "image" | "video" | "audio" }>(
@@ -314,10 +335,10 @@ export class PostgresEntityStore implements EntityStore {
        JOIN media_asset_placements AS placement
          ON placement.workspace_id = asset.workspace_id
         AND placement.asset_id = asset.id
-        AND placement.scope_kind = 'personal'
-        AND placement.owner_user_id = $2
+        AND placement.scope_kind = $4
+        AND placement.scope_owner = $2
        FOR KEY SHARE OF asset, placement`,
-      [workspaceId, actorId, assetIds],
+      [workspaceId, space === "personal" ? actorId : "", assetIds, space],
     );
     if (available.rows.length !== assetIds.length) throw new EntityMediaUnavailableError();
     const cover = content.coverMediaId
@@ -342,29 +363,37 @@ export class PostgresEntityStore implements EntityStore {
     );
   }
 
-  private async ensurePersonalEntityPlacement(
+  private async ensureEntityPlacement(
     client: PoolClient,
     workspaceId: string,
     actorId: string,
     entityId: string,
     createdAt: string,
     folderId: string | null = null,
+    space: LibrarySpace = "personal",
   ): Promise<void> {
     await client.query(
       `INSERT INTO entity_placements (
          id, workspace_id, entity_id, scope_kind, owner_user_id, created_by_user_id, created_at, folder_id
-       ) VALUES ($1, $2, $3, 'personal', $4, $4, $5, $6)
-       ON CONFLICT (workspace_id, entity_id, owner_user_id) DO NOTHING`,
-      [`entity-placement-${this.createId()}`, workspaceId, entityId, actorId, createdAt, folderId],
+       ) VALUES ($1, $2, $3, $7, $8, $4, $5, $6)
+       ON CONFLICT (workspace_id, entity_id, scope_kind, scope_owner) DO NOTHING`,
+      [`entity-placement-${this.createId()}`, workspaceId, entityId, actorId, createdAt, folderId, space, space === "personal" ? actorId : null],
     );
   }
 
-  private async ensurePersonalMediaBindings(
+  private async ensureMediaBindings(
     client: PoolClient,
     workspaceId: string,
     actorId: string,
     entityId: string,
+    space: LibrarySpace,
   ): Promise<void> {
+    if (space === "organization") {
+      await client.query(`INSERT INTO entity_organization_media_bindings (workspace_id, entity_id, asset_id)
+        SELECT workspace_id, entity_id, asset_id FROM entity_media_references WHERE workspace_id=$1 AND entity_id=$2
+        ON CONFLICT (workspace_id, entity_id, asset_id) DO NOTHING`, [workspaceId, entityId]);
+      return;
+    }
     await client.query(
       `INSERT INTO entity_personal_media_bindings (
          workspace_id, entity_id, owner_user_id, asset_id
@@ -378,11 +407,12 @@ export class PostgresEntityStore implements EntityStore {
     );
   }
 
-  private async readPersonalEntity(
+  private async readScopedEntity(
     client: PoolClient,
     workspaceId: string,
     actorId: string,
     entityId: string,
+    space: LibrarySpace,
   ): Promise<WorkspaceEntity | null> {
     const result = await client.query<EntityRow>(
       `SELECT ${entityColumns}, placement.tag_ids AS library_tag_ids
@@ -395,10 +425,10 @@ export class PostgresEntityStore implements EntityStore {
         AND reference.entity_id = entity.id
        WHERE placement.workspace_id = $1
          AND placement.entity_id = $2
-         AND placement.scope_kind = 'personal'
-         AND placement.owner_user_id = $3
+         AND placement.scope_kind = $4
+         AND placement.scope_owner = $3
        ORDER BY reference.position`,
-      [workspaceId, entityId, actorId],
+      [workspaceId, entityId, space === "personal" ? actorId : "", space],
     );
     return mapEntities(result.rows)[0] ?? null;
   }
@@ -408,6 +438,7 @@ export class PostgresEntityStore implements EntityStore {
     workspaceId: string,
     actorId: string,
     idempotencyKey: string,
+    space: LibrarySpace,
   ): Promise<WorkspaceEntity | null> {
     const result = await client.query<EntityRow>(
       `SELECT ${entityColumns}
@@ -418,8 +449,9 @@ export class PostgresEntityStore implements EntityStore {
        WHERE entity.workspace_id = $1
          AND entity.created_by_user_id = $2
          AND entity.create_idempotency_key = $3
+         AND entity.create_space = $4
        ORDER BY reference.position`,
-      [workspaceId, actorId, idempotencyKey],
+      [workspaceId, actorId, idempotencyKey, space],
     );
     return mapEntities(result.rows)[0] ?? null;
   }

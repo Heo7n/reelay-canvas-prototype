@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MediaUploadPolicySchema } from "../domain/asset/media-upload-policy";
-import { DeleteLibraryTagInputSchema, DeleteLibraryItemSchema, LibraryFolderSchema, LibraryTagSchema, MediaLibraryCatalogSchema, UpdateLibraryTagsInputSchema } from "../domain/asset/media-library";
+import { DeleteLibraryTagInputSchema, DeleteLibraryItemSchema, LibraryFolderSchema, LibraryTagSchema, MediaLibraryCatalogSchema, UpdateLibraryTagsInputSchema, isValidLibraryTagUpdate } from "../domain/asset/media-library";
 
 export const bridgeCanvasDocumentSchema = z
   .object({
@@ -95,6 +95,7 @@ export const bridgeWorkspaceAssetSchema = z.object({
 }).strict();
 
 export const bridgeWorkspaceEntitySchema = z.object({
+  space: z.enum(["personal", "organization"]).default("personal"),
   libraryTagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
   id: bridgeIdentifierSchema,
   name: z.string().trim().min(1).max(200),
@@ -298,7 +299,7 @@ export const canvasMediaLibraryCommandSchema = z.discriminatedUnion("command", [
   }).strict(),
   z.object({ ...libraryCommandFields, command: z.literal("delete"), space: librarySpaceSchema, items: z.array(DeleteLibraryItemSchema).min(1).max(100) }).strict(),
   DeleteLibraryTagInputSchema.omit({ workspaceId: true }).extend({ ...libraryCommandFields, command: z.literal("delete-tag") }).strict(),
-  UpdateLibraryTagsInputSchema.omit({ workspaceId: true }).extend({ ...libraryCommandFields, command: z.literal("update-tags") }).strict(),
+  UpdateLibraryTagsInputSchema.omit({ workspaceId: true }).extend({ ...libraryCommandFields, command: z.literal("update-tags") }).strict().refine(isValidLibraryTagUpdate),
   z.object({ ...libraryCommandFields, command: z.literal("save"),
     space: librarySpaceSchema, folderId: bridgeIdentifierSchema.nullable(),
     tagIds: z.array(bridgeIdentifierSchema).max(50),
@@ -440,6 +441,7 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:rename-media"),
+    space: z.enum(["personal", "organization"]).default("personal"),
     protocolVersion: z.literal(1),
     instanceId: canvasInstanceIdSchema,
     requestId: bridgeRequestIdSchema,
@@ -449,6 +451,7 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:create-entity"),
+    space: z.enum(["personal", "organization"]).default("personal"),
     tagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
     folderId: bridgeIdentifierSchema.nullable().optional(),
     protocolVersion: z.literal(1),
@@ -463,6 +466,7 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
   z.object({
     source: z.literal("reelay-legacy-canvas"),
     type: z.literal("canvas:update-entity"),
+    space: z.enum(["personal", "organization"]).default("personal"),
     tagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
     expectedTagIds: z.array(bridgeIdentifierSchema).max(50).optional(),
     protocolVersion: z.literal(1),

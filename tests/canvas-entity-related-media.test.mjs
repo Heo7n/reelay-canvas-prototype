@@ -88,9 +88,9 @@ test("recent Media sorting uses creation time with stable undated items and leav
   assert.deepEqual(ids(store.listItems({ kind: "entity", sort: "recent" })), ["hero"]);
 });
 
-test("read-only subjects retain only the related-media menu action and related filters explain unavailable state", () => {
+test("read-only subjects omit management menus and related filters explain unavailable state", () => {
   const markup = view.renderEntityCard({ entity: { id: "hero", name: "角色" }, space: "personal", mutable: false, menuOpen: true });
-  assert.match(markup, /data-library-menu-item="view-media"/);
+  assert.doesNotMatch(markup, /data-library-menu-item=/);
   assert.doesNotMatch(markup, /data-library-menu-item="(?:edit|rename|move|share-organization|delete)"/);
   const filter = view.renderEntityMediaFilter({ entity: { name: '<img onerror="alert(1)">' }, status: "ready" });
   assert.match(filter, /返回主体列表/);
@@ -146,14 +146,12 @@ function harness(t) {
   return { window, document: window.document, state, store, rootMedia, nestedMedia, folder, entity };
 }
 
-test("real subject menu opens cross-directory Media; search, type, clear and explicit navigation compose safely", (t) => {
+test("subject member browsing composes cross-directory Media search, type, clear and explicit navigation safely", (t) => {
   const h = harness(t);
   const before = plain(h.store.snapshot());
   const canvasBefore = JSON.stringify(h.window.createCanvasDocumentSnapshot());
   h.document.querySelector('[data-library-open-subjects]').click();
-  const card = h.document.querySelector(`[data-library-entity="${h.entity.id}"]`);
-  card.querySelector('[data-library-menu-toggle]').click();
-  h.document.querySelector('[data-library-menu-item="view-media"]').click();
+  h.window.viewEntityRelatedMedia(h.entity.id);
   assert.equal(h.document.querySelector('#assetLibraryEntityTab'), null);
   assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), [h.nestedMedia.id, h.rootMedia.id]);
   assert.equal(h.document.querySelector('#assetLibraryEntityFilter').hidden, false);
@@ -398,8 +396,7 @@ test("subject zone is reachable from the fifth directory level and restores inde
   h.state.librarySearch = "跨目录";
   h.window.renderAssetLibrary();
   grid.scrollTop = 126;
-  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-menu-toggle]`).click();
-  h.document.querySelector('[data-library-menu-item="view-media"]').click();
+  h.window.viewEntityRelatedMedia(h.entity.id);
   assert.ok(h.window.getVisibleAssetLibraryContent().items.every((item) => item.kind === "media"));
   assert.equal(h.state.librarySearch, "");
   assert.deepEqual(plain(h.state.libraryTagFilter), { tagIds: [], untagged: false });
@@ -414,7 +411,7 @@ test("subject zone is reachable from the fifth directory level and restores inde
   assert.equal(grid.scrollTop, 126);
   h.window.switchAssetLibraryContext({ space: "organization" });
   assert.equal(h.state.libraryZone, "media");
-  assert.equal(h.document.querySelector('#assetLibrarySubjectsBtn').hidden, true);
+  assert.equal(h.document.querySelector('#assetLibrarySubjectsBtn').hidden, false);
   h.window.switchAssetLibraryContext({ space: "personal" });
   assert.equal(h.state.libraryZone, "subjects");
   assert.equal(grid.scrollTop, 126);
@@ -504,7 +501,8 @@ test("same-ID media and subjects keep separate selections across zones and only 
   assert.equal(h.document.querySelector('[data-library-subject-zone]'), null);
   h.document.querySelector('#assetLibrarySubjectsBtn').click();
   assert.equal(h.state.librarySelectedIds.size, 0);
-  select("entity", h.entity.id);
+  h.document.querySelector('[data-library-selection-toggle]').click();
+  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
   assert.deepEqual([...h.state.librarySelectedIds], [`entity:${h.entity.id}`]);
   assert.equal(h.document.querySelectorAll("#assetLibraryGrid .selected").length, 1);
   const subjectCard = h.document.querySelector(`[data-library-entity="${h.entity.id}"]`);
@@ -529,12 +527,11 @@ test("same-ID media and subjects keep separate selections across zones and only 
   assert.equal(h.state.librarySelectedIds.size, h.window.getVisibleAssetLibraryContent().items.length);
 });
 
-test("subject view-media action browses references without inserting nodes and restores its source", (t) => {
+test("subject member browsing leaves canvas unchanged and restores its source", (t) => {
   const h = harness(t);
   const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
   h.document.querySelector('[data-library-open-subjects]').click();
-  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-menu-toggle]`).click();
-  h.document.querySelector('[data-library-menu-item="view-media"]').click();
+  h.window.viewEntityRelatedMedia(h.entity.id);
   assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), [h.nestedMedia.id, h.rootMedia.id]);
   assert.equal(h.document.querySelectorAll("#assetLibraryGrid [data-library-entity]").length, 0);
   assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
@@ -553,8 +550,9 @@ test("using multiple subjects expands ordered references and inserts shared medi
     mediaRefs: [{ mediaId: h.rootMedia.id }, { mediaId: h.nestedMedia.id }] }).entity;
   const before = h.state.nodes.length;
   h.document.querySelector('[data-library-open-subjects]').click();
-  h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`).click();
-  h.document.querySelector(`[data-library-select="entity:${other.id}"]`).click();
+  h.document.querySelector('[data-library-selection-toggle]').click();
+  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
+  h.document.querySelector(`[data-library-entity="${other.id}"] [data-library-preview]`).click();
   h.document.querySelector('[data-library-batch-toggle]').click();
   h.document.querySelector('[data-library-batch-action="add-canvas"]').click();
   assert.equal(h.state.nodes.length, before + 2);
@@ -565,40 +563,97 @@ test("subject batches expose usage and media batches expose creation without adv
   const h = harness(t);
   const menuActions = () => [...h.document.querySelectorAll('[data-library-batch-action]')].map((button) => button.dataset.libraryBatchAction).sort();
   h.document.querySelector('[data-library-open-subjects]').click();
-  h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`).click();
+  h.document.querySelector('[data-library-selection-toggle]').click();
+  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
   h.document.querySelector('[data-library-batch-toggle]').click();
   assert.deepEqual(menuActions(), ["add-canvas"]);
-  for (const [kind, label] of [["agent", "添加到对话参考"], ["node", "添加到当前节点"]]) {
-    h.state.libraryTarget = { kind, nodeId: "test-target" };
-    h.window.renderAssetLibrary();
-    assert.equal(h.document.querySelector('[data-library-batch-action="add-canvas"]').textContent.trim(), label);
-  }
-  h.state.libraryTarget = null;
   h.document.querySelector('#assetLibraryDirectoryButton').click();
   h.document.querySelector(`[data-library-select="media:${h.rootMedia.id}"]`).click();
   h.document.querySelector('[data-library-batch-toggle]').click();
   assert.deepEqual(menuActions(), ["add-canvas", "create-group", "move", "review", "share-organization"]);
 });
 
-test("group card menus keep browse, edit and rename without unrelated Media mutations", (t) => {
+test("group card menus keep edit and rename without duplicate content browsing", (t) => {
   const h = harness(t);
   h.document.querySelector('[data-library-open-subjects]').click();
   const card = h.document.querySelector(`[data-library-entity="${h.entity.id}"]`);
   card.querySelector('[data-library-menu-toggle]').click();
   const actions = [...h.document.querySelectorAll('[data-library-menu-item]')].map((button) => button.dataset.libraryMenuItem).sort();
-  assert.deepEqual(actions, ["edit", "rename", "view-media"]);
+  assert.deepEqual(actions, ["edit", "rename"]);
 });
 
 
-test("clicking a subject card opens its editor with own tags and leaves canvas content unchanged", (t) => {
+test("subject edit menu opens its editor with own tags and leaves canvas content unchanged", (t) => {
   const h = harness(t);
   h.store.registerPersistedEntity({ entity: {...h.entity, libraryTagIds: ['builtin:character']} });
   const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
   h.document.querySelector('[data-library-open-subjects]').click();
-  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
+  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-menu-toggle]`).click();
+  h.document.querySelector('[data-library-menu-item="edit"]').click();
   assert.equal(h.document.querySelector('[data-entity-editor="true"]').dataset.entityEditorMode, 'edit');
   assert.equal(h.document.querySelector('[data-entity-editor-name]').value, h.entity.name);
   assert.match(h.document.querySelector('[data-entity-editor-tags-toggle]').textContent, /角色/);
   assert.equal(h.state.libraryEntityFilter, null);
   assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+});
+
+test("subject card click opens its editor and does not add canvas nodes", (t) => {
+  const h = harness(t);
+  const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  h.document.querySelector('[data-library-open-subjects]').click();
+  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
+  assert.equal(h.document.querySelector('[data-entity-editor="true"]').dataset.entityEditorMode, "edit");
+  assert.equal(h.document.querySelector('[data-entity-use-detail]'), null);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+});
+
+test("subject cover action adds ordered media once without editing and supports one-step undo", (t) => {
+  const h = harness(t);
+  const before = h.state.nodes.length;
+  h.document.querySelector('[data-library-open-subjects]').click();
+  const add = () => h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-entity-add]`);
+  assert.ok(add());
+  add().click();
+  assert.equal(h.document.querySelector('[data-entity-editor="true"]'), null);
+  assert.equal(h.state.nodes.length, before + 2);
+  assert.deepEqual(Array.from(h.state.nodes.slice(before), (node) => node.assets[0].librarySourceId), [h.nestedMedia.id, h.rootMedia.id]);
+  add().click();
+  assert.equal(h.state.nodes.length, before + 2);
+  h.window.undoLastAction();
+  assert.equal(h.state.nodes.length, before);
+});
+
+test("subject corner checkboxes appear only in multi-selection and sync with cover toggles", (t) => {
+  const h = harness(t);
+  h.document.querySelector('[data-library-open-subjects]').click();
+  assert.equal(h.document.querySelector('[data-library-entity] [data-library-select]'), null);
+  h.document.querySelector('[data-library-selection-toggle]').click();
+  const cover = () => h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`);
+  const checkbox = () => h.document.querySelector(`[data-library-select="entity:${h.entity.id}"]`);
+  assert.equal(checkbox().getAttribute('aria-pressed'), 'false');
+  cover().click();
+  assert.equal(cover().getAttribute('aria-pressed'), 'true');
+  assert.deepEqual([...h.state.librarySelectedIds], [`entity:${h.entity.id}`]);
+  assert.equal(checkbox().getAttribute('aria-pressed'), 'true');
+  assert.equal(h.document.querySelector('[data-entity-editor="true"]'), null);
+  checkbox().click();
+  assert.equal(cover().getAttribute('aria-pressed'), 'false');
+  assert.equal(h.state.librarySelectedIds.size, 0);
+  h.document.querySelector('[data-library-selection-cancel]').click();
+  assert.equal(checkbox(), null);
+});
+
+test("subject card in reference selection opens members instead of a canvas-use preview", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(0, 0, "video");
+  h.state.nodes.push(node);
+  h.window.openAssetLibrary(node.id);
+  h.document.querySelector('[data-library-open-subjects]').click();
+  assert.equal(h.document.querySelector('[data-library-entity-add]'), null);
+  h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
+  assert.equal(h.document.querySelector('[data-entity-use-detail]'), null);
+  assert.equal(h.document.querySelector('[data-entity-editor="true"]'), null);
+  assert.equal(h.state.libraryEntityFilter.entityId, h.entity.id);
+  assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), [h.nestedMedia.id, h.rootMedia.id]);
+  assert.equal(node.assets.length, 0);
 });

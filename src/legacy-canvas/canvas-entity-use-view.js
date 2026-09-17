@@ -157,25 +157,13 @@
     const featuredMedia = cover || media.find((item) => safeMediaUrl(item.thumbnailUrl)) || media[0] || null;
     const name = entityName(entity);
     const description = String(entity.description || "").trim();
-    const pinned = Boolean(options.pinned);
-    const busy = Boolean(options.busy);
-    const addSupported = options.canAdd !== false && Boolean(entityId) && media.length > 0;
-    const canAdd = addSupported && !busy;
-    const unavailableReason = busy
-      ? "正在添加主体"
-      : options.canAdd === false
-        ? "当前画布不可编辑"
-        : !entityId || !media.length
-          ? "主体没有可添加的素材"
-          : "";
     const safeId = escapeHtml(entityId);
     const safeName = escapeHtml(name);
     const safeDescription = escapeHtml(description);
-    const state = pinned ? "pinned" : "preview";
     const placement = options.placement && typeof options.placement === "object" ? options.placement : null;
 
     return `
-      <section class="${classNames("entity-use-detail", pinned && "is-pinned", busy && "is-busy")}" role="dialog" aria-modal="false" aria-labelledby="entity-use-detail-title" data-entity-use-detail="${safeId}" data-entity-use-state="${state}" data-pinned="${pinned}" data-placement="${escapeHtml(placement?.side || "right")}"${detailPlacementStyle(placement)}>
+      <section class="entity-use-detail" role="tooltip" aria-labelledby="entity-use-detail-title" data-entity-use-detail="${safeId}" data-entity-use-state="preview" data-placement="${escapeHtml(placement?.side || "right")}"${detailPlacementStyle(placement)}>
         <div class="entity-use-detail-cover" data-cover-kind="${cover ? normalizeMediaKind(cover) : featuredMedia ? "preview" : "empty"}" data-media-kind="${normalizeMediaKind(featuredMedia) || "empty"}" data-media-preview-key="${escapeHtml(JSON.stringify([entityId, featuredMedia?.id, normalizeMediaKind(featuredMedia), featuredMedia?.url, featuredMedia?.thumbnailUrl]))}">
           ${featuredMedia ? renderMediaThumbnail(featuredMedia) : `<span class="entity-use-media-placeholder entity">${icon("user-round")}</span>`}
         </div>
@@ -186,12 +174,6 @@
           </div>
           <p${description ? "" : ' class="muted"'}>${description ? safeDescription : "暂无主体描述"}</p>
         </div>
-        <footer>
-          <button class="entity-use-detail-add" type="button"${canAdd ? ` data-entity-use-action="add-canvas" data-entity-use-add-canvas="${safeId}"` : ` data-entity-use-unavailable="add-canvas" disabled aria-disabled="true" title="${escapeHtml(unavailableReason)}"`}>
-            ${busy ? icon("loader-circle") : ""}
-            <span>添加到画布</span>
-          </button>
-        </footer>
       </section>
     `;
   }
@@ -537,10 +519,8 @@
   function syncEntityDetailPortal(portal, state = {}) {
     if (!portal || typeof portal !== "object") return null;
     const visible = Boolean(state.visible);
-    const pinned = visible && Boolean(state.pinned);
     setPortalVisibility(portal, visible);
-    portal.classList?.toggle("is-pinned", pinned);
-    portal.setAttribute?.("data-entity-use-state", visible ? (pinned ? "pinned" : "preview") : "hidden");
+    portal.setAttribute?.("data-entity-use-state", visible ? "preview" : "hidden");
     const placement = state.placement && typeof state.placement === "object" ? state.placement : null;
     const properties = [
       ["--entity-use-detail-left", placement?.left],

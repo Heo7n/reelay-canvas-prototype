@@ -40,15 +40,16 @@ function setup() {
 afterEach(() => { window.dispatchEvent(new Event("pagehide")); document.body.replaceChildren(); Reflect.deleteProperty(window, "REELAY_GENERATION_HISTORY_PRESETS"); });
 
 describe("generation simulator development boundary", () => {
-  it("injects only into the served canvas and leaves built entries unreferenced", () => {
+  it("requires explicit developer opt-in and leaves ordinary preview and built entries unreferenced", () => {
     expect(generationSimulatorPlugin().apply).toBe("serve");
-    expect(generationSimulatorTags("/index.html")).toHaveLength(2);
+    expect(generationSimulatorTags("/index.html")).toEqual([]);
+    expect(generationSimulatorTags("/index.html", true)).toHaveLength(2);
     expect(generationSimulatorTags("/app-shell.html")).toEqual([]);
     expect(generationSimulatorTags("/app/projects/example")).toEqual([]);
     for (const name of ["index.html", "app-shell.html"]) {
       expect(readFileSync(path.resolve(name), "utf8")).not.toMatch(/generation-simulator/);
     }
-    expect(generationSimulatorTags("/index.html").map((tag) => tag.attrs?.src || tag.attrs?.href))
+    expect(generationSimulatorTags("/index.html", true).map((tag) => tag.attrs?.src || tag.attrs?.href))
       .toEqual(["/src/dev/generation-simulator.css", "/src/dev/generation-simulator.js"]);
   });
 

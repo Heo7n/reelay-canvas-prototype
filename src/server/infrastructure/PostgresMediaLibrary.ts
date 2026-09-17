@@ -100,15 +100,15 @@ export class PostgresMediaLibrary {
         if (!["owner", "admin"].includes(role.rows[0]?.role)) throw new MediaLibraryError("forbidden", "只有组织所有者或管理员可以删除组织素材。");
       }
       const catalog = await this.catalog(client, input);
-      const entities = input.space === "personal" ? await client.query<{ id: string; version: number; asset_ids: string[] }>(
+      const entities = await client.query<{ id: string; version: number; asset_ids: string[] }>(
         `SELECT entity.id,entity.version,ARRAY(SELECT reference.asset_id FROM entity_media_references AS reference WHERE reference.workspace_id=entity.workspace_id AND reference.entity_id=entity.id) AS asset_ids
          FROM entity_placements AS placement JOIN workspace_entities AS entity ON entity.workspace_id=placement.workspace_id AND entity.id=placement.entity_id
-         WHERE placement.workspace_id=$1 AND placement.scope_kind='personal' AND placement.owner_user_id=$2 FOR UPDATE OF entity,placement`, [input.workspaceId, input.actorId]) : { rows: [] };
+         WHERE placement.workspace_id=$1 AND placement.scope_kind=$2 AND placement.scope_owner=$3 FOR UPDATE OF entity,placement`, [input.workspaceId, input.space, input.space === "personal" ? input.actorId : ""]);
       const plan = planLibraryDeletion(catalog, entities.rows.map((entity) => ({ id: entity.id, version: entity.version, assetIds: entity.asset_ids })), input);
-      // Delete group placements first, letting their personal media bindings cascade. The source group and media remain intact.
+      // Delete group placements first, letting their scoped media bindings cascade. The source group and media remain intact.
       if (plan.entityIds.length) {
-        await client.query(`INSERT INTO entity_library_deletions (workspace_id,entity_id,owner_user_id) SELECT $1,unnest($2::text[]),$3 ON CONFLICT DO NOTHING`, [input.workspaceId, plan.entityIds, input.actorId]);
-        await client.query(`DELETE FROM entity_placements WHERE workspace_id=$1 AND entity_id=ANY($2::text[]) AND scope_kind='personal' AND owner_user_id=$3`, [input.workspaceId, plan.entityIds, input.actorId]);
+        await client.query(`INSERT INTO entity_library_deletions (workspace_id,entity_id,scope_kind,owner_user_id) SELECT $1,unnest($2::text[]),$3,$4 ON CONFLICT DO NOTHING`, [input.workspaceId, plan.entityIds, input.space, input.space === "personal" ? input.actorId : null]);
+        await client.query(`DELETE FROM entity_placements WHERE workspace_id=$1 AND entity_id=ANY($2::text[]) AND scope_kind=$3 AND scope_owner=$4`, [input.workspaceId, plan.entityIds, input.space, input.space === "personal" ? input.actorId : ""]);
       }
       const owner = input.space === "personal" ? input.actorId : "";
       // Detach legacy locations without moving/reordering surviving subjects or changing their content.
@@ -153,9 +153,9 @@ export class PostgresMediaLibrary {
             WHERE workspace_id=$1 AND scope_kind=$2 AND scope_owner=$3 AND asset_id=$4 AND tag_ids IS DISTINCT FROM $5::text[]`,
           [input.workspaceId, plan.space, plan.space === "personal" ? input.actorId : "", item.id, item.tagIds, this.now().toISOString()]);
         } else {
-          await client.query(`UPDATE entity_placements SET tag_ids=$4
-            WHERE workspace_id=$1 AND scope_kind='personal' AND owner_user_id=$2 AND entity_id=$3 AND tag_ids IS DISTINCT FROM $4::text[]`,
-          [input.workspaceId, input.actorId, item.id, item.tagIds]);
+          await client.query(`UPDATE entity_placements SET tag_ids=$5
+            WHERE workspace_id=$1 AND scope_kind=$2 AND scope_owner=$3 AND entity_id=$4 AND tag_ids IS DISTINCT FROM $5::text[]`,
+          [input.workspaceId, input.space, input.space === "personal" ? input.actorId : "", item.id, item.tagIds]);
         }
       }
       return this.catalog(client, input);
@@ -167,7 +167,7 @@ export class PostgresMediaLibrary {
     const folders = await client.query<{ id: string; name: string; parent_id: string | null; scope_kind: LibrarySpace }>(`SELECT id,name,parent_id,scope_kind FROM media_library_folders WHERE ${visibility} ORDER BY name,id`,[input.workspaceId,input.actorId]);
     const tags = await client.query<{ id: string; name: string; scope_kind: LibrarySpace }>(`SELECT id,name,scope_kind FROM media_library_tags WHERE ${visibility} ORDER BY name,id`,[input.workspaceId,input.actorId]);
     const entityEntries = await client.query<{ entity_id: string; scope_kind: LibrarySpace; tag_ids: string[]; folder_id: string | null; added_at: Date }>(
-      `SELECT entity_id,scope_kind,tag_ids,folder_id,COALESCE(added_at,created_at) AS added_at FROM entity_placements WHERE workspace_id=$1 AND scope_kind='personal' AND owner_user_id=$2 ORDER BY entity_id`, [input.workspaceId, input.actorId]);
+      `SELECT entity_id,scope_kind,tag_ids,folder_id,COALESCE(added_at,created_at) AS added_at FROM entity_placements WHERE ${visibility} ORDER BY entity_id`, [input.workspaceId, input.actorId]);
     const entries = await client.query<{ asset_id: string; object_version: number; media_kind: MediaKind; display_name: string; content_type: string; byte_size: string; checksum_sha256: string; created_at: Date; added_at: Date; scope_kind: LibrarySpace; folder_id: string | null; tag_ids: string[] }>(
       `SELECT asset.id AS asset_id,asset.object_version,asset.media_kind,COALESCE(placement.display_name,asset.display_name) AS display_name,asset.content_type,asset.byte_size,asset.checksum_sha256,placement.created_at,COALESCE(placement.added_at,placement.created_at) AS added_at,placement.scope_kind,placement.folder_id,placement.tag_ids FROM media_asset_placements AS placement JOIN workspace_media_assets AS asset ON asset.workspace_id=placement.workspace_id AND asset.id=placement.asset_id WHERE placement.workspace_id=$1 AND (placement.scope_kind='organization' OR placement.owner_user_id=$2) ORDER BY placement.created_at DESC,asset.id`,[input.workspaceId,input.actorId]);
     return {

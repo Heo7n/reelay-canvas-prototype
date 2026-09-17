@@ -3,6 +3,22 @@ import { HttpEntityRepository } from "./HttpEntityRepository";
 import { HttpResponseValidationError } from "./HttpApiClient";
 
 describe("HttpEntityRepository subject tags", () => {
+  it("uses the existing scoped API for organization list, get, create and update", async () => {
+    const entity = { id: "subject", space: "organization", workspaceId: "scope", name: "Team subject", description: "", mediaRefs: [{ assetId: "asset", order: 0 }], coverAssetId: "asset", version: 1, createdAt: "2026-09-16T00:00:00.000Z", updatedAt: "2026-09-16T00:00:00.000Z" };
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ entities: [entity] }))
+      .mockResolvedValueOnce(Response.json({ entity })).mockResolvedValueOnce(Response.json({ entity })).mockResolvedValueOnce(Response.json({ entity }));
+    const repository = new HttpEntityRepository({ fetch });
+    expect((await repository.listPersonal("scope", "organization"))[0]!.space).toBe("organization");
+    expect((await repository.get("scope", "subject", "organization")).space).toBe("organization");
+    const input = { workspaceId: "scope", space: "organization" as const, name: "Team subject", description: "", assetIds: ["asset"], coverAssetId: "asset" };
+    await repository.create({ ...input, idempotencyKey: "create-team-subject" });
+    await repository.update({ ...input, entityId: "subject", expectedVersion: 1 });
+    expect(fetch.mock.calls[0]![0]).toBe("/api/workspaces/scope/entities?scope=organization");
+    expect(fetch.mock.calls[1]![0]).toBe("/api/workspaces/scope/entities/subject?scope=organization");
+    expect(JSON.parse(fetch.mock.calls[2]![1].body).space).toBe("organization");
+    expect(JSON.parse(fetch.mock.calls[3]![1].body).space).toBe("organization");
+  });
+
   it("sends placement tags and snapshots with entity saves and reads authoritative tag results", async () => {
     const entity = { id: "subject", workspaceId: "scope", name: "Subject", description: "", mediaRefs: [{ assetId: "asset", order: 0 }], coverAssetId: "asset", version: 1, createdAt: "2026-09-16T00:00:00.000Z", updatedAt: "2026-09-16T00:00:00.000Z", libraryTagIds: ["builtin:character"] };
     const fetch = vi.fn().mockResolvedValueOnce(Response.json({ entity }))

@@ -43,6 +43,7 @@ export const CreateAssetUploadIntentBodySchema = z.object({
 }).strict();
 
 export const RenamePersonalAssetBodySchema = z.object({
+  space: z.enum(["personal", "organization"]).optional().default("personal"),
   displayName: z.string().trim().min(1).max(300),
 }).strict();
 

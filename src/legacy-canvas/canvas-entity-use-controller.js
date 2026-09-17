@@ -6,7 +6,7 @@
     if (!grid || !detailPortal || !pickerPortal || !view?.renderEntityDetail || !view?.updateEntityPicker) {
       throw new TypeError("Canvas Entity use controller dependencies are incomplete.");
     }
-    for (const name of ["getScope", "getDetailContext", "getDetailEntity", "getPickerEntities", "isTargetAvailable", "isMutable", "requireMutation", "getPickerTrigger", "onAddEntities", "onAddToCanvas"]) {
+    for (const name of ["getScope", "getDetailContext", "getDetailEntity", "getPickerEntities", "isTargetAvailable", "isMutable", "requireMutation", "getPickerTrigger", "onAddEntities"]) {
       if (typeof options[name] !== "function") throw new TypeError(`${name} must be a function.`);
     }
     const document = grid.ownerDocument;
@@ -18,7 +18,6 @@
     let detail = null;
     let pendingDetail = null;
     let openTimer = 0;
-    let closeTimer = 0;
     let picker = null;
     let previousBackground = null;
     let restoringDetailFocus = false;
@@ -67,16 +66,10 @@
       return true;
     }
 
-    function clearCloseTimer() {
-      window.clearTimeout(closeTimer);
-      closeTimer = 0;
-    }
-
     function clearDetailTimers() {
       window.clearTimeout(openTimer);
       openTimer = 0;
       pendingDetail = null;
-      clearCloseTimer();
     }
 
     function isDetailAvailable(session) {
@@ -110,14 +103,31 @@
       if (!entity) return closeDetail();
       const anchorRect = findCard(detail.entityId).getBoundingClientRect();
       const viewportRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+      const sourceRect = options.getDetailSourceRect?.() || anchorRect;
+      let avoidRects = options.getAvoidRects?.() || [];
+      let width = Math.min(340, Math.max(1, viewportRect.width - 24));
+      if (sourceRect !== anchorRect) {
+        const left = (sourceRect.right ?? sourceRect.left + sourceRect.width) + 10;
+        const available = window.innerWidth - 12 - left;
+        const corridor = Math.min(available, ...avoidRects
+          .filter((rect) => (rect.right ?? rect.left + rect.width) > left)
+          .map((rect) => rect.left - 10 - left));
+        if (corridor < 240) return closeDetail();
+        width = Math.min(340, corridor);
+        // Keep the preview in the exterior corridor, preserving the card's vertical
+        // anchor without covering library cards or displacing either side panel.
+        viewportRect.left = left - 12;
+        viewportRect.width = width + 24;
+        avoidRects = [];
+      }
       // Measure the rendered content at its usable width before placing it. Position
       // belongs to the portal so the panel cannot retain a conflicting inline offset.
       root.REELAY_CANVAS_MEDIA_PREVIEW.renderPreservingMedia(detailPortal,
-        view.renderEntityDetail({ entity, media: entity.media, pinned: detail.pinned, canAdd: options.isMutable() }),
+        view.renderEntityDetail({ entity, media: entity.media }),
         ".entity-use-detail-cover");
-      view.syncEntityDetailPortal(detailPortal, { visible: true, pinned: detail.pinned, placement: {
-        left: 12, top: 12,
-        width: Math.min(340, Math.max(1, viewportRect.width - 24)),
+      view.syncEntityDetailPortal(detailPortal, { visible: true, placement: {
+        left: viewportRect.left + 12, top: 12,
+        width,
         maxHeight: Math.max(1, viewportRect.height - 24),
       } });
       refreshIcons();
@@ -125,22 +135,22 @@
       const placement = view.computeDetailPlacement({
         viewportRect,
         anchorRect,
-        sourceRect: anchorRect,
-        avoidRects: options.getAvoidRects?.() || [],
+        sourceRect,
+        avoidRects,
         panelWidth: panel.offsetWidth,
         panelHeight: panel.offsetHeight,
         gap: 10,
         margin: 12,
       });
-      view.syncEntityDetailPortal(detailPortal, { visible: true, pinned: detail.pinned, placement });
+      view.syncEntityDetailPortal(detailPortal, { visible: true, placement });
       panel.dataset.placement = placement.side;
     }
 
-    function openDetail(entityId, { pinned = false, delay = 0 } = {}) {
-      if (disposed || restoringDetailFocus || (detail?.pinned && !pinned)) return;
-      const session = { entityId, pinned: Boolean(pinned), scope: captureScope(), space: options.getDetailContext().space };
+    function openDetail(entityId, { delay = 0 } = {}) {
+      if (disposed || restoringDetailFocus) return;
+      const session = { entityId, scope: captureScope(), space: options.getDetailContext().space };
       if (!isDetailAvailable(session)) return;
-      clearDetailTimers();
+      closeDetail();
       cancelFrame("detail-focus");
       cancelFrame("picker-focus");
       pendingDetail = session;
@@ -154,18 +164,6 @@
       };
       if (delay > 0) openTimer = window.setTimeout(open, delay);
       else open();
-    }
-
-    function scheduleDetailClose(delay = 170) {
-      window.clearTimeout(openTimer);
-      openTimer = 0;
-      pendingDetail = null;
-      if (detail?.pinned) return;
-      clearCloseTimer();
-      closeTimer = window.setTimeout(() => {
-        closeTimer = 0;
-        if (!detail?.pinned) closeDetail();
-      }, delay);
     }
 
     function isolateBackground(active) {
@@ -291,7 +289,7 @@
         }
         return true;
       }
-      if (event.key === "Escape" && detail?.pinned) {
+      if (event.key === "Escape" && (detail || pendingDetail)) {
         event.preventDefault();
         closeDetail({ restoreFocus: true });
         return true;
@@ -299,8 +297,11 @@
       return false;
     }
 
-    function cardFromEvent(event) {
-      return event.target instanceof window.Element ? event.target.closest("[data-library-entity]") : null;
+    function previewFromEvent(event) {
+      const preview = event.target instanceof window.Element
+        ? event.target.closest(".asset-library-card-preview")
+        : null;
+      return preview?.closest("[data-library-entity]") && grid.contains(preview) ? preview : null;
     }
 
     function movedWithin(event, element) {
@@ -308,50 +309,25 @@
     }
 
     listen(grid, "pointerover", (event) => {
-      const card = cardFromEvent(event);
-      if (card && !movedWithin(event, card)) openDetail(card.dataset.libraryEntity, { delay: 130 });
+      const preview = previewFromEvent(event);
+      if (preview && !movedWithin(event, preview)) {
+        openDetail(preview.closest("[data-library-entity]").dataset.libraryEntity, { delay: 130 });
+      }
     });
     listen(grid, "pointerout", (event) => {
-      const card = cardFromEvent(event);
-      if (card && !movedWithin(event, card) && !movedWithin(event, detailPortal)) scheduleDetailClose();
+      const preview = previewFromEvent(event);
+      if (preview && !movedWithin(event, preview)) closeDetail();
     });
     listen(grid, "focusin", (event) => {
-      const card = cardFromEvent(event);
-      if (card) openDetail(card.dataset.libraryEntity);
+      const preview = previewFromEvent(event);
+      if (preview) openDetail(preview.closest("[data-library-entity]").dataset.libraryEntity);
     });
     listen(grid, "focusout", (event) => {
-      const card = cardFromEvent(event);
-      if (card && !movedWithin(event, card) && !movedWithin(event, detailPortal)) scheduleDetailClose();
+      const preview = previewFromEvent(event);
+      if (preview && !movedWithin(event, preview)) closeDetail();
     });
-    listen(grid, "scroll", () => {
-      if (detail?.pinned) renderDetail();
-      else closeDetail();
-    }, { passive: true });
+    listen(grid, "scroll", () => closeDetail(), { passive: true });
     listen(window, "resize", refreshDetail);
-    listen(detailPortal, "pointerenter", clearCloseTimer);
-    listen(detailPortal, "pointerleave", () => scheduleDetailClose());
-    listen(detailPortal, "focusin", clearCloseTimer);
-    listen(detailPortal, "focusout", (event) => {
-      if (!movedWithin(event, detailPortal)) scheduleDetailClose();
-    });
-    listen(detailPortal, "pointerdown", (event) => event.stopPropagation());
-    listen(detailPortal, "click", (event) => {
-      event.stopPropagation();
-      if (!(event.target instanceof window.Element)) return;
-      if (event.target.closest("[data-entity-use-detail-close]")) return closeDetail({ restoreFocus: true });
-      const addButton = event.target.closest("[data-entity-use-add-canvas]");
-      if (!addButton || addButton.disabled || !detail) return;
-      if (!isDetailAvailable(detail)) return closeDetail();
-      if (!options.requireMutation()) return;
-      const submission = Object.freeze({ scope: detail.scope, entityId: detail.entityId, space: detail.space });
-      if (options.onAddToCanvas(submission)) closeDetail();
-    });
-    listen(detailPortal, "keydown", (event) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeDetail({ restoreFocus: true });
-    });
     listen(pickerPortal, "pointerdown", (event) => event.stopPropagation());
     listen(pickerPortal, "click", (event) => {
       event.stopPropagation();

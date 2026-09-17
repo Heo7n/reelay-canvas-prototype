@@ -156,8 +156,8 @@ html[data-theme="light"] .entity-use-picker-backdrop {
   background: var(--entity-use-panel);
   box-shadow: var(--entity-use-shadow);
   color: var(--entity-use-text);
-  pointer-events: auto;
-  grid-template-rows: auto auto auto;
+  pointer-events: none;
+  grid-template-rows: auto auto;
   animation: entity-use-detail-in 0.14s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   transform-origin: left center;
 }
@@ -270,44 +270,6 @@ html[data-theme="light"] .entity-use-picker-backdrop {
   color: var(--entity-use-subtle);
 }
 
-.entity-use-detail > footer {
-  padding: 0 8px 8px;
-}
-
-.entity-use-detail-add {
-  display: flex;
-  width: 100%;
-  min-height: 42px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 11px;
-  outline: 0;
-  background: var(--entity-use-primary);
-  color: var(--entity-use-primary-text);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-}
-
-.entity-use-detail-add:hover:not(:disabled) {
-  opacity: 0.88;
-}
-
-.entity-use-detail-add:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-
-.entity-use-detail-add svg {
-  width: 16px;
-  height: 16px;
-}
-
-.entity-use-detail.is-busy .entity-use-detail-add svg,
 .entity-use-picker.is-busy > footer .primary svg {
   animation: entity-use-spin 0.8s linear infinite;
 }
@@ -780,7 +742,6 @@ html[data-theme="light"] .entity-use-picker-backdrop {
   .entity-use-picker-backdrop,
   .entity-use-picker,
   .entity-use-picker-card > button,
-  .entity-use-detail.is-busy .entity-use-detail-add svg,
   .entity-use-picker.is-busy > footer .primary svg {
     animation: none !important;
     scroll-behavior: auto;
@@ -793,14 +754,12 @@ html[data-theme="light"] .entity-use-picker-backdrop {
   .entity-use-picker,
   .entity-use-picker-card > button,
   .entity-use-picker-check,
-  .entity-use-detail-add,
   .entity-use-picker > footer button {
     border: 1px solid CanvasText;
   }
 
   .entity-use-picker-card.is-selected .entity-use-picker-check,
-  .entity-use-picker > footer button.primary,
-  .entity-use-detail-add {
+  .entity-use-picker > footer button.primary {
     background: Highlight;
     color: HighlightText;
   }

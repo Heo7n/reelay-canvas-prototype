@@ -82,13 +82,13 @@
           descriptions: {
             auto: "生成 4–30 秒视频，可用图片、视频或音频参考。\n参考视频每段 2–30 秒，建议至少 4 秒。",
             edit: "上传 4–30 秒视频，用文字修改画面或声音。\n支持局部编辑，输出基本保持原时长。",
-            extend: "上传 2–30 秒视频，向前或向后续写。\n可指定 4–30 秒续写时长。",
+            extend: "上传 2–30 秒视频，向前或向后续写。\n时长可选 Auto，或指定 4–30 秒。",
           },
           // Prompt guidance: https://docs.volcengine.com/docs/82379/2607689?lang=zh
           promptPlaceholders: {
             auto: "基于图片、视频或音频参考生成新视频",
             edit: "传入已有视频，提示词带关键词：修改、替换、增加、删除等更改视频内容的描述，支持时间戳局部编辑，支持额外输入参考图引导编辑。",
-            extend: "传入已有视频，提示词带关键词：向前/向后延长、续写……可指定 4–30 秒续写时长。",
+            extend: "传入已有视频，提示词带关键词：向前/向后延长、续写……时长可选 Auto，或指定 4–30 秒。",
           },
           constraints: {
             reference: {},
@@ -97,12 +97,11 @@
               referenceVideoDurationRange: { min: 4, max: 30 },
               aspect: "adaptive",
               duration: -1,
-              hideDuration: true,
             },
             extend: {
               referenceVideoRequired: true,
               aspect: "adaptive",
-              hideDuration: true,
+              allowAutoDuration: true,
             },
           },
         },

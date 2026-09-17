@@ -21,12 +21,12 @@
       return next;
     }
     function restore(space, zone = lastZones.get(space) || "media") {
-      if (space !== "personal") zone = "media";
+      if (!["personal", "organization"].includes(space)) zone = "media";
       return apply(contexts.get(`${space}:${zone}`) || empty(space, zone));
     }
     function enterSubjects({ reset = false } = {}) {
       const current = options.read();
-      if (current.space !== "personal") return false;
+      if (!["personal", "organization"].includes(current.space)) return false;
       remember(current);
       if (current.zone !== "subjects") returns.set(current.space, copy(current));
       return apply(reset ? empty(current.space, "subjects") : contexts.get(`${current.space}:subjects`) || empty(current.space, "subjects"));
@@ -43,12 +43,16 @@
       return apply({ ...next, zone: "media", folderId, scrollTop: 0 });
     }
     function switchSpace(space) { remember(); return restore(space); }
+    function openMediaRoot(space = "personal") {
+      remember();
+      return apply(empty(space));
+    }
     function pruneTags(space, validIds) {
       for (const map of [contexts, returns]) for (const view of map.values()) {
         if (view.space === space) view.tagFilter.tagIds = view.tagFilter.tagIds.filter((id) => validIds.has(id));
       }
     }
-    return Object.freeze({ remember, restore, enterSubjects, leaveSubjects, selectDirectory, switchSpace, pruneTags,
+    return Object.freeze({ remember, restore, enterSubjects, leaveSubjects, selectDirectory, switchSpace, openMediaRoot, pruneTags,
       returnFolderId: () => returns.get(options.read().space)?.folderId || null,
       syncContext() {
         const nextScope = options.getScopeKey?.();

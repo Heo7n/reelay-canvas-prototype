@@ -14,6 +14,7 @@
 | 画布表面与宿主过渡、公共焦点 | `styles/color-tokens.css` | `--color-canvas-*`、`--ui-focus-ring`；工作台材质不套用画布色 |
 | 登录 / 账号面板关闭按钮 | `src/shared/ui/DialogCloseButton.tsx` | 36px 命中区、20px Lucide X、必填可访问名称；页面只负责位置与表面色 |
 | 画布、节点、Agent 基础 | `styles/app.css` | `--surface`、`--text`、`--node-font-*`、`--agent-panel-*`、`--canvas-popover-*` |
+| 资产库、主体编辑及其素材选择面板 | `styles/canvas-asset-library.css` | 共用 `--asset-panel-bg / subtle / preview / line / hover`，同层级表面不得另写独立浅深色；主体主操作复用 `--color-canvas-action-*` |
 | 画布边缘工具与面板 | `styles/canvas-chrome.css` | `--canvas-edge-*`、`--canvas-chrome-*` |
 | 生成记录、引用与优化 | `styles/canvas-generation-*.css`、`styles/canvas-prompt-*.css` | 先消费基础变量，再使用功能内语义别名 |
 | React 应用壳与工作台 | `src/app/app-shell.css`、`src/pages/home/WorkspacePages.module.css`、`src/shared/ui/` | 字体继承、`--workspace-*`、已有共享组件 |
@@ -39,6 +40,8 @@
 - 通用图标库统一使用 **Lucide**：React 从已安装的 `lucide-react` 按需导入，版本以锁文件为准；legacy 画布通过 `src/icons/index.js` 按需导入官方 `lucide` 包，共用图标创建 / 刷新入口；编辑器直接按需导入同一官方包。禁止在业务文件手写、复制维护通用图标路径或另建 SVG sprite。新增图标登记官方导出名称，保持两套包版本一致；构建保留许可证。不为单个页面另引图标库，不加载完整图标包或外部 CDN。品牌图标和积分资产继续使用产品专用资源；这项选型已确定，不需要每次开发重新讨论。
 - 通用线性图标优先 `16 / 20px`，相同控件组统一 stroke、viewBox、端点和视觉重量；继承 `currentColor`，不拿 emoji、Unicode 字符或临时拼线替代成熟图标。纯图标按钮有可访问名称，装饰图标对辅助技术隐藏。
 - 实现覆盖该控件适用的默认、hover、pressed、selected / expanded、focus-visible、disabled、loading、error 状态，不要求每次微调另写状态清单。hover 不替代焦点；disabled 不伪装为可点击；loading 只限制冲突操作，不能无理由锁住整个输入区。
+- 素材拖入状态在节点媒体区、节点输入区与右侧对话输入区共用 `--reference-drop-*`：浅色用中性细边界与柔和外阴影，深色用浅色边界与低亮外圈，不修改背景、圆角、尺寸或使用内描边；仅高亮当前可接收的实际区域，移出、取消、作用域或权限改变时立即恢复。
+- 持续参考选择使用画布顶部独立浮动状态条，高 44px、距顶部 12px，复用中性高对比操作色与 Lucide 图标；短文字、实际引用计数和 32px 高退出按钮同一行，不占资产库内容区。已选素材用勾号加封面 16% 黑色遮层表达，文件名不变暗；勾选与键盘焦点分别表达，不能只靠封面明暗区分状态。
 - 列表和任务明确区分加载中、空数据、筛选无结果、失败、成功与取消。toast 只承载短反馈，持久错误与需要用户处理的状态留在相关区域；不重复常识性提示或把模拟实现细节塞进产品界面。
 
 ## 4. 浮层、预览与动效

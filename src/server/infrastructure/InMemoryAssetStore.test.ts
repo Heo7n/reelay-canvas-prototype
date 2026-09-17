@@ -193,3 +193,17 @@ describe("InMemoryAssetStore", () => {
     expect(projectAssets[0].reference.assetVersion).toBe(asset.objectVersion);
   });
 });
+
+
+it("renames only the scoped organization placement, preserving directory, tags and source names", async () => {
+  const store = new InMemoryAssetStore({...seed, workspaceMemberships: seed.workspaceMemberships.map((membership) => ({...membership, role: membership.actorId === ownerId ? "owner" : "member"}))});
+  const {asset} = await uploadAsset(store);
+  const folder = await store.createLibraryFolder({workspaceId, actorId: ownerId, space: "organization", parentId: null, name: "Shared folder"});
+  await store.saveLibrary({workspaceId, projectId, actorId: ownerId, space: "organization", folderId: folder.id, tagIds: ["builtin:character"], items: [{assetId: asset.id, displayName: "Shared.webp", action: "add"}]});
+  await expect(store.renamePersonalAsset({workspaceId, actorId: editorId, assetId: asset.id, space: "organization", displayName: "Forbidden.webp"})).rejects.toMatchObject({code: "forbidden"});
+  await expect(store.renamePersonalAsset({workspaceId, actorId: ownerId, assetId: asset.id, space: "organization", displayName: "Renamed.webp"})).resolves.toMatchObject({displayName: "Renamed.webp"});
+  const catalog = await store.listLibrary({workspaceId, actorId: ownerId});
+  expect(catalog.entries.find((entry) => entry.space === "organization")).toMatchObject({displayName: "Renamed.webp", folderId: folder.id, tagIds: ["builtin:character"]});
+  expect(catalog.entries.find((entry) => entry.space === "personal")).toMatchObject({displayName: asset.displayName});
+  await expect(store.getLibraryAsset({workspaceId, actorId: ownerId, assetId: asset.id})).resolves.toMatchObject({displayName: asset.displayName});
+});
