@@ -9,7 +9,7 @@ import { createContext, Script } from "node:vm";
 import { JSDOM } from "jsdom";
 import { canvasIconsSource } from "../tests/helpers/canvas-icons.mjs";
 import { build, loadConfigFromFile } from "vite";
-import { buildLegacyCanvas, bundleClassicScripts, generationPreviewAssets } from "./copy-legacy-canvas.mjs";
+import { buildLegacyCanvas, bundleClassicScripts, generationPreviewAssets, inspirationAssets } from "./copy-legacy-canvas.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -66,6 +66,12 @@ test("builds the real entry with content hashes, complete references and unchang
   for (const reference of previewAssets) {
     assert.deepEqual(await readFile(path.join(output, reference)), await readFile(path.join(root, reference)));
   }
+  const inspirationReferences = inspirationAssets([{ name: "src/config/inspiration-catalog.js", source: await readFile(path.join(root, "src/config/inspiration-catalog.js"), "utf8") }]);
+  assert.equal(inspirationReferences.length, 83);
+  assert.ok(inspirationReferences.includes("./assets/inspiration/ATTRIBUTION.txt"));
+  for (const reference of inspirationReferences) {
+    assert.deepEqual(await readFile(path.join(output, reference)), await readFile(path.join(root, reference)));
+  }
   const html = await readFile(path.join(output, "index.html"), "utf8");
   assert.match(result.faviconReference, /favicon-account-[a-f0-9]+\.svg$/);
   assert.ok(html.includes(`href="${result.faviconReference}"`));
@@ -109,6 +115,10 @@ test("experience legacy build uses its own hashed favicon without the account ic
   assert.deepEqual(await readFile(path.join(output, result.faviconReference)), await readFile(path.join(root, "assets/favicon-experience.svg")));
   assert.doesNotMatch(html, /favicon-account/);
   assert.ok(!(await readdir(path.join(output, "assets"))).some((name) => name.startsWith("favicon-account")));
+  const inspirationReferences = inspirationAssets([{ name: "src/config/inspiration-catalog.js", source: await readFile(path.join(root, "src/config/inspiration-catalog.js"), "utf8") }]);
+  for (const reference of inspirationReferences) {
+    assert.deepEqual(await readFile(path.join(output, reference)), await readFile(path.join(root, reference)));
+  }
 });
 
 for (const [mode, variant] of [["production", "account"], ["experience", "experience"]]) {

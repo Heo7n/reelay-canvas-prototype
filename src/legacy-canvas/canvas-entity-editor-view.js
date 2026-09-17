@@ -342,7 +342,7 @@
         <form class="entity-editor-details" id="canvasEntityEditorForm" data-entity-editor-form="true" novalidate>
           <header class="entity-editor-header">
             <div class="entity-editor-title">
-              ${headingIcon("square-user-round")}
+              ${headingIcon("layout-grid")}
               <h2 id="canvasEntityEditorTitle" title="${escapeHtml(title)}">${escapeHtml(title)}</h2>
             </div>
             <button type="button" aria-label="关闭主体编辑器" data-entity-editor-cancel="true"${busy ? ' disabled aria-disabled="true"' : ""}>${icon("x")}</button>
@@ -350,6 +350,7 @@
 
           <div class="entity-editor-details-scroll">
             ${options.sourceNotice ? `<p class="entity-editor-source-notice" role="status">${escapeHtml(options.sourceNotice)}</p>` : ""}
+            <div class="entity-editor-workspace">
             <div class="entity-editor-metadata">
             <div class="entity-editor-field entity-editor-name-field">
               <label for="canvasEntityEditorName">名称 <span aria-hidden="true">*</span></label>
@@ -374,17 +375,6 @@
                   idPrefix: "canvasEntityEditorFilter",
                   panelId: "canvasEntityEditorMediaGrid",
                 })}
-                <div class="entity-editor-media-actions">
-                  <button type="button" data-entity-editor-add-from-library="true"${canAddFromLibrary ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持从素材库添加" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
-                    ${icon("images")}
-                    <span>从素材库添加</span>
-                  </button>
-                  <span aria-hidden="true"></span>
-                  <button type="button" data-entity-editor-upload="true"${canUpload ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持上传素材" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
-                    ${icon("upload")}
-                    <span>上传</span>
-                  </button>
-                </div>
               </div>
               ${safeMediaError ? `<span class="entity-editor-field-error" id="canvasEntityEditorMediaError" role="alert">${safeMediaError}</span>` : ""}
               <div class="entity-editor-media-grid" id="canvasEntityEditorMediaGrid" role="list" aria-label="${FILTERS.find((filter) => filter.id === activeFilter).label}素材" aria-labelledby="canvasEntityEditorFilter-${activeFilter}"${safeMediaError ? ' aria-describedby="canvasEntityEditorMediaError"' : ""}>
@@ -397,7 +387,18 @@
                   })).join("")
                   : `<div class="entity-editor-media-empty">${icon("image-plus")}<strong>${emptyLabel}</strong><span>${counts.all === 0 ? "可从素材库选择，或上传图片、视频和音频。" : "切换分类查看其他已添加素材。"}</span></div>`}
               </div>
+              <div class="entity-editor-media-actions">
+                <button type="button" data-entity-editor-add-from-library="true"${canAddFromLibrary ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持从素材库添加" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
+                  ${icon("images")}
+                  <span>选择素材</span>
+                </button>
+                <button type="button" data-entity-editor-upload="true"${canUpload ? "" : ` disabled aria-disabled="true" title="${mutable && !busy ? "当前项目暂不支持上传素材" : busy ? "请等待当前操作完成" : "当前主体仅可查看"}"`}>
+                  ${icon("upload")}
+                  <span>本地上传</span>
+                </button>
+              </div>
             </section>
+            </div>
         <section class="entity-editor-preview" aria-labelledby="canvasEntityEditorPreviewTitle">
           <header>
             <div class="entity-editor-preview-meta">
@@ -420,10 +421,12 @@
                 <h3 id="canvasEntityEditorPreviewTitle">预览</h3>
               `}
             </div>
-            ${coverControl}
           </header>
+          <div class="entity-editor-preview-surface">
           <div class="entity-editor-preview-stage" data-entity-editor-preview="${escapeHtml(selectedId)}" data-media-preview-key="${escapeHtml(JSON.stringify([selectedId, selectedMedia?.mediaKind, selectedMedia?.url, selectedMedia?.thumbnailUrl]))}">
             ${renderPreviewMedia(selectedMedia)}
+          </div>
+          ${coverControl}
           </div>
         </section>
           </div>

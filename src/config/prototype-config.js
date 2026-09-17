@@ -244,32 +244,6 @@
         aspectRatio: 16 / 9,
         source: "team-shared",
       },
-      {
-        id: "media-platform-landscape",
-        mediaKind: "image",
-        type: "image",
-        name: "深空母舰.webp",
-        displayName: "深空母舰.webp",
-        url: "./assets/home/project-scifi.webp",
-        width: 800,
-        height: 450,
-        aspectRatio: 16 / 9,
-        source: "platform",
-        platformSourceId: "platform-landscape-001",
-        sourceCatalogId: "reelay-inspiration",
-      },
-      {
-        id: "media-platform-roar",
-        mediaKind: "audio",
-        type: "audio",
-        name: "荒原巨兽低吼.mp3",
-        displayName: "荒原巨兽低吼.mp3",
-        url: "https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3",
-        duration: 0,
-        source: "platform",
-        platformSourceId: "platform-roar-001",
-        sourceCatalogId: "reelay-inspiration",
-      },
     ],
     entities: [
       {
@@ -313,7 +287,6 @@
       { id: "folder-personal-visual", space: "personal", kind: "media", name: "视觉参考", parentId: null },
       { id: "folder-personal-entity", space: "personal", kind: "entity", name: "主体合集", parentId: null },
       { id: "folder-organization-brand", space: "organization", kind: "media", name: "品牌资料", parentId: null },
-      { id: "folder-platform-starter", space: "platform", kind: "media", name: "平台示例", parentId: null },
     ],
     placements: [
       { item: { kind: "media", id: "media-personal-umbra-key-art" }, space: "personal", folderId: null },
@@ -335,8 +308,6 @@
       { item: { kind: "media", id: "media-personal-forest" }, space: "personal", folderId: null },
       { item: { kind: "media", id: "media-personal-roar" }, space: "personal", folderId: null },
       { item: { kind: "media", id: "media-organization-product" }, space: "organization", folderId: null },
-      { item: { kind: "media", id: "media-platform-landscape" }, space: "platform", folderId: null },
-      { item: { kind: "media", id: "media-platform-roar" }, space: "platform", folderId: null },
     ],
   };
 

@@ -70,8 +70,8 @@ test("subjects have a central area, retain member placement and restore nested m
   await canvas.locator('[data-library-batch-action="create-group"]').click();
   const editor = canvas.locator('[data-entity-editor="true"]');
   await expect(editor).toBeVisible();
-  // The editor uses one panel: fixed controls, four media columns, preview
-  // beneath the collection, and reachable footer even on a short desktop.
+  // The editor keeps metadata beside a two-column, two-row media viewport.
+  // Its full-width preview and footer remain usable on a short desktop.
   for (const size of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }]) {
     await page.setViewportSize(size);
     const layout = await editor.evaluate((root) => {
@@ -80,14 +80,33 @@ test("subjects have a central area, retain member placement and restore nested m
         return { x: box.x, y: box.y, width: box.width, bottom: box.bottom, height: box.height };
       };
       const grid = root.querySelector('.entity-editor-media-grid')!;
-      return { name: rect('.entity-editor-name-field'), description: rect('.entity-editor-description-field'),
+      const gridStyle = getComputedStyle(grid);
+      return { panel: root.getBoundingClientRect().width,
+        workspace: rect('.entity-editor-workspace'), metadata: rect('.entity-editor-metadata'),
+        media: rect('.entity-editor-media-section'), actions: rect('.entity-editor-media-actions'),
+        name: rect('.entity-editor-name-field'), tags: rect('.entity-editor-tags-field'),
+        description: rect('[data-entity-editor-description]'), card: rect('.entity-editor-media-card'),
         grid: rect('.entity-editor-media-grid'), preview: rect('.entity-editor-preview'), footer: rect('.entity-editor-footer'),
         columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+        rowGap: parseFloat(gridStyle.rowGap), overflowY: gridStyle.overflowY,
       };
     });
-    expect(layout.columns).toBe(4);
-    expect(layout.name.width / (layout.name.width + layout.description.width)).toBeCloseTo(0.3, 1);
-    expect(layout.preview.y).toBeGreaterThanOrEqual(layout.grid.bottom);
+    expect(layout.panel).toBeCloseTo(760, 0);
+    expect(layout.columns).toBe(2);
+    expect(layout.metadata.width / (layout.metadata.width + layout.media.width)).toBeCloseTo(0.38, 1);
+    expect(layout.media.x).toBeGreaterThanOrEqual(layout.metadata.x + layout.metadata.width);
+    expect(layout.name.x).toBeCloseTo(layout.tags.x, 0);
+    expect(layout.tags.x).toBeCloseTo(layout.description.x, 0);
+    expect(layout.tags.y).toBeGreaterThanOrEqual(layout.name.bottom);
+    expect(layout.description.y).toBeGreaterThanOrEqual(layout.tags.bottom);
+    expect(Math.abs(layout.description.bottom - layout.actions.bottom)).toBeLessThanOrEqual(1);
+    expect(layout.actions.y).toBeGreaterThanOrEqual(layout.grid.bottom);
+    expect(layout.overflowY).toBe('auto');
+    expect(layout.grid.height).toBeGreaterThanOrEqual(layout.card.height * 2 + layout.rowGap - 1);
+    expect(layout.grid.height).toBeLessThan(layout.card.height * 3 + layout.rowGap * 2);
+    expect(layout.preview.y).toBeGreaterThanOrEqual(layout.workspace.bottom);
+    expect(layout.preview.x).toBeCloseTo(layout.workspace.x, 0);
+    expect(layout.preview.width).toBeCloseTo(layout.workspace.width, 0);
     expect(layout.preview.height).toBeGreaterThanOrEqual(130);
     expect(layout.footer.y).toBeGreaterThanOrEqual(layout.preview.bottom);
     expect(layout.footer.bottom).toBeLessThanOrEqual(size.height);

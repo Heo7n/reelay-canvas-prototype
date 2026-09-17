@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { buildPromptEditor } from "../scripts/build-prompt-editor.mjs";
 
 const root = new URL("../", import.meta.url);
+const inspirationModules = await Promise.all(["src/config/inspiration-catalog.js", "src/legacy-canvas/canvas-inspiration-view.js", "src/legacy-canvas/canvas-inspiration-controller.js", "src/legacy-canvas/canvas-inspiration-discovery.js"]
+  .map((path) => readFile(new URL(path, root), "utf8")));
 const fileName = await readFile(new URL("src/legacy-canvas/canvas-file-name.js", root), "utf8");
 const themeController = await readFile(new URL("src/legacy-canvas/canvas-theme-controller.js", root), "utf8");
 const saveMediaModules = await Promise.all(["canvas-media-library-coordinator", "canvas-save-media-dialog", "canvas-save-media-controller", "canvas-library-upload-controller", "canvas-library-delete-controller", "canvas-library-navigation", "canvas-library-search-session", "canvas-library-tags-controller", "canvas-library-directory-controller"]
@@ -129,6 +131,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(promptController);
   window.eval(promptEditor);
   window.eval(config);
+  inspirationModules.forEach((source) => window.eval(source));
   window.eval(themeController);
   window.eval(connections);
   window.eval(connectionInteraction);

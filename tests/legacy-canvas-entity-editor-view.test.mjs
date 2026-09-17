@@ -67,7 +67,7 @@ test("create mode keeps the title 新建主体 and renders the complete empty dr
   assert.match(markup, /role="region" aria-labelledby="canvasEntityEditorTitle"/);
   assert.match(markup, /data-entity-editor-mode="create"/);
   assert.match(markup, /<h2 id="canvasEntityEditorTitle" title="新建主体">新建主体<\/h2>/);
-  const headingIcon = JSDOM.fragment(markup).querySelector('.entity-editor-title > svg[data-entity-editor-icon="square-user-round"]');
+  const headingIcon = JSDOM.fragment(markup).querySelector('.entity-editor-title > svg[data-entity-editor-icon="layout-grid"]');
   assert.equal(headingIcon.getAttribute('aria-hidden'), 'true');
   assert.equal(headingIcon.nextElementSibling.id, 'canvasEntityEditorTitle');
   assert.match(markup, /data-entity-editor-name="true"/);
@@ -77,7 +77,7 @@ test("create mode keeps the title 新建主体 and renders the complete empty dr
   assert.match(markup, /<h3 class="sr-only" id="canvasEntityEditorMediaTitle">参考素材<\/h3>/);
   assert.match(markup, /class="entity-editor-media-toolbar">[\s\S]*?class="entity-editor-media-filters"[\s\S]*?class="entity-editor-media-actions"/);
   assert.match(markup, /data-entity-editor-add-from-library="true"/);
-  assert.match(markup, />从素材库添加<\/span>/);
+  assert.match(markup, />选择素材<\/span>/);
   assert.match(markup, /data-entity-editor-upload="true"/);
   for (const filter of ["all", "image", "video", "audio"]) {
     assert.match(markup, new RegExp(`data-entity-editor-filter="${filter}"`));
@@ -140,7 +140,7 @@ test("model-shaped state can drive title, values, counts, filter, and preview di
   assert.match(markup, /data-entity-editor-preview="portrait"/);
   assert.match(markup, /entity-editor-preview-kind-icon[^]*data-entity-editor-icon="image"/);
   assert.equal(new JSDOM(markup).window.document.querySelector('[data-entity-editor-preview-name="portrait"]').textContent, "正面照");
-  assert.match(markup, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<span class="entity-editor-cover-control entity-editor-cover-status" role="status"[^>]*>当前封面<\/span>/);
+  assert.match(markup, /<div class="entity-editor-preview-surface">[\s\S]*?<span class="entity-editor-cover-control entity-editor-cover-status" role="status"[^>]*>当前封面<\/span>/);
 });
 
 test("filtering limits the Media grid while preserving live category counts", () => {
@@ -183,7 +183,7 @@ test("image, video, and audio previews use only structured safe Media fields", (
     assert.equal(previewIcon.getAttribute('aria-hidden'), 'true');
     assert.ok(previewIcon.classList.contains('lucide'));
   }
-  assert.match(image, /<header>\s*<div class="entity-editor-preview-meta">[\s\S]*?<\/div>\s*<button class="entity-editor-cover-control entity-editor-cover-action"[^>]*data-entity-editor-set-cover="portrait"[^>]*>设为封面<\/button>/);
+  assert.match(image, /<div class="entity-editor-preview-surface">[\s\S]*?<button class="entity-editor-cover-control entity-editor-cover-action"[^>]*data-entity-editor-set-cover="portrait"[^>]*>设为封面<\/button>/);
   assert.match(video, /<video src="blob:https:\/\/reelay\.example\/video-1" poster="\/thumbs\/turnaround\.webp" controls playsinline/);
   assert.match(audio, /<audio src="https:\/\/cdn\.example\/voice\.mp3" controls preload="metadata"/);
   assert.doesNotMatch(video, /data-entity-editor-set-cover/);
@@ -367,9 +367,9 @@ test("dedicated CSS covers theme parity, visible hover removal, focus, and defen
   assert.match(css, /\.entity-editor-media-card:hover \.entity-editor-media-remove/);
   assert.match(css, /\.entity-editor-media-card:focus-within \.entity-editor-media-remove/);
   assert.match(css, /\.entity-editor-details-scroll\s*\{[^}]*overflow:\s*hidden;[^}]*flex-direction:\s*column;/s);
-  assert.match(css, /\.entity-editor-media-grid\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto;[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/s);
+  assert.match(css, /\.entity-editor-media-grid\s*\{[^}]*height:[^}]*overflow-y:\s*auto;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   assert.match(css, /\.entity-editor-preview-meta\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
-  assert.match(css, /\.entity-editor-preview > header \.entity-editor-cover-control\s*\{[^}]*width:\s*80px;[^}]*min-width:\s*80px;[^}]*max-width:\s*80px;[^}]*height:\s*30px;[^}]*appearance:\s*none;[^}]*font-size:\s*12px;/s);
+  assert.match(css, /\.entity-editor-preview-surface \.entity-editor-cover-control\s*\{[^}]*width:\s*80px;[^}]*min-width:\s*80px;[^}]*max-width:\s*80px;[^}]*height:\s*30px;[^}]*appearance:\s*none;[^}]*font-size:\s*12px;/s);
   assert.match(css, /\.entity-editor-cover-status\s*\{[^}]*pointer-events:\s*none;/s);
   assert.doesNotMatch(css, /\.entity-editor-cover-badge svg/);
   assert.match(css, /:focus-visible/);
@@ -388,8 +388,15 @@ test("subject editor keeps metadata, media and preview in one form with its foot
   assert.equal(editor.firstElementChild, form);
   const content = form.querySelector(".entity-editor-details-scroll");
   assert.deepEqual([...content.children].map((node) => node.className), [
-    "entity-editor-metadata", "entity-editor-media-section", "entity-editor-preview",
+    "entity-editor-workspace", "entity-editor-preview",
   ]);
+  const workspace = content.querySelector(".entity-editor-workspace");
+  assert.deepEqual([...workspace.children].map((node) => node.className), [
+    "entity-editor-metadata", "entity-editor-media-section",
+  ]);
+  const actions = workspace.querySelector(".entity-editor-media-actions");
+  assert.equal(actions.previousElementSibling.className, "entity-editor-media-grid");
+  assert.deepEqual([...actions.querySelectorAll("button")].map((node) => node.textContent.trim()), ["选择素材", "本地上传"]);
   assert.equal(content.querySelector(".entity-editor-footer"), null);
   assert.equal(form.lastElementChild.className, "entity-editor-footer");
   const card = content.querySelector(".entity-editor-media-card");

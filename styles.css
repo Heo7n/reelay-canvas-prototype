@@ -4,6 +4,8 @@
 @import url("./styles/canvas-chrome.css");
 @import url("./styles/canvas-arrange.css");
 @import url("./styles/canvas-asset-library.css");
+@import url("./styles/canvas-inspiration.css");
+@import url("./styles/canvas-inspiration-discovery.css");
 @import url("./styles/canvas-entity-editor.css");
 @import url("./styles/canvas-entity-use.css");
 @import url("./styles/canvas-prompt-editor.css");

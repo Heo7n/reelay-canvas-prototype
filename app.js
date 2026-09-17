@@ -429,14 +429,42 @@ const canvasAssetLibraryModel = window.REELAY_CANVAS_ASSET_LIBRARY_MODEL;
 if (!canvasAssetLibraryModel) throw new Error("Canvas asset library model is unavailable.");
 const canvasAssetLibraryView = window.REELAY_CANVAS_ASSET_LIBRARY_VIEW;
 if (!canvasAssetLibraryView) throw new Error("Canvas asset library view is unavailable.");
+const inspirationCatalog = window.REELAY_INSPIRATION_CATALOG;
+const inspirationLibrarySeed = inspirationCatalog.withLibrarySeed(assetLibrarySeed);
 const runtimeAssetLibrarySeed = window.parent === window
-  ? assetLibrarySeed
+  ? inspirationLibrarySeed
   : {
-      ...assetLibrarySeed,
-      folders: Array.from(assetLibrarySeed.folders || []).filter((folder) => folder?.space !== "personal"),
-      placements: Array.from(assetLibrarySeed.placements || []).filter((placement) => placement?.space !== "personal"),
+      ...inspirationLibrarySeed,
+      folders: Array.from(inspirationLibrarySeed.folders || []).filter((folder) => folder?.space !== "personal"),
+      placements: Array.from(inspirationLibrarySeed.placements || []).filter((placement) => placement?.space !== "personal"),
     };
 const assetLibraryStore = canvasAssetLibraryModel.createAssetLibraryStore(runtimeAssetLibrarySeed);
+const canvasInspiration = window.REELAY_CANVAS_INSPIRATION_CONTROLLER.create({
+  document, catalog: inspirationCatalog, view: window.REELAY_CANVAS_INSPIRATION_VIEW,
+  getScope: () => ({ projectId: state.projectId, canvasId: getActiveCanvas()?.id }),
+  canUse: isCanvasMutationAllowed,
+  refreshIcons,
+  onUse(action, { clip }) {
+    if (!requireCanvasMutation()) return false;
+    const media = assetLibraryStore.getMedia({ id: clip.id, kind: "media", space: "platform" });
+    if (!media) throw new Error("片段已不可用");
+    if (action === "canvas") return addLibraryAssetsToCanvas([media]).length > 0;
+    return false;
+  },
+});
+const canvasInspirationDiscovery = window.REELAY_CANVAS_INSPIRATION_DISCOVERY.create({
+  document, host: document.getElementById("inspirationDiscovery"), grid: assetLibraryGrid,
+  catalog: inspirationCatalog, refreshIcons,
+  getTrigger: () => assetLibraryCommandBar.querySelector("[data-library-filter-toggle]"),
+  getScope: () => JSON.stringify([state.projectId, getActiveCanvas()?.id]),
+  onChange({ filtersOnly = false } = {}) {
+    if (!filtersOnly) {
+      state.librarySelectedIds.clear();
+      assetLibraryGrid.scrollTop = 0;
+    }
+    renderAssetLibrary();
+  },
+});
 const hostPersonalMediaIds = new Set();
 const canvasMediaToolbarView = window.REELAY_CANVAS_MEDIA_TOOLBAR_VIEW;
 if (!canvasMediaToolbarView) throw new Error("Canvas media toolbar view is unavailable.");
@@ -969,6 +997,7 @@ function syncCanvasAccessUi() {
 }
 
 function applyCanvasAccessMode(mode) {
+  canvasInspiration.syncContext();
   canvasLibrarySearch.syncContext();
   canvasLibraryNavigation.syncContext();
   canvasSaveMedia.syncContext();
@@ -1235,6 +1264,7 @@ function getActiveCanvas() {
 
 function resetActiveCanvasSession(canvas) {
   if (!canvas) return;
+  canvasInspiration.close({ restoreFocus: false });
   clearRecentConnectionFeedback();
   canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
   state.selectedIds = new Set();
@@ -3903,6 +3933,11 @@ function getAssetLibraryFolderDescendantIds(folderId) {
 }
 
 function getVisibleAssetLibraryContent() {
+  if (state.librarySpace === "platform") {
+    const allItems = assetLibraryStore.listItems({ space: "platform", kind: "media" });
+    const ids = new Set(canvasInspirationDiscovery.results(state.librarySearch).map((clip) => clip.id));
+    return { folders: [], allItems, items: allItems.filter((item) => ids.has(item.id)) };
+  }
   if (state.librarySpace === "personal" && getPersonalCatalogStatus()) {
     return { folders: [], allItems: [], items: [] };
   }
@@ -3986,7 +4021,7 @@ function renderAssetLibrary() {
   const mutable = isAssetLibraryMutable();
   const space = state.librarySpace;
   const platform = space === "platform";
-  const searching = isGlobalLibrarySearch();
+  const searching = !platform && isGlobalLibrarySearch();
   const subjectZone = !searching && isSubjectLibraryZone() && !state.libraryEntityFilter;
   const section = searching ? "all" : subjectZone ? "entity" : "media";
   const canCreateEntity = mutable && space === "personal" && canPersistLibraryEntities();
@@ -4024,10 +4059,12 @@ function renderAssetLibrary() {
   assetLibraryPanel?.setAttribute("data-library-folder-capability", canManageFolders ? "true" : "false");
   const platformResults = platform;
   assetLibraryGrid.className = "asset-library-grid grid-view";
+  assetLibraryGrid.classList.toggle("inspiration-grid", platform);
   if (assetLibrarySearchInput && assetLibrarySearchInput.value !== state.librarySearch) {
     assetLibrarySearchInput.value = state.librarySearch;
   }
-  if (assetLibrarySearchInput) assetLibrarySearchInput.placeholder = `搜索${assetLibrarySpaceDetails[space].label}`;
+  if (assetLibrarySearchInput) assetLibrarySearchInput.placeholder = platform ? "搜索内容、场景或表现方式" : `搜索${assetLibrarySpaceDetails[space].label}`;
+  canvasInspirationDiscovery.sync({ active: platform, query: state.librarySearch, selectionMode: state.librarySelectionMode });
   if (assetLibraryEntityFilter) {
     assetLibraryEntityFilter.hidden = !entityFilter;
     const filterMarkup = entityFilter ? canvasAssetLibraryView.renderEntityMediaFilter({ ...entityFilter, searchReturn: canvasLibrarySearch.hasReturn() }) : "";
@@ -4077,6 +4114,8 @@ function renderAssetLibrary() {
       addLabel: state.libraryTarget?.kind === "agent" ? "添加到对话参考"
         : state.libraryTarget?.kind === "node" ? "添加到当前节点" : hasSelectedGroups ? "使用所含素材" : "添加到画布",
       canImportPlatformAssets: false,
+      discoveryCount: canvasInspirationDiscovery.count,
+      discoveryExpanded: canvasInspirationDiscovery.expanded,
       selectionMode: state.librarySelectionMode,
       searchOpen: canvasLibrarySearch.isOpen(),
       searchReturn: canvasLibrarySearch.hasReturn(),
@@ -4143,6 +4182,12 @@ function renderAssetLibrary() {
             : ["view-media", "edit", "rename"],
         });
       }
+      if (platform && inspirationCatalog.get(item.id)) return window.REELAY_CANVAS_INSPIRATION_VIEW.renderCard({
+        ...common, media: item, clip: inspirationCatalog.get(item.id),
+        discoveryTags: inspirationCatalog.getDiscoveryTags(item.id)
+          .filter((tag) => !["content", "duration"].includes(tag.groupId))
+          .sort((a, b) => Number(canvasInspirationDiscovery.selectedIds.includes(b.id)) - Number(canvasInspirationDiscovery.selectedIds.includes(a.id)) || Number(a.groupId === "scale") - Number(b.groupId === "scale")),
+      });
       return canvasAssetLibraryView.renderMediaCard({
         ...common,
         media: item,
@@ -4166,7 +4211,7 @@ function renderAssetLibrary() {
     section,
     space,
     subjectZone,
-    hasQuery: Boolean(state.librarySearch || state.libraryFilter !== "all" || tagFiltered),
+    hasQuery: Boolean(state.librarySearch || state.libraryFilter !== "all" || tagFiltered || platform && canvasInspirationDiscovery.count),
     mutable,
     canCreateEntity,
     canUploadMedia,
@@ -4409,6 +4454,7 @@ function addEntityToCanvas({ scope, entityId, space }) {
 }
 
 function openAssetLibraryPreview(id) {
+  if (state.librarySpace === "platform" && canvasInspiration.open(id)) return;
   const item = assetLibraryStore.getMedia({ kind: "media", id, space: state.librarySpace });
   if (!item || !assetLibraryPreviewDialog || !assetLibraryPreviewBody) return;
   state.libraryPreviewTarget = { kind: "media", id };
@@ -4438,6 +4484,7 @@ function openAssetLibraryPreview(id) {
 }
 
 function closeAssetLibraryPreview() {
+  canvasInspiration.close();
   state.libraryPreviewTarget = null;
   assetLibraryPreviewDialog?.close?.();
   if (assetLibraryPreviewBody) assetLibraryPreviewBody.innerHTML = "";
@@ -4519,6 +4566,7 @@ function openAssetLibrary(targetNodeId = null, { focus = false, agentScope = nul
 }
 
 function closeAssetLibrary({ restoreFocus = true } = {}) {
+  canvasInspirationDiscovery.sync({ active: false });
   if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
   assetLibraryHeader.sync({ space: state.librarySpace, query: state.librarySearch, visible: false });
   assetLibraryItemMenu.dispose();
@@ -4983,6 +5031,7 @@ function render() {
 }
 
 function renderCanvasView() {
+  canvasInspiration.syncContext();
   canvasLibrarySearch.syncContext();
   canvasLibraryNavigation.syncContext();
   canvasSaveMedia.syncContext();
@@ -10682,6 +10731,10 @@ assetLibraryPanel?.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-library-filter-toggle]")) {
+    if (state.librarySpace === "platform") {
+      canvasInspirationDiscovery.toggle();
+      return;
+    }
     state.libraryToolbarMenu = state.libraryToolbarMenu === "filter" ? null : "filter";
     state.libraryFilterDraft = state.libraryToolbarMenu === "filter"
       ? { mediaKind: state.libraryFilter, ...state.libraryTagFilter, tagIds: [...state.libraryTagFilter.tagIds] } : null;
@@ -11751,10 +11804,13 @@ promptOptimization = window.REELAY_PROMPT_OPTIMIZATION.createController({
 window.addEventListener("message", handleHostBridgeMessage);
 window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
+  canvasInspiration.close({ restoreFocus: false });
   canvasArrange.close();
   promptOptimization?.close();
   canvasTheme.clearFeedback();
   if (!event.persisted) {
+    canvasInspiration.destroy();
+    canvasInspirationDiscovery.destroy();
     assetLibraryHeader.destroy();
     agentLauncherMotion.dispose();
     agentCloseMotion.dispose();

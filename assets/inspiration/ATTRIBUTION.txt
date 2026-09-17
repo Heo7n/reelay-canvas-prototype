@@ -1,0 +1,41 @@
+Reelay film inspiration: excerpt sources and attribution
+
+Big Buck Bunny (2008)
+Copyright (c) 2008 Blender Foundation / www.bigbuckbunny.org
+Licensed under Creative Commons Attribution 3.0:
+https://creativecommons.org/licenses/by/3.0/
+Official source: https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v.zip
+morning.webm: 00:40-01:00; butterfly.webm: 01:00-01:30;
+tree.webm: 01:35-02:05. Excerpted, resized and transcoded; original audio retained.
+
+Sintel (2010)
+Copyright (c) 2010 Blender Foundation / durian.blender.org
+Licensed under Creative Commons Attribution 3.0:
+https://creativecommons.org/licenses/by/3.0/
+Official source: https://download.blender.org/durian/trailer/sintel_trailer-720p.mp4
+rooftop.webm: trailer 00:22-00:35.5; snow.webm: trailer 00:02-00:09.
+Excerpted, letterbox cropped, resized and transcoded; original audio retained.
+
+Tears of Steel (2012)
+Copyright (c) 2012 Blender Foundation / mango.blender.org
+Licensed under Creative Commons Attribution 3.0:
+https://creativecommons.org/licenses/by/3.0/
+Official source: https://download.blender.org/demo/movies/ToS/tears_of_steel_720p.mov
+city.webm: 01:09.917-01:39.917; lab.webm: 00:45.625-01:04.458.
+Excerpted, resized and transcoded; original audio retained.
+
+All associated keyframe and cover WebP files are extracted from the named
+excerpts and retain the same attribution and license. The creators do not
+endorse Reelay. Shot descriptions and generation prompts are Reelay's own
+curated annotations, not statements by the original filmmakers.
+
+Existing repository demonstration footage
+coast.webm / desert.webm: assets/experience-media/multishot-fe80f293.webm
+moon.webm / swim.webm: assets/experience-media/seedance-empty-state-7ed500ba.webm
+road.webm: assets/experience-media/editing-empty-state-dfddf1e7.webm
+These are excerpts of the repository's existing published motion fixtures.
+Their MultiShot / Seedance / Edit Studio labels identify the source fixture,
+not a connected film-search service or a claim to Blender's license.
+Changes: excerpt selection, preview resizing/transcoding, crop of embedded
+demo subtitles for desert, and local keyframe extraction. Moon's unrelated
+final animation frame was removed. No loops or playback-rate changes.

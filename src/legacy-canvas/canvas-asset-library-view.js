@@ -123,9 +123,10 @@
     const draft = options.filterDraft || { mediaKind: activeFilter, ...normalizeTagFilter(options.tagFilter) };
     const mediaKind = normalizeFilter(draft.mediaKind, options.section);
     const subjectZone = options.subjectZone === true || normalizeSection(options.section) === "entity";
+    const platform = normalizeSpace(options.space) === "platform";
     const { tagIds, untagged } = normalizeTagFilter(draft);
     const selectedTags = new Set(tagIds);
-    const builtins = [
+    const builtins = platform ? [] : [
       { id: "builtin:character", name: "角色" },
       { id: "builtin:scene", name: "场景" },
       { id: "builtin:object", name: "物品" },
@@ -145,15 +146,15 @@
       <section class="asset-library-filter-popover" role="dialog" aria-label="筛选" data-library-filter-popover="true">
         <header><strong>筛选</strong><button type="button" data-library-filter-reset="true">重置</button></header>
         <div class="asset-library-filter-body">
-          ${subjectZone ? "" : `<fieldset><legend>类型</legend>
+          ${subjectZone || platform ? "" : `<fieldset><legend>类型</legend>
             <div class="asset-library-filter-types" role="group" aria-label="素材类型">
               ${FILTERS.map((filter) => `<button class="${filter.id === mediaKind ? "active" : ""}" type="button" aria-pressed="${filter.id === mediaKind}" data-library-filter="${filter.id}">${filter.label}</button>`).join("")}
             </div>
           </fieldset>`}
-          <fieldset${tagsAvailable ? "" : " disabled"}><legend>标签</legend>
+          <fieldset${tagsAvailable ? "" : " disabled"}><legend>${platform ? "镜头特征" : "标签"}</legend>
             <div class="asset-library-filter-tags" role="group" aria-label="标签">
               ${tags.map((tag) => `<button class="${selectedTags.has(tag.id) ? "active" : ""}" type="button" aria-pressed="${selectedTags.has(tag.id)}" data-library-filter-tag="${escapeHtml(tag.id)}" title="${escapeHtml(tag.name)}">${escapeHtml(tag.name)}</button>`).join("")}
-              <button class="${untagged ? "active" : ""}" type="button" aria-pressed="${untagged}" data-library-filter-untagged="true">未标记</button>
+              ${platform ? "" : `<button class="${untagged ? "active" : ""}" type="button" aria-pressed="${untagged}" data-library-filter-untagged="true">未标记</button>`}
             </div>
           </fieldset>
         </div>
@@ -210,7 +211,7 @@
       : 0;
     const filter = normalizeFilter(options.filter, section);
     const tagFilter = normalizeTagFilter(options.tagFilter);
-    const filterCount = Number(filter !== "all") + (tagFilter.untagged ? 1 : tagFilter.tagIds.length);
+    const filterCount = space === "platform" ? Number(options.discoveryCount || 0) : Number(filter !== "all") + (tagFilter.untagged ? 1 : tagFilter.tagIds.length);
     const requestedMenu = normalizeMenu(options.menu);
     const reviewableSelection = options.reviewableSelection !== false;
     const batchActions = getBatchActions(space, reviewableSelection, section, options.allowedBatchActions);
@@ -280,7 +281,7 @@
       <button class="asset-library-selection-cancel" type="button" aria-label="取消多选" data-library-selection-cancel="true">${icon("x")}<span>取消</span></button>`;
 
     const filterControl = `
-        <button class="asset-library-filter-toggle${filterCount ? " active" : ""}" type="button" title="筛选" aria-label="筛选${filterCount ? `，已应用 ${filterCount} 项条件` : ""}" aria-haspopup="dialog" aria-expanded="${menu === "filter"}" data-library-filter-toggle="true">
+        <button class="asset-library-filter-toggle${filterCount ? " active" : ""}" type="button" title="筛选" aria-label="筛选${filterCount ? `，已应用 ${filterCount} 项条件` : ""}" aria-haspopup="dialog" ${space === "platform" ? 'aria-controls="inspirationDiscovery"' : ""} aria-expanded="${space === "platform" ? Boolean(options.discoveryExpanded) : menu === "filter"}" data-library-filter-toggle="true">
           ${icon("list-filter")}
           ${filterCount ? `<span class="asset-library-filter-count" aria-hidden="true">${filterCount}</span>` : ""}
         </button>
@@ -294,7 +295,7 @@
           <div class="asset-library-command-group${selectionMode ? " selecting" : ""}">
             ${selectionMode ? selectionControls : `${filterControl}${selectionControl}`}
           </div>
-          ${menu === "filter" ? renderFilterMenu({ ...options, section }, filter) : ""}
+          ${menu === "filter" && space !== "platform" ? renderFilterMenu({ ...options, section }, filter) : ""}
           ${menu === "select-kind" ? `<div class="asset-library-toolbar-menu" role="menu" aria-label="选择结果类型">${(options.selectionKinds || []).map(({ kind, label, count }) => `<button type="button" role="menuitem" data-library-select-kind="${escapeHtml(kind)}">全选${escapeHtml(label)}<span>${count}</span></button>`).join("")}</div>` : ""}
         </div>
       </div>

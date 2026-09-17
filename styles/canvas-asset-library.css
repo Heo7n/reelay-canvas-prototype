@@ -6,8 +6,8 @@
   --asset-panel-line: var(--floating-line);
   --asset-panel-hover: color-mix(in srgb, var(--text) 7%, transparent);
   --asset-card-size: 164px;
-  --asset-command-width: 204px;
-  --asset-command-gap: 6px;
+  --asset-command-width: 188px;
+  --asset-command-gap: 4px;
   --asset-command-icon-width: calc((var(--asset-command-width) - var(--asset-command-gap) * 3) / 4);
   --asset-command-selection-width: calc((var(--asset-command-width) - var(--asset-command-gap) * 2) / 3);
   --asset-command-group-width: calc(var(--asset-command-icon-width) * 2 + var(--asset-command-gap));
@@ -759,7 +759,7 @@ html[data-theme="light"] .asset-library-panel {
   min-width: var(--asset-command-selection-width);
   flex-basis: var(--asset-command-selection-width);
   gap: 5px;
-  padding: 0 8px;
+  padding: 0 6px;
   font-weight: 400;
   white-space: nowrap;
 }
@@ -790,7 +790,7 @@ html[data-theme="light"] .asset-library-panel {
 
 .asset-library-command-group.selecting > button {
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 6px;
   font-size: 13px;
   font-weight: 400;
   gap: 5px;

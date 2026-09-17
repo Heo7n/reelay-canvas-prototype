@@ -115,6 +115,18 @@ export function generationPreviewAssets(scripts) {
 
 // The current styles contain no asset URLs, namespace rules, or conditional
 // imports. Fail closed if that contract changes rather than relocating URLs.
+export function inspirationAssets(scripts) {
+  const definition = scripts.find((entry) => entry.name === "src/config/inspiration-catalog.js");
+  if (!definition) throw new Error("Missing inspiration catalog definition.");
+  const context = {};
+  new Script(definition.source, { filename: definition.name }).runInNewContext(context);
+  const catalog = context.REELAY_INSPIRATION_CATALOG;
+  return [...new Set([catalog.attributionUrl, ...catalog.clips.flatMap((clip) => [clip.url, clip.posterUrl, ...clip.shots.map((shot) => shot.posterUrl)])])].map((url) => {
+    if (url !== "./assets/inspiration/ATTRIBUTION.txt" && !/^\.\/assets\/inspiration\/[a-z0-9-]+\.(?:webm|webp)$/.test(url)) throw new Error(`Unexpected inspiration asset: ${url}`);
+    return url;
+  });
+}
+
 async function flattenStyles(root, reference, ancestors = []) {
   const filename = localPath(root, reference);
   if (ancestors.includes(filename)) throw new Error(`Circular CSS import: ${reference}`);
@@ -191,7 +203,7 @@ export async function buildLegacyCanvas(workspaceRoot, outputRoot = path.join(wo
 
   // Runtime presets contain media URLs, which are invisible to HTML/Vite asset scanning.
   // Ship exactly their local dependencies in both account and experience builds.
-  const previewReferences = generationPreviewAssets(scripts);
+  const previewReferences = [...generationPreviewAssets(scripts), ...inspirationAssets(scripts)];
   for (const reference of previewReferences) {
     const destination = localPath(outputRoot, reference);
     await mkdir(path.dirname(destination), { recursive: true });
