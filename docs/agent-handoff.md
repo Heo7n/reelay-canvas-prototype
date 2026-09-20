@@ -2,7 +2,15 @@
 
 本页只保留当前接手信息；功能细节见[产品规范](current-product-spec.md)，规则见[开发工作流](development-workflow.md)。每次更新替换失效状态，历史由 Git / PR 保存。
 
-## 最近核验：2026-09-17
+## 接续交接：2026-09-20
+
+- 当前实际工作区为 `C:/Users/Ho/.codex/worktrees/cc38/0707-experiment`，分支 `codex/experiment-20260910`；不要把任务初始目录 `cc38/0707` 当成本实验源码。开始时核对 Git 状态，按用户下一条需求推进。
+- 本轮修复资产库拖入节点提示词时混入 `asset-…` 内部 ID：共享 ProseMirror 编辑器对素材 MIME / Files 跳过文本回退并继续冒泡，由既有节点 / Agent 参考处理器校验和添加。普通文本拖放及撤销不变；不会清洗历史提示词。修改在 `src/prompt-editor/index.js`，回归在 `tests/prompt-editor.test.mjs`。49 项定向测试、完整 `npm run check` 及 `git diff --check` 已通过；5182 提供的新 bundle 已确认含修复，当前已打开页面需刷新后加载。未声称完成真人拖放端到端验证。
+- 主体编辑器尺寸优化已被用户暂停，不自动继续。当前 CSS 仍为原 760px 布局，本次已清除产品文档中残留的 840px / 高度分配试验说明。后续需重新讨论预览与表单布局，不能把未认可方案当成定稿。
+- 本地预览沿用 `5182 → 5183`、数据库容器 `reelay-library-check-20260915` 和 `.reelay-data/library-preview/objects`；2026-09-18 已恢复，前端 / API 返回 200。再次恢复先查端口和进程，使用忽略目录中的 `frontend.mjs` / `server.mts`，记录为 `processes.json`。不初始化、seed、迁移或覆盖现有数据，也不自动修改用户草稿。
+- 本次仅本地提交并交接，不推送、不部署。公网仍为下方记录的 2026-09-17 版本；发布历史不代表本次修复已上线。
+
+## 最近公网核验：2026-09-17
 
 - 实验版本已提交并推送至 `origin/codex/experiment-20260910`，功能源提交 `3cdc5e26e9c36573ac09b5be3020a0fc871dfeba`。免注册体验站 [公开评审入口](https://reelay-experience.vercel.app/app) 已提升到部署 `dpl_FAL9xngVmrcF1LeQGJoEFv6hHqZY`；正式域 `experience-release.json` 确认同一源 SHA。以下“未提交 / 未发布”为各轮历史状态，已由本条取代。此次只发布静态体验站，账号站、云端数据库及本地用户数据未同步或迁移。
 - 发布验证：本轮完整检查、账号 / Experience 构建通过；候选 index SHA-256 与本地一致，视频 Range 返回 206，正式域 83/83 平台文件的字节与 SHA-256 相同（12 段视频 / 58 个镜头，含关键帧及署名），`/api/health` 为 404。匿名真实浏览器验证首页、示例项目、平台列表、视频播放到终点、六镜头拉片分析、对话文字匹配与城市重点重排，控制台无警告 / 错误。体验站包含公开三主体及音视频示例，组织主体功能可用但初始为空，刷新重置；不包含 localhost 数据库内的用户项目编辑。Vercel 体验项目当前无 Git link，推送本身不会更新此站；静态产物由 CLI 发布，未改部署保护设置。

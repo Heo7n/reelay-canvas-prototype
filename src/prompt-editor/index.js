@@ -325,6 +325,15 @@ export function createEditor(options) {
       return false;
     },
     handleDOMEvents: {
+      drop(editor, event) {
+        const transfer = event.dataTransfer;
+        const types = Array.from(transfer?.types || []);
+        if (!types.includes('application/x-reelay-asset') && !types.includes('Files') && !transfer?.files?.length) return false;
+        // Media belongs to the outer reference drop handler. Skip ProseMirror's
+        // text fallback, but keep bubbling so the owner validates and adds it.
+        event.preventDefault();
+        return true;
+      },
       compositionstart() { composing = true; closeMenu(); return false; },
       compositionend() { composing = false; window.setTimeout(() => { if (!disposed) updateMenu(true); }, 0); return false; },
       blur() { closeMenu(true); return false; },

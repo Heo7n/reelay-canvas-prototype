@@ -52,6 +52,53 @@ function setup(t, overrides = {}) {
   };
 }
 
+function dropIntoEditor(ctx, data, files = []) {
+  const event = new ctx.window.Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: {
+    types: [...Object.keys(data), ...(files.length ? ['Files'] : [])],
+    files,
+    getData: (type) => data[type] || '',
+  } });
+  ctx.editor.view.posAtCoords = () => ({ pos: 1, inside: -1 });
+  ctx.editor.dom.dispatchEvent(event);
+  return event;
+}
+
+for (const [label, data, files] of [
+  ['single library asset', { 'application/x-reelay-asset': JSON.stringify({ assetIds: ['asset-a'] }), 'text/plain': 'asset-a' }, []],
+  ['multiple library assets', { 'application/x-reelay-asset': JSON.stringify({ assetIds: ['asset-a', 'asset-b'] }), 'text/plain': 'asset-a\nasset-b' }, []],
+  ['invalid library payload', { 'application/x-reelay-asset': '{invalid', 'text/plain': 'asset-invalid' }, []],
+  ['local file with text fallback', { 'text/plain': 'portrait.png', 'text/html': '<p>portrait.png</p>' }, [{ name: 'portrait.png' }]],
+]) {
+  test(`media drop delegates ${label} without changing prompt, selection or history`, (t) => {
+    const ctx = setup(t, { document: prompt('原提示词', reference()) });
+    ctx.select(2, 4);
+    const before = ctx.editor.getDocument();
+    const selection = ctx.editor.view.state.selection.toJSON();
+    let ownerCalls = 0;
+    ctx.window.addEventListener('drop', (event) => {
+      ownerCalls++;
+      assert.equal(event.defaultPrevented, true);
+      assert.deepEqual(ctx.editor.getDocument(), before, 'owner sees no accidental text insertion');
+    });
+    dropIntoEditor(ctx, data, files);
+    assert.equal(ownerCalls, 1, 'drop still reaches the reference owner exactly once');
+    assert.deepEqual(ctx.editor.getDocument(), before);
+    assert.deepEqual(ctx.editor.view.state.selection.toJSON(), selection);
+    assert.equal(ctx.changes.length, 0);
+    assert.equal(undo(ctx.editor.view.state), false, 'no prompt undo entry is created');
+  });
+}
+
+test('ordinary text drop still inserts prose and supports undo', (t) => {
+  const ctx = setup(t, { document: '原提示词' });
+  dropIntoEditor(ctx, { 'text/plain': '雨夜' });
+  assert.equal(ctx.editor.getText(), '雨夜原提示词');
+  assert.equal(ctx.changes.length, 1);
+  ctx.key('z', { ctrlKey: true });
+  assert.equal(ctx.editor.getText(), '原提示词');
+});
+
 test('schema round-trips multiline prose and mixed atomic references without editor HTML', () => {
   const source = prompt('第一行\n让', reference(), '跳舞\n', reference('connection:c', 'video', '视频1'), '\n');
   assert.deepEqual(fromEditorDocument(toEditorDocument(source)), source);
