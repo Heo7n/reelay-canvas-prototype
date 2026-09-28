@@ -22,8 +22,8 @@
 
 ## 最近公网核验：2026-09-28
 
-- 本轮样片 / 正片、即时生成节点、10 秒模拟与 7 秒取消、媒体边缘及深色参数面板已提交并推送到 `origin/codex/experiment-20260910`，功能源提交 `e3a4de44ebdc0fc0ebcab429e070bcd2bc4399b1`；同时保留此前已提交的提示词素材拖入修复。免注册体验站 [公开评审入口](https://reelay-experience.vercel.app/app) 已提升同一候选到部署 `dpl_5wVB4GegKRgmZpSdDaWFBFBa67jX`，实际主域 inspect 与发布元数据确认该部署及源 SHA。下文各轮“未提交 / 未发布”是历史状态，以本条为准。仅发布静态体验站，账号站、数据库及本地用户项目未同步。
-- 发布验证：完整 `npm run check`、`git diff --check` 与本次 Experience 构建通过；候选发布清单、两个 HTML 入口及六个核心脚本 / 样式均与本地 SHA-256 一致；主域 139 个文件全量哈希匹配、26 个大媒体文件的 1024 字节范围内容匹配，两个 SPA 入口回退正确，视频 Range 为 206、`/api/health` 为 404。完整结果保存在 `.reelay-data/seedance-public-verification.json`。Vercel 体验项目已重新核验无 Git link，静态产物从独立输出目录发布，保持原部署保护设置。体验站无需登录，公开示例与临时业务状态仅在标签页内存中，刷新重置。本轮未重跑受限浏览器的视觉 / E2E，不将此前浏览器结果作为本次验收。检查与构建日志为 `.reelay-data/seedance-release-check.log`、`.reelay-data/seedance-experience-build.log`。
+- 本轮样片 / 正片、即时生成节点、7.5 秒模拟与 5 秒取消、图标模式入口与完整参数布局、三段随机风景视频、媒体边缘及深色参数面板已提交并推送到 `origin/codex/experiment-20260910`，功能源提交 `911a57d13f884d6a2e4061b30c03f123a955cb3b`；同时保留此前已提交的提示词素材拖入修复。免注册体验站 [公开评审入口](https://reelay-experience.vercel.app/app) 已提升同一候选到部署 `dpl_4tUyjHd6aM6YVDvijvzhG7UifVie`，实际主域 inspect 与发布元数据确认该部署及源 SHA。下文各轮“未提交 / 未发布”是历史状态，以本条为准。仅发布静态体验站，账号站、数据库及本地用户项目未同步。
+- 发布验证：完整 `npm run check`、`git diff --check` 与账号 / Experience 构建通过；候选 16 个入口、核心脚本 / 样式、发布清单及新增媒体与本地产物匹配；主域 143 个文件全量哈希匹配、29 个大媒体文件的 1024 字节范围内容匹配，两个 SPA 入口回退正确，视频 Range 为 206、`/api/health` 为 404。完整结果保存在 `.reelay-data/generation-refinement-public-verification.json`。Vercel 体验项目已重新核验无 Git link，静态产物从独立输出目录发布，保持原部署保护设置。体验站无需登录，公开示例与临时业务状态仅在标签页内存中，刷新重置。本轮未重跑受限浏览器的视觉 / E2E，不将此前浏览器结果作为本次验收。检查与构建日志为 `.reelay-data/generation-refinement-check.log`、`.reelay-data/generation-refinement-experience-build.log`。
 
 - 灵感匹配进一步改为可调整内容侧重：来源恢复纯说明，下方提取条件可切普通 / 重点参考或逐项移除，恢复默认撤回调整。重点提高排序权重并同步最佳镜头与理由；移除不代表排除该内容，全部移除回到手动搜索 / 筛选候选。更新文字保留共有条件偏好，新会话恢复默认；原提示词不改。本轮仍为本地规则原型，未接语义模型。实际预览以现有“霓虹街道，城市夜景，彩色光”验证城市重点使城市片段前移、逐项移除与恢复，用户草稿保持不变，未生成。
 - 侧重调整完整 `npm run check`、账号构建及 `git diff --check` 通过；模型覆盖重点引起片段 / 镜头排序变化、移除不排除内容及未知偏好，控制器覆盖全部移除、恢复和新旧文字偏好保留。实际 5182 已检查浅深主题及窄栏，恢复浅色；未提交或发布。
