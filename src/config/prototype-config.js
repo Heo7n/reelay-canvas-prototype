@@ -19,6 +19,24 @@
     "4K": 36,
   };
 
+  const simulationVideos = [
+    { key: "coast", label: "海岸" },
+    { key: "mountains", label: "山景" },
+    { key: "forest", label: "森林" },
+  ].map(({ key, label }) => ({
+    type: "video",
+    name: `${key}.mp4`,
+    displayName: `${label}演示视频`,
+    url: `./assets/generation-demo/${key}.mp4`,
+    posterUrl: `./assets/generation-demo/${key}.webp`,
+    width: 1280,
+    height: 720,
+    aspectRatio: 16 / 9,
+    duration: 8,
+    hasAudio: false,
+    contentType: "video/mp4",
+  }));
+
   const simulationAssets = {
     image: {
       type: "image",
@@ -29,15 +47,7 @@
       height: 720,
       aspectRatio: 16 / 9,
     },
-    video: {
-      type: "video",
-      name: "Reelay simulated video",
-      displayName: "Generated video",
-      url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-      width: 1280,
-      height: 720,
-      aspectRatio: 16 / 9,
-    },
+    video: simulationVideos[0],
   };
 
   const assetLibrarySeed = {
@@ -474,7 +484,9 @@
     imageQualityMultiplier,
     videoQualityCost,
     simulationAssets,
-    generationDurationMs: 10000,
+    simulationVideos,
+    generationDurationMs: 7500,
+    generationCancelWindowMs: 5000,
     assetLibrarySeed,
     mediaToolDefinitions,
     mediaToolsByType,

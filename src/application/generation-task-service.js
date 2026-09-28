@@ -161,7 +161,7 @@
       const record = {
         task: null, submitting: true, removed: false,
         status: "queued", progress: 0, createdAt, startedAt: null, finishedAt: null,
-        cancelUntil: createdAt + 7000, error: null, result: null,
+        cancelUntil: createdAt + root.REELAY_PROTOTYPE_CONFIG.generationCancelWindowMs, error: null, result: null,
         charged: 0, refunded: 0, refundAttempted: false,
         addedNodeId: null, addedCanvasId: null,
       };

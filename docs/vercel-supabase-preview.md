@@ -53,7 +53,7 @@ Dev、Test 和体验站之间没有自动数据同步。Git 携带代码及明�
 
 ## 3. 体验站构建边界
 
-`npm run build:experience` 输出 `dist/experience`，构建期选择内存 services。当前个人示例集为三主体 12 图及 3 视频 / 1 音频，来源分别是 `entity-demo-fixtures.ts` 与 `media-demo-fixtures.ts`；构建按 SHA-256 白名单复制并生成图片预览，不从内部账号实时读取，也不随内部新增素材扩大公开集。
+`npm run build:experience` 输出 `dist/experience`，构建期选择内存 services。当前个人示例集为三主体 12 图及 3 视频 / 1 音频，来源分别是 `entity-demo-fixtures.ts` 与 `media-demo-fixtures.ts`；构建按 SHA-256 白名单复制并生成图片预览，不从内部账号实时读取，也不随内部新增素材扩大公开集。另有生成模拟专用的海岸、山景、森林三段公开风景视频及封面，由 `prototype-config.js` 声明，legacy 构建只复制声明的本地文件及 `assets/generation-demo/README.md` 来源许可说明，不加入个人素材库或数据库 seed。
 
 产物自带静态 `vercel.json`；部署工作目录必须为 `dist/experience`，显式使用该配置，不能继承根目录的 API functions 或账号站 `.vercel/project.json`。不配置数据库、Storage、账号凭据，不执行 migration / seed。构建会检查内部登录代码与服务器目录没有进入产物。
 

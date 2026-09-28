@@ -103,10 +103,17 @@ export function generationPreviewAssets(scripts) {
   const presets = context.REELAY_GENERATION_DEMO_PRESETS.create({
     models: context.REELAY_MODEL_CATALOG, media: context.REELAY_PROTOTYPE_CONFIG.assetLibrarySeed.media,
   });
-  return [...new Set(presets.flatMap((preset) => preset.input.references.map((asset) => asset.url)))]
+  const generationMedia = context.REELAY_PROTOTYPE_CONFIG.simulationVideos
+    .flatMap((asset) => [asset.url, asset.posterUrl]);
+  return [...new Set([
+    ...presets.flatMap((preset) => preset.input.references.map((asset) => asset.url)),
+    ...generationMedia, "./assets/generation-demo/README.md",
+  ])]
     .filter((url) => !/^(?:https?:|\/\/)/.test(url))
     .map((url) => {
-      if (!/^\.\/assets\/home\/[a-z0-9-]+\.(?:png|jpg|webp)$/.test(url)) {
+      if (!/^\.\/assets\/home\/[a-z0-9-]+\.(?:png|jpg|webp)$/.test(url)
+        && !/^\.\/assets\/generation-demo\/[a-z0-9-]+\.(?:mp4|webp)$/.test(url)
+        && url !== "./assets/generation-demo/README.md") {
         throw new Error(`Unexpected published preview asset: ${url}`);
       }
       return url;

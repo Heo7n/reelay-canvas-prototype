@@ -62,7 +62,9 @@ test("builds the real entry with content hashes, complete references and unchang
   const definitions = await Promise.all(["data/model-catalog.js", "src/config/prototype-config.js", "src/config/generation-demo-presets.js"]
     .map(async (name) => ({ name, source: await readFile(path.join(root, name), "utf8") })));
   const previewAssets = generationPreviewAssets(definitions);
-  assert.equal(previewAssets.length, 12);
+  assert.equal(previewAssets.length, 19);
+  assert.equal(previewAssets.filter((reference) => reference.endsWith(".mp4")).length, 3);
+  assert.ok(previewAssets.includes("./assets/generation-demo/README.md"));
   for (const reference of previewAssets) {
     assert.deepEqual(await readFile(path.join(output, reference)), await readFile(path.join(root, reference)));
   }

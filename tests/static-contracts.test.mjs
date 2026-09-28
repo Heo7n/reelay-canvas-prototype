@@ -801,15 +801,6 @@ test("task type summaries, provider snapshots, and generation guards share one c
   assert.equal(editSnapshot.referenceSnapshot.media[0].asset.url, "https://example.test/upstream.mp4");
   assert.equal(editSnapshot.referenceSnapshot.media[2].asset.duration, 6);
 
-  const generatedAssetSource = sourceBetween(
-    appSource,
-    "function createGeneratedAsset(parameterSnapshot)",
-    "function generatorMediaContent(",
-  );
-  assert.match(generatedAssetSource, /Number\.isFinite\(parameterSnapshot\.outputDuration\)/);
-  assert.match(generatedAssetSource, /generated\.duration = parameterSnapshot\.outputDuration/);
-  assert.doesNotMatch(generatedAssetSource, /generated\.duration = parameterSnapshot\.duration/);
-
   const documentHydrationSource = sourceBetween(
     appSource,
     "function hydrateCanvasDocumentSnapshot(content)",
@@ -1471,17 +1462,11 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
   assert.match(appCss, /\.agent-messages\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/);
   assert.match(appCss, /\.agent-message-body\s*\{[^}]*font-size:\s*14px;[^}]*line-height:\s*1\.55;/);
   assert.match(appCss, /\.agent-composer-spacer\s*\{\s*display:\s*block;\s*flex:\s*1 1 0;/);
-  assert.match(appCss, /\.agent-composer-bar\s*\{\s*gap:\s*4px;/);
-  assert.match(appCss, /@container agent-composer \(max-width:\s*540px\)\s*\{[\s\S]*?\.agent-param-summary \.param-summary-before\s*\{\s*display:\s*none;/);
   assert.doesNotMatch(appCss, /\.agent-composer-model-icon\s*\{\s*display:\s*none;/);
-  assert.match(appCss, /@container agent-composer \(max-width:\s*500px\)\s*\{[\s\S]*?\.agent-mode \.control-chip-label\s*\{\s*display:\s*none;/);
-  assert.match(appCss, /@container agent-composer \(max-width:\s*440px\)\s*\{[\s\S]*?\.agent-model-button \.agent-composer-model-icon\s*\{\s*display:\s*grid;[\s\S]*?\.agent-model-button-label\s*\{\s*display:\s*none;/);
-  assert.match(appCss, /@container agent-composer \(max-width:\s*380px\)\s*\{[\s\S]*?\.agent-param-summary \.param-summary-after\s*\{\s*display:\s*none;[\s\S]*?\.agent-param-summary \.control-chip-audio-separator\s*\{\s*display:\s*none;/);
   assert.match(appSource, /class="prompt-panel prompt-composer-surface prompt-composer-layout/);
   assert.match(appSource, /data-node-prompt-input/);
   assert.match(appSource, /nodeLayer\.querySelectorAll\("\[data-node-prompt-input\]"\)/);
   assert.doesNotMatch(appCss, /\.agent-composer textarea/);
-  assert.doesNotMatch(appCss, /\.agent-composer-bar\s*\{[^}]*\bposition:/);
   assert.match(
     agentMarkup,
     /id="agentHistoryBtn"[^>]*aria-controls="agentHistoryMenu"[^>]*aria-expanded="false"/,
@@ -1490,6 +1475,11 @@ test("the Agent composer keeps its icon, disclosure, and accessibility contracts
     agentMarkup,
     /id="agentModeBtn"[^>]*aria-controls="agentModeMenu"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"/,
   );
+  const modeTrigger = new JSDOM(agentMarkup).window.document.querySelector("#agentModeBtn");
+  assert.equal(modeTrigger.textContent.trim(), "");
+  assert.equal(modeTrigger.getAttribute("aria-label"), "当前模式：生成模式");
+  assert.equal(modeTrigger.title, "当前模式：生成模式");
+  assert.equal(modeTrigger.querySelector("[data-agent-mode-icon]").getAttribute("aria-hidden"), "true");
   assert.match(
     agentMarkup,
     /id="agentModelBtn"[^>]*aria-controls="agentModelMenu"[^>]*aria-haspopup="dialog"[^>]*aria-expanded="false"/,

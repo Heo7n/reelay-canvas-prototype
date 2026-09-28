@@ -5,6 +5,8 @@ import vm from "node:vm";
 
 const source = await readFile(new URL("../src/legacy-canvas/canvas-node-task-runner.js", import.meta.url), "utf8");
 const context = vm.createContext({});
+context.window = context;
+vm.runInContext(await readFile(new URL("../src/config/prototype-config.js", import.meta.url), "utf8"), context);
 vm.runInContext(source, context);
 const { createCanvasNodeTaskRunner } = context.REELAY_CANVAS_NODE_TASK_RUNNER;
 
@@ -151,7 +153,7 @@ test("generation progress follows the existing completion duration and never rea
   assert.equal(h.runner.get(task.id), task);
   assert.equal(task.progress, 0);
   assert.equal(task.createdAt, 10000);
-  assert.equal(task.cancelUntil, 17000);
+  assert.equal(task.cancelUntil, 15000);
   h.advance(600);
   assert.equal(task.progress, 50);
   assert.equal(updates.length, 3);
@@ -167,15 +169,15 @@ test("generation progress follows the existing completion duration and never rea
   assert.equal(h.timers.size, 0);
 });
 
-test("user cancellation has a strict seven-second deadline while system cancellation stays unconditional", () => {
-  for (const elapsed of [6999, 7000, 7500]) {
+test("user cancellation has a strict five-second deadline while system cancellation stays unconditional", () => {
+  for (const elapsed of [4999, 5000, 5500]) {
     const h = createHarness({ onProgress() {} });
     const task = h.start({ delayMs: 12000 });
     h.advance(elapsed);
-    assert.equal(task.canCancel, elapsed < 7000);
-    assert.equal(h.runner.canCancel(task.id), elapsed < 7000);
-    assert.equal(h.runner.cancel(task.id), elapsed < 7000);
-    if (elapsed < 7000) {
+    assert.equal(task.canCancel, elapsed < 5000);
+    assert.equal(h.runner.canCancel(task.id), elapsed < 5000);
+    assert.equal(h.runner.cancel(task.id), elapsed < 5000);
+    if (elapsed < 5000) {
       assert.equal(h.calls.cancels[0].reason, "user-canceled");
       assert.equal(h.runner.cancel(task.id), false);
     } else {

@@ -175,6 +175,9 @@ const {
   canvasScaleLimits = { min: 0.2, max: 2 },
   groupFrameRules = {},
 } = prototypeConfig;
+const selectSimulationMedia = window.REELAY_SIMULATED_GENERATION_MEDIA.createSelector({
+  image: simulationAssets.image, videos: prototypeConfig.simulationVideos,
+});
 const generatorModelPolicy = window.REELAY_CANVAS_GENERATOR_MODEL_POLICY;
 if (!generatorModelPolicy) throw new Error("Canvas generator model policy is unavailable.");
 const canvasPopoverPlacement = window.REELAY_CANVAS_POPOVER_PLACEMENT;
@@ -4821,7 +4824,7 @@ function createGenerationParameterSnapshot(node) {
 
 function createGeneratedAsset(parameterSnapshot) {
   const mediaKind = normalizeGeneratorMode(parameterSnapshot.mediaKind) || "image";
-  const base = simulationAssets[mediaKind] || simulationAssets.image;
+  const base = selectSimulationMedia(mediaKind);
   const generated = {
     ...base,
     id: crypto.randomUUID(),
@@ -4834,13 +4837,6 @@ function createGeneratedAsset(parameterSnapshot) {
     generated.height = size.height;
     generated.aspectRatio = aspectStringToRatio(parameterSnapshot.aspect);
     generated.url = `https://picsum.photos/seed/${encodeURIComponent(parameterSnapshot.id)}/${size.width}/${size.height}`;
-  }
-
-  if (mediaKind === "video") {
-    generated.aspectRatio = aspectStringToRatio(parameterSnapshot.aspect);
-    if (Number.isFinite(parameterSnapshot.outputDuration) && parameterSnapshot.outputDuration > 0) {
-      generated.duration = parameterSnapshot.outputDuration;
-    }
   }
 
   return generated;
@@ -4904,9 +4900,10 @@ function assetMediaContent(asset, displayWidth) {
   }
 
   if (asset.type === "video" && safeUrl) {
+    const poster = safeMediaAttributeUrl(asset.posterUrl || asset.thumbnailUrl);
     return `
       <div class="media-content video">
-        <video class="frame-media" src="${safeUrl}" controls playsinline preload="metadata" draggable="false"></video>
+        <video class="frame-media" src="${safeUrl}"${poster ? ` poster="${poster}"` : ""} controls playsinline preload="metadata" draggable="false"></video>
       </div>
     `;
   }
@@ -8144,7 +8141,7 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
     syncCreditDisplay(); return true;
   },
   makeResult: (task) => ({
-    ...simulationAssets[task.input.mediaType], id: crypto.randomUUID(),
+    ...selectSimulationMedia(task.input.mediaType, task.input.sourceDraftAsset), id: crypto.randomUUID(),
     displayName: task.input.mediaType === "image" ? "模拟生成图片" : "模拟生成视频",
     source: "generation", generationTaskId: task.id,
   }),
@@ -8402,7 +8399,7 @@ function syncAgentComposerControls() {
   agentReferences.close();
   const definition = agentComposerModes[mode];
   if (agentModeBtn) {
-    agentModeBtn.innerHTML = `<i data-agent-mode-icon data-lucide="${definition.icon}" aria-hidden="true"></i><span class="control-chip-label" data-agent-mode-label>${definition.label}</span>`;
+    agentModeBtn.innerHTML = `<i data-agent-mode-icon data-lucide="${definition.icon}" aria-hidden="true"></i>`;
     agentModeBtn.title = `当前模式：${definition.label}`;
     agentModeBtn.setAttribute("aria-label", `当前模式：${definition.label}`);
   }

@@ -61,6 +61,7 @@ describe("generation simulator development boundary", () => {
     expect(root.parentElement?.className).toBe("agent-actions");
     expect(panel.parentElement).toBe(document.body);
     expect(panel.hidden).toBe(true);
+    expect(panel.querySelector('.generation-simulator-note[role="status"]')?.textContent).toContain("约 7.5 秒完成，前 5 秒可取消");
     root.querySelector<HTMLButtonElement>(".generation-simulator-toggle")!.click();
     expect(document.activeElement?.id).toBe("generation-simulator-preset");
     expect(capabilities.setNextScenario).not.toHaveBeenCalled();

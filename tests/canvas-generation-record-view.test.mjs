@@ -7,7 +7,7 @@ import { installCanvasIcons } from "./helpers/canvas-icons.mjs";
 const [source, placement, mediaPlayer, referencePreview, statusView] = await Promise.all([
   "canvas-generation-record-view.js", "canvas-popover-placement.js", "canvas-generation-media.js", "canvas-generation-reference-preview.js", "canvas-generation-status-view.js",
 ].map((name) => readFile(new URL(`../src/legacy-canvas/${name}`, import.meta.url), "utf8")));
-const [modelCatalog, draftPolicy] = await Promise.all(["../data/model-catalog.js", "../src/application/draft-video-policy.js"]
+const [modelCatalog, draftPolicy, prototypeConfig] = await Promise.all(["../data/model-catalog.js", "../src/application/draft-video-policy.js", "../src/config/prototype-config.js"]
   .map((path) => readFile(new URL(path, import.meta.url), "utf8")));
 
 function fixture(t, options = {}) {
@@ -46,7 +46,7 @@ function fixture(t, options = {}) {
   window.HTMLMediaElement.prototype.load = () => {};
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   window.HTMLDialogElement.prototype.close = function () { this.open = false; };
-  window.eval(modelCatalog); window.eval(draftPolicy);
+  window.eval(prototypeConfig); window.eval(modelCatalog); window.eval(draftPolicy);
   window.eval(placement); window.eval(mediaPlayer); window.eval(referencePreview); window.eval(statusView); window.eval(source);
   const controller = window.REELAY_GENERATION_RECORD_VIEW.createController({
     document, container, getScope: () => scope, getTasks: () => tasks, getTask: (id) => tasks.find((task) => task.id === id),
@@ -57,7 +57,7 @@ function fixture(t, options = {}) {
   t.after(() => { controller.dispose(); dom.window.close(); });
   function task(overrides = {}) {
     return { id: `task-${tasks.length + 1}`, scope: { ...scope }, status: "queued", createdAt: now,
-      cancelUntil: now + 7000, input: { prompt: "保留瓶身设计，镜头缓慢推进。", modelName: "Seedance 2.5", parameterSummary: "全模态参考 · 16:9 · 480P · 10s", cost: 24, references: [] },
+      cancelUntil: now + 5000, input: { prompt: "保留瓶身设计，镜头缓慢推进。", modelName: "Seedance 2.5", parameterSummary: "全模态参考 · 16:9 · 480P · 10s", cost: 24, references: [] },
       charged: 24, refunded: 0, ...overrides };
   }
   function advance(amount) {
@@ -111,7 +111,7 @@ test("record video controls dispose on result removal while hiding only pauses p
 });
 
 for (const status of ["queued", "running"]) {
-  test(`${status} record places cancellation in its status row and disables it at the seven-second deadline`, (t) => {
+  test(`${status} record places cancellation in its status row and disables it at the five-second deadline`, (t) => {
     const f = fixture(t); const task = f.task({ status }); f.setTasks([task]);
     const edit = f.query('[data-generation-action="edit"]');
     const cancel = f.query('[data-generation-action="cancel"]');
@@ -119,14 +119,14 @@ for (const status of ["queued", "running"]) {
     assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["cancel", "edit"]);
     assert.equal(cancel.textContent.trim(), "取消");
     assert.ok(cancel.closest(".generation-record-wait .generation-status"));
-    assert.match(cancel.title, /发送后\s*7\s*秒内可取消/);
+    assert.match(cancel.title, /发送后\s*5\s*秒内可取消/);
     assert.match(cancel.getAttribute("aria-description"), /取消后返还本次积分/);
     assert.equal(f.timers.size, 0, "service owns task deadline timers");
     edit.click(); assert.deepEqual(f.actions.map(([action]) => action), ["edit"]);
     f.query('[data-generation-action="again"]').click();
     f.query('[data-generation-action="remove"]').click();
     assert.deepEqual(f.actions.map(([action]) => action), ["edit"], "hidden terminal actions cannot submit duplicate tasks or delete active ones");
-    f.advance(6999); f.controller.render(); assert.equal(cancel.disabled, false);
+    f.advance(4999); f.controller.render(); assert.equal(cancel.disabled, false);
     cancel.focus();
     f.advance(1); f.controller.render();
     assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["cancel", "edit"]);
@@ -154,7 +154,7 @@ test("progress updates retain the active status bar and button without adding vi
 test("the cancellation deadline does not steal focus from another control", (t) => {
   const f = fixture(t); f.setTasks([f.task()]);
   const outside = f.query("#outside"); outside.focus();
-  f.advance(7000); f.controller.render();
+  f.advance(5000); f.controller.render();
   assert.equal(f.query('[data-generation-action="cancel"]').disabled, true);
   assert.equal(f.document.activeElement, outside);
 });
@@ -1035,7 +1035,7 @@ test("final task hides free editing in every state and shows its distinct reques
   assert.equal(f.query('.generation-record-stage'), null);
   const edit = f.query('[data-generation-action="edit"]'); assert.equal(edit.hidden, true);
   edit.click(); assert.equal(f.actions.length, 0);
-  f.query('[data-generation-action="cancel"]').focus(); f.advance(7000); f.controller.render();
+  f.query('[data-generation-action="cancel"]').focus(); f.advance(5000); f.controller.render();
   assert.equal(f.document.activeElement, f.query('[data-record-popover="details"]'));
   task.status = "failed"; f.controller.render();
   f.query('[data-generation-action="again"]').click(); assert.equal(f.actions.at(-1)[0], "again");

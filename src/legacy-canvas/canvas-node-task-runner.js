@@ -93,7 +93,7 @@
       if (typeof id !== "string" || !id || records.has(id)) throw new TypeError("Node task ids must be unique.");
       const createdAt = now();
       const task = Object.freeze({ id, kind, ...taskScope, inputs: copyTaskInputs(inputs),
-        createdAt, cancelUntil: kind === "generation" ? createdAt + 7000 : null,
+        createdAt, cancelUntil: kind === "generation" ? createdAt + root.REELAY_PROTOTYPE_CONFIG.generationCancelWindowMs : null,
         get progress() {
           return record.completed ? 100 : Math.max(0, Math.min(99,
             Math.floor((now() - createdAt) / Math.max(1, delayMs) * 100)));

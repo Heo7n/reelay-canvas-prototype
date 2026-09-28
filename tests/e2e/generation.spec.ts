@@ -24,7 +24,7 @@ test("sidebar generation immediately adds a pending node, fills it on completion
   const pendingPosition = await pending.evaluate((element) => ({ left: (element as HTMLElement).style.left, top: (element as HTMLElement).style.top }));
 
   // Keep this real timer path: it covers the production queued -> running ->
-  // succeeded lifecycle, including filling the same canvas placeholder (10 seconds).
+  // succeeded lifecycle, including filling the same canvas placeholder (7.5 seconds).
   await expect(record).toHaveAttribute("data-status", "succeeded", { timeout: 20_000 });
   await expect(canvas.locator(".canvas-node")).toHaveCount(before + 1);
   const image = record.locator(".generation-record-media");
@@ -58,7 +58,7 @@ test("canceling queued sidebar generation removes its pending node and refunds o
   await expect(canvas.locator(".generating-preview")).toBeVisible();
   const cancel = record.getByRole("button", { name: "取消生成", exact: true });
   await expect(record.getByRole("button", { name: "重新编辑", exact: true })).toBeVisible();
-  await expect(cancel).toHaveAttribute("aria-description", "发送后 7 秒内可取消，取消后返还本次积分");
+  await expect(cancel).toHaveAttribute("aria-description", "发送后 5 秒内可取消，取消后返还本次积分");
   await record.getByRole("button", { name: "取消生成", exact: true }).click();
   await expect(record).toHaveAttribute("data-status", "canceled");
   await expect(record).toContainText("积分已返还");
@@ -67,7 +67,7 @@ test("canceling queued sidebar generation removes its pending node and refunds o
   await expect(canvas.locator(".canvas-node")).toHaveCount(before);
   // Pass the simulated completion deadline after cancellation to verify that
   // no late result or second refund occurs. The successful flow uses real time.
-  await page.clock.fastForward(10_500);
+  await page.clock.fastForward(8000);
   await expect(record).toHaveAttribute("data-status", "canceled");
   await expect(canvas.locator("#railCreditValue")).toHaveText("3000");
   await expect(canvas.locator(".canvas-node")).toHaveCount(before);
@@ -125,7 +125,7 @@ test("a saved sample survives refresh and its node can generate a separately cha
   const pendingSample = canvas.locator(".canvas-node").filter({ has: canvas.locator(".generating-preview") });
   const pendingSampleId = await pendingSample.getAttribute("data-id");
   await expect(pendingSample.locator(".node-draft-label")).toHaveText("样片 480P");
-  await page.clock.fastForward(10_500);
+  await page.clock.fastForward(8000);
   await expect(sampleRecord).toHaveAttribute("data-status", "succeeded");
   await expect(sampleRecord.locator(".generation-media-resolution")).toHaveText("样片 480P");
   await expect(canvas.locator(".canvas-node")).toHaveCount(before + 1);
@@ -177,7 +177,7 @@ test("a saved sample survives refresh and its node can generate a separately cha
   await expect(finalRecord.locator(".generation-record-prompt, .generation-record-references")).toHaveCount(0);
   await expect(canvas.locator(".canvas-node")).toHaveCount(before + 2);
   await expect(canvas.locator(".generating-preview")).toBeVisible();
-  await page.clock.fastForward(10_500);
+  await page.clock.fastForward(8000);
   await expect(finalRecord).toHaveAttribute("data-status", "succeeded");
   await expect(finalRecord.locator(".generation-media-resolution")).toHaveText("正片 1080P");
   await expect(canvas.locator(".canvas-node")).toHaveCount(before + 2);

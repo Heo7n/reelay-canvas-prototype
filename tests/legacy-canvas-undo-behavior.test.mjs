@@ -2321,7 +2321,7 @@ test("generation charges once, completes in its background canvas and preserves 
   assert.equal(h.window.startSimulatedGeneration(node), true);
   const task = h.scheduledTask();
   const callback = h.timers.get(task.timeoutId);
-  assert.equal(task.delay, 10000);
+  assert.equal(task.delay, 7500);
   assert.equal(h.state.account.credits, 3000 - cost);
   assert.equal(h.state.account.consumedCredits, cost);
   assert.equal(h.window.startSimulatedGeneration(node), false);

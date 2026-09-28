@@ -26,7 +26,7 @@ test("node sample media badge follows shared expiry and project eligibility befo
   h.first.nodes.push(node);
   h.window.normalizeNodeParameters(node);
   assert.equal(h.window.startSimulatedGeneration(node), true);
-  h.advance(10000);
+  h.advance(7500);
   h.window.setSelection([node.id], node.id);
   h.state.mediaToolbarNodeId = node.id;
   const button = () => {
@@ -63,7 +63,7 @@ test("sample badge keeps its media-relative dimensions through canvas zoom", (t)
   h.first.nodes.push(node);
   h.window.normalizeNodeParameters(node);
   h.window.startSimulatedGeneration(node);
-  h.advance(10000);
+  h.advance(7500);
   h.state.scale = 1;
   h.window.applyTransform();
   const badge = h.document.querySelector(`[data-id="${node.id}"] .node-draft-badge`);
@@ -84,7 +84,7 @@ test("node sample keeps frozen inputs and survives creating a separately charged
   h.first.nodes.push(node);
   h.window.normalizeNodeParameters(node);
   assert.equal(h.window.startSimulatedGeneration(node), true);
-  h.advance(10000);
+  h.advance(7500);
   const sample = node.generatedAsset;
   assert.equal(sample.generation.stage, "draft");
   assert.equal(sample.generation.input.prompt, "固定镜头，女孩抱着狐狸");
@@ -147,7 +147,7 @@ test("pending final nodes cannot be copied or resurrected through delete undo", 
   source.model = "seedance-2-5-draft"; source.prompt = "镜头缓缓推进";
   h.first.nodes.push(source);
   h.window.normalizeNodeParameters(source);
-  h.window.startSimulatedGeneration(source); h.advance(10000);
+  h.window.startSimulatedGeneration(source); h.advance(7500);
   const anchor = h.document.querySelector("[data-node-draft-final]");
   anchor.getBoundingClientRect = () => ({ left: 300, right: 440, top: 50, bottom: 80, width: 140, height: 30 });
   anchor.click();
@@ -177,7 +177,7 @@ for (const outcome of ["cancel", "fail"]) {
     node.model = "seedance-2-5-draft"; node.prompt = "镜头缓缓推进";
     h.first.nodes.push(node);
     h.window.normalizeNodeParameters(node);
-    h.window.startSimulatedGeneration(node); h.advance(10000);
+    h.window.startSimulatedGeneration(node); h.advance(7500);
     const credits = h.state.account.credits;
     const anchor = h.document.querySelector("[data-node-draft-final]");
     anchor.getBoundingClientRect = () => ({ left: 300, right: 440, top: 50, bottom: 80, width: 140, height: 30 });
@@ -198,6 +198,45 @@ for (const outcome of ["cancel", "fail"]) {
     assert.equal(node.generatedAsset.generation.stage, "draft");
   });
 }
+
+test("node and conversation share scenic choices, stable results and original sample media for final", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  node.model = "seedance-2-5";
+  node.prompt = "山间风景";
+  node.aspect = "9:16";
+  node.duration = "12s";
+  h.first.nodes.push(node);
+  h.window.normalizeNodeParameters(node);
+  h.window.startSimulatedGeneration(node);
+  h.advance(7500);
+  const first = node.generatedAsset;
+  assert.match(first.url, /^\.\/assets\/generation-demo\//);
+  assert.equal(first.width, 1280);
+  assert.equal(first.height, 720);
+  assert.equal(first.aspectRatio, 16 / 9, "result describes actual media, not requested aspect");
+  assert.equal(first.duration, 8, "requested output duration must not overwrite demo metadata");
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"] video`).getAttribute("poster"), first.posterUrl);
+
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  const sample = h.send("阳光下的自然风景");
+  h.advance(7500);
+  assert.notEqual(sample.result.url, first.url, "both entry points use the same non-repeating selector");
+  const resultNode = h.first.nodes.find((entry) => entry.id === sample.addedNodeId);
+  assert.equal(resultNode.assets[0].url, sample.result.url);
+  const sourceUrl = sample.result.url;
+  h.window.render();
+  assert.equal(sample.result.url, sourceUrl);
+  const final = h.service.submitFinal({ source: sample.result, scope: sample.scope, cost: 36, outputFormat: "mov" });
+  h.advance(7500);
+  assert.equal(final.status, "succeeded");
+  assert.equal(final.result.url, sourceUrl);
+  assert.equal(final.result.posterUrl, sample.result.posterUrl);
+  assert.equal(final.result.duration, sample.result.duration);
+  const next = h.send("远山云海");
+  h.advance(7500);
+  assert.notEqual(next.result.url, sourceUrl, "final generation does not consume a new scene");
+});
 
 test("Agent sample actions preserve a new draft, refund only the final and keep both records", (t) => {
   const h = harness(t);
@@ -581,9 +620,9 @@ test("record cancellation refunds once and stale completion cannot overwrite its
   const task = h.send();
   assert.equal(h.first.nodes.length, 1);
   assert.equal(h.first.nodes[0].pendingGeneration.taskId, task.id);
-  const completion = [...h.timers.values()].find((timer) => timer.at === task.createdAt + 10000)?.callback;
+  const completion = [...h.timers.values()].find((timer) => timer.at === task.createdAt + 7500)?.callback;
   assert.ok(completion);
-  h.advance(6999);
+  h.advance(4999);
   h.click(task, "cancel");
   assert.equal(task.status, "canceled");
   assert.equal(h.first.nodes.length, 0, "successful cancellation removes the pending canvas node");
@@ -601,7 +640,7 @@ test("record cancellation refunds once and stale completion cannot overwrite its
   assert.equal(h.state.account.credits, 3000);
 });
 
-test("node and conversation keep shared progress, close cancellation at seven seconds and succeed at ten seconds", (t) => {
+test("node and conversation keep shared progress, close cancellation at five seconds and succeed at 7.5 seconds", (t) => {
   const h = harness(t);
   const task = h.send();
   const pending = h.first.nodes[0];
@@ -635,7 +674,7 @@ test("node and conversation keep shared progress, close cancellation at seven se
   assert.equal(progress(node), `${task.progress}%`);
   assert.equal(progress(record), progress(node));
   assert.ok(task.progress > 0);
-  h.advance(5499);
+  h.advance(3499);
   assert.equal(nodeCancel.disabled, false);
   assert.equal(recordCancel.disabled, false);
   h.advance(1);
@@ -654,7 +693,7 @@ test("node and conversation keep shared progress, close cancellation at seven se
   assert.equal(h.first.nodes[0], pending);
   assert.equal(h.state.account.credits, 2976);
   assert.equal(progress(node), progress(record));
-  h.advance(2999);
+  h.advance(2499);
   assert.equal(task.status, "running");
   assert.equal(pending.generating, true);
   assert.equal(pending.pendingGeneration.taskId, task.id);
@@ -663,7 +702,7 @@ test("node and conversation keep shared progress, close cancellation at seven se
   h.advance(1);
   assert.equal(task.status, "succeeded");
   assert.equal(task.progress, 100);
-  assert.equal(h.first.nodes[0], pending, "ten-second completion fills the original placeholder");
+  assert.equal(h.first.nodes[0], pending, "7.5-second completion fills the original placeholder");
   assert.equal(pending.pendingGeneration, undefined);
   assert.equal(pending.generating, undefined);
   assert.equal(h.document.querySelector(`[data-id="${pending.id}"] .generation-status`), null);
@@ -684,7 +723,7 @@ test("cancel from the canvas status row terminates its conversation task and ref
   assert.equal(h.state.account.credits, 3000);
   assert.equal(h.state.account.consumedCredits, 0);
   button.click();
-  h.advance(10000);
+  h.advance(7500);
   assert.equal(h.first.nodes.length, 0);
   assert.equal(h.state.account.credits, 3000);
   assert.equal(task.refunded, task.charged);
@@ -717,13 +756,13 @@ test("ordinary generator status updates in place and cancel refunds while retain
   assert.equal(node.kind, "generator");
   assert.equal(node.prompt, "缓缓推进的镜头");
   button.click();
-  h.advance(10000);
+  h.advance(7500);
   assert.equal(node.generatedAsset, null);
   assert.equal(h.state.account.credits, credits);
 });
 
 for (const [mediaType, modelId] of [["image", "gpt-image-2"], ["video", "seedance-2-5"], ["video", "seedance-2-5-draft"]]) {
-  test(`node ${modelId} rejects cancellation at seven seconds and replaces the placeholder with media at ten seconds`, (t) => {
+  test(`node ${modelId} rejects cancellation at five seconds and replaces the placeholder with media at 7.5 seconds`, (t) => {
     const h = harness(t);
     const node = h.window.defaultGeneratorNode(40, 50, mediaType);
     node.model = modelId;
@@ -742,7 +781,7 @@ for (const [mediaType, modelId] of [["image", "gpt-image-2"], ["video", "seedanc
     const element = h.document.querySelector(`[data-id="${node.id}"]`);
     const cancel = element.querySelector("[data-cancel-generation]");
     assert.ok(cancel && !cancel.disabled);
-    h.advance(6999);
+    h.advance(4999);
     assert.equal(node.generating, true);
     assert.equal(cancel.disabled, false);
     h.advance(1);
@@ -751,7 +790,7 @@ for (const [mediaType, modelId] of [["image", "gpt-image-2"], ["video", "seedanc
     cancel.dispatchEvent(new h.window.MouseEvent("click", { bubbles: true }));
     assert.equal(node.generating, true, "a stale activation cannot cancel after the deadline");
     assert.equal(h.state.account.credits, creditsAfterSend);
-    h.advance(2999);
+    h.advance(2499);
     assert.equal(node.generating, true);
     assert.equal(node.generatedAsset, null);
     assert.equal(h.document.querySelector(`[data-id="${node.id}"]`), element);
@@ -777,7 +816,7 @@ test("failure keeps reason and refund visible; retry creates a new record preser
   const task = h.send();
   const failedNode = h.first.nodes[0];
   assert.equal(failedNode.pendingGeneration.taskId, task.id);
-  h.advance(10000);
+  h.advance(7500);
   assert.equal(task.status, "failed");
   assert.equal(h.first.nodes.length, 0);
   assert.match(h.record(task).textContent, /生成失败.*参考视频暂时不可读取/s);
@@ -820,7 +859,7 @@ test("edit restores original model, parameters and stable @ bindings and protect
   assert.deepEqual(plain(resolved.document), plain(task.input.promptDocument));
 });
 
-for (const elapsed of [0, 7000]) {
+for (const elapsed of [0, 5000]) {
   test(`editing an active task at ${elapsed}ms restores a snapshot without canceling, charging or changing the original task`, (t) => {
     const h = harness(t);
     const saved = withReferences(h);
@@ -849,7 +888,7 @@ for (const elapsed of [0, 7000]) {
     h.draft("改写恢复的提示词");
     h.agentReferences.restoreAssets([], h.agentReferences.captureScope(), { replace: true });
     assert.deepEqual(plain(task.input), input, "editing the recovered draft must not mutate the sent snapshot");
-    h.advance(10000 - elapsed);
+    h.advance(7500 - elapsed);
     assert.equal(task.status, "succeeded", "the original generation retains its original completion schedule");
     assert.ok(task.addedNodeId);
     assert.equal(h.editor().getText(), "改写恢复的提示词");
@@ -909,7 +948,7 @@ test("submission reserves a result node without changing selection or viewport a
   assert.equal(h.state.account.credits, 2976);
   assert.deepEqual(plain(task.input), inputSnapshot);
   h.agentGeneration.render();
-  h.advance(10000);
+  h.advance(7500);
   assert.equal(h.first.nodes.length, 1, "undo must not cause result delivery to run again");
   assert.equal(h.state.account.credits, 2976);
 });

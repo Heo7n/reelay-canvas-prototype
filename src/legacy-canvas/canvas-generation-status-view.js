@@ -5,7 +5,7 @@
     return { progress: Math.max(0, Math.min(99, Math.floor(Number(progress) || 0))), canCancel: Boolean(canCancel) };
   }
   function description(canCancel) {
-    return canCancel ? "发送后 7 秒内可取消，取消后返还本次积分" : "已进入生成阶段，当前无法取消";
+    return canCancel ? `发送后 ${root.REELAY_PROTOTYPE_CONFIG.generationCancelWindowMs / 1000} 秒内可取消，取消后返还本次积分` : "已进入生成阶段，当前无法取消";
   }
   function render(state) {
     const { progress, canCancel } = values(state);

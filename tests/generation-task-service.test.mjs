@@ -110,12 +110,12 @@ test("successful task debits once, follows queued/running states, and holds immu
   assert.equal(task.status, "queued");
   f.advance(1);
   assert.equal(task.status, "running");
-  f.advance(9299);
+  f.advance(6799);
   assert.equal(task.status, "running");
   f.advance(1);
   assert.equal(task.status, "succeeded");
   assert.equal(task.progress, 100);
-  assert.equal(task.finishedAt, 11000);
+  assert.equal(task.finishedAt, 8500);
   assert.equal(task.result.id, `result-${task.id}`);
   assert.ok(Object.isFrozen(task.result));
   assert.equal(task.canCancel, false);
@@ -140,7 +140,7 @@ test("all task readers observe one monotonic simulation percentage that reaches 
   assert.throws(() => { task.progress = 87; }, TypeError);
   f.advance(500);
   assert.ok(task.progress > 0);
-  f.advance(9499);
+  f.advance(6999);
   assert.equal(task.status, "running");
   assert.ok(observations.length > 10);
   assert.ok(observations.every((value, index) => index === 0 || value > observations[index - 1]));
@@ -153,7 +153,7 @@ test("all task readers observe one monotonic simulation percentage that reaches 
 
 test("progress ignores invalid, duplicate and stale signals and clamps active percentages below completion", () => {
   const signals = [];
-  const isolated = vm.createContext({ REELAY_SIMULATED_GENERATION_EXECUTOR: {
+  const isolated = vm.createContext({ REELAY_PROTOTYPE_CONFIG: sandbox.REELAY_PROTOTYPE_CONFIG, REELAY_SIMULATED_GENERATION_EXECUTOR: {
     createExecutor: () => ({ start: (callbacks) => signals.push(callbacks), stop() {}, dispose() {} }),
   } });
   vm.runInContext(fs.readFileSync(new URL("../src/application/generation-task-service.js", import.meta.url), "utf8"), isolated);
@@ -233,17 +233,17 @@ test("insufficient balance yields no task, timer, or refund and preserves next s
   assert.equal(f.balance(), 20);
   request.input.cost = 10;
   const task = f.service.submit(request);
-  f.advance(10000);
+  f.advance(7500);
   assert.equal(task.status, "failed");
   assert.equal(task.error, "测试原因");
   assert.equal(f.balance(), 20);
 });
 
-test("cancel before seven seconds refunds exactly once and rejects all late signals", () => {
+test("cancel before five seconds refunds exactly once and rejects all late signals", () => {
   const f = fixture();
   const task = f.service.submit(input());
   const staleCallbacks = [...f.timers.values()].map((timer) => timer.callback);
-  f.advance(6999);
+  f.advance(4999);
   staleCallbacks.push(...[...f.timers.values()].map((timer) => timer.callback));
   const canceledProgress = task.progress;
   assert.equal(f.service.cancel(task), true);
@@ -262,10 +262,10 @@ test("cancel before seven seconds refunds exactly once and rejects all late sign
   assert.equal(f.timers.size, 0);
 });
 
-test("seven-second boundary is strict even if the timeout has not fired", () => {
+test("five-second boundary is strict even if the timeout has not fired", () => {
   const f = fixture();
   const task = f.service.submit(input());
-  f.setTime(8000);
+  f.setTime(6000);
   assert.equal(task.canCancel, false);
   assert.equal(f.service.canCancel(task.id), false);
   assert.equal(f.service.cancel(task), false);
@@ -276,7 +276,7 @@ test("seven-second boundary is strict even if the timeout has not fired", () => 
 test("cancel deadline notifies once independently of progress updates", () => {
   const f = fixture();
   const task = f.service.submit(input());
-  f.advance(7000);
+  f.advance(5000);
   assert.deepEqual(f.events.filter((event) => event.type !== "progress").map((event) => event.type), ["submitted", "running", "cancel-window-closed"]);
   assert.equal(f.events.at(-1).canCancel, false);
   assert.equal(task.status, "running");
@@ -303,7 +303,7 @@ test("next-scenario configuration is consumed by exactly one accepted task", () 
   f.service.setNextScenario("failure", "指定的失败原因");
   const failed = f.service.submit(input());
   const successful = f.service.submit(input());
-  f.advance(10000);
+  f.advance(7500);
   assert.equal(failed.status, "failed");
   assert.equal(failed.error, "指定的失败原因");
   assert.equal(successful.status, "succeeded");
@@ -458,7 +458,7 @@ test("subscriber can cancel immediately on submit without leaving timers alive",
 test("makeResult failures become a failed task with one refund", () => {
   const f = fixture({ makeResult() { throw new Error("结果暂不可用"); } });
   const task = f.service.submit(input());
-  f.advance(10000);
+  f.advance(7500);
   assert.equal(task.status, "failed");
   assert.equal(task.error, "结果暂不可用");
   assert.equal(task.result, null);
@@ -567,7 +567,7 @@ test("preview import is scoped and atomic; ordinary retries still charge and ref
   const real = f.service.submit({ scope: preview.scope, input: preview.input });
   assert.equal(real.isPreview, undefined);
   assert.equal(f.balance(), 2976); assert.equal(f.debits.length, 1);
-  f.advance(10000);
+  f.advance(7500);
   assert.equal(real.status, "failed"); assert.equal(f.balance(), 3000); assert.equal(f.refunds.length, 1);
   assert.equal(f.service.get(preview.id), preview);
 });
@@ -602,7 +602,7 @@ test("sample completion records immutable provenance; final conversion separatel
   assert.equal(f.debits.length, 2);
   assert.equal(final.input.parameters.quality, "1080p");
   assert.equal(final.input.parameters.outputFormat, "mov");
-  f.advance(10000);
+  f.advance(7500);
   assert.equal(final.status, "succeeded");
   assert.equal(final.result.url, draft.result.url);
   assert.equal(final.result.name, "source.mp4");
@@ -631,7 +631,7 @@ test("simultaneous sample conversions charge once; canceled and failed attempts 
   f.service.setNextScenario("failure");
   const failed = f.service.submitFinal(request);
   assert.notEqual(failed.id, first.id);
-  f.advance(10000);
+  f.advance(7500);
   assert.equal(failed.status, "failed");
   assert.equal(f.refunds.length, 2);
   assert.equal(f.balance(), 2976);

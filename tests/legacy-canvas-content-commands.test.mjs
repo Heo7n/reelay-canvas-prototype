@@ -4,6 +4,8 @@ import test from "node:test";
 import vm from "node:vm";
 
 const context = vm.createContext({});
+context.window = context;
+vm.runInContext(await readFile(new URL("../src/config/prototype-config.js", import.meta.url), "utf8"), context);
 for (const file of ["canvas-prompt-document.js", "canvas-command-executor.js", "canvas-content-commands.js", "canvas-node-task-runner.js"]) {
   vm.runInContext(await readFile(new URL(`../src/legacy-canvas/${file}`, import.meta.url), "utf8"), context);
 }
