@@ -101,3 +101,62 @@ test("batch planning deduplicates sources and keeps every legal edge", () => {
     rejected: [],
   });
 });
+
+function draftFinalNodes({ pending = false, sourceKind = "asset" } = {}) {
+  const draftAsset = { id: "draft-result", type: "video",
+    generation: { stage: "draft", simulated: true, taskId: "draft-task", resultId: "draft-result" } };
+  const finalGeneration = { stage: "final", simulated: true, taskId: "final-task",
+    sourceDraftTaskId: "draft-task", sourceResultId: "draft-result" };
+  return [
+    { id: "sample", kind: sourceKind, mode: "video", ...(sourceKind === "asset"
+      ? { assets: [draftAsset], activeAssetId: draftAsset.id } : { generatedAsset: draftAsset }) },
+    { id: "final", kind: "asset", mode: "video", ...(pending
+      ? { assets: [], pendingGeneration: finalGeneration }
+      : { assets: [{ id: "final-result", type: "video", generation: finalGeneration }], activeAssetId: "final-result" }) },
+  ];
+}
+
+test("final result derivation survives normalization for asset and generator sample sources", () => {
+  const edge = { id: "sample-to-final", sourceNodeId: "sample", targetNodeId: "final", mediaType: "video" };
+  for (const sourceKind of ["asset", "generator"]) {
+    const resultNodes = draftFinalNodes({ sourceKind });
+    assert.equal(connectionsApi.canConnect([], resultNodes, "sample", "final").ok, true);
+    assert.deepEqual(plain(connectionsApi.normalizeConnections([edge], resultNodes)), [edge]);
+    assert.equal(connectionsApi.canConnect([edge], resultNodes, "sample", "final").reason, "duplicate");
+  }
+});
+
+test("pending final only accepts its captured sample provenance and persists the edge after completion", () => {
+  const resultNodes = draftFinalNodes({ pending: true });
+  const edge = { id: "derivation", sourceNodeId: "sample", targetNodeId: "final" };
+  assert.equal(connectionsApi.canConnect([], resultNodes, "sample", "final").ok, true);
+  const normalized = connectionsApi.normalizeConnections([edge], resultNodes);
+  const final = resultNodes[1];
+  final.assets = [{ id: "delivered", type: "video", generation: final.pendingGeneration }];
+  delete final.pendingGeneration;
+  assert.deepEqual(plain(connectionsApi.normalizeConnections(normalized, resultNodes)), plain(normalized));
+});
+
+test("asset destinations reject unrelated or incomplete lineage and use only the active sample media", () => {
+  for (const pending of [false, true]) {
+    for (const corrupt of [
+      (source) => { source.assets[0].generation.taskId = "different-task"; },
+      (source) => { source.assets[0].generation.resultId = "different-result"; },
+      (source) => { source.assets[0].generation.simulated = false; },
+      (source) => { delete source.assets[0].generation; },
+      (source) => { source.assets[0].type = "image"; },
+      (source, target) => { (target.pendingGeneration || target.assets[0].generation).stage = "draft"; },
+      (source) => {
+        source.assets.push({ id: "other-video", type: "video" }); source.activeAssetId = "other-video";
+      },
+    ]) {
+      const resultNodes = draftFinalNodes({ pending }); corrupt(...resultNodes);
+      assert.equal(connectionsApi.canConnect([], resultNodes, "sample", "final").reason, "invalid-target");
+      assert.equal(connectionsApi.normalizeConnections([
+        { id: "invalid", sourceNodeId: "sample", targetNodeId: "final" },
+      ], resultNodes).length, 0);
+    }
+  }
+  const resultNodes = draftFinalNodes(); resultNodes[1].assets[0].generation.simulated = false;
+  assert.equal(connectionsApi.canConnect([], resultNodes, "sample", "final").ok, false);
+});

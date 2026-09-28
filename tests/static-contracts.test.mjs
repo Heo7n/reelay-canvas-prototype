@@ -1157,8 +1157,8 @@ test("node selection and connection relationships use one restrained neutral hie
   assert.match(appCss, /--relation-stroke:\s*rgba\(/);
   assert.match(appCss, /--relation-stroke-strong:\s*rgba\(/);
   assert.match(appCss, /--relation-stroke-ready:\s*rgba\(/);
-  assert.match(appCss, /\.canvas-node\.selected \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-selected-border\)[\s\S]*?box-shadow:\s*var\(--node-media-shadow\)/);
-  assert.match(appCss, /\.app-shell \.canvas-shell\.multi-selection-active \.canvas-node\.selected \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)[\s\S]*?box-shadow:\s*var\(--node-media-shadow\)/);
+  assert.match(appCss, /\.canvas-node\.selected \.media-frame::after\s*\{[\s\S]*?border-color:\s*var\(--node-media-ring-selected\)[\s\S]*?box-shadow:\s*var\(--node-media-ring-glow\)/);
+  assert.match(appCss, /\.app-shell \.canvas-shell\.multi-selection-active \.canvas-node\.selected \.media-frame::after\s*\{[\s\S]*?opacity:\s*0/);
   assert.match(appCss, /\.asset-node\.image-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
   assert.match(appCss, /\.asset-node\.video-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
   assert.match(appCss, /\.asset-node\.audio-source \.media-frame\s*\{[\s\S]*?border-color:\s*var\(--node-media-border\)/);
@@ -1307,7 +1307,7 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.match(appSource, /anchorAction === "param-panel"[\s\S]*?return \["top-start"\]/);
   assert.match(appSource, /anchorAction === "param-panel"\) return 8/);
   assert.match(appSource, /const popoverWidth = popover\.offsetWidth \* compositeScale[\s\S]*?const popoverHeight = popover\.offsetHeight \* compositeScale/);
-  assert.match(appCss, /\.model-panel\s*\{[\s\S]*?width:\s*320px/);
+  assert.match(appCss, /\.model-panel\s*\{[\s\S]*?width:\s*380px/);
   assert.match(appCss, /\.param-panel\s*\{[\s\S]*?width:\s*348px[\s\S]*?border-radius:\s*12px/);
   assert.match(appSource, /<section class="panel-popover param-panel(?:\s|\")/);
   assert.doesNotMatch(appSource, /class="settings-card param-panel"/);
@@ -1315,7 +1315,7 @@ test("prompt workspace adapts screen width while preserving world anchors and co
   assert.doesNotMatch(appCss, /@keyframes nodePopoverIn\s*\{[\s\S]*?scale:/);
   assert.match(appCss, /\[data-node-popover\]\[data-placement\]\.param-panel\s*\{[\s\S]*?animation:\s*none/);
   assert.match(appCss, /\.model-option:hover \.model-desc,[\s\S]*?\.model-option\.active \.model-desc,[\s\S]*?\.model-option:focus-visible \.model-desc/);
-  assert.match(appCss, /\.model-desc\s*\{[\s\S]*?text-overflow:\s*ellipsis[\s\S]*?white-space:\s*nowrap/);
+  assert.match(appCss, /\.model-desc\s*\{[\s\S]*?white-space:\s*normal/);
   assert.match(appSource, /class="model-option \$\{node\.model === item\.id \? "active" : ""\}"[\s\S]*?aria-pressed="\$\{node\.model === item\.id \? "true" : "false"\}"/);
   assert.match(appCss, /\.model-chip-glyph\s*\{[\s\S]*?flex:\s*0 0 24px[\s\S]*?width:\s*24px/);
   assert.match(appCss, /\.model-option\s*\{[\s\S]*?grid-template-columns:\s*34px minmax\(0, 1fr\) 18px/);

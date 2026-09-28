@@ -34,6 +34,7 @@
     let active = null;
     let showTimer = 0;
     let hideTimer = 0;
+    let expiryTimer = 0;
     let disposed = false;
     let restoringFocus = false;
     let resizeObserver;
@@ -52,6 +53,14 @@
     function icon(name) {
       return global.REELAY_ICONS.markup(name, { "data-generation-icon": name });
     }
+    function stageOf(task) {
+      return task.input.generationStage || (global.REELAY_DRAFT_VIDEO?.isDraftInput(task.input) ? "draft" : "")
+        || (task.result?.asset || task.result)?.generation?.stage || "";
+    }
+    function finalEligibility(task) {
+      return global.REELAY_DRAFT_VIDEO?.getFinalEligibility(task.result?.asset || task.result,
+        { projectId: getScope()?.projectId, now: now() }) || { eligible: false, reason: "此视频不支持生成成片" };
+    }
     function references(input) {
       const raw = Array.isArray(input.referenceSnapshot) ? input.referenceSnapshot
         : (input.references || []).map((entry) => entry.asset ? entry : { asset: entry, key: `asset:${entry.id}` });
@@ -69,6 +78,20 @@
       const url = sanitizeUrl(asset.type === "image" ? asset.url : asset.posterUrl || asset.thumbnailUrl || "");
       return url ? `<img src="${escape(url)}" alt="" loading="lazy" decoding="async" draggable="false">`
         : icon(ICONS[asset.type] || "image");
+    }
+    function finalSourceMarkup(task, details) {
+      const source = task.input.sourceDraftAsset;
+      const poster = sanitizeUrl(source?.posterUrl) || sanitizeUrl(source?.thumbnailUrl);
+      const url = source?.type === "video" && sanitizeUrl(source.url);
+      const preview = poster ? `<img src="${escape(poster)}" alt="" loading="lazy" decoding="async" draggable="false">`
+        : url ? `<video src="${escape(url)}" muted playsinline preload="metadata" tabindex="-1" aria-hidden="true" draggable="false"></video>`
+          : icon("square-play");
+      const parameters = task.input.parameters || {};
+      const duration = parameters.duration === -1 ? "智能时长" : Number.isFinite(parameters.duration) ? `${parameters.duration}s` : parameters.duration;
+      const summary = [duration, parameters.aspect, parameters.quality, parameters.outputFormat].filter(Boolean).map((value) => String(value).replace(/p$/i, "P").replace(/^(mp4|mov)$/i, (format) => format.toUpperCase()));
+      const modelName = (task.input.modelName || task.input.modelId || "Seedance 2.5").replace(/（(?:成片|正片)）$/, "");
+      return `<div class="generation-record-final-source"><span class="generation-record-source-pill"><span class="generation-record-source-thumbnail" role="img" aria-label="来源样片">${preview}</span><strong>正片模式</strong></span>
+        <div class="generation-record-parameters"><strong title="${escape(modelName)}">${escape(modelName)}</strong>${summary.map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div></div>`;
     }
     function promptMarkup(input) {
       if (!renderPrompt) return escape(typeof input.prompt === "string" ? input.prompt : "").replaceAll("\n", "<br>");
@@ -124,26 +147,37 @@
     function makeCard(task) {
       const article = document.createElement("article");
       article.className = "generation-record"; article.dataset.generationTaskId = task.id;
-      const entries = references(task.input);
+      const isFinal = stageOf(task) === "final";
+      const entries = isFinal ? [] : references(task.input);
       const counts = Object.keys(TYPES).map((type) => ({ type, count: entries.filter((entry) => entry.mediaType === type).length })).filter((item) => item.count);
       const title = counts.map(({ type, count }) => `${count} 个${TYPES[type]}`).join("、");
       const cover = entries.find((entry) => entry.mediaType === "image") || entries[0];
-      article.innerHTML = `<div class="generation-record-surface"><div class="generation-record-input${entries.length ? " has-references" : ""}">
+      const details = `<button type="button" class="generation-record-details-trigger" data-record-popover="details" aria-expanded="false" aria-label="任务详情"><span class="generation-record-details-label">任务详情</span>${icon("info")}</button>`;
+      article.innerHTML = `<div class="generation-record-surface">${isFinal ? finalSourceMarkup(task, details) : `<div class="generation-record-input${entries.length ? " has-references" : ""}">
         ${entries.length ? `<button type="button" class="generation-record-references" data-record-popover="references" aria-expanded="false" aria-label="参考素材：${escape(title)}">
           <span class="generation-record-cover">${thumbnail(cover)}</span>
           <span class="generation-record-counts">${counts.map(({ type, count }) => `<span title="${count} 个${TYPES[type]}">${icon(ICONS[type])}<span>${count}</span></span>`).join("")}</span>
         </button>` : ""}
         <div class="generation-record-copy"><div class="generation-record-prompt" data-record-popover="prompt" tabindex="0" role="button" aria-label="查看完整提示词" aria-expanded="false">${promptMarkup(task.input)}</div>
-        <div class="generation-record-parameters"><strong title="${escape(task.input.modelName || task.input.modelId || "生成任务")}">${escape(task.input.modelName || task.input.modelId || "生成任务")}</strong>${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}<button type="button" class="generation-record-details-trigger" data-record-popover="details" aria-expanded="false" aria-label="任务详情"><span class="generation-record-details-label">任务详情</span>${icon("info")}</button></div>
-      </div></div></div>
+        <div class="generation-record-parameters"><strong title="${escape(task.input.modelName || task.input.modelId || "生成任务")}">${escape(task.input.modelName || task.input.modelId || "生成任务")}</strong>${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div>
+      </div></div>`}</div>
       <div class="generation-record-output"></div>
       <footer class="generation-record-footer">
         <div class="generation-record-actions">
+          <button type="button" data-generation-action="final" hidden>${icon("check")}生成正片</button>
           <button type="button" data-generation-action="edit">${icon("square-pen")}重新编辑</button>
-          <button type="button" data-generation-action="cancel" class="generation-record-cancel" aria-label="取消生成" aria-description="发送后 7 秒内可取消，取消后返还本次积分" data-tooltip="发送后 7 秒内可取消，取消后返还本次积分">${icon("x")}取消生成</button>
           <span class="generation-record-terminal-actions"><button type="button" data-generation-action="again">${icon("rotate-ccw")}再次生成</button><button type="button" data-generation-action="locate" class="generation-record-icon-action" aria-label="定位画布中的生成结果" title="定位生成结果" hidden>${icon("locate-fixed")}</button><button type="button" data-record-popover="menu" class="generation-record-more" aria-label="更多操作" aria-expanded="false">${icon("ellipsis")}</button><span data-record-delete-reveal hidden inert><button type="button" data-generation-action="remove">${icon("trash-2")}<span>删除此记录</span></button></span></span>
         </div></footer>`;
       list.append(article);
+      const sourcePreview = article.querySelector(".generation-record-source-thumbnail :is(img, video)");
+      if (sourcePreview) {
+        if (sourcePreview.tagName === "VIDEO") sourcePreview.muted = true;
+        sourcePreview.addEventListener("error", () => {
+          const cover = sourcePreview.parentElement;
+          if (!cover) return;
+          releaseMedia(cover); cover.innerHTML = icon("square-play");
+        }, { once: true });
+      }
       const card = { taskId: task.id, element: article, entries, signature: "", input: task.input, start: 0, pageSize: 0 };
       article.querySelector("[data-record-delete-reveal]").id = `${popover.id}-delete-${encodeURIComponent(task.id)}`;
       cards.set(task.id, card);
@@ -170,8 +204,19 @@
     function updateCard(card, task) {
       const article = card.element;
       article.dataset.status = task.status;
+      const stage = stageOf(task);
+      const edit = article.querySelector('[data-generation-action="edit"]');
+      edit.hidden = stage === "final";
+      const draftAction = article.querySelector('[data-generation-action="final"]');
+      draftAction.hidden = stage !== "draft" || task.status !== "succeeded";
+      if (!draftAction.hidden) {
+        const eligibility = finalEligibility(task);
+        draftAction.disabled = !eligibility.eligible;
+        draftAction.title = eligibility.eligible ? "生成 1080P 正片" : eligibility.reason;
+        draftAction.setAttribute("aria-description", draftAction.title);
+      }
       const resultAsset = task.result?.asset || task.result || {};
-      const signature = JSON.stringify([task.status, task.error, task.refunded, resultAsset.url, resultAsset.type]);
+      const signature = JSON.stringify([busy(task) ? "active" : task.status, task.error, task.refunded, resultAsset.url, resultAsset.type]);
       const output = article.querySelector(".generation-record-output");
       let changed = false;
       if (signature !== card.signature) {
@@ -181,7 +226,7 @@
           releaseMedia(output); output.replaceChildren();
           delete output.dataset.resultUrl; delete output.dataset.resultType;
           if (busy(task)) {
-            output.innerHTML = `<div class="generation-record-wait" role="status"><span class="generation-record-spinner" aria-hidden="true"></span><span>${task.status === "queued" ? "正在排队" : "正在生成"}</span><small>生成完成后会显示在这里</small></div>`;
+            output.innerHTML = `<div class="generation-record-wait">${global.REELAY_GENERATION_STATUS.render({ progress: task.progress, canCancel: cancellable(task) })}</div>`;
             const aspect = String(task.input.parameters?.aspect || "16:9").split(":").map(Number);
             setMediaAspect(output.firstElementChild, aspect[0] / aspect[1]);
           } else if (task.status === "succeeded") {
@@ -196,7 +241,7 @@
             result.append(media);
             output.append(result);
             if (asset.type === "video" && media.tagName === "VIDEO") {
-              const player = global.REELAY_GENERATION_MEDIA?.mount({ document, container: result, video: media });
+              const player = global.REELAY_GENERATION_MEDIA?.mount({ document, container: result, video: media, asset });
               if (player) mediaPlayers.set(media, player);
             }
             output.dataset.resultUrl = asset.url || ""; output.dataset.resultType = asset.type || "";
@@ -210,11 +255,12 @@
         card.signature = signature; changed = true;
       }
       article.querySelector(".generation-record-terminal-actions").hidden = busy(task);
-      const cancel = article.querySelector('[data-generation-action="cancel"]');
-      const cancelFocused = document.activeElement === cancel;
-      cancel.hidden = !cancellable(task);
-      if (cancel.hidden && cancelFocused) {
-        article.querySelector('[data-generation-action="edit"]').focus({ preventScroll: true });
+      const cancel = article.querySelector('[data-cancel-generation]');
+      const cancelFocused = cancel && document.activeElement === cancel;
+      if (busy(task)) global.REELAY_GENERATION_STATUS.update(output, { progress: task.progress, canCancel: cancellable(task) });
+      if (cancel?.disabled && cancelFocused) {
+        if (!edit.hidden) edit.focus({ preventScroll: true });
+        else article.querySelector('[data-record-popover="details"]').focus({ preventScroll: true });
       }
       const locate = article.querySelector('[data-generation-action="locate"]');
       locate.hidden = task.status !== "succeeded";
@@ -250,6 +296,10 @@
       }
       if (list.parentNode !== container) { container.replaceChildren(list, notice); }
       const tasks = scopeKey ? (getTasks() || []).filter(inScope) : [];
+      view.clearTimeout(expiryTimer); expiryTimer = 0;
+      const expiries = tasks.filter((task) => task.status === "succeeded" && stageOf(task) === "draft")
+        .map((task) => finalEligibility(task).expiresAt).filter((at) => at > now());
+      if (expiries.length) expiryTimer = view.setTimeout(() => render(), Math.min(2147483647, Math.min(...expiries) - now() + 1));
       const ids = new Set(tasks.map((task) => task.id));
       for (const [id, card] of cards) {
         if (!ids.has(id)) { releaseMedia(card.element); card.element.remove(); cards.delete(id); }
@@ -648,6 +698,9 @@
       const action = event.target.closest?.("[data-generation-action]");
       if (action && (list.contains(action) || popover.contains(action))) {
         const name = action.dataset.generationAction;
+        if (action.disabled || action.hidden) return;
+        if (name === "edit" && stageOf(task) === "final") return;
+        if (name === "final" && (task.status !== "succeeded" || !finalEligibility(task).eligible)) return;
         if (name === "cancel" && !cancellable(task)) return;
         if (name === "again" && busy(task)) return;
         if (name === "remove" && (busy(task) || action.closest("[data-record-delete-reveal]")?.hidden)) return;
@@ -750,6 +803,7 @@
     if (view.ResizeObserver) { resizeObserver = new view.ResizeObserver(onResize); resizeObserver.observe(container); }
 
     function close() {
+      view.clearTimeout(expiryTimer); expiryTimer = 0;
       hoverPaused.set(list, now());
       dismiss();
       // Hiding the workspace stops sound without destroying playback position.

@@ -1,11 +1,12 @@
 # 模型目录说明
 
-更新时间：2026-09-07
+更新时间：2026-09-24
 
 ## 命名原则
 
 - 生成节点、Agent 模型偏好、组织积分演示和组织用量演示统一使用同一组产品模型名称。
 - 模型条目、参数能力和可替换的演示用量模板只在 `data/model-catalog.js` 中定义；React 通过 `src/features/models/model-catalog.ts` 的类型化适配读取同一运行时目录。只有已经持久化的历史记录可以保存名称快照。
+- 底栏可使用目录中的 `compactName` 紧凑名称；展开列表、悬停提示与任务记录仍使用完整 `name`。样片入口分别为 `Seedance 2.5（样片）` / `Seedance 2.5（样片模式）`。
 - 同系列速度变体保留明确后缀，例如 `Fast`、`Lite`。
 - 目录中删除的模型 ID 只按媒体类型回退到新的默认模型，不允许图片和视频模型互相替代。
 
@@ -19,11 +20,12 @@
 视频模型：
 
 - `Seedance 2.5`
+- `Seedance 2.5（样片模式）`
 - `Seedance 2.0`
 - `Seedance 2.0 Fast`
 - `Kling 3.0`
 
-当前共 6 个生成模型：图片 2 个、视频 4 个。音频暂不提供独立生成模型，只保留画布素材上传、播放与编辑能力。
+当前共 7 个生成入口：图片 2 个、视频 5 个。样片模式是 Seedance 2.5 的独立产品入口，底层复用同一供应商模型。音频暂不提供独立生成模型，只保留画布素材上传、播放与编辑能力。
 
 ## 菜单展示短句与资料依据
 
@@ -34,6 +36,7 @@
 | GPT Image 2 | 高质量图像生成，文字呈现与高保真编辑 | [官方模型页](https://developers.openai.com/api/docs/models/gpt-image-2)说明高质量生成与编辑；[图像生成指南](https://developers.openai.com/api/docs/guides/image-generation#image-input-fidelity)明确 GPT Image 2 自动以高保真处理图像输入。文字呈现依据指南的 GPT Image 系列说明，不承诺文字布局完全准确。 |
 | Seedream 5.0 Lite | 深度推理与联网检索，精准图像创作 | [官方模型页](https://seed.bytedance.com/seedream5_0_lite)明确深度思考、实时检索增强、指令响应及风格与排版控制。 |
 | Seedance 2.5 | 30 秒音画叙事，精细参考与音视频编辑 | [官方模型页](https://seed.bytedance.com/zh/seedance2_5)明确 30 秒长叙事、参考视频意图与镜头语言理解，以及更广的音视频编辑能力。 |
+| Seedance 2.5（样片模式） | 先生成 480P 样片，选定后生成 1080P 成片 | 2026-09-24 核对[火山官方样片模式](https://docs.volcengine.com/docs/ark/seedance-2-5?lang=zh#2.5_draft_mode)：同一模型通过 `draft=true` 生成 480p 样片，7 天内引用样片任务生成 1080p 成片，两阶段分别计费。 |
 | Seedance 2.0 | 全模态音画生成，精准表演与运镜控制 | [官方模型页](https://seed.bytedance.com/seedance2_0)明确文字、图片、音频与视频输入、音视频联合生成，以及表演、光影、运镜调度。 |
 | Seedance 2.0 Fast | 多模态参考与灵活运镜，快速生成同步音画 | [fal 的 Fast 专属端点](https://fal.ai/models/bytedance/seedance-2.0/fast/reference-to-video)明确较低延迟、多种图像/视频/音频参考、同步音频及运镜控制；不推导具体提速倍率或各渠道价格。 |
 | Kling 3.0 | 原生音画同步生成，多镜头叙事与主体一致性 | [官方 VIDEO 3.0 指南](https://app.klingai.com/global/quickstart/klingai-video-3-model-user-guide)明确 Native Audio、Multi-Shot 及 Enhanced Subject Consistency，均属于 VIDEO 3.0 本身，不借用 Omni 专属能力。 |
@@ -55,6 +58,7 @@ Reelay 的“自动校验素材”按用户确认的产品规则表达为：用�
 - Seedance 2.5：底层 workflow 固定为 `omni-reference`；界面任务类型为全模态参考 / 视频编辑 / 视频延长，对应 `omni_reference_task_type=auto / edit / extend`，接口支持但界面不单列的 `reference` 仍保留在能力表中。比例为 `adaptive / 21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16`，其中 `adaptive` 显示为 `Auto`；分辨率显示为 `480P / 720P / 1080P`；普通输出时长为 `4–30s`、逐秒可调；默认 `auto · 16:9 · 480p · 10s`，与参数稿选中态一致。
 - Seedance 2.5 特殊约束：`edit` 与 `extend` 必须包含真实参考视频且比例固定为 `adaptive`；两种模式的比例区只呈现一个占满整行的 `Auto`。`edit` 保留时长滑杆与数值框，滑杆禁用、数值框只读显示「智能」，悬停说明跟随原视频，参考视频须为 `4–30s`，生成请求时长固定为 `-1`。`extend` 使用滑杆选择：最左端为「智能」，下一档为 4s，向右逐秒至 30s；数值框同步显示智能或秒数，无额外模式按钮。Auto 保存为字符串 `auto`，请求映射为 `-1`，滑杆位置不参与秒数计算；同一时长区不改变高度。Auto 与自定义值穿过编辑模式时保留，不支持 Auto 的其他模式恢复模型默认秒数。当前 Auto 延长仅以默认 `10s` 做模拟估算，正式供应商能力及计费仍须接入时核验。三种任务类型在同一参数弹层内切换，仅 tab 选中底色短促过渡，内容不做整层位移、复制或高度动画；系统减少动态效果时直接采用最终布局。这些约束用于前端生成可用性和模拟任务快照；实际处理时模型仍可能因任务类型不一致而异步失败。
 - Seedance 2.0：底层固定为 `omni-reference`，不显示模式选择；比例为 `21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16`，分辨率显示为 `480P / 720P / 1080P`，时长为 `4–15s`、逐秒可调，默认 `4s`。
+- Seedance 2.5（样片模式）：沿用普通 2.5 的任务类型、参考约束、时长、音频与优化能力，分辨率固定为 `480p`（显示 `样片 480P`），单次 1 个结果。`seedance-2-5-draft` 与普通入口共享 `baseModelId=seedance-2-5`、`providerModelId=doubao-seedance-2-5-260628`，以 `executionMode=draft` 区分；转成片分辨率和有效期由目录 `draftConversion` 声明。样片模拟费用沿用普通 480p，成片按冻结输出时长与现有 1080p 规则单独估算，不宣称优惠倍率或真实供应商价格。普通 480p 视频及上传素材不具备样片身份。完整模拟行为见产品规范 10.8。
 - Seedance 2.0 Fast：同样固定为 `omni-reference` 且不显示模式选择，分辨率只有 `480P / 720P`，时长为 `4–15s`、逐秒可调，默认 `4s`。
 - Kling 3.0：文生视频 / 图生视频 / 首尾帧，比例为 `16:9 / 1:1 / 9:16`，分辨率显示为 `std (720p) / pro (1080p) / 4K`，时长为 `3–15s`、逐秒可调，默认 `4s`，与参数稿选中态一致。
 
@@ -66,5 +70,6 @@ Reelay 的“自动校验素材”按用户确认的产品规则表达为：用�
 
 - `seedance-2`、`seedance-2-fast`、`kling-video-3`、`gpt-image-2`、`seedream-5-lite` 和 `nano-banana-pro` 保留既有稳定 ID。
 - 新增的 Seedance 2.5 使用 `seedance-2-5`，并成为新视频节点默认模型。
+- 样片入口使用 `seedance-2-5-draft`，不替换默认模型。画布资产通过经过校验的 `generation` 保存样片 / 成片来源、任务标识和不可变输入；浏览器与服务端文档归一化共用同一来源序列化规则。来源不等于持久任务，刷新仍清空本次对话任务并重置模拟积分。样片作为已有模型变体不新增虚构的账户演示流水。
 - 历史画布中的 Nano Banana 2、Midjourney、Niji、Seedance 2.0 Mini、Kling Video 3.0 Omni 和 Veo 3.1 会在恢复并归一化节点时回退到同媒体类型的当前默认模型。
 - 个人与组织用量页面仍使用可整体替换的确定性演示流水；演示记录的模型名称在生成 fixture 时从共享 `REELAY_MODEL_DIRECTORY` 解析，不维护第二套模型目录。未来真实 `GenerationTask` 仍应保存不可变的模型与计费快照。

@@ -117,6 +117,49 @@ test("Alt promotion maps the active node to its corresponding copy", () => {
   assert.equal(harness.calls[0], "select:a-copy-1,b-copy-2:b-copy-2");
 });
 
+test("Alt promotion with only rejected copies clears the candidate without creating a drag", () => {
+  const actions = [];
+  const h = createHarness({
+    cloneNode: () => null,
+    setAction: (action) => actions.push(action),
+    addNodes: () => assert.fail("rejected copies cannot be inserted"),
+  });
+  assert.equal(h.controller.promote(candidate({ altKey: true }), { clientX: 120, clientY: 110 }), null);
+  assert.deepEqual(actions, [null]);
+  assert.deepEqual(h.calls, []);
+  assert.equal(h.nodes.length, 2);
+  assert.equal(h.undoActions.length, 0);
+});
+
+test("mixed Alt copying skips rejected nodes and preserves original selection for cancellation", () => {
+  for (const activeId of ["a", "b"]) {
+    const h = createHarness({ cloneNode: (node) => node.pendingGeneration ? null : { ...node, id: `${node.id}-copy` } });
+    h.nodes[0].pendingGeneration = { taskId: "pending-task" };
+    const action = h.controller.promote(candidate({ altKey: true, activeId }), { clientX: 120, clientY: 110 });
+    assert.deepEqual(action.ids, ["b-copy"]);
+    assert.equal(action.activeId, "b-copy");
+    assert.deepEqual(action.sourceIds, ["a", "b"]);
+    assert.equal(action.sourceActiveId, activeId);
+    assert.deepEqual(h.nodes.map(({ id, x, y }) => ({ id, x, y })), [
+      { id: "a", x: 10, y: 20 }, { id: "b", x: 70, y: 90 }, { id: "b-copy", x: 80, y: 95 },
+    ]);
+    h.controller.finish(action, { cancelled: true });
+    assert.deepEqual(h.nodes.map(({ id }) => id), ["a", "b"]);
+    assert.ok(h.calls.includes(`select:a,b:${activeId}`));
+    assert.equal(h.undoActions.length, 0);
+  }
+});
+
+test("a pending node remains movable without Alt duplication", () => {
+  const h = createHarness({ cloneNode: () => assert.fail("ordinary dragging must not clone") });
+  h.nodes[0].pendingGeneration = { taskId: "pending-task" };
+  const action = h.controller.promote(candidate(), { clientX: 120, clientY: 110 });
+  assert.equal(action.isDuplicate, false);
+  assert.equal(h.nodes[0].x, 20);
+  assert.equal(h.nodes[0].y, 25);
+  assert.equal(h.nodes[0].pendingGeneration.taskId, "pending-task");
+});
+
 test("finishing records one move for originals or one create for duplicated nodes", () => {
   const original = createHarness();
   const originalAction = { ...candidate(), type: "drag-nodes", moved: true, isDuplicate: false };

@@ -3,12 +3,16 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-const [codecSource, connectionsSource, promptSource] = await Promise.all([
+const [codecSource, connectionsSource, promptSource, draftSource, modelSource] = await Promise.all([
   readFile(new URL("../src/legacy-canvas/canvas-document-codec.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-connections.js", import.meta.url), "utf8"),
   readFile(new URL("../src/legacy-canvas/canvas-prompt-document.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/application/draft-video-policy.js", import.meta.url), "utf8"),
+  readFile(new URL("../data/model-catalog.js", import.meta.url), "utf8"),
 ]);
 const context = vm.createContext({});
+new vm.Script(modelSource, { filename: "model-catalog.js" }).runInContext(context);
+new vm.Script(draftSource, { filename: "draft-video-policy.js" }).runInContext(context);
 new vm.Script(promptSource, { filename: "canvas-prompt-document.js" }).runInContext(context);
 new vm.Script(codecSource, { filename: "canvas-document-codec.js" }).runInContext(context);
 new vm.Script(connectionsSource, { filename: "canvas-connections.js" }).runInContext(context);
@@ -601,4 +605,43 @@ test("structured import canonicalizes only prompt fragments, preserves legacy st
   assert.equal(create({ version: 1, content: [{ type: "text", text: "x".repeat(20_010) }] }).content[0].text.length, 20_000);
   assert.deepEqual(plain(create({ version: 2, content: [] })), { version: 1, content: [] });
   for (const value of [undefined, null, 42, [], true]) assert.equal(create(value), "");
+});
+
+test("sample lineage roundtrips as content without persisting task state or granting ordinary videos conversion", () => {
+  const policy = context.REELAY_DRAFT_VIDEO;
+  const input = { modelId: "seedance-2-5-draft", mediaType: "video", prompt: "Original prompt", cost: 24,
+    parameters: { quality: "480p", duration: "10s", outputDuration: 10, seed: 42, audioEnabled: true },
+    references: [{ id: "image", type: "image", url: "/image.jpg" }], referenceSnapshot: [] };
+  const generation = policy.createDraftProvenance({ input, taskId: "sample-task", resultId: "sample-result", createdAt: 1000,
+    scope: { projectId: "project-1", canvasId: "canvas-1" } });
+  const state = { activeCanvasId: "canvas-1", account: { credits: 2916 }, canvases: [{ id: "canvas-1", nodes: [
+    { id: "sample-node", kind: "generator", mode: "video", model: "seedance-2-5-draft", generating: true,
+      generatedAsset: { id: "sample-result", type: "video", url: "/sample.mp4", generation: { ...generation, status: "running", charged: 24 } } },
+    { id: "regular-node", kind: "asset", assets: [{ id: "regular-result", type: "video", url: "/480.mp4", quality: "480p" }] },
+  ] }] };
+  const restored = codec.restoreSnapshot(plain(codec.createSnapshot(state)));
+  const asset = restored.canvases[0].nodes[0].generatedAsset;
+  assert.deepEqual(plain(asset.generation), plain(generation));
+  assert.equal(restored.canvases[0].nodes[0].generating, false);
+  assert.equal(restored.account, undefined);
+  assert.equal(policy.getFinalEligibility(asset, { projectId: "project-1", now: 2000 }).eligible, true);
+  assert.equal(restored.canvases[0].nodes[1].assets[0].generation, undefined);
+  assert.deepEqual(plain(codec.createSnapshot(restored)), plain(codec.createSnapshot(state)));
+});
+
+test("sample lineage cannot carry unsafe URLs through references or nested provider fields", () => {
+  const generation = { version: 1, stage: "draft", simulated: true, taskId: "task", resultId: "result", projectId: "project", canvasId: "canvas",
+    createdAt: 1000, expiresAt: 604801000, input: { modelId: "seedance-2-5-draft", mediaType: "video", prompt: "sample", cost: 24,
+      parameters: { quality: "480p", providerParameters: { callbackUrl: "javascript:payload" }, referenceVideos: [{ assetId: "video", url: "blob:unavailable" }] },
+      references: [{ id: "image", type: "image", url: "javascript:payload", posterUrl: "data:text/html,payload" }],
+      referenceSnapshot: [{ key: "asset:image", asset: { id: "image", type: "image", url: "//untrusted.example/image" } }] } };
+  const snapshot = codec.createSnapshot({ canvases: [{ id: "canvas", nodes: [{ id: "node", kind: "asset",
+    assets: [{ id: "result", type: "video", url: "/sample.mp4", generation }] }] }] });
+  const saved = snapshot.canvases[0].nodes[0].assets[0].generation;
+  assert.equal(saved.input.references[0].url, "");
+  assert.equal(saved.input.references[0].posterUrl, "");
+  assert.equal(saved.input.referenceSnapshot[0].asset.url, "");
+  assert.equal(saved.input.parameters.referenceVideos[0].url, "");
+  assert.equal(saved.input.parameters.providerParameters.callbackUrl, undefined);
+  assert.doesNotThrow(() => JSON.stringify(snapshot));
 });

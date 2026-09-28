@@ -18,6 +18,10 @@ const codecSource = readFileSync(
   "utf8",
 );
 const context = vm.createContext({});
+new vm.Script(readFileSync(new URL("../../../data/model-catalog.js", import.meta.url), "utf8"),
+  { filename: "model-catalog.js" }).runInContext(context);
+new vm.Script(readFileSync(new URL("../../application/draft-video-policy.js", import.meta.url), "utf8"),
+  { filename: "draft-video-policy.js" }).runInContext(context);
 new vm.Script(readFileSync(new URL("../../legacy-canvas/canvas-prompt-document.js", import.meta.url), "utf8"),
   { filename: "canvas-prompt-document.js" }).runInContext(context);
 new vm.Script(codecSource, { filename: "canvas-document-codec.js" }).runInContext(context);
@@ -25,6 +29,51 @@ const codec = context.REELAY_CANVAS_DOCUMENT_CODEC as LegacyCodec;
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
 describe("CanvasDocument v1 cross-runtime contract", () => {
+  it.each(["draft", "final"] as const)("preserves %s provenance identically through browser and HTTP canonicalization", (stage) => {
+    const generation = { version: 1, stage, simulated: true, taskId: "task", resultId: "result", createdAt: 1000,
+      projectId: "project", canvasId: "canvas", ...(stage === "draft" ? { expiresAt: 604801000 }
+        : { sourceDraftTaskId: "source-task", sourceResultId: "source-result" }),
+      input: { mediaType: "video", modelId: stage === "draft" ? "seedance-2-5-draft" : "seedance-2-5", prompt: "Original prompt",
+        ...(stage === "final" ? { generationStage: "final", sourceDraftTaskId: "source-task", sourceResultId: "source-result" } : {}),
+        parameters: { quality: stage === "draft" ? "480p" : "1080p", duration: "10s", outputDuration: 10, seed: 42, audioEnabled: true },
+        references: [{ id: "ref", type: "image", url: "/ref.jpg" }], referenceSnapshot: [{ key: "asset:ref", label: "图片1" }] } };
+    const asset = { id: "result", type: "video", url: "/clip.mp4", generation };
+    const input = { kind: "reelay-legacy-canvas", version: 1, activeCanvasId: "canvas", canvases: [{ id: "canvas", nodes: [
+      { id: "generator", kind: "generator", mediaKind: "video", generatedAsset: asset },
+      { id: "placed", kind: "asset", assets: [asset] },
+    ] }] };
+    const browser = plain(codec.createSnapshot(input));
+    const server = canonicalizeLegacyCanvasDocumentV1(browser);
+    expect(server).toEqual(browser);
+    expect(server?.canvases[0].nodes[0].generatedAsset?.generation).toEqual(generation);
+    expect(server?.canvases[0].nodes[1].assets[0].generation).toEqual(generation);
+    const restored = plain(codec.createSnapshot(canonicalizeLegacyCanvasDocumentV1(server)));
+    expect(restored).toEqual(browser);
+  });
+
+  it("applies the shared generation whitelist and persisted URL rules at both boundaries", () => {
+    const generation = { version: 1, stage: "draft", simulated: true, taskId: "task", resultId: "result", createdAt: 1000,
+      projectId: "project", canvasId: "canvas", expiresAt: 604801000, status: "running", charged: 20,
+      input: { mediaType: "video", modelId: "seedance-2-5-draft", prompt: "Sample", parameters: { quality: "480p",
+        providerParameters: { callbackUrl: "javascript:payload" }, referenceVideos: [{ assetId: "v", url: "blob:https://example.test/video" }] },
+        references: [{ id: "ref", type: "image", url: "javascript:payload", posterUrl: "data:text/html,script", generation: { taskId: "nested" } }],
+        referenceSnapshot: [{ key: "asset:ref", asset: { id: "ref", type: "image", url: "//example.test/image" } }],
+        sourceDraftAsset: { id: "runtime-only" } } };
+    const input = { kind: "reelay-legacy-canvas", version: 1, canvases: [{ id: "canvas", nodes: [
+      { id: "asset", kind: "asset", assets: [{ id: "result", type: "video", url: "/clip.mp4", generation }] },
+    ] }] };
+    const server = canonicalizeLegacyCanvasDocumentV1(input);
+    expect(server).toEqual(plain(codec.createSnapshot(input)));
+    const saved = server?.canvases[0].nodes[0].assets[0].generation;
+    expect(saved).not.toHaveProperty("status");
+    expect(saved).not.toHaveProperty("charged");
+    expect(saved?.input).not.toHaveProperty("sourceDraftAsset");
+    expect(saved?.input.references).toEqual([{ id: "ref", type: "image", url: "", posterUrl: "" }]);
+    expect(saved?.input.referenceSnapshot).toEqual([{ key: "asset:ref", asset: { id: "ref", type: "image", url: "" } }]);
+    expect(saved?.input.parameters.referenceVideos).toEqual([{ assetId: "v", sourceNodeId: "", url: "" }]);
+    expect(saved?.input.parameters.providerParameters).toEqual({});
+  });
+
   it("preserves structured prompt identity and reference order in the shared API contract", () => {
     const prompt = { version: 1, content: [
       { type: "text", text: "让" },

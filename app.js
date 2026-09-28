@@ -513,6 +513,8 @@ const canvasNodeTasks = canvasNodeTaskRunnerFactory.createCanvasNodeTaskRunner({
   makeTaskId: () => crypto.randomUUID(),
   setTimer: (callback, delay) => window.setTimeout(callback, delay),
   clearTimer: (timerId) => window.clearTimeout(timerId),
+  now: () => Date.now(),
+  onProgress: syncNodeGenerationStatus,
   resolveTarget: resolveCanvasNodeTaskTarget,
   onStart: applyCanvasNodeTaskStart,
   onComplete(task, node) {
@@ -1599,6 +1601,7 @@ function applyTransform() {
   scheduleCanvasDocumentSave();
   canvasToolbarMenus.sync();
   promptOptimization?.refresh();
+  agentGeneration?.repositionFinal();
 }
 
 function syncNodeVisualLayout(
@@ -1609,6 +1612,7 @@ function syncNodeVisualLayout(
   if (!element) return;
   const { y, layout } = presentation;
   const canonicalLayout = getNodeLayout(node);
+  window.REELAY_DRAFT_VIDEO_BADGE.sync(element, canonicalLayout.mediaWidth);
   canvasMediaImageView.syncImages(element, { scale: state.scale, displayWidth: canonicalLayout.mediaWidth });
   const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
   const base = canvasArrange.getNodePosition(node) || node;
@@ -2491,6 +2495,7 @@ function getActiveAsset(node) {
 
 function getMediaRatio(node) {
   if (node.kind === "asset") {
+    if (node.pendingGeneration?.aspectRatio) return node.pendingGeneration.aspectRatio;
     const asset = getActiveAsset(node);
     if (asset?.type === "audio") return layoutRules.audioRatio;
     if (asset?.aspectRatio) return asset.aspectRatio;
@@ -2963,6 +2968,7 @@ function applyPreset(node, preset) {
 }
 
 function cloneNode(source) {
+  if (source.pendingGeneration) return null;
   const assets = (source.assets || []).map((asset) => ({ ...asset, id: crypto.randomUUID() }));
   const assetIds = new Map((source.assets || []).map((asset, index) => [asset.id, assets[index].id]));
   const activeAssetIndex = (source.assets || []).findIndex((asset) => asset.id === source.activeAssetId);
@@ -3198,6 +3204,11 @@ function formatMediaSize(width, height) {
 }
 
 function getMediaTitle(node, asset = getActiveAsset(node)) {
+  if (node.pendingGeneration) {
+    if (node.pendingGeneration.stage === "final") return "视频正片";
+    if (node.pendingGeneration.stage === "draft") return "视频样片";
+    return node.mode === "video" ? "生成视频" : node.mode === "audio" ? "生成音频" : "生成图片";
+  }
   if (node.kind === "asset") return getAssetDisplayName(asset);
   if (!node.preview) return "";
   if (node.generatedAsset?.displayName) return node.name || node.generatedAsset.displayName;
@@ -3205,6 +3216,11 @@ function getMediaTitle(node, asset = getActiveAsset(node)) {
 }
 
 function getMediaSpec(node, asset = getActiveAsset(node)) {
+  const generation = getEditableMedia(node)?.generation;
+  if (generation?.simulated) {
+    const media = getEditableMedia(node);
+    return formatMediaSize(media.width, media.height);
+  }
   if (node.kind === "asset") {
     if (!asset) return "";
     if (asset.type === "audio") return "";
@@ -3220,7 +3236,7 @@ function getMediaSpec(node, asset = getActiveAsset(node)) {
 
 function mediaMeta(node) {
   const asset = getActiveAsset(node);
-  const type = node.kind === "asset" ? asset?.type : node.mode;
+  const type = node.kind === "asset" ? asset?.type || node.mode : node.mode;
   const title = getMediaTitle(node, asset);
   const typeLabel = node.kind === "generator" && !title
     ? node.mode === "video" ? "Video" : "Image"
@@ -3526,6 +3542,15 @@ function mediaEditToolbar(node, layout) {
 }
 
 const canvasMediaImageView = window.REELAY_CANVAS_MEDIA_IMAGE_VIEW.createCanvasMediaImageView({ origin: window.location.origin });
+
+function draftVideoBadge(node, layout) {
+  const asset = getEditableMedia(node);
+  return window.REELAY_DRAFT_VIDEO_BADGE.render({
+    asset, pending: node.pendingGeneration, mediaWidth: layout.mediaWidth,
+    eligibility: asset?.generation?.stage === "draft"
+      ? window.REELAY_DRAFT_VIDEO.getFinalEligibility(asset, { projectId: state.projectId }) : null,
+  });
+}
 
 function assetPreview(asset) {
   const safeUrl = safeMediaAttributeUrl(asset.url);
@@ -4821,14 +4846,21 @@ function createGeneratedAsset(parameterSnapshot) {
   return generated;
 }
 
+function getNodeGenerationStatus(node) {
+  const task = node.pendingGeneration
+    ? agentGeneration?.service.get(node.pendingGeneration.taskId) : canvasNodeTasks.get(node.generationTaskId);
+  return { progress: task?.progress || 0, canCancel: Boolean(task?.canCancel) && isCanvasMutationAllowed() };
+}
+
+function syncNodeGenerationStatus(task, node) {
+  if (task.canvasId && task.canvasId !== state.activeCanvasId) return;
+  const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+  window.REELAY_GENERATION_STATUS.update(element, getNodeGenerationStatus(node));
+}
+
 function generatorMediaContent(node, displayWidth) {
   if (node.generating) {
-    return `
-      <div class="media-content generating-preview">
-        <div class="generating-orbit" aria-hidden="true"></div>
-        <div class="generating-label">生成中</div>
-      </div>
-    `;
+    return `<div class="media-content generating-preview">${window.REELAY_GENERATION_STATUS.render(getNodeGenerationStatus(node))}</div>`;
   }
 
   if (node.generatedAsset) {
@@ -5075,6 +5107,10 @@ function getNodeRenderSignature(node) {
     Object.entries(node).filter(([key]) => !["x", "y", "z", "groupId", "aspect"].includes(key)),
   );
   renderState.mediaToolbarVisible = shouldShowMediaEditToolbar(node);
+  const media = getEditableMedia(node);
+  if (media?.generation?.stage === "draft" && media.generation.simulated) {
+    renderState.draftFinalEligibility = window.REELAY_DRAFT_VIDEO.getFinalEligibility(media, { projectId: state.projectId });
+  }
   renderState.linkedReferences = getIncomingConnections(node.id).map((connection) => {
     const source = state.nodes.find((item) => item.id === connection.sourceNodeId);
     const asset = source ? getEditableMedia(source) : null;
@@ -5414,7 +5450,7 @@ function createAssetNodeElement(node, existingElement = null) {
   const asset = getActiveAsset(node);
   const selected = state.selectedIds.has(node.id);
   const el = existingElement || document.createElement("article");
-  el.className = `canvas-node generator-node asset-node ${asset?.type || "media"}-source ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
+  el.className = `canvas-node generator-node asset-node ${asset?.type || node.mode || "media"}-source ${selected ? "selected" : ""} ${node.groupId ? "grouped" : ""}`;
   el.style.left = `${node.x}px`;
   el.style.top = `${node.y}px`;
   el.style.width = `${layout.nodeWidth}px`;
@@ -5425,7 +5461,8 @@ function createAssetNodeElement(node, existingElement = null) {
     <section class="media-frame source-frame ${asset ? `has-asset ${asset.type}-asset` : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
-      ${assetMediaContent(asset, layout.mediaWidth)}
+      ${node.pendingGeneration ? generatorMediaContent(node, layout.mediaWidth) : assetMediaContent(asset, layout.mediaWidth)}
+      ${draftVideoBadge(node, layout)}
       ${nodePortMarkup(node)}
     </section>
   `);
@@ -5468,7 +5505,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
         <div class="control-bar">
           <button class="control-chip model-chip has-divider ${node.panel === "model" ? "active" : ""}" data-action="model-panel" type="button" aria-label="${escapeHtml(model?.name || "暂无可用模型")}" title="${escapeHtml(model?.name || "暂无可用模型")}" ${generationInputsDisabled}>
             ${modelIconMarkup(model, "model-chip-glyph")}
-            <span class="control-chip-label">${escapeHtml(model?.name || "暂无可用模型")}</span>
+            <span class="control-chip-label">${escapeHtml(model?.compactName || model?.name || "暂无可用模型")}</span>
           </button>
           <button class="control-chip param-chip ${node.panel === "params" ? "active" : ""}" data-action="param-panel" type="button" aria-label="${escapeHtml(Object.values(getParamLabelParts(node)).join(""))}" title="${escapeHtml(Object.values(getParamLabelParts(node)).join(""))}" ${generationInputsDisabled}>
             <span class="control-chip-label param-chip-label">${getParamLabelMarkup(node)}</span>
@@ -5499,10 +5536,11 @@ function createGeneratorNodeElement(node, existingElement = null) {
     : "";
 
   const { retainedInput, retainedMedia } = canvasNodePromptView.renderContents(el, `
-    <section class="media-frame generator-frame ${node.preview ? "has-preview" : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
+    <section class="media-frame generator-frame ${node.generatedAsset ? `has-asset ${node.generatedAsset.type}-asset` : node.preview ? "has-preview" : ""}" style="width: ${layout.mediaWidth}px; height: ${layout.mediaHeight}px;" data-drag-handle="true">
       ${mediaEditToolbar(node, layout)}
       ${mediaMeta(node)}
       ${generatorMediaContent(node, layout.mediaWidth)}
+      ${draftVideoBadge(node, layout)}
       ${nodePortMarkup(node)}
     </section>
     ${promptPanel}
@@ -5569,8 +5607,28 @@ function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
     el.addEventListener("dragstart", (event) => event.preventDefault());
   }
   if (!bindMedia) return;
+  const generationStatus = el.querySelector(".generation-status");
+  generationStatus?.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    if (event.button === 1 || (event.button === 0 && state.isSpaceDown)) {
+      event.preventDefault(); beginPan(event);
+    }
+  });
+  generationStatus?.addEventListener("keydown", (event) => event.stopPropagation());
+  generationStatus?.addEventListener("keyup", (event) => event.stopPropagation());
+  generationStatus?.querySelector("[data-cancel-generation]")?.addEventListener("click", (event) => {
+    event.preventDefault(); event.stopPropagation();
+    if (!requireCanvasMutation() || !getActiveCanvas()?.nodes.includes(node)) return;
+    const canceled = node.pendingGeneration ? agentGeneration?.cancelTask(node.pendingGeneration.taskId)
+      : canvasNodeTasks.cancel(node.generationTaskId);
+    if (!canceled) { syncNodeGenerationStatus({}, node); showActionToast("已进入生成阶段，当前无法取消"); }
+  });
   bindMediaTitleEvents(el, node);
   bindMediaToolbarEvents(el, node);
+  window.REELAY_DRAFT_VIDEO_BADGE.bind(el, (anchor) => {
+    if (!requireCanvasMutation() || !getActiveCanvas()?.nodes.includes(node)) return;
+    agentGeneration?.requestFinal(getEditableMedia(node), { sourceNodeId: node.id, anchor });
+  });
   el.querySelectorAll("[data-node-port-zone]").forEach((zone) => {
     zone.addEventListener("pointermove", (event) => {
       if (state.action || state.isSpaceDown) return;
@@ -5788,7 +5846,7 @@ function showMediaToolbarSettings(node) {
   renderDialog();
 }
 
-function handleMediaToolAction(node, action) {
+function handleMediaToolAction(node, action, anchor = null) {
   if (action === "toggle-more") {
     node.mediaMenuOpen = !node.mediaMenuOpen;
     render();
@@ -5828,7 +5886,7 @@ function bindMediaToolbarEvents(element, node) {
     if (!button) return;
     event.preventDefault();
     event.stopPropagation();
-    handleMediaToolAction(node, button.dataset.mediaTool);
+    handleMediaToolAction(node, button.dataset.mediaTool, button);
   });
 }
 
@@ -5926,11 +5984,19 @@ function applyCanvasNodeTaskStart(task, node) {
   render();
 }
 
-function applyCanvasNodeTaskCancellation(task, node) {
+function applyCanvasNodeTaskCancellation(task, node, reason) {
   if (task.kind === "generation") {
     if (node.generationTaskId !== task.id) return;
     node.generating = false;
     delete node.generationTaskId;
+    if (reason === "user-canceled") {
+      if (task.inputs.charge) {
+        state.account.credits += task.inputs.cost;
+        state.account.consumedCredits = Math.max(0, state.account.consumedCredits - task.inputs.cost);
+        syncCreditDisplay();
+      }
+      if (task.canvasId === state.activeCanvasId) render();
+    }
   }
 }
 
@@ -6060,6 +6126,13 @@ function completeSimulatedGeneration(task, node) {
     scheduleCanvasDocumentSave();
     return;
   }
+  if (task.inputs.draftInput) {
+    generatedAsset.generation = window.REELAY_DRAFT_VIDEO.createDraftProvenance({
+      input: task.inputs.draftInput, taskId: task.id, createdAt: task.inputs.createdAt,
+      scope: { projectId: task.projectId, canvasId: task.canvasId }, resultId: generatedAsset.id,
+    });
+    generatedAsset.displayName = "视频样片";
+  }
   node.preview = true;
   node.generatedAsset = generatedAsset;
   node.name = node.name || node.generatedAsset.displayName || defaultGeneratedName(node);
@@ -6135,11 +6208,21 @@ function startSimulatedGeneration(node, options = {}) {
     return false;
   }
 
+  const parameterSnapshot = createGenerationParameterSnapshot(node);
+  const model = getModel(node);
+  const draftInput = model?.executionMode === "draft" ? {
+    mediaType: "video", modelId: model.id, modelName: model.name, cost,
+    prompt: parameterSnapshot.prompt, promptDocument: parameterSnapshot.promptDocument,
+    parameters: parameterSnapshot,
+    references: parameterSnapshot.referenceSnapshot.media.map((entry) => entry.asset),
+    referenceSnapshot: parameterSnapshot.referenceSnapshot.media,
+    parameterSummary: Object.values(getParamLabelParts(node)).join(""),
+  } : null;
   return Boolean(canvasNodeTasks.start({
     kind: "generation",
     scope: { projectId: state.projectId, canvasId: canvas.id, nodeId: node.id },
-    inputs: { parameterSnapshot: createGenerationParameterSnapshot(node), cost, charge },
-    delayMs: 900 + Math.round(Math.random() * 700),
+    inputs: { parameterSnapshot, cost, charge, draftInput, createdAt: Date.now() },
+    delayMs: prototypeConfig.generationDurationMs,
   }));
 }
 
@@ -7373,12 +7456,13 @@ function cloneGroupState(group) {
 }
 
 function cloneCanvasContent(source) {
-  const nodeIdMap = new Map(source.nodes.map((node) => [node.id, crypto.randomUUID()]));
+  const sourceNodes = source.nodes.filter((node) => !node.pendingGeneration);
+  const nodeIdMap = new Map(sourceNodes.map((node) => [node.id, crypto.randomUUID()]));
   const groupIdMap = new Map(source.groups.map((group) => [group.id, crypto.randomUUID()]));
   const connectionIdMap = new Map((source.connections || []).filter((connection) =>
     nodeIdMap.has(connection.sourceNodeId) && nodeIdMap.has(connection.targetNodeId)
   ).map((connection) => [connection.id, crypto.randomUUID()]));
-  const nodes = source.nodes.map((sourceNode) => {
+  const nodes = sourceNodes.map((sourceNode) => {
     const node = cloneNodeState(sourceNode);
     const assetIdMap = new Map();
     node.id = nodeIdMap.get(sourceNode.id);
@@ -7411,7 +7495,7 @@ function cloneCanvasContent(source) {
     ...cloneGroupState(sourceGroup),
     id: groupIdMap.get(sourceGroup.id),
     nodeIds: sourceGroup.nodeIds.map((id) => nodeIdMap.get(id)).filter(Boolean),
-  }));
+  })).filter((group) => group.nodeIds.length);
   const connections = (source.connections || []).map((connection) => ({
     ...cloneConnectionState(connection),
     id: connectionIdMap.get(connection.id),
@@ -7454,25 +7538,31 @@ function deleteSelectedNodes(confirmed = false) {
 
   const activeCanvas = getActiveCanvas();
   const selectedNodeIds = new Set(state.selectedIds);
+  const transientIds = new Set(state.nodes.filter((node) => node.pendingGeneration).map((node) => node.id));
   if (activeCanvas) {
     canvasNodeTasks.cancelScope({ projectId: state.projectId, canvasId: activeCanvas.id, nodeIds: selectedNodeIds }, "nodes-deleted");
   }
 
   const deleted = state.nodes
     .map((node, index) => ({ node, index }))
-    .filter((item) => state.selectedIds.has(item.node.id))
+    .filter((item) => state.selectedIds.has(item.node.id) && !transientIds.has(item.node.id))
     .map((item) => ({ index: item.index, node: cloneNodeState(item.node) }));
   const affectedGroups = state.groups
     .map((group, index) => ({ group, index }))
     .filter(({ group }) => group.nodeIds.some((id) => selectedNodeIds.has(id)))
     .map(({ group, index }) => ({ index, group: cloneGroupState(group) }));
+  const undoGroups = affectedGroups.map(({ index, group }) => ({ index,
+    group: { ...group, nodeIds: group.nodeIds.filter((id) => !transientIds.has(id)) },
+  })).filter(({ group }) => group.nodeIds.length);
   const deletedConnections = state.connections
     .map((connection, index) => ({ connection, index }))
     .filter(({ connection }) => selectedNodeIds.has(connection.sourceNodeId) || selectedNodeIds.has(connection.targetNodeId))
     .map(({ connection, index }) => ({ index, connection: cloneConnectionState(connection) }));
 
-  if (!deleted.length) return;
-  pushUndoAction({ type: "delete", deleted, affectedGroups, deletedConnections });
+  if (deleted.length) pushUndoAction({ type: "delete", deleted, affectedGroups: undoGroups,
+    deletedConnections: deletedConnections.filter(({ connection }) =>
+      !transientIds.has(connection.sourceNodeId) && !transientIds.has(connection.targetNodeId)),
+  });
   state.nodes = state.nodes.filter((node) => !state.selectedIds.has(node.id));
   state.connections = state.connections.filter(
     (connection) => !selectedNodeIds.has(connection.sourceNodeId) && !selectedNodeIds.has(connection.targetNodeId),
@@ -7946,13 +8036,64 @@ const agentResultPlacement = window.REELAY_AGENT_RESULT_PLACEMENT.createControll
   getNodeBounds: (node, canvas) => getNodeVisualBounds(node,
     { x: node.x, y: node.y, layout: getNodeLayout(node, canvas.scale) }),
   getNodeMedia: getEditableMedia,
-  createNode: (asset) => defaultAssetNode(0, 0, cloneAsset(asset, "generation"), { z: 0 }),
-  commitNode(canvas, node) {
+  createPendingNode(task, sourceNode) {
+    const stage = task.input.generationStage === "final" ? "final"
+      : window.REELAY_DRAFT_VIDEO.isDraftInput(task.input) ? "draft" : "";
+    return {
+      ...defaultAssetNode(0, 0, { type: task.input.mediaType }, { z: 0 }),
+      assets: [], activeAssetId: null, generating: true,
+      pendingGeneration: { taskId: task.id, status: task.status, stage, quality: task.input.parameters?.quality,
+        sourceDraftTaskId: task.input.sourceDraftTaskId, sourceResultId: task.input.sourceResultId,
+        aspectRatio: sourceNode ? getMediaRatio(sourceNode) : task.input.mediaType === "audio"
+          ? layoutRules.audioRatio : aspectStringToRatio(task.input.parameters?.aspect) },
+    };
+  },
+  commitPendingNode(canvas, node, sourceNode, target) {
     node.z = ++canvas.zCounter;
     canvas.nodes.push(node);
+    if (sourceNode) canvas.connections.push({ id: crypto.randomUUID(), sourceNodeId: sourceNode.id, targetNodeId: node.id,
+      mediaType: "video", sourceRatio: 0.5, targetRatio: 0.5,
+      sourcePortId: getConnectionPortId(sourceNode.id, "output"), targetPortId: getConnectionPortId(node.id, "input") });
+    if (canvas === getActiveCanvas()) {
+      if (target.sourceNodeId) setSelection([node.id], node.id);
+      renderCanvasView();
+    }
+  },
+  updatePendingNode(canvas, node, task) {
+    node.pendingGeneration.status = task.status;
+    if (canvas === getActiveCanvas()) syncNodeGenerationStatus(task, node);
+  },
+  completePendingNode(canvas, node, result) {
+    if (!canvas.nodes.includes(node) || !node.pendingGeneration) return false;
+    const asset = cloneAsset(result, "generation");
+    node.assets = [asset]; node.activeAssetId = asset.id;
+    delete node.pendingGeneration; delete node.generating;
     pushCanvasUndoAction(canvas, { type: "create", nodeIds: [node.id] });
     scheduleCanvasDocumentSave(0);
-    if (canvas === getActiveCanvas()) render();
+    if (canvas === getActiveCanvas()) {
+      if (state.selectedIds.size === 1 && state.selectedIds.has(node.id)) state.mediaToolbarNodeId = node.id;
+      render();
+    }
+    return true;
+  },
+  removePendingNode(canvas, node) {
+    if (!canvas.nodes.includes(node) || !node.pendingGeneration) return;
+    canvas.nodes.splice(canvas.nodes.indexOf(node), 1);
+    canvas.connections = canvas.connections.filter((edge) => edge.sourceNodeId !== node.id && edge.targetNodeId !== node.id);
+    canvas.groups = canvas.groups.flatMap((group) => {
+      if (!group.nodeIds.includes(node.id)) return [group];
+      const nodeIds = group.nodeIds.filter((id) => id !== node.id);
+      group.nodeIds = nodeIds;
+      return nodeIds.length ? [group] : [];
+    });
+    if (canvas === getActiveCanvas()) {
+      if (state.selectedIds.has(node.id)) {
+        setSelection([...state.selectedIds].filter((id) => id !== node.id), state.activeId,
+          { keepGroup: true, keepConnection: true });
+      }
+      if (!canvas.connections.some((edge) => edge.id === state.activeConnectionId)) state.activeConnectionId = null;
+      renderCanvasView();
+    }
   },
   focusNode(canvas, node) {
     if (canvas !== getActiveCanvas()) switchCanvas(canvas.id);
@@ -8007,7 +8148,19 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
     displayName: task.input.mediaType === "image" ? "模拟生成图片" : "模拟生成视频",
     source: "generation", generationTaskId: task.id,
   }),
+  createFinalInput(asset, { outputFormat, scope, sourceNodeId }) {
+    const eligibility = window.REELAY_DRAFT_VIDEO.getFinalEligibility(asset, { projectId: scope.projectId });
+    if (!eligibility.eligible) return null;
+    const seconds = Number(asset.generation.input.parameters.outputDuration);
+    const cost = Number(videoQualityCost["1080p"]) * Math.ceil(seconds / 4);
+    if (!Number.isFinite(cost) || cost <= 0) return null;
+    const input = window.REELAY_DRAFT_VIDEO.buildFinalInput(asset, { projectId: scope.projectId, outputFormat, cost });
+    return input ? { ...input, sourceNodeId } : null;
+  },
   capturePlacementTarget: agentResultPlacement.capture,
+  beginResult: agentResultPlacement.begin,
+  updateResult: agentResultPlacement.update,
+  discardResult: agentResultPlacement.discard,
   placeResult: agentResultPlacement.place,
   locateResult: agentResultPlacement.locate,
   showMessage: showActionToast, escapeHtml, assetPreview: agentReferenceThumbnail,
@@ -8058,7 +8211,8 @@ function captureAgentGenerationInput() {
   return {
     prompt: resolved.text, promptDocument: resolved.document,
     references: agentReferences.getAssets(), referenceSnapshot: resolved.media,
-    parameters, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
+    parameters: { ...parameters, outputDuration: getGenerationOutputDurationSeconds(parameters) },
+    modelId: model.id, modelName: model.name, mediaType: model.type, cost,
     parameterSummary: `${beforeAspect}${aspect}${afterAspect}`,
   };
 }
@@ -8300,7 +8454,7 @@ function syncAgentModelButton() {
     agentModelBtn.classList.toggle("agent-managed", agentManaged);
     agentModelBtn.innerHTML = agentManaged
       ? `<i class="agent-composer-model-icon" data-lucide="layers-2" aria-hidden="true"></i><span class="agent-model-button-label control-chip-label">模型偏好 · ${names.length}</span>`
-      : `${modelIconMarkup(model, "model-chip-glyph agent-composer-model-icon")}<span class="agent-model-button-label control-chip-label">${escapeHtml(model?.name || "选择模型")}</span>`;
+      : `${modelIconMarkup(model, "model-chip-glyph agent-composer-model-icon")}<span class="agent-model-button-label control-chip-label">${escapeHtml(model?.compactName || model?.name || "选择模型")}</span>`;
     const label = agentManaged ? preferenceLabel : `当前模型：${model?.name || "未选择"}`;
     agentModelBtn.title = label;
     agentModelBtn.setAttribute("aria-label", label);
@@ -11753,6 +11907,24 @@ document.addEventListener("pointerdown", (event) => {
   if (event.button === 0 && !event.target?.closest(".media-edit-toolbar, .media-frame")) {
     if (closeMediaToolbarState()) render();
   }
+}, true);
+
+// Capture clicks before editors and node controls stop bubbling. Keep the owning
+// trigger for its toggle handler; closing must not swallow the clicked action.
+document.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  let changed = false;
+  for (const node of state.nodes) {
+    if (node.kind !== "generator" || !node.panel) continue;
+    const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+    const popover = element?.querySelector("[data-node-popover]");
+    const trigger = element?.querySelector(`[data-action="${popover?.dataset.anchorAction}"]`);
+    if (popover?.contains(target) || trigger?.contains(target)) continue;
+    node.panel = null;
+    changed = true;
+  }
+  if (changed) renderCanvasView();
 }, true);
 
 document.addEventListener("click", (event) => {

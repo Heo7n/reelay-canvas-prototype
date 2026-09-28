@@ -11,6 +11,28 @@
     return node?.kind === "generator";
   }
 
+  function getNodeMedia(node) {
+    if (node?.kind === "asset") {
+      return node.assets?.find((asset) => asset.id === node.activeAssetId) || node.assets?.[0] || null;
+    }
+    return node?.generatedAsset || null;
+  }
+
+  function isFinalDerivation(source, target) {
+    if (target?.kind !== "asset") return false;
+    const sourceMedia = getNodeMedia(source);
+    const draft = sourceMedia?.generation;
+    if (sourceMedia?.type !== "video" || draft?.stage !== "draft" || draft.simulated !== true
+      || typeof draft.taskId !== "string" || !draft.taskId
+      || typeof draft.resultId !== "string" || !draft.resultId) return false;
+    const targetMedia = getNodeMedia(target);
+    const final = target.pendingGeneration || targetMedia?.generation;
+    if (final?.stage !== "final") return false;
+    if (target.pendingGeneration ? target.mode !== "video"
+      : targetMedia?.type !== "video" || final.simulated !== true) return false;
+    return final.sourceDraftTaskId === draft.taskId && final.sourceResultId === draft.resultId;
+  }
+
   function hasPath(connections, startNodeId, targetNodeId) {
     const adjacency = new Map();
     connections.forEach((connection) => {
@@ -39,7 +61,10 @@
   function canConnect(connections, nodes, sourceNodeId, targetNodeId) {
     const source = findNode(nodes, sourceNodeId);
     const target = findNode(nodes, targetNodeId);
-    if (!source || !isGenerator(target)) return { ok: false, reason: "invalid-target" };
+    // Result assets accept only their proven sample lineage, never arbitrary references.
+    if (!source || (!isGenerator(target) && !isFinalDerivation(source, target))) {
+      return { ok: false, reason: "invalid-target" };
+    }
     if (sourceNodeId === targetNodeId) return { ok: false, reason: "self" };
     if (connections.some((item) => item.sourceNodeId === sourceNodeId && item.targetNodeId === targetNodeId)) {
       return { ok: false, reason: "duplicate" };

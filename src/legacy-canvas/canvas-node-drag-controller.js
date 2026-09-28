@@ -26,10 +26,16 @@
       let activeId = action.activeId;
 
       if (action.altKey) {
-        draggedNodes = sourceNodes.map(options.cloneNode);
+        const copies = sourceNodes.map((source) => ({ source, clone: options.cloneNode(source) }))
+          .filter(({ clone }) => clone);
+        if (!copies.length) {
+          options.setAction(null);
+          return null;
+        }
+        draggedNodes = copies.map(({ clone }) => clone);
         options.addNodes(draggedNodes);
         origins = draggedNodes.map((node) => ({ id: node.id, x: node.x, y: node.y }));
-        activeId = draggedNodes[activeIndex]?.id || draggedNodes[0]?.id || null;
+        activeId = (copies.find(({ source }) => source.id === action.activeId) || copies[0]).clone.id;
         options.selectNodes(
           draggedNodes.map((node) => node.id),
           activeId,

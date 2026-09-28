@@ -3,11 +3,14 @@
 
   function renderToolButton(tool, showLabel) {
     if (!tool?.id || !tool?.icon || !tool?.label) return "";
+    const disabledReason = typeof tool.disabledReason === "string" ? tool.disabledReason : "";
+    const tooltip = (tool.disabled && disabledReason ? disabledReason : tool.label)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     return `
-      <button class="media-tool-button ${showLabel ? "with-label" : ""}" type="button" data-media-tool="${tool.id}" aria-label="${tool.label}">
+      <button class="media-tool-button ${showLabel ? "with-label" : ""}" type="button" data-media-tool="${tool.id}" aria-label="${tool.label}"${tool.disabled ? ` disabled title="${tooltip}" aria-description="${tooltip}"` : ""}>
         <i data-lucide="${tool.icon}" aria-hidden="true"></i>
         ${showLabel ? `<span>${tool.label}</span>` : ""}
-        <span class="toolbar-tip" aria-hidden="true">${tool.label}</span>
+        <span class="toolbar-tip" aria-hidden="true">${tooltip}</span>
       </button>
     `;
   }

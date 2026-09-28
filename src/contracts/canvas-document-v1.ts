@@ -1,4 +1,6 @@
 import "../legacy-canvas/canvas-prompt-document.js";
+import "../../data/model-catalog.js";
+import "../application/draft-video-policy.js";
 
 export const LEGACY_CANVAS_DOCUMENT_SCHEMA_VERSION = 1 as const;
 export const LEGACY_CANVAS_DOCUMENT_KIND = "reelay-legacy-canvas" as const;
@@ -20,6 +22,39 @@ const promptDocumentModel = (globalThis as unknown as {
   REELAY_CANVAS_PROMPT_DOCUMENT: { normalize(value: unknown): LegacyPromptDocumentV1 };
 }).REELAY_CANVAS_PROMPT_DOCUMENT;
 
+type GenerationSnapshotValue = string | number | boolean | null | GenerationSnapshotValue[]
+  | { [key: string]: GenerationSnapshotValue };
+
+export interface LegacyVideoGenerationV1 {
+  version: 1;
+  stage: "draft" | "final";
+  simulated: true;
+  taskId: string;
+  resultId: string;
+  createdAt: number;
+  projectId: string;
+  canvasId: string;
+  expiresAt?: number;
+  sourceDraftTaskId?: string;
+  sourceResultId?: string;
+  input: {
+    mediaType: "video";
+    modelId: string;
+    prompt: string;
+    parameters: Record<string, GenerationSnapshotValue>;
+    [key: string]: GenerationSnapshotValue;
+  };
+}
+
+// Host and HTTP persistence use the classic canvas's exact provenance
+// whitelist. The URL sanitizer belongs to this persistence boundary, so a
+// temporary Blob reference cannot become durable content through a snapshot.
+const draftVideoPolicy = (globalThis as unknown as {
+  REELAY_DRAFT_VIDEO: {
+    serializeProvenance(value: unknown, options: { sanitizeUrl(value: unknown): string }): LegacyVideoGenerationV1 | null;
+  };
+}).REELAY_DRAFT_VIDEO;
+
 export interface LegacyCanvasAssetV1 {
   id: string;
   type: MediaKind;
@@ -34,6 +69,7 @@ export interface LegacyCanvasAssetV1 {
   category?: string;
   librarySourceId?: string;
   enhanced?: boolean;
+  generation?: LegacyVideoGenerationV1;
 }
 
 export interface LegacyCanvasNodeV1 {
@@ -195,6 +231,10 @@ function serializeAsset(value: unknown): LegacyCanvasAssetV1 | null {
   if (typeof candidate.category === "string") asset.category = boundedString(candidate.category, "", 80);
   if (typeof candidate.librarySourceId === "string") asset.librarySourceId = boundedString(candidate.librarySourceId, "", 200);
   if (typeof candidate.enhanced === "boolean") asset.enhanced = candidate.enhanced;
+  if (candidate.type === "video") {
+    const generation = draftVideoPolicy.serializeProvenance(candidate.generation, { sanitizeUrl: sanitizePersistedMediaUrl });
+    if (generation) asset.generation = generation;
+  }
   return asset;
 }
 

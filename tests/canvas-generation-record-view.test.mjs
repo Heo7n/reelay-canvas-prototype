@@ -4,9 +4,11 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 import { installCanvasIcons } from "./helpers/canvas-icons.mjs";
 
-const [source, placement, mediaPlayer, referencePreview] = await Promise.all([
-  "canvas-generation-record-view.js", "canvas-popover-placement.js", "canvas-generation-media.js", "canvas-generation-reference-preview.js",
+const [source, placement, mediaPlayer, referencePreview, statusView] = await Promise.all([
+  "canvas-generation-record-view.js", "canvas-popover-placement.js", "canvas-generation-media.js", "canvas-generation-reference-preview.js", "canvas-generation-status-view.js",
 ].map((name) => readFile(new URL(`../src/legacy-canvas/${name}`, import.meta.url), "utf8")));
+const [modelCatalog, draftPolicy] = await Promise.all(["../data/model-catalog.js", "../src/application/draft-video-policy.js"]
+  .map((path) => readFile(new URL(path, import.meta.url), "utf8")));
 
 function fixture(t, options = {}) {
   const dom = new JSDOM('<!doctype html><body><div id="records"></div><button id="outside">其他</button></body>', { runScripts: "outside-only" });
@@ -44,7 +46,8 @@ function fixture(t, options = {}) {
   window.HTMLMediaElement.prototype.load = () => {};
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   window.HTMLDialogElement.prototype.close = function () { this.open = false; };
-  window.eval(placement); window.eval(mediaPlayer); window.eval(referencePreview); window.eval(source);
+  window.eval(modelCatalog); window.eval(draftPolicy);
+  window.eval(placement); window.eval(mediaPlayer); window.eval(referencePreview); window.eval(statusView); window.eval(source);
   const controller = window.REELAY_GENERATION_RECORD_VIEW.createController({
     document, container, getScope: () => scope, getTasks: () => tasks, getTask: (id) => tasks.find((task) => task.id === id),
     onAction: (...args) => actions.push(args), now: () => now,
@@ -108,36 +111,51 @@ test("record video controls dispose on result removal while hiding only pauses p
 });
 
 for (const status of ["queued", "running"]) {
-  test(`${status} record offers edit before cancellation, then keeps edit after the seven-second deadline`, (t) => {
+  test(`${status} record places cancellation in its status row and disables it at the seven-second deadline`, (t) => {
     const f = fixture(t); const task = f.task({ status }); f.setTasks([task]);
     const edit = f.query('[data-generation-action="edit"]');
     const cancel = f.query('[data-generation-action="cancel"]');
     const visibleActions = () => f.all('[data-generation-action]').filter((button) => !button.closest("[hidden], [inert]"));
-    assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["edit", "cancel"]);
-    assert.equal(cancel.textContent.trim(), "取消生成");
-    assert.match(cancel.dataset.tooltip, /发送后\s*7\s*秒内可取消/);
+    assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["cancel", "edit"]);
+    assert.equal(cancel.textContent.trim(), "取消");
+    assert.ok(cancel.closest(".generation-record-wait .generation-status"));
+    assert.match(cancel.title, /发送后\s*7\s*秒内可取消/);
     assert.match(cancel.getAttribute("aria-description"), /取消后返还本次积分/);
     assert.equal(f.timers.size, 0, "service owns task deadline timers");
     edit.click(); assert.deepEqual(f.actions.map(([action]) => action), ["edit"]);
     f.query('[data-generation-action="again"]').click();
     f.query('[data-generation-action="remove"]').click();
     assert.deepEqual(f.actions.map(([action]) => action), ["edit"], "hidden terminal actions cannot submit duplicate tasks or delete active ones");
-    f.advance(6999); f.controller.render(); assert.equal(cancel.hidden, false);
+    f.advance(6999); f.controller.render(); assert.equal(cancel.disabled, false);
     cancel.focus();
     f.advance(1); f.controller.render();
-    assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["edit"]);
-    assert.equal(f.document.activeElement, edit, "expiration returns focus from the disappearing cancel action");
+    assert.deepEqual(visibleActions().map((button) => button.dataset.generationAction), ["cancel", "edit"]);
+    assert.equal(cancel.disabled, true);
+    assert.equal(f.document.activeElement, edit, "expiration returns focus from the now-disabled cancel action");
     cancel.click(); assert.equal(f.actions.length, 1);
     edit.click(); assert.deepEqual(f.actions.map(([action]) => action), ["edit", "edit"]);
     assert.ok(f.query(".generation-record-wait"));
   });
 }
 
+test("progress updates retain the active status bar and button without adding view timers", (t) => {
+  const f = fixture(t); const task = f.task({ progress: 4 }); f.setTasks([task]);
+  const status = f.query(".generation-status");
+  const cancel = status.querySelector("[data-cancel-generation]"); cancel.focus();
+  task.status = "running"; task.progress = 16; f.controller.render();
+  assert.equal(f.query(".generation-status"), status);
+  assert.equal(f.document.activeElement, cancel);
+  assert.equal(status.querySelector("[data-generation-progress]").textContent, "16%");
+  assert.equal(status.querySelector('[role="progressbar"]').getAttribute("aria-valuenow"), "16");
+  assert.equal(status.querySelector(".generation-status-label").textContent, "生成中");
+  assert.equal(f.timers.size, 0);
+});
+
 test("the cancellation deadline does not steal focus from another control", (t) => {
   const f = fixture(t); f.setTasks([f.task()]);
   const outside = f.query("#outside"); outside.focus();
   f.advance(7000); f.controller.render();
-  assert.equal(f.query('[data-generation-action="cancel"]').hidden, true);
+  assert.equal(f.query('[data-generation-action="cancel"]').disabled, true);
   assert.equal(f.document.activeElement, outside);
 });
 
@@ -981,4 +999,97 @@ test("media counts reuse existing icons and task affordances do not degrade to f
   assert.ok(f.query('[data-record-popover="details"]'));
   f.query('[data-record-popover="details"]').click();
   assert.ok(f.query('.generation-record-details-popover [data-generation-icon="copy"]'));
+});
+
+test("only a real successful sample exposes final generation and expiry updates without replacing its video", (t) => {
+  const f = fixture(t);
+  const input = { mediaType: "video", modelId: "seedance-2-5-draft", prompt: "样片内容", cost: 12,
+    parameters: { quality: "480p", aspect: "16:9", duration: "10s" } };
+  const task = f.task({ status: "succeeded", input });
+  task.result = { id: "sample-asset", type: "video", url: "/sample.mp4", generation: f.window.REELAY_DRAFT_VIDEO.createDraftProvenance({
+    input, scope: task.scope, taskId: task.id, resultId: "sample-asset", createdAt: task.createdAt,
+  }) };
+  f.setTasks([task]);
+  const action = f.query('[data-generation-action="final"]'); const video = f.query("video");
+  assert.equal(f.query('.generation-record-stage'), null);
+  assert.equal(f.query('.generation-record-draft-action'), null);
+  assert.equal(f.query('.generation-record-actions').firstElementChild, action);
+  assert.equal(action.textContent, "生成正片");
+  const badge = f.query('.generation-media-resolution');
+  assert.equal(badge.textContent, "样片 480P");
+  assert.equal(f.all('.generation-media-resolution').length, 1);
+  assert.equal(action.disabled, false); action.click(); assert.equal(f.actions.at(-1)[0], "final");
+  f.advance(7 * 24 * 60 * 60 * 1000 + 1);
+  assert.equal(action.disabled, true); assert.match(action.title, /已过期/);
+  assert.equal(action.getAttribute("aria-description"), action.title);
+  assert.equal(f.query('.generation-media-resolution'), badge);
+  assert.equal(f.query("video"), video); action.click(); assert.equal(f.actions.length, 1);
+  const ordinary = f.task({ status: "succeeded", result: { type: "video", url: "/ordinary.mp4", height: 480 } });
+  f.setTasks([ordinary]); assert.equal(f.query('[data-generation-action="final"]').hidden, true);
+  f.query('[data-generation-action="final"]').click(); assert.equal(f.actions.length, 1);
+});
+
+test("final task hides free editing in every state and shows its distinct requested output stage", (t) => {
+  const f = fixture(t); const task = f.task({ input: { generationStage: "final", modelName: "Seedance 2.5（成片）", cost: 36 } });
+  f.setTasks([task]);
+  assert.equal(f.query('.generation-record-stage'), null);
+  const edit = f.query('[data-generation-action="edit"]'); assert.equal(edit.hidden, true);
+  edit.click(); assert.equal(f.actions.length, 0);
+  f.query('[data-generation-action="cancel"]').focus(); f.advance(7000); f.controller.render();
+  assert.equal(f.document.activeElement, f.query('[data-record-popover="details"]'));
+  task.status = "failed"; f.controller.render();
+  f.query('[data-generation-action="again"]').click(); assert.equal(f.actions.at(-1)[0], "again");
+  assert.equal(f.query('[data-generation-action="final"]').hidden, true);
+  task.status = "succeeded";
+  task.result = { type: "video", url: "/final.mp4", generation: { stage: "final", simulated: true } };
+  f.controller.render(); assert.equal(f.query('.generation-media-resolution').textContent, "正片 1080P");
+});
+
+test("final records show the source sample and output choices without repeating the prompt or original references", (t) => {
+  let promptRenders = 0;
+  const f = fixture(t, { renderPrompt() { promptRenders++; return "原提示词"; } });
+  const task = f.task();
+  Object.assign(task.input, { generationStage: "final", sourceDraftAsset: { type: "video", url: "/sample.mp4", posterUrl: "/sample.jpg" },
+    parameters: { quality: "1080p", outputFormat: "mov", duration: "10s", aspect: "16:9" }, referenceSnapshot: f.references(3) });
+  f.setTasks([task]);
+  assert.equal(f.query(".generation-record-prompt, .generation-record-references"), null);
+  assert.equal(promptRenders, 0);
+  assert.equal(f.query(".generation-record-source-pill strong").textContent, "正片模式");
+  assert.deepEqual(f.all(".generation-record-final-source .generation-record-parameter").map((element) => element.textContent), ["10s", "16:9", "1080P", "MOV"]);
+  assert.equal(f.query(".generation-record-final-source .generation-record-parameters strong").textContent, "Seedance 2.5");
+  assert.equal(f.query(".generation-record-source-thumbnail img").getAttribute("src"), "/sample.jpg");
+  assert.equal(f.query(".generation-record-source-thumbnail video"), null);
+  const source = f.query(".generation-record-final-source");
+  task.status = "succeeded"; task.result = { type: "video", url: "/final.mp4" }; f.controller.render();
+  assert.equal(f.query(".generation-record-final-source"), source);
+  assert.equal(f.query(".generation-record-result video").getAttribute("src"), "/final.mp4");
+  f.query('[data-record-popover="details"]').click(); assert.ok(f.query(".generation-record-details-popover"));
+  f.query('[data-generation-action="again"]').click(); assert.equal(f.actions.at(-1)[0], "again");
+  f.query('[data-record-popover="menu"]').click(); f.query('[data-generation-action="remove"]').click();
+  assert.equal(f.actions.at(-1)[0], "remove");
+});
+
+test("source sample without a poster uses a stable silent video thumbnail and releases it with the record", (t) => {
+  const f = fixture(t); const task = f.task();
+  Object.assign(task.input, { generationStage: "final", sourceDraftAsset: { type: "video", url: "/sample.mp4" } });
+  f.setTasks([task]);
+  const video = f.query(".generation-record-source-thumbnail video");
+  assert.equal(video.muted, true); assert.equal(video.autoplay, false); assert.equal(video.controls, false);
+  assert.equal(video.preload, "metadata"); assert.equal(video.playsInline, true);
+  task.status = "running"; f.controller.render();
+  assert.equal(f.query(".generation-record-source-thumbnail video"), video);
+  f.setTasks([]); assert.equal(video.hasAttribute("src"), false); assert.ok(f.pauses > 0);
+});
+
+test("source sample thumbnails reject unsafe URLs and fall back safely when unavailable", (t) => {
+  const f = fixture(t); const task = f.task();
+  Object.assign(task.input, { generationStage: "final", sourceDraftAsset: { type: "video", url: "javascript:bad()", posterUrl: "javascript:bad()" } });
+  f.setTasks([task]);
+  assert.equal(f.query(".generation-record-source-thumbnail :is(img, video)"), null);
+  assert.ok(f.query(".generation-record-source-thumbnail svg"));
+  const other = f.task({ id: "other" });
+  Object.assign(other.input, { generationStage: "final", sourceDraftAsset: { type: "video", url: "/sample.mp4", thumbnailUrl: "/missing.png" } });
+  f.setTasks([other]); f.query(".generation-record-source-thumbnail img").dispatchEvent(new f.window.Event("error"));
+  assert.equal(f.query(".generation-record-source-thumbnail img"), null);
+  assert.ok(f.query(".generation-record-source-thumbnail svg"));
 });

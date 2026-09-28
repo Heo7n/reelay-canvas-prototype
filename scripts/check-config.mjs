@@ -125,7 +125,25 @@ for (const model of modelDirectory) {
   directoryIds.add(model.id);
   assert.ok(model.name && model.provider, `Directory model ${model.id} needs a name and provider.`);
   assert.ok(Object.isFrozen(model.capabilities), `Directory capabilities must be frozen for ${model.id}.`);
-  assert.ok(Array.isArray(model.demoUsage) && model.demoUsage.length > 0, `${model.id} needs demo usage templates.`);
+  const variantBase = model.baseModelId !== model.id
+    ? modelDirectory.find((entry) => entry.id === model.baseModelId && entry.type === model.type)
+    : null;
+  // A new execution variant need not invent historical usage or reshuffle existing fixtures.
+  assert.ok(Array.isArray(model.demoUsage) && (model.demoUsage.length > 0 || variantBase?.demoUsage.length > 0),
+    `${model.id} needs demo usage templates or an existing base model.`);
+  if (model.executionMode !== undefined) {
+    assert.ok(["standard", "draft"].includes(model.executionMode), `${model.id} has an unknown execution mode.`);
+    assert.ok(model.providerModelId, `${model.id} needs a provider model id.`);
+    assert.ok(model.baseModelId === model.id || variantBase, `${model.id} has an unavailable base model.`);
+  }
+  if (model.executionMode === "draft") {
+    assert.equal(model.type, "video", `${model.id} draft mode requires video.`);
+    assert.equal(model.providerModelId, variantBase?.providerModelId, `${model.id} must use its base provider model.`);
+    assert.deepEqual([...model.capabilities.qualities], ["480p"], `${model.id} draft quality must be fixed.`);
+    assert.deepEqual([...model.capabilities.counts], [1], `${model.id} draft simulation supports one result.`);
+    assert.equal(model.capabilities.draftConversion?.quality, "1080p", `${model.id} final quality must be 1080p.`);
+    assert.equal(model.capabilities.draftConversion?.validForMs, 604800000, `${model.id} needs the seven-day conversion window.`);
+  }
   for (const template of model.demoUsage) {
     assert.ok(Number.isInteger(template.order) && template.order >= 0, `${model.id} has an invalid demo order.`);
     assert.ok(!demoOrders.has(template.order), `Duplicate demo usage order: ${template.order}`);

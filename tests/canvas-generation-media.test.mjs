@@ -38,7 +38,7 @@ function fixture(t, options = {}) {
   const messages = [];
   window.eval(canvasIconsSource);
   window.eval(source);
-  const mountOptions = { document, container, video, showMessage: (message) => messages.push(message) };
+  const mountOptions = { document, container, video, asset: options.asset, showMessage: (message) => messages.push(message) };
   const controller = window.REELAY_GENERATION_MEDIA.mount(mountOptions);
   t.after(() => { controller.dispose(); window.close(); });
   const element = (selector) => container.querySelector(selector);
@@ -73,6 +73,25 @@ test("mount enhances the existing video with muted paused controls and real dime
   f.metadata({ videoWidth: 1000, videoHeight: 1000 });
   assert.equal(f.element(".generation-media-resolution").textContent, "1000 × 1000");
 });
+
+for (const [stage, label] of [["draft", "样片 480P"], ["final", "正片 1080P"]]) {
+  test(`${stage} uses the single video badge for its requested stage and discloses actual preview dimensions`, (t) => {
+    const f = fixture(t, { asset: { generation: { stage, simulated: true } } });
+    const badge = f.element(".generation-media-resolution");
+    assert.equal(badge.hidden, false); assert.equal(badge.textContent, label);
+    assert.match(badge.title, /实际分辨率加载中/);
+    f.metadata();
+    assert.equal(badge.textContent, label); assert.equal(badge.getAttribute("aria-label"), label);
+    assert.match(badge.title, /模拟目标规格.*实际分辨率 1280 × 720/);
+    assert.equal(badge.getAttribute("aria-description"), badge.title);
+    assert.equal(f.video.videoWidth, 1280); assert.equal(f.video.videoHeight, 720);
+    assert.equal(f.video.getAttribute("src"), "/result.mp4");
+    f.video.currentTime = 4; f.emit("timeupdate"); f.controller.sync();
+    assert.equal(f.element(".generation-media-resolution"), badge);
+    assert.equal(f.container.querySelectorAll(".generation-media-resolution").length, 1);
+    assert.equal(f.video.currentTime, 4); assert.equal(f.calls.load, 0);
+  });
+}
 
 test("central and bottom controls follow actual playback, seek, time and mute state", async (t) => {
   const f = fixture(t); f.metadata();

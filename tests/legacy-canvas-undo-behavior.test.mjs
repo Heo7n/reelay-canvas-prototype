@@ -162,9 +162,9 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
     onPreview();
     window.dispatchEvent(pointer(cancelled ? "pointercancel" : "pointerup", 100 + dx, 100 + dy));
   }
-  // The runner arms its task timer after synchronous render effects complete.
+  // Completion timers are at least 900ms; progress pulses must not stand in for completion.
   const scheduledTask = () => {
-    const timeoutId = [...timers.keys()].at(-1);
+    const timeoutId = [...timers.keys()].filter((id) => timerDelays.get(id) >= 900).at(-1);
     return { timeoutId, delay: timerDelays.get(timeoutId) };
   };
   return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, timers, scheduledTask, metadataImages,
@@ -666,6 +666,60 @@ test("closed library catalog registration loads no media; using an asset hydrate
   assert.equal(placed.height, 1600);
   assert.equal(placed.aspectRatio, 900 / 1600);
   assert.equal(h.metadataImages.length, 1, "dimension completion must not start background requests for unused assets");
+});
+
+test("node popovers dismiss from the prompt without losing editor focus, selection or content", (t) => {
+  const h = createHarness(t);
+  const node = h.node("dismiss-popover", { expanded: true });
+  h.install(h.canvas("dismiss", [node]));
+  const element = h.window.document.querySelector('[data-id="dismiss-popover"]');
+  const input = element.querySelector("[data-node-prompt-input] .prompt-editor-content");
+  h.setText(input, "镜头缓慢推进，保持光影连续。");
+  input.addEventListener("click", (event) => event.stopPropagation());
+  for (const action of ["param-panel", "model-panel", "material-panel"]) {
+    element.querySelector(`[data-action="${action}"]`).click();
+    const popover = element.querySelector("[data-node-popover]");
+    assert.ok(popover);
+    popover.click();
+    assert.ok(node.panel, "clicking the panel surface keeps it open");
+    input.focus();
+    h.selectText(input, 2, 6, "backward");
+    const before = h.getText(input);
+    input.click();
+    assert.equal(node.panel, null, "even a stopped input click dismisses the panel");
+    assert.equal(element.querySelector("[data-node-popover]"), null);
+    assert.equal(element.querySelector(".prompt-editor-content"), input);
+    assert.equal(h.window.document.activeElement, input);
+    assert.deepEqual(h.selection(input), [2, 6, "backward"]);
+    assert.equal(h.getText(input), before);
+    assert.equal(node.expanded, true);
+  }
+});
+
+test("outside dismissal preserves node trigger toggles and the clicked control action", (t) => {
+  const h = createHarness(t);
+  const node = h.node("popover-actions", { expanded: true });
+  h.install(h.canvas("dismiss-actions", [node]));
+  const element = h.window.document.querySelector('[data-id="popover-actions"]');
+  const click = (action) => element.querySelector(`[data-action="${action}"]`).click();
+  click("param-panel");
+  element.querySelector('[data-action="param-panel"] span').click();
+  assert.equal(node.panel, null, "clicking a trigger child closes without reopening");
+  click("param-panel");
+  click("model-panel");
+  assert.equal(node.panel, "model", "another trigger switches on the same click");
+  click("param-panel");
+  click("advanced-settings-toggle");
+  assert.equal(node.panel, null);
+  assert.equal(node.advancedSettingsExpanded, true, "the original action still executes once");
+  click("param-panel");
+  const outside = h.window.document.createElement("button");
+  h.window.document.body.append(outside);
+  let clicks = 0;
+  outside.addEventListener("click", (event) => { clicks += 1; event.stopPropagation(); });
+  outside.click();
+  assert.equal(node.panel, null);
+  assert.equal(clicks, 1);
 });
 
 test("node controls preserve the live prompt editor and media across content renders", (t) => {
@@ -2267,7 +2321,7 @@ test("generation charges once, completes in its background canvas and preserves 
   assert.equal(h.window.startSimulatedGeneration(node), true);
   const task = h.scheduledTask();
   const callback = h.timers.get(task.timeoutId);
-  assert.ok(task.delay >= 900 && task.delay <= 1600);
+  assert.equal(task.delay, 10000);
   assert.equal(h.state.account.credits, 3000 - cost);
   assert.equal(h.state.account.consumedCredits, cost);
   assert.equal(h.window.startSimulatedGeneration(node), false);
@@ -3212,7 +3266,7 @@ test("canvas credit widget compacts large balances without overstating them and 
   assert.equal(refreshed.window.document.querySelector("#railCreditValue").textContent, "3000");
 });
 
-test("generation send estimate remains independent of balance while each task charges without changing canvases", (t) => {
+test("generation send estimate remains independent of balance while each task reserves one transient node", (t) => {
   const h = createHarness(t);
   const first = h.canvas("one", [h.node("shared-id")]);
   const second = h.canvas("two", [h.node("shared-id", { model: "seedance-2-5" })]);
@@ -3248,8 +3302,13 @@ test("generation send estimate remains independent of balance while each task ch
   assert.equal(h.getText(input), "");
   assert.equal(h.state.account.credits, account.credits - cost);
   assert.equal(h.state.account.consumedCredits, account.consumedCredits + cost);
-  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot);
-  assert.deepEqual(plain([first, second]), canvases);
+  const pending = first.nodes.filter((node) => node.pendingGeneration);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].pendingGeneration.taskId, task.id);
+  snapshot.canvases.find((canvas) => canvas.id === first.id).zCounter += 1;
+  canvases[0].zCounter += 1;
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), snapshot, "only the layer counter is persisted before completion");
+  assert.deepEqual(plain([{ ...first, nodes: first.nodes.filter((node) => !node.pendingGeneration) }, second]), canvases);
   assert.deepEqual({ amount: amount.textContent, label: send.getAttribute("aria-label") }, estimate);
 });
 
@@ -3470,6 +3529,8 @@ test("generation @ insertion freezes mixed-media task inputs and send resets edi
   assert.equal(sent.prompt, "让图片1参考视频1，使用音频1");
   assert.equal(h.state.account.credits, beforeAccount.credits - expectedCost);
   assert.equal(h.state.account.consumedCredits, beforeAccount.consumedCredits + expectedCost);
+  assert.equal(h.state.nodes.filter((node) => node.pendingGeneration?.taskId === task.id).length, 1);
+  beforeCanvas.canvases.find((canvas) => canvas.id === task.scope.canvasId).zCounter += 1;
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), beforeCanvas);
 });
 

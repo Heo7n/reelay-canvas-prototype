@@ -75,6 +75,7 @@
       record.finishedAt = now();
       record.error = error;
       record.result = result;
+      if (status === "succeeded") record.progress = 100;
       executor.stop(record.task.id);
       if (status === "failed" || status === "canceled") refundOnce(record);
       notify(record, status);
@@ -93,12 +94,29 @@
       const record = resolve(taskOrId);
       if (!isActive(record)) return false;
       try {
-        const output = result === undefined ? options.makeResult(record.task) : result;
+        let output = result === undefined ? options.makeResult(record.task) : result;
         if (!output || typeof output !== "object" || Array.isArray(output)) {
           throw new TypeError("生成结果不可用，请重新生成。");
         }
         if (output.type !== record.task.input.mediaType) {
           throw new TypeError("生成结果类型与本次任务不一致，请重新生成。");
+        }
+        const draftPolicy = root.REELAY_DRAFT_VIDEO;
+        const task = record.task;
+        if (task.input.generationStage === "final") {
+          // A simulated finish keeps the original clip and its true decoded size;
+          // 1080P / MOV are requested specifications, not a fictitious transcode.
+          const source = task.input.sourceDraftAsset;
+          const { generation: _generation, ...sourceMedia } = source;
+          output = { ...sourceMedia, ...output, url: source.url, width: source.width, height: source.height,
+            aspectRatio: source.aspectRatio, duration: source.duration, name: source.name,
+            displayName: "模拟生成成片", generation: draftPolicy.createFinalProvenance({
+              input: task.input, taskId: task.id, resultId: output.id, scope: task.scope, createdAt: task.createdAt,
+            }) };
+        } else if (draftPolicy?.isDraftInput(task.input)) {
+          output = { ...output, generation: draftPolicy.createDraftProvenance({
+            input: task.input, taskId: task.id, resultId: output.id, scope: task.scope, createdAt: task.createdAt,
+          }) };
         }
         const frozenResult = snapshot(output);
         return finish(record, "succeeded", { result: frozenResult });
@@ -123,6 +141,18 @@
       if (!["image", "video", "audio"].includes(input.mediaType)) {
         throw new TypeError("Generation task mediaType must be image, video or audio.");
       }
+      if (input.generationStage === "final") {
+        if (!root.REELAY_DRAFT_VIDEO) throw new Error("The draft video policy must be loaded first.");
+        // Reconstruct from provenance for every attempt, including direct repeat
+        // submissions: current editor parameters never change the original clip.
+        input = root.REELAY_DRAFT_VIDEO.buildFinalInput(input.sourceDraftAsset, {
+          projectId: scope.projectId, now: now(), cost: input.cost, outputFormat: input.parameters?.outputFormat,
+        });
+        const pending = [...records.values()].find((record) => !record.removed && activeStatuses.has(record.status)
+          && record.task.scope.projectId === scope.projectId && record.task.input.generationStage === "final"
+          && record.task.input.sourceDraftTaskId === input.sourceDraftTaskId && record.task.input.sourceResultId === input.sourceResultId);
+        if (pending) return pending.task;
+      }
       const frozenInput = snapshot(input);
       const frozenScope = snapshot(scope);
       const id = options.makeId();
@@ -130,13 +160,13 @@
       const createdAt = now();
       const record = {
         task: null, submitting: true, removed: false,
-        status: "queued", createdAt, startedAt: null, finishedAt: null,
+        status: "queued", progress: 0, createdAt, startedAt: null, finishedAt: null,
         cancelUntil: createdAt + 7000, error: null, result: null,
         charged: 0, refunded: 0, refundAttempted: false,
         addedNodeId: null, addedCanvasId: null,
       };
       const task = { id, input: frozenInput, scope: frozenScope };
-      for (const field of ["status", "createdAt", "startedAt", "finishedAt", "cancelUntil", "error", "result", "charged", "refunded", "addedNodeId", "addedCanvasId"]) {
+      for (const field of ["status", "progress", "createdAt", "startedAt", "finishedAt", "cancelUntil", "error", "result", "charged", "refunded", "addedNodeId", "addedCanvasId"]) {
         Object.defineProperty(task, field, { enumerable: true, get: () => record[field] });
       }
       Object.defineProperty(task, "canCancel", { enumerable: true, get: () => canCancel(task) });
@@ -167,6 +197,13 @@
             record.startedAt = now();
             notify(record, "running");
           },
+          onProgress(value) {
+            if (!isActive(record) || !Number.isFinite(value)) return;
+            const progress = Math.min(99, Math.max(0, Math.floor(value)));
+            if (progress <= record.progress) return;
+            record.progress = progress;
+            notify(record, "progress");
+          },
           onCancelWindowClosed() {
             if (isActive(record)) notify(record, "cancel-window-closed");
           },
@@ -179,6 +216,13 @@
       }
       notify(record, "submitted");
       return task;
+    }
+
+    function submitFinal({ source, scope, cost, outputFormat = "mp4", idempotencyKey } = {}) {
+      if (disposed) return null;
+      if (!root.REELAY_DRAFT_VIDEO) throw new Error("The draft video policy must be loaded first.");
+      const input = root.REELAY_DRAFT_VIDEO.buildFinalInput(source, { projectId: scope?.projectId, now: now(), cost, outputFormat });
+      return submit({ input, scope, idempotencyKey });
     }
 
     function get(taskOrId) {
@@ -200,11 +244,11 @@
         const id = options.makeId();
         if (typeof id !== "string" || !id || records.has(id) || ids.has(id)) return [];
         ids.add(id);
-        const createdAt = Number.isFinite(entry.createdAt) ? entry.createdAt : now() - 11000;
-        const finishedAt = Math.max(createdAt, Number.isFinite(entry.finishedAt) ? entry.finishedAt : createdAt + 11000);
+        const createdAt = Number.isFinite(entry.createdAt) ? entry.createdAt : now() - root.REELAY_PROTOTYPE_CONFIG.generationDurationMs;
+        const finishedAt = Math.max(createdAt, Number.isFinite(entry.finishedAt) ? entry.finishedAt : createdAt + root.REELAY_PROTOTYPE_CONFIG.generationDurationMs);
         const frozenInput = snapshot(entry.input);
         const task = Object.freeze({ id, isPreview: true, scope: frozenScope, input: frozenInput,
-          status: entry.status, createdAt, startedAt: createdAt, finishedAt, cancelUntil: createdAt,
+          status: entry.status, progress: entry.status === "succeeded" ? 100 : 0, createdAt, startedAt: createdAt, finishedAt, cancelUntil: createdAt,
           error: entry.status === "failed" ? String(entry.error || defaultFailure) : null,
           result: entry.status === "succeeded" ? snapshot(entry.result) : null,
           charged: frozenInput.cost, refunded: entry.status === "succeeded" ? 0 : frozenInput.cost,
@@ -283,7 +327,7 @@
       subscribers.clear();
     }
 
-    return Object.freeze({ submit, get, list, subscribe, canCancel, cancel, remove, markAdded, clearAdded, dispose, setNextScenario, complete, fail, importPreviewRecords });
+    return Object.freeze({ submit, submitFinal, get, list, subscribe, canCancel, cancel, remove, markAdded, clearAdded, dispose, setNextScenario, complete, fail, importPreviewRecords });
   }
 
   root.REELAY_GENERATION_TASKS = Object.freeze({ createService });

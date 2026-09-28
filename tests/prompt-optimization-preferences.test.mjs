@@ -142,9 +142,9 @@ test("actual catalog defaults exist without triggering preservation-only simulat
   const catalog = catalogContext.REELAY_MODEL_CATALOG;
   assert.equal(new Set(catalog.map((model) => model.id)).size, catalog.length);
   const supported = catalog.filter(context.REELAY_PROMPT_OPTIMIZATION_PREFERENCES.supportsModel);
-  assert.deepEqual(Array.from(supported, model => model.id), ["seedance-2-5", "seedance-2", "seedance-2-fast"]);
+  assert.deepEqual(Array.from(supported, model => model.id), ["seedance-2-5", "seedance-2-5-draft", "seedance-2", "seedance-2-fast"]);
   const store = createStore({ models: catalog });
-  assert.equal(store.get("seedance-2").models.length, 3);
+  assert.equal(store.get("seedance-2").models.length, 4);
   for (const model of catalog.filter(model => !supported.includes(model))) assert.throws(() => store.get(model), /模型/);
   for (const model of supported) {
     assert.ok(model.optimizationInstructions.length > 20, model.id);

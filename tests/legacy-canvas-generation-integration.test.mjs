@@ -18,6 +18,301 @@ const sources = await Promise.all(paths.map(async (path) => ({ path, source: pat
 const promptEditorSource = await buildPromptEditor(fileURLToPath(root));
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test("node sample media badge follows shared expiry and project eligibility before accepting clicks", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  node.model = "seedance-2-5-draft";
+  node.prompt = "固定镜头，女孩抱着狐狸";
+  h.first.nodes.push(node);
+  h.window.normalizeNodeParameters(node);
+  assert.equal(h.window.startSimulatedGeneration(node), true);
+  h.advance(10000);
+  h.window.setSelection([node.id], node.id);
+  h.state.mediaToolbarNodeId = node.id;
+  const button = () => {
+    h.window.render();
+    return h.document.querySelector('[data-node-draft-final]');
+  };
+  assert.equal(button().disabled, false);
+  assert.ok(button().closest(".media-frame"));
+  assert.equal(button().closest(".media-edit-toolbar"), null);
+  assert.equal(button().querySelector(".node-draft-idle").textContent, "样片 480P");
+  assert.equal(button().querySelector(".node-draft-ready").textContent, "生成正片 1080P");
+  assert.equal(h.document.querySelector(".node-draft-tooltip"), null);
+  assert.equal(h.document.querySelector('[data-media-tool="draft-final"]'), null);
+  h.state.projectId = "other-project";
+  assert.equal(button().disabled, true);
+  assert.match(button().title, /所属项目/);
+  h.state.projectId = "generation-project";
+  h.window.Date.now = () => node.generatedAsset.generation.expiresAt;
+  const expired = button();
+  assert.equal(expired.disabled, true);
+  assert.equal(expired.getAttribute("aria-label"), "生成正片 1080P");
+  assert.match(expired.title, /已过期/);
+  const credits = h.state.account.credits;
+  expired.click();
+  assert.equal(h.document.querySelector(".draft-video-popover"), null);
+  assert.equal(h.state.account.credits, credits);
+});
+
+test("sample badge keeps its media-relative dimensions through canvas zoom", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  node.model = "seedance-2-5-draft";
+  node.prompt = "花苞徐徐盛开";
+  h.first.nodes.push(node);
+  h.window.normalizeNodeParameters(node);
+  h.window.startSimulatedGeneration(node);
+  h.advance(10000);
+  h.state.scale = 1;
+  h.window.applyTransform();
+  const badge = h.document.querySelector(`[data-id="${node.id}"] .node-draft-badge`);
+  assert.ok(badge);
+  const initialScale = Number(badge.style.getPropertyValue("--draft-badge-scale"));
+  assert.equal(initialScale, h.window.getNodeLayout(node).mediaWidth / 768);
+  h.state.scale = 0.2;
+  h.window.applyTransform();
+  assert.equal(Number(badge.style.getPropertyValue("--draft-badge-scale")), initialScale);
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"] .node-draft-badge`), badge);
+});
+
+test("node sample keeps frozen inputs and survives creating a separately charged final result", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  node.model = "seedance-2-5-draft";
+  node.prompt = "固定镜头，女孩抱着狐狸";
+  h.first.nodes.push(node);
+  h.window.normalizeNodeParameters(node);
+  assert.equal(h.window.startSimulatedGeneration(node), true);
+  h.advance(10000);
+  const sample = node.generatedAsset;
+  assert.equal(sample.generation.stage, "draft");
+  assert.equal(sample.generation.input.prompt, "固定镜头，女孩抱着狐狸");
+  assert.equal(sample.generation.input.parameters.outputDuration, 10);
+  const afterSample = h.state.account.credits;
+  node.prompt = "此后修改的文字不能改变原样片";
+  h.agentModels.setMode("agent");
+  const anchor = h.document.querySelector("#canvasHomeBtn");
+  anchor.getBoundingClientRect = () => ({ left: 20, top: 20, right: 52, bottom: 52, width: 32, height: 32 });
+  assert.equal(h.agentGeneration.requestFinal(sample, { sourceNodeId: node.id, anchor }), true);
+  const dialog = h.document.querySelector(".draft-video-popover");
+  assert.equal(dialog.querySelector("[data-draft-resolution]").textContent, "1080P");
+  dialog.querySelector("form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  const final = h.service.list().at(-1);
+  assert.equal(final.input.generationStage, "final");
+  assert.equal(final.input.parameters.quality, "1080p");
+  assert.equal(final.input.prompt, sample.generation.input.prompt);
+  assert.equal(h.state.account.credits, afterSample - final.input.cost);
+  assert.equal(node.generatedAsset, sample);
+  assert.equal(h.first.nodes.length, 2, "submission immediately creates the result node");
+  const pending = h.first.nodes[1];
+  assert.equal(pending.kind, "asset");
+  assert.equal(pending.generating, true);
+  assert.equal(pending.pendingGeneration.taskId, final.id);
+  assert.equal(h.first.connections.length, 1);
+  assert.equal(h.first.connections[0].sourceNodeId, node.id);
+  assert.equal(h.first.connections[0].targetNodeId, pending.id);
+  const pendingElement = h.document.querySelector(`[data-id="${pending.id}"]`);
+  assert.equal(pendingElement.querySelector(".node-draft-label").textContent, "正片 1080P");
+  assert.equal(pendingElement.querySelector(".generation-status-label").textContent, "生成中");
+  assert.equal(pendingElement.querySelector(".prompt-panel"), null);
+  const inFlight = plain(h.window.createCanvasDocumentSnapshot()).canvases[0];
+  assert.equal(inFlight.nodes.length, 1, "a refresh cannot restore a taskless empty placeholder");
+  assert.equal(inFlight.connections.length, 0);
+  assert.equal(h.service.complete(final), true);
+  assert.equal(node.generatedAsset, sample);
+  assert.equal(h.first.nodes.length, 2);
+  const result = h.first.nodes[1];
+  assert.equal(result, pending, "completion fills the same connected result node");
+  assert.equal(result.pendingGeneration, undefined);
+  assert.equal(result.generating, undefined);
+  const resultElement = h.document.querySelector(`[data-id="${result.id}"]`);
+  assert.ok(resultElement.querySelector(".media-edit-toolbar"));
+  assert.equal(resultElement.querySelector(".prompt-panel"), null);
+  assert.equal(result.assets[0].generation.stage, "final");
+  assert.equal(result.assets[0].url, sample.url);
+  assert.equal(result.assets[0].width, sample.width);
+  assert.ok(result.x > node.x, "final is placed beside its sample");
+  assert.equal(h.agentModels.getMode(), "agent", "node action does not change the active composer mode");
+  const saved = plain(h.window.createCanvasDocumentSnapshot());
+  assert.equal(saved.canvases[0].nodes.find((entry) => entry.id === node.id).generatedAsset.generation.taskId, sample.generation.taskId);
+  assert.equal(saved.canvases[0].connections.length, 1);
+  h.window.hydrateCanvasDocumentSnapshot(saved);
+  assert.equal(h.state.connections.length, 1, "restoring the saved canvas keeps its sample-to-final edge");
+});
+
+test("pending final nodes cannot be copied or resurrected through delete undo", (t) => {
+  const h = harness(t);
+  const source = h.window.defaultGeneratorNode(40, 50, "video");
+  source.model = "seedance-2-5-draft"; source.prompt = "镜头缓缓推进";
+  h.first.nodes.push(source);
+  h.window.normalizeNodeParameters(source);
+  h.window.startSimulatedGeneration(source); h.advance(10000);
+  const anchor = h.document.querySelector("[data-node-draft-final]");
+  anchor.getBoundingClientRect = () => ({ left: 300, right: 440, top: 50, bottom: 80, width: 140, height: 30 });
+  anchor.click();
+  h.document.querySelector(".draft-video-popover form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  const task = h.service.list().at(-1);
+  const pending = h.first.nodes[1];
+  assert.equal(h.window.cloneNode(pending), null);
+  const copied = h.window.cloneCanvasContent(h.first);
+  assert.equal(copied.nodes.length, 1);
+  assert.equal(copied.connections.length, 0);
+  h.window.setSelection([source.id, pending.id], pending.id);
+  h.window.deleteSelectedNodes(true);
+  assert.equal(h.first.nodes.length, 0);
+  h.window.undoLastAction();
+  assert.equal(h.first.nodes.length, 1);
+  assert.equal(h.first.nodes[0].id, source.id);
+  assert.equal(h.first.connections.length, 0);
+  assert.equal(h.service.complete(task), true);
+  assert.equal(h.first.nodes.length, 1, "completion does not resurrect the deleted placeholder");
+  assert.equal(task.addedNodeId, null);
+});
+
+for (const outcome of ["cancel", "fail"]) {
+  test(`node final ${outcome} removes only its transient node and connection and refunds`, (t) => {
+    const h = harness(t);
+    const node = h.window.defaultGeneratorNode(40, 50, "video");
+    node.model = "seedance-2-5-draft"; node.prompt = "镜头缓缓推进";
+    h.first.nodes.push(node);
+    h.window.normalizeNodeParameters(node);
+    h.window.startSimulatedGeneration(node); h.advance(10000);
+    const credits = h.state.account.credits;
+    const anchor = h.document.querySelector("[data-node-draft-final]");
+    anchor.getBoundingClientRect = () => ({ left: 300, right: 440, top: 50, bottom: 80, width: 140, height: 30 });
+    anchor.click();
+    h.document.querySelector(".draft-video-popover form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+    const task = h.service.list().at(-1);
+    assert.equal(h.first.nodes.length, 2);
+    const unrelatedGroup = { id: "source-group", nodeIds: [node.id], x: 0, y: 0, width: 640, height: 380, z: 1 };
+    h.first.groups.push(unrelatedGroup);
+    h.window.setSelection([node.id], node.id);
+    h.state.activeGroupId = unrelatedGroup.id;
+    assert.equal(h.service[outcome](task), true);
+    assert.deepEqual(plain(h.first.nodes.map((entry) => entry.id)), [node.id]);
+    assert.equal(h.first.connections.length, 0);
+    assert.equal(h.first.groups[0], unrelatedGroup, "cleanup preserves unrelated group identity and undo ownership");
+    assert.equal(h.state.activeGroupId, unrelatedGroup.id, "cleanup does not clear the user's current group selection");
+    assert.equal(h.state.account.credits, credits);
+    assert.equal(node.generatedAsset.generation.stage, "draft");
+  });
+}
+
+test("Agent sample actions preserve a new draft, refund only the final and keep both records", (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  const sampleTask = h.send("狐狸慢慢看向镜头");
+  h.service.complete(sampleTask);
+  assert.equal(sampleTask.result.generation.stage, "draft");
+  h.draft("这是下一次生成的草稿");
+  const credits = h.state.account.credits;
+  h.document.querySelector('[data-generation-action="final"]').getBoundingClientRect = () => ({ left: 600, top: 250, right: 700, bottom: 282, width: 100, height: 32 });
+  h.document.querySelector("#agentGenerationRecords").getBoundingClientRect = () => ({ top: 0, bottom: 500 });
+  h.click(sampleTask, "final");
+  h.document.querySelector(".draft-video-popover form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  const final = h.service.list().at(-1);
+  assert.equal(final.input.sourceDraftTaskId, sampleTask.id);
+  const finalRecord = h.document.querySelector(`[data-generation-task-id="${final.id}"]`);
+  assert.match(finalRecord.querySelector(".generation-record-source-pill").textContent, /正片模式/);
+  assert.equal(finalRecord.querySelector(".generation-record-prompt, .generation-record-references"), null);
+  assert.equal(h.first.nodes.length, 2, "conversation submission immediately creates its final result node");
+  const pending = h.first.nodes.find((node) => node.pendingGeneration?.taskId === final.id);
+  assert.ok(pending);
+  assert.equal(pending.generating, true);
+  assert.equal(h.document.querySelector(`[data-id="${pending.id}"] .node-draft-label`).textContent, "正片 1080P");
+  assert.equal(h.document.querySelector(`[data-id="${pending.id}"] .prompt-panel`), null);
+  assert.equal(h.editor().getText(), "这是下一次生成的草稿");
+  assert.equal(h.service.cancel(final), true);
+  assert.equal(h.state.account.credits, credits);
+  assert.equal(h.first.nodes.length, 1);
+  assert.equal(sampleTask.status, "succeeded");
+  assert.equal(h.service.list().length, 2);
+  assert.equal(h.service.complete(final), false);
+});
+
+
+for (const [modelId, mediaType, stage] of [
+  ["gpt-image-2", "image", null],
+  ["seedance-2-5", "video", null],
+  ["seedance-2-5-draft", "video", "draft"],
+]) {
+  test(`conversation ${modelId} has one canvas placeholder throughout queued, running and successful states`, (t) => {
+    const h = harness(t);
+    h.agentModels.setGenerationModel(modelId);
+    const task = h.send("镜头里的晨光");
+    assert.equal(task.status, "queued");
+    assert.equal(h.first.nodes.length, 1);
+    const pending = h.first.nodes[0];
+    const position = [pending.x, pending.y];
+    assert.equal(pending.kind, "asset");
+    assert.equal(pending.mode, mediaType);
+    assert.equal(pending.generating, true);
+    assert.equal(pending.pendingGeneration.taskId, task.id);
+    assert.equal(pending.assets.length, 0);
+    const element = () => h.document.querySelector(`[data-id="${pending.id}"]`);
+    assert.ok(element().querySelector(".generating-preview"));
+    assert.equal(element().querySelector(".generation-status-label").textContent, "生成中");
+    assert.equal(element().querySelector(".prompt-panel"), null);
+    if (stage === "draft") assert.equal(element().querySelector(".node-draft-label").textContent, "样片 480P");
+    assert.equal(h.window.createCanvasDocumentSnapshot().canvases[0].nodes.length, 0);
+    h.advance(1000);
+    assert.equal(task.status, "running");
+    assert.equal(h.first.nodes[0], pending);
+    assert.ok(element().querySelector(".generating-preview"));
+    assert.equal(element().querySelector(".generation-status-label").textContent, "生成中");
+    assert.equal(h.service.complete(task), true);
+    assert.equal(h.first.nodes.length, 1);
+    assert.equal(h.first.nodes[0], pending);
+    assert.equal(task.addedNodeId, pending.id);
+    assert.deepEqual([pending.x, pending.y], position);
+    assert.equal(pending.generating, undefined);
+    assert.equal(pending.pendingGeneration, undefined);
+    assert.equal(pending.assets[0].type, mediaType);
+    assert.equal(element().querySelector(".generating-preview"), null);
+    if (stage === "draft") assert.equal(pending.assets[0].generation.stage, "draft");
+    assert.equal(h.window.createCanvasDocumentSnapshot().canvases[0].nodes.length, 1);
+  });
+}
+
+for (const outcome of ["cancel", "fail"]) {
+  test(`conversation ${outcome} cleans only its own placeholder and refunds once`, (t) => {
+    const h = harness(t);
+    const task = h.send("这次任务将终止");
+    const other = h.send("另一个任务继续");
+    assert.equal(h.first.nodes.length, 2);
+    const remaining = h.first.nodes.find((node) => node.pendingGeneration?.taskId === other.id);
+    h.window.setSelection([remaining.id], remaining.id);
+    const credits = h.state.account.credits;
+    assert.equal(h.service[outcome](task), true);
+    assert.deepEqual(plain(h.first.nodes.map((node) => node.id)), [remaining.id]);
+    assert.deepEqual([...h.state.selectedIds], [remaining.id]);
+    assert.equal(h.state.account.credits, credits + task.input.cost);
+    assert.equal(h.service[outcome](task), false);
+    assert.equal(h.service.complete(task), false);
+    assert.equal(h.state.account.credits, credits + task.input.cost);
+    assert.equal(h.service.complete(other), true);
+    assert.equal(h.first.nodes[0], remaining);
+  });
+}
+
+test("deleting a conversation placeholder cannot resurrect it on undo or task completion", (t) => {
+  const h = harness(t);
+  const task = h.send();
+  const pending = h.first.nodes[0];
+  assert.equal(pending.pendingGeneration.taskId, task.id);
+  h.window.setSelection([pending.id], pending.id);
+  h.window.deleteSelectedNodes(true);
+  assert.equal(h.first.nodes.length, 0);
+  h.window.undoLastAction();
+  assert.equal(h.first.nodes.length, 0);
+  assert.equal(h.service.complete(task), true);
+  assert.equal(task.status, "succeeded");
+  assert.ok(task.result, "the generated media remains available in the conversation");
+  assert.equal(task.addedNodeId, null);
+  assert.equal(h.first.nodes.length, 0);
+});
+
 // Run the shipped entry/modules. Only scheduling and unsupported browser/media APIs are replaced.
 function harness(t, { hosted = false, publicHistory = false } = {}) {
   const dom = new JSDOM(html, { url: "http://reelay.test/index.html", runScripts: "outside-only", pretendToBeVisual: true });
@@ -58,6 +353,8 @@ function harness(t, { hosted = false, publicHistory = false } = {}) {
   window.Element.prototype.releasePointerCapture = () => {};
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  window.HTMLElement.prototype.showPopover = function () { this.dataset.open = "true"; };
+  window.HTMLElement.prototype.hidePopover = function () { delete this.dataset.open; };
   window.eval(promptEditorSource);
   for (const { path, source } of sources) {
     // Most task tests use an empty history fixture; publicHistory exercises the complete shipped entry.
@@ -275,17 +572,21 @@ test("generation send freezes prompt/reference inputs, charges 24 and creates on
   h.agentReferences.addAssets([{ id: "later", type: "image", name: "新的图", url: "/later.png" }]);
   assert.deepEqual(plain(task.input.references), saved.references);
   assert.match(task.input.prompt, /图片1视频1音频1/);
+  beforeCanvas.canvases[0].zCounter += 1; // Reserving the transient node allocates its canvas stacking position.
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), beforeCanvas);
 });
 
 test("record cancellation refunds once and stale completion cannot overwrite its terminal state", (t) => {
   const h = harness(t);
   const task = h.send();
-  const completion = [...h.timers.values()].find((timer) => timer.at === task.createdAt + 11000)?.callback;
+  assert.equal(h.first.nodes.length, 1);
+  assert.equal(h.first.nodes[0].pendingGeneration.taskId, task.id);
+  const completion = [...h.timers.values()].find((timer) => timer.at === task.createdAt + 10000)?.callback;
   assert.ok(completion);
   h.advance(6999);
   h.click(task, "cancel");
   assert.equal(task.status, "canceled");
+  assert.equal(h.first.nodes.length, 0, "successful cancellation removes the pending canvas node");
   assert.equal(task.refunded, 24);
   assert.equal(h.state.account.credits, 3000);
   assert.equal(h.state.account.consumedCredits, 0);
@@ -296,29 +597,189 @@ test("record cancellation refunds once and stale completion cannot overwrite its
   completion();
   assert.equal(task.status, "canceled");
   assert.equal(task.result, null);
+  assert.equal(h.first.nodes.length, 0, "late completion cannot restore a canceled canvas node");
   assert.equal(h.state.account.credits, 3000);
 });
 
-test("cancel disappears at seven seconds without a countdown while held task continues", (t) => {
+test("node and conversation keep shared progress, close cancellation at seven seconds and succeed at ten seconds", (t) => {
   const h = harness(t);
-  h.service.setNextScenario("hold");
   const task = h.send();
-  assert.ok(h.record(task).querySelector('[data-generation-action="cancel"]'));
-  h.advance(7000);
+  const pending = h.first.nodes[0];
+  const node = h.document.querySelector(`[data-id="${pending.id}"]`);
+  const record = h.record(task);
+  const nodeCancel = node.querySelector("[data-cancel-generation]");
+  const recordCancel = record.querySelector("[data-cancel-generation]");
+  const progress = (element) => element.querySelector("[data-generation-progress]").textContent;
+  assert.equal(progress(node), "0%");
+  assert.equal(progress(record), "0%");
+  assert.equal(nodeCancel.disabled, false);
+  assert.equal(recordCancel.disabled, false);
+  const selection = [...h.state.selectedIds];
+  const action = h.state.action;
+  let nodePointerDowns = 0;
+  node.addEventListener("pointerdown", () => { nodePointerDowns += 1; });
+  node.querySelector("[data-generation-progress]").dispatchEvent(new h.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  nodeCancel.dispatchEvent(new h.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  assert.equal(nodePointerDowns, 0, "status controls cannot initiate node drag");
+  assert.equal(h.state.action, action);
+  assert.deepEqual([...h.state.selectedIds], selection);
+  assert.equal(node.querySelector(".generating-spinner"), null);
+  assert.equal(record.querySelector(".generation-record-spinner"), null);
+  h.advance(1000);
+  nodeCancel.focus();
+  h.advance(500);
+  assert.equal(h.document.querySelector(`[data-id="${pending.id}"]`), node);
+  assert.equal(node.querySelector("[data-cancel-generation]"), nodeCancel);
+  assert.equal(h.document.activeElement, nodeCancel, "progress updates preserve the user's focused node action");
+  assert.equal(h.record(task), record);
+  assert.equal(progress(node), `${task.progress}%`);
+  assert.equal(progress(record), progress(node));
+  assert.ok(task.progress > 0);
+  h.advance(5499);
+  assert.equal(nodeCancel.disabled, false);
+  assert.equal(recordCancel.disabled, false);
+  h.advance(1);
   assert.equal(task.status, "running");
-  const button = h.record(task).querySelector('[data-generation-action="cancel"]');
-  assert.ok(!button || button.hidden, "deadline update must hide the cancellation action");
+  assert.equal(nodeCancel.hidden, false);
+  assert.equal(recordCancel.hidden, false);
+  assert.equal(nodeCancel.disabled, true);
+  assert.equal(recordCancel.disabled, true);
+  assert.equal(nodeCancel.getAttribute("aria-description"), "已进入生成阶段，当前无法取消");
+  assert.equal(recordCancel.getAttribute("aria-description"), nodeCancel.getAttribute("aria-description"));
+  nodeCancel.click();
+  recordCancel.click();
+  nodeCancel.dispatchEvent(new h.window.MouseEvent("click", { bubbles: true }));
   assert.equal(h.service.cancel(task), false);
-  assert.doesNotMatch(h.record(task).textContent, /倒计时|剩余\s*\d+\s*秒/);
+  assert.equal(task.status, "running");
+  assert.equal(h.first.nodes[0], pending);
+  assert.equal(h.state.account.credits, 2976);
+  assert.equal(progress(node), progress(record));
+  h.advance(2999);
+  assert.equal(task.status, "running");
+  assert.equal(pending.generating, true);
+  assert.equal(pending.pendingGeneration.taskId, task.id);
+  assert.ok(task.progress < 100);
+  assert.equal(progress(node), progress(record));
+  h.advance(1);
+  assert.equal(task.status, "succeeded");
+  assert.equal(task.progress, 100);
+  assert.equal(h.first.nodes[0], pending, "ten-second completion fills the original placeholder");
+  assert.equal(pending.pendingGeneration, undefined);
+  assert.equal(pending.generating, undefined);
+  assert.equal(h.document.querySelector(`[data-id="${pending.id}"] .generation-status`), null);
+  assert.equal(h.record(task).dataset.status, "succeeded");
   assert.equal(h.state.account.credits, 2976);
 });
+
+test("cancel from the canvas status row terminates its conversation task and refunds exactly once", (t) => {
+  const h = harness(t);
+  const task = h.send();
+  const pending = h.first.nodes[0];
+  const button = h.document.querySelector(`[data-id="${pending.id}"] [data-cancel-generation]`);
+  h.advance(700);
+  button.click();
+  assert.equal(task.status, "canceled");
+  assert.equal(h.record(task).dataset.status, "canceled");
+  assert.equal(h.first.nodes.length, 0);
+  assert.equal(h.state.account.credits, 3000);
+  assert.equal(h.state.account.consumedCredits, 0);
+  button.click();
+  h.advance(10000);
+  assert.equal(h.first.nodes.length, 0);
+  assert.equal(h.state.account.credits, 3000);
+  assert.equal(task.refunded, task.charged);
+});
+
+test("ordinary generator status updates in place and cancel refunds while retaining the editable node", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  node.prompt = "缓缓推进的镜头";
+  h.first.nodes.push(node);
+  h.window.setSelection([node.id], node.id);
+  const credits = h.state.account.credits;
+  assert.equal(h.window.startSimulatedGeneration(node), true);
+  const element = h.document.querySelector(`[data-id="${node.id}"]`);
+  const button = element.querySelector("[data-cancel-generation]");
+  assert.ok(button);
+  assert.ok(h.state.account.credits < credits);
+  button.focus();
+  h.advance(700);
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"]`), element);
+  assert.equal(h.document.activeElement, button);
+  assert.ok(Number.parseInt(element.querySelector("[data-generation-progress]").textContent) > 0);
+  button.click();
+  assert.equal(h.first.nodes[0], node);
+  assert.equal(h.first.nodes.length, 1);
+  assert.equal(node.generating, false);
+  assert.equal(node.generatedAsset, null);
+  assert.equal(h.state.account.credits, credits);
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"] .generation-status`), null);
+  assert.equal(node.kind, "generator");
+  assert.equal(node.prompt, "缓缓推进的镜头");
+  button.click();
+  h.advance(10000);
+  assert.equal(node.generatedAsset, null);
+  assert.equal(h.state.account.credits, credits);
+});
+
+for (const [mediaType, modelId] of [["image", "gpt-image-2"], ["video", "seedance-2-5"], ["video", "seedance-2-5-draft"]]) {
+  test(`node ${modelId} rejects cancellation at seven seconds and replaces the placeholder with media at ten seconds`, (t) => {
+    const h = harness(t);
+    const node = h.window.defaultGeneratorNode(40, 50, mediaType);
+    node.model = modelId;
+    node.prompt = "The flower opens in soft daylight";
+    h.first.nodes.push(node);
+    h.window.normalizeNodeParameters(node);
+    h.window.setSelection([node.id], node.id);
+    h.window.render();
+    const generate = h.document.querySelector(`[data-id="${node.id}"] [data-action="generate"]`);
+    assert.ok(generate);
+    generate.click();
+    assert.equal(node.generating, true);
+    assert.equal(node.generatedAsset, null);
+    const creditsAfterSend = h.state.account.credits;
+    assert.ok(creditsAfterSend < 3000);
+    const element = h.document.querySelector(`[data-id="${node.id}"]`);
+    const cancel = element.querySelector("[data-cancel-generation]");
+    assert.ok(cancel && !cancel.disabled);
+    h.advance(6999);
+    assert.equal(node.generating, true);
+    assert.equal(cancel.disabled, false);
+    h.advance(1);
+    assert.equal(node.generating, true);
+    assert.equal(cancel.disabled, true);
+    cancel.dispatchEvent(new h.window.MouseEvent("click", { bubbles: true }));
+    assert.equal(node.generating, true, "a stale activation cannot cancel after the deadline");
+    assert.equal(h.state.account.credits, creditsAfterSend);
+    h.advance(2999);
+    assert.equal(node.generating, true);
+    assert.equal(node.generatedAsset, null);
+    assert.equal(h.document.querySelector(`[data-id="${node.id}"]`), element);
+    assert.ok(Number.parseInt(element.querySelector("[data-generation-progress]").textContent) < 100);
+    h.advance(1);
+    assert.equal(h.first.nodes[0], node);
+    assert.equal(h.first.nodes.length, 1);
+    assert.equal(node.generating, false);
+    assert.equal(node.generatedAsset.type, mediaType);
+    const frame = h.document.querySelector(`[data-id="${node.id}"] .media-frame`);
+    assert.ok(frame.classList.contains("has-asset"), "completed media uses its asset surface");
+    assert.ok(frame.classList.contains(`${mediaType}-asset`));
+    assert.equal(frame.classList.contains("has-preview"), false, "a completed result cannot retain the placeholder gradient");
+    assert.ok(frame.querySelector(mediaType === "image" ? "img" : "video"));
+    assert.equal(frame.querySelector(".generation-status"), null);
+    assert.equal(h.state.account.credits, creditsAfterSend);
+  });
+}
 
 test("failure keeps reason and refund visible; retry creates a new record preserving the old attempt", (t) => {
   const h = harness(t);
   h.service.setNextScenario({ outcome: "failure", reason: "参考视频暂时不可读取" });
   const task = h.send();
-  h.advance(11000);
+  const failedNode = h.first.nodes[0];
+  assert.equal(failedNode.pendingGeneration.taskId, task.id);
+  h.advance(10000);
   assert.equal(task.status, "failed");
+  assert.equal(h.first.nodes.length, 0);
   assert.match(h.record(task).textContent, /生成失败.*参考视频暂时不可读取/s);
   assert.equal(h.state.account.credits, 3000);
   h.click(task, "again");
@@ -326,6 +787,9 @@ test("failure keeps reason and refund visible; retry creates a new record preser
   assert.notEqual(retry.id, task.id);
   assert.equal(task.status, "failed");
   assert.equal(retry.status, "queued");
+  assert.equal(h.first.nodes.length, 1);
+  assert.notEqual(h.first.nodes[0].id, failedNode.id);
+  assert.equal(h.first.nodes[0].pendingGeneration.taskId, retry.id);
   assert.deepEqual(plain(retry.input), plain(task.input));
   assert.equal(h.document.querySelectorAll(".generation-record").length, 2);
   assert.equal(h.state.account.credits, 2976);
@@ -385,7 +849,7 @@ for (const elapsed of [0, 7000]) {
     h.draft("改写恢复的提示词");
     h.agentReferences.restoreAssets([], h.agentReferences.captureScope(), { replace: true });
     assert.deepEqual(plain(task.input), input, "editing the recovered draft must not mutate the sent snapshot");
-    h.advance(11000 - elapsed);
+    h.advance(10000 - elapsed);
     assert.equal(task.status, "succeeded", "the original generation retains its original completion schedule");
     assert.ok(task.addedNodeId);
     assert.equal(h.editor().getText(), "改写恢复的提示词");
@@ -394,7 +858,7 @@ for (const elapsed of [0, 7000]) {
   });
 }
 
-test("success automatically places once without changing existing selection or viewport; undo does not regenerate it", (t) => {
+test("submission reserves a result node without changing selection or viewport and completion fills it once", (t) => {
   const h = harness(t);
   const existing = h.window.defaultGeneratorNode(20, 30, "image");
   existing.prompt = "已有节点保持不变";
@@ -405,7 +869,20 @@ test("success automatically places once without changing existing selection or v
   const original = plain(existing);
   const viewport = [h.state.tx, h.state.ty, h.state.scale];
   const task = h.send();
+  const pending = h.first.nodes.find((node) => node.pendingGeneration?.taskId === task.id);
+  assert.ok(pending);
+  assert.equal(h.first.nodes.length, 2);
+  assert.deepEqual([...h.state.selectedIds], [existing.id]);
+  assert.equal(h.state.activeId, existing.id);
+  assert.deepEqual([h.state.tx, h.state.ty, h.state.scale], viewport);
+  pending.x += 75;
+  pending.y += 45;
+  const position = [pending.x, pending.y];
   h.service.complete(task);
+  assert.equal(h.first.nodes.find((node) => node.id === pending.id), pending);
+  assert.deepEqual([pending.x, pending.y], position, "completion preserves the user's pending-node placement");
+  assert.equal(pending.pendingGeneration, undefined);
+  assert.equal(pending.generating, undefined);
   const inputSnapshot = plain(task.input);
   const added = task.addedNodeId;
   assert.ok(added);
@@ -432,7 +909,7 @@ test("success automatically places once without changing existing selection or v
   assert.equal(h.state.account.credits, 2976);
   assert.deepEqual(plain(task.input), inputSnapshot);
   h.agentGeneration.render();
-  h.advance(11000);
+  h.advance(10000);
   assert.equal(h.first.nodes.length, 1, "undo must not cause result delivery to run again");
   assert.equal(h.state.account.credits, 2976);
 });
@@ -471,6 +948,8 @@ test("Agent mode retains existing role messages and does not create generation t
 test("background success places in its captured canvas and keeps the currently viewed canvas and conversation intact", (t) => {
   const h = harness(t);
   const task = h.send();
+  const pending = h.first.nodes[0];
+  assert.equal(pending.pendingGeneration.taskId, task.id);
   const originalConversation = h.agentHistory.getActiveId();
   h.agentHistory.startNew();
   assert.notEqual(h.agentHistory.getActiveId(), originalConversation);
@@ -480,6 +959,7 @@ test("background success places in its captured canvas and keeps the currently v
   const selected = [...h.state.selectedIds];
   h.service.complete(task);
   assert.equal(task.scope.canvasId, h.first.id);
+  assert.equal(h.first.nodes[0], pending, "background completion fills the captured pending node");
   assert.equal(h.first.nodes.length, 1);
   assert.equal(h.second.nodes.length, 0);
   assert.deepEqual(plain(h.second), current, "background delivery must not increment the active canvas z counter or history");
@@ -500,23 +980,25 @@ test("background success places in its captured canvas and keeps the currently v
   assert.equal(h.second.nodes.length, 0);
 });
 
-test("success cannot write into another project or a replacement canvas with the same id", (t) => {
-  const h = harness(t);
-  const firstTask = h.send();
-  h.state.projectId = "different-project";
-  h.service.complete(firstTask);
-  assert.equal(h.first.nodes.length, 0);
-  assert.equal(firstTask.addedNodeId, null);
-  h.state.projectId = firstTask.scope.projectId;
-  const secondTask = h.send();
-  const replacement = h.window.createCanvasRecord("replacement");
-  replacement.id = h.first.id;
-  h.canvasRuntimeStore.replaceCanvases([replacement, h.second], replacement.id);
-  h.service.complete(secondTask);
-  assert.equal(replacement.nodes.length, 0);
-  assert.equal(h.first.nodes.length, 0);
-  assert.equal(secondTask.addedNodeId, null);
-});
+for (const change of ["project", "canvas instance"]) {
+  test(`completion cannot write after its captured ${change} is replaced`, (t) => {
+    const h = harness(t);
+    const task = h.send();
+    assert.equal(h.first.nodes.length, 1);
+    let replacement;
+    if (change === "project") h.state.projectId = "different-project";
+    else {
+      replacement = h.window.createCanvasRecord("replacement");
+      replacement.id = h.first.id;
+      h.canvasRuntimeStore.replaceCanvases([replacement, h.second], replacement.id);
+    }
+    h.service.complete(task);
+    assert.equal(h.first.nodes.length, 0, "the old transient placeholder is discarded");
+    if (replacement) assert.equal(replacement.nodes.length, 0);
+    assert.equal(h.second.nodes.length, 0);
+    assert.equal(task.addedNodeId, null);
+  });
+}
 
 test("locate result switches to its original canvas, selects the delivered node and fits it into the available canvas", (t) => {
   const h = harness(t);

@@ -6,13 +6,14 @@
     placeResult, locateResult, showMessage, escapeHtml, assetPreview, renderPrompt, sanitizeUrl,
     placeAnchoredPopover, refreshIcons, getDemoPresets = () => [], preparePreviewInput = () => null,
     createPreviewHistory = null, selectionTrigger = null, beforeSelection = () => {},
-    confirmRemoveRecords = async () => false }) {
+    confirmRemoveRecords = async () => false, createFinalInput = null,
+    beginResult = () => null, updateResult = () => {}, discardResult = () => {} }) {
     const window = document.defaultView;
     let disposed = false;
     let sending = false;
     let previewInitializer = createPreviewHistory;
     let previewHandled = false;
-    const placementTargets = new WeakMap();
+    const placementTargets = new Map();
     let recordView;
     let selectionView;
     let removing = false;
@@ -21,6 +22,10 @@
       setTimer: (fn, delay) => window.setTimeout(fn, delay), clearTimer: (id) => window.clearTimeout(id),
       charge, refund, makeResult,
       onRefund: (task) => showMessage(`已返还 ${task.refunded} 积分`),
+    });
+    const finalView = createFinalInput && root.REELAY_DRAFT_VIDEO_CONTROLLER?.createController({
+      document, getScope, isEditable, createFinalInput, showMessage, placeAnchoredPopover,
+      onSubmit: (input, context) => submitFinalSnapshot(input, context),
     });
 
     function sameConversation(task, scope = getScope()) {
@@ -35,6 +40,7 @@
 
     function render(options) {
       if (disposed) return;
+      finalView?.refresh();
       const generation = isGenerationMode();
       if (generation) initializePreviewHistory();
       chatContainer.hidden = generation;
@@ -68,13 +74,49 @@
       }
     }
 
+    function beginPlacement(task, target) {
+      if (placementTargets.has(task)) return;
+      placementTargets.set(task, target);
+      try { beginResult(task, target); } catch { /* The accepted task remains available in its record. */ }
+    }
+
     function submitSnapshot(input, scope) {
       const target = capturePlacementTarget(scope, input);
       if (!target) { showMessage("当前画布不可编辑，本次生成未提交"); return null; }
       const task = service.submit({ input, scope });
       if (!task) showMessage("积分不足，本次生成未提交");
-      else placementTargets.set(task, target);
+      else beginPlacement(task, target);
       return task;
+    }
+
+    function submitFinalSnapshot(input, { sourceAsset, scope }) {
+      const current = getScope();
+      if (disposed || sending || !isEditable() || !current || current.projectId !== scope.projectId
+        || current.canvasId !== scope.canvasId || current.conversationId !== scope.conversationId) return null;
+      const pending = service.list({ projectId: scope.projectId }).find((task) => ["queued", "running"].includes(task.status)
+        && task.input.generationStage === "final" && task.input.sourceDraftTaskId === input.sourceDraftTaskId
+        && task.input.sourceResultId === input.sourceResultId);
+      if (pending) { showMessage("此样片的成片已在生成中，可在原生成记录中查看"); return pending; }
+      const target = capturePlacementTarget(scope, input);
+      if (!target) { showMessage("当前画布不可编辑，本次生成未提交"); return null; }
+      sending = true;
+      try {
+        const task = service.submitFinal({ source: sourceAsset, scope, cost: input.cost,
+          outputFormat: input.parameters?.outputFormat || "mp4" });
+        if (!task) { showMessage("本次生成未提交，请检查积分或样片有效期"); return null; }
+        beginPlacement(task, target);
+        render({ forceBottom: true });
+        showMessage(input.sourceNodeId ? "正片已提交，正在画布中生成" : "正片已提交，可在生成记录中查看进度");
+        return task;
+      } finally { sending = false; }
+    }
+
+    function requestFinal(sourceAsset, { sourceNodeId = "", anchor = document.activeElement, scope = getScope() } = {}) {
+      if (disposed || sending || !isEditable() || !scope || !finalView) return false;
+      const eligibility = root.REELAY_DRAFT_VIDEO.getFinalEligibility(sourceAsset, { projectId: scope.projectId });
+      if (!eligibility.eligible) { showMessage(eligibility.reason); return false; }
+      recordView.close();
+      return finalView.open({ sourceAsset, sourceNodeId, anchor, scope });
     }
 
     function submit() {
@@ -113,24 +155,32 @@
         if (!isEditable()) return;
         // A repeated click from the same activation must not produce two attempts.
         if (event?.detail > 1 || sending) return;
+        if (task.input.generationStage === "final") {
+          requestFinal(task.input.sourceDraftAsset, { anchor: event?.target?.closest?.("button") });
+          return;
+        }
         sending = true;
         try {
           if (submitSnapshot(task.input, getScope())) render({ forceBottom: true });
         } finally { sending = false; }
       } else if (name === "edit") {
         if (!isEditable()) return;
+        if (task.input.generationStage === "final") return;
         if (hasDraft()) { showMessage("输入区已有草稿，请先保留或清空，再重新编辑此条记录"); return; }
         if (restoreDraft(task.input)) { recordView.close(); showMessage("已带入提示词、参考素材和参数"); }
       } else if (name === "locate") {
         if (task.status !== "succeeded" || !task.addedNodeId) return;
         if (locateResult(task)) recordView.close();
         else showMessage("画布中的结果已不存在或暂不可访问");
+      } else if (name === "final") {
+        if (task.status === "succeeded") requestFinal(task.result?.asset || task.result,
+          { anchor: event?.target?.closest?.("button") });
       }
     }
 
     const unsubscribe = service.subscribe((task, event) => {
-      // Placement belongs to the terminal transition and its captured canvas,
-      // never to rendering, the current conversation, or a late "add" gesture.
+      // Both surfaces project the same task into its captured canvas.
+      if (["running", "progress", "cancel-window-closed"].includes(event.type)) updateResult(task);
       if (["succeeded", "failed", "canceled", "removed"].includes(event.type)) {
         const target = placementTargets.get(task);
         placementTargets.delete(task);
@@ -138,7 +188,12 @@
           let placement = null;
           try { placement = placeResult(task, target); } catch { /* Keep the successful media available in its record. */ }
           if (placement) service.markAdded(task, placement);
-          else showMessage("生成已完成，原画布暂不可放置，结果保留在记录中");
+          else {
+            discardResult(task);
+            showMessage("生成已完成，原画布暂不可放置，结果保留在记录中");
+          }
+        } else if (target) {
+          discardResult(task);
         }
       }
       if (!removing && sameConversation(task)) render();
@@ -199,10 +254,19 @@
     function connect() {
       window.dispatchEvent(new window.CustomEvent("reelay:generation-ready", { detail: capabilities }));
     }
-    function close() { selectionView?.close(); recordView.close(); }
+    function cancelTask(id) {
+      const task = service.get(id);
+      const scope = getScope();
+      if (disposed || !isEditable() || !task || task.scope.projectId !== scope?.projectId
+        || task.scope.canvasId !== scope.canvasId) return false;
+      return service.cancel(task);
+    }
+    function close() { selectionView?.close(); recordView.close(); finalView?.close(); }
     function dispose() {
       if (disposed) return;
-      disposed = true; close(); unsubscribe(); service.dispose(); selectionView?.dispose(); recordView.dispose();
+      disposed = true; close(); unsubscribe(); service.dispose(); selectionView?.dispose(); recordView.dispose(); finalView?.dispose();
+      for (const task of placementTargets.keys()) discardResult(task);
+      placementTargets.clear();
       for (const [target, name, fn, capture] of listeners) target.removeEventListener(name, fn, capture);
     }
     function pageHide(event) { if (event.persisted) close(); else dispose(); }
@@ -211,7 +275,8 @@
     ];
     for (const [target, name, fn, capture] of listeners) target.addEventListener(name, fn, capture);
     connect();
-    return Object.freeze({ submit, render, close, dispose, service,
+    return Object.freeze({ submit, requestFinal, cancelTask, render, close, dispose, service,
+      repositionFinal: () => finalView?.reposition(),
       hasRecords: (conversationId) => service.list({ projectId: getScope()?.projectId, conversationId }).length > 0,
       hasPending: (conversationId) => service.list({ projectId: getScope()?.projectId, conversationId })
         .some((task) => task.status === "queued" || task.status === "running"),

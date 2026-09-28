@@ -19,7 +19,7 @@
       const result = definition.type === "image" ? image : simulationAssets.video;
       if (definition.status === "succeeded" && !result?.url) return [];
       const createdAt = now - (definitions.length - index) * 60000;
-      return [{ input, status: definition.status, createdAt, finishedAt: createdAt + (definition.status === "canceled" ? 3500 : 11000),
+      return [{ input, status: definition.status, createdAt, finishedAt: createdAt + (definition.status === "canceled" ? 3500 : root.REELAY_PROTOTYPE_CONFIG.generationDurationMs),
         error: definition.error || null,
         result: definition.status === "succeeded" ? { ...result, id: `preview-result-${definition.presetId}`,
           source: "preview", displayName: definition.type === "image" ? "图片生成展示示例" : "视频生成展示示例" } : null }];

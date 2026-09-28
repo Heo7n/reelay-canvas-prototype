@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { JSDOM } from "jsdom";
 
 const [interactionSource, controllerSource] = await Promise.all([
   readFile(new URL("../src/legacy-canvas/canvas-node-interaction.js", import.meta.url), "utf8"),
@@ -75,6 +76,45 @@ test("embedded controls never start a node drag", () => {
   assert.equal(harness.controller.handlePointerDown(pointerEvent({ target }), "a"), "control");
   assert.deepEqual(harness.calls, ["control"]);
   assert.equal(harness.getAction(), null);
+});
+
+test("the entire prompt panel keeps pointer gestures out of node dragging", () => {
+  const dom = new JSDOM(`<article class="canvas-node">
+    <div class="media-frame"></div>
+    <section class="prompt-panel">
+      <div class="prompt-input"><div contenteditable="true"><p>Prompt text</p></div></div>
+      <div class="prompt-controls"><span>Parameter summary</span></div>
+    </section>
+  </article>`);
+  try {
+    for (const selector of [".prompt-panel", ".prompt-input", "p", ".prompt-controls", "span"]) {
+      const harness = createHarness();
+      let prevented = false;
+      const event = pointerEvent({
+        target: dom.window.document.querySelector(selector),
+        preventDefault() { prevented = true; },
+      });
+      assert.equal(harness.controller.handlePointerDown(event, "a"), "control", selector);
+      assert.deepEqual(harness.calls, ["control"], selector);
+      assert.equal(harness.getAction(), null, selector);
+      assert.equal(prevented, false, "native focus and text selection remain available");
+    }
+
+    const target = dom.window.document.querySelector(".prompt-panel");
+    for (const [button, spaceDown] of [[1, false], [0, true]]) {
+      const harness = createHarness({ spaceDown });
+      assert.equal(harness.controller.handlePointerDown(pointerEvent({ button, target }), "a"), "pan");
+      assert.deepEqual(harness.calls, ["pan"]);
+      assert.equal(harness.getAction(), null);
+    }
+
+    const media = createHarness();
+    assert.equal(media.controller.handlePointerDown(pointerEvent({
+      target: dom.window.document.querySelector(".media-frame"),
+    }), "a"), "drag-candidate");
+  } finally {
+    dom.window.close();
+  }
 });
 
 test("read-only node clicks update selection without creating a drag action", () => {

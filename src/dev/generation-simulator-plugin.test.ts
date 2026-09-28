@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { generationSimulatorPlugin, generationSimulatorTags } from "./generation-simulator-plugin";
 
+const configSource = readFileSync(path.resolve("src/config/prototype-config.js"), "utf8");
 const clientSource = readFileSync(path.resolve("src/dev/generation-simulator.js"), "utf8");
 
 function setup() {
@@ -24,6 +25,7 @@ function setup() {
   };
   const ready = () => window.dispatchEvent(new CustomEvent("reelay:generation-ready", { detail: capabilities }));
   window.addEventListener("reelay:generation-connect", ready);
+  window.eval(configSource);
   window.eval(clientSource);
   window.removeEventListener("reelay:generation-connect", ready);
   const root = document.querySelector<HTMLElement>("#reelay-generation-simulator")!;
@@ -37,7 +39,7 @@ function setup() {
   return { root, panel, capabilities, unsubscribe, ready, select, setTasks };
 }
 
-afterEach(() => { window.dispatchEvent(new Event("pagehide")); document.body.replaceChildren(); Reflect.deleteProperty(window, "REELAY_GENERATION_HISTORY_PRESETS"); });
+afterEach(() => { window.dispatchEvent(new Event("pagehide")); document.body.replaceChildren(); Reflect.deleteProperty(window, "REELAY_GENERATION_HISTORY_PRESETS"); Reflect.deleteProperty(window, "REELAY_PROTOTYPE_CONFIG"); });
 
 describe("generation simulator development boundary", () => {
   it("requires explicit developer opt-in and leaves ordinary preview and built entries unreferenced", () => {

@@ -1,6 +1,7 @@
 (function mountGenerationSimulator(view) {
   "use strict";
   const document = view.document;
+  const durationSeconds = view.REELAY_PROTOTYPE_CONFIG.generationDurationMs / 1000;
   const ROOT_ID = "reelay-generation-simulator";
   if (document.getElementById(ROOT_ID)) return;
   const composer = document.querySelector("#agentComposer");
@@ -41,7 +42,7 @@
         <label for="generation-simulator-reason">失败原因</label>
         <input id="generation-simulator-reason" type="text" maxlength="180" value="生成服务暂时不可用，请稍后重试。" />
       </div>
-      <p class="generation-simulator-note" role="status">填入后正常发送；约 11 秒完成，前 7 秒可取消。</p>
+      <p class="generation-simulator-note" role="status">填入后正常发送；约 ${durationSeconds} 秒完成，前 7 秒可取消。</p>
       </div>`;
   document.body.append(panel);
   const preset = panel.querySelector("#generation-simulator-preset");
@@ -149,7 +150,7 @@
     reasonGroup.hidden = outcome.value !== "failure";
     capabilities.setNextScenario({ outcome: outcome.value, failureReason: reason.value.trim() || "生成服务暂时不可用，请稍后重试。" });
     nextConfigured = true;
-    note.textContent = `下一次：${outcome.selectedOptions[0].textContent}。约 11 秒完成，前 7 秒可取消。`;
+    note.textContent = `下一次：${outcome.selectedOptions[0].textContent}。约 ${durationSeconds} 秒完成，前 7 秒可取消。`;
     positionPanel();
   }
 

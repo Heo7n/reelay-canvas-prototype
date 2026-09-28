@@ -6,6 +6,7 @@
     const now = options.now || (() => Date.now());
     const setTimer = options.setTimer || ((callback, delay) => root.setTimeout(callback, delay));
     const clearTimer = options.clearTimer || ((timer) => root.clearTimeout(timer));
+    const durationMs = root.REELAY_PROTOTYPE_CONFIG.generationDurationMs;
     const executions = new Map();
     let disposed = false;
 
@@ -18,13 +19,14 @@
       return true;
     }
 
-    function start({ id, createdAt, cancelUntil, scenario, onRunning, onComplete, onFail, onCancelWindowClosed }) {
+    function start({ id, createdAt, cancelUntil, scenario, onRunning, onProgress, onComplete, onFail, onCancelWindowClosed }) {
       if (disposed) return false;
       if (executions.has(id)) throw new TypeError("An execution already exists for this task.");
       const execution = { timers: new Set() };
       executions.set(id, execution);
 
       function schedule(at, callback) {
+        if (disposed || executions.get(id) !== execution) return;
         const timer = setTimer(() => {
           execution.timers.delete(timer);
           if (disposed || executions.get(id) !== execution) return;
@@ -33,15 +35,23 @@
         execution.timers.add(timer);
       }
 
+      function reportProgress() {
+        // This percentage belongs to the simulation, not to a real model provider.
+        const progress = Math.min(99, Math.max(0, Math.floor((now() - createdAt) * 100 / durationMs)));
+        onProgress(progress);
+        if (progress < 99) schedule(now() + 500, reportProgress);
+      }
+
       try {
         schedule(createdAt + 700, onRunning);
         schedule(cancelUntil, onCancelWindowClosed);
         if (scenario.outcome !== "hold") {
-          schedule(createdAt + 11000, () => {
+          schedule(createdAt + durationMs, () => {
             if (scenario.outcome === "failure") onFail(scenario.reason);
             else onComplete();
           });
         }
+        if (typeof onProgress === "function") schedule(createdAt + 500, reportProgress);
       } catch (error) {
         stop(id);
         throw error;

@@ -20,6 +20,28 @@ test("hidden media toolbar renders no markup", () => {
   assert.equal(renderMediaToolbar({ visible: false }), "");
 });
 
+test("unavailable media actions are disabled and expose their reason in both toolbar presentations", () => {
+  for (const showLabels of [true, false]) {
+    const reason = '样片已过期，请重新生成样片。<"说明">';
+    const dom = new JSDOM(renderMediaToolbar({
+      visible: true, showLabels,
+      pinnedTools: [{ id: "draft-final", icon: "video", label: "成片生成不可用", disabled: true, disabledReason: reason }],
+    }));
+    const button = dom.window.document.querySelector('[data-media-tool="draft-final"]');
+    assert.equal(button.disabled, true);
+    assert.equal(button.getAttribute("aria-label"), "成片生成不可用");
+    assert.equal(button.getAttribute("aria-description"), reason);
+    assert.equal(button.title, reason);
+    assert.equal(button.querySelector(".toolbar-tip").textContent, reason);
+    assert.equal(dom.window.document.querySelector('[data-media-tool="download"]').disabled, false);
+    let clicks = 0;
+    button.addEventListener("click", () => { clicks += 1; });
+    button.click();
+    assert.equal(clicks, 0);
+    dom.window.close();
+  }
+});
+
 test("compact media toolbar preserves interaction selectors and scale", () => {
   const markup = renderMediaToolbar({
     visible: true,

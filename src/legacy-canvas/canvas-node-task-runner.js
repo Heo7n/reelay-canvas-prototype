@@ -18,6 +18,7 @@
     }
     const records = new Map();
     const targets = new Map();
+    const now = options.now || (() => Date.now());
     let disposed = false;
 
     function release(record) {
@@ -25,7 +26,9 @@
       records.delete(record.task.id);
       if (targets.get(record.key) === record) targets.delete(record.key);
       if (record.timerId !== null) options.clearTimer(record.timerId);
+      if (record.progressTimerId !== null) options.clearTimer(record.progressTimerId);
       record.timerId = null;
+      record.progressTimerId = null;
       return true;
     }
 
@@ -41,8 +44,36 @@
     function complete(record) {
       if (disposed || records.get(record.task.id) !== record) return;
       const target = options.resolveTarget(record.task);
+      record.completed = target === record.target;
       release(record);
       if (target === record.target) options.onComplete(record.task, target);
+    }
+
+    function canCancel(taskId) {
+      const record = records.get(taskId);
+      return Boolean(!disposed && record?.task.kind === "generation" && now() < record.task.cancelUntil
+        && options.resolveTarget(record.task) === record.target);
+    }
+
+    function cancel(taskId) {
+      return canCancel(taskId) ? cancelRecord(records.get(taskId), "user-canceled") : false;
+    }
+
+    function scheduleProgress(record) {
+      if (record.task.kind !== "generation" || typeof options.onProgress !== "function"
+        || disposed || records.get(record.task.id) !== record) return;
+      const remaining = record.task.createdAt + record.delayMs - now();
+      if (remaining <= 0) return;
+      record.progressTimerId = options.setTimer(() => {
+        record.progressTimerId = null;
+        if (disposed || records.get(record.task.id) !== record) return;
+        if (options.resolveTarget(record.task) !== record.target) {
+          cancelRecord(record, "target-replaced"); return;
+        }
+        try { options.onProgress(record.task, record.target); }
+        catch { /* A progress view failure cannot prevent task completion or cleanup. */ }
+        scheduleProgress(record);
+      }, Math.min(200, remaining));
     }
 
     function start({ kind, scope, inputs = {}, delayMs } = {}) {
@@ -60,9 +91,17 @@
       if (previous?.target === target) return null;
       const id = options.makeTaskId();
       if (typeof id !== "string" || !id || records.has(id)) throw new TypeError("Node task ids must be unique.");
-      const task = Object.freeze({ id, kind, ...taskScope, inputs: copyTaskInputs(inputs) });
+      const createdAt = now();
+      const task = Object.freeze({ id, kind, ...taskScope, inputs: copyTaskInputs(inputs),
+        createdAt, cancelUntil: kind === "generation" ? createdAt + 7000 : null,
+        get progress() {
+          return record.completed ? 100 : Math.max(0, Math.min(99,
+            Math.floor((now() - createdAt) / Math.max(1, delayMs) * 100)));
+        },
+        get canCancel() { return canCancel(id); },
+      });
       if (previous) cancelRecord(previous, "target-replaced");
-      const record = { task, target, key, timerId: null };
+      const record = { task, target, key, timerId: null, progressTimerId: null, delayMs, completed: false };
       records.set(id, record);
       targets.set(key, record);
       try {
@@ -76,6 +115,7 @@
           return null;
         }
         record.timerId = options.setTimer(() => complete(record), delayMs);
+        scheduleProgress(record);
         return task;
       } catch (error) {
         cancelRecord(record, "start-failed");
@@ -109,7 +149,7 @@
       cancelScope({}, "disposed");
     }
 
-    return Object.freeze({ start, cancelScope, dispose });
+    return Object.freeze({ start, get: (taskId) => records.get(taskId)?.task || null, canCancel, cancel, cancelScope, dispose });
   }
 
   root.REELAY_CANVAS_NODE_TASK_RUNNER = Object.freeze({ createCanvasNodeTaskRunner });

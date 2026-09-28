@@ -474,6 +474,7 @@
     imageQualityMultiplier,
     videoQualityCost,
     simulationAssets,
+    generationDurationMs: 10000,
     assetLibrarySeed,
     mediaToolDefinitions,
     mediaToolsByType,

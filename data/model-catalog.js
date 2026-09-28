@@ -53,6 +53,9 @@
     },
     {
       id: "seedance-2-5",
+      baseModelId: "seedance-2-5",
+      providerModelId: "doubao-seedance-2-5-260628",
+      executionMode: "standard",
       type: "video",
       provider: "ByteDance",
       brand: "seedance",
@@ -221,6 +224,28 @@
       ],
     },
   ];
+
+  // A separate product choice uses the same provider model and task constraints.
+  // Only successful draft tasks can later request a 1080p final within seven days.
+  const seedance25Index = canvasModels.findIndex((model) => model.id === "seedance-2-5");
+  const seedance25 = canvasModels[seedance25Index];
+  canvasModels.splice(seedance25Index + 1, 0, {
+    ...seedance25,
+    id: "seedance-2-5-draft",
+    name: "Seedance 2.5（样片模式）",
+    compactName: "Seedance 2.5（样片）",
+    desc: "先生成 480P 样片，选定后生成 1080P 成片",
+    executionMode: "draft",
+    capabilities: {
+      ...seedance25.capabilities,
+      qualities: ["480p"],
+      qualityLabels: { "480p": "样片 480P" },
+      counts: [1],
+      draftConversion: { quality: "1080p", validForMs: 7 * 24 * 60 * 60 * 1000 },
+    },
+    defaults: { ...seedance25.defaults, quality: "480p" },
+    demoUsage: [],
+  });
 
   const serviceModels = [
     {

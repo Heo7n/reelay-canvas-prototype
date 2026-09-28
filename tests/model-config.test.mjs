@@ -9,13 +9,14 @@ test("catalog keeps stable image and video defaults", () => {
   assert.equal(catalog.find((model) => model.type === "video")?.id, "seedance-2-5");
 });
 
-test("catalog exposes the six product models in stable display order", () => {
+test("catalog exposes product models and the draft variant in stable display order", () => {
   assert.deepEqual(
     [...catalog].map(({ id, name, type }) => ({ id, name, type })),
     [
       { id: "gpt-image-2", name: "GPT Image 2", type: "image" },
       { id: "seedream-5-lite", name: "Seedream 5.0 Lite", type: "image" },
       { id: "seedance-2-5", name: "Seedance 2.5", type: "video" },
+      { id: "seedance-2-5-draft", name: "Seedance 2.5（样片模式）", type: "video" },
       { id: "seedance-2", name: "Seedance 2.0", type: "video" },
       { id: "seedance-2-fast", name: "Seedance 2.0 Fast", type: "video" },
       { id: "kling-video-3", name: "Kling 3.0", type: "video" },
@@ -27,14 +28,14 @@ test("the Seedance family is identified by shared catalog brand metadata", () =>
   const seedanceIds = [...catalog]
     .filter((model) => model.brand === "seedance")
     .map((model) => model.id);
-  assert.deepEqual(seedanceIds, ["seedance-2-5", "seedance-2", "seedance-2-fast"]);
+  assert.deepEqual(seedanceIds, ["seedance-2-5", "seedance-2-5-draft", "seedance-2", "seedance-2-fast"]);
   assert.ok(seedanceIds.every((id) => catalog.find((model) => model.id === id)?.type === "video"));
   assert.equal(catalog.find((model) => model.id === "kling-video-3")?.brand, undefined);
 });
 
 test("shared directory is the frozen source for canvas and usage model metadata", () => {
   assert.ok(Object.isFrozen(modelDirectory));
-  assert.equal(modelDirectory.length, 10);
+  assert.equal(modelDirectory.length, 11);
   assert.ok(catalog.every((model) => modelDirectory.includes(model)));
   assert.deepEqual(
     [...modelDirectory].filter((model) => !catalog.includes(model)).map(({ id, name, type }) => ({ id, name, type })),
@@ -67,6 +68,32 @@ test("default GPT Image 2 generation keeps the five-credit prototype cost", () =
   const resolutionCost = config.imageResolutionCost["2K"];
   const qualityMultiplier = config.imageQualityMultiplier["中"];
   assert.equal(Math.ceil(resolutionCost * qualityMultiplier), 5);
+});
+
+test("Seedance 2.5 draft is an explicit single-output 480p variant with the same base capabilities", () => {
+  const standard = catalog.find((model) => model.id === "seedance-2-5");
+  const draft = catalog.find((model) => model.id === "seedance-2-5-draft");
+  assert.ok(draft);
+  assert.equal(standard.executionMode, "standard");
+  assert.equal(draft.executionMode, "draft");
+  assert.equal(standard.baseModelId, standard.id);
+  assert.equal(draft.baseModelId, standard.id);
+  assert.equal(draft.providerModelId, "doubao-seedance-2-5-260628");
+  assert.equal(draft.providerModelId, standard.providerModelId);
+  assert.equal(draft.capabilities.omniReferenceTaskType, standard.capabilities.omniReferenceTaskType);
+  assert.equal(draft.capabilities.durationRange, standard.capabilities.durationRange);
+  assert.equal(draft.capabilities.aspects, standard.capabilities.aspects);
+  assert.equal(draft.capabilities.outputFormats, standard.capabilities.outputFormats);
+  assert.equal(draft.optimizationInstructions, standard.optimizationInstructions);
+  assert.deepEqual([...draft.capabilities.qualities], ["480p"]);
+  assert.deepEqual([...draft.capabilities.counts], [1]);
+  assert.equal(draft.defaults.quality, "480p");
+  assert.equal(draft.capabilities.qualityLabels["480p"], "样片 480P");
+  assert.deepEqual({ ...draft.capabilities.draftConversion }, { quality: "1080p", validForMs: 604800000 });
+  assert.equal(standard.capabilities.draftConversion, undefined, "ordinary 480p output is not a convertible draft");
+  assert.ok(Object.isFrozen(draft.capabilities.draftConversion));
+  assert.deepEqual([...standard.capabilities.qualities], ["480p", "720p", "1080p"]);
+  assert.deepEqual([...standard.capabilities.counts], [1, 2, 4]);
 });
 
 test("Seedance 2.5 drives the reference parameter layout", () => {

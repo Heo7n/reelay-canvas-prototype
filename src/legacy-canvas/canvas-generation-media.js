@@ -32,7 +32,7 @@
     return `${width} × ${height}`;
   }
 
-  function mount({ document, container, video, showMessage = () => {} }) {
+  function mount({ document, container, video, asset = null, showMessage = () => {} }) {
     if (!container || !video || video.tagName !== "VIDEO" || !container.contains(video)) return null;
     if (mounted.has(video)) return mounted.get(video);
     const listeners = [];
@@ -43,7 +43,7 @@
     let mediaError = false;
     const overlay = document.createElement("div");
     overlay.className = "generation-media-overlay";
-    overlay.innerHTML = `<span class="generation-media-resolution" hidden></span>
+    overlay.innerHTML = `<span class="generation-media-resolution" role="img" hidden></span>
       <button type="button" class="generation-media-center" aria-label="播放生成视频">${icon("play")}</button>
       <span class="generation-media-notice" role="status" hidden></span>
       <div class="generation-media-controls" role="group" aria-label="生成视频播放控制">
@@ -117,9 +117,21 @@
       }
       volume.setAttribute("aria-pressed", String(audible));
       const width = Math.round(video.videoWidth || 0); const height = Math.round(video.videoHeight || 0);
-      resolution.textContent = resolutionLabel(width, height);
+      const generation = asset?.generation;
+      const generationLabel = generation?.stage === "draft" ? "样片 480P" : generation?.stage === "final" ? "正片 1080P" : "";
+      resolution.textContent = generationLabel || resolutionLabel(width, height);
       resolution.hidden = !resolution.textContent;
-      if (resolution.textContent) resolution.setAttribute("aria-label", `视频分辨率 ${width} × ${height}`);
+      if (generationLabel) {
+        const actual = width && height ? `当前预览实际分辨率 ${width} × ${height}` : "当前预览实际分辨率加载中";
+        const description = generation.simulated ? `模拟目标规格：${generationLabel}；${actual}。未进行实际画质或格式转换。`
+          : `生成规格：${generationLabel}；${actual}。`;
+        resolution.setAttribute("aria-label", generationLabel);
+        resolution.setAttribute("aria-description", description);
+        resolution.title = description;
+      } else if (resolution.textContent) {
+        resolution.setAttribute("aria-label", `视频分辨率 ${width} × ${height}`);
+        resolution.removeAttribute("aria-description"); resolution.removeAttribute("title");
+      }
       const expanded = document.fullscreenElement === container || Boolean(video.webkitDisplayingFullscreen);
       const fullscreenLabel = expanded ? "退出生成视频全屏" : "全屏播放生成视频";
       if (fullscreen.getAttribute("aria-label") !== fullscreenLabel) {

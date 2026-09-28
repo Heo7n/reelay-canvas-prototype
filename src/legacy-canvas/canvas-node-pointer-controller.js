@@ -6,6 +6,7 @@
     "textarea",
     "input",
     "[contenteditable='true']",
+    ".prompt-panel",
     ".panel-popover",
     ".material-panel",
     ".asset-card",

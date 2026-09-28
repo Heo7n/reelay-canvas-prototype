@@ -63,6 +63,9 @@ export async function openCanvas(page: Page, projectName = "个人概念短片")
   const canvas = page.frameLocator(canvasFrameSelector);
   await expect(page.locator(".legacy-canvas-host")).toHaveAttribute("data-persistence-status", "saved");
   await expect(canvas.locator("#canvasShell")).toBeVisible();
+  // The host can finish reading before the iframe's classic script binds its
+  // controls. Wait for bridge initialization before clicking static markup.
+  await expect(canvas.locator(".app-shell")).toHaveAttribute("data-canvas-access", "editable");
   if (await canvas.getByRole("button", { name: "展开 Reelay Agent", exact: true }).isVisible()) {
     await canvas.getByRole("button", { name: "展开 Reelay Agent", exact: true }).click();
   }

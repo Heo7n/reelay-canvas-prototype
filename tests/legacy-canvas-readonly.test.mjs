@@ -33,6 +33,7 @@ const audioPlayer = await readFile(new URL("src/legacy-canvas/canvas-audio-playe
 const agentComposerView = await readFile(new URL("src/legacy-canvas/canvas-agent-composer-view.js", root), "utf8");
 const agentReferences = await readFile(new URL("src/legacy-canvas/canvas-agent-references.js", root), "utf8");
 const generationModules = await Promise.all([
+  "src/legacy-canvas/canvas-draft-video-badge.js",
   "src/legacy-canvas/canvas-agent-launcher-motion.js",
   "src/application/prompt-optimization-preferences.js",
   "src/application/prompt-optimization-service.js",
@@ -41,7 +42,7 @@ const generationModules = await Promise.all([
   "src/legacy-canvas/canvas-reference-thumbnails.js",
   "src/legacy-canvas/canvas-agent-composer-resize.js",
   "src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js",
-  "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-reference-preview.js", "src/legacy-canvas/canvas-generation-record-view.js",
+  "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-reference-preview.js", "src/legacy-canvas/canvas-generation-status-view.js", "src/legacy-canvas/canvas-generation-record-view.js",
   "src/legacy-canvas/canvas-generation-selection.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
   "src/legacy-canvas/canvas-agent-result-placement.js",
 ].map((path) => readFile(new URL(path, root), "utf8")));

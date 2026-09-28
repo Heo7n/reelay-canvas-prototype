@@ -599,6 +599,43 @@ describe("organization project access API", () => {
     expect(updated.json().document.revision).toBe(2);
   });
 
+  it("retains sample and final provenance through real PUT, GET and resave without persisting runtime task data", async () => {
+    const cookie = await login(app, "creator@reelay.test");
+    const url = "/api/projects/project-perfume-tvc/canvases/main/document";
+    const draft = { version: 1, stage: "draft", simulated: true, taskId: "sample-task", resultId: "sample-result", createdAt: 1000,
+      expiresAt: 604801000, projectId: "project-perfume-tvc", canvasId: "canvas", status: "running", charged: 24,
+      input: { mediaType: "video", modelId: "seedance-2-5-draft", prompt: "Original prompt", cost: 24,
+        parameters: { quality: "480p", duration: "10s", outputDuration: 10, seed: 42, audioEnabled: true },
+        references: [{ id: "ref", type: "image", url: "blob:https://example.test/local-reference" }], referenceSnapshot: [] } };
+    const final = { ...draft, stage: "final", taskId: "final-task", resultId: "final-result", sourceDraftTaskId: "sample-task", sourceResultId: "sample-result",
+      input: { ...draft.input, modelId: "seedance-2-5", generationStage: "final", sourceDraftTaskId: "sample-task", sourceResultId: "sample-result",
+        parameters: { ...draft.input.parameters, quality: "1080p" }, sourceDraftAsset: { id: "must-not-persist" } } };
+    const content = { kind: "reelay-legacy-canvas", version: 1, canvases: [{ id: "canvas", nodes: [
+      { id: "sample-node", kind: "generator", mediaKind: "video", generating: true,
+        generatedAsset: { id: "sample-result", type: "video", url: "/sample.mp4", generation: draft } },
+      { id: "final-node", kind: "asset", assets: [{ id: "final-result", type: "video", url: "/sample.mp4", generation: final }] },
+    ] }] };
+    const written = await app.inject({ method: "PUT", url, headers: { cookie },
+      payload: { schemaVersion: 1, expectedRevision: 0, content } });
+    expect(written.statusCode).toBe(201);
+    const loaded = await app.inject({ method: "GET", url, headers: { cookie } });
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.json().document).toEqual(written.json().document);
+    const nodes = loaded.json().document.content.canvases[0].nodes;
+    expect(nodes[0].generatedAsset.generation).toMatchObject({ stage: "draft", taskId: "sample-task", resultId: "sample-result",
+      expiresAt: 604801000, input: { prompt: "Original prompt", parameters: { outputDuration: 10, seed: 42, audioEnabled: true } } });
+    expect(nodes[0]).not.toHaveProperty("generating");
+    expect(nodes[0].generatedAsset.generation).not.toHaveProperty("status");
+    expect(nodes[0].generatedAsset.generation).not.toHaveProperty("charged");
+    expect(nodes[0].generatedAsset.generation.input.references[0].url).toBe("");
+    expect(nodes[1].assets[0].generation).toMatchObject({ stage: "final", sourceDraftTaskId: "sample-task", sourceResultId: "sample-result" });
+    expect(nodes[1].assets[0].generation.input).not.toHaveProperty("sourceDraftAsset");
+    const updated = await app.inject({ method: "PUT", url, headers: { cookie },
+      payload: { schemaVersion: 1, expectedRevision: 1, content: loaded.json().document.content } });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().document.content).toEqual(loaded.json().document.content);
+  });
+
   it("canonicalizes stored v1 documents and fails closed for unsupported or corrupt stored content", async () => {
     const cookie = await login(app, "creator@reelay.test");
     const baseInput = {

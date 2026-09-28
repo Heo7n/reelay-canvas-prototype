@@ -16,6 +16,8 @@ export interface DemoUsageTemplate {
 }
 
 export interface ModelDirectoryEntry {
+  baseModelId?: string;
+  compactName?: string;
   capabilities: Readonly<Record<string, unknown>>;
   demoUsage: ReadonlyArray<{
     activityLabel: string;
@@ -27,8 +29,10 @@ export interface ModelDirectoryEntry {
     weight: number;
   }>;
   id: string;
+  executionMode?: "standard" | "draft";
   name: string;
   provider: string;
+  providerModelId?: string;
   type: UsageActivityKind;
 }
 

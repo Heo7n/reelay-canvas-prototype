@@ -68,6 +68,10 @@
       asset.librarySourceId = boundedString(candidate.librarySourceId, "", 200);
     }
     if (typeof candidate.enhanced === "boolean") asset.enhanced = candidate.enhanced;
+    if (candidate.type === "video" && root.REELAY_DRAFT_VIDEO) {
+      const generation = root.REELAY_DRAFT_VIDEO.serializeProvenance(candidate.generation, { sanitizeUrl: sanitizeMediaUrl });
+      if (generation) asset.generation = generation;
+    }
     return asset;
   }
 
@@ -81,6 +85,8 @@
 
   function serializeNode(candidate) {
     if (!candidate || typeof candidate !== "object") return null;
+    // In-flight final placeholders belong to the page task, not the saved document.
+    if (candidate.pendingGeneration) return null;
     const id = requiredId(candidate.id);
     if (!id || (candidate.kind !== "generator" && candidate.kind !== "asset")) return null;
 

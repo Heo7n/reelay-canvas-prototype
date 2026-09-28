@@ -1,0 +1,57 @@
+.draft-video-popover {
+  --draft-field-bg: #1e1f22;
+  --draft-field-line: rgb(255 255 255 / 8%);
+  --draft-option-selected-bg: #414348;
+  --draft-option-selected-line: rgb(255 255 255 / 16%);
+  --draft-option-hover-bg: #303237;
+  --draft-secondary-text: #b3b5bd;
+  position: fixed; inset: auto; margin: 0; box-sizing: border-box; transform-origin: top left;
+  width: min(280px, calc(100vw - 24px)); max-height: calc(100dvh - 24px);
+  padding: 0; overflow-y: auto; overscroll-behavior: contain;
+  border: 0; background: transparent; color: var(--canvas-popover-text);
+  font: 13px/1.5 var(--font-family-ui);
+}
+html[data-theme="light"] .draft-video-popover {
+  --draft-field-bg: var(--canvas-popover-hover);
+  --draft-field-line: var(--canvas-popover-line);
+  --draft-option-selected-bg: var(--canvas-popover-bg);
+  --draft-option-selected-line: var(--canvas-popover-active-line);
+  --draft-option-hover-bg: var(--canvas-popover-active);
+  --draft-secondary-text: var(--canvas-popover-muted);
+}
+.draft-video-popover:popover-open { display: grid; gap: 8px; }
+.draft-video-parameter-card, .draft-video-time-card {
+  min-width: 0; padding: 12px; border: 1px solid var(--canvas-popover-line); border-radius: 10px;
+  background: var(--canvas-popover-bg);
+}
+.draft-video-popover form { display: grid; gap: 12px; }
+.draft-video-resolution { display: grid; gap: 8px; }
+.draft-video-resolution-heading, .draft-video-formats legend { color: var(--draft-secondary-text); }
+.draft-video-resolution-value { padding: 8px; border-radius: 7px; background: var(--draft-field-bg); box-shadow: inset 0 0 0 1px var(--draft-field-line); text-align: center; }
+.draft-video-resolution [data-draft-resolution] { font-weight: 500; font-variant-numeric: tabular-nums; }
+.draft-video-time-card { color: var(--draft-secondary-text); font-size: 11px; line-height: 1.6; }
+.draft-video-timing { display: grid; gap: 6px; margin: 0; }
+.draft-video-timing > div { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 4px; }
+.draft-video-timing dt { flex: 0 0 auto; }
+.draft-video-timing dd { margin: 0; color: var(--canvas-popover-text); font-variant-numeric: tabular-nums; }
+.draft-video-timing-note { margin: 6px 0 0; }
+.draft-video-formats { min-width: 0; margin: 0; padding: 0; border: 0; }
+.draft-video-formats legend { margin: 0 0 8px; padding: 0; }
+.draft-video-formats [data-draft-formats] { display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: var(--draft-field-bg); box-shadow: inset 0 0 0 1px var(--draft-field-line); }
+.draft-video-formats label { position: relative; flex: 1; min-width: 0; cursor: pointer; }
+.draft-video-formats input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.draft-video-formats label span { display: block; padding: 5px 8px; border-radius: 6px; text-align: center; color: var(--draft-secondary-text); }
+.draft-video-formats input:checked + span { background: var(--draft-option-selected-bg); color: var(--canvas-popover-text); box-shadow: inset 0 0 0 1px var(--draft-option-selected-line), 0 1px 3px rgb(0 0 0 / 8%); font-weight: 500; }
+.draft-video-formats label:hover input:not(:checked) + span { background: var(--draft-option-hover-bg); }
+.draft-video-formats label:hover span { color: var(--canvas-popover-text); }
+.draft-video-formats input:focus-visible + span, .draft-video-popover button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
+.draft-video-submit {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 32px;
+  padding: 6px 12px; border: 0; border-radius: 8px; font: inherit; cursor: pointer;
+  background: var(--color-canvas-action-background); color: var(--color-canvas-action-text);
+}
+.draft-video-submit:not(:disabled):hover { background: var(--color-canvas-action-hover); }
+.draft-video-submit:disabled { opacity: .5; cursor: default; }
+.draft-video-cost { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.draft-video-cost img { width: 14px; height: 14px; }
+.draft-video-error { margin: 0; color: var(--canvas-popover-text); font-size: 12px; }

@@ -11,6 +11,7 @@ const { createCanvasNodeTaskRunner } = context.REELAY_CANVAS_NODE_TASK_RUNNER;
 function createHarness(overrides = {}) {
   let taskSerial = 0;
   let timerSerial = 0;
+  let time = 10000;
   let projectId = "project-one";
   const nodes = new Map([["canvas-one/node-one", {}], ["canvas-two/node-one", {}]]);
   const timers = new Map();
@@ -18,7 +19,8 @@ function createHarness(overrides = {}) {
   const calls = { starts: [], completes: [], cancels: [] };
   const runner = createCanvasNodeTaskRunner({
     makeTaskId: () => `task-${++taskSerial}`,
-    setTimer: (callback, delay) => { const id = ++timerSerial; timers.set(id, { callback, delay }); callbacks.set(id, callback); return id; },
+    now: () => time,
+    setTimer: (callback, delay) => { const id = ++timerSerial; timers.set(id, { callback, delay, at: time + delay }); callbacks.set(id, callback); return id; },
     clearTimer: (id) => timers.delete(id),
     resolveTarget: (scope) => scope.projectId === projectId ? nodes.get(`${scope.canvasId}/${scope.nodeId}`) : null,
     onStart: (task, node) => { calls.starts.push({ task, node }); },
@@ -30,7 +32,17 @@ function createHarness(overrides = {}) {
     kind: "generation", scope: { projectId, canvasId: "canvas-one", nodeId: "node-one" },
     inputs: { parameterSnapshot: { prompt: "hello", assetIds: ["media-one"] } }, delayMs: 1200, ...extra,
   });
-  return { runner, start, nodes, timers, callbacks, calls, changeProject: (id) => { projectId = id; } };
+  const advance = (duration) => {
+    const until = time + duration;
+    for (;;) {
+      const next = [...timers.entries()].filter(([, timer]) => timer.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
+      if (!next) break;
+      const [id, timer] = next;
+      time = timer.at; timers.delete(id); timer.callback();
+    }
+    time = until;
+  };
+  return { runner, start, nodes, timers, callbacks, calls, advance, changeProject: (id) => { projectId = id; } };
 }
 
 test("runner snapshots task inputs, owns its timer and emits completion exactly once", () => {
@@ -127,7 +139,92 @@ test("dispose releases every timer, rejects new tasks and makes queued callbacks
   assert.equal(h.calls.completes.length, 0);
   assert.equal(h.start(), null);
   assert.equal(h.runner.cancelScope(), 0);
-  assert.deepEqual(Object.keys(h.runner), ["start", "cancelScope", "dispose"]);
+  assert.equal(h.runner.get("task-1"), null);
+  assert.equal(h.runner.canCancel("task-1"), false);
+  assert.equal(h.runner.cancel("task-1"), false);
+});
+
+test("generation progress follows the existing completion duration and never reaches 100 before completion", () => {
+  const updates = [];
+  const h = createHarness({ onProgress: (task, node) => updates.push({ progress: task.progress, node }) });
+  const task = h.start();
+  assert.equal(h.runner.get(task.id), task);
+  assert.equal(task.progress, 0);
+  assert.equal(task.createdAt, 10000);
+  assert.equal(task.cancelUntil, 17000);
+  h.advance(600);
+  assert.equal(task.progress, 50);
+  assert.equal(updates.length, 3);
+  assert.ok(updates.every((entry) => entry.progress < 100 && entry.node === h.nodes.get("canvas-one/node-one")));
+  h.advance(599);
+  assert.equal(task.progress, 99);
+  assert.equal(h.calls.completes.length, 0);
+  h.advance(1);
+  assert.equal(h.calls.completes.length, 1);
+  assert.equal(task.progress, 100);
+  assert.equal(h.runner.get(task.id), null);
+  assert.equal(task.canCancel, false);
+  assert.equal(h.timers.size, 0);
+});
+
+test("user cancellation has a strict seven-second deadline while system cancellation stays unconditional", () => {
+  for (const elapsed of [6999, 7000, 7500]) {
+    const h = createHarness({ onProgress() {} });
+    const task = h.start({ delayMs: 12000 });
+    h.advance(elapsed);
+    assert.equal(task.canCancel, elapsed < 7000);
+    assert.equal(h.runner.canCancel(task.id), elapsed < 7000);
+    assert.equal(h.runner.cancel(task.id), elapsed < 7000);
+    if (elapsed < 7000) {
+      assert.equal(h.calls.cancels[0].reason, "user-canceled");
+      assert.equal(h.runner.cancel(task.id), false);
+    } else {
+      assert.equal(h.calls.cancels.length, 0);
+      assert.equal(h.runner.cancelScope({ canvasId: "canvas-one" }, "canvas-deleted"), 1);
+      assert.equal(h.calls.cancels[0].reason, "canvas-deleted");
+    }
+    assert.equal(h.timers.size, 0);
+    assert.equal(h.runner.get(task.id), null);
+    for (const callback of [...h.callbacks.values()]) callback();
+    assert.equal(h.calls.cancels.length, 1);
+    assert.equal(h.calls.completes.length, 0);
+  }
+});
+
+test("late progress never reaches replaced nodes or newer tasks and disposal releases every progress timer", () => {
+  const updates = [];
+  const h = createHarness({ onProgress: (task) => updates.push(task.id) });
+  const first = h.start();
+  const oldProgress = h.callbacks.get(2);
+  h.nodes.set("canvas-one/node-one", {});
+  assert.equal(h.runner.canCancel(first.id), false);
+  oldProgress();
+  assert.equal(h.runner.get(first.id), null);
+  assert.equal(updates.length, 0);
+  const second = h.start();
+  oldProgress();
+  h.advance(200);
+  assert.deepEqual(updates, [second.id]);
+  h.runner.dispose();
+  for (const callback of [...h.callbacks.values()]) callback();
+  assert.deepEqual(updates, [second.id]);
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.calls.completes.length, 0);
+});
+
+test("progress callback errors cannot interrupt completion and optimization keeps its original single timer", () => {
+  const h = createHarness({ onProgress() { throw new Error("view failed"); } });
+  h.start();
+  h.advance(1200);
+  assert.equal(h.calls.completes.length, 1);
+  assert.equal(h.timers.size, 0);
+  const optimization = h.start({ kind: "prompt-optimization", delayMs: 900 });
+  assert.equal(optimization.cancelUntil, null);
+  assert.equal(h.runner.cancel(optimization.id), false);
+  assert.equal(h.timers.size, 1);
+  h.advance(900);
+  assert.equal(h.calls.completes.length, 2);
+  assert.equal(h.timers.size, 0);
 });
 
 test("effect failures cannot leave completed or cancelled records owning targets", () => {

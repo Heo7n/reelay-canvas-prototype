@@ -11,7 +11,7 @@ test("batch deletion confirms the selected history and preserves generated canva
 
   await editor.fill("批量删除：保留晨光中的香水瓶结果");
   await canvas.locator(".agent-send").click();
-  await page.clock.fastForward(11_500);
+  await page.clock.fastForward(10_500);
   const success = records.filter({ hasText: "批量删除：保留晨光中的香水瓶结果" });
   await expect(success).toHaveAttribute("data-status", "succeeded");
   await expect(canvas.locator(".canvas-node")).toHaveCount(nodeCount + 1);

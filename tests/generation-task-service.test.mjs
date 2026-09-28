@@ -4,12 +4,13 @@ import vm from "node:vm";
 import { test } from "node:test";
 
 const sandbox = vm.createContext({});
-for (const file of ["src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js"]) {
+sandbox.window = sandbox;
+for (const file of ["src/config/prototype-config.js", "data/model-catalog.js", "src/infrastructure/generation/simulated-generation-executor.js", "src/application/draft-video-policy.js", "src/application/generation-task-service.js"]) {
   vm.runInContext(fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), sandbox, { filename: file });
 }
 const { createService } = sandbox.REELAY_GENERATION_TASKS;
 
-function fixture(overrides = {}) {
+function fixture(overrides = {}, makeService = createService) {
   let time = 1000;
   let nextTimer = 0;
   let nextTask = 0;
@@ -19,7 +20,7 @@ function fixture(overrides = {}) {
   const refunds = [];
   const refundNotices = [];
   const events = [];
-  const service = createService({
+  const service = makeService({
     makeId: () => `task-${++nextTask}`,
     now: () => time,
     setTimer(callback, delay) {
@@ -43,7 +44,7 @@ function fixture(overrides = {}) {
     onRefund: (task) => refundNotices.push(task.refunded),
     ...overrides,
   });
-  service.subscribe((task, event) => events.push({ id: task.id, type: event.type, status: task.status, canCancel: task.canCancel, refunded: task.refunded }));
+  service.subscribe((task, event) => events.push({ id: task.id, type: event.type, status: task.status, progress: task.progress, canCancel: task.canCancel, refunded: task.refunded }));
   function advance(milliseconds) {
     const target = time + milliseconds;
     while (true) {
@@ -102,15 +103,19 @@ test("successful task debits once, follows queued/running states, and holds immu
   const f = fixture();
   const task = f.service.submit(input());
   assert.equal(task.status, "queued");
+  assert.equal(task.progress, 0);
   assert.equal(task.charged, 24);
   assert.equal(f.balance(), 2976);
   f.advance(699);
   assert.equal(task.status, "queued");
   f.advance(1);
   assert.equal(task.status, "running");
-  f.advance(10300);
+  f.advance(9299);
+  assert.equal(task.status, "running");
+  f.advance(1);
   assert.equal(task.status, "succeeded");
-  assert.equal(task.finishedAt, 12000);
+  assert.equal(task.progress, 100);
+  assert.equal(task.finishedAt, 11000);
   assert.equal(task.result.id, `result-${task.id}`);
   assert.ok(Object.isFrozen(task.result));
   assert.equal(task.canCancel, false);
@@ -119,15 +124,90 @@ test("successful task debits once, follows queued/running states, and holds immu
   assert.equal(f.timers.size, 0);
 });
 
+test("all task readers observe one monotonic simulation percentage that reaches 100 only on success", () => {
+  const f = fixture();
+  const request = input();
+  const task = f.service.submit(request);
+  const observations = [];
+  f.service.subscribe((updated, event) => {
+    if (event.type !== "progress") return;
+    assert.equal(updated, task);
+    assert.equal(f.service.get(task.id).progress, task.progress);
+    assert.equal(f.service.list(request.scope)[0].progress, task.progress);
+    assert.ok(task.progress >= 0 && task.progress < 100 && Number.isInteger(task.progress));
+    observations.push(task.progress);
+  });
+  assert.throws(() => { task.progress = 87; }, TypeError);
+  f.advance(500);
+  assert.ok(task.progress > 0);
+  f.advance(9499);
+  assert.equal(task.status, "running");
+  assert.ok(observations.length > 10);
+  assert.ok(observations.every((value, index) => index === 0 || value > observations[index - 1]));
+  f.advance(1);
+  assert.equal(task.progress, 100);
+  assert.equal(f.events.at(-1).type, "succeeded");
+  assert.equal(f.events.at(-1).progress, 100);
+  assert.equal(f.timers.size, 0);
+});
+
+test("progress ignores invalid, duplicate and stale signals and clamps active percentages below completion", () => {
+  const signals = [];
+  const isolated = vm.createContext({ REELAY_SIMULATED_GENERATION_EXECUTOR: {
+    createExecutor: () => ({ start: (callbacks) => signals.push(callbacks), stop() {}, dispose() {} }),
+  } });
+  vm.runInContext(fs.readFileSync(new URL("../src/application/generation-task-service.js", import.meta.url), "utf8"), isolated);
+  const f = fixture({}, isolated.REELAY_GENERATION_TASKS.createService);
+  const task = f.service.submit(input());
+  for (const value of [NaN, Infinity, "40", undefined, -5]) signals[0].onProgress(value);
+  assert.equal(task.progress, 0);
+  signals[0].onProgress(12.9);
+  for (const value of [12, 12.4, 8, 0]) signals[0].onProgress(value);
+  assert.equal(task.progress, 12);
+  assert.equal(f.events.filter((event) => event.type === "progress").length, 1);
+  signals[0].onProgress(100);
+  assert.equal(task.progress, 99);
+  signals[0].onProgress(1000);
+  assert.equal(f.events.filter((event) => event.type === "progress").length, 2);
+  f.service.complete(task);
+  signals[0].onProgress(20);
+  assert.equal(task.progress, 100);
+  const failed = f.service.submit(input());
+  signals[1].onProgress(26);
+  f.service.fail(failed);
+  signals[1].onProgress(88);
+  assert.equal(failed.progress, 26);
+  const disposed = f.service.submit(input());
+  f.service.dispose();
+  signals[2].onProgress(70);
+  assert.equal(disposed.progress, 0);
+});
+
+test("canceling from a progress observer stops execution without rescheduling another tick", () => {
+  const f = fixture();
+  const task = f.service.submit(input());
+  f.service.subscribe((updated, event) => {
+    if (event.type === "progress") f.service.cancel(updated);
+  });
+  f.advance(500);
+  assert.equal(task.status, "canceled");
+  assert.equal(f.timers.size, 0);
+  const stoppedProgress = task.progress;
+  f.advance(60000);
+  assert.equal(task.progress, stoppedProgress);
+  assert.equal(f.refunds.length, 1);
+});
+
 test("duplicate submit returns same task and never creates timers or another debit", () => {
   const f = fixture();
   const request = input({ idempotencyKey: "send-1" });
   const first = f.service.submit(request);
+  const timerCount = f.timers.size;
   const second = f.service.submit({ ...request, input: { ...request.input, cost: 500 } });
   assert.equal(first, second);
   assert.equal(f.service.list().length, 1);
   assert.equal(f.debits.length, 1);
-  assert.equal(f.timers.size, 3);
+  assert.equal(f.timers.size, timerCount);
 });
 
 test("idempotency is scoped and cannot combine different projects, conversations, or canvases", () => {
@@ -153,7 +233,7 @@ test("insufficient balance yields no task, timer, or refund and preserves next s
   assert.equal(f.balance(), 20);
   request.input.cost = 10;
   const task = f.service.submit(request);
-  f.advance(11000);
+  f.advance(10000);
   assert.equal(task.status, "failed");
   assert.equal(task.error, "测试原因");
   assert.equal(f.balance(), 20);
@@ -164,6 +244,8 @@ test("cancel before seven seconds refunds exactly once and rejects all late sign
   const task = f.service.submit(input());
   const staleCallbacks = [...f.timers.values()].map((timer) => timer.callback);
   f.advance(6999);
+  staleCallbacks.push(...[...f.timers.values()].map((timer) => timer.callback));
+  const canceledProgress = task.progress;
   assert.equal(f.service.cancel(task), true);
   assert.equal(task.status, "canceled");
   assert.equal(task.refunded, 24);
@@ -172,6 +254,7 @@ test("cancel before seven seconds refunds exactly once and rejects all late sign
   assert.equal(f.service.complete(task), false);
   assert.equal(f.service.fail(task, "late failure"), false);
   for (const callback of staleCallbacks) callback();
+  assert.equal(task.progress, canceledProgress);
   assert.equal(task.status, "canceled");
   assert.equal(task.result, null);
   assert.equal(f.refunds.length, 1);
@@ -190,11 +273,11 @@ test("seven-second boundary is strict even if the timeout has not fired", () => 
   assert.equal(f.refunds.length, 0);
 });
 
-test("cancel deadline notifies once without adding countdown ticks", () => {
+test("cancel deadline notifies once independently of progress updates", () => {
   const f = fixture();
   const task = f.service.submit(input());
   f.advance(7000);
-  assert.deepEqual(f.events.map((event) => event.type), ["submitted", "running", "cancel-window-closed"]);
+  assert.deepEqual(f.events.filter((event) => event.type !== "progress").map((event) => event.type), ["submitted", "running", "cancel-window-closed"]);
   assert.equal(f.events.at(-1).canCancel, false);
   assert.equal(task.status, "running");
   assert.equal(f.service.cancel(task), false);
@@ -220,7 +303,7 @@ test("next-scenario configuration is consumed by exactly one accepted task", () 
   f.service.setNextScenario("failure", "指定的失败原因");
   const failed = f.service.submit(input());
   const successful = f.service.submit(input());
-  f.advance(11000);
+  f.advance(10000);
   assert.equal(failed.status, "failed");
   assert.equal(failed.error, "指定的失败原因");
   assert.equal(successful.status, "succeeded");
@@ -233,10 +316,12 @@ test("hold keeps running beyond the cancellation window and supports manual comp
   const task = f.service.submit(input());
   f.advance(60000);
   assert.equal(task.status, "running");
+  assert.equal(task.progress, 99);
   assert.equal(task.canCancel, false);
   assert.equal(f.timers.size, 0);
   assert.equal(f.service.complete(task.id), true);
   assert.equal(task.status, "succeeded");
+  assert.equal(task.progress, 100);
   assert.equal(task.finishedAt, 61000);
 });
 
@@ -373,7 +458,7 @@ test("subscriber can cancel immediately on submit without leaving timers alive",
 test("makeResult failures become a failed task with one refund", () => {
   const f = fixture({ makeResult() { throw new Error("结果暂不可用"); } });
   const task = f.service.submit(input());
-  f.advance(11000);
+  f.advance(10000);
   assert.equal(task.status, "failed");
   assert.equal(task.error, "结果暂不可用");
   assert.equal(task.result, null);
@@ -458,6 +543,7 @@ test("preview history imports immutable terminal snapshots without touching the 
   assert.equal(f.debits.length, 0); assert.equal(f.refunds.length, 0); assert.equal(f.refundNotices.length, 0);
   assert.equal(f.timers.size, 0);
   assert.deepEqual(Array.from(imported, (task) => task.status), ["succeeded", "failed", "canceled"]);
+  assert.deepEqual(Array.from(imported, (task) => task.progress), [100, 0, 0]);
   assert.deepEqual(Array.from(imported, (task) => task.refunded), [0, 24, 24]);
   assert.ok(imported.every((task) => task.isPreview && task.charged === 24 && !task.canCancel && !task.addedNodeId));
   assert.ok(f.events.every((event) => event.type === "preview-imported"));
@@ -481,7 +567,7 @@ test("preview import is scoped and atomic; ordinary retries still charge and ref
   const real = f.service.submit({ scope: preview.scope, input: preview.input });
   assert.equal(real.isPreview, undefined);
   assert.equal(f.balance(), 2976); assert.equal(f.debits.length, 1);
-  f.advance(11000);
+  f.advance(10000);
   assert.equal(real.status, "failed"); assert.equal(f.balance(), 3000); assert.equal(f.refunds.length, 1);
   assert.equal(f.service.get(preview.id), preview);
 });
@@ -494,4 +580,107 @@ test("preview history cannot overwrite an existing real conversation or import a
   assert.equal(f.service.list().length, 1); assert.equal(f.balance(), 2976);
   f.service.dispose();
   assert.equal(f.service.importPreviewRecords({ ...history, scope: { ...request.scope, conversationId: "new" } }).length, 0);
+});
+
+function submitDraft(f) {
+  const request = input();
+  request.input.modelId = "seedance-2-5-draft";
+  request.input.parameters = { quality: "480p", aspect: "16:9", duration: "10s", outputFormat: "mp4", outputDuration: 10, seed: 42, audioEnabled: true };
+  const draft = f.service.submit(request);
+  f.service.complete(draft, { id: "source-result", type: "video", url: "/source.mp4", name: "source.mp4", width: 640, height: 360, duration: 8 });
+  return draft;
+}
+
+test("sample completion records immutable provenance; final conversion separately charges and keeps the exact clip", () => {
+  const f = fixture();
+  const draft = submitDraft(f);
+  assert.equal(draft.result.generation.stage, "draft");
+  assert.equal(draft.result.generation.createdAt, 1000);
+  assert.equal(draft.result.generation.expiresAt, 604801000);
+  const final = f.service.submitFinal({ source: draft.result, scope: draft.scope, cost: 60, outputFormat: "mov" });
+  assert.equal(f.balance(), 2916);
+  assert.equal(f.debits.length, 2);
+  assert.equal(final.input.parameters.quality, "1080p");
+  assert.equal(final.input.parameters.outputFormat, "mov");
+  f.advance(10000);
+  assert.equal(final.status, "succeeded");
+  assert.equal(final.result.url, draft.result.url);
+  assert.equal(final.result.name, "source.mp4");
+  assert.equal(final.result.width, 640);
+  assert.equal(final.result.height, 360);
+  assert.equal(final.result.duration, 8);
+  assert.notEqual(final.result.id, draft.result.id);
+  assert.equal(final.result.generation.stage, "final");
+  assert.equal(final.result.generation.sourceDraftTaskId, draft.id);
+  assert.equal(final.result.generation.sourceResultId, "source-result");
+  assert.equal(draft.result.generation.stage, "draft");
+  assert.equal(f.refunds.length, 0);
+});
+
+test("simultaneous sample conversions charge once; canceled and failed attempts can retry with one refund each", () => {
+  const f = fixture();
+  const draft = submitDraft(f);
+  const request = { source: draft.result, scope: draft.scope, cost: 60 };
+  const first = f.service.submitFinal(request);
+  assert.equal(f.service.submitFinal(request), first);
+  assert.equal(f.debits.length, 2);
+  assert.equal(f.service.cancel(first), true);
+  assert.equal(f.service.cancel(first), false);
+  assert.equal(f.refunds.length, 1);
+  assert.equal(f.balance(), 2976);
+  f.service.setNextScenario("failure");
+  const failed = f.service.submitFinal(request);
+  assert.notEqual(failed.id, first.id);
+  f.advance(10000);
+  assert.equal(failed.status, "failed");
+  assert.equal(f.refunds.length, 2);
+  assert.equal(f.balance(), 2976);
+  assert.equal(f.service.fail(failed), false);
+  assert.equal(f.service.complete(failed), false);
+  assert.equal(draft.status, "succeeded");
+  assert.equal(draft.result.url, "/source.mp4");
+});
+
+test("final submission accepts persisted node provenance but rejects ordinary, expired or foreign source media before charge", () => {
+  const firstPage = fixture();
+  const draft = submitDraft(firstPage);
+  const persisted = JSON.parse(JSON.stringify(draft.result));
+  const secondPage = fixture();
+  assert.equal(secondPage.service.list().length, 0);
+  const request = { source: persisted, scope: draft.scope, cost: 60 };
+  assert.ok(secondPage.service.submitFinal(request));
+  assert.equal(secondPage.debits.length, 1);
+  assert.throws(() => secondPage.service.submitFinal({ ...request, source: { ...persisted, generation: undefined } }), /仅成功/);
+  assert.throws(() => secondPage.service.submitFinal({ ...request, scope: { ...draft.scope, projectId: "other" } }), /所属项目/);
+  secondPage.setTime(draft.createdAt + 604800000);
+  assert.throws(() => secondPage.service.submitFinal(request), /过期/);
+  assert.equal(secondPage.debits.length, 1);
+});
+
+test("direct final repeats cannot alter frozen content or bypass expiry, and reentrant conversion cannot double charge", () => {
+  const f = fixture();
+  const draft = submitDraft(f);
+  const first = f.service.submitFinal({ source: draft.result, scope: draft.scope, cost: 60 });
+  f.service.cancel(first);
+  const changed = { ...first.input, prompt: "changed prompt", parameters: { ...first.input.parameters, seed: 9, aspect: "9:16" } };
+  const repeated = f.service.submit({ scope: draft.scope, input: changed });
+  assert.equal(repeated.input.prompt, draft.input.prompt);
+  assert.equal(repeated.input.parameters.seed, 42);
+  assert.equal(repeated.input.parameters.aspect, "16:9");
+  f.setTime(draft.createdAt + 604800000);
+  assert.throws(() => f.service.submit({ scope: draft.scope, input: changed }), /过期/);
+
+  let nested;
+  let reentered = false;
+  let service;
+  const g = fixture({ charge() {
+    if (reentered) return true;
+    reentered = true;
+    nested = service.submitFinal({ source: draft.result, scope: draft.scope, cost: 60 });
+    return true;
+  } });
+  service = g.service;
+  const outer = service.submitFinal({ source: draft.result, scope: draft.scope, cost: 60 });
+  assert.equal(nested, outer);
+  assert.equal(service.list().length, 1);
 });

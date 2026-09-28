@@ -52,9 +52,11 @@
   }
 
   function createController({ getProjectId, getCanvas, isEditable, getViewport,
-    getNodeBounds, getNodeMedia, createNode, commitNode, isAccessible = isEditable, focusNode = () => false }) {
+    getNodeBounds, getNodeMedia, isAccessible = isEditable, focusNode = () => false,
+    createPendingNode, commitPendingNode, updatePendingNode, completePendingNode, removePendingNode }) {
     const targets = new WeakSet();
     const placements = new WeakMap();
+    const pending = new WeakMap();
 
     function capture(scope, input) {
       if (!scope || scope.projectId !== getProjectId()) return null;
@@ -65,27 +67,33 @@
       const references = [...(input?.references || []),
         ...(input?.referenceSnapshot || []).map((entry) => entry.asset)];
       const referenceIds = new Set(references.flatMap(assetIds));
-      const referenceNodes = canvas.nodes.filter((node) => assetIds(getNodeMedia(node))
-        .some((id) => referenceIds.has(id)));
-      const target = Object.freeze({ projectId: scope.projectId, canvasId: scope.canvasId,
+      const referenceNodes = input?.generationStage === "final"
+        ? canvas.nodes.filter((node) => {
+          const source = getNodeMedia(node)?.generation;
+          return source?.stage === "draft" && source.taskId === input.sourceDraftTaskId
+            && source.resultId === input.sourceResultId
+            && (!input.sourceNodeId || node.id === input.sourceNodeId);
+        })
+        : canvas.nodes.filter((node) => assetIds(getNodeMedia(node)).some((id) => referenceIds.has(id)));
+      const sourceNodeId = input?.generationStage === "final" ? input.sourceNodeId || "" : "";
+      if (sourceNodeId && !referenceNodes.length) return null;
+      const target = Object.freeze({ projectId: scope.projectId, canvasId: scope.canvasId, sourceNodeId,
+        finalGeneration: input?.generationStage === "final",
         canvas, referenceNodes: Object.freeze(referenceNodes),
         center: Object.freeze({ x: (viewport.left + viewport.right) / 2, y: (viewport.top + viewport.bottom) / 2 }) });
       targets.add(target);
       return target;
     }
 
-    function place(task, target) {
-      if (!task || typeof task !== "object" || task.status !== "succeeded") return null;
-      if (placements.has(task)) return placements.get(task)?.placement || null;
-      // A completion is consumed even when its destination no longer permits writes.
-      // Mark it before collaborator calls so reentrant notifications cannot duplicate it.
-      placements.set(task, null);
-      if (!target || !targets.has(target) || task.scope?.projectId !== target.projectId
-        || task.scope?.canvasId !== target.canvasId || getProjectId() !== target.projectId
-        || getCanvas(target.canvasId) !== target.canvas || !isEditable(target.canvas, task.scope)) return null;
+    function validTarget(task, target) {
+      return Boolean(target && targets.has(target) && task.scope?.projectId === target.projectId
+        && task.scope?.canvasId === target.canvasId && getProjectId() === target.projectId
+        && getCanvas(target.canvasId) === target.canvas && isEditable(target.canvas, task.scope));
+    }
+
+    function positionNode(node, target) {
       const canvas = target.canvas;
       if (!Array.isArray(canvas.nodes)) return null;
-      const node = createNode(task.result);
       if (!node || typeof node.id !== "string" || !Number.isFinite(node.x) || !Number.isFinite(node.y)) return null;
       const size = boundsOf(getNodeBounds(node, canvas));
       if (!size) return null;
@@ -99,11 +107,60 @@
           y: target.center.y - size.height / 2 }, size, obstacles);
       node.x += point.x - size.left;
       node.y += point.y - size.top;
-      // Geometry and node construction are adapters; recheck identity after invoking them.
-      if (getProjectId() !== target.projectId || getCanvas(target.canvasId) !== canvas
-        || !isEditable(canvas, task.scope) || commitNode(canvas, node) === false) return null;
-      const placement = Object.freeze({ nodeId: node.id, canvasId: target.canvasId });
-      placements.set(task, { placement, target, node });
+      return node;
+    }
+
+    function begin(task, target) {
+      if (!task || !["queued", "running"].includes(task.status)) return null;
+      if (pending.has(task)) return pending.get(task)?.node || null;
+      // Reserve the task before adapters run, including rejected attempts.
+      pending.set(task, null);
+      if (!validTarget(task, target) || !createPendingNode || !commitPendingNode) return null;
+      const source = target.finalGeneration ? target.referenceNodes.find((node) =>
+        (!target.sourceNodeId || node.id === target.sourceNodeId) && target.canvas.nodes.includes(node)) : undefined;
+      if (target.sourceNodeId && !source) return null;
+      const node = positionNode(createPendingNode(task, source), target);
+      if (!node || !validTarget(task, target) || (source && !target.canvas.nodes.includes(source))) return null;
+      const entry = { target, node };
+      pending.set(task, entry);
+      if (commitPendingNode(target.canvas, node, source, target) === false) { discard(task); return null; }
+      return node;
+    }
+
+    function discard(task) {
+      if (!task || typeof task !== "object") return false;
+      const entry = pending.get(task);
+      pending.set(task, null);
+      if (!entry) return false;
+      // Cleanup touches only the exact transient object owned by this task.
+      removePendingNode?.(entry.target.canvas, entry.node);
+      return true;
+    }
+
+    function update(task) {
+      if (!task || !["queued", "running"].includes(task.status)) return false;
+      const entry = pending.get(task);
+      if (!entry) return false;
+      if (!validTarget(task, entry.target) || !entry.target.canvas.nodes.includes(entry.node)) {
+        discard(task); return false;
+      }
+      return updatePendingNode?.(entry.target.canvas, entry.node, task) !== false;
+    }
+
+    function place(task, target) {
+      if (!task || typeof task !== "object" || task.status !== "succeeded") return null;
+      if (placements.has(task)) return placements.get(task)?.placement || null;
+      // A completion is consumed even when its destination no longer permits writes.
+      placements.set(task, null);
+      if (!validTarget(task, target)) { discard(task); return null; }
+      const canvas = target.canvas;
+      const entry = pending.get(task);
+      if (!entry || entry.target !== target || !canvas.nodes.includes(entry.node)
+        || !completePendingNode) { discard(task); return null; }
+      if (completePendingNode(canvas, entry.node, task.result) === false) { discard(task); return null; }
+      pending.set(task, null);
+      const placement = Object.freeze({ nodeId: entry.node.id, canvasId: target.canvasId });
+      placements.set(task, { ...entry, placement });
       return placement;
     }
 
@@ -121,7 +178,7 @@
       return focusNode(target.canvas, node) !== false;
     }
 
-    return Object.freeze({ capture, place, locate });
+    return Object.freeze({ capture, begin, update, discard, place, locate });
   }
 
   root.REELAY_AGENT_RESULT_PLACEMENT = Object.freeze({ createController });

@@ -149,7 +149,7 @@ describe("guest home and login navigation", () => {
     expect(trigger).toHaveFocus();
     expect(screen.getByRole("textbox", { name: "描述你的创作需求" })).toBe(prompt);
     expect(prompt).toHaveValue("清晨薄雾中的森林");
-    expect(readGuestCreationDraft()).toBe("");
+    await waitFor(() => expect(readGuestCreationDraft()).toBe(""));
     expect(services.projectRepository.create).not.toHaveBeenCalled();
   });
 
@@ -163,7 +163,7 @@ describe("guest home and login navigation", () => {
     await screen.findByRole("heading", { name: "最近项目" });
     expect(within(screen.getByRole("region", { name: "开始创作" })).getByRole("button", { name: "新建项目" })).toBeEnabled();
     expect(screen.getByRole("textbox", { name: "描述你的创作需求" })).toHaveValue("角色的半身肖像，柔和侧光");
-    expect(readGuestCreationDraft()).toBe("");
+    await waitFor(() => expect(readGuestCreationDraft()).toBe(""));
     expect(services.projectRepository.create).not.toHaveBeenCalled();
     expect(services.sessionGateway.signInWithPassword).toHaveBeenCalledWith({ account: "creator@reelay.test", password: "reelay-demo" });
   });
@@ -225,7 +225,7 @@ describe("guest home and login navigation", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/app/w/review-workspace"));
     expect(await screen.findByRole("textbox", { name: "描述你的创作需求" })).toHaveValue(prompt);
     expect(services.projectRepository.create).toHaveBeenCalledOnce();
-    expect(readGuestCreationDraft("review-workspace")).toBe("");
+    await waitFor(() => expect(readGuestCreationDraft("review-workspace")).toBe(""));
     expect(window.sessionStorage.getItem("reelay-home-launch-intent")).toBeNull();
   });
 
@@ -251,7 +251,7 @@ describe("guest home and login navigation", () => {
     expect(screen.getByRole("textbox", { name: "描述你的创作需求" })).toHaveValue("跨标签续登的输入");
     expect(services.sessionGateway.signInWithPassword).not.toHaveBeenCalled();
     expect(services.projectRepository.create).toHaveBeenCalledOnce();
-    expect(readGuestCreationDraft("review-workspace")).toBe("");
+    await waitFor(() => expect(readGuestCreationDraft("review-workspace")).toBe(""));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
