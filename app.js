@@ -306,7 +306,7 @@ const state = {
   nodeCreatePoint: null,
   isSpaceDown: false,
   agentOpen: false,
-  agentWidth: 560,
+  agentWidth: 624,
   agentTopInset: 0,
   agentBottomInset: 0,
   zoomTipTimer: 0,
@@ -5622,9 +5622,12 @@ function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
   });
   bindMediaTitleEvents(el, node);
   bindMediaToolbarEvents(el, node);
-  window.REELAY_DRAFT_VIDEO_BADGE.bind(el, (anchor) => {
-    if (!requireCanvasMutation() || !getActiveCanvas()?.nodes.includes(node)) return;
-    agentGeneration?.requestFinal(getEditableMedia(node), { sourceNodeId: node.id, anchor });
+  window.REELAY_DRAFT_VIDEO_BADGE.bind(el, (anchor, options) => {
+    if (options?.interaction !== "leave") {
+      const allowed = options?.interaction === "hover" ? isCanvasMutationAllowed() : requireCanvasMutation();
+      if (!allowed || !getActiveCanvas()?.nodes.includes(node)) return;
+    }
+    agentGeneration?.requestFinal(getEditableMedia(node), { sourceNodeId: node.id, anchor, ...options });
   });
   el.querySelectorAll("[data-node-port-zone]").forEach((zone) => {
     zone.addEventListener("pointermove", (event) => {
@@ -8163,9 +8166,9 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
   showMessage: showActionToast, escapeHtml, assetPreview: agentReferenceThumbnail,
   renderPrompt: (input) => agentComposerView.renderPrompt({ ...input, content: input.prompt }),
   getDemoPresets: () => window.REELAY_GENERATION_DEMO_PRESETS?.create({ models, media: assetLibrarySeed.media }) || [],
-  createPreviewHistory: window.REELAY_GENERATION_HISTORY_PRESETS && (({ presets, prepareInput }) =>
-    window.REELAY_GENERATION_HISTORY_PRESETS.create({ presets, prepareInput,
-      media: assetLibrarySeed.media, simulationAssets, now: Date.now() })),
+  createPreviewHistory: window.REELAY_GENERATION_HISTORY_PRESETS && ((context) =>
+    window.REELAY_GENERATION_HISTORY_PRESETS.create({ ...context,
+      media: assetLibrarySeed.media, simulationAssets, simulationVideos: window.REELAY_PROTOTYPE_CONFIG.simulationVideos, now: Date.now() })),
   preparePreviewInput(input) {
     const model = models.find((entry) => entry.id === input.modelId);
     if (!model) return null;
@@ -8176,7 +8179,7 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
     if (!resolved.valid || !Number.isFinite(cost) || cost <= 0) return null;
     const { beforeAspect, aspect, afterAspect } = getParamLabelParts(parameters);
     return { prompt: resolved.text, promptDocument: resolved.document, references, referenceSnapshot: resolved.media,
-      parameters, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
+      parameters: { ...parameters, outputDuration: getGenerationOutputDurationSeconds(parameters) }, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
       parameterSummary: `${beforeAspect}${aspect}${afterAspect}` };
   },
   sanitizeUrl: sanitizeRuntimeMediaUrl, placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover, refreshIcons,
@@ -8451,7 +8454,7 @@ function syncAgentModelButton() {
     agentModelBtn.classList.toggle("agent-managed", agentManaged);
     agentModelBtn.innerHTML = agentManaged
       ? `<i class="agent-composer-model-icon" data-lucide="layers-2" aria-hidden="true"></i><span class="agent-model-button-label control-chip-label">模型偏好 · ${names.length}</span>`
-      : `${modelIconMarkup(model, "model-chip-glyph agent-composer-model-icon")}<span class="agent-model-button-label control-chip-label">${escapeHtml(model?.compactName || model?.name || "选择模型")}</span>`;
+      : `${modelIconMarkup(model, "model-chip-glyph agent-composer-model-icon")}<span class="agent-model-button-label control-chip-label">${escapeHtml(model?.composerName || model?.compactName || model?.name || "选择模型")}</span>${model?.composerVariant ? `<span class="agent-model-variant">${escapeHtml(model.composerVariant)}</span>` : ""}`;
     const label = agentManaged ? preferenceLabel : `当前模型：${model?.name || "未选择"}`;
     agentModelBtn.title = label;
     agentModelBtn.setAttribute("aria-label", label);
@@ -8522,7 +8525,11 @@ function setAgentOpen(open) {
     closeAgentPopovers();
     setAgentAdvancedOpen(false);
   }
-  if (open) { mountAgentPrompt(); agentComposerResize?.sync(); }
+  if (open) {
+    mountAgentPrompt();
+    renderAgentMessages();
+    agentComposerResize?.sync();
+  }
   syncNarrowViewportIsolation({ focusPanel: narrowViewportQuery.matches && open });
   syncPromptPanelLayouts();
   if (shouldMoveFocusIntoPanel) window.requestAnimationFrame(() => {

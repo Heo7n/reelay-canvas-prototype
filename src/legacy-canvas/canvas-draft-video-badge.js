@@ -24,6 +24,10 @@
     const button = badge?.querySelector("[data-node-draft-final]");
     if (!button) return;
     badge.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("pointerenter", (event) => {
+      if (!button.disabled && event.pointerType !== "touch") onOpen(button, { interaction: "hover" });
+    });
+    button.addEventListener("pointerleave", () => onOpen(button, { interaction: "leave" }));
     button.addEventListener("click", (event) => {
       event.preventDefault(); event.stopPropagation();
       if (!button.disabled) onOpen(button);

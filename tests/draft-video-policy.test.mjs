@@ -62,6 +62,7 @@ test("conversion freezes the original prompt, reference order, seed, audio and t
     assert.equal(final.parameters[key], asset.generation.input.parameters[key]);
   }
   assert.equal(final.cost, 44);
+  assert.equal(final.modelName, "Seedance 2.5");
   assert.equal(final.parameters.quality, "1080p");
   assert.equal(final.parameters.outputFormat, "mov");
   assert.equal(final.parameters.providerParameters.draft_task_id, "draft-1");

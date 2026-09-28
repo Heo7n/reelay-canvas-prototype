@@ -29,12 +29,12 @@ html[data-theme="light"] .draft-video-popover {
 .draft-video-resolution-heading, .draft-video-formats legend { color: var(--draft-secondary-text); }
 .draft-video-resolution-value { padding: 8px; border-radius: 7px; background: var(--draft-field-bg); box-shadow: inset 0 0 0 1px var(--draft-field-line); text-align: center; }
 .draft-video-resolution [data-draft-resolution] { font-weight: 500; font-variant-numeric: tabular-nums; }
-.draft-video-time-card { color: var(--draft-secondary-text); font-size: 11px; line-height: 1.6; }
+.draft-video-time-card { color: var(--draft-secondary-text); font-size: 13px; line-height: 1.6; }
 .draft-video-timing { display: grid; gap: 6px; margin: 0; }
-.draft-video-timing > div { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 4px; }
+.draft-video-timing > div { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
 .draft-video-timing dt { flex: 0 0 auto; }
-.draft-video-timing dd { margin: 0; color: var(--canvas-popover-text); font-variant-numeric: tabular-nums; }
-.draft-video-timing-note { margin: 6px 0 0; }
+.draft-video-timing dd { margin: 0; color: var(--canvas-popover-text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.draft-video-timing-note { margin: 8px 0 0; }
 .draft-video-formats { min-width: 0; margin: 0; padding: 0; border: 0; }
 .draft-video-formats legend { margin: 0 0 8px; padding: 0; }
 .draft-video-formats [data-draft-formats] { display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: var(--draft-field-bg); box-shadow: inset 0 0 0 1px var(--draft-field-line); }

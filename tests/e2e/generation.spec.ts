@@ -173,13 +173,13 @@ test("a saved sample survives refresh and its node can generate a separately cha
   await expect(dialog).toBeHidden();
   await expect(canvas.locator("#railCreditValue")).toHaveText(String(3000 - finalCost));
   const finalRecord = canvas.locator("#agentGenerationRecords .generation-record").filter({ has: canvas.locator(".generation-record-final-source") });
-  await expect(finalRecord).toHaveAttribute("data-status", /queued|running/);
-  await expect(finalRecord.locator(".generation-record-prompt, .generation-record-references")).toHaveCount(0);
+  await expect(finalRecord).toHaveCount(0);
   await expect(canvas.locator(".canvas-node")).toHaveCount(before + 2);
   await expect(canvas.locator(".generating-preview")).toBeVisible();
   await page.clock.fastForward(8000);
-  await expect(finalRecord).toHaveAttribute("data-status", "succeeded");
-  await expect(finalRecord.locator(".generation-media-resolution")).toHaveText("正片 1080P");
+  await expect(finalRecord).toHaveCount(0);
+  await expect(canvas.locator(".generating-preview")).toHaveCount(0);
+  await expect(canvas.locator(".node-draft-label").filter({ hasText: "正片 1080P" })).toHaveCount(1);
   await expect(canvas.locator(".canvas-node")).toHaveCount(before + 2);
   const savedFinal = await (await finalSave).json() as { document: { content: LegacyCanvasDocumentV1 } };
   const savedNodes = savedFinal.document.content.canvases.flatMap((item) => item.nodes);

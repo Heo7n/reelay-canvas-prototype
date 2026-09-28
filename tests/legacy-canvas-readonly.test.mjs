@@ -41,7 +41,7 @@ const generationModules = await Promise.all([
   "src/legacy-canvas/canvas-prompt-optimization-controller.js",
   "src/legacy-canvas/canvas-reference-thumbnails.js",
   "src/legacy-canvas/canvas-agent-composer-resize.js",
-  "src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js",
+  "src/infrastructure/generation/simulated-generation-executor.js", "src/application/generation-task-service.js", "src/application/generation-record-groups.js",
   "src/infrastructure/generation/simulated-generation-media.js",
   "src/legacy-canvas/canvas-generation-media.js", "src/legacy-canvas/canvas-generation-reference-preview.js", "src/legacy-canvas/canvas-generation-status-view.js", "src/legacy-canvas/canvas-generation-record-view.js",
   "src/legacy-canvas/canvas-generation-selection.js", "src/legacy-canvas/canvas-agent-generation-controller.js",
@@ -195,7 +195,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   for (const source of generationModules) window.eval(source);
   for (const source of saveMediaModules) window.eval(source);
   window.eval(`${app}\nwindow.__readonlyPromptEditors = promptEditors;`);
-  assert.equal(window.document.querySelector("#agentDock").style.getPropertyValue("--agent-width"), "560px");
+  assert.equal(window.document.querySelector("#agentDock").style.getPropertyValue("--agent-width"), "624px");
 
   const injectionProbe = window.document.createElement("div");
   injectionProbe.innerHTML = window.assetMediaContent({

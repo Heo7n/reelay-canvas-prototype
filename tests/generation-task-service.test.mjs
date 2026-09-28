@@ -572,6 +572,25 @@ test("preview import is scoped and atomic; ordinary retries still charge and ref
   assert.equal(f.service.get(preview.id), preview);
 });
 
+test("preview import preserves provenance identities and rejects collisions atomically", () => {
+  const f = fixture(); const request = input();
+  const example = { id: "preview-fixed-task", input: request.input, status: "canceled" };
+  assert.equal(f.service.importPreviewRecords({ scope: request.scope, records: [example, example] }).length, 0);
+  assert.equal(f.service.list().length, 0);
+  assert.equal(f.service.importPreviewRecords({ scope: request.scope, records: [{ ...example, id: "" }] }).length, 0);
+  const [task] = f.service.importPreviewRecords({ scope: request.scope, records: [example] });
+  assert.equal(task.id, example.id);
+  const otherScope = { ...request.scope, conversationId: "other" };
+  assert.equal(f.service.importPreviewRecords({ scope: otherScope, records: [{ ...example, id: "unique" }, example] }).length, 0);
+  assert.equal(f.service.list().length, 1);
+  const real = f.service.submit({ ...request, scope: otherScope });
+  assert.equal(f.service.importPreviewRecords({ scope: { ...request.scope, conversationId: "third" },
+    records: [{ ...example, id: real.id }] }).length, 0);
+  assert.equal(f.service.get(real.id), real);
+  assert.equal(f.debits.length, 1);
+  assert.equal(f.refunds.length, 0);
+});
+
 test("preview history cannot overwrite an existing real conversation or import after disposal", () => {
   const f = fixture(); const request = input();
   f.service.submit(request);
@@ -684,3 +703,40 @@ test("direct final repeats cannot alter frozen content or bypass expiry, and ree
   assert.equal(nested, outer);
   assert.equal(service.list().length, 1);
 });
+
+
+test("canvas ownership is explicit, conversation validation and history imports stay strict", () => {
+  const f = fixture();
+  const request = input();
+  const scope = { projectId: request.scope.projectId, canvasId: request.scope.canvasId };
+  assert.throws(() => f.service.submit({ ...request, scope }), /conversation scope/);
+  assert.throws(() => f.service.submit({ ...request, sourceSurface: "canvas" }), /scope/);
+  assert.throws(() => f.service.submit({ ...request, sourceSurface: "unknown" }), /source surface/);
+  const canvas = f.service.submit({ ...request, scope, sourceSurface: "canvas", idempotencyKey: "same" });
+  assert.equal(canvas.scope.conversationId, null);
+  assert.equal(canvas.sourceSurface, "canvas");
+  assert.equal(f.service.submit({ ...request, scope: { ...scope, conversationId: null }, sourceSurface: "canvas", idempotencyKey: "same" }), canvas);
+  const chat = f.service.submit({ ...request, idempotencyKey: "same" });
+  assert.notEqual(chat, canvas);
+  assert.equal(chat.sourceSurface, "conversation");
+  assert.equal(f.service.list({ conversationId: request.scope.conversationId }).length, 1);
+  assert.equal(f.service.importPreviewRecords({ scope, records: [{ status: "canceled", input: request.input }] }).length, 0);
+});
+
+for (const firstSurface of ["canvas", "conversation"]) {
+  test(`pending final deduplication preserves ${firstSurface} ownership across both entry surfaces`, () => {
+    const f = fixture();
+    const draft = submitDraft(f);
+    const request = { source: draft.result, scope: draft.scope, cost: 60 };
+    const canvas = { ...request, scope: { ...draft.scope, conversationId: null }, sourceSurface: "canvas" };
+    const first = f.service.submitFinal(firstSurface === "canvas" ? canvas : request);
+    const duplicate = f.service.submitFinal(firstSurface === "canvas" ? request : canvas);
+    assert.equal(duplicate, first);
+    assert.equal(first.sourceSurface, firstSurface);
+    assert.equal(f.debits.length, 2);
+    assert.equal(f.service.cancel(duplicate), true);
+    assert.equal(f.service.cancel(first), false);
+    assert.equal(f.refunds.length, 1);
+    assert.equal(draft.status, "succeeded");
+  });
+}

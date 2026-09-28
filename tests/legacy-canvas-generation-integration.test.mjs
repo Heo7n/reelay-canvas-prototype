@@ -100,6 +100,11 @@ test("node sample keeps frozen inputs and survives creating a separately charged
   dialog.querySelector("form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
   const final = h.service.list().at(-1);
   assert.equal(final.input.generationStage, "final");
+  assert.equal(final.sourceSurface, "canvas");
+  assert.equal(final.scope.conversationId, null);
+  assert.equal(h.agentGeneration.hasRecords(h.agentHistory.getActiveId()), false);
+  assert.equal(h.agentGeneration.hasPending(h.agentHistory.getActiveId()), false);
+  assert.equal(h.record(final), null);
   assert.equal(final.input.parameters.quality, "1080p");
   assert.equal(final.input.prompt, sample.generation.input.prompt);
   assert.equal(h.state.account.credits, afterSample - final.input.cost);
@@ -238,7 +243,7 @@ test("node and conversation share scenic choices, stable results and original sa
   assert.notEqual(next.result.url, sourceUrl, "final generation does not consume a new scene");
 });
 
-test("Agent sample actions preserve a new draft, refund only the final and keep both records", (t) => {
+test("Agent sample actions preserve a new draft, refund only the final and keep its grouped record", (t) => {
   const h = harness(t);
   h.agentModels.setGenerationModel("seedance-2-5-draft");
   const sampleTask = h.send("狐狸慢慢看向镜头");
@@ -252,9 +257,10 @@ test("Agent sample actions preserve a new draft, refund only the final and keep 
   h.document.querySelector(".draft-video-popover form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
   const final = h.service.list().at(-1);
   assert.equal(final.input.sourceDraftTaskId, sampleTask.id);
-  const finalRecord = h.document.querySelector(`[data-generation-task-id="${final.id}"]`);
-  assert.match(finalRecord.querySelector(".generation-record-source-pill").textContent, /正片模式/);
-  assert.equal(finalRecord.querySelector(".generation-record-prompt, .generation-record-references"), null);
+  assert.equal(h.record(final), null, "a final task does not append a second conversation record");
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 1);
+  assert.equal(h.record(sampleTask).querySelectorAll(".generation-record-prompt").length, 1);
+  assert.match(h.record(sampleTask).textContent, /正片/);
   assert.equal(h.first.nodes.length, 2, "conversation submission immediately creates its final result node");
   const pending = h.first.nodes.find((node) => node.pendingGeneration?.taskId === final.id);
   assert.ok(pending);
@@ -353,7 +359,7 @@ test("deleting a conversation placeholder cannot resurrect it on undo or task co
 });
 
 // Run the shipped entry/modules. Only scheduling and unsupported browser/media APIs are replaced.
-function harness(t, { hosted = false, publicHistory = false } = {}) {
+function harness(t, { hosted = false, publicHistory = false, entryOnly = false } = {}) {
   const dom = new JSDOM(html, { url: "http://reelay.test/index.html", runScripts: "outside-only", pretendToBeVisual: true });
   const { window } = dom;
   const hostWindow = { postMessage() {} };
@@ -409,15 +415,17 @@ function harness(t, { hosted = false, publicHistory = false } = {}) {
     window.close();
   });
   const { state, agentGeneration, agentModels, agentParameters, agentReferences, agentHistory, canvasRuntimeStore, promptEditors } = exposed;
-  state.projectId = "generation-project";
-  const first = window.createCanvasRecord("generation-canvas");
-  const second = window.createCanvasRecord("other-canvas");
-  canvasRuntimeStore.replaceCanvases([first, second], first.id);
-  window.clearSelection();
-  window.render();
-  window.setAgentOpen(true);
-  agentHistory.startNew();
-  agentModels.setGenerationModel("seedance-2-5");
+  const first = entryOnly ? window.getActiveCanvas() : window.createCanvasRecord("generation-canvas");
+  const second = entryOnly ? null : window.createCanvasRecord("other-canvas");
+  if (!entryOnly) {
+    state.projectId = "generation-project";
+    canvasRuntimeStore.replaceCanvases([first, second], first.id);
+    window.clearSelection();
+    window.render();
+    window.setAgentOpen(true);
+    agentHistory.startNew();
+    agentModels.setGenerationModel("seedance-2-5");
+  }
   const service = agentGeneration.service;
   const record = (task) => window.document.querySelector(`.generation-record[data-generation-task-id="${task.id}"]`);
   const editor = () => promptEditors.get(window.getConversation());
@@ -472,13 +480,41 @@ async function enablePreviewHistory(h) {
   h.window.addEventListener("reelay:generation-ready", (event) => { capabilities = event.detail; }, { once: true });
   h.window.dispatchEvent(new h.window.CustomEvent("reelay:generation-connect"));
   const config = h.window.REELAY_PROTOTYPE_CONFIG;
-  const initialize = () => capabilities.initializePreviewHistory(({ presets, prepareInput }) =>
-    h.window.REELAY_GENERATION_HISTORY_PRESETS.create({ presets, prepareInput, media: config.assetLibrarySeed.media,
-      simulationAssets: config.simulationAssets, now: h.window.Date.now() }));
+  const initialize = () => capabilities.initializePreviewHistory((context) =>
+    h.window.REELAY_GENERATION_HISTORY_PRESETS.create({ ...context, media: config.assetLibrarySeed.media,
+      simulationAssets: config.simulationAssets, simulationVideos: config.simulationVideos, now: h.window.Date.now() }));
   return { capabilities, initialize };
 }
 
-test("shared default history renders four scoped states from real presets without debit, delivery or draft changes", async (t) => {
+test("first panel opening renders default history without a model change or conversation reselection", (t) => {
+  const h = harness(t, { publicHistory: true, entryOnly: true });
+  const conversationId = h.agentHistory.getActiveId();
+  const canvas = plain(h.window.createCanvasDocumentSnapshot());
+  const modelId = h.agentModels.getModel().id;
+  assert.equal(h.state.agentOpen, false);
+  h.document.querySelector("#agentLauncher").click();
+  assert.equal(h.state.agentOpen, true);
+  assert.equal(h.document.querySelector("#agentGenerationRecords").hidden, false);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 6);
+  const taskIds = h.service.list().map((task) => task.id);
+  assert.equal(taskIds.length, 9);
+  assert.ok(h.service.list().every((task) => task.scope.projectId === h.state.projectId
+    && task.scope.canvasId === h.first.id && task.scope.conversationId === conversationId));
+  assert.equal(h.agentModels.getModel().id, modelId);
+  assert.equal(h.agentHistory.getActiveId(), conversationId);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), canvas);
+  assert.equal(h.state.account.credits, 3000);
+  assert.equal(h.state.account.consumedCredits, 0);
+  h.document.querySelector("#agentCloseBtn").click();
+  h.document.querySelector("#agentLauncher").click();
+  assert.deepEqual(h.service.list().map((task) => task.id), taskIds);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 6);
+  h.document.querySelector("#agentNewChatBtn").click();
+  assert.notEqual(h.agentHistory.getActiveId(), conversationId);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
+});
+
+test("shared default history renders three draft groups and terminal examples without debit, delivery or draft changes", async (t) => {
   const h = harness(t);
   const current = plain(h.window.createCanvasDocumentSnapshot());
   const account = plain(h.state.account);
@@ -488,14 +524,15 @@ test("shared default history renders four scoped states from real presets withou
   records.scrollTop = 800;
   assert.equal(initialize(), true);
   const tasks = h.service.list();
-  assert.equal(tasks.length, 4);
-  assert.deepEqual(plain(tasks.map((task) => task.status)), ["succeeded", "succeeded", "failed", "canceled"]);
-  assert.deepEqual(plain(tasks.map((task) => task.input.mediaType)), ["video", "image", "image", "video"]);
-  assert.equal(tasks[0].input.references.length, 9);
+  assert.equal(tasks.length, 9);
+  assert.deepEqual(plain(tasks.map((task) => task.status)), [...Array(7).fill("succeeded"), "failed", "canceled"]);
+  assert.deepEqual(plain(tasks.map((task) => task.input.mediaType)), [...Array(6).fill("video"), "image", "image", "video"]);
+  const groups = h.window.REELAY_GENERATION_RECORD_GROUPS.groupTasks(tasks);
+  assert.deepEqual(plain(groups.slice(0, 3).map((group) => group.finals.length)), [0, 1, 2]);
   assert.ok(tasks.every((task) => task.isPreview && task.scope.canvasId === h.first.id && !task.addedNodeId));
-  assert.equal(h.document.querySelectorAll(".generation-record").length, 4);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 6);
   assert.equal(h.document.querySelectorAll(".generation-record-refund").length, 2);
-  for (const task of tasks) {
+  for (const { root: task } of groups) {
     const locate = h.record(task).querySelector('[data-generation-action="locate"]');
     assert.equal(locate.hidden, task.status !== "succeeded");
     assert.equal(locate.getAttribute("aria-disabled"), "true");
@@ -508,7 +545,7 @@ test("shared default history renders four scoped states from real presets withou
   assert.equal(h.editor().getText(), ""); assert.equal(h.agentReferences.getAssets().length, 0);
   assert.equal(capabilities.list().length, 0, "preview history is excluded from real task monitoring");
   assert.equal(initialize(), false);
-  h.agentGeneration.render(); assert.equal(h.service.list().length, 4);
+  h.agentGeneration.render(); assert.equal(h.service.list().length, 9);
   h.agentHistory.startNew();
   assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
   assert.equal(initialize(), false);
@@ -522,6 +559,61 @@ test("shared default history renders four scoped states from real presets withou
   assert.equal(h.state.account.consumedCredits, tasks[0].input.cost);
 });
 
+test("preview draft groups use real identities, switch finals and permit a newly charged conversion", async (t) => {
+  const h = harness(t);
+  const { initialize, capabilities } = await enablePreviewHistory(h);
+  initialize();
+  const groups = h.window.REELAY_GENERATION_RECORD_GROUPS.groupTasks(h.service.list()).slice(0, 3);
+  for (const group of groups) {
+    const sample = group.root;
+    assert.equal(sample.result.generation.taskId, sample.id);
+    assert.equal(sample.result.generation.resultId, sample.result.id);
+    assert.equal(h.window.REELAY_DRAFT_VIDEO.getFinalEligibility(sample.result,
+      { projectId: sample.scope.projectId, now: h.window.Date.now() }).eligible, true);
+    for (const final of group.finals) {
+      assert.equal(final.input.sourceDraftTaskId, sample.id);
+      assert.equal(final.input.sourceResultId, sample.result.id);
+      assert.equal(final.result.url, sample.result.url);
+      assert.equal(final.result.generation.taskId, final.id);
+      assert.equal(final.result.generation.resultId, final.result.id);
+      assert.equal(final.sourceSurface, "conversation");
+      assert.deepEqual(plain(final.scope), plain(sample.scope));
+    }
+  }
+  assert.equal(new Set(groups.map((group) => group.root.result.url)).size, 3);
+  assert.deepEqual(plain(groups[2].finals.map((task) => task.input.parameters.outputFormat)), ["mp4", "mov"]);
+  const multiple = groups[2];
+  h.document.querySelector("#agentGenerationRecords").getBoundingClientRect = () => ({ top: 0, bottom: 500, left: 600, right: 1200, width: 600, height: 500 });
+  const versionsTrigger = h.record(multiple.root).querySelector('[data-record-popover="versions"]');
+  versionsTrigger.getBoundingClientRect = () => ({ left: 1000, top: 250, right: 1100, bottom: 282, width: 100, height: 32 });
+  for (const task of [...multiple.finals, multiple.root]) {
+    versionsTrigger.click();
+    const button = h.document.querySelector(`.generation-record-versions-popover [data-record-version="${task.id}"]`);
+    assert.ok(button);
+    button.click();
+    assert.equal(button.getAttribute("aria-pressed"), "true");
+    assert.equal(h.document.querySelector(".generation-record-versions-popover"), null);
+  }
+  assert.equal(capabilities.list().length, 0);
+  assert.equal(h.first.nodes.length, 0);
+  assert.equal(h.state.account.credits, 3000);
+  h.document.querySelector("#agentGenerationRecords").getBoundingClientRect = () => ({ top: 0, bottom: 500 });
+  h.record(groups[0].root).querySelector('[data-generation-action="final"]').getBoundingClientRect = () => ({ left: 600, top: 250, right: 700, bottom: 282, width: 100, height: 32 });
+  h.click(groups[0].root, "final");
+  const dialog = h.document.querySelector(".draft-video-popover");
+  assert.ok(dialog);
+  dialog.querySelector("form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  const task = capabilities.list()[0];
+  assert.ok(task && !task.isPreview);
+  assert.equal(task.input.sourceDraftTaskId, groups[0].root.id);
+  assert.equal(h.first.nodes.length, 1);
+  assert.equal(h.state.account.credits, 3000 - task.input.cost);
+  h.advance(7500);
+  assert.equal(task.status, "succeeded");
+  assert.equal(h.window.REELAY_GENERATION_RECORD_GROUPS.recordForTask(h.service.list(), task).root.id, groups[0].root.id);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 6);
+});
+
 test("preview history waits outside Agent mode and never follows its first conversation into a different project", async (t) => {
   const h = harness(t);
   h.agentModels.setMode("agent");
@@ -530,7 +622,7 @@ test("preview history waits outside Agent mode and never follows its first conve
   assert.equal(h.service.list().length, 0);
   h.agentModels.setMode("generation");
   h.agentGeneration.render();
-  assert.equal(h.service.list().length, 4);
+  assert.equal(h.service.list().length, 9);
   h.state.projectId = "other-project";
   h.agentGeneration.render();
   assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
@@ -572,15 +664,15 @@ test("hosted preview waits through host:init and hydrates examples only when the
   h.dispatchHost({ source: "reelay-shell", type: "host:document", protocolVersion: 1, writable: true,
     document: { id: "main", projectId: context.projectId, schemaVersion: 1, revision: 1, content } });
   const tasks = h.service.list();
-  assert.equal(tasks.length, 4);
+  assert.equal(tasks.length, 9);
   assert.ok(tasks.every((task) => task.scope.projectId === "formal-project" && task.scope.canvasId === h.first.id));
-  assert.equal(h.document.querySelectorAll(".generation-record").length, 4);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 6);
   assert.equal(h.document.querySelector("#agentGenerationRecords").scrollTop, 0);
   assert.equal(h.state.account.credits, 3000); assert.equal(h.state.account.consumedCredits, 0);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot().canvases), content.canvases);
   assert.equal(h.state.activeCanvasId, content.activeCanvasId);
   h.agentGeneration.render();
-  assert.equal(h.service.list().length, 4);
+  assert.equal(h.service.list().length, 9);
   h.agentHistory.startNew();
   assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
 });
@@ -965,6 +1057,41 @@ test("pending conversation deletion is blocked through the actual history delete
   assert.equal(h.state.account.credits, 2976);
   assert.match(h.document.querySelector(".action-toast")?.textContent || "", /仍有生成任务/);
   assert.equal(h.document.querySelector("dialog[open]"), null);
+});
+
+test("a successful result completed in another conversation is announced only after returning to its owner", (t) => {
+  const h = harness(t); const task = h.send();
+  h.agentHistory.startNew();
+  assert.equal(h.service.complete(task), true);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
+  assert.equal(h.document.querySelector(".generation-record-new").hidden, true);
+  h.agentHistory.select(task.scope.conversationId);
+  const notice = h.document.querySelector(".generation-record-new");
+  assert.equal(notice.hidden, false); assert.match(notice.textContent, /1 个新结果/);
+  notice.click();
+  assert.equal(notice.hidden, true);
+  assert.ok(h.record(task).querySelector(".generation-record-output.is-result-highlighted"));
+});
+
+test("successful generation in Agent mode retains result feedback when switching back", (t) => {
+  const h = harness(t); const task = h.send();
+  h.agentModels.setMode("agent");
+  assert.equal(h.service.complete(task), true);
+  h.agentModels.setMode("generation");
+  h.agentGeneration.render();
+  assert.ok(h.record(task));
+  const notice = h.document.querySelector(".generation-record-new");
+  assert.equal(notice.hidden, false); assert.match(notice.textContent, /1 个新结果/);
+});
+
+test("collapsed conversation preserves successful result feedback until the next opening", (t) => {
+  const h = harness(t); const task = h.send();
+  h.window.setAgentOpen(false);
+  assert.equal(h.service.complete(task), true);
+  h.advance(1000);
+  h.window.setAgentOpen(true);
+  const notice = h.document.querySelector(".generation-record-new");
+  assert.equal(notice.hidden, false); assert.match(notice.textContent, /1 个新结果/);
 });
 
 test("Agent mode retains existing role messages and does not create generation tasks or charge credits", (t) => {
@@ -1430,4 +1557,187 @@ test("development presets fill mixed-media and twelve-reference drafts without s
   assert.equal(h.service.list().length, 0);
   assert.deepEqual(plain(h.state.account), account);
   assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), canvas);
+});
+
+
+test("sample badge hover stays silent in readonly canvas and leave cancels an earlier pending open", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  node.model = "seedance-2-5-draft"; node.prompt = "山间风景";
+  h.first.nodes.push(node); h.window.normalizeNodeParameters(node);
+  h.window.startSimulatedGeneration(node); h.advance(7500);
+  const badge = h.document.querySelector(`[data-id="${node.id}"] [data-node-draft-final]`);
+  badge.getBoundingClientRect = () => ({ left: 100, right: 220, top: 100, bottom: 132, width: 120, height: 32 });
+  const messages = [];
+  h.window.showActionToast = (message) => messages.push(message);
+  let allowed = true;
+  h.window.isCanvasMutationAllowed = () => allowed;
+  badge.dispatchEvent(new h.window.Event("pointerenter"));
+  allowed = false;
+  badge.dispatchEvent(new h.window.Event("pointerleave"));
+  allowed = true; h.advance(200);
+  assert.equal(h.document.querySelector(".draft-video-popover"), null, "leave clears pending open even after access changes");
+  allowed = false;
+  badge.dispatchEvent(new h.window.Event("pointerenter")); h.advance(200);
+  badge.dispatchEvent(new h.window.Event("pointerleave")); h.advance(300);
+  assert.equal(h.document.querySelector(".draft-video-popover"), null);
+  assert.deepEqual(messages, [], "passive pointer movement never shows a mutation denial toast");
+  badge.click();
+  assert.equal(messages.length, 1, "explicit activation still explains the edit restriction");
+  assert.equal(h.service.list().length, 0);
+});
+
+
+function submitCanvasFinal(h, node) {
+  const anchor = h.document.querySelector(`[data-id="${node.id}"] [data-node-draft-final]`);
+  assert.ok(anchor);
+  anchor.getBoundingClientRect = () => ({ left: 300, right: 440, top: 50, bottom: 80, width: 140, height: 30 });
+  anchor.click();
+  h.document.querySelector(".draft-video-popover form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  return h.service.list().at(-1);
+}
+
+test("a conversation sample converted on canvas never writes to its original or current conversation", async (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  const sample = h.send();
+  h.service.complete(sample);
+  const sourceConversation = sample.scope.conversationId;
+  const node = h.first.nodes[0];
+  h.agentHistory.startNew();
+  const otherConversation = h.agentHistory.getActiveId();
+  assert.notEqual(otherConversation, sourceConversation);
+  const final = submitCanvasFinal(h, node);
+  assert.equal(final.scope.conversationId, null);
+  assert.equal(final.sourceSurface, "canvas");
+  assert.equal(h.service.list({ conversationId: sourceConversation }).length, 1);
+  assert.equal(h.service.list({ conversationId: otherConversation }).length, 0);
+  assert.equal(h.agentGeneration.hasPending(sourceConversation), false);
+  assert.equal(h.agentGeneration.hasRecords(otherConversation), false);
+  assert.equal(h.agentGeneration.hasPending(otherConversation), false);
+  assert.equal(h.agentGeneration.hasRecords(null), false);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
+  const pending = h.first.nodes[1];
+  h.document.querySelector(`#agentHistoryList [data-chat-id="${sourceConversation}"] [data-history-action="delete"]`).click();
+  const confirm = h.document.querySelector(".confirm-ok");
+  assert.ok(confirm, "canvas task does not block deleting its source conversation");
+  confirm.click();
+  await Promise.resolve();
+  assert.equal(h.agentHistory.getConversation(sourceConversation), undefined);
+  h.agentGeneration.removeConversation(otherConversation);
+  h.agentGeneration.removeConversation(null);
+  assert.equal(h.service.get(final.id), final);
+  h.window.switchCanvas(h.second.id);
+  h.advance(7500);
+  assert.equal(final.status, "succeeded");
+  assert.equal(final.addedNodeId, pending.id);
+  assert.equal(h.first.nodes[1], pending);
+  assert.equal(pending.assets[0].url, sample.result.url);
+  assert.equal(h.second.nodes.length, 0);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
+});
+
+for (const firstSurface of ["canvas", "conversation"]) {
+  test(`cross-entry final actions keep one task, node and debit when ${firstSurface} submits first`, (t) => {
+    const h = harness(t);
+    h.agentModels.setGenerationModel("seedance-2-5-draft");
+    const sample = h.send(); h.service.complete(sample);
+    const node = h.first.nodes[0];
+    const credits = h.state.account.credits;
+    function chatFinal() {
+      h.document.querySelector("#agentGenerationRecords").getBoundingClientRect = () => ({ top: 0, bottom: 500 });
+      h.record(sample).querySelector('[data-generation-action="final"]').getBoundingClientRect = () => ({ left: 600, top: 250, right: 700, bottom: 282, width: 100, height: 32 });
+      h.click(sample, "final");
+      h.document.querySelector(".draft-video-popover form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+      return h.service.list().at(-1);
+    }
+    const final = firstSurface === "canvas" ? submitCanvasFinal(h, node) : chatFinal();
+    const duplicate = firstSurface === "canvas" ? chatFinal() : submitCanvasFinal(h, node);
+    assert.equal(duplicate, final);
+    assert.equal(h.service.list().length, 2);
+    assert.equal(h.first.nodes.length, 2);
+    assert.equal(h.first.connections.length, 1);
+    assert.equal(h.state.account.credits, credits - final.input.cost);
+    assert.equal(final.sourceSurface, firstSurface);
+    assert.equal(h.record(final), null);
+    assert.equal(h.document.querySelectorAll(".generation-record").length, 1);
+    assert.equal(h.agentGeneration.cancelTask(final.id), true);
+    assert.equal(h.service.cancel(final), false);
+    assert.equal(h.first.nodes.length, 1);
+    assert.equal(h.state.account.credits, credits);
+    if (firstSurface === "conversation") assert.match(h.record(sample).textContent, /已取消/);
+    else assert.equal(h.service.list({ conversationId: sample.scope.conversationId }).length, 1);
+  });
+}
+
+test("failed canvas final removes its node and refunds without adding a failure record", (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  const sample = h.send(); h.service.complete(sample);
+  const before = h.state.account.credits;
+  const final = submitCanvasFinal(h, h.first.nodes[0]);
+  h.agentHistory.startNew();
+  h.window.switchCanvas(h.second.id);
+  assert.equal(h.service.fail(final, "模拟生成失败"), true);
+  assert.equal(h.first.nodes.length, 1);
+  assert.equal(h.second.nodes.length, 0);
+  assert.equal(h.state.account.credits, before);
+  assert.equal(h.record(final), null);
+  assert.match(h.document.querySelector(".action-toast").textContent, /正片生成失败.*已返还/);
+  assert.equal(h.service.list({ conversationId: sample.scope.conversationId }).length, 1);
+});
+
+
+function submitConversationFinal(h, sample) {
+  h.document.querySelector("#agentGenerationRecords").getBoundingClientRect = () => ({ top: 0, bottom: 500 });
+  h.record(sample).querySelector('[data-generation-action="final"]').getBoundingClientRect = () => ({ left: 600, top: 250, right: 700, bottom: 282, width: 100, height: 32 });
+  h.click(sample, "final");
+  h.document.querySelector(".draft-video-popover form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  return h.service.list().at(-1);
+}
+
+test("a grouped final blocks deleting its root while pending and terminal group deletion preserves canvas and billing", async (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  const sample = h.send(); h.service.complete(sample);
+  const final = submitConversationFinal(h, sample);
+  const select = h.document.querySelector("#agentRecordSelectBtn");
+  select.click();
+  assert.equal(h.document.querySelectorAll('[data-generation-selection="record"]').length, 1);
+  assert.equal(h.record(sample).querySelector('[data-generation-selection="record"]').disabled, true);
+  h.agentGeneration.removeConversation(sample.scope.conversationId);
+  assert.equal(h.service.get(sample.id), sample, "a pending child keeps its root record alive");
+  assert.equal(h.service.get(final.id), final);
+  h.service.complete(final);
+  assert.equal(h.record(sample).querySelector('[data-generation-selection="record"]').disabled, false);
+  const canvas = plain(h.window.createCanvasDocumentSnapshot());
+  const account = plain(h.state.account);
+  h.document.querySelector('[data-generation-selection="all"]').click();
+  h.document.querySelector('[data-generation-selection="remove"]').click();
+  assert.match(h.document.querySelector(".confirm-layer").textContent, /删除 1 条生成记录/);
+  h.document.querySelector(".confirm-ok").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.service.list().length, 0);
+  assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
+  assert.deepEqual(plain(h.window.createCanvasDocumentSnapshot()), canvas);
+  assert.deepEqual(plain(h.state.account), account);
+});
+
+test("submitting a final into an earlier creation preserves record position and reading scroll", (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  const sample = h.send("原始创作"); h.service.complete(sample);
+  const later = h.send("后来的创作"); h.service.complete(later);
+  const container = h.document.querySelector("#agentGenerationRecords");
+  Object.defineProperty(container, "scrollHeight", { configurable: true, get: () => 2000 });
+  Object.defineProperty(container, "clientHeight", { configurable: true, get: () => 500 });
+  container.scrollTop = 100;
+  const row = h.record(sample);
+  const final = submitConversationFinal(h, sample);
+  assert.equal(container.scrollTop, 100);
+  assert.equal(h.record(sample), row);
+  assert.deepEqual([...h.document.querySelectorAll(".generation-record")].map((item) => item.dataset.generationTaskId), [sample.id, later.id]);
+  h.service.complete(final);
+  assert.equal(container.scrollTop, 100);
+  assert.equal(h.record(sample), row);
 });

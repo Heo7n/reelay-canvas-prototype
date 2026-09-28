@@ -166,7 +166,7 @@
       providerParameters: { draft: false, resolution: quality, draft_task_id: generation.taskId } };
     const parameterSummary = string(original.parameterSummary, 500).replace(/480p/ig, quality.toUpperCase())
       .replace(/样片(?:模式)?/g, "成片").replace(/\b(?:mp4|mov)\b/ig, outputFormat.toUpperCase());
-    return freeze({ ...original, modelId: model.baseModelId, modelName: `${baseModel?.name || original.modelName}（成片）`, parameters, cost,
+    return freeze({ ...original, modelId: model.baseModelId, modelName: baseModel?.name || original.modelName, parameters, cost,
       parameterSummary,
       generationStage: "final", sourceDraftTaskId: generation.taskId, sourceResultId: generation.resultId,
       sourceDraftAsset: { ...mediaSnapshot(asset), generation } });

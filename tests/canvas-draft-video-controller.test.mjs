@@ -6,8 +6,8 @@ import { installCanvasIcons } from "./helpers/canvas-icons.mjs";
 
 const sources = await Promise.all([
   "config/prototype-config.js", "application/draft-video-policy.js", "legacy-canvas/canvas-popover-placement.js", "legacy-canvas/canvas-draft-video-controller.js",
-  "infrastructure/generation/simulated-generation-executor.js", "application/generation-task-service.js",
-  "legacy-canvas/canvas-agent-generation-controller.js",
+  "infrastructure/generation/simulated-generation-executor.js", "application/generation-task-service.js", "application/generation-record-groups.js",
+  "legacy-canvas/canvas-agent-generation-controller.js", "legacy-canvas/canvas-draft-video-badge.js",
 ].map((path) => readFile(new URL(`../src/${path}`, import.meta.url), "utf8")));
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const catalog = await readFile(new URL("../data/model-catalog.js", import.meta.url), "utf8");
@@ -44,7 +44,7 @@ function fixture(t, { agent = false, parameters = {} } = {}) {
   if (agent) {
     window.REELAY_GENERATION_RECORD_VIEW = { createController(options) {
       actions = options.onAction;
-      return { render() {}, close() {}, dispose() {} };
+      return { render() {}, close() {}, dispose() {}, observeTask() {} };
     } };
     controller = window.REELAY_AGENT_GENERATION.createController({
       document, container: document.querySelector("#records"), chatContainer: document.querySelector("#chat"),
@@ -307,4 +307,130 @@ test("final record repeats reopen locked confirmation and do not enter editable 
   f.submit(); assert.equal(f.controller.service.list().length, 2); assert.equal(f.balance, 2964);
   const next = f.controller.service.list().at(-1); f.controller.service.cancel(next);
   assert.equal(f.balance, 3000); assert.equal(f.sourceAsset.generation.stage, "draft");
+});
+
+
+test("only the node badge hover opens after intent delay and leaves keyboard focus unchanged", (t) => {
+  const f = fixture(t);
+  const node = f.document.createElement("article");
+  node.innerHTML = f.window.REELAY_DRAFT_VIDEO_BADGE.render({ asset: f.sourceAsset, eligibility: { eligible: true } });
+  f.document.body.append(node);
+  const badge = node.querySelector("button");
+  badge.getBoundingClientRect = f.anchor.getBoundingClientRect;
+  f.window.REELAY_DRAFT_VIDEO_BADGE.bind(node, (anchor, { interaction } = {}) => {
+    if (interaction === "leave") f.controller.leave(anchor);
+    else if (interaction === "hover") f.controller.hover({ sourceAsset: f.sourceAsset, anchor, sourceNodeId: "node" });
+    else f.controller.open({ sourceAsset: f.sourceAsset, anchor, sourceNodeId: "node" });
+  });
+  f.anchor.focus();
+  node.dispatchEvent(new f.window.Event("pointerenter")); f.advance(200);
+  assert.equal(f.query(".draft-video-popover"), null, "the whole node is not a hover trigger");
+  const touch = new f.window.Event("pointerenter"); Object.defineProperty(touch, "pointerType", { value: "touch" });
+  badge.dispatchEvent(touch); f.advance(200);
+  assert.equal(f.query(".draft-video-popover"), null, "touch still uses click activation");
+  badge.dispatchEvent(new f.window.Event("pointerenter")); f.advance(149);
+  assert.equal(f.query(".draft-video-popover"), null);
+  f.advance(1);
+  assert.ok(f.query(".draft-video-popover"));
+  assert.equal(f.document.activeElement, f.anchor);
+  assert.equal(badge.getAttribute("aria-expanded"), "true");
+  badge.click();
+  assert.ok(f.query(".draft-video-popover"), "first click pins an already hovered menu");
+  assert.equal(f.document.activeElement, f.query("input:checked"));
+  badge.dispatchEvent(new f.window.Event("pointerleave")); f.advance(300);
+  assert.ok(f.query(".draft-video-popover"), "pinned menus survive pointer departure");
+  badge.click(); assert.equal(f.query(".draft-video-popover"), null);
+});
+
+test("hover traverses the trigger gap and both cards, then dismisses without moving focus", (t) => {
+  const f = fixture(t); f.anchor.focus();
+  f.controller.hover({ sourceAsset: f.sourceAsset, anchor: f.anchor }); f.advance(150);
+  const panel = f.query(".draft-video-popover");
+  f.controller.leave(f.anchor); f.advance(150);
+  panel.dispatchEvent(new f.window.Event("pointerenter")); f.advance(300);
+  assert.equal(f.query(".draft-video-popover"), panel);
+  for (const target of [f.query("form"), panel, f.query(".draft-video-time-card")]) {
+    target.dispatchEvent(new f.window.Event("pointermove", { bubbles: true })); f.advance(300);
+    assert.equal(f.query(".draft-video-popover"), panel, "cards and internal gap share the same hover boundary");
+  }
+  panel.dispatchEvent(new f.window.Event("pointerleave")); f.advance(219);
+  assert.equal(f.query(".draft-video-popover"), panel);
+  f.advance(1); assert.equal(f.query(".draft-video-popover"), null);
+  assert.equal(f.document.activeElement, f.anchor); assert.equal(f.timers.size, 0);
+});
+
+test("brief hover, scope change, permission loss, Escape and disposal clear pending opens", (t) => {
+  for (const change of ["leave", "scope", "permission", "escape", "dispose", "outside"]) {
+    const f = fixture(t);
+    f.controller.hover({ sourceAsset: f.sourceAsset, anchor: f.anchor });
+    if (change === "leave") f.controller.leave(f.anchor);
+    if (change === "scope") { f.setScope({ ...f.scope, canvasId: "other" }); f.controller.refresh(); }
+    if (change === "permission") { f.setEditable(false); f.controller.refresh(); }
+    if (change === "escape") f.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    if (change === "dispose") f.controller.dispose();
+    if (change === "outside") f.document.body.dispatchEvent(new f.window.Event("pointerdown", { bubbles: true }));
+    f.advance(500);
+    assert.equal(f.query(".draft-video-popover"), null, change);
+    assert.equal(f.timers.size, 0, change);
+  }
+});
+
+test("removing a hovered source closes the popover and clears its lifecycle timers", async (t) => {
+  const f = fixture(t);
+  f.controller.hover({ sourceAsset: f.sourceAsset, anchor: f.anchor }); f.advance(150);
+  assert.ok(f.query(".draft-video-popover"));
+  f.anchor.remove(); await Promise.resolve();
+  assert.equal(f.query(".draft-video-popover"), null); assert.equal(f.timers.size, 0);
+});
+
+test("interacting with a hovered parameter pins the menu until explicit dismissal", (t) => {
+  const f = fixture(t);
+  f.controller.hover({ sourceAsset: f.sourceAsset, anchor: f.anchor }); f.advance(150);
+  const panel = f.query(".draft-video-popover");
+  const format = f.query('input[value="mov"]');
+  format.dispatchEvent(new f.window.Event("pointerdown", { bubbles: true })); format.focus();
+  panel.dispatchEvent(new f.window.Event("pointerleave")); f.advance(300);
+  assert.equal(f.query(".draft-video-popover"), panel);
+  f.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  assert.equal(f.query(".draft-video-popover"), null); assert.equal(f.document.activeElement, f.anchor);
+});
+
+test("node hover uses the agent adapter without submitting or charging", (t) => {
+  const f = fixture(t, { agent: true }); f.anchor.focus();
+  f.controller.requestFinal(f.sourceAsset, { anchor: f.anchor, sourceNodeId: "node", interaction: "hover" });
+  f.advance(150); assert.ok(f.query(".draft-video-popover"));
+  assert.equal(f.document.activeElement, f.anchor); assert.equal(f.balance, 3000);
+  assert.equal(f.controller.service.list().length, 0);
+  f.controller.requestFinal(f.sourceAsset, { anchor: f.anchor, sourceNodeId: "node", interaction: "leave" });
+  f.advance(220); assert.equal(f.query(".draft-video-popover"), null);
+});
+
+
+test("canvas final scope ignores conversation changes and never acquires a conversation owner", (t) => {
+  const f = fixture(t, { agent: true });
+  assert.equal(f.controller.requestFinal(f.sourceAsset, { anchor: f.anchor, sourceNodeId: "sample-node" }), true);
+  f.setScope({ ...f.scope, conversationId: "other-chat" });
+  f.controller.render();
+  assert.ok(f.query(".draft-video-popover"));
+  f.submit();
+  const task = f.controller.service.list()[0];
+  assert.equal(task.sourceSurface, "canvas");
+  assert.equal(task.scope.conversationId, null);
+  assert.equal(f.targets[0].scope.conversationId, null);
+  assert.equal(f.controller.hasRecords("chat"), false);
+  assert.equal(f.controller.hasRecords("other-chat"), false);
+  f.controller.removeConversation("chat");
+  f.controller.removeConversation("other-chat");
+  f.controller.service.complete(task);
+  assert.equal(f.placements.length, 1);
+});
+
+test("conversation final popover cannot submit into another conversation", (t) => {
+  const f = fixture(t, { agent: true });
+  assert.equal(f.open(), true);
+  f.setScope({ ...f.scope, conversationId: "other-chat" });
+  f.controller.render();
+  assert.equal(f.query(".draft-video-popover"), null);
+  assert.equal(f.controller.service.list().length, 0);
+  assert.equal(f.balance, 3000);
 });

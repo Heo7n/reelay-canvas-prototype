@@ -125,15 +125,19 @@
       }
     }
 
-    function submit({ scope, input, idempotencyKey } = {}) {
+    function submit({ scope, input, idempotencyKey, sourceSurface = "conversation" } = {}) {
       if (disposed) return null;
-      if (!scopeFields.every((key) => typeof scope?.[key] === "string" && scope[key].trim())) {
-        throw new TypeError("Generation tasks require project, conversation and canvas scope.");
+      if (!["conversation", "canvas"].includes(sourceSurface)) throw new TypeError("Unknown generation source surface.");
+      const requiredFields = sourceSurface === "canvas" ? ["projectId", "canvasId"] : scopeFields;
+      if (!requiredFields.every((key) => typeof scope?.[key] === "string" && scope[key].trim())
+        || (sourceSurface === "canvas" && scope.conversationId != null)) {
+        throw new TypeError("Generation tasks require project and canvas scope; conversation requests also require conversation scope.");
       }
+      scope = { ...scope, conversationId: sourceSurface === "canvas" ? null : scope.conversationId };
       if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || !idempotencyKey)) {
         throw new TypeError("Task idempotency keys must be non-empty strings.");
       }
-      const key = idempotencyKey === undefined ? null : JSON.stringify([...scopeFields.map((field) => scope[field]), idempotencyKey]);
+      const key = idempotencyKey === undefined ? null : JSON.stringify([sourceSurface, ...scopeFields.map((field) => scope[field]), idempotencyKey]);
       if (key && submissions.has(key)) return submissions.get(key).task;
       if (!input || !Number.isFinite(input.cost) || input.cost < 0) {
         throw new TypeError("Generation task cost must be a finite, non-negative number.");
@@ -165,7 +169,7 @@
         charged: 0, refunded: 0, refundAttempted: false,
         addedNodeId: null, addedCanvasId: null,
       };
-      const task = { id, input: frozenInput, scope: frozenScope };
+      const task = { id, sourceSurface, input: frozenInput, scope: frozenScope };
       for (const field of ["status", "progress", "createdAt", "startedAt", "finishedAt", "cancelUntil", "error", "result", "charged", "refunded", "addedNodeId", "addedCanvasId"]) {
         Object.defineProperty(task, field, { enumerable: true, get: () => record[field] });
       }
@@ -218,11 +222,11 @@
       return task;
     }
 
-    function submitFinal({ source, scope, cost, outputFormat = "mp4", idempotencyKey } = {}) {
+    function submitFinal({ source, scope, cost, outputFormat = "mp4", idempotencyKey, sourceSurface = "conversation" } = {}) {
       if (disposed) return null;
       if (!root.REELAY_DRAFT_VIDEO) throw new Error("The draft video policy must be loaded first.");
       const input = root.REELAY_DRAFT_VIDEO.buildFinalInput(source, { projectId: scope?.projectId, now: now(), cost, outputFormat });
-      return submit({ input, scope, idempotencyKey });
+      return submit({ input, scope, idempotencyKey, sourceSurface });
     }
 
     function get(taskOrId) {
@@ -231,7 +235,7 @@
     }
 
     function importPreviewRecords({ scope, records: entries } = {}) {
-      if (disposed || !Array.isArray(entries) || !entries.length || entries.length > 8) return [];
+      if (disposed || !Array.isArray(entries) || !entries.length || entries.length > 12) return [];
       if (!scopeFields.every((key) => typeof scope?.[key] === "string" && scope[key].trim())) return [];
       if (list({ projectId: scope.projectId, conversationId: scope.conversationId }).length) return [];
       const frozenScope = snapshot(scope);
@@ -241,13 +245,13 @@
           || !["image", "video", "audio"].includes(entry.input?.mediaType)
           || !Number.isFinite(entry.input?.cost) || entry.input.cost < 0
           || (entry.status === "succeeded" && (!entry.result || entry.result.type !== entry.input.mediaType))) return [];
-        const id = options.makeId();
+        const id = entry.id ?? options.makeId();
         if (typeof id !== "string" || !id || records.has(id) || ids.has(id)) return [];
         ids.add(id);
         const createdAt = Number.isFinite(entry.createdAt) ? entry.createdAt : now() - root.REELAY_PROTOTYPE_CONFIG.generationDurationMs;
         const finishedAt = Math.max(createdAt, Number.isFinite(entry.finishedAt) ? entry.finishedAt : createdAt + root.REELAY_PROTOTYPE_CONFIG.generationDurationMs);
         const frozenInput = snapshot(entry.input);
-        const task = Object.freeze({ id, isPreview: true, scope: frozenScope, input: frozenInput,
+        const task = Object.freeze({ id, sourceSurface: "conversation", isPreview: true, scope: frozenScope, input: frozenInput,
           status: entry.status, progress: entry.status === "succeeded" ? 100 : 0, createdAt, startedAt: createdAt, finishedAt, cancelUntil: createdAt,
           error: entry.status === "failed" ? String(entry.error || defaultFailure) : null,
           result: entry.status === "succeeded" ? snapshot(entry.result) : null,

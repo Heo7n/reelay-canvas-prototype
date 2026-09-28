@@ -43,13 +43,48 @@
     let expiryTimer = 0;
     let observer = null;
     let frame = 0;
+    let hoverTimer = 0;
+    let closeTimer = 0;
+    let pendingHover = null;
+    let removalObserver = null;
 
-    function sameScope(scope) {
+    function clearHoverTimer() {
+      view.clearTimeout(hoverTimer); hoverTimer = 0; pendingHover = null;
+    }
+    function keepOpen() { view.clearTimeout(closeTimer); closeTimer = 0; }
+    function pin() {
+      keepOpen();
+      if (active) active.pinned = true;
+    }
+    function leave(anchor) {
+      if (!anchor || pendingHover?.anchor === anchor) clearHoverTimer();
+      if (!active || active.pinned || (anchor && active.anchor !== anchor)) return;
+      keepOpen();
+      closeTimer = view.setTimeout(() => close({ restoreFocus: false }), 220);
+    }
+    function hover(options) {
+      if (disposed) return false;
+      clearHoverTimer();
+      if (active?.anchor === options.anchor) { keepOpen(); return true; }
+      pendingHover = { ...options, scope: { ...(options.scope || getScope()) } };
+      hoverTimer = view.setTimeout(() => {
+        const request = pendingHover;
+        clearHoverTimer();
+        if (request) open({ ...request, hoverOnly: true });
+      }, 150);
+      return true;
+    }
+
+    function sameScope(scope, sourceSurface = "conversation") {
       const current = getScope();
       return Boolean(current && scope && current.projectId === scope.projectId
-        && current.canvasId === scope.canvasId && current.conversationId === scope.conversationId);
+        && current.canvasId === scope.canvasId
+        && (sourceSurface === "canvas" || current.conversationId === scope.conversationId));
     }
     function close({ restoreFocus = true } = {}) {
+      clearHoverTimer(); keepOpen();
+      removalObserver?.disconnect(); removalObserver = null;
+      const returnFocus = active?.pinned;
       view.clearTimeout(expiryTimer); expiryTimer = 0;
       view.cancelAnimationFrame(frame); frame = 0;
       observer?.disconnect(); observer = null;
@@ -60,12 +95,12 @@
         anchor.setAttribute("aria-expanded", "false");
         anchor.removeAttribute("aria-controls");
       }
-      if (restoreFocus && anchor?.isConnected && !anchor.disabled) anchor.focus({ preventScroll: true });
+      if (restoreFocus && returnFocus && anchor?.isConnected && !anchor.disabled) anchor.focus({ preventScroll: true });
     }
     function position() {
       view.cancelAnimationFrame(frame); frame = 0;
       if (!active) return;
-      if (!active.anchor.isConnected || !sameScope(active.scope) || !isEditable()) { close({ restoreFocus: false }); return; }
+      if (!active.anchor.isConnected || !sameScope(active.scope, active.sourceSurface) || !isEditable()) { close({ restoreFocus: false }); return; }
       const anchor = active.anchor.getBoundingClientRect();
       const scroller = active.anchor.closest("#agentGenerationRecords");
       const clip = scroller?.getBoundingClientRect();
@@ -96,8 +131,9 @@
       if (!frame) frame = view.requestAnimationFrame(position);
     }
     function refresh() {
+      if (pendingHover && (!sameScope(pendingHover.scope, pendingHover.sourceSurface) || !isEditable() || !pendingHover.anchor?.isConnected)) clearHoverTimer();
       if (!active || disposed) return null;
-      if (!sameScope(active.scope) || !isEditable() || !active.anchor.isConnected) { close({ restoreFocus: false }); return null; }
+      if (!sameScope(active.scope, active.sourceSurface) || !isEditable() || !active.anchor.isConnected) { close({ restoreFocus: false }); return null; }
       const eligibility = root.REELAY_DRAFT_VIDEO.getFinalEligibility(active.sourceAsset,
         { projectId: active.scope.projectId, now: now() });
       let input = null;
@@ -120,14 +156,21 @@
       schedulePosition();
       return input;
     }
-    function open({ sourceAsset, scope = getScope(), sourceNodeId = "", anchor = document.activeElement }) {
-      if (disposed || !sourceAsset || !scope || !sameScope(scope) || !isEditable() || !anchor?.isConnected) return false;
-      if (active?.anchor === anchor) { close(); return true; }
+    function open({ sourceAsset, scope = getScope(), sourceNodeId = "", sourceSurface = sourceNodeId ? "canvas" : "conversation", anchor = document.activeElement, hoverOnly = false }) {
+      if (disposed || !sourceAsset || !scope || !sameScope(scope, sourceSurface) || !isEditable() || !anchor?.isConnected) return false;
+      clearHoverTimer(); keepOpen();
+      if (active?.anchor === anchor) {
+        if (hoverOnly) return true;
+        if (!active.pinned) {
+          pin(); form.querySelector("input:checked")?.focus({ preventScroll: true });
+        } else close();
+        return true;
+      }
       close({ restoreFocus: false });
       const model = root.REELAY_MODEL_DIRECTORY.find((entry) => entry.id === sourceAsset.generation?.input.modelId);
       const formats = model?.capabilities.outputFormats || [];
       if (!formats.length || !model.capabilities.draftConversion) return false;
-      active = { sourceAsset, scope: { ...scope }, sourceNodeId, anchor };
+      active = { sourceAsset, scope: { ...scope }, sourceNodeId, sourceSurface, anchor, pinned: !hoverOnly };
       panel.querySelector("[data-draft-resolution]").textContent = model.capabilities.draftConversion.quality.toUpperCase();
       const options = panel.querySelector("[data-draft-formats]");
       options.replaceChildren();
@@ -153,7 +196,13 @@
         const mediaFrame = sourceNodeId && anchor.closest(".media-frame");
         if (mediaFrame) observer.observe(mediaFrame);
       }
-      form.querySelector("input:checked")?.focus({ preventScroll: true });
+      if (view.MutationObserver) {
+        removalObserver = new view.MutationObserver(() => {
+          if (active && !active.anchor.isConnected) close({ restoreFocus: false });
+        });
+        removalObserver.observe(document.body, { childList: true, subtree: true });
+      }
+      if (!hoverOnly) form.querySelector("input:checked")?.focus({ preventScroll: true });
       return true;
     }
     function submit(event) {
@@ -170,12 +219,15 @@
       finally { submitting = false; if (active) { submitButton.disabled = false; schedulePosition(); } }
     }
     function pointerOutside(event) {
+      if (pendingHover && !pendingHover.anchor.contains(event.target)) clearHoverTimer();
       if (active && !panel.contains(event.target) && !active.anchor.contains(event.target)) close({ restoreFocus: false });
     }
     function focusOutside(event) {
+      if (pendingHover && !pendingHover.anchor.contains(event.target) && !panel.contains(event.target)) clearHoverTimer();
       if (active && !panel.contains(event.target) && !active.anchor.contains(event.target)) close({ restoreFocus: false });
     }
     function keydown(event) {
+      if (event.key === "Escape") clearHoverTimer();
       if (active && event.key === "Escape") {
         event.preventDefault(); event.stopPropagation(); close();
       }
@@ -183,14 +235,15 @@
     function contain(event) { event.stopPropagation(); }
     const listeners = [
       [form, "submit", submit], [form, "change", refresh],
-      [panel, "pointerdown", contain], [panel, "click", contain],
+      [panel, "pointerdown", contain], [panel, "pointerdown", pin], [panel, "click", contain],
+      [panel, "pointerenter", keepOpen], [panel, "pointerleave", () => leave()], [panel, "focusin", pin],
       [panel, "keydown", contain], [panel, "keyup", contain],
       [document, "pointerdown", pointerOutside, true], [document, "focusin", focusOutside],
       [document, "keydown", keydown, true], [document, "scroll", schedulePosition, true],
       [view, "resize", schedulePosition],
     ];
     for (const [target, name, listener, capture] of listeners) target.addEventListener(name, listener, capture);
-    return Object.freeze({ open, refresh, close, reposition: schedulePosition, dispose() {
+    return Object.freeze({ open, hover, leave, refresh, close, reposition: schedulePosition, dispose() {
       if (disposed) return;
       close({ restoreFocus: false }); disposed = true;
       for (const [target, name, listener, capture] of listeners) target.removeEventListener(name, listener, capture);

@@ -4,7 +4,7 @@
   const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
 
   function createController({ document, container, trigger, getScope, getTasks, getTask, onRemove, onEnter = () => {},
-    refreshIcons = () => {} }) {
+    refreshIcons = () => {}, canRemoveTask = (task) => TERMINAL.has(task?.status) }) {
     const selected = new Set();
     const rows = new Map();
     const previousInert = new WeakMap();
@@ -79,7 +79,7 @@
         entry.children.add(child);
       }
       if (entry.label.parentElement !== row) row.append(entry.label);
-      const eligible = TERMINAL.has(task.status);
+      const eligible = canRemoveTask(task);
       const prompt = String(task.input?.prompt || "").trim().slice(0, 30);
       entry.checkbox.setAttribute("aria-label", `选择生成记录：${prompt || `第 ${index + 1} 条`}`);
       entry.checkbox.disabled = !eligible;
@@ -104,7 +104,7 @@
       if (list) {
         if (toolbar.nextElementSibling !== list) list.before(toolbar);
       } else if (toolbar.parentElement !== container) container.prepend(toolbar);
-      const eligible = tasks.filter((task) => TERMINAL.has(task.status));
+      const eligible = tasks.filter((task) => canRemoveTask(task));
       const all = toolbar.querySelector('[data-generation-selection="all"]');
       all.checked = eligible.length > 0 && selected.size === eligible.length;
       all.indeterminate = selected.size > 0 && selected.size < eligible.length;
@@ -122,7 +122,7 @@
       if (!selecting) return;
       const taskMap = new Map(tasks.map((task) => [task.id, task]));
       for (const id of selected) {
-        if (!TERMINAL.has(taskMap.get(id)?.status)) selected.delete(id);
+        if (!canRemoveTask(taskMap.get(id))) selected.delete(id);
       }
       const liveRows = new Set(container.querySelectorAll(".generation-record"));
       for (const [row, entry] of rows) {
@@ -154,12 +154,12 @@
       if (!selecting) return;
       if (action === "all") {
         for (const task of currentTasks()) {
-          if (!TERMINAL.has(task.status)) continue;
+          if (!canRemoveTask(task)) continue;
           if (checked) selected.add(task.id); else selected.delete(task.id);
         }
       } else {
         const task = getTask(id);
-        if (inScope(task) && TERMINAL.has(task.status)) {
+        if (inScope(task) && canRemoveTask(task)) {
           if (checked) selected.add(id); else selected.delete(id);
         }
       }
@@ -171,7 +171,7 @@
       if (action === "done") { close({ restoreFocus: true }); return; }
       render();
       if (!selecting || removing) return;
-      const tasks = Array.from(selected, (id) => getTask(id)).filter((task) => inScope(task) && TERMINAL.has(task.status));
+      const tasks = Array.from(selected, (id) => getTask(id)).filter((task) => inScope(task) && canRemoveTask(task));
       if (!tasks.length) return;
       removing = true;
       render();

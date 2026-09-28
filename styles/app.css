@@ -59,7 +59,7 @@
   --node-media-border-width: 1px;
   --node-media-radius: 8px;
   --node-media-shadow: none;
-  --node-media-ring-gap: 2px;
+  --node-media-ring-gap: 1px;
   --node-media-ring-width: 1.5px;
   --node-media-ring-hover: #555559;
   --node-media-ring-selected: #aaaab0;
@@ -5691,7 +5691,7 @@ html[data-theme="light"] .media-content.audio {
 .agent-model-wrap {
   position: static;
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
 }
@@ -5713,16 +5713,21 @@ html[data-theme="light"] .media-content.audio {
 
 .agent-model-button-label {
   min-width: 0;
-  overflow: visible;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-model-variant {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .agent-param-summary {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: none;
-  padding: 0 6px;
+  padding: 0 4px;
   cursor: pointer;
   text-align: left;
 }
@@ -6001,10 +6006,12 @@ html[data-theme="light"] .media-content.audio {
   position: relative;
   grid-row: 2;
   inset: auto;
+  display: flex;
+  flex-wrap: nowrap;
   margin: 0 var(--agent-content-inset);
-  height: auto;
+  height: var(--agent-control-size);
   min-height: var(--agent-control-size);
-  gap: 4px;
+  gap: 2px;
 }
 
 .agent-composer-bar .control-chip,
@@ -6014,15 +6021,13 @@ html[data-theme="light"] .media-content.audio {
 }
 
 .agent-composer-bar .control-chip {
-  gap: 6px;
+  gap: 4px;
   line-height: 20px;
 }
 
 .agent-composer-bar :is(.agent-model-button, .agent-param-summary) {
-  height: auto;
-  min-height: var(--agent-control-size);
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .agent-composer-bar .control-chip:focus-visible {
@@ -6059,51 +6064,14 @@ html[data-theme="light"] .media-content.audio {
   display: block;
   min-width: 0;
   overflow: visible;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .agent-param-summary :is(.param-summary-before, .param-summary-aspect, .param-summary-after) {
   display: inline;
   width: auto;
   overflow: visible;
-  white-space: normal;
-}
-
-@container agent-composer (max-width: 740px) {
-  .agent-composer-bar {
-    display: grid;
-    grid-template-columns: var(--agent-control-size) minmax(0, 1fr) max-content;
-    align-items: center;
-  }
-
-  .agent-mode-wrap {
-    grid-area: 1 / 1;
-  }
-
-  .agent-model-wrap {
-    grid-area: 1 / 2 / 2 / -1;
-    justify-self: start;
-  }
-
-  .agent-model-button.has-divider::after {
-    display: none;
-  }
-
-  .agent-param-summary {
-    grid-area: 2 / 1 / 3 / 3;
-    justify-self: start;
-    max-width: 100%;
-  }
-
-  .agent-composer-spacer {
-    display: none;
-  }
-
-  .agent-send {
-    grid-area: 2 / 3;
-    justify-self: end;
-  }
+  white-space: nowrap;
 }
 
 .confirm-layer {

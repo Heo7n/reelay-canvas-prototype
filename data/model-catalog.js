@@ -234,6 +234,8 @@
     id: "seedance-2-5-draft",
     name: "Seedance 2.5（样片模式）",
     compactName: "Seedance 2.5（样片）",
+    composerName: "Seedance 2.5",
+    composerVariant: "（样片）",
     desc: "先生成 480P 样片，选定后生成 1080P 成片",
     executionMode: "draft",
     capabilities: {

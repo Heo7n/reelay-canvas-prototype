@@ -16,7 +16,9 @@
     list.className = "generation-record-list";
     const notice = document.createElement("button");
     notice.type = "button"; notice.className = "generation-record-new"; notice.hidden = true;
-    notice.textContent = "有新的生成结果 ↓";
+    notice.textContent = "新结果 · 查看";
+    const noticeSlot = document.createElement("div"); noticeSlot.className = "generation-record-feedback-slot";
+    noticeSlot.append(notice);
     const popover = document.createElement("div");
     popover.id = `generation-record-popover-${++nextPopover}`;
     popover.className = "generation-record-popover";
@@ -40,10 +42,105 @@
     let resizeObserver;
     const hoverPaused = new Map();
     let pointerPosition = null;
+    const observedTasks = new Map();
+    const unreadResults = new Map();
+    const readingTimers = new Map();
+    let highlight = null;
 
     function keyOf(scope) {
       return scope?.projectId && (scope.conversationId || scope.conversation?.id)
         ? `${scope.projectId}\u0000${scope.conversationId || scope.conversation.id}` : "";
+    }
+    function resultKey(task) { return `${keyOf(task.scope)}\u0000${task.id}`; }
+    function isUnread(task) { return Boolean(task && unreadResults.has(resultKey(task))); }
+    function observeTask(task, event = {}) {
+      if (disposed || !task || task.sourceSurface === "canvas" || task.isPreview) return;
+      const key = resultKey(task);
+      if (event.type === "removed") { observedTasks.delete(key); unreadResults.delete(key); return; }
+      const previous = observedTasks.get(key);
+      if (task.status === "succeeded" && task.result && previous?.status !== "succeeded"
+        && (previous || event.type === "succeeded")) {
+        unreadResults.set(key, { id: task.id, scope: keyOf(task.scope) });
+      }
+      observedTasks.set(key, { id: task.id, scope: keyOf(task.scope), status: task.status });
+    }
+    function mediaVisible(card) {
+      const media = card?.element.querySelector(".generation-record-result");
+      if (!media || !container.isConnected || document.visibilityState === "hidden" || container.closest("[hidden], [inert], [aria-hidden='true']")) return false;
+      const bounds = container.getBoundingClientRect();
+      const rect = media.getBoundingClientRect();
+      const visibleHeight = Math.min(rect.bottom, bounds.bottom, view.innerHeight) - Math.max(rect.top, bounds.top, 0);
+      return rect.height > 0 && visibleHeight >= Math.min(rect.height, bounds.height || container.clientHeight, view.innerHeight) * .5;
+    }
+    function selectedVisible(card, id) { return card?.selectedId === id && mediaVisible(card); }
+    function setUnread(element, value) {
+      if (value && element.dataset.unread !== "true") element.dataset.unread = "true";
+      else if (!value && element.hasAttribute("data-unread")) element.removeAttribute("data-unread");
+    }
+    function acknowledge(task) {
+      if (!task || !unreadResults.delete(resultKey(task))) return false;
+      const key = resultKey(task);
+      view.clearTimeout(readingTimers.get(key)); readingTimers.delete(key);
+      const card = cardForTask(task.id);
+      if (card) updateGroupControls(card, getTask(card.selectedId) || card.group.root);
+      return true;
+    }
+    function syncResultFeedback() {
+      if (disposed) return;
+      if (document.visibilityState === "hidden") clearResultHighlight();
+      const candidates = [...unreadResults].filter(([, entry]) => entry.scope === scopeKey);
+      let outside = 0;
+      const reading = new Set();
+      for (const [key, entry] of candidates) {
+        const card = cardForTask(entry.id);
+        if (!card) continue;
+        if (!selectedVisible(card, entry.id)) { outside++; continue; }
+        reading.add(key);
+        if (!readingTimers.has(key)) readingTimers.set(key, view.setTimeout(() => {
+          readingTimers.delete(key);
+          if (entry.scope === scopeKey && selectedVisible(cardForTask(entry.id), entry.id)) acknowledge(getTask(entry.id));
+          syncResultFeedback();
+        }, 900));
+      }
+      for (const [key, timer] of readingTimers) if (!reading.has(key)) { view.clearTimeout(timer); readingTimers.delete(key); }
+      const label = `${outside} 个新结果 · 查看`;
+      if (notice.textContent !== label) notice.textContent = label;
+      notice.hidden = outside === 0;
+      for (const card of cards.values()) {
+        const output = card.element.querySelector(".generation-record-output");
+        const selected = getTask(card.selectedId);
+        const unread = isUnread(selected);
+        setUnread(output, unread);
+        let marker = output.querySelector(".generation-record-media-new");
+        if (unread && !marker) {
+          marker = document.createElement("span"); marker.className = "generation-record-media-new";
+          marker.textContent = "新"; marker.setAttribute("aria-label", "新生成的结果"); output.append(marker);
+        } else if (!unread) marker?.remove();
+        const trigger = card.element.querySelector('[data-record-popover="versions"]');
+        const hasNewFinal = card.group.finals.some(isUnread);
+        setUnread(trigger, hasNewFinal);
+        const triggerLabel = `${trigger.querySelector(".generation-record-version-count").textContent}，查看样片与正片版本${hasNewFinal ? "，含新结果" : ""}`;
+        if (trigger.getAttribute("aria-label") !== triggerLabel) trigger.setAttribute("aria-label", triggerLabel);
+        for (const button of card.versionMenu.querySelectorAll("[data-record-version]")) {
+          const fresh = isUnread(getTask(button.dataset.recordVersion));
+          setUnread(button, fresh);
+          const title = `${fresh ? "新生成，" : ""}查看${button.title}`;
+          if (button.getAttribute("aria-label") !== title) button.setAttribute("aria-label", title);
+        }
+      }
+    }
+    function clearResultHighlight() {
+      if (!highlight) return;
+      view.clearTimeout(highlight.timer); highlight.element.classList.remove("is-result-highlighted"); highlight = null;
+    }
+    function highlightResult(card) {
+      clearResultHighlight();
+      const element = card.element.querySelector(".generation-record-output");
+      element.classList.add("is-result-highlighted");
+      highlight = { element, timer: view.setTimeout(clearResultHighlight, 1200) };
+    }
+    function cardForTask(id) {
+      return cards.get(id) || [...cards.values()].find((card) => card.group?.finals.some((task) => task.id === id));
     }
     function inScope(task) { return task && keyOf(task.scope) === scopeKey && keyOf(getScope()) === scopeKey; }
     function busy(task) { return task.status === "queued" || task.status === "running"; }
@@ -79,6 +176,18 @@
       return url ? `<img src="${escape(url)}" alt="" loading="lazy" decoding="async" draggable="false">`
         : icon(ICONS[asset.type] || "image");
     }
+    function recordModelName(task, sourceTask) {
+      const isFinal = stageOf(task) === "final";
+      const input = isFinal
+        ? task.input.sourceDraftAsset?.generation?.input || sourceTask?.input || task.input
+        : task.input;
+      const catalogName = global.REELAY_MODEL_DIRECTORY?.find((model) => model.id === input.modelId)?.name;
+      return (isFinal && input === task.input ? catalogName : input.modelName) || catalogName || input.modelName || input.modelId || "生成任务";
+    }
+    function modelMarkup(task) {
+      const name = recordModelName(task);
+      return `<strong title="${escape(name)}">${escape(name)}</strong>`;
+    }
     function finalSourceMarkup(task, details) {
       const source = task.input.sourceDraftAsset;
       const poster = sanitizeUrl(source?.posterUrl) || sanitizeUrl(source?.thumbnailUrl);
@@ -89,9 +198,8 @@
       const parameters = task.input.parameters || {};
       const duration = parameters.duration === -1 ? "智能时长" : Number.isFinite(parameters.duration) ? `${parameters.duration}s` : parameters.duration;
       const summary = [duration, parameters.aspect, parameters.quality, parameters.outputFormat].filter(Boolean).map((value) => String(value).replace(/p$/i, "P").replace(/^(mp4|mov)$/i, (format) => format.toUpperCase()));
-      const modelName = (task.input.modelName || task.input.modelId || "Seedance 2.5").replace(/（(?:成片|正片)）$/, "");
-      return `<div class="generation-record-final-source"><span class="generation-record-source-pill"><span class="generation-record-source-thumbnail" role="img" aria-label="来源样片">${preview}</span><strong>正片模式</strong></span>
-        <div class="generation-record-parameters"><strong title="${escape(modelName)}">${escape(modelName)}</strong>${summary.map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div></div>`;
+      return `<div class="generation-record-final-source"><span class="generation-record-source-pill"><span class="generation-record-source-thumbnail" role="img" aria-label="来源样片">${preview}</span><strong>正片生成</strong></span>
+        <div class="generation-record-parameters">${modelMarkup(task)}${summary.map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div></div>`;
     }
     function promptMarkup(input) {
       if (!renderPrompt) return escape(typeof input.prompt === "string" ? input.prompt : "").replaceAll("\n", "<br>");
@@ -137,7 +245,7 @@
       view.clearTimeout(showTimer); view.clearTimeout(hideTimer); showTimer = 0; hideTimer = 0;
       if (active?.gallery) settleReferenceTransition(active.gallery);
       if (active?.kind === "menu") {
-        const reveal = cards.get(active.taskId)?.element.querySelector("[data-record-delete-reveal]");
+        const reveal = cardForTask(active.taskId)?.element.querySelector("[data-record-delete-reveal]");
         if (reveal) { reveal.hidden = true; reveal.inert = true; }
       }
       active?.anchor?.setAttribute("aria-expanded", "false");
@@ -159,9 +267,11 @@
           <span class="generation-record-counts">${counts.map(({ type, count }) => `<span title="${count} 个${TYPES[type]}">${icon(ICONS[type])}<span>${count}</span></span>`).join("")}</span>
         </button>` : ""}
         <div class="generation-record-copy"><div class="generation-record-prompt" data-record-popover="prompt" tabindex="0" role="button" aria-label="查看完整提示词" aria-expanded="false">${promptMarkup(task.input)}</div>
-        <div class="generation-record-parameters"><strong title="${escape(task.input.modelName || task.input.modelId || "生成任务")}">${escape(task.input.modelName || task.input.modelId || "生成任务")}</strong>${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div>
+        <div class="generation-record-parameters">${modelMarkup(task)}${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div>
       </div></div>`}</div>
-      <div class="generation-record-output"></div>
+      <div class="generation-record-media-layout"><div class="generation-record-output" tabindex="-1" aria-label="生成结果"></div>
+      <div class="generation-record-versions" hidden><button type="button" class="generation-record-version-trigger" data-record-popover="versions" aria-haspopup="dialog" aria-expanded="false"><span class="generation-record-version-stack" aria-hidden="true"><span class="generation-record-version-cover"></span></span><span class="generation-record-version-count"></span></button></div></div>
+      <div class="generation-record-final-state" hidden></div>
       <footer class="generation-record-footer">
         <div class="generation-record-actions">
           <button type="button" data-generation-action="final" hidden>${icon("check")}生成正片</button>
@@ -178,7 +288,9 @@
           releaseMedia(cover); cover.innerHTML = icon("square-play");
         }, { once: true });
       }
-      const card = { taskId: task.id, element: article, entries, signature: "", input: task.input, start: 0, pageSize: 0 };
+      const card = { taskId: task.id, element: article, entries, signature: "", input: task.input, start: 0, pageSize: 0,
+        versionMenu: document.createElement("div") };
+      card.versionMenu.className = "generation-record-version-options";
       article.querySelector("[data-record-delete-reveal]").id = `${popover.id}-delete-${encodeURIComponent(task.id)}`;
       cards.set(task.id, card);
       fillReferences(card);
@@ -216,12 +328,12 @@
         draftAction.setAttribute("aria-description", draftAction.title);
       }
       const resultAsset = task.result?.asset || task.result || {};
-      const signature = JSON.stringify([busy(task) ? "active" : task.status, task.error, task.refunded, resultAsset.url, resultAsset.type]);
+      const signature = JSON.stringify([busy(task) ? "active" : task.status, task.error, task.refunded, task.id, resultAsset.id, resultAsset.url, resultAsset.type, resultAsset.generation, task.input.parameters]);
       const output = article.querySelector(".generation-record-output");
       let changed = false;
       if (signature !== card.signature) {
         const sameMedia = task.status === "succeeded" && output.querySelector(".generation-record-result")
-          && output.dataset.resultUrl === resultAsset.url && output.dataset.resultType === resultAsset.type;
+          && output.dataset.generationTaskId === task.id && output.dataset.resultUrl === resultAsset.url && output.dataset.resultType === resultAsset.type;
         if (!sameMedia) {
           releaseMedia(output); output.replaceChildren();
           delete output.dataset.resultUrl; delete output.dataset.resultType;
@@ -233,13 +345,13 @@
             const asset = resultAsset;
             const result = document.createElement("div"); result.className = `generation-record-result is-${asset.type || "image"}`;
             const media = mediaElement(asset, asset.name || "生成结果", "generation-record-media");
-            setMediaAspect(result, Number(asset.width) / Number(asset.height) || Number(asset.aspectRatio));
             const onDimensions = () => setMediaAspect(result,
               (media.naturalWidth || media.videoWidth) / (media.naturalHeight || media.videoHeight));
             media.addEventListener(asset.type === "video" ? "loadedmetadata" : "load", onDimensions, { once: true });
             if (asset.type === "image") { media.dataset.recordPopover = "result"; media.tabIndex = 0; media.setAttribute("role", "button"); media.setAttribute("aria-label", "放大预览生成结果"); }
             result.append(media);
             output.append(result);
+            setMediaAspect(result, Number(asset.width) / Number(asset.height) || Number(asset.aspectRatio));
             if (asset.type === "video" && media.tagName === "VIDEO") {
               const player = global.REELAY_GENERATION_MEDIA?.mount({ document, container: result, video: media, asset });
               if (player) mediaPlayers.set(media, player);
@@ -252,6 +364,7 @@
             output.append(status);
           }
         }
+        output.dataset.generationTaskId = task.id;
         card.signature = signature; changed = true;
       }
       article.querySelector(".generation-record-terminal-actions").hidden = busy(task);
@@ -269,9 +382,173 @@
       locate.setAttribute("aria-label", task.addedNodeId ? "定位画布中的生成结果" : `定位生成结果：${locate.title}`);
       return changed;
     }
+    function updateGroupSelection(card) {
+      const successes = card.group.finals.filter((task) => task.status === "succeeded");
+      const latest = successes.at(-1);
+      const previous = card.successIds;
+      card.successIds = new Set(successes.map((task) => task.id));
+      if (!previous) { card.selectedId = latest?.id || card.taskId; return; }
+      if (!card.successIds.has(card.selectedId) && card.selectedId !== card.taskId) card.selectedId = card.taskId;
+      const completed = latest && !previous.has(latest.id);
+      if (completed) {
+        const media = card.element.querySelector(".generation-record-output video");
+        const reading = card.element.querySelector(".generation-record-output").contains(document.activeElement)
+          || card.element.querySelector(".generation-record-versions").contains(document.activeElement)
+          || (active?.kind === "versions" && active.taskId === card.taskId);
+        if (mediaVisible(card) && !reading && (!media || media.paused || media.ended)) {
+          card.selectedId = latest.id;
+        }
+      }
+    }
+    function updateGroupControls(card, selected) {
+      const { root, finals } = card.group;
+      const article = card.element;
+      const successes = finals.filter((task) => task.status === "succeeded");
+      const latest = finals.at(-1);
+      const pending = finals.find(busy);
+      const eligibility = finals.length ? finalEligibility(root) : null;
+      const versions = article.querySelector(".generation-record-versions");
+      const formatOf = (task) => String(task.input.parameters?.outputFormat || (task.result?.asset || task.result)?.generation?.outputFormat || "MP4").toUpperCase();
+      const format = formatOf(selected);
+      versions.hidden = !successes.length;
+      const trigger = versions.querySelector("button");
+      const count = `正片 ×${successes.length}`;
+      const countLabel = trigger.querySelector(".generation-record-version-count");
+      if (countLabel.textContent !== count) countLabel.textContent = count;
+      trigger.setAttribute("aria-label", `${count}，查看样片与正片版本`);
+      trigger.title = "查看生成版本";
+      const coverAsset = successes.at(-1)?.result;
+      const asset = coverAsset?.asset || coverAsset;
+      const coverUrl = sanitizeUrl(asset?.posterUrl || asset?.thumbnailUrl);
+      if (card.versionCover !== coverUrl) {
+        const cover = trigger.querySelector(".generation-record-version-cover");
+        cover.innerHTML = coverUrl
+          ? `<img src="${escape(coverUrl)}" alt="" loading="lazy" decoding="async" draggable="false">` : icon("square-play");
+        cover.querySelector("img")?.addEventListener("error", () => { cover.innerHTML = icon("square-play"); }, { once: true });
+        card.versionCover = coverUrl;
+      }
+      const available = successes.length ? [root, ...successes] : [];
+      const buttons = new Map([...card.versionMenu.querySelectorAll("[data-record-version]")].map((button) => [button.dataset.recordVersion, button]));
+      const availableIds = new Set(available.map((task) => task.id));
+      for (const [id, button] of buttons) if (!availableIds.has(id)) button.remove();
+      for (const [index, task] of available.entries()) {
+        let button = buttons.get(task.id);
+        if (!button) {
+          button = document.createElement("button"); button.type = "button";
+          button.dataset.recordVersion = task.id;
+          button.innerHTML = `<span class="generation-record-version-label"></span><span class="generation-record-version-spec"></span>${icon("check")}`;
+          card.versionMenu.append(button);
+        }
+        const label = index === 0 ? "样片" : `正片 ${index}`;
+        const labelElement = button.querySelector(".generation-record-version-label");
+        if (labelElement.textContent !== label) labelElement.textContent = label;
+        const specification = `${index === 0 ? "480P" : "1080P"} · ${formatOf(task)}`;
+        const specElement = button.querySelector(".generation-record-version-spec");
+        if (specElement.textContent !== specification) specElement.textContent = specification;
+        button.setAttribute("aria-pressed", String(task.id === selected.id));
+        button.title = `${label} · ${index === 0 ? "480P" : "1080P"} · ${formatOf(task)}`;
+        button.setAttribute("aria-label", `查看${button.title}`);
+      }
+      article.querySelector(".generation-record-footer").dataset.generationTaskId = selected.id;
+      article.querySelector('[data-record-popover="details"]').dataset.generationTaskId = selected.id;
+      if (finals.length && card.parameterTaskId !== selected.id) {
+        const parameters = article.querySelector(".generation-record-parameters");
+        const details = parameters.querySelector('[data-record-popover="details"]');
+        const name = parameters.querySelector("strong");
+        name.textContent = recordModelName(selected, root);
+        name.title = name.textContent;
+        let operation = parameters.querySelector(".generation-record-operation");
+        if (!operation && stageOf(selected) === "final") {
+          operation = document.createElement("span"); operation.className = "generation-record-operation";
+          operation.textContent = "正片生成"; name.before(operation);
+        }
+        if (operation) operation.hidden = stageOf(selected) !== "final";
+        for (const parameter of parameters.querySelectorAll(".generation-record-parameter")) parameter.remove();
+        const values = selected.input.parameters || {};
+        const summary = parameterItems(selected.input);
+        const items = stageOf(selected) === "final"
+          ? [values.aspect, "1080P", values.duration === -1 ? "智能时长" : values.duration, format].filter(Boolean)
+          : [...summary.filter((item) => !/^(mp4|mov)$/i.test(item)), format];
+        for (const value of items) {
+          const parameter = document.createElement("span"); parameter.className = "generation-record-parameter";
+          parameter.textContent = String(value); details.before(parameter);
+        }
+        card.parameterTaskId = selected.id;
+      }
+      article.querySelector('[data-generation-action="remove"]').dataset.generationTaskId = root.id;
+      article.querySelector('[data-record-popover="menu"]').dataset.generationTaskId = root.id;
+      if (finals.length) {
+        article.querySelector('[data-generation-action="final"]').hidden = selected.id !== root.id || Boolean(pending);
+        article.querySelector('.generation-record-footer [data-generation-action="again"]').hidden = Boolean(pending);
+        const again = article.querySelector('.generation-record-footer [data-generation-action="again"]');
+        again.disabled = selected.id !== root.id && !eligibility.eligible;
+        again.title = again.disabled ? eligibility.reason : "";
+      }
+      article.querySelector('[data-record-popover="menu"]').disabled = !global.REELAY_GENERATION_RECORD_GROUPS.canRemove(card.group);
+      const state = article.querySelector(".generation-record-final-state");
+      const attempt = pending || (latest && latest.status !== "succeeded" ? latest : null);
+      const ready = successes.find((task) => task.id !== selected.id && isUnread(task));
+      const stateKey = attempt ? `${attempt.id}:${busy(attempt) ? "active" : attempt.status}:${attempt.error?.message || attempt.error || ""}:${attempt.refunded}` : ready ? `ready:${ready.id}` : "";
+      state.hidden = !stateKey;
+      const stateFocused = state.contains(document.activeElement);
+      if (card.finalStateKey !== stateKey) {
+        state.removeAttribute("data-generation-task-id");
+        if (attempt) {
+          state.dataset.generationTaskId = attempt.id;
+          state.innerHTML = `<span class="generation-record-final-label">正片 1080P</span>${busy(attempt) ? global.REELAY_GENERATION_STATUS.render({ progress: attempt.progress, canCancel: cancellable(attempt) }) : `<span class="generation-record-final-outcome" role="status">${attempt.status === "failed" ? "生成失败" : "已取消"}${attempt.refunded ? " · 积分已返还" : ""}</span><button type="button" data-generation-action="again">重试</button>`}`;
+          if (!busy(attempt) && attempt.error) {
+            const reason = String(attempt.error.message || attempt.error);
+            const outcome = state.querySelector(".generation-record-final-outcome");
+            outcome.textContent += ` · ${reason}`; outcome.title = reason;
+          }
+        } else state.innerHTML = ready ? `<span role="status">正片已就绪</span><button type="button" class="generation-record-final-ready" data-record-version="${escape(ready.id)}">查看</button>` : "";
+        card.finalStateKey = stateKey;
+      }
+      const retry = state.querySelector('[data-generation-action="again"]');
+      if (retry) {
+        retry.disabled = !eligibility.eligible;
+        retry.title = retry.disabled ? eligibility.reason : "重新生成正片";
+        retry.setAttribute("aria-description", retry.title);
+      }
+      if (stateFocused && (!state.contains(document.activeElement) || document.activeElement.disabled)) {
+        (state.querySelector("button:not(:disabled)") || article.querySelector('[data-record-popover="details"]'))?.focus({ preventScroll: true });
+      }
+      if (pending) {
+        const cancel = state.querySelector('[data-cancel-generation]');
+        const focused = cancel === document.activeElement;
+        global.REELAY_GENERATION_STATUS.update(state, { progress: pending.progress, canCancel: cancellable(pending) });
+        if (focused && cancel.disabled) article.querySelector('[data-record-popover="details"]').focus({ preventScroll: true });
+      }
+    }
+    function chooseVersion(target, id) {
+      const fromMenu = popover.contains(target) && active?.kind === "versions";
+      const rootId = fromMenu ? active.taskId : target.closest(".generation-record")?.dataset.generationTaskId;
+      const card = cards.get(rootId);
+      if (!card || !inScope(card.group.root)) return;
+      const selected = id === rootId ? card.group.root : card.group.finals.find((task) => task.id === id && task.status === "succeeded");
+      if (!selected) return;
+      if (card.selectedId === id) {
+        if (acknowledge(selected)) { syncResultFeedback(); highlightResult(card); }
+        if (fromMenu) closeAndRestoreFocus(); return;
+      }
+      const versionTrigger = card.element.querySelector('[data-record-popover="versions"]');
+      const restoreFocus = document.activeElement === target;
+      const fresh = isUnread(selected);
+      dismiss(); card.selectedId = id;
+      acknowledge(selected);
+      // Browsing versions is a local view change, not a task/list update.
+      // In particular it must not invoke the list's follow-bottom policy.
+      updateCard(card, selected);
+      updateGroupControls(card, selected);
+      refreshIcons(card.element);
+      syncResultFeedback();
+      if (fresh) highlightResult(card);
+      if (fromMenu || (restoreFocus && !target.isConnected)) versionTrigger.focus({ preventScroll: true });
+    }
     function setMediaAspect(element, ratio) {
       const aspect = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
       element.style.setProperty("--generation-media-aspect", String(aspect));
+      element.closest(".generation-record-media-layout")?.style.setProperty("--generation-media-aspect", String(aspect));
     }
     function visibleAnchor() {
       const bounds = container.getBoundingClientRect();
@@ -292,25 +569,32 @@
           scrollPositions.set(scopeKey, container.scrollTop);
           hoverPaused.set(list, now());
         }
+        clearResultHighlight();
         dismiss(); releaseMedia(list); cards.clear(); list.replaceChildren(); scopeKey = nextScope;
       }
-      if (list.parentNode !== container) { container.replaceChildren(list, notice); }
+      if (list.parentNode !== container) { container.replaceChildren(list, noticeSlot); }
       const tasks = scopeKey ? (getTasks() || []).filter(inScope) : [];
       view.clearTimeout(expiryTimer); expiryTimer = 0;
       const expiries = tasks.filter((task) => task.status === "succeeded" && stageOf(task) === "draft")
         .map((task) => finalEligibility(task).expiresAt).filter((at) => at > now());
       if (expiries.length) expiryTimer = view.setTimeout(() => render(), Math.min(2147483647, Math.min(...expiries) - now() + 1));
+      const groups = global.REELAY_GENERATION_RECORD_GROUPS.groupTasks(tasks);
       const ids = new Set(tasks.map((task) => task.id));
+      for (const [key, entry] of observedTasks) if (entry.scope === scopeKey && !ids.has(entry.id)) { observedTasks.delete(key); unreadResults.delete(key); }
+      for (const task of tasks) observeTask(task);
+      const roots = new Set(groups.map((group) => group.root.id));
       for (const [id, card] of cards) {
-        if (!ids.has(id)) { releaseMedia(card.element); card.element.remove(); cards.delete(id); }
+        if (!roots.has(id)) { releaseMedia(card.element); card.element.remove(); cards.delete(id); }
       }
-      let newResult = false;
-      for (const task of tasks) {
+      for (const group of groups) {
+        const task = group.root;
         const card = cards.get(task.id) || makeCard(task);
-        const previous = card.element.dataset.status;
-        const changed = updateCard(card, task);
+        card.group = group;
+        updateGroupSelection(card);
+        const selected = group.finals.find((item) => item.id === card.selectedId) || task;
+        updateCard(card, selected);
+        updateGroupControls(card, selected);
         fillReferences(card);
-        if (changed && previous && previous !== task.status && !busy(task)) newResult = true;
       }
       if (!tasks.length) {
         if (!list.querySelector(".generation-record-empty")) {
@@ -318,10 +602,10 @@
           empty.textContent = "描述你的创意，生成结果会留在这里"; list.append(empty);
         }
       } else list.querySelector(".generation-record-empty")?.remove();
-      if (forceBottom || (!switched && wasBottom)) { container.scrollTop = container.scrollHeight; notice.hidden = true; }
-      else if (switched) { container.scrollTop = scrollPositions.get(scopeKey) ?? container.scrollHeight; notice.hidden = true; }
+      if (forceBottom || (!switched && wasBottom)) container.scrollTop = container.scrollHeight;
+      else if (switched) container.scrollTop = scrollPositions.get(scopeKey) ?? container.scrollHeight;
       else if (anchor?.element.isConnected) container.scrollTop += anchor.element.getBoundingClientRect().top - anchor.top;
-      if (!forceBottom && !wasBottom && newResult) notice.hidden = false;
+      syncResultFeedback();
       if (active && !ids.has(active.taskId)) dismiss();
       if (active?.kind === "details") fillDetails(getTask(active.taskId));
       refreshIcons(list); positionPopover();
@@ -411,6 +695,7 @@
     }
     function onResize() {
       for (const card of cards.values()) fillReferences(card);
+      syncResultFeedback();
       positionPopover();
     }
     function positionPopover() {
@@ -426,10 +711,10 @@
       if (state.kind === "menu") return;
       const maxWidth = Math.max(120, Math.min(listRect.width || 340, view.innerWidth - 24));
       surface.style.maxWidth = `${maxWidth}px`;
-      surface.style.maxHeight = `${Math.max(80, view.innerHeight - 32)}px`;
+      surface.style.maxHeight = `${Math.max(80, Math.min(state.kind === "versions" ? 360 : Infinity, view.innerHeight - 32))}px`;
       surface.style.setProperty("--generation-prompt-width", `${maxWidth}px`);
       const floating = surface.getBoundingClientRect();
-      const isMenu = state.kind === "details";
+      const isMenu = state.kind === "details" || state.kind === "versions";
       const isReference = state.kind === "reference";
       const anchor = isMenu || isReference ? anchorRect : {
         left: listRect.left, right: listRect.right, width: listRect.width,
@@ -451,7 +736,7 @@
     function open(kind, anchor, task, pinned = false, referenceKey = "") {
       if (!task || !inScope(task)) return;
       if (kind === "prompt" && anchor.scrollHeight <= anchor.clientHeight + 1) return;
-      const entries = kind === "reference" ? cards.get(task.id)?.entries || [] : [];
+      const entries = kind === "reference" ? cardForTask(task.id)?.entries || [] : [];
       const key = referenceKey || anchor.dataset.referenceKey || "";
       const entry = kind === "reference" ? key ? entries.find((item) => item.key === key)
         : entries[Number(anchor.dataset.referencePreview)] : null;
@@ -462,8 +747,8 @@
       dismiss(); active = { kind, anchor, taskId: task.id, pinned, referenceKey: entry?.key || "" };
       anchor.setAttribute("aria-expanded", "true"); anchor.setAttribute("aria-controls", popover.id);
       if (kind === "menu") {
-        if (busy(task)) return dismiss();
-        const reveal = cards.get(task.id).element.querySelector("[data-record-delete-reveal]");
+        if (!global.REELAY_GENERATION_RECORD_GROUPS.canRemove(cardForTask(task.id)?.group)) return dismiss();
+        const reveal = cardForTask(task.id).element.querySelector("[data-record-delete-reveal]");
         reveal.hidden = false; reveal.inert = false;
         anchor.setAttribute("aria-controls", reveal.id);
         return;
@@ -471,7 +756,7 @@
       popover.className = `generation-record-popover generation-record-${kind}-popover`;
       popover.setAttribute("role", "dialog");
       if (kind === "references") {
-        const card = cards.get(task.id);
+        const card = cardForTask(task.id);
         if (!card.entries.length) return dismiss();
         popover.setAttribute("aria-label", "参考素材");
         popover.innerHTML = `<div class="generation-record-popover-title"><span>参考素材 <span class="generation-record-reference-total">(${card.entries.length})</span></span><div class="generation-record-reference-navigation" role="group" aria-label="参考素材翻页"><button type="button" class="generation-record-page-button" data-reference-page="-1" aria-label="上一页素材">${icon("chevron-left")}</button><button type="button" class="generation-record-page-button" data-reference-page="1" aria-label="下一页素材">${icon("chevron-right")}</button></div></div><div class="generation-record-reference-rail"></div>`;
@@ -484,6 +769,11 @@
       } else if (kind === "details") {
         popover.setAttribute("aria-label", "任务详情");
         fillDetails(task);
+      } else if (kind === "versions") {
+        const card = cards.get(task.id);
+        if (!card || card.element.querySelector(".generation-record-versions").hidden) return dismiss();
+        popover.setAttribute("aria-label", "生成版本");
+        popover.append(card.versionMenu);
       } else if (kind === "result") {
         showMedia(task.result?.asset || task.result, "生成结果");
       }
@@ -527,7 +817,7 @@
       if (active?.kind !== "prompt" || !popover.contains(anchor) || !inScope(getTask(active.taskId))) return;
       view.clearTimeout(showTimer); view.clearTimeout(hideTimer); view.clearTimeout(inlineHideTimer);
       if (inlineActive?.anchor === anchor) { inlineActive.pinned ||= pinned; return; }
-      const entry = cards.get(active.taskId)?.entries.find((item) => item.key === anchor.dataset.referenceKey);
+      const entry = cardForTask(active.taskId)?.entries.find((item) => item.key === anchor.dataset.referenceKey);
       if (!entry || anchor.classList.contains("is-missing")) return;
       closeInlinePreview();
       inlineActive = { kind: "reference", anchor, taskId: active.taskId, pinned };
@@ -554,15 +844,22 @@
     }
     function fillDetails(task) {
       const finishedAt = task.finishedAt ?? task.completedAt;
-      const signature = JSON.stringify([task.status, finishedAt, task.refunded]);
+      const group = cardForTask(task.id)?.group;
+      const attempts = group?.finals.length ? [group.root, ...group.finals] : [];
+      const signature = JSON.stringify([task.id, task.status, finishedAt, task.refunded, attempts.map((item) => [item.id, item.status, item.refunded])]);
       if (active.detailsSignature === signature) return;
       active.detailsSignature = signature;
       const focused = popover.contains(document.activeElement) ? document.activeElement : null;
       const copyFocused = focused?.matches('[data-generation-action="feedback"]');
       const closeFocused = focused?.matches("[data-record-close]");
+      const historyFocused = focused?.dataset.recordHistoryTask;
       popover.innerHTML = `<div class="generation-record-popover-title">任务详情<button type="button" data-record-close aria-label="关闭任务详情">${icon("x")}</button></div><dl><dt>发送时间</dt><dd>${escape(formatTime(task.createdAt, true))}</dd>${finishedAt != null ? `<dt>${task.status === "canceled" ? "取消时间" : "完成时间"}</dt><dd>${escape(formatTime(finishedAt, true))}</dd><dt>耗时</dt><dd>${Math.max(0, Math.round((finishedAt - task.createdAt) / 1000))} 秒</dd>` : ""}<dt>本次消耗</dt><dd>${escape(task.input.cost ?? 0)} 积分${task.refunded ? " · 已返还" : ""}</dd><dt>TaskId</dt><dd class="generation-record-task-id"><code>${escape(task.id)}</code><button type="button" data-generation-action="feedback" aria-label="复制 TaskId" title="复制任务编号">${icon("copy")}</button></dd></dl>`;
+      if (attempts.length) {
+        popover.insertAdjacentHTML("beforeend", `<div class="generation-record-task-history"><strong>生成历史</strong><ol>${attempts.map((item) => `<li class="generation-record-task-attempt"><button type="button" data-record-history-task="${escape(item.id)}" aria-pressed="${item.id === task.id}">${item.id === group.root.id ? "样片" : "正片"} · ${escape(String(item.input.parameters?.outputFormat || "MP4").toUpperCase())} · ${{queued:"生成中",running:"生成中",succeeded:"已完成",failed:"失败",canceled:"已取消"}[item.status] || escape(item.status)}</button><span>${escape(item.input.cost ?? 0)} 积分${item.refunded ? " · 已返还" : ""}</span></li>`).join("")}</ol></div>`);
+      }
       refreshIcons(popover);
       if (copyFocused || closeFocused) popover.querySelector(copyFocused ? '[data-generation-action="feedback"]' : "[data-record-close]")?.focus({ preventScroll: true });
+      else if (historyFocused) [...popover.querySelectorAll("[data-record-history-task]")].find((button) => button.dataset.recordHistoryTask === historyFocused)?.focus({ preventScroll: true });
     }
     function pinPopover() {
       view.clearTimeout(showTimer); view.clearTimeout(hideTimer); showTimer = 0; hideTimer = 0;
@@ -633,10 +930,11 @@
         if (!inlineActive.pinned) closeInlinePreview();
       }
       if (active?.kind === "menu") {
-        const reveal = cards.get(active.taskId)?.element.querySelector("[data-record-delete-reveal]");
+        const reveal = cardForTask(active.taskId)?.element.querySelector("[data-record-delete-reveal]");
         if (!active.anchor.contains(event.relatedTarget) && !reveal?.contains(event.relatedTarget)) dismiss();
         return;
       }
+      if (active?.kind === "versions" && !active.anchor.contains(event.relatedTarget) && !popover.contains(event.relatedTarget)) { dismiss(); return; }
       if (!active || active.pinned || active.anchor.contains(event.relatedTarget) || popover.contains(event.relatedTarget) || inlinePopover.contains(event.relatedTarget)) return;
       dismiss();
     }
@@ -660,7 +958,7 @@
     }
     function turnReferencePage(direction, focusNavigation = false) {
       const task = active?.kind === "references" && getTask(active.taskId);
-      const card = task && inScope(task) && cards.get(task.id);
+      const card = task && inScope(task) && cardForTask(task.id);
       if (!card || referencePreview.isOpen()) return false;
       const start = card.start + direction * card.pageSize;
       if (start < 0 || start >= card.entries.length) return false;
@@ -675,7 +973,7 @@
     }
     function wheelReferences(event) {
       if (active?.kind !== "references" || referencePreview.isOpen() || event.ctrlKey || event.metaKey) return;
-      const card = cards.get(active.taskId);
+      const card = cardForTask(active.taskId);
       if (!card || card.entries.length <= card.pageSize || !inScope(getTask(active.taskId))) return;
       const raw = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
       if (!Number.isFinite(raw) || raw === 0) return;
@@ -693,6 +991,18 @@
       }
     }
     function click(event) {
+      const version = event.target.closest?.("[data-record-version]");
+      if (version && (list.contains(version) || (popover.contains(version) && active?.kind === "versions"))) { event.preventDefault(); chooseVersion(version, version.dataset.recordVersion); return; }
+      const history = event.target.closest?.("[data-record-history-task]");
+      if (history && popover.contains(history)) {
+        const task = getTask(history.dataset.recordHistoryTask);
+        if (inScope(task)) {
+          const focused = document.activeElement === history;
+          active.taskId = task.id; active.detailsSignature = ""; fillDetails(task); positionPopover();
+          if (focused) [...popover.querySelectorAll("[data-record-history-task]")].find((button) => button.dataset.recordHistoryTask === task.id)?.focus({ preventScroll: true });
+        }
+        return;
+      }
       const task = taskAt(event.target);
       if (!task) return;
       const action = event.target.closest?.("[data-generation-action]");
@@ -703,7 +1013,7 @@
         if (name === "final" && (task.status !== "succeeded" || !finalEligibility(task).eligible)) return;
         if (name === "cancel" && !cancellable(task)) return;
         if (name === "again" && busy(task)) return;
-        if (name === "remove" && (busy(task) || action.closest("[data-record-delete-reveal]")?.hidden)) return;
+        if (name === "remove" && (!global.REELAY_GENERATION_RECORD_GROUPS.canRemove(cardForTask(task.id)?.group) || action.closest("[data-record-delete-reveal]")?.hidden)) return;
         if (name === "locate" && (task.status !== "succeeded" || !task.addedNodeId)) return;
         event.preventDefault(); event.stopPropagation(); if (name === "remove") dismiss();
         onAction(name, task, event); return;
@@ -716,7 +1026,7 @@
       }
       const tile = event.target.closest?.("[data-reference-preview]");
       if (tile && popover.contains(tile) && !tile.closest(".is-leaving")) {
-        const card = cards.get(task.id);
+        const card = cardForTask(task.id);
         const entry = card.entries[Number(tile.dataset.referencePreview)];
         if (entry) {
           event.preventDefault(); event.stopPropagation(); pinPopover();
@@ -735,7 +1045,7 @@
       }
       const part = event.target.closest?.(".prompt-reference[data-reference-key]");
       if (part) {
-        const entry = cards.get(task.id)?.entries.find((item) => item.key === part.dataset.referenceKey);
+        const entry = cardForTask(task.id)?.entries.find((item) => item.key === part.dataset.referenceKey);
         if (entry) {
           if (popover.contains(part)) { openInlinePreview(part, true); pinPopover(); }
           else open("reference", part, task, true, part.dataset.referenceKey);
@@ -761,7 +1071,7 @@
       if (inlinePopover.contains(event.target)) { if (inlineActive) inlineActive.pinned = true; pinPopover(); return; }
       if (inlineActive && !inlineActive.anchor.contains(event.target)) closeInlinePreview();
       if (active?.kind === "references" && popover.contains(event.target)) { pinPopover(); return; }
-      if (active?.kind === "menu" && cards.get(active.taskId)?.element.querySelector("[data-record-delete-reveal]")?.contains(event.target)) return;
+      if (active?.kind === "menu" && cardForTask(active.taskId)?.element.querySelector("[data-record-delete-reveal]")?.contains(event.target)) return;
       if (active && !popover.contains(event.target) && !active.anchor.contains(event.target)) dismiss();
     }
     function keydown(event) {
@@ -775,12 +1085,22 @@
     function onScroll(event) {
       if (event.target === container) suspendHover(list);
       else if (popover.contains(event.target)) suspendHover(popover);
-      if (event.target === container && container.scrollHeight - container.scrollTop - container.clientHeight < 48) notice.hidden = true;
+      if (event.target === container) syncResultFeedback();
       if (active && !popover.contains(event.target)) positionPopover();
     }
     function onPopoverEnter() { view.clearTimeout(hideTimer); }
     function onPopoverLeave(event) { view.clearTimeout(showTimer); if (!popover.contains(event.relatedTarget) && !inlinePopover.contains(event.relatedTarget)) { scheduleInlineHide(); scheduleHide(); } }
-    function scrollBottom() { container.scrollTop = container.scrollHeight; notice.hidden = true; }
+    function revealNewResult() {
+      const entry = [...unreadResults.values()].find((item) => item.scope === scopeKey && !selectedVisible(cardForTask(item.id), item.id));
+      const task = entry && getTask(entry.id);
+      const card = task && cardForTask(task.id);
+      if (!card || !inScope(task) || task.status !== "succeeded") return syncResultFeedback();
+      chooseVersion(card.element, task.id);
+      const output = card.element.querySelector(".generation-record-output");
+      container.scrollTop += output.getBoundingClientRect().top - container.getBoundingClientRect().top - 16;
+      output.focus({ preventScroll: true });
+      syncResultFeedback();
+    }
     list.addEventListener("pointerover", hover); list.addEventListener("pointerout", leave);
     list.addEventListener("focusin", focusPreview);
     list.addEventListener("focusout", blurPreview);
@@ -796,13 +1116,16 @@
     popover.addEventListener("wheel", wheelReading, { passive: true });
     popover.addEventListener("focusout", blurPreview);
     popover.addEventListener("pointerenter", onPopoverEnter); popover.addEventListener("pointerleave", onPopoverLeave);
-    notice.addEventListener("click", scrollBottom);
+    notice.addEventListener("click", revealNewResult);
+    document.addEventListener("visibilitychange", syncResultFeedback);
     document.addEventListener("pointerdown", pointerOutside);
     document.addEventListener("keydown", keydown); document.addEventListener("scroll", onScroll, true);
     view.addEventListener("resize", onResize);
     if (view.ResizeObserver) { resizeObserver = new view.ResizeObserver(onResize); resizeObserver.observe(container); }
 
     function close() {
+      for (const timer of readingTimers.values()) view.clearTimeout(timer);
+      readingTimers.clear(); clearResultHighlight();
       view.clearTimeout(expiryTimer); expiryTimer = 0;
       hoverPaused.set(list, now());
       dismiss();
@@ -811,7 +1134,7 @@
     }
     function dispose() {
       if (disposed) return; disposed = true; close(); referencePreview.dispose(); resizeObserver?.disconnect(); releaseMedia(list); cards.clear();
-      list.remove(); notice.remove();
+      list.remove(); noticeSlot.remove();
       list.removeEventListener("pointerover", hover); list.removeEventListener("pointerout", leave);
       list.removeEventListener("focusin", focusPreview);
       list.removeEventListener("focusout", blurPreview);
@@ -827,10 +1150,11 @@
       popover.removeEventListener("wheel", wheelReferences);
       popover.removeEventListener("wheel", wheelReading);
       popover.removeEventListener("focusout", blurPreview);
-      notice.removeEventListener("click", scrollBottom); document.removeEventListener("pointerdown", pointerOutside);
+      observedTasks.clear(); unreadResults.clear();
+      notice.removeEventListener("click", revealNewResult); document.removeEventListener("visibilitychange", syncResultFeedback); document.removeEventListener("pointerdown", pointerOutside);
       document.removeEventListener("keydown", keydown); document.removeEventListener("scroll", onScroll, true); view.removeEventListener("resize", onResize);
     }
-    return Object.freeze({ render, close, dispose });
+    return Object.freeze({ render, close, dispose, observeTask });
   }
   global.REELAY_GENERATION_RECORD_VIEW = Object.freeze({ createController });
 }(typeof globalThis === "object" ? globalThis : window));
