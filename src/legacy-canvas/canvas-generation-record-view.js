@@ -116,12 +116,12 @@
           marker = document.createElement("span"); marker.className = "generation-record-media-new";
           marker.textContent = "新"; marker.setAttribute("aria-label", "新生成的结果"); output.append(marker);
         } else if (!unread) marker?.remove();
-        const trigger = card.element.querySelector('[data-record-popover="versions"]');
-        const hasNewFinal = card.group.finals.some(isUnread);
-        setUnread(trigger, hasNewFinal);
-        const triggerLabel = `${trigger.querySelector(".generation-record-version-count").textContent}，查看样片与正片版本${hasNewFinal ? "，含新结果" : ""}`;
+        const trigger = card.element.querySelector("[data-record-versions-toggle]");
+        const freshFinal = card.group.finals.some(isUnread);
+        setUnread(trigger, freshFinal);
+        const triggerLabel = `展开样片与正片版本${freshFinal ? "，含新结果" : ""}`;
         if (trigger.getAttribute("aria-label") !== triggerLabel) trigger.setAttribute("aria-label", triggerLabel);
-        for (const button of card.versionMenu.querySelectorAll("[data-record-version]")) {
+        for (const button of card.versionList.querySelectorAll("[data-record-version]")) {
           const fresh = isUnread(getTask(button.dataset.recordVersion));
           setUnread(button, fresh);
           const title = `${fresh ? "新生成，" : ""}查看${button.title}`;
@@ -270,7 +270,10 @@
         <div class="generation-record-parameters">${modelMarkup(task)}${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div>
       </div></div>`}</div>
       <div class="generation-record-media-layout"><div class="generation-record-output" tabindex="-1" aria-label="生成结果"></div>
-      <div class="generation-record-versions" hidden><button type="button" class="generation-record-version-trigger" data-record-popover="versions" aria-haspopup="dialog" aria-expanded="false"><span class="generation-record-version-stack" aria-hidden="true"><span class="generation-record-version-cover"></span></span><span class="generation-record-version-count"></span></button></div></div>
+      <div class="generation-record-versions" role="group" aria-label="生成版本" hidden>
+        <button type="button" class="generation-record-version-trigger" data-record-versions-toggle aria-expanded="false" aria-label="展开样片与正片版本" title="展开生成版本"><span class="generation-record-version-stack" aria-hidden="true"><span class="generation-record-version-cover"></span></span><span class="generation-record-version-caption">正片</span></button>
+        <div class="generation-record-version-browser" hidden><div class="generation-record-version-list" data-wheel-scope="local"></div></div>
+      </div></div>
       <div class="generation-record-final-state" hidden></div>
       <footer class="generation-record-footer">
         <div class="generation-record-actions">
@@ -289,8 +292,10 @@
         }, { once: true });
       }
       const card = { taskId: task.id, element: article, entries, signature: "", input: task.input, start: 0, pageSize: 0,
-        versionMenu: document.createElement("div") };
-      card.versionMenu.className = "generation-record-version-options";
+        versionList: article.querySelector(".generation-record-version-list"), versionsExpanded: false };
+      const versionBrowser = article.querySelector(".generation-record-version-browser");
+      versionBrowser.id = `${popover.id}-versions-${encodeURIComponent(task.id)}`;
+      article.querySelector("[data-record-versions-toggle]").setAttribute("aria-controls", versionBrowser.id);
       article.querySelector("[data-record-delete-reveal]").id = `${popover.id}-delete-${encodeURIComponent(task.id)}`;
       cards.set(task.id, card);
       fillReferences(card);
@@ -392,9 +397,8 @@
       const completed = latest && !previous.has(latest.id);
       if (completed) {
         const media = card.element.querySelector(".generation-record-output video");
-        const reading = card.element.querySelector(".generation-record-output").contains(document.activeElement)
-          || card.element.querySelector(".generation-record-versions").contains(document.activeElement)
-          || (active?.kind === "versions" && active.taskId === card.taskId);
+        const reading = card.versionsExpanded || card.element.querySelector(".generation-record-output").contains(document.activeElement)
+          || card.element.querySelector(".generation-record-versions").contains(document.activeElement);
         if (mediaVisible(card) && !reading && (!media || media.paused || media.ended)) {
           card.selectedId = latest.id;
         }
@@ -411,24 +415,10 @@
       const formatOf = (task) => String(task.input.parameters?.outputFormat || (task.result?.asset || task.result)?.generation?.outputFormat || "MP4").toUpperCase();
       const format = formatOf(selected);
       versions.hidden = !successes.length;
-      const trigger = versions.querySelector("button");
-      const count = `正片 ×${successes.length}`;
-      const countLabel = trigger.querySelector(".generation-record-version-count");
-      if (countLabel.textContent !== count) countLabel.textContent = count;
-      trigger.setAttribute("aria-label", `${count}，查看样片与正片版本`);
-      trigger.title = "查看生成版本";
-      const coverAsset = successes.at(-1)?.result;
-      const asset = coverAsset?.asset || coverAsset;
-      const coverUrl = sanitizeUrl(asset?.posterUrl || asset?.thumbnailUrl);
-      if (card.versionCover !== coverUrl) {
-        const cover = trigger.querySelector(".generation-record-version-cover");
-        cover.innerHTML = coverUrl
-          ? `<img src="${escape(coverUrl)}" alt="" loading="lazy" decoding="async" draggable="false">` : icon("square-play");
-        cover.querySelector("img")?.addEventListener("error", () => { cover.innerHTML = icon("square-play"); }, { once: true });
-        card.versionCover = coverUrl;
-      }
+      if (!successes.length) setVersionsExpanded(card, false);
+      updateVersionCover(versions.querySelector(".generation-record-version-trigger .generation-record-version-cover"), successes.at(-1));
       const available = successes.length ? [root, ...successes] : [];
-      const buttons = new Map([...card.versionMenu.querySelectorAll("[data-record-version]")].map((button) => [button.dataset.recordVersion, button]));
+      const buttons = new Map([...card.versionList.querySelectorAll("[data-record-version]")].map((button) => [button.dataset.recordVersion, button]));
       const availableIds = new Set(available.map((task) => task.id));
       for (const [id, button] of buttons) if (!availableIds.has(id)) button.remove();
       for (const [index, task] of available.entries()) {
@@ -436,13 +426,14 @@
         if (!button) {
           button = document.createElement("button"); button.type = "button";
           button.dataset.recordVersion = task.id;
-          button.innerHTML = `<span class="generation-record-version-label"></span><span class="generation-record-version-spec"></span>${icon("check")}`;
-          card.versionMenu.append(button);
+          button.innerHTML = `<span class="generation-record-version-cover" aria-hidden="true"></span><span class="generation-record-version-label"></span><span class="generation-record-version-spec"></span>`;
         }
+        if (card.versionList.children[index] !== button) card.versionList.insertBefore(button, card.versionList.children[index] || null);
         const label = index === 0 ? "样片" : `正片 ${index}`;
         const labelElement = button.querySelector(".generation-record-version-label");
         if (labelElement.textContent !== label) labelElement.textContent = label;
-        const specification = `${index === 0 ? "480P" : "1080P"} · ${formatOf(task)}`;
+        updateVersionCover(button.querySelector(".generation-record-version-cover"), task);
+        const specification = formatOf(task);
         const specElement = button.querySelector(".generation-record-version-spec");
         if (specElement.textContent !== specification) specElement.textContent = specification;
         button.setAttribute("aria-pressed", String(task.id === selected.id));
@@ -520,18 +511,46 @@
         if (focused && cancel.disabled) article.querySelector('[data-record-popover="details"]').focus({ preventScroll: true });
       }
     }
+    function updateVersionCover(cover, task) {
+      const asset = task?.result?.asset || task?.result;
+      const url = sanitizeUrl(asset?.posterUrl || asset?.thumbnailUrl);
+      if (cover.dataset.url === url) return;
+      cover.dataset.url = url;
+      cover.innerHTML = url
+        ? `<img src="${escape(url)}" alt="" loading="lazy" decoding="async" draggable="false">` : icon("square-play");
+      cover.querySelector("img")?.addEventListener("error", () => { cover.innerHTML = icon("square-play"); }, { once: true });
+    }
+    function setVersionsExpanded(card, expanded, focus = false) {
+      const trigger = card.element.querySelector("[data-record-versions-toggle]");
+      const browser = card.element.querySelector(".generation-record-version-browser");
+      if (expanded) {
+        for (const other of cards.values()) if (other !== card && other.versionsExpanded) setVersionsExpanded(other, false);
+      }
+      card.versionsExpanded = expanded;
+      trigger.hidden = expanded;
+      trigger.setAttribute("aria-expanded", String(expanded));
+      browser.hidden = !expanded;
+      const selected = card.versionList.querySelector('[aria-pressed="true"]') || card.versionList.querySelector("button");
+      if (focus) (expanded ? selected : trigger)?.focus({ preventScroll: true });
+      // Reveal the focused version inside its own rail, never scroll the conversation.
+      if (expanded && selected && card.versionList.clientHeight > 0) {
+        const rail = card.versionList;
+        const top = selected.offsetTop;
+        const bottom = top + selected.offsetHeight;
+        if (top < rail.scrollTop) rail.scrollTop = top;
+        else if (bottom > rail.scrollTop + rail.clientHeight) rail.scrollTop = bottom - rail.clientHeight;
+      }
+    }
     function chooseVersion(target, id) {
-      const fromMenu = popover.contains(target) && active?.kind === "versions";
-      const rootId = fromMenu ? active.taskId : target.closest(".generation-record")?.dataset.generationTaskId;
+      const rootId = target.closest(".generation-record")?.dataset.generationTaskId;
       const card = cards.get(rootId);
       if (!card || !inScope(card.group.root)) return;
       const selected = id === rootId ? card.group.root : card.group.finals.find((task) => task.id === id && task.status === "succeeded");
       if (!selected) return;
       if (card.selectedId === id) {
         if (acknowledge(selected)) { syncResultFeedback(); highlightResult(card); }
-        if (fromMenu) closeAndRestoreFocus(); return;
+        return;
       }
-      const versionTrigger = card.element.querySelector('[data-record-popover="versions"]');
       const restoreFocus = document.activeElement === target;
       const fresh = isUnread(selected);
       dismiss(); card.selectedId = id;
@@ -543,7 +562,10 @@
       refreshIcons(card.element);
       syncResultFeedback();
       if (fresh) highlightResult(card);
-      if (fromMenu || (restoreFocus && !target.isConnected)) versionTrigger.focus({ preventScroll: true });
+      if (restoreFocus && !target.isConnected) {
+        [...card.versionList.querySelectorAll("[data-record-version]")]
+          .find((button) => button.dataset.recordVersion === id)?.focus({ preventScroll: true });
+      }
     }
     function setMediaAspect(element, ratio) {
       const aspect = Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
@@ -711,10 +733,10 @@
       if (state.kind === "menu") return;
       const maxWidth = Math.max(120, Math.min(listRect.width || 340, view.innerWidth - 24));
       surface.style.maxWidth = `${maxWidth}px`;
-      surface.style.maxHeight = `${Math.max(80, Math.min(state.kind === "versions" ? 360 : Infinity, view.innerHeight - 32))}px`;
+      surface.style.maxHeight = `${Math.max(80, view.innerHeight - 32)}px`;
       surface.style.setProperty("--generation-prompt-width", `${maxWidth}px`);
       const floating = surface.getBoundingClientRect();
-      const isMenu = state.kind === "details" || state.kind === "versions";
+      const isMenu = state.kind === "details";
       const isReference = state.kind === "reference";
       const anchor = isMenu || isReference ? anchorRect : {
         left: listRect.left, right: listRect.right, width: listRect.width,
@@ -769,11 +791,6 @@
       } else if (kind === "details") {
         popover.setAttribute("aria-label", "任务详情");
         fillDetails(task);
-      } else if (kind === "versions") {
-        const card = cards.get(task.id);
-        if (!card || card.element.querySelector(".generation-record-versions").hidden) return dismiss();
-        popover.setAttribute("aria-label", "生成版本");
-        popover.append(card.versionMenu);
       } else if (kind === "result") {
         showMedia(task.result?.asset || task.result, "生成结果");
       }
@@ -900,6 +917,14 @@
       if (!pointerPosition) pointerPosition = { x: event.clientX, y: event.clientY };
       const surface = popover.contains(event.target) ? popover : list;
       if (hoverPaused.has(surface)) return;
+      const versionTrigger = event.target.closest?.("[data-record-versions-toggle]");
+      if (versionTrigger && list.contains(versionTrigger) && event.pointerType !== "touch" && !versionTrigger.hidden) {
+        const card = cards.get(versionTrigger.closest(".generation-record")?.dataset.generationTaskId);
+        if (card && inScope(card.group.root) && !versionTrigger.closest(".generation-record-versions").hidden) {
+          dismiss(); setVersionsExpanded(card, true);
+        }
+        return;
+      }
       const part = event.target.closest?.(".prompt-reference[data-reference-key]:not(.is-missing)");
       if (part && popover.contains(part) && active?.kind === "prompt") {
         if (part.contains(event.relatedTarget)) return;
@@ -934,7 +959,6 @@
         if (!active.anchor.contains(event.relatedTarget) && !reveal?.contains(event.relatedTarget)) dismiss();
         return;
       }
-      if (active?.kind === "versions" && !active.anchor.contains(event.relatedTarget) && !popover.contains(event.relatedTarget)) { dismiss(); return; }
       if (!active || active.pinned || active.anchor.contains(event.relatedTarget) || popover.contains(event.relatedTarget) || inlinePopover.contains(event.relatedTarget)) return;
       dismiss();
     }
@@ -991,8 +1015,17 @@
       }
     }
     function click(event) {
+      const disclosure = event.target.closest?.("[data-record-versions-toggle]");
+      if (disclosure && list.contains(disclosure)) {
+        const card = cards.get(disclosure.closest(".generation-record")?.dataset.generationTaskId);
+        if (card && inScope(card.group.root) && !disclosure.closest(".generation-record-versions").hidden) {
+          event.preventDefault(); dismiss();
+          setVersionsExpanded(card, true, true);
+        }
+        return;
+      }
       const version = event.target.closest?.("[data-record-version]");
-      if (version && (list.contains(version) || (popover.contains(version) && active?.kind === "versions"))) { event.preventDefault(); chooseVersion(version, version.dataset.recordVersion); return; }
+      if (version && list.contains(version)) { event.preventDefault(); chooseVersion(version, version.dataset.recordVersion); return; }
       const history = event.target.closest?.("[data-record-history-task]");
       if (history && popover.contains(history)) {
         const task = getTask(history.dataset.recordHistoryTask);
@@ -1066,6 +1099,16 @@
       if (event.target.closest("[data-record-close]")) { closeAndRestoreFocus(); return; }
       click(event);
     }
+    function leaveVersionArea(event) {
+      if (!event.target.matches?.(".generation-record-media-layout") || event.pointerType === "touch" || event.target.contains(event.relatedTarget)) return;
+      const card = cards.get(event.target.closest(".generation-record")?.dataset.generationTaskId);
+      if (card?.versionsExpanded) setVersionsExpanded(card, false, card.versionList.contains(document.activeElement));
+    }
+    function collapseVersionsOutside(event) {
+      for (const card of cards.values()) {
+        if (card.versionsExpanded && !card.element.querySelector(".generation-record-media-layout").contains(event.target)) setVersionsExpanded(card, false);
+      }
+    }
     function pointerOutside(event) {
       if (referencePreview.isOpen()) return;
       if (inlinePopover.contains(event.target)) { if (inlineActive) inlineActive.pinned = true; pinPopover(); return; }
@@ -1078,6 +1121,10 @@
       if (referencePreview.isOpen()) return;
       if (event.key === "Escape" && inlineActive) { closeInlinePreview(true); event.preventDefault(); return; }
       if (event.key === "Escape" && active) { closeAndRestoreFocus(); event.preventDefault(); }
+      else if (event.key === "Escape") {
+        const card = [...cards.values()].find((item) => item.versionsExpanded);
+        if (card) { setVersionsExpanded(card, false, true); event.preventDefault(); }
+      }
       else if ((event.key === "Enter" || event.key === " ") && (list.contains(event.target) || popover.contains(event.target))) {
         if (event.target.matches('[role="button"]:not(button)')) { event.preventDefault(); event.target.click(); }
       }
@@ -1102,6 +1149,7 @@
       syncResultFeedback();
     }
     list.addEventListener("pointerover", hover); list.addEventListener("pointerout", leave);
+    list.addEventListener("pointerleave", leaveVersionArea, true);
     list.addEventListener("focusin", focusPreview);
     list.addEventListener("focusout", blurPreview);
     list.addEventListener("click", click);
@@ -1118,12 +1166,15 @@
     popover.addEventListener("pointerenter", onPopoverEnter); popover.addEventListener("pointerleave", onPopoverLeave);
     notice.addEventListener("click", revealNewResult);
     document.addEventListener("visibilitychange", syncResultFeedback);
+    // Capture before canvas/input controls can stop propagation of outside presses.
+    document.addEventListener("pointerdown", collapseVersionsOutside, true);
     document.addEventListener("pointerdown", pointerOutside);
     document.addEventListener("keydown", keydown); document.addEventListener("scroll", onScroll, true);
     view.addEventListener("resize", onResize);
     if (view.ResizeObserver) { resizeObserver = new view.ResizeObserver(onResize); resizeObserver.observe(container); }
 
     function close() {
+      for (const card of cards.values()) if (card.versionsExpanded) setVersionsExpanded(card, false);
       for (const timer of readingTimers.values()) view.clearTimeout(timer);
       readingTimers.clear(); clearResultHighlight();
       view.clearTimeout(expiryTimer); expiryTimer = 0;
@@ -1136,6 +1187,7 @@
       if (disposed) return; disposed = true; close(); referencePreview.dispose(); resizeObserver?.disconnect(); releaseMedia(list); cards.clear();
       list.remove(); noticeSlot.remove();
       list.removeEventListener("pointerover", hover); list.removeEventListener("pointerout", leave);
+      list.removeEventListener("pointerleave", leaveVersionArea, true);
       list.removeEventListener("focusin", focusPreview);
       list.removeEventListener("focusout", blurPreview);
       list.removeEventListener("click", click);
@@ -1152,6 +1204,7 @@
       popover.removeEventListener("focusout", blurPreview);
       observedTasks.clear(); unreadResults.clear();
       notice.removeEventListener("click", revealNewResult); document.removeEventListener("visibilitychange", syncResultFeedback); document.removeEventListener("pointerdown", pointerOutside);
+      document.removeEventListener("pointerdown", collapseVersionsOutside, true);
       document.removeEventListener("keydown", keydown); document.removeEventListener("scroll", onScroll, true); view.removeEventListener("resize", onResize);
     }
     return Object.freeze({ render, close, dispose, observeTask });

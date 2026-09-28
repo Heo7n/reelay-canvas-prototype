@@ -8,7 +8,7 @@
 
 - “正片生成”标签按最新反馈减轻：底色正文混合比例改为 8%，常规 400 字重，文字为辅助色混入正文色 20%，去掉内边线；独立正片来源块同步。不改字号 / 尺寸。CSS / HTML、文档与差异检查通过，本地样式已同步，未做实际浏览器视觉复核。
 
-- 版本入口本轮改为媒体右侧轻量叠片：常显最新成功正片封面与“正片 ×N”，仅样片时隐藏，替换上方横向版本栏。点击展开共享小浮层，显示样片与成功正片的分辨率 / 格式及当前勾选，选择后关闭并无滚动回焦入口；外点、焦点移出、Escape 及会话 / 面板关闭沿既有生命周期清理。查看版本时异步完成不强制换片，失败 / 取消不计入数量。媒体原尺寸不因入口出现改变，封面不挂载额外视频。三组默认样片提示词扩充为真实使用的不同长度场景描述，包含镜头、光线、节奏及约束，山景 / 森林保留段落。141 项视图 / 入口定向测试、长提示词后的 102 项导入 / 入口测试、完整 `npm run check`、体验构建与差异检查通过；日志 `.reelay-data/stack-versions-check.log`、`.reelay-data/stack-versions-build.log`。5182 已返回最新版本入口、样式与示例文案；实际浏览器视觉仍未复核，未提交或发布。
+- 版本入口最新调整为“默认叠片，悬停原位展开”：成功正片默认显示最新封面叠片与“正片”，无数量；展开后在同一 80px 右侧区域展示样片 / 正片缩略图、名称和格式，无收起按钮，列表占满媒体高度并独立滚动。主视频、播放器控件、版本列表及两者间隙属于同一媒体比较区，悬停入口展开且不抢焦点，点击 / 键盘仍可展开，触摸不走 hover。区内操作保持展开；鼠标离开整个比较区立即收起，不加延迟、不要求选过版本；比较区外按下（提示词、参数行、下方操作栏、输入区和浮层等）立即收起，在捕获阶段处理以覆盖阻止冒泡的输入控件。Escape、关闭对话栏及切会话收起；同时最多展开一条，Escape 回焦叠片但不滚动，外部点击不抢焦点。展开时聚焦当前项并仅在列表内保证其可见。叠片聚合未查看正片提示点，各版本仍独立标记；展开期间新结果只加入列表，不自动换片。稳定按钮、乱序完成顺序、播放与阅读反馈保留。本次尚未提交或发布，公网仍为下方记录的版本弹层设计；本地 5182 已返回新开关实现和样式，实际浏览器视觉复核仍受此前限制。最终 hover 与媒体比较区范围通过 161 项视图 / 入口定向测试、完整 `npm run check` 及差异检查，日志 `.reelay-data/hover-version-tests.log`、`.reelay-data/hover-version-release-check.log`。
 
 - 首次展开对话栏为空已修复：启动时画布 scope 未就绪，示例导入按原规则等待；展开面板现在同步渲染当前记录，无需切换模型 / 重选会话，不加延时。真实入口回归覆盖立即显示 9 个任务 / 6 条记录、关闭重开不重复、新会话空及积分 / 画布不变。正片不再把“成片”拼进模型名称；记录参数行用“正片生成”轻底色标签加来源样片模型名，切回样片隐藏标签，孤立正片的来源缩略图块同样标识。84 项视图 / 策略定向测试、62 项入口集成测试、完整 `npm run check`、体验构建及 `git diff --check` 通过；日志 `.reelay-data/first-open-model-label-check.log`、`.reelay-data/first-open-model-label-build.log`。5182 已返回新版代码，实际浏览器视觉仍未复核；未提交或发布。
 
@@ -41,7 +41,7 @@
 
 ## 最近公网核验：2026-09-28
 
-- 样片 / 正片分组、右侧叠片版本选择、默认演示历史与长提示词、首次打开记录修复、轻量“正片生成”标签及按具体结果定位 / 标记的新结果反馈已提交并推送到 `origin/codex/experiment-20260910`，功能源提交 `9e41e672d848a769de190606872466fe59e4d758`，包含此前样片模拟发布的全部内容。[公开评审入口](https://reelay-experience.vercel.app/app) 已更新，实际 production 部署为 `dpl_5HZbjEyrwmzEDJ5r22gTeJw1T98H`（`reelay-experience-qb4aobg67-heos-projects-560eccff.vercel.app`）；主域 inspect 与发布元数据确认目标和源 SHA。本页上述 / 下述各轮“未提交 / 未发布”已被本次代码提交与静态体验发布取代；账号站、数据库及本地用户项目未同步。
+- 样片 / 正片分组、右侧叠片版本选择、默认演示历史与长提示词、首次打开记录修复、轻量“正片生成”标签及按具体结果定位 / 标记的新结果反馈已提交并推送到 `origin/codex/experiment-20260910`，功能源提交 `9e41e672d848a769de190606872466fe59e4d758`，包含此前样片模拟发布的全部内容。[公开评审入口](https://reelay-experience.vercel.app/app) 已更新，实际 production 部署为 `dpl_5HZbjEyrwmzEDJ5r22gTeJw1T98H`（`reelay-experience-qb4aobg67-heos-projects-560eccff.vercel.app`）；主域 inspect 与发布元数据确认目标和源 SHA。截至该源提交的各轮“未提交 / 未发布”已被本次代码提交与静态体验发布取代，后续本地迭代以接续交接为准；账号站、数据库及本地用户项目未同步。
 - 发布验证：完整 `npm run check`、Experience 构建与 `git diff --check` 通过。候选 `dpl_F44qKMEeoLtGRRsSGN5gns1yGPtC` 的域名 TLS 握手失败，因此通过已认证 Vercel API 核对全部 173 个候选源文件 SHA1 与本地产物一致；执行 promote 后平台实际创建上述新的 production 部署，不将其描述为相同部署 ID。随后分享主域 172 个文件通过核验：143 个文件全量 SHA256 匹配，29 个大媒体范围内容匹配，两个 SPA 入口正确，视频 Range 为 206、`/api/health` 为 404，发布源 SHA 与功能提交一致。证据为 `.reelay-data/grouped-feedback-candidate-verification.json`、`.reelay-data/grouped-feedback-public-verification.json` 和 `.reelay-data/grouped-feedback-promote.log`；检查 / 发布构建日志为 `.reelay-data/result-feedback-check.log`、`.reelay-data/grouped-feedback-release-build.log`。
 - Vercel 体验项目重新核验无 Git link，独立静态输出发布，保护仍为 `all_except_custom_domains`。体验站无需登录，公开示例与临时业务状态仅在标签页内存中，刷新重置。本轮未完成受限浏览器的实际视觉 / E2E 复核；HTTP 文件一致性与自动化测试不代替视觉验收。
 

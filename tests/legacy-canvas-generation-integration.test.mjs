@@ -584,14 +584,20 @@ test("preview draft groups use real identities, switch finals and permit a newly
   assert.deepEqual(plain(groups[2].finals.map((task) => task.input.parameters.outputFormat)), ["mp4", "mov"]);
   const multiple = groups[2];
   h.document.querySelector("#agentGenerationRecords").getBoundingClientRect = () => ({ top: 0, bottom: 500, left: 600, right: 1200, width: 600, height: 500 });
-  const versionsTrigger = h.record(multiple.root).querySelector('[data-record-popover="versions"]');
-  versionsTrigger.getBoundingClientRect = () => ({ left: 1000, top: 250, right: 1100, bottom: 282, width: 100, height: 32 });
+  const versions = h.record(multiple.root).querySelector('.generation-record-versions');
+  assert.equal(versions.hidden, false);
+  assert.equal(versions.querySelector('[data-record-popover="versions"]'), null);
+  const browser = versions.querySelector('.generation-record-version-browser');
+  assert.equal(browser.hidden, true);
+  versions.querySelector('[data-record-versions-toggle]').click();
+  assert.equal(browser.hidden, false);
   for (const task of [...multiple.finals, multiple.root]) {
-    versionsTrigger.click();
-    const button = h.document.querySelector(`.generation-record-versions-popover [data-record-version="${task.id}"]`);
+    const button = versions.querySelector(`[data-record-version="${task.id}"]`);
     assert.ok(button);
-    button.click();
+    button.focus(); button.click();
     assert.equal(button.getAttribute("aria-pressed"), "true");
+    assert.equal(h.document.activeElement, button);
+    assert.equal(browser.hidden, false);
     assert.equal(h.document.querySelector(".generation-record-versions-popover"), null);
   }
   assert.equal(capabilities.list().length, 0);

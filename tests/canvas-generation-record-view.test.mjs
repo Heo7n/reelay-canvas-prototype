@@ -1128,20 +1128,26 @@ function succeedFinal(task) {
   task.result = { id: `${task.id}-result`, type: "video", url: "/shared.mp4", generation: { stage: "final", outputFormat: task.input.parameters.outputFormat } };
 }
 
-function openVersions(f, article = f.query("article.generation-record")) {
-  const trigger = article.querySelector('[data-record-popover="versions"]');
-  trigger.click();
-  const panel = f.query(".generation-record-versions-popover");
-  assert.ok(panel, "the stack opens the versions list");
-  return { trigger, panel, buttons: [...panel.querySelectorAll("[data-record-version]")] };
+function versionRail(f, article = f.query("article.generation-record")) {
+  const panel = article.querySelector(".generation-record-versions");
+  assert.ok(panel && !panel.hidden, "successful finals expose the version browser entry");
+  const trigger = panel.querySelector("[data-record-versions-toggle]");
+  const browser = panel.querySelector(".generation-record-version-browser");
+  assert.ok(trigger && browser);
+  if (browser.hidden) trigger.click();
+  assert.equal(browser.hidden, false);
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  assert.equal(article.querySelector('[data-record-popover="versions"]'), null);
+  assert.equal(f.query(".generation-record-versions-popover"), null);
+  return { panel, trigger, browser, buttons: [...panel.querySelectorAll(".generation-record-version-list > [data-record-version]")] };
 }
 
 function chooseVersion(f, id) {
-  const { panel, trigger } = openVersions(f);
+  const { panel } = versionRail(f);
   const button = panel.querySelector(`[data-record-version="${id}"]`);
   button.focus(); button.click();
   assert.equal(f.query(".generation-record-versions-popover"), null);
-  assert.equal(f.document.activeElement, trigger);
+  assert.equal(f.document.activeElement, button);
   return button;
 }
 
@@ -1156,7 +1162,7 @@ test("initial history and preview successes never appear as new results", (t) =>
   const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final);
   f.setTasks([root, final]);
   assert.equal(f.query(".generation-record-new").hidden, true);
-  assert.equal(f.query('[data-record-popover="versions"]').dataset.unread, undefined);
+  assert.equal(f.query('[data-record-version][data-unread="true"]'), null);
   const preview = f.task({ id: "preview", isPreview: true });
   f.setTasks([root, final, preview]);
   preview.status = "succeeded"; preview.result = { type: "image", url: "/preview.png" }; f.controller.render();
@@ -1206,7 +1212,7 @@ test("new finals retain individual unread state and the notice visits them in co
   succeedFinal(final); final.finishedAt = 100200; f.controller.render();
   const notice = f.query(".generation-record-new");
   assert.equal(notice.hidden, false); assert.match(notice.textContent, /2 个新结果/);
-  const { trigger, panel } = openVersions(f);
+  const { panel, trigger } = versionRail(f);
   assert.equal(trigger.dataset.unread, "true");
   assert.equal(panel.querySelector('[data-record-version="sample"]').dataset.unread, undefined);
   assert.equal(panel.querySelector('[data-record-version="final-1"]').dataset.unread, "true");
@@ -1219,6 +1225,7 @@ test("new finals retain individual unread state and the notice visits them in co
   notice.click();
   assert.equal(f.query(".generation-record-footer").dataset.generationTaskId, final.id);
   assert.equal(notice.hidden, true);
+  assert.equal(panel.querySelector('[data-unread="true"]'), null);
   assert.notEqual(trigger.dataset.unread, "true");
 });
 
@@ -1230,7 +1237,7 @@ test("manual selection acknowledges only the selected new final", (t) => {
   succeedFinal(final); succeedFinal(second); f.controller.render();
   chooseVersion(f, second.id);
   assert.match(f.query(".generation-record-new").textContent, /1 个新结果/);
-  const { panel } = openVersions(f);
+  const { panel } = versionRail(f);
   assert.equal(panel.querySelector('[data-record-version="final-1"]').dataset.unread, "true");
   assert.notEqual(panel.querySelector('[data-record-version="final-2"]').dataset.unread, "true");
 });
@@ -1271,7 +1278,7 @@ test("completion observed outside the active conversation stays scoped until ret
   assert.equal(f.query(".generation-record-new").hidden, false);
 });
 
-test("the stack distinguishes no final, one final and multiple finals without an extra playing video", (t) => {
+test("successful finals expose a collapsed stack without a count and expand inline with distinct thumbnails", (t) => {
   const f = fixture(t); const { root, final } = groupedTasks(f);
   root.result.posterUrl = "/sample-poster.jpg";
   f.setTasks([root]);
@@ -1279,38 +1286,144 @@ test("the stack distinguishes no final, one final and multiple finals without an
   f.setTasks([root, final]);
   assert.equal(f.query(".generation-record-versions").hidden, true, "pending is not a finished version");
   succeedFinal(final); final.result.posterUrl = "/final-poster.jpg"; f.controller.render();
-  const stack = f.query(".generation-record-versions");
-  const trigger = stack.querySelector('[data-record-popover="versions"]');
-  assert.equal(stack.hidden, false); assert.match(trigger.textContent, /正片\s*×\s*1/);
-  assert.equal(stack.querySelectorAll("video").length, 0);
-  assert.ok(stack.querySelector(".generation-record-version-cover img"));
-  assert.match(stack.querySelector("img").getAttribute("src"), /poster\.jpg$/);
+  const trigger = f.query("[data-record-versions-toggle]");
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(f.query(".generation-record-version-browser").hidden, true);
+  assert.equal(trigger.textContent.trim(), "正片");
+  assert.ok(trigger.querySelector("img"));
+  const { panel, buttons } = versionRail(f);
+  assert.equal(buttons.length, 2);
+  assert.equal(panel.querySelectorAll("video").length, 0);
+  assert.equal(buttons[0].querySelector(".generation-record-version-cover img").getAttribute("src"), "/sample-poster.jpg");
+  assert.equal(buttons[1].querySelector(".generation-record-version-cover img").getAttribute("src"), "/final-poster.jpg");
+  assert.doesNotMatch(panel.textContent, /×/);
   const second = { ...final, id: "second", createdAt: final.createdAt + 1 }; succeedFinal(second);
   f.setTasks([root, final, second]);
-  assert.match(trigger.textContent, /正片\s*×\s*2/);
+  assert.equal(versionRail(f).buttons.length, 3);
   assert.equal(f.query(".generation-record-versions-popover"), null);
 });
 
-test("the versions menu closes on outside click or Escape and shares one popover with details", (t) => {
+test("hover opens versions without stealing focus and only leaving the whole media area closes immediately", (t) => {
+  const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final); f.setTasks([root, final]);
+  const trigger = f.query('[data-record-versions-toggle]');
+  const browser = f.query('.generation-record-version-browser');
+  const area = f.query('.generation-record-media-layout');
+  const video = f.query('.generation-record-output video'); video.currentTime = 3;
+  const outside = f.query('#outside'); outside.focus();
+  const touch = new f.window.MouseEvent('pointerover', { bubbles: true });
+  Object.defineProperty(touch, 'pointerType', { value: 'touch' });
+  trigger.dispatchEvent(touch); assert.equal(browser.hidden, true);
+  trigger.dispatchEvent(new f.window.MouseEvent('pointerover', { bubbles: true }));
+  assert.equal(browser.hidden, false); assert.equal(f.document.activeElement, outside);
+  browser.dispatchEvent(new f.window.MouseEvent('pointerleave', { relatedTarget: video }));
+  assert.equal(browser.hidden, false, 'moving to the video remains in the comparison area');
+  video.dispatchEvent(new f.window.MouseEvent('pointerdown', { bubbles: true }));
+  assert.equal(browser.hidden, false);
+  area.dispatchEvent(new f.window.MouseEvent('pointerleave', { relatedTarget: outside }));
+  assert.equal(browser.hidden, true, 'no delay or selection is required to close');
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+  assert.equal(f.document.activeElement, outside);
+  assert.equal(f.query('.generation-record-output video'), video); assert.equal(video.currentTime, 3);
+  trigger.click(); chooseVersion(f, root.id);
+  assert.equal(browser.hidden, false);
+  area.dispatchEvent(new f.window.MouseEvent('pointerleave', { relatedTarget: outside }));
+  assert.equal(browser.hidden, true, 'selected versions also close on leaving');
+  assert.equal(f.document.activeElement, trigger);
+});
+
+test("the version browser stays open within the media comparison area and closes on stopped outside presses", (t) => {
   const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final);
   f.setTasks([root, final]);
-  const { trigger, buttons } = openVersions(f);
-  assert.equal(trigger.getAttribute("aria-expanded"), "true");
-  buttons[0].focus();
-  f.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  assert.equal(f.query(".generation-record-versions-popover"), null);
+  const { trigger, browser, buttons } = versionRail(f);
+  assert.equal(f.query('[data-record-versions-close]'), null);
+  buttons[0].dispatchEvent(new f.window.MouseEvent("pointerdown", { bubbles: true }));
+  chooseVersion(f, root.id);
+  assert.equal(browser.hidden, false);
+  const rail = browser.querySelector(".generation-record-version-list");
+  rail.dispatchEvent(new f.window.MouseEvent("pointerdown", { bubbles: true }));
+  assert.equal(browser.hidden, false, "scrollbar and blank rail space belong to the switching block");
+  for (const selector of [".generation-record-output video", ".generation-record-output", ".generation-record-media-layout"]) {
+    f.query(selector).dispatchEvent(new f.window.MouseEvent("pointerdown", { bubbles: true }));
+    assert.equal(browser.hidden, false, `${selector} belongs to the media comparison area`);
+  }
+  for (const selector of [".generation-record-prompt", '[data-record-popover="details"]', ".generation-record-footer", "#outside"]) {
+    versionRail(f);
+    const outside = f.query(selector);
+    outside.addEventListener("pointerdown", (event) => event.stopPropagation(), { once: true });
+    outside.focus();
+    const focused = f.document.activeElement;
+    outside.dispatchEvent(new f.window.MouseEvent("pointerdown", { bubbles: true }));
+    assert.equal(browser.hidden, true, `${selector} is outside the media comparison area`);
+    assert.equal(trigger.getAttribute("aria-expanded"), "false");
+    assert.equal(f.document.activeElement, focused, "outside presses must not restore trigger focus");
+  }
+});
+
+test("opening and Escape move focus without scrolling or replacing the current media", (t) => {
+  const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final); f.setTasks([root, final]);
+  const trigger = f.query('[data-record-versions-toggle]');
+  const browser = f.query('.generation-record-version-browser');
+  const selected = f.query('[data-record-version][aria-pressed="true"]');
+  const video = f.query('.generation-record-output video'); video.currentTime = 3;
+  const focusCalls = [];
+  for (const element of [selected, trigger]) {
+    const focus = element.focus.bind(element);
+    element.focus = (options) => { focusCalls.push({ element, options }); focus(options); };
+  }
+  f.container.scrollTop = 200; trigger.click();
+  assert.equal(f.document.activeElement, selected);
+  assert.equal(focusCalls.at(-1).options.preventScroll, true);
+  f.document.dispatchEvent(new f.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(browser.hidden, true);
   assert.equal(f.document.activeElement, trigger);
-  assert.equal(trigger.getAttribute("aria-expanded"), "false");
-  openVersions(f);
-  f.query("#outside").dispatchEvent(new f.window.MouseEvent("pointerdown", { bubbles: true }));
-  assert.equal(f.query(".generation-record-versions-popover"), null);
-  openVersions(f);
-  f.query('[data-record-popover="details"]').click();
-  assert.equal(f.query(".generation-record-versions-popover"), null);
-  assert.ok(f.query(".generation-record-details-popover"));
-  openVersions(f);
-  assert.equal(f.query(".generation-record-details-popover"), null);
-  assert.equal(f.all(".generation-record-popover").length, 1);
+  assert.equal(focusCalls.at(-1).options.preventScroll, true);
+  assert.equal(f.container.scrollTop, 200);
+  assert.equal(f.query('.generation-record-output video'), video);
+  assert.equal(video.currentTime, 3); assert.equal(f.pauses, 0);
+});
+
+test("closing the sidebar and changing scope reset expanded versions without resetting media", (t) => {
+  const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final); f.setTasks([root, final]);
+  const { browser } = versionRail(f);
+  const video = f.query('.generation-record-output video'); video.currentTime = 3;
+  f.controller.close(); f.controller.render();
+  assert.equal(browser.hidden, true);
+  assert.equal(f.query('.generation-record-output video'), video); assert.equal(video.currentTime, 3);
+  versionRail(f);
+  f.setScope({ ...root.scope, conversationId: 'other' }); f.setScope(root.scope);
+  assert.equal(f.query('.generation-record-version-browser').hidden, true);
+  assert.equal(f.query('[data-record-versions-toggle]').getAttribute('aria-expanded'), 'false');
+});
+
+test("only one record can have its inline version browser open", (t) => {
+  const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final);
+  const other = { ...root, id: 'sample-other', result: { ...root.result, id: 'result-other' } };
+  other.result.generation = f.window.REELAY_DRAFT_VIDEO.createDraftProvenance({
+    input: other.input, scope: other.scope, taskId: other.id, resultId: other.result.id, createdAt: other.createdAt,
+  });
+  const otherFinal = { ...final, id: 'final-other', input: { ...final.input, sourceDraftTaskId: other.id, sourceResultId: other.result.id } };
+  f.setTasks([root, final, other, otherFinal]);
+  const articles = f.all('article.generation-record'); assert.equal(articles.length, 2);
+  const first = versionRail(f, articles[0]);
+  const second = versionRail(f, articles[1]);
+  assert.equal(first.browser.hidden, true); assert.equal(first.trigger.getAttribute('aria-expanded'), 'false');
+  assert.equal(second.browser.hidden, false); assert.equal(second.trigger.getAttribute('aria-expanded'), 'true');
+});
+
+test("an expanded browser protects the inspected media even after focus leaves the version list", (t) => {
+  const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final); f.setTasks([root, final]);
+  chooseVersion(f, root.id);
+  const { browser } = versionRail(f);
+  const video = f.query('.generation-record-output video'); video.currentTime = 3;
+  const second = { ...final, id: 'final-2', status: 'running', result: null, createdAt: final.createdAt + 1 };
+  f.setTasks([root, final, second]);
+  f.query('[data-generation-action="locate"]').focus();
+  succeedFinal(second); f.controller.render();
+  assert.equal(browser.hidden, false);
+  assert.equal(f.query('.generation-record-output video'), video); assert.equal(video.currentTime, 3);
+  assert.equal(f.query('[data-record-version="sample"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(f.query('[data-record-version="final-2"]').dataset.unread, 'true');
+  assert.equal(f.query('[data-record-versions-toggle]').dataset.unread, 'true');
 });
 
 test("final versions show an operation badge and the source model without inventing a final model", (t) => {
@@ -1383,7 +1496,7 @@ test("completed grouped final switches metadata despite identical URLs and route
   const switcher = chooseVersion(f, "sample");
   assert.equal(f.query(".generation-media-resolution").textContent, "样片 480P");
   assert.ok(f.all(".generation-record-parameter").some((item) => item.textContent === "480P"));
-  assert.equal(f.document.activeElement.dataset.recordPopover, "versions");
+  assert.equal(f.document.activeElement, switcher);
   assert.equal(switcher.getAttribute("aria-pressed"), "true");
   f.query('[data-generation-action="locate"]').click(); assert.equal(f.actions.at(-1)[1].id, root.id);
   f.query('[data-record-popover="menu"]').click(); f.query('[data-generation-action="remove"]').click();
@@ -1425,7 +1538,7 @@ test("canceled and failed attempts remain in details history while versions cont
   const f = fixture(t); const { root, final } = groupedTasks(f);
   final.status = "canceled"; final.refunded = 54;
   f.setTasks([root, final]);
-  assert.equal(f.query(".generation-record-versions").hidden, true, "canceled attempts do not create a result stack");
+  assert.equal(f.query(".generation-record-versions").hidden, true, "canceled attempts do not create result versions");
   const video = f.query(".generation-record-output video");
   assert.match(f.query(".generation-record-final-state").textContent, /已取消.*积分已返还/);
   f.query('.generation-record-final-state [data-generation-action="again"]').click();
@@ -1435,13 +1548,12 @@ test("canceled and failed attempts remain in details history while versions cont
   const second = { ...final, id: "final-success-2", refunded: 0 }; succeedFinal(second);
   f.setTasks([root, final, failed, first, second]);
   assert.equal(f.all("article.generation-record").length, 1);
-  const { buttons, trigger } = openVersions(f);
+  const { buttons } = versionRail(f);
   assert.deepEqual(buttons.map((button) => button.dataset.recordVersion), [root.id, first.id, second.id]);
-  assert.match(trigger.textContent, /正片\s*×\s*2/);
   assert.equal(f.query(".generation-record-version-select"), null);
   assert.equal(video.isConnected, false);
   const firstVersion = f.query(`[data-record-version="${first.id}"]`); firstVersion.focus(); firstVersion.click();
-  assert.equal(f.document.activeElement, trigger);
+  assert.equal(f.document.activeElement, firstVersion);
   f.query('[data-record-popover="details"]').click();
   assert.equal(f.query(".generation-record-task-id code").textContent, first.id);
   assert.equal(f.all(".generation-record-task-attempt").length, 5);
@@ -1496,7 +1608,7 @@ test("expired source disables grouped retry and moves focus off the expired cont
   retry.click(); assert.equal(f.actions.length, 0);
 });
 
-test("the stack lists successful finals with their formats and selected format stays with its parameters", (t) => {
+test("the inline rail lists all successful finals with compact formats and selects versions directly", (t) => {
   const f = fixture(t); const { root, final } = groupedTasks(f);
   const finals = Array.from({ length: 4 }, (_, index) => {
     const task = { ...final, id: `final-${index + 1}`, createdAt: final.createdAt + index,
@@ -1504,23 +1616,23 @@ test("the stack lists successful finals with their formats and selected format s
     succeedFinal(task); return task;
   });
   f.setTasks([root, ...finals]);
-  const { buttons, trigger } = openVersions(f);
-  assert.match(trigger.textContent, /正片\s*×\s*4/);
+  const { buttons, panel } = versionRail(f);
   assert.deepEqual(buttons.map((button) => button.querySelector(".generation-record-version-label").textContent), ["样片", "正片 1", "正片 2", "正片 3", "正片 4"]);
   assert.deepEqual(buttons.map((button) => button.dataset.recordVersion), [root.id, ...finals.map((task) => task.id)]);
   assert.equal(f.query(".generation-record-versions select"), null);
   assert.equal(f.query(".generation-record-version-meta"), null);
+  panel.querySelector(".generation-record-version-list").scrollTop = 80;
   for (const [index, task] of finals.entries()) {
-    if (index) openVersions(f);
     const button = buttons[index + 1]; const format = task.input.parameters.outputFormat.toUpperCase();
     button.focus(); button.click();
     assert.equal(f.query(".generation-record-versions-popover"), null);
-    assert.equal(f.document.activeElement, trigger);
+    assert.equal(f.document.activeElement, button);
+    assert.equal(panel.querySelector(".generation-record-version-list").scrollTop, 80);
     assert.equal(button.getAttribute("aria-pressed"), "true");
     assert.equal(buttons.filter((item) => item.getAttribute("aria-pressed") === "true").length, 1);
     assert.match(button.title, new RegExp(`正片 ${index + 1}.*1080P.*${format}`));
     assert.match(button.getAttribute("aria-label"), new RegExp(`正片 ${index + 1}.*1080P.*${format}`));
-    assert.match(button.querySelector(".generation-record-version-spec").textContent, new RegExp(`1080P.*${format}`));
+    assert.equal(button.querySelector(".generation-record-version-spec").textContent, format);
     assert.deepEqual(f.all(".generation-record-parameter").map((item) => item.textContent), ["1080P", format]);
     f.query('[data-generation-action="locate"]').click();
     assert.equal(f.actions.at(-1)[1].id, task.id);
@@ -1545,16 +1657,16 @@ for (const scrollTop of [200, 1180]) {
     f.container.scrollTop = scrollTop;
     const hint = f.query(".generation-record-new"); assert.equal(hint.hidden, true);
     const versions = articles[1].querySelector(".generation-record-versions");
-    const { trigger, buttons: [sampleButton, finalButton] } = openVersions(f, articles[1]);
-    const focusCalls = [];
-    const originalFocus = trigger.focus.bind(trigger);
-    trigger.focus = (options) => { focusCalls.push(options); originalFocus(options); };
+    const { buttons: [sampleButton, finalButton] } = versionRail(f, articles[1]);
     for (const button of [sampleButton, finalButton]) {
-      if (!f.query(".generation-record-versions-popover")) openVersions(f, articles[1]);
-      button.focus(); button.click();
+      button.focus();
+      const focusCalls = [];
+      const originalFocus = button.focus.bind(button);
+      button.focus = (options) => { focusCalls.push(options); originalFocus(options); };
+      button.click();
       assert.equal(f.container.scrollTop, scrollTop, "explicit local switching must never apply near-bottom auto-follow");
-      assert.equal(f.document.activeElement, trigger);
-      assert.equal(focusCalls.at(-1)?.preventScroll, true);
+      assert.equal(f.document.activeElement, button);
+      assert.ok(focusCalls.every((options) => options?.preventScroll === true), "retained focus needs no scrolling focus call");
       assert.equal(articles[1].querySelector(".generation-record-versions"), versions);
       assert.equal(f.query(".generation-record-versions-popover"), null);
       assert.equal(hint.hidden, true, "viewing an existing result is not a new task completion");
@@ -1568,33 +1680,61 @@ for (const scrollTop of [200, 1180]) {
   });
 }
 
-test("an open version menu retains its buttons, focus and selected sample when a final completes", (t) => {
+test("the rail retains buttons, focus, scroll and the selected sample when another final completes", (t) => {
   const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final);
   f.setTasks([root, final]);
   const versions = f.query(".generation-record-versions");
   chooseVersion(f, root.id);
-  const { panel, trigger, buttons: [sampleButton, firstButton] } = openVersions(f);
+  const { panel, buttons: [sampleButton, firstButton] } = versionRail(f);
+  const list = panel.querySelector(".generation-record-version-list"); list.scrollTop = 80;
   sampleButton.focus();
   const video = f.query(".generation-record-output video");
   video.currentTime = 3;
-  const second = { ...final, id: "final-2", createdAt: final.createdAt + 1 }; succeedFinal(second);
+  const second = { ...final, id: "final-2", status: "running", result: null, createdAt: final.createdAt + 1 };
   f.setTasks([root, final, second]);
+  assert.equal(f.query(".generation-record-output video"), video);
+  succeedFinal(second); f.controller.render();
   assert.equal(f.query(".generation-record-versions"), versions);
-  assert.equal(f.query(".generation-record-versions-popover"), panel);
+  assert.equal(f.query(".generation-record-versions-popover"), null);
+  assert.equal(panel.querySelector(".generation-record-version-list"), list);
+  assert.equal(list.scrollTop, 80);
   assert.equal(panel.querySelector(`[data-record-version="${root.id}"]`), sampleButton);
   assert.equal(panel.querySelector(`[data-record-version="${final.id}"]`), firstButton);
   assert.equal(f.document.activeElement, sampleButton);
   assert.equal(sampleButton.getAttribute("aria-pressed"), "true", "completion must not replace a version being inspected");
   assert.deepEqual([...panel.querySelectorAll(".generation-record-version-label")].map((label) => label.textContent), ["样片", "正片 1", "正片 2"]);
-  assert.match(trigger.textContent, /正片\s*×\s*2/);
+  assert.equal(panel.querySelector('[data-record-version="final-2"]').dataset.unread, "true");
   assert.equal(f.query(".generation-record-output video"), video);
   assert.equal(video.currentTime, 3);
+});
+
+test("out-of-order final completions insert versions in creation order without replacing the focused version", (t) => {
+  const f = fixture(t); const { root, final } = groupedTasks(f);
+  const second = { ...final, id: "final-2", createdAt: final.createdAt + 1 };
+  f.setTasks([root, final, second]);
+  succeedFinal(second); f.controller.render();
+  const { panel, buttons } = versionRail(f);
+  const secondButton = buttons[1]; secondButton.focus();
+  const list = panel.querySelector(".generation-record-version-list"); list.scrollTop = 32;
+  f.container.scrollTop = 200;
+  const video = f.query(".generation-record-output video"); video.currentTime = 3;
+  succeedFinal(final); f.controller.render();
+  const updated = versionRail(f).buttons;
+  assert.deepEqual(updated.map((button) => button.dataset.recordVersion), [root.id, final.id, second.id]);
+  assert.deepEqual(updated.map((button) => button.querySelector(".generation-record-version-label").textContent), ["样片", "正片 1", "正片 2"]);
+  assert.equal(updated[2], secondButton);
+  assert.equal(f.document.activeElement, secondButton);
+  assert.equal(secondButton.getAttribute("aria-pressed"), "true");
+  assert.equal(list.scrollTop, 32); assert.equal(f.container.scrollTop, 200);
+  assert.equal(f.query(".generation-record-output video"), video);
+  assert.equal(video.currentTime, 3);
+  assert.equal(updated[1].dataset.unread, "true");
 });
 
 test("selecting the already selected version is a no-op for playback, scroll and focus", (t) => {
   const f = fixture(t); const { root, final } = groupedTasks(f); succeedFinal(final);
   f.setTasks([root, final]);
-  const { panel, trigger } = openVersions(f);
+  const { panel } = versionRail(f);
   const button = panel.querySelector(`[data-record-version="${final.id}"]`);
   const video = f.query(".generation-record-output video");
   video.currentTime = 4; Object.defineProperty(video, "paused", { value: false });
@@ -1603,7 +1743,7 @@ test("selecting the already selected version is a no-op for playback, scroll and
   f.container.scrollTop = 1180; button.focus(); button.click();
   assert.equal(f.query(".generation-record-output video"), video);
   assert.equal(video.currentTime, 4); assert.equal(f.pauses, 0);
-  assert.equal(f.document.activeElement, trigger); assert.equal(f.container.scrollTop, 1180);
+  assert.equal(f.document.activeElement, button); assert.equal(f.container.scrollTop, 1180);
   assert.equal(f.query(".generation-record-versions-popover"), null);
   assert.deepEqual(observer.takeRecords(), []);
   observer.disconnect();
