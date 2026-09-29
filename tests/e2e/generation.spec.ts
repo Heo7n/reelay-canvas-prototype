@@ -1,5 +1,13 @@
 import { test, expect, openCanvas } from "./fixtures";
+import type { Page } from "@playwright/test";
 import type { LegacyCanvasDocumentV1 } from "../../src/contracts/canvas-document-v1";
+
+async function pauseGenerationClock(page: Page) {
+  // Installing alone keeps time advancing during locator actions. Deadline
+  // assertions must advance only explicitly, independent of CI machine speed.
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
+}
 
 test("sidebar generation immediately adds a pending node, fills it on completion and locates the same node", async ({ page }) => {
   const canvas = await openCanvas(page, "香水品牌 TVC_最终版");
@@ -45,7 +53,7 @@ test("sidebar generation immediately adds a pending node, fills it on completion
 
 test("canceling queued sidebar generation removes its pending node and refunds once", async ({ page }) => {
   const canvas = await openCanvas(page, "角色动画短片_第 3 版");
-  await page.clock.install();
+  await pauseGenerationClock(page);
   const prompt = `取消生成边界 ${Date.now()}`;
   await canvas.locator('#agentInput [contenteditable="true"]').fill(prompt);
   const before = await canvas.locator(".canvas-node").count();
@@ -75,7 +83,7 @@ test("canceling queued sidebar generation removes its pending node and refunds o
 
 test("cancel deadline keeps both status rows visible and disables cancellation", async ({ page }) => {
   const canvas = await openCanvas(page, "角色动画短片_第 3 版");
-  await page.clock.install();
+  await pauseGenerationClock(page);
   const prompt = `取消窗口到期 ${Date.now()}`;
   await canvas.locator('#agentInput [contenteditable="true"]').fill(prompt);
   await canvas.locator(".agent-send").click();
@@ -88,7 +96,10 @@ test("cancel deadline keeps both status rows visible and disables cancellation",
   await expect(nodeCancel).toBeEnabled();
   await page.clock.fastForward(1_500);
   await expect(pending.locator("[data-generation-progress]")).toHaveText(await record.locator("[data-generation-progress]").innerText());
-  await page.clock.fastForward(5_600);
+  await page.clock.fastForward(3_499);
+  await expect(cancel).toBeEnabled();
+  await expect(nodeCancel).toBeEnabled();
+  await page.clock.fastForward(1);
   await expect(cancel).toBeVisible();
   await expect(cancel).toBeDisabled();
   await expect(nodeCancel).toBeVisible();
@@ -99,6 +110,9 @@ test("cancel deadline keeps both status rows visible and disables cancellation",
   await edit.click();
   await expect(canvas.locator('#agentInput [contenteditable="true"]')).toHaveText(prompt);
   await expect(record).toHaveAttribute("data-status", "running");
+  await page.clock.fastForward(2_500);
+  await expect(record).toHaveAttribute("data-status", "succeeded");
+  await expect(canvas.locator(".generating-preview")).toHaveCount(0);
 });
 
 test("a saved sample survives refresh and its node can generate a separately charged final without replacing the sample", async ({ page }) => {
