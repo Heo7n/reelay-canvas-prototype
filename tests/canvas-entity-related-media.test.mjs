@@ -135,7 +135,11 @@ function harness(t) {
   window.Element.prototype.matches = function (selector) { return selector === ":popover-open" ? this.dataset.testOpen === "true" : matches.call(this, selector); };
   window.eval(promptSource);
   for (const { path, source } of scripts) {
-    window.eval(source + (path === "./app.js" ? "\nwindow.relatedMediaTest = { state, assetLibraryStore, promptEditors };" : ""));
+    window.eval(source + (path === "./app.js" ? `
+      window.relatedMediaTest = {
+        state, assetLibraryStore, promptEditors, canvasEntityEditor, canvasLibrarySearch,
+        setProjectScope(id) { state.projectId = id; hostLaunchScope = id; },
+      };` : ""));
   }
   const { state, assetLibraryStore: store } = window.relatedMediaTest;
   const rootMedia = store.registerMedia({ media: { id: "related-root", type: "image", name: "角色正面.png", url: "blob:related-root" } }).media;
@@ -605,6 +609,113 @@ test("subject card click opens its editor and does not add canvas nodes", (t) =>
   assert.equal(h.document.querySelector('[data-entity-editor="true"]').dataset.entityEditorMode, "edit");
   assert.equal(h.document.querySelector('[data-entity-use-detail]'), null);
   assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+});
+
+function beginSubjectSearch(h) {
+  h.window.selectAssetLibraryDirectory(h.folder.id);
+  h.state.libraryFilter = "audio";
+  h.state.libraryTagFilter = { tagIds: [], untagged: true };
+  h.window.renderAssetLibrary();
+  const grid = h.document.querySelector('#assetLibraryGrid');
+  grid.scrollTop = 90;
+  h.document.querySelector('[data-library-search-toggle]').click();
+  h.state.libraryFilter = "all";
+  h.state.libraryTagFilter = { tagIds: [], untagged: false };
+  const search = h.document.querySelector('#assetLibrarySearchInput');
+  search.value = "角色";
+  search.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  grid.scrollTop = 42;
+  return { grid, search, editor: h.window.relatedMediaTest.canvasEntityEditor, session: h.window.relatedMediaTest.canvasLibrarySearch };
+}
+
+test("canceling or saving an existing subject preserves the live search and its original directory return", async (t) => {
+  for (const action of ["cancel", "save"]) await t.test(action, async (t) => {
+    const h = harness(t);
+    const { grid, search, editor, session } = beginSubjectSearch(h);
+    const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+    const results = ids(h.window.getVisibleAssetLibraryContent().items);
+    h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
+    assert.equal(editor.isOpen(), true);
+    assert.equal(h.window.isAssetLibraryOpen(), false);
+    assert.equal(session.isOpen(), true, "temporarily hiding the library does not end the search session");
+    assert.equal(h.state.librarySearch, "角色");
+    if (action === "save") {
+      const description = h.document.querySelector('[data-entity-editor-description]');
+      description.value = "保留查询的主体修改";
+      description.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+      await editor.submit();
+      assert.equal(h.store.getEntity({ kind: "entity", id: h.entity.id }).description, description.value);
+    } else await editor.requestClose();
+    assert.equal(editor.isOpen(), false);
+    assert.equal(h.window.isAssetLibraryOpen(), true);
+    assert.equal(h.document.querySelector('#assetLibrarySearchRegion').getAttribute('aria-hidden'), 'false');
+    assert.equal(search.value, "角色");
+    assert.equal(h.state.libraryFolderId, h.folder.id);
+    assert.equal(h.state.libraryFilter, "all");
+    assert.deepEqual(plain(h.state.libraryTagFilter), { tagIds: [], untagged: false });
+    assert.equal(grid.scrollTop, 42);
+    assert.deepEqual(ids(h.window.getVisibleAssetLibraryContent().items), results);
+    assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+    h.document.querySelector('#assetLibrarySearchClearBtn').click();
+    assert.equal(session.isActive(), false);
+    assert.equal(search.value, "");
+    assert.equal(h.state.libraryFolderId, h.folder.id);
+    assert.equal(h.state.libraryFilter, "audio");
+    assert.deepEqual(plain(h.state.libraryTagFilter), { tagIds: [], untagged: true });
+    assert.equal(grid.scrollTop, 90);
+  });
+});
+
+test("canceling subject creation keeps search, while successful creation explicitly enters the subject area", async (t) => {
+  for (const action of ["cancel", "create"]) await t.test(action, async (t) => {
+    const h = harness(t);
+    const { editor, session, search, grid } = beginSubjectSearch(h);
+    h.window.openEntityEditorCreate([h.rootMedia]);
+    assert.equal(editor.isOpen(), true);
+    if (action === "cancel") {
+      await editor.requestClose();
+      assert.equal(session.isOpen(), true);
+      assert.equal(search.value, "角色");
+      assert.equal(grid.scrollTop, 42);
+      h.window.closeAssetLibrary();
+      h.window.openAssetLibrary();
+      assert.equal(session.isActive(), false, "an actual library close still ends search");
+      assert.equal(search.value, "");
+      assert.equal(h.state.libraryFolderId, h.folder.id);
+      assert.equal(h.state.libraryFilter, "audio");
+    } else {
+      const name = h.document.querySelector('[data-entity-editor-name]');
+      name.value = "新角色设定";
+      name.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+      await editor.submit();
+      assert.equal(editor.isOpen(), false);
+      assert.equal(session.isActive(), false);
+      assert.equal(search.value, "");
+      assert.equal(h.state.libraryZone, "subjects");
+      assert.ok(h.window.getVisibleAssetLibraryContent().items.some((item) => item.name === "新角色设定"));
+      h.document.querySelector('#assetLibraryDirectoryButton').click();
+      assert.equal(h.state.libraryFolderId, h.folder.id);
+      assert.equal(h.state.libraryFilter, "audio");
+    }
+  });
+});
+
+test("an editor whose project, account or edit access expires cannot reopen the retained library session", async (t) => {
+  for (const change of ["project", "account", "access"]) await t.test(change, async (t) => {
+    const h = harness(t);
+    const { editor, session } = beginSubjectSearch(h);
+    h.document.querySelector(`[data-library-entity="${h.entity.id}"] [data-library-preview]`).click();
+    if (change === "project") h.window.relatedMediaTest.setProjectScope("next-project");
+    else if (change === "account") h.state.identity.account = "other@reelay.test";
+    else h.window.isCanvasMutationAllowed = () => false;
+    h.window.applyCanvasAccessMode(change === "access" ? "readonly" : "loading");
+    await editor.requestClose();
+    assert.equal(editor.isOpen(), false);
+    assert.equal(h.window.isAssetLibraryOpen(), false);
+    assert.equal(session.isActive(), false);
+    assert.equal(h.state.librarySearch, "");
+    assert.equal(h.document.querySelector('#assetLibraryPanel').getAttribute('aria-hidden'), 'true');
+  });
 });
 
 test("subject cover action adds ordered media once without editing and supports one-step undo", (t) => {

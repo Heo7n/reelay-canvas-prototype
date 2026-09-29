@@ -921,6 +921,7 @@ const canvasEntityEditor = canvasEntityEditorControllerFactory.createCanvasEntit
     if (window.parent !== window) syncHostEntity(entity);
     reopenAssetLibraryAfterEntityEditor = true;
     if (mode === "create") {
+      if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
       if (state.librarySpace !== entityEditorSpace) canvasLibraryNavigation.switchSpace(entityEditorSpace);
       canvasLibraryNavigation.enterSubjects({ reset: true });
       rememberAssetLibraryContext();
@@ -4598,17 +4599,21 @@ function openAssetLibrary(targetNodeId = null, { focus = false, agentScope = nul
 }
 
 function closeAssetLibrary({ restoreFocus = true } = {}) {
+  if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
+  if (state.libraryEntityFilter) clearEntityRelatedMediaFilter();
+  rememberAssetLibraryContext();
+  hideAssetLibrary({ restoreFocus });
+}
+
+function hideAssetLibrary({ restoreFocus = true } = {}) {
   canvasInspirationMatching.clear();
   canvasInspirationDiscovery.sync({ active: false });
-  if (canvasLibrarySearch.isActive()) canvasLibrarySearch.close();
   assetLibraryHeader.sync({ space: state.librarySpace, query: state.librarySearch, visible: false });
   assetLibraryItemMenu.dispose();
   const shouldRestoreFocus = restoreFocus && Boolean(assetLibraryPanel?.contains(document.activeElement));
   canvasEntityUse.closeDetail();
   state.libraryTarget = null;
   libraryReferencePicker.sync();
-  if (state.libraryEntityFilter) clearEntityRelatedMediaFilter();
-  rememberAssetLibraryContext();
   state.libraryDirectoryMenuOpen = false;
   state.libraryRenameTarget = null;
   clearAssetLibrarySelection();
@@ -10409,9 +10414,9 @@ function confirmEntityEditorDiscard() {
   });
 }
 
-function prepareEntityEditorReturn() {
+function prepareEntityEditorReturn({ contextValid = true } = {}) {
   document.body.classList.add("entity-editor-returning");
-  if (!reopenAssetLibraryAfterEntityEditor) return;
+  if (!reopenAssetLibraryAfterEntityEditor || !contextValid) return;
   state.librarySpace = entityEditorSpace;
   openAssetLibrary();
   // Reveal the destination beneath the exiting workspace without accepting input yet.
@@ -10419,12 +10424,14 @@ function prepareEntityEditorReturn() {
   assetLibraryPanel.setAttribute("aria-hidden", "true");
 }
 
-function setEntityEditorOpen(open, { entityId = null } = {}) {
+function setEntityEditorOpen(open, { entityId = null, contextValid = true } = {}) {
   const returning = document.body.classList.contains("entity-editor-returning");
   document.body.classList.toggle("entity-editor-open", open);
   if (open) {
     document.body.classList.remove("entity-editor-returning");
-    closeAssetLibrary();
+    // The editor temporarily covers this browsing session; only an explicit
+    // library close or navigation ends its search and member return contexts.
+    hideAssetLibrary({ restoreFocus: false });
     setAgentOpen(false);
     closeProfileMenu();
     closeProjectMenus();
@@ -10448,8 +10455,9 @@ function setEntityEditorOpen(open, { entityId = null } = {}) {
     topActions.inert = false;
     topActions.removeAttribute("aria-hidden");
   }
-  const shouldReopenLibrary = reopenAssetLibraryAfterEntityEditor;
+  const shouldReopenLibrary = reopenAssetLibraryAfterEntityEditor && contextValid;
   reopenAssetLibraryAfterEntityEditor = false;
+  if (!contextValid) closeAssetLibrary({ restoreFocus: false });
   if (shouldReopenLibrary) {
     state.librarySpace = entityEditorSpace;
     openAssetLibrary();
@@ -10479,10 +10487,11 @@ function openEntityEditorCreate(initialMedia = []) {
   const scope = hostLaunchScope;
   const projectId = state.projectId;
   const canvas = getActiveCanvas();
+  const account = state.identity.account;
   reopenAssetLibraryAfterEntityEditor = isAssetLibraryOpen();
   canvasEntityEditor.open({
     space,
-    isContextValid: () => scope === hostLaunchScope && projectId === state.projectId && canvas === getActiveCanvas()
+    isContextValid: () => scope === hostLaunchScope && projectId === state.projectId && canvas === getActiveCanvas() && account === state.identity.account
       && entityEditorSpace === space && isCanvasMutationAllowed() && canPersistLibraryEntities(),
     mode: "create",
     initialMedia,
@@ -10527,8 +10536,9 @@ function openSelectionEntityEditor() {
   if (canvasEntityEditor.isOpen()) return;
   const projectId = state.projectId;
   const canvas = getActiveCanvas();
+  const account = state.identity.account;
   const isContextValid = () => state.projectId === projectId && getActiveCanvas() === canvas
-    && isCanvasMutationAllowed() && canPersistLibraryEntities();
+    && account === state.identity.account && isCanvasMutationAllowed() && canPersistLibraryEntities();
   entityEditorSpace = "personal";
   reopenAssetLibraryAfterEntityEditor = false;
   setSelectionDownloadMenuOpen(false);
@@ -10576,6 +10586,7 @@ function openEntityEditorEdit(entityId) {
   const projectId = state.projectId;
   const canvas = getActiveCanvas();
   const scope = hostLaunchScope;
+  const account = state.identity.account;
   const editable = canManageLibraryEntities(space);
   canvasEntityEditor.open({
     space,
@@ -10584,7 +10595,7 @@ function openEntityEditorEdit(entityId) {
     media: assetLibraryStore.getEntityMedia({ kind: "entity", id: entityId, space }),
     expectedVersion: entity.version,
     tagIds: entity.tagIds || [],
-    isContextValid: () => scope === hostLaunchScope && state.projectId === projectId && getActiveCanvas() === canvas
+    isContextValid: () => scope === hostLaunchScope && state.projectId === projectId && getActiveCanvas() === canvas && account === state.identity.account
       && entityEditorSpace === space && isCanvasMutationAllowed() && canPersistLibraryEntities()
       && (!editable || canManageLibraryEntities(space)),
     mutable: canManageLibraryEntities(space),

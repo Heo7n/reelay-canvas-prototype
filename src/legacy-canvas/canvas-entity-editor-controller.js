@@ -322,7 +322,7 @@
       resetTagCreation();
       closePicker();
       renderEditor();
-      onVisibilityChange(false, { entityId: closedEntityId });
+      onVisibilityChange(false, { entityId: closedEntityId, contextValid: isContextValid() });
       restoreFocus?.();
     }
 
@@ -332,7 +332,7 @@
       const session = { animations: [] };
       exitSession = session;
       host.setAttribute("inert", "");
-      onExitStart();
+      onExitStart({ contextValid: isContextValid() });
       const reducedMotion = root.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       if (panel?.animate && !reducedMotion) {
         session.animations = [panel.animate(

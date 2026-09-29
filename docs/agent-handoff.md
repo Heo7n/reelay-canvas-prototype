@@ -28,9 +28,9 @@
 
 历史证据仍保留在本机忽略目录：`.reelay-data/hover-version-release-check.log`、`.reelay-data/inline-version-release-build.log`、`.reelay-data/inline-version-public-verification.json`、`.reelay-data/inline-version-production-inspect.log`。通用新核验命令见[发布步骤](vercel-supabase-preview.md#4-发布步骤)，不再依赖历史临时验证脚本。本轮治理未同步公网。
 
-本轮本地完整检查与构建证据在 `.reelay-data/governance-check-final.log`、`governance-account-build.log`、`governance-experience-build.log`；其中包含 1690 项 legacy、478 项 shell、328 项 server、11 项交付工具、8 项启动工具测试，以及 lint、类型、文档、CSS / HTML 和 E2E 类型检查。独立临时 PostgreSQL 的 94 项集成测试通过，临时容器已清理。新增浏览器验收覆盖真实 401 同页续登与 409 保存副本；实际运行结果查看上述 CI 入口，不将本地类型检查当成浏览器通过。
+本轮本地完整检查与两种构建证据在 `.reelay-data/governance-check-final.log`、`governance-account-build.log`、`governance-experience-build.log`；涵盖 legacy、shell、server、交付与启动工具测试，以及 lint、类型、文档、CSS / HTML 和 E2E 类型检查。独立临时 PostgreSQL 的 94 项集成测试通过，临时容器已清理。新增浏览器验收覆盖真实 401 同页续登与 409 保存副本；实际运行结果查看上述 CI 入口，不将本地类型检查当成浏览器通过。
 
-首轮远端验收已暴露并修复旧迁移断言、测试数据隔离、过期 UI 定位器、正片参数被误判外部点击，以及演示初始化首轮返回陈旧标签数据的问题；没有跳过失败或放宽错误校验。浏览器每项测试使用独立内存服务，数据库测试只在隔离环境执行，不接触当前评审数据。
+远端验收已暴露并修复旧迁移断言、测试数据隔离、过期 UI 定位器、正片参数被误判外部点击、主体编辑返回丢失搜索，以及演示初始化首轮返回陈旧标签数据的问题；没有跳过失败或放宽错误校验。浏览器每项测试使用独立内存服务，数据库测试只在隔离环境执行，不接触当前评审数据。
 
 ## 接续边界与下一入口
 
