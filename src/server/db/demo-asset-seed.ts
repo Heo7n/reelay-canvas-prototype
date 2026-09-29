@@ -219,7 +219,7 @@ export async function seedDemoAssetLibrary(
   for (const fixture of DEMO_ENTITY_FIXTURES) {
     const mediaAssets = fixture.assetKeys.map((key) => requireAsset(assetsByKey, key));
     const coverAsset = requireAsset(assetsByKey, fixture.coverAssetKey);
-    const entity = await dependencies.entityStore.createPersonalEntity({
+    let entity = await dependencies.entityStore.createPersonalEntity({
       actorId: DEMO_ACTOR_ID,
       workspaceId: DEMO_WORKSPACE_ID,
       idempotencyKey: fixture.createIdempotencyKey,
@@ -228,12 +228,19 @@ export async function seedDemoAssetLibrary(
       mediaAssetIds: mediaAssets.map(({ id }) => id),
       coverMediaId: coverAsset.id,
     });
-    entities.push(entity);
     // Only these published fixtures are character groups; replay preserves users' tag edits.
-    if (!existingEntityIds.has(entity.id) && ["umbra", "baixi", "xuanling"].includes(fixture.key)) await dependencies.assetStore.updateLibraryTags({
-      actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID, space: "personal", operation: "add",
-      tagIds: ["builtin:character"], items: [{ kind: "entity", id: entity.id }],
-    });
+    if (!existingEntityIds.has(entity.id) && ["umbra", "baixi", "xuanling"].includes(fixture.key)) {
+      await dependencies.assetStore.updateLibraryTags({
+        actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID, space: "personal", operation: "add",
+        tagIds: ["builtin:character"], items: [{ kind: "entity", id: entity.id }],
+      });
+      const taggedEntity = await dependencies.entityStore.getPersonalEntity({
+        actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID, entityId: entity.id,
+      });
+      if (!taggedEntity) throw new Error("The seeded demo Entity is no longer available.");
+      entity = taggedEntity;
+    }
+    entities.push(entity);
   }
 
   if (!options.personalOnly) {

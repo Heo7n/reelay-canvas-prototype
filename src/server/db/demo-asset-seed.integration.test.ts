@@ -109,6 +109,7 @@ beforeEach(async () => {
         media_library_tags,
         entity_library_deletions,
         entity_personal_media_bindings,
+        entity_organization_media_bindings,
         entity_placements,
         entity_media_references,
         workspace_entities,
@@ -297,6 +298,9 @@ describe("demo asset library seed", () => {
     const context = { actorId: DEMO_ACTOR_ID, workspaceId: DEMO_WORKSPACE_ID };
     try {
       const seeded = await seedDemoAssetLibrary(dependencies);
+      expect(seeded.entities.map(({ libraryTagIds }) => libraryTagIds)).toEqual([
+        ["builtin:character"], ["builtin:character"], ["builtin:character"],
+      ]);
       expect((await assetStore.listLibrary(context)).folders).toHaveLength(0);
       const fixtureIndex = DEMO_ASSET_FIXTURES.findIndex(({ key }) => key === DEMO_LIBRARY_DIRECTORY_EXAMPLE.assetKey);
       const sample = seeded.assets[fixtureIndex];
@@ -323,7 +327,8 @@ describe("demo asset library seed", () => {
       const customized = await assetStore.listLibrary(context);
       await assetStore.updateLibraryTags({ ...context, space: "personal", operation: "remove", tagIds: ["builtin:character"], items: seeded.entities.map((entity) => ({ kind: "entity", id: entity.id })) });
       customized.entityEntries = customized.entityEntries?.map((entry) => ({ ...entry, tagIds: [] }));
-      await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
+      const replayed = await seedDemoAssetLibrary(dependencies, { withDirectoryExample: true });
+      expect(replayed.entities.map(({ libraryTagIds }) => libraryTagIds)).toEqual([[], [], []]);
       expect(await assetStore.listLibrary(context)).toEqual(customized);
     } finally { await pool.end(); }
   });
