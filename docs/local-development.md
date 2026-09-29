@@ -2,70 +2,51 @@
 
 这里统一维护日常启动、换电脑接续和数据保留规则。分支与验证见[开发工作流](development-workflow.md)，公网环境见[公网预览](vercel-supabase-preview.md)。历史候选端口不作为当前入口。
 
-## 当前机器
+## 当前评审环境
 
-最近核验：2026-09-14。以下是运行快照；重启前重新查端口与进程命令行，不依赖旧 PID。
+运行入口核对：2026-09-29。此表只描述本机评审，不代表共享开发或公网账号站已同步。
 
 | 用途 | 当前来源 |
 | --- | --- |
-| 前端 5174 | `C:/Users/Ho/.codex/worktrees/f859/0707`，`vite.shell.config.ts` |
-| API 5175 | 同一 f859 工作区的 `src/server/start.ts`，由共享开发环境校验后启动 |
-| API 专用配置 | `D:/Software/codePro/0707/.env.shared-development.local`，保持忽略，不复制进当前 worktree |
-| 启动记录与日志 | `D:/Software/codePro/0707/.git/worktrees/0707/` 内的 `generation-preview.json`、`generation-preview.*.log`、`generation-api.*.log` |
-| API 本机 launcher | 上述 Git 元数据目录内 `generation-shared-api.mjs`，读取当前工作目录代码与专用配置 |
+| 工作区 | `C:/Users/Ho/.codex/worktrees/cc38/0707-experiment`，实际分支以 Git 为准 |
+| 前端 / API | [5182 /app](http://localhost:5182/app) → `127.0.0.1:5183`；独立画布入口为 `/index.html` |
+| 数据库 | 既有 Docker `reelay-library-check-20260915`，数据库 `reelay_library_preview_20260915`；端口读取容器实际 loopback 绑定 |
+| 原媒体 | 当前工作区 `.reelay-data/library-preview/objects`，保留用户已有内容 |
+| 本机记录 | `.reelay-data/library-preview/processes.json` 与同目录日志；PID 只作历史记录，使用前重查 |
+| 标准恢复入口 | 入库的 `scripts/start-local-preview.mjs`，从忽略的 `.env.local-preview` 读取端口和既有数据位置 |
 
 ```powershell
 git status --short --branch
 npm run worktrees
-Get-NetTCPConnection -State Listen -LocalPort 5174,5175 -ErrorAction SilentlyContinue |
+Get-NetTCPConnection -State Listen -LocalPort 5182,5183 -ErrorAction SilentlyContinue |
   Select-Object LocalAddress,LocalPort,OwningProcess
 ```
 
-已运行且来源正确则复用；端口占用时先查对应进程，不能结束所有 Node 进程或悄悄换到另一端口。当前入口为 <http://127.0.0.1:5174/app>；原项目路由可直接复用。
+正确服务已运行就复用，不结束其他 Node 进程，不换端口替代用户正在看的页面。现有进程最初由忽略目录的临时 launcher 启动；本机配置已安全转存为 `.env.local-preview` 并纯检查与旧启动计划一致，后续确需恢复时使用下述标准入口。API 新契约是否已重启载入以交接的实际结果为准。
 
-### 恢复前端
+### 恢复当前前后端
 
-确认端口空闲后，在当前工作区执行：
+从[本机配置样例](examples/local-preview.env.example) 建立 `.env.local-preview`，私下填写现有本机数据库凭据，保留库名与 ObjectStore 位置。样例不是凭据；不得输出连接串、将文件提交 Git，或为满足配置重新创建库 / 素材目录。已有环境由其持有者补齐这份配置。
 
-```powershell
-npm run dev:shell -- --host 127.0.0.1 --port 5174 --strictPort
-```
-
-Vite 默认把同源 `/api` 代理到 `127.0.0.1:5175`。独立并行任务确需其它 API 时，显式设置 `REELAY_DEV_API_PORT`，记录前后端来源；端口只接受有效数字，代理主机固定本机。前端 HMR 不会更新常驻 API。
-
-源码入口不加手工 `?v=`：Vite 会将它作为版本化资源缓存，导致预览留在旧代码。正式构建由构建脚本产生内容哈希。
-
-### 恢复当前 API
-
-确认 5175 空闲后，从当前 f859 工作区运行现有本机 launcher：
+确认对应端口空闲后，在当前工作区的两个终端分别执行：
 
 ```powershell
-node 'D:/Software/codePro/0707/.git/worktrees/0707/generation-shared-api.mjs'
+npm run dev:preview -- server
+npm run dev:preview -- frontend
 ```
 
-它调用当前代码的 `createSharedServerEnvironment`，在进程内读取已保留的专用配置，再启动当前工作区的 API。换电脑时不复制该绝对路径 launcher，使用下节标准入口。
+可用 `--config <本机配置文件>` 明确选择配置。启动器只启动现有 API / Vite，清除继承的云端、迁移和 seed 变量；API 仅接受 loopback PostgreSQL、既有目录和 filesystem 模式。可查询已存在容器的绑定端口，但不创建 / 启动容器、不迁移、不 seed、不复制业务数据。前端进程不接收数据库或 Storage 凭据。缺配置或目录时失败，不降级到空库。
 
-共享入口只读取专用配置，清除继承的旧数据库、ObjectStore、部署与 seed 环境，固定 `development + postgresql + supabase`。缺配置或数据项目不匹配即失败，不回退空素材库。`dev:server` / `start:server` 是通用入口，可能使用独立本机默认数据，不能替代共享入口。
-
-需要长期后台预览时，使用 `Start-Process -WindowStyle Hidden`，明确工作目录和日志；前台启动则保持终端运行。恢复后验证：
-
-```powershell
-Invoke-RestMethod -Uri 'http://127.0.0.1:5175/api/health'
-Invoke-RestMethod -Uri 'http://127.0.0.1:5174/api/health'
-```
-
-再打开原项目确认节点、素材和控制台。health 成功只证明服务可访问，不能证明数据归属正确。失败先看端口、日志和配置，不运行 seed。
+前端 HMR 不更新常驻 API；后端变化需要在完成当前操作后单独重启。后台运行使用 `Start-Process -WindowStyle Hidden` 并指定工作区与日志。恢复后检查 5183 及 5182 的 `/api/health`，再核对原项目、素材与控制台；health 成功不等于数据归属正确。源码 URL 不加手工 `?v=`，正式产物用内容哈希。
 
 ## 首次安装与换电脑
 
-1. 安装 Git、Node.js `24.x`，clone 仓库并检出实际交接的开发分支；运行 `npm ci`。各电脑安装自己的依赖，不复制 `node_modules`，不以网盘同步 `.git`。
-2. 以 [配置样例](examples/shared-development.env.example) 创建该电脑的 `.env.shared-development.local`，填写同一个 Reelay_Dev 的 Session pooler（5432）、服务端密钥与桶名。数据库与 Storage 必须属于同一项目；凭据不放聊天、源码或 `VITE_` 环境变量。
-3. 在配置所在的仓库运行 `npm run dev:server:shared`；另一终端按上节启动前端。标准入口固定 API 5175，不启动 Docker，不初始化或 seed。
-4. 本机浏览器重新登录，验证既有项目、画布、主体及素材顺序、原图 / 缩略图，再完成一次明确的保存与另一台重新打开的接续验收。家里电脑仍待此项验证，不能据单机结果称两机完成。
+1. 安装 Git、Node.js `24.x`，clone 并检出实际交接分支，运行 `npm ci`。不复制 `node_modules`，不以网盘同步 `.git`。
+2. 先选择需要哪种数据环境：仅产品评审使用[静态体验构建](vercel-supabase-preview.md#3-体验站构建边界)；接续当前本机项目需要另行授权、配套转移数据库与原媒体，Git 不携带它们。没有这份数据时不能称已复现本机创作环境。
+3. 接入既有共享开发需先核实该库迁移是否支持当前分支；独立实验迁移没有自动应用到 Reelay_Dev。确认兼容后，按[共享配置样例](examples/shared-development.env.example) 创建 `.env.shared-development.local`，私下填写同一 Reelay_Dev 的连接与私有桶配置，然后运行 `npm run dev:server:shared`（API 5175）；前端用 `npm run dev:shell -- --host 127.0.0.1 --port 5174 --strictPort`。这是另一环境，不替代当前 5182 评审。
+4. 登录并验证既有项目、画布、主体、素材顺序及原文件；经明确保存与另一台重新打开后才算两机接续验收。家里电脑尚无已完成的验收证据。
 
-离开前等待画布保存、提交并按已授权范围推送开发分支；另一台先检查脏文件再 `git pull --ff-only`。分叉时处理来源，不用 force/reset 覆盖。Git 同步代码，云库保存内容，聊天与 Cookie 不迁移。同主机不同端口可能共享 Cookie；`localhost` 与 `127.0.0.1` 可隔离浏览器登录，但不会隔离数据库。
-
-共享库不是实时协同画布：避免两台同时编辑同一画布，revision 冲突不自动合并。schema 变更由一个任务执行，另一台同步代码；不兼容实验用独立本机数据库。
+离开前等待保存，按已授权范围提交 / 推送；另一台检查脏文件后 `git pull --ff-only`，不 force/reset。共享库不是实时协同，避免两台同时编辑同一画布。Git 只同步代码，Cookie 不迁移，同主机不同端口可能共享 Cookie。恢复、拉取与换机都不自动初始化、迁移或 seed。
 
 ## 演示账号
 
@@ -100,7 +81,7 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:5174/api/health'
 
 2026-09-14 已完成一次**本机仓库样本的隔离恢复演练**。命令 `npm run check:backup:drill` 使用已安装并运行的本机 Docker 与本地 `postgres:18.4` 镜像；不自动下载镜像，不启动保留源 Compose 服务，不读取 `.env` 或接受数据库目标参数。它创建独立临时容器、自动分配仅本机可访问的端口，在新库应用现有迁移并加入公开图片 / 视频 / 音频样本，导出 PostgreSQL custom archive 与 ObjectStore，再恢复到另一新库 / 新目录。
 
-最近演练验证了 13 个迁移、17 张表的行数和内容哈希、可见字段顺序、约束、索引、RLS 与有效表权限；3 个原素材的字节数、类型和 SHA-256 全部一致。临时容器在核对本次名称和所有权标签后移除；样本 archive、对象副本与 `report.json` 保留在忽略目录 `.reelay-data/backup-drills/<run-id>/`，没有真实业务数据。该检查接在 CI 的 PostgreSQL 任务后，本地仅在持久化、备份工具或相关阶段验收运行，不加入日常视觉检查；新增 CI 配置尚待推送后的首次远端验证。数据库大版本为本机 18.4，当前 Dev / Test 为 17.6，不能用这次演练证明跨版本云恢复已通过。
+上述日期的演练验证了 13 个迁移、17 张表的行数和内容哈希、可见字段顺序、约束、索引、RLS 与有效表权限；3 个原素材的字节数、类型和 SHA-256 全部一致。这些是历史演练计数，不是当前仓库 schema。临时容器在核对本次名称和所有权标签后移除；样本 archive、对象副本与 `report.json` 保留在忽略目录 `.reelay-data/backup-drills/<run-id>/`，没有真实业务数据。该检查接在 CI 的 PostgreSQL 任务后，本地仅在持久化、备份工具或相关阶段验收运行，不加入日常视觉检查；远端是否执行以相应源 SHA 的 CI 为准。当时本机为 PostgreSQL 18.4、Dev / Test 为 17.6，不能用这次演练证明跨版本云恢复已通过，也不代表本轮重查了云端版本。
 
 **真实云备份仍需落实。** 当天只读查询确认 Dev / Test 均健康、`reelay-assets` 桶均为私有；仓库可确认的真实备份仍是上节迁移快照，没有据此证明当前云端持续备份、保留期限或异地副本。按[Supabase 官方备份说明](https://supabase.com/docs/guides/platform/backups)，Free 项目应自行定期导出；数据库备份只含 Storage 元数据，不包含原文件。
 

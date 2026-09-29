@@ -62,11 +62,27 @@ Dev、Test 和体验站之间没有自动数据同步。Git 携带代码及明�
 ## 4. 发布步骤
 
 1. 按 [开发工作流](development-workflow.md) 核对实际 worktree、提交、未提交改动与目标环境。先确认本次是否包含代码发布、迁移或数据同步；它们不是同一动作。检查 Vercel 当前 Git 连接与部署工作流，不能沿用历史“未连接 Git”的结论。
-2. 完成受影响界面验收、`npm run check`、`git diff --check` 和所需构建。双站发布同时运行 `npm run build` 与 `npm run build:experience`；记录同一构建源 SHA，体验构建设置 `REELAY_RELEASE_COMMIT` 写入 `experience-release.json`。相同代码已通过的检查不因补写 PR 反复执行。
+2. 完成受影响界面验收、`npm run check`、`git diff --check` 和所需构建；发布源必须是明确提交，工作区无未收录的代码。查询该 SHA 的 push / manual CI，确认 `quality`、`browser`、`postgres` 都成功；没有记录、仍在执行、跳过、失败均不算通过，PR 合并结果的检查不能代替源树。CI 缺口先解决，不用本机受限推导远端已验证。双站发布同时运行 `npm run build` 与 `npm run build:experience`；体验构建设置 `REELAY_RELEASE_COMMIT` 写入 `experience-release.json`。相同代码已通过的本地检查不因补写 PR 反复执行。
 3. 账号站从准确的已验收源码目录进入账号项目，使用根配置；核对上传范围不含 `.env*`、`.reelay-data`、本机 ObjectStore、日志或其他工作区草稿。体验站仅从上述静态输出进入独立项目，显式使用输出配置。部署前确认 CLI 所选项目、环境和目标别名。
 4. 为两个目标分别建立候选，验证与目标一致的环境配置和实际候选 URL。记录 source SHA、deployment ID、构建状态和检查结果；需要验证的候选先不覆盖主域。
 5. 候选通过后提升同一部署，不无故重建。分别核对账号主域与体验主域解析到预期部署，再复验实际主域。PR 合并、构建成功、候选可用、主域切换各自保留结果。
 6. 将本次发布证据更新到交接与对应 PR；后续修整是否进入下一轮按实际影响判断，不在本手册追加逐轮日志。
+
+### 可复用的只读核验命令
+
+```powershell
+$releaseCommit = git rev-parse HEAD
+npm run check:release-ci -- --repo Heo7n/reelay-canvas-prototype --sha $releaseCommit
+$env:REELAY_RELEASE_COMMIT = $releaseCommit
+npm run build:experience
+npm run verify:experience -- --origin https://reelay-experience.vercel.app --sha $releaseCommit --report .reelay-data/experience-verification.json
+```
+
+`check:release-ci` 只通过已登录的 `gh` 查询证据，不触发工作流；只接受这个 SHA 最近一次 push / manual run 的三个完整成功任务，失败不能回退旧成功。需要手动 CI 时由 GitHub 的 workflow_dispatch 在明确分支上运行，重新查询准确 SHA；CI 配置进入远端前不能宣称已生效。
+
+`verify:experience` 对比当前 `dist/experience` 和指定站点的发布元数据、全部公开文件、两个 SPA 入口、API 404 及视频 Range。默认大媒体校验首 1024 字节和 Content-Range，报告分别计完整哈希与范围匹配；要求全文件时加 `--full-media`。核验候选时将 `--origin` 替换为确切候选 origin；它不部署、提升别名、提供鉴权绕过或更改环境。平台反馈脚本等导致 HTML 字节不同会明确失败，不静默剥除。报告保持忽略，仅把源 SHA、部署 ID、核验范围和限制摘要记录进交接 / PR。
+
+这组命令不代替实际浏览器视觉、播放、状态和隔离验收，也不验证数据库或真实供应商。被工具明确拒绝的浏览器地址不能通过换工具 / 端口绕过；如有验收缺口，交付记录单独说明。
 
 ### 验收范围
 
@@ -79,7 +95,7 @@ Dev、Test 和体验站之间没有自动数据同步。Git 携带代码及明�
 
 ### 新建空账号环境
 
-1. 明确空目标及数据库 / Storage 配套关系，执行仓库 `src/server/db/migrations` 的实际迁移；当前 schema 至 `0013`。已存在目标先比对 ledger 和 checksum，只补缺失迁移，不重建数据库。
+1. 明确空目标及数据库 / Storage 配套关系，执行本次验收代码中的实际迁移；仓库当前最高文件为 `0019_organization_entities.sql`。这不代表任一云库已应用至 `0019`，各环境已应用版本只以该目标的 ledger / checksum 为准。已存在目标先核实差异与兼容性，只补本次授权的缺失迁移，不重建数据库。
 2. 仅首次建立演示账号 / 项目时，临时设置 `REELAY_DEPLOYMENT_MODE=preview`、`ALLOW_DEMO_SEED=true` 并运行 `npm run db:seed`，完成移除开关。preview 模式跳过媒体，不为更新素材重跑账号 / 项目 seed。
 3. 预建私有桶、核验 MIME 与大小限制，配置服务端变量；需要标准主体案例时使用下一节的独立入口，再部署验收。
 

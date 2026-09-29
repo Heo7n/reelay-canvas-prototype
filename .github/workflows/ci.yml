@@ -5,12 +5,14 @@ on:
   push:
     branches:
       - main
+      - codex/experiment-20260910
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,6 +37,8 @@ jobs:
         run: |
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             git diff --check "$BASE_SHA...$HEAD_SHA"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            git show --format= --check "$GITHUB_SHA"
           elif [[ "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
             EMPTY_TREE_SHA="$(git hash-object -t tree /dev/null)"
             git diff --check "$EMPTY_TREE_SHA" "$GITHUB_SHA"
