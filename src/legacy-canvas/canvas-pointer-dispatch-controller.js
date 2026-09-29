@@ -71,8 +71,8 @@
         if (!cancelled && options.hasCrossedDragThreshold(action, pointer)) {
           const promotedAction = options.promoteNodeDrag(action, pointer);
           if (promotedAction?.type === "drag-nodes") {
-            options.finishNodeDrag(promotedAction, { render: false });
-            options.finishNodeClick(promotedAction, pointer, { cancelled: false });
+            const result = options.finishNodeDrag(promotedAction, { render: false });
+            options.finishNodeClick(promotedAction, pointer, { cancelled: result?.ok === false });
           }
         } else {
           options.finishNodeClick(action, pointer, { cancelled });
@@ -101,8 +101,8 @@
 
       if (action.type === "marquee") options.finishMarquee(action);
       else if (action.type === "drag-nodes") {
-        options.finishNodeDrag(action, { cancelled, render: cancelled });
-        options.finishNodeClick(action, pointer, { cancelled });
+        const result = options.finishNodeDrag(action, { cancelled, render: cancelled });
+        options.finishNodeClick(action, pointer, { cancelled: cancelled || result?.ok === false });
       }
       else if (action.type === "drag-group" || action.type === "resize-group") {
         options.finishGroup(action, { cancelled });

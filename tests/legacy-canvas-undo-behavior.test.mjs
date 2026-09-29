@@ -74,7 +74,7 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
       ? "\nwindow.canvasTest = { state, canvasRuntimeStore, canvasNodeDragController, canvasGroupInteractionController, canvasCommandExecutor, canvasContentCommands, canvasEntityUse, canvasEntityEditor, assetLibraryStore, canvasNodeTasks, canvasPersistence, agentReferences, agentGeneration, promptEditors, promptOptimization };"
       : ""));
   }
-  const { state, canvasRuntimeStore, canvasNodeDragController } = window.canvasTest;
+  const { state, canvasRuntimeStore } = window.canvasTest;
   function node(id, overrides = {}) {
     return Object.assign(window.defaultGeneratorNode(10, 20, "video"), {
       id, prompt: "一只狐狸走过森林", expanded: false, ...overrides,
@@ -127,15 +127,9 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
   };
   const promptText = (value, entries) => window.REELAY_CANVAS_PROMPT_DOCUMENT.toText(value, entries);
   function moveNode(nodeId, dx, dy, { altKey = false, cancelled = false } = {}) {
-    const current = state.nodes.find((item) => item.id === nodeId);
-    const action = canvasNodeDragController.promote({
-      type: "drag-candidate", pointerId: 1, ids: [nodeId], activeId: nodeId,
-      altKey, startClientX: 0, startClientY: 0,
-      origins: [{ id: nodeId, x: current.x, y: current.y }],
-      groups: state.groups.map(window.cloneGroupState),
-    }, { clientX: dx, clientY: dy });
-    canvasNodeDragController.finish(action, { cancelled });
-    state.action = null;
+    window.setSelection([nodeId], nodeId);
+    window.render();
+    pointerGesture(nodeId, dx, dy, { altKey, cancelled });
   }
   function resizeGroup(groupId, dx, dy, { cancelled = false, onPreview = () => {} } = {}) {
     const current = state.groups.find((item) => item.id === groupId);
@@ -162,13 +156,61 @@ function createHarness(t, { trackMetadataImages = false } = {}) {
     onPreview();
     window.dispatchEvent(pointer(cancelled ? "pointercancel" : "pointerup", 100 + dx, 100 + dy));
   }
+  function dragGroup(groupId, dx, dy, { cancelled = false, onPreview = () => {} } = {}) {
+    const target = window.document.querySelector(`[data-group-id="${groupId}"] .group-title`);
+    assert.ok(target, "expected a rendered group drag target");
+    const pointer = (type, clientX, clientY) => {
+      const event = new window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+      Object.defineProperty(event, "pointerId", { value: 7 });
+      return event;
+    };
+    target.dispatchEvent(pointer("pointerdown", 100, 100));
+    window.dispatchEvent(pointer("pointermove", 100 + dx, 100 + dy));
+    onPreview();
+    window.dispatchEvent(pointer(cancelled ? "pointercancel" : "pointerup", 100 + dx, 100 + dy));
+  }
   // Completion timers are at least 900ms; progress pulses must not stand in for completion.
   const scheduledTask = () => {
     const timeoutId = [...timers.keys()].filter((id) => timerDelays.get(id) >= 900).at(-1);
     return { timeoutId, delay: timerDelays.get(timeoutId) };
   };
-  return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, timers, scheduledTask, metadataImages,
+  return { window, state, node, canvas, install, fireTimer, moveNode, resizeGroup, pointerGesture, dragGroup, timers, scheduledTask, metadataImages,
     editorFor, setText, getText, selectText, selection, promptText, applyOptimization };
+}
+
+function attachHostedCanvasPersistence(h) {
+  const messages = [];
+  const hostWindow = { postMessage(message) { messages.push(plain(message)); } };
+  Object.defineProperty(h.window, "parent", { configurable: true, value: hostWindow });
+  const persistence = h.window.canvasTest.canvasPersistence;
+  const projectId = h.state.projectId;
+  let revision = 0;
+  const dispatch = (data) => persistence.handleHostMessage({
+    origin: h.window.location.origin, source: hostWindow,
+    data: { source: "reelay-shell", protocolVersion: 1, ...data },
+  });
+  dispatch({ type: "host:init", context: { protocolVersion: 1, projectId, canvasId: "main", writable: true } });
+  dispatch({ type: "host:document", document: null, writable: true });
+  const saves = () => messages.filter((message) => message.type === "canvas:save");
+  return {
+    messages, persistence, dispatch, saves,
+    runSaveTimer() {
+      const before = saves().length;
+      h.fireTimer(persistence.getState().saveTimer);
+      return saves().length > before ? saves().at(-1) : null;
+    },
+    flush() {
+      const before = saves().length;
+      h.window.flushCanvasDocumentSave();
+      return saves().length > before ? saves().at(-1) : null;
+    },
+    acknowledge(save) {
+      assert.ok(save, "expected a real canvas:save message");
+      assert.equal(dispatch({ type: "host:save-result", requestId: save.requestId,
+        document: { id: "main", projectId, schemaVersion: 1, revision: ++revision, content: save.content },
+      }), true);
+    },
+  };
 }
 
 test("selection layout menu is mutually exclusive, closes for stale selection, and does not mutate content", (t) => {
@@ -2784,6 +2826,8 @@ test("group resize settles membership only on release and cancellation restores 
   assert.equal(outside.groupId || null, null);
   assert.equal(first.undoStack.length, 0);
   h.resizeGroup(frame.id, 1400, 0, { onPreview() {
+    assert.deepEqual(plain(frame), originalFrame, "resize preview cannot change canonical group geometry");
+    assert.equal(Number.parseFloat(h.window.document.querySelector(`[data-group-id="${frame.id}"]`).style.width), originalFrame.width + 1400);
     assert.equal(outside.groupId || null, null);
     assert.deepEqual(plain(frame.nodeIds), [inside.id]);
     assert.equal(first.undoStack.length, 0);
@@ -2801,6 +2845,304 @@ test("group resize settles membership only on release and cancellation restores 
   assertMembership(first);
   assert.equal(first.undoStack.length, 0);
 });
+
+for (const altKey of [false, true]) {
+  test(`geometry gesture ${altKey ? "Alt-copy" : "node-drag"} preview stays out of a long-drag save and acknowledged cancellation`, (t) => {
+    const h = createHarness(t);
+    const node = h.node("source", { x: 100, y: 100 });
+    const canvas = h.canvas("one", [node]);
+    h.install(canvas);
+    const hosted = attachHostedCanvasPersistence(h);
+    h.window.commitCanvasRename("已提交的画布名称");
+    h.pointerGesture(node.id, 120, 80, { altKey, cancelled: true, onPreview() {
+      assert.deepEqual(canvas.nodes.map(({ id, x, y }) => ({ id, x, y })), [{ id: node.id, x: 100, y: 100 }]);
+      assert.equal(canvas.undoStack.length, 0);
+      const rendered = [...h.window.document.querySelectorAll(".canvas-node[data-id]")];
+      assert.equal(rendered.length, altKey ? 2 : 1, "the uncommitted gesture is still visible");
+      const preview = altKey ? rendered.find((element) => element.dataset.id !== node.id) : rendered[0];
+      assert.equal(Number.parseFloat(preview.style.left), 220);
+      assert.equal(Number.parseFloat(preview.style.top), 180);
+      const save = hosted.runSaveTimer();
+      assert.ok(save);
+      assert.equal(save.content.canvases[0].name, "已提交的画布名称");
+      assert.deepEqual(save.content.canvases[0].nodes.map(({ id, x, y }) => ({ id, x, y })), [{ id: node.id, x: 100, y: 100 }]);
+      hosted.acknowledge(save);
+      assert.equal(hosted.persistence.getState().saveTimer, 0, "a save acknowledgment must not enqueue the visual preview");
+    } });
+    assert.deepEqual(canvas.nodes.map(({ id, x, y }) => ({ id, x, y })), [{ id: node.id, x: 100, y: 100 }]);
+    assert.equal(h.window.document.querySelectorAll(".canvas-node[data-id]").length, 1);
+    assert.equal(Number.parseFloat(h.window.document.querySelector(`[data-id="${node.id}"]`).style.left), 100);
+    assert.equal(canvas.undoStack.length, 0);
+    assert.equal(hosted.persistence.getState().dirty, false);
+    assert.equal(hosted.persistence.getState().saveTimer, 0, "cancellation needs no compensating save");
+    assert.equal(hosted.flush(), null);
+    assert.equal(hosted.saves().length, 1);
+  });
+
+  test(`geometry gesture ${altKey ? "Alt-copy" : "node-drag"} release commits once after an earlier save acknowledgment`, (t) => {
+    const h = createHarness(t);
+    const node = h.node("source", { x: 100, y: 100 });
+    const canvas = h.canvas("one", [node]);
+    h.install(canvas);
+    const hosted = attachHostedCanvasPersistence(h);
+    h.window.commitCanvasRename("先前提交");
+    h.pointerGesture(node.id, 120, 80, { altKey, onPreview() {
+      const save = hosted.runSaveTimer();
+      assert.ok(save);
+      assert.deepEqual(save.content.canvases[0].nodes.map(({ x, y }) => ({ x, y })), [{ x: 100, y: 100 }]);
+      hosted.acknowledge(save);
+      assert.equal(canvas.undoStack.length, 0);
+    } });
+    const moved = altKey ? canvas.nodes.find((item) => item !== node) : node;
+    assert.ok(moved);
+    assert.deepEqual({ x: moved.x, y: moved.y }, { x: 220, y: 180 });
+    assert.equal(canvas.nodes.length, altKey ? 2 : 1);
+    assert.equal(canvas.undoStack.length, 1);
+    h.window.finishPointerInteraction({ type: "pointerup", pointerId: 5, clientX: 220, clientY: 180 });
+    assert.equal(canvas.undoStack.length, 1, "duplicate terminal events cannot commit twice");
+    const saved = hosted.runSaveTimer();
+    assert.ok(saved);
+    assert.equal(saved.content.canvases[0].nodes.length, altKey ? 2 : 1);
+    assert.equal(saved.content.canvases[0].nodes.find((item) => item.id === moved.id).x, 220);
+    hosted.acknowledge(saved);
+    assert.equal(hosted.saves().length, 2);
+    h.window.undoLastAction();
+    assert.equal(canvas.nodes.length, 1);
+    assert.equal(canvas.nodes[0], node);
+    assert.deepEqual({ x: node.x, y: node.y }, { x: 100, y: 100 });
+    assert.equal(canvas.undoStack.length, 0);
+  });
+}
+
+test("geometry lifecycle candidate pointercancel restores its rendered layer without content, save or undo", (t) => {
+  const h = createHarness(t);
+  const node = h.node("source", { x: 100, y: 100, z: 2 });
+  const above = h.node("above", { x: 900, y: 900, z: 20 });
+  const canvas = h.canvas("one", [node, above]);
+  h.install(canvas);
+  const hosted = attachHostedCanvasPersistence(h);
+  const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+  h.pointerGesture(node.id, 0, 0, { cancelled: true, onPreview() {
+    assert.equal(h.state.action.type, "drag-candidate");
+    assert.equal(node.z, 2);
+    assert.ok(Number(h.window.document.querySelector(`[data-id="${node.id}"]`).style.zIndex) > above.z);
+    assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+  } });
+  assert.equal(Number(h.window.document.querySelector(`[data-id="${node.id}"]`).style.zIndex), 2);
+  assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+  assert.equal(canvas.undoStack.length, 0);
+  assert.equal(hosted.persistence.getState().saveTimer, 0);
+  assert.equal(hosted.persistence.getState().dirty, false);
+  assert.equal(hosted.flush(), null);
+});
+
+for (const reason of ["Escape", "blur", "lostpointercapture"]) {
+  for (const altKey of [false, true]) {
+    test(`geometry lifecycle ${reason} cancels ${altKey ? "Alt-copy" : "node-drag"}, restores selection and rejects trailing pointerup`, (t) => {
+      const h = createHarness(t);
+      const nodes = [h.node("a", { x: 100, y: 100 }), h.node("b", { x: 700, y: 100 })];
+      const canvas = h.canvas("one", nodes);
+      h.install(canvas);
+      const hosted = attachHostedCanvasPersistence(h);
+      h.window.setSelection(["a", "b"], "a");
+      h.window.render();
+      const before = JSON.stringify(h.window.createCanvasDocumentSnapshot());
+      h.pointerGesture("a", 120, 80, { altKey, onPreview() {
+        assert.equal(h.window.document.querySelectorAll(".canvas-node[data-id]").length, altKey ? 4 : 2);
+        if (reason === "lostpointercapture") {
+          const unrelated = new h.window.Event(reason);
+          Object.defineProperty(unrelated, "pointerId", { value: 999 });
+          h.window.dispatchEvent(unrelated);
+          assert.ok(h.state.action, "another pointer cannot cancel this gesture");
+        }
+        const event = reason === "Escape"
+          ? new h.window.KeyboardEvent("keydown", { key: reason, bubbles: true, cancelable: true })
+          : new h.window.Event(reason);
+        if (reason === "lostpointercapture") Object.defineProperty(event, "pointerId", { value: 5 });
+        h.window.dispatchEvent(event);
+        assert.equal(h.state.action, null);
+        assert.equal(h.window.document.querySelectorAll(".canvas-node[data-id]").length, 2);
+        assert.deepEqual(plain([...h.state.selectedIds]), ["a", "b"]);
+        assert.equal(h.state.activeId, "a");
+        assert.equal(Number.parseFloat(h.window.document.querySelector('[data-id="a"]').style.left), 100);
+      } });
+      assert.equal(JSON.stringify(h.window.createCanvasDocumentSnapshot()), before);
+      assert.equal(canvas.undoStack.length, 0);
+      assert.deepEqual(plain([...h.state.selectedIds]), ["a", "b"]);
+      assert.equal(hosted.persistence.getState().saveTimer, 0);
+      assert.equal(hosted.flush(), null);
+      assert.equal(hosted.saves().length, 0);
+    });
+  }
+}
+
+for (const altKey of [false, true]) {
+  test(`geometry lifecycle beforeunload flushes committed content and clears an unfinished ${altKey ? "Alt-copy" : "node-drag"}`, (t) => {
+    const h = createHarness(t);
+    const node = h.node("source", { x: 100, y: 100 });
+    const canvas = h.canvas("one", [node]);
+    h.install(canvas);
+    const hosted = attachHostedCanvasPersistence(h);
+    h.window.commitCanvasRename("离开前已提交");
+    h.pointerGesture(node.id, 120, 80, { altKey, onPreview() {
+      h.window.dispatchEvent(new h.window.Event("beforeunload"));
+      assert.equal(h.state.action, null);
+      const save = hosted.saves().at(-1);
+      assert.ok(save, "navigation flushes the previous committed edit immediately");
+      assert.equal(save.content.canvases[0].name, "离开前已提交");
+      assert.deepEqual(save.content.canvases[0].nodes.map(({ id, x, y }) => ({ id, x, y })), [{ id: node.id, x: 100, y: 100 }]);
+      hosted.acknowledge(save);
+      h.window.render();
+      assert.equal(h.window.document.querySelectorAll(".canvas-node[data-id]").length, 1, "a retained page no longer projects abandoned copies");
+      assert.equal(Number.parseFloat(h.window.document.querySelector(`[data-id="${node.id}"]`).style.left), 100);
+    } });
+    assert.equal(canvas.nodes.length, 1);
+    assert.equal(canvas.nodes[0], node);
+    assert.equal(canvas.undoStack.length, 0);
+    assert.equal(hosted.saves().length, 1);
+    assert.equal(hosted.persistence.getState().dirty, false);
+    assert.equal(hosted.persistence.getState().saveTimer, 0);
+    assert.equal(hosted.flush(), null);
+  });
+}
+
+for (const kind of ["drag", "resize"]) {
+  for (const cancelled of [false, true]) {
+    test(`geometry gesture group ${kind} ${cancelled ? "cancellation" : "release"} isolates visible geometry from a pending save`, (t) => {
+      const h = createHarness(t);
+      const member = h.node("member", { x: 100, y: 100, groupId: "frame" });
+      const frame = group("frame", [member.id]);
+      const canvas = h.canvas("one", [member], [frame]);
+      h.install(canvas);
+      const hosted = attachHostedCanvasPersistence(h);
+      const before = plain(frame);
+      h.window.commitCanvasRename("之前的提交");
+      const gesture = kind === "drag" ? h.dragGroup : h.resizeGroup;
+      gesture(frame.id, 120, 80, { cancelled, onPreview() {
+        assert.deepEqual(plain(frame), before);
+        assert.deepEqual({ x: member.x, y: member.y }, { x: 100, y: 100 });
+        const element = h.window.document.querySelector(`[data-group-id="${frame.id}"]`);
+        assert.equal(Number.parseFloat(element.style[kind === "drag" ? "left" : "width"]), kind === "drag" ? 120 : before.width + 120);
+        if (kind === "drag") assert.equal(Number.parseFloat(h.window.document.querySelector(`[data-id="${member.id}"]`).style.left), 220);
+        const save = hosted.runSaveTimer();
+        assert.ok(save);
+        assert.equal(save.content.canvases[0].groups[0].x, before.x);
+        assert.equal(save.content.canvases[0].groups[0].width, before.width);
+        assert.equal(save.content.canvases[0].nodes[0].x, 100);
+        hosted.acknowledge(save);
+      } });
+      assertMembership(canvas);
+      assert.equal(canvas.undoStack.length, cancelled ? 0 : 1);
+      assert.equal(canvas.groups[0], frame);
+      assert.equal(canvas.nodes[0], member);
+      if (cancelled) {
+        assert.deepEqual(plain(frame), before);
+        assert.deepEqual({ x: member.x, y: member.y }, { x: 100, y: 100 });
+        assert.equal(hosted.persistence.getState().dirty, false);
+        assert.equal(hosted.flush(), null);
+      } else {
+        assert.equal(frame[kind === "drag" ? "x" : "width"], kind === "drag" ? 120 : before.width + 120);
+        assert.equal(member.x, kind === "drag" ? 220 : 100);
+        const save = hosted.runSaveTimer();
+        assert.ok(save);
+        assert.equal(save.content.canvases[0].groups[0][kind === "drag" ? "x" : "width"], kind === "drag" ? 120 : before.width + 120);
+        hosted.acknowledge(save);
+        h.window.undoLastAction();
+        assert.deepEqual(plain(frame), before);
+        assert.deepEqual({ x: member.x, y: member.y }, { x: 100, y: 100 });
+      }
+    });
+  }
+}
+
+test("geometry gesture cancellation preserves and saves a generation result completed during the drag", (t) => {
+  const h = createHarness(t);
+  const node = h.node("generating", { x: 100, y: 100 });
+  const canvas = h.canvas("one", [node]);
+  h.install(canvas);
+  const hosted = attachHostedCanvasPersistence(h);
+  assert.equal(h.window.startSimulatedGeneration(node), true);
+  const task = h.scheduledTask();
+  let result;
+  h.pointerGesture(node.id, 120, 80, { cancelled: true, onPreview() {
+    h.fireTimer(task.timeoutId);
+    result = node.generatedAsset;
+    assert.ok(result);
+    assert.equal(node.generating, false);
+    assert.deepEqual({ x: node.x, y: node.y }, { x: 100, y: 100 });
+    const save = hosted.runSaveTimer();
+    assert.ok(save);
+    assert.equal(save.content.canvases[0].nodes[0].generatedAsset.id, result.id);
+    assert.equal(save.content.canvases[0].nodes[0].x, 100);
+    hosted.acknowledge(save);
+  } });
+  assert.equal(node.generatedAsset, result, "cancellation must not restore a whole-node snapshot");
+  assert.equal(node.generating, false);
+  assert.deepEqual({ x: node.x, y: node.y }, { x: 100, y: 100 });
+  assert.equal(canvas.undoStack.length, 0);
+  assert.equal(hosted.persistence.getState().dirty, false);
+  assert.equal(hosted.flush(), null);
+});
+
+for (const code of ["authentication", "conflict"]) {
+  for (const altKey of [false, true]) {
+    test(`geometry gesture ${altKey ? "Alt-copy" : "node-drag"} preview is absent from a ${code} recovery snapshot`, (t) => {
+      const h = createHarness(t);
+      const node = h.node("source", { x: 100, y: 100 });
+      const canvas = h.canvas("one", [node]);
+      h.install(canvas);
+      const hosted = attachHostedCanvasPersistence(h);
+      h.window.commitCanvasRename("保留已提交修改");
+      const inFlight = hosted.flush();
+      assert.ok(inFlight);
+      h.pointerGesture(node.id, 120, 80, { altKey, onPreview() {
+        hosted.dispatch({ type: "host:save-error", requestId: inFlight.requestId, code });
+        const recovery = hosted.messages.findLast((message) => message.type === "canvas:recovery-snapshot");
+        assert.ok(recovery);
+        assert.equal(recovery.content.canvases[0].name, "保留已提交修改");
+        assert.deepEqual(recovery.content.canvases[0].nodes.map(({ id, x, y }) => ({ id, x, y })), [{ id: node.id, x: 100, y: 100 }]);
+        assert.equal(h.state.action, null, "locking the canvas terminates its gesture");
+        assert.ok([...h.state.selectedIds].every((id) => canvas.nodes.some((item) => item.id === id)), "locking cannot retain selection of abandoned preview copies");
+      } });
+      assert.equal(hosted.persistence.getAccessMode(), "blocked");
+      assert.equal(canvas.nodes.length, 1);
+      assert.equal(canvas.nodes[0], node);
+      assert.deepEqual({ x: node.x, y: node.y }, { x: 100, y: 100 });
+      assert.equal(canvas.undoStack.length, 0);
+      assert.equal(h.window.document.querySelectorAll(".canvas-node[data-id]").length, 1);
+      assert.equal(hosted.persistence.getState().saveTimer, 0);
+    });
+  }
+}
+
+for (const boundary of ["switch-canvas", "replace-canvas", "replace-node", "hydrate"]) {
+  test(`geometry gesture ${boundary} cannot commit into a same-ID replacement`, (t) => {
+    const h = createHarness(t);
+    const original = h.node("shared", { x: 100, y: 100 });
+    const replacement = h.node("shared", { x: 900, y: 900 });
+    const first = h.canvas("one", [original]);
+    const second = h.canvas(boundary === "switch-canvas" ? "two" : "one", [replacement]);
+    h.install(first, ...(boundary === "switch-canvas" ? [second] : []));
+    h.pointerGesture(original.id, 120, 80, { onPreview() {
+      if (boundary === "switch-canvas") h.window.switchCanvas(second.id);
+      else if (boundary === "replace-canvas") h.install(second);
+      else if (boundary === "replace-node") {
+        first.nodes[0] = replacement;
+        h.window.render();
+      } else {
+        const document = h.window.createCanvasDocumentSnapshot();
+        Object.assign(document.canvases[0].nodes[0], { x: 900, y: 900 });
+        assert.equal(h.window.hydrateCanvasDocumentSnapshot(document), true);
+      }
+    } });
+    const live = h.state.nodes[0];
+    assert.deepEqual({ x: original.x, y: original.y }, { x: 100, y: 100 });
+    assert.deepEqual({ x: live.x, y: live.y }, { x: 900, y: 900 });
+    assert.equal(h.state.undoStack.length, 0);
+    assert.equal(first.undoStack.length, 0);
+    assert.equal(h.state.action, null);
+  });
+}
 
 for (const grouped of [false, true]) {
   test(`${grouped ? "group" : "selected-node"} arrangement commits one undo while preserving task and membership state`, (t) => {
@@ -2868,14 +3210,19 @@ test("an Alt copy joins its drop group only on release and can undo before the p
   h.window.setSelection(["a", "b"]);
   h.window.groupSelectedNodes();
   const frame = first.groups[0];
-  let duplicate;
+  let duplicateId;
   h.pointerGesture("a", 40, 20, { altKey: true, onPreview() {
-    duplicate = first.nodes.find((node) => node.id !== "a" && node.id !== "b");
-    assert.ok(duplicate);
-    assert.equal(Object.hasOwn(duplicate, "groupId"), false, "a preview copy must not inherit the source group");
+    const duplicateElement = [...h.window.document.querySelectorAll(".canvas-node[data-id]")]
+      .find((element) => element.dataset.id !== "a" && element.dataset.id !== "b");
+    assert.ok(duplicateElement);
+    duplicateId = duplicateElement.dataset.id;
+    assert.equal(duplicateElement.classList.contains("grouped"), false, "a preview copy must not inherit the source group");
+    assert.equal(first.nodes.length, 2, "preview copies belong to the gesture until release");
     assert.deepEqual(plain(frame.nodeIds), ["a", "b"]);
     assert.equal(first.undoStack.length, 1);
   } });
+  const duplicate = first.nodes.find((node) => node.id === duplicateId);
+  assert.ok(duplicate);
   assert.equal(first.nodes.length, 3);
   assert.equal(duplicate.groupId, frame.id);
   assertMembership(first);
@@ -2902,7 +3249,8 @@ test("cancelling an Alt drag removes its preview copies and restores the origina
   h.install(first);
   h.window.setSelection(["a", "b"], "a");
   h.pointerGesture("a", 40, 20, { altKey: true, cancelled: true, onPreview() {
-    assert.equal(first.nodes.length, 4);
+    assert.equal(first.nodes.length, 2);
+    assert.equal(h.window.document.querySelectorAll(".canvas-node[data-id]").length, 4);
     assert.ok([...h.state.selectedIds].every((id) => id !== "a" && id !== "b"));
     assert.equal(first.undoStack.length, 0);
   } });

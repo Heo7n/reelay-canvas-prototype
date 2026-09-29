@@ -411,6 +411,10 @@ const canvasNodePointerControllerFactory = window.REELAY_CANVAS_NODE_POINTER_CON
 if (!canvasNodePointerControllerFactory) throw new Error("Canvas node pointer controller is unavailable.");
 const canvasNodeDragControllerFactory = window.REELAY_CANVAS_NODE_DRAG_CONTROLLER;
 if (!canvasNodeDragControllerFactory) throw new Error("Canvas node drag controller is unavailable.");
+const canvasGeometryGesture = window.REELAY_CANVAS_GEOMETRY_GESTURE.createSession({
+  getContext: () => ({ projectId: state.projectId, canvas: getActiveCanvas(), canMutate: isCanvasMutationAllowed() }),
+  cloneNode,
+});
 const canvasGroupInteractionControllerFactory = window.REELAY_CANVAS_GROUP_INTERACTION_CONTROLLER;
 if (!canvasGroupInteractionControllerFactory) throw new Error("Canvas group interaction controller is unavailable.");
 const canvasPointerInteractionControllerFactory = window.REELAY_CANVAS_POINTER_INTERACTION_CONTROLLER;
@@ -562,6 +566,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   getExpectedSource: () => window.parent,
   onAccessChange: applyCanvasAccessMode,
   onContext(context) {
+    cancelCanvasPointerInteraction();
     if (context.theme === "light" || context.theme === "dark") applyTheme(context.theme, { notifyHost: false });
     canvasNodeTasks.cancelScope({}, "context-replaced");
     state.projectId = String(context.projectId || state.projectId);
@@ -1077,10 +1082,9 @@ function applyCanvasAccessMode(mode) {
   canvasLibraryTagManager.syncContext();
   canvasLibraryDirectory.syncContext();
   if (!isCanvasMutationAllowed()) {
+    const cancelledInteraction = cancelCanvasPointerInteraction();
     const cancelledTasks = canvasNodeTasks.cancelScope({}, "access-revoked");
-    state.action = null;
-    shell?.classList.remove("dragging");
-    if (cancelledTasks) render();
+    if (cancelledTasks || cancelledInteraction) render();
   }
   syncCanvasAccessUi();
   canvasEntityUse.refresh({ renderPicker: true });
@@ -1335,6 +1339,7 @@ function getActiveCanvas() {
 
 function resetActiveCanvasSession(canvas) {
   if (!canvas) return;
+  cancelCanvasPointerInteraction();
   canvasInspiration.close({ restoreFocus: false });
   clearRecentConnectionFeedback();
   canvas.connections = canvasConnections.normalizeConnections(canvas.connections, canvas.nodes);
@@ -1434,6 +1439,7 @@ function hydrateCanvasDocumentSnapshot(content) {
     maxScale: canvasScaleLimits.max,
   });
   if (!restored) return false;
+  cancelCanvasPointerInteraction();
   canvasNodeTasks.cancelScope({}, "document-replaced");
   canvasRuntimeStore.replaceCanvases(restored.canvases, restored.activeCanvasId);
   state.canvases.forEach((canvas) => {
@@ -1638,7 +1644,7 @@ function syncNodeVisualLayout(
   window.REELAY_DRAFT_VIDEO_BADGE.sync(element, canonicalLayout.mediaWidth);
   canvasMediaImageView.syncImages(element, { scale: state.scale, displayWidth: canonicalLayout.mediaWidth });
   const isTransitioning = canvasNodeLayoutTransition.isActive(getNodeLayoutTransitionId(node));
-  const base = canvasArrange.getNodePosition(node) || node;
+  const base = canvasGeometryGesture.getNodePosition(node) || canvasArrange.getNodePosition(node) || node;
   element.style.left = `${base.x}px`;
   element.style.top = `${base.y}px`;
   element.style.width = `${canonicalLayout.nodeWidth}px`;
@@ -1725,7 +1731,7 @@ function syncPromptPanelContentHeight(node, element) {
 }
 
 function syncPromptPanelLayouts() {
-  for (const node of state.nodes) {
+  for (const node of getCanvasViewNodes()) {
     const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
     const panel = element?.querySelector(".prompt-panel");
     const previousWidth = panel?.style.width;
@@ -2620,7 +2626,7 @@ function getNodeLayoutTransitionId(node) {
 
 function getNodePresentation(node) {
   const layout = getNodeLayout(node);
-  const preview = canvasArrange.getNodePosition(node);
+  const preview = canvasGeometryGesture.getNodePosition(node) || canvasArrange.getNodePosition(node);
   if (preview) return { x: preview.x, y: preview.y, layout };
   const transition = canvasNodeLayoutTransition.get(getNodeLayoutTransitionId(node));
   if (!transition) return { x: node.x, y: node.y, layout };
@@ -2799,7 +2805,7 @@ function normalizeGroupFrame(group) {
 }
 
 function getGroupBounds(group, canonical = false) {
-  const preview = canonical ? null : canvasArrange.getGroupPosition(group);
+  const preview = canonical ? null : canvasGeometryGesture.getGroupFrame(group) || canvasArrange.getGroupPosition(group);
   const normalized = normalizeGroupFrame(preview ? { ...group, ...preview } : group);
   if (!normalized) return null;
   return {
@@ -2830,7 +2836,7 @@ function getViewportWorldBounds() {
 
 function getMinimapWorldBounds() {
   const viewport = getViewportWorldBounds();
-  const bounds = state.nodes.reduce(
+  const bounds = getCanvasViewNodes().reduce(
     (acc, node) => {
       const nodeBounds = getNodeBounds(node);
       return {
@@ -2909,7 +2915,7 @@ function renderMinimap() {
   const metrics = getMinimapMetrics();
   if (!metrics) return;
 
-  const nodeMarkers = state.nodes
+  const nodeMarkers = getCanvasViewNodes()
     .map((node) => {
       const rect = worldRectToMinimapRect(getNodeBounds(node), metrics);
       const type = getMinimapNodeType(node);
@@ -3016,7 +3022,7 @@ function cloneNode(source) {
     expanded: source.kind === "generator" ? source.expanded : false,
     panel: null,
     modelFilter: source.kind === "generator" ? source.mode : undefined,
-    z: nextZ(),
+    z: source.z,
   };
   delete clone.groupId;
   delete clone.generationTaskId;
@@ -5098,6 +5104,7 @@ function render() {
 }
 
 function renderCanvasView() {
+  if (canvasGeometryGesture.hasActive() && !canvasGeometryGesture.isCurrent()) cancelCanvasPointerInteraction();
   libraryReferencePicker.sync();
   canvasInspiration.syncContext();
   canvasLibrarySearch.syncContext();
@@ -5109,8 +5116,9 @@ function renderCanvasView() {
   canvasLibraryDirectory.syncContext();
   canvasEntityUse.refresh();
   if (state.activeGroupId && !getGroupById(state.activeGroupId)) state.activeGroupId = null;
-  canvasNodeLayoutTransition.prune(new Set(state.nodes.map(getNodeLayoutTransitionId)));
-  canvasLayerReconciler.reconcile({ groups: state.groups, nodes: state.nodes });
+  const viewNodes = getCanvasViewNodes();
+  canvasNodeLayoutTransition.prune(new Set(viewNodes.map(getNodeLayoutTransitionId)));
+  canvasLayerReconciler.reconcile({ groups: state.groups, nodes: viewNodes });
   canvasReferenceDrop.syncContext();
   promptEditors.prune();
   if (agentPromptReady && state.agentOpen) mountAgentPrompt();
@@ -5162,7 +5170,7 @@ function getGroupRenderSignature(group) {
 }
 
 function syncCanvasNodeElement(element, node) {
-  element.style.zIndex = String(node.z);
+  element.style.zIndex = String(canvasGeometryGesture.getNodeZ(node) ?? node.z);
   element.classList.toggle("selected", state.selectedIds.has(node.id));
   element.classList.toggle("grouped", Boolean(node.groupId));
   syncNodeVisualLayout(node, element);
@@ -5350,6 +5358,10 @@ function getSelectedNodes() {
   return state.nodes.filter((node) => state.selectedIds.has(node.id));
 }
 
+function getCanvasViewNodes() {
+  return canvasGeometryGesture.getViewNodes();
+}
+
 function getExactSelectionGroup(selectedNodes = getSelectedNodes()) {
   return canvasSpatialSelection.getExactSelectionGroup(selectedNodes, state.groups);
 }
@@ -5365,7 +5377,7 @@ function updateEmptyState() {
 }
 
 function getSelectionVisualBounds() {
-  const selectedNodes = getSelectedNodes();
+  const selectedNodes = getCanvasViewNodes().filter((node) => state.selectedIds.has(node.id));
   if (selectedNodes.length < 2) return null;
   const bounds = selectedNodes.reduce(
     (result, node) => {
@@ -5388,7 +5400,7 @@ function getSelectionVisualBounds() {
 
 function renderSelectionToolbar() {
   if (!selectionToolbar || !multiSelectionSurface || !multiSelectionChrome) return;
-  const selectedNodes = getSelectedNodes();
+  const selectedNodes = getCanvasViewNodes().filter((node) => state.selectedIds.has(node.id));
   if (selectionLayoutSession && !isSelectionLayoutSessionCurrent()) setSelectionLayoutMenuOpen(false);
   const layoutIssue = getSelectionLayoutIssue(selectedNodes);
   selectionLayoutTrigger?.setAttribute("aria-disabled", String(Boolean(layoutIssue) || !isCanvasMutationAllowed()));
@@ -5471,7 +5483,9 @@ function renderSelectionToolbar() {
 }
 
 function createNodeElement(node) {
-  return node.kind === "asset" ? createAssetNodeElement(node) : createGeneratorNodeElement(node);
+  const element = node.kind === "asset" ? createAssetNodeElement(node) : createGeneratorNodeElement(node);
+  syncCanvasNodeElement(element, node);
+  return element;
 }
 
 function createAssetNodeElement(node, existingElement = null) {
@@ -7371,6 +7385,7 @@ function finishConnectionDrag(event, options = {}) {
 
 const canvasNodePointerController = canvasNodePointerControllerFactory.createCanvasNodePointerController({
   interaction: canvasNodeInteraction,
+  preview: canvasGeometryGesture,
   isSpaceDown: () => state.isSpaceDown,
   beginPan,
   getNode: (nodeId) => state.nodes.find((item) => item.id === nodeId),
@@ -7399,7 +7414,6 @@ const canvasNodePointerController = canvasNodePointerControllerFactory.createCan
   setMediaToolbarNodeId: (nodeId) => {
     state.mediaToolbarNodeId = nodeId;
   },
-  promoteNodes: bringNodesToFront,
   setAction: (action) => {
     state.action = action;
   },
@@ -7529,6 +7543,7 @@ function pushUndoAction(action) {
 
 function deleteSelectedNodes(confirmed = false) {
   if (!requireCanvasMutation()) return;
+  cancelCanvasPointerInteraction();
   if (state.activeGroupId && !state.selectedIds.size) {
     const group = getGroupById(state.activeGroupId);
     if (!group) return;
@@ -7608,6 +7623,7 @@ function restoreGroupSnapshot(groups, positions = []) {
 
 function undoLastAction() {
   if (!requireCanvasMutation()) return;
+  cancelCanvasPointerInteraction();
   canvasNodeLayoutTransition.finishAll();
   const pendingAction = state.undoStack[state.undoStack.length - 1];
   if (pendingAction?.kind === "canvas-command") {
@@ -9347,11 +9363,40 @@ function getNormalizedWheelDeltaY(event) {
 }
 
 function beginPan(event) {
+  cancelCanvasPointerInteraction();
   canvasPointerInteractionController.beginPan(event, shell);
 }
 
 function beginMarquee(event) {
+  cancelCanvasPointerInteraction();
   canvasPointerInteractionController.beginMarquee(event, shell);
+}
+
+function cancelCanvasPointerInteraction({ render: shouldRender = false } = {}) {
+  const action = state.action;
+  const hadPreview = canvasGeometryGesture.hasActive();
+  if (action?.pointerFrameId) window.cancelAnimationFrame(action.pointerFrameId);
+  if (action) {
+    action.pointerFrameId = 0;
+    action.pendingPointerPosition = null;
+    if (action.type === "drag-nodes") canvasNodeDragController.finish(action, { cancelled: true, render: false });
+    else if (["group-drag-candidate", "drag-group", "resize-group"].includes(action.type)) {
+      canvasGroupInteractionController.finish(action, { cancelled: true, render: false });
+    }
+  }
+  canvasGeometryGesture.cancel();
+  if (hadPreview || action?.gesture) {
+    const liveIds = new Set(state.nodes.map((node) => node.id));
+    setSelection([...state.selectedIds].filter((id) => liveIds.has(id)), state.activeId, { keepGroup: true, keepConnection: true });
+  }
+  state.action = null;
+  shell.classList.remove("dragging", "selection-frame-pressed");
+  selectionBox?.classList.add("hidden");
+  if (groupResizeOverlay) delete groupResizeOverlay.dataset.activeResize;
+  try { (action?.captureTarget || shell).releasePointerCapture?.(action?.pointerId); }
+  catch { /* The browser may already have released capture. */ }
+  if (shouldRender) render();
+  return Boolean(action || hadPreview);
 }
 
 function beginSelectionFrameDrag(event) {
@@ -9406,45 +9451,37 @@ function moveMinimapDrag(event) {
 
 const canvasNodeDragController = canvasNodeDragControllerFactory.createCanvasNodeDragController({
   interaction: canvasNodeInteraction,
+  preview: canvasGeometryGesture,
   getScale: () => state.scale,
-  getNode: (nodeId) => state.nodes.find((node) => node.id === nodeId),
-  cloneNode,
-  addNodes: (nodes) => state.nodes.push(...nodes),
-  removeDuplicatedNodes: (ids, action) => {
-    const duplicates = new Set(ids);
-    state.nodes = state.nodes.filter((node) => !duplicates.has(node.id));
+  restoreSelection: (action) => {
     setSelection(action.sourceIds.filter((id) => state.nodes.some((node) => node.id === id)), action.sourceActiveId);
   },
   selectNodes: setSelection,
-  promoteNodes: bringNodesToFront,
   setAction: (action) => {
     state.action = action;
   },
   setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
-  applyNodePosition: (position) => {
-    const node = state.nodes.find((item) => item.id === position.id);
-    if (!node) return;
-    node.x = position.x;
-    node.y = position.y;
-    const nodeElement = nodeLayer.querySelector(`[data-id="${node.id}"]`);
-    if (nodeElement) {
-      nodeElement.style.left = `${node.x}px`;
-      nodeElement.style.top = `${node.y}px`;
-      nodeElement.style.zIndex = String(node.z);
-    }
-  },
   renderMovement: () => {
+    const movingIds = new Set(state.action?.ids || []);
+    for (const node of getCanvasViewNodes()) {
+      if (!movingIds.has(node.id)) continue;
+      const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
+      if (!element) continue;
+      syncNodeVisualLayout(node, element);
+      element.style.zIndex = String(canvasGeometryGesture.getNodeZ(node) ?? node.z);
+    }
     renderConnections();
     renderSelectionToolbar();
     renderMinimap();
   },
-  updateGroupMembership: updateDraggedNodeGroupMembership,
+  onGeometryCommit: (action) => updateDraggedNodeGroupMembership(action.ids),
   pushUndoAction,
   onCommit: scheduleCanvasDocumentSave,
   render,
 });
 
 const canvasGroupInteractionController = canvasGroupInteractionControllerFactory.createCanvasGroupInteractionController({
+  preview: canvasGeometryGesture,
   getScale: () => state.scale,
   getGroup: getGroupById,
   getGroupBounds,
@@ -9456,17 +9493,12 @@ const canvasGroupInteractionController = canvasGroupInteractionControllerFactory
   },
   setDragging: (dragging) => shell.classList.toggle("dragging", dragging),
   capturePointer: (target, pointerId) => target.setPointerCapture(pointerId),
-  applyGroupFrame: (groupId, frame) => {
-    const group = getGroupById(groupId);
-    if (group) Object.assign(group, frame);
-  },
-  applyNodePosition: (nodeId, position) => {
-    const node = state.nodes.find((item) => item.id === nodeId);
-    if (node) Object.assign(node, position);
-  },
   minWidth: groupFrameRules.minWidth,
   minHeight: groupFrameRules.minHeight,
   pushUndoAction,
+  onGeometryCommit: (action) => {
+    if (action.type === "resize-group" && action.moved) reconcileGroupFrameMembership(action.groupId);
+  },
   onCommit: scheduleCanvasDocumentSave,
   render,
 });
@@ -9539,7 +9571,16 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
   finishMarquee: (action) => canvasPointerInteractionController.finishMarquee(action),
   finishNodeDrag: (action, options) => canvasNodeDragController.finish(action, options),
   finishNodeClick: (action, _pointer, options = {}) => {
-    if (options.cancelled) return;
+    if (options.cancelled) {
+      cancelCanvasPointerInteraction({ render: true });
+      return;
+    }
+    if (state.action !== action) return;
+    if (action.type === "drag-candidate") {
+      const result = canvasGeometryGesture.commit(action);
+      if (!result.ok) return;
+      if (result.changed) scheduleCanvasDocumentSave();
+    }
     const node = state.nodes.find((item) => item.id === action.activeId);
     const canReveal = node && state.selectedIds.has(node.id) && state.selectedIds.size === 1;
     state.mediaToolbarNodeId = canReveal && action.revealMediaToolbar ? node.id : null;
@@ -9550,14 +9591,10 @@ const canvasPointerDispatchController = canvasPointerDispatchControllerFactory.c
     }
     render();
   },
-  finishGroup: (action, options = {}) => {
-    if (!options.cancelled && action.type === "resize-group" && action.moved) {
-      reconcileGroupFrameMembership(action.groupId);
-    }
-    canvasGroupInteractionController.finish(action, options);
-  },
+  finishGroup: (action, options = {}) => canvasGroupInteractionController.finish(action, options),
   finishAssetLibraryResize,
   clearAction: () => {
+    canvasGeometryGesture.cancel();
     state.action = null;
     if (groupResizeOverlay) delete groupResizeOverlay.dataset.activeResize;
     agentDock?.classList.remove("resizing-vertical");
@@ -9687,6 +9724,12 @@ window.addEventListener("pointermove", handlePointerMove);
 shell.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointerup", finishPointerInteraction);
 window.addEventListener("pointercancel", finishPointerInteraction);
+window.addEventListener("lostpointercapture", (event) => {
+  if (state.action?.gesture && state.action.pointerId === event.pointerId) cancelCanvasPointerInteraction({ render: true });
+});
+window.addEventListener("blur", () => {
+  if (state.action?.gesture) cancelCanvasPointerInteraction({ render: true });
+});
 
 shell.addEventListener("dblclick", (event) => {
   if (event.target instanceof Element && event.target.closest(".canvas-node, .connection-create-menu, .node-create-menu")) return;
@@ -9894,6 +9937,11 @@ shell.addEventListener(
 );
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.action?.gesture) {
+    event.preventDefault();
+    cancelCanvasPointerInteraction({ render: true });
+    return;
+  }
   if (document.querySelector(".confirm-layer")) return;
   if (canvasEntityUse.handleGlobalKeyDown(event)) return;
   if (canvasEntityEditor.isOpen()) return;
@@ -12034,8 +12082,12 @@ promptOptimization = window.REELAY_PROMPT_OPTIMIZATION.createController({
 });
 
 window.addEventListener("message", handleHostBridgeMessage);
-window.addEventListener("beforeunload", flushCanvasDocumentSave);
+window.addEventListener("beforeunload", () => {
+  cancelCanvasPointerInteraction();
+  flushCanvasDocumentSave();
+});
 window.addEventListener("pagehide", (event) => {
+  cancelCanvasPointerInteraction({ render: event.persisted });
   canvasInspiration.close({ restoreFocus: false });
   canvasArrange.close();
   agentGeneration.close();

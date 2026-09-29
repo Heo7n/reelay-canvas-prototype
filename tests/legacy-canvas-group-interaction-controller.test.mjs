@@ -9,6 +9,7 @@ const source = await readFile(
 );
 const context = vm.createContext({});
 new vm.Script(source).runInContext(context);
+new vm.Script(await readFile(new URL("../src/legacy-canvas/canvas-geometry-gesture-session.js", import.meta.url), "utf8")).runInContext(context);
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
@@ -23,7 +24,13 @@ function createHarness() {
   const calls = [];
   const undoActions = [];
   let action = null;
+  const canvas = { id: "canvas", nodes, groups: [group] };
+  const preview = context.REELAY_CANVAS_GEOMETRY_GESTURE.createSession({
+    getContext: () => ({ projectId: "project", canvas, canMutate: true }),
+    cloneNode: (node) => ({ ...node, id: `${node.id}-copy` }),
+  });
   const controller = context.REELAY_CANVAS_GROUP_INTERACTION_CONTROLLER.createCanvasGroupInteractionController({
+    preview,
     getScale: () => 2,
     getGroup: (id) => (id === group.id ? group : null),
     getGroupBounds: () => ({ left: group.x, top: group.y, width: group.width, height: group.height }),
@@ -33,14 +40,14 @@ function createHarness() {
     setAction: (nextAction) => { action = nextAction; },
     setDragging: (dragging) => calls.push(`dragging:${dragging}`),
     capturePointer: (_target, pointerId) => calls.push(`capture:${pointerId}`),
-    applyGroupFrame: (_id, frame) => Object.assign(group, frame),
-    applyNodePosition: (id, position) => Object.assign(nodes.find((node) => node.id === id), position),
     minWidth: 160,
     minHeight: 120,
     pushUndoAction: (entry) => undoActions.push(entry),
+    onGeometryCommit: () => calls.push("membership"),
+    onCommit: () => calls.push("save"),
     render: () => calls.push("render"),
   });
-  return { controller, group, nodes, calls, undoActions, getAction: () => action };
+  return { controller, group, nodes, preview, calls, undoActions, getAction: () => action };
 }
 
 test("group drag promotion preserves group and node offsets", () => {
@@ -54,8 +61,13 @@ test("group drag promotion preserves group and node offsets", () => {
 
   assert.equal(drag.type, "drag-group");
   assert.equal(harness.getAction(), drag);
-  assert.deepEqual(plain(harness.group), { id: "group-1", x: 30, y: 35, width: 240, height: 180 });
+  assert.deepEqual(plain(harness.group), { id: "group-1", x: 20, y: 30, width: 240, height: 180 });
+  assert.deepEqual(plain(harness.preview.getGroupFrame(harness.group)), { x: 30, y: 35 });
   assert.deepEqual(plain(harness.nodes), [
+    { id: "a", x: 40, y: 60 },
+    { id: "b", x: 120, y: 140 },
+  ]);
+  assert.deepEqual(harness.nodes.map((node) => ({ id: node.id, ...harness.preview.getNodePosition(node) })), [
     { id: "a", x: 50, y: 65 },
     { id: "b", x: 130, y: 145 },
   ]);
@@ -73,7 +85,8 @@ test("north-west resize respects minimum dimensions and anchored far edges", () 
   const frame = harness.controller.resize(action, { clientX: 300, clientY: 260 });
 
   assert.deepEqual(plain(frame), { x: 100, y: 90, width: 160, height: 120 });
-  assert.deepEqual(plain(harness.group), { id: "group-1", x: 100, y: 90, width: 160, height: 120 });
+  assert.deepEqual(plain(harness.group), { id: "group-1", x: 20, y: 30, width: 240, height: 180 });
+  assert.deepEqual(plain(harness.preview.getGroupFrame(harness.group)), { x: 100, y: 90, width: 160, height: 120 });
 });
 
 test("finishing a changed group records one shared movement undo entry", () => {
@@ -84,7 +97,14 @@ test("finishing a changed group records one shared movement undo entry", () => {
     {},
   );
   harness.controller.promoteDrag(action, { clientX: 20, clientY: 10 });
+  harness.calls.length = 0;
   harness.controller.finish(harness.getAction());
+  harness.controller.finish(harness.getAction());
+  assert.deepEqual(harness.calls, ["membership", "save", "render"]);
+  assert.deepEqual(plain(harness.group), { id: "group-1", x: 30, y: 35, width: 240, height: 180 });
+  assert.deepEqual(plain(harness.nodes), [
+    { id: "a", x: 50, y: 65 }, { id: "b", x: 130, y: 145 },
+  ]);
 
   assert.deepEqual(plain(harness.undoActions), [{
     type: "move",
@@ -93,7 +113,7 @@ test("finishing a changed group records one shared movement undo entry", () => {
   }]);
 });
 
-test("cancelling a group drag restores the frozen frame and member snapshot without undo", () => {
+test("cancelling a group drag discards the preview without writing the frame or members", () => {
   const harness = createHarness();
   const candidate = harness.controller.beginDrag(
     harness.group,
@@ -101,7 +121,8 @@ test("cancelling a group drag restores the frozen frame and member snapshot with
     {},
   );
   const drag = harness.controller.promoteDrag(candidate, { clientX: 140, clientY: 120 });
-  assert.deepEqual(plain(harness.group), { id: "group-1", x: 40, y: 40, width: 240, height: 180 });
+  assert.deepEqual(plain(harness.preview.getGroupFrame(harness.group)), { x: 40, y: 40 });
+  harness.calls.length = 0;
 
   harness.controller.finish(drag, { cancelled: true });
 
@@ -111,9 +132,11 @@ test("cancelling a group drag restores the frozen frame and member snapshot with
     { id: "b", x: 120, y: 140 },
   ]);
   assert.deepEqual(harness.undoActions, []);
+  assert.deepEqual(harness.calls, ["render"]);
+  assert.equal(harness.preview.getGroupFrame(harness.group), null);
 });
 
-test("cancelling a group resize restores its original frame without recording undo", () => {
+test("cancelling a group resize preserves its original frame without recording undo", () => {
   const harness = createHarness();
   const resize = harness.controller.beginResize(
     harness.group,
@@ -122,10 +145,13 @@ test("cancelling a group resize restores its original frame without recording un
     {},
   );
   harness.controller.resize(resize, { clientX: 180, clientY: 160 });
-  assert.deepEqual(plain(harness.group), { id: "group-1", x: 20, y: 30, width: 280, height: 210 });
+  assert.deepEqual(plain(harness.preview.getGroupFrame(harness.group)), { x: 20, y: 30, width: 280, height: 210 });
+  harness.calls.length = 0;
 
   harness.controller.finish(resize, { cancelled: true });
 
   assert.deepEqual(plain(harness.group), { id: "group-1", x: 20, y: 30, width: 240, height: 180 });
   assert.deepEqual(harness.undoActions, []);
+  assert.deepEqual(harness.calls, ["render"]);
+  assert.equal(harness.preview.getGroupFrame(harness.group), null);
 });

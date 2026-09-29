@@ -566,12 +566,13 @@ test("node creation, references, deletion and undo save explicitly without rende
 test("node and group gesture commits save while canceled previews leave a clean document", (t) => {
   const h = hostedEditableHarness(t);
   const node = h.window.addNodeAt(200, 180, "image", { useLastPreset: false }); h.save();
-  const drag = () => ({ type: "drag-nodes", ids: [node.id], origins: [{ id: node.id, x: node.x, y: node.y }],
-    startClientX: 0, startClientY: 0, groups: [], isDuplicate: false });
-  const canceled = drag(); h.canvasNodeDragController.move(canceled, { clientX: 50, clientY: 40 });
+  const drag = () => h.canvasNodeDragController.promote({ type: "drag-candidate", ids: [node.id], activeId: node.id,
+    origins: [{ id: node.id, x: node.x, y: node.y }], startClientX: 0, startClientY: 0, groups: [], altKey: false },
+  { clientX: 50, clientY: 40 });
+  const canceled = drag();
   h.canvasNodeDragController.finish(canceled, { cancelled: true });
   assert.equal(h.canvasPersistence.getState().dirty, false);
-  const committed = drag(); h.canvasNodeDragController.move(committed, { clientX: 50, clientY: 40 });
+  const committed = drag();
   h.canvasNodeDragController.finish(committed);
   assert.equal(h.save().canvases[0].nodes[0].x, node.x);
   const second = h.window.addNodeAt(500, 180, "image", { useLastPreset: false }); h.save();

@@ -2,6 +2,9 @@
   "use strict";
 
   function createCanvasGroupInteractionController(options) {
+    const preview = options.preview;
+    if (!preview?.setGroupFrame || !preview?.commit) throw new TypeError("Group gestures require a geometry preview owner.");
+    const finishedActions = new WeakSet();
     function snapshotNodes(group) {
       return options.getGroupNodes(group).map((node) => ({ id: node.id, x: node.x, y: node.y }));
     }
@@ -28,6 +31,7 @@
         startScale: options.getScale(),
         captureTarget,
       };
+      if (!preview.capture(action)) return null;
       options.setActiveGroup(group.id);
       options.setAction(action);
       options.capturePointer(captureTarget, pointer.pointerId);
@@ -56,6 +60,7 @@
         startScale: options.getScale(),
         captureTarget,
       };
+      if (!preview.capture(action)) return null;
       options.setActiveGroup(group.id);
       options.setAction(action);
       options.capturePointer(captureTarget, pointer.pointerId);
@@ -64,12 +69,13 @@
     }
 
     function promoteDrag(action, pointer) {
-      if (!options.getGroup(action.groupId)) {
+      if (!preview.isCurrent(action)) {
         options.setAction(null);
         return null;
       }
       const dragAction = {
         type: "drag-group",
+        gesture: action.gesture,
         pointerId: action.pointerId,
         groupId: action.groupId,
         startClientX: action.startClientX,
@@ -87,28 +93,28 @@
     }
 
     function move(action, pointer) {
+      if (!preview.isCurrent(action)) return null;
       const scale = Math.max(0.0001, action.startScale || options.getScale());
       const dx = (pointer.clientX - action.startClientX) / scale;
       const dy = (pointer.clientY - action.startClientY) / scale;
       action.moved = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
       if (action.originFrame) {
-        options.applyGroupFrame(action.groupId, {
+        preview.setGroupFrame(action, {
           x: action.originFrame.x + dx,
           y: action.originFrame.y + dy,
         });
       }
-      action.origins.forEach((origin) => {
-        options.applyNodePosition(origin.id, {
+      preview.setNodePositions(action, action.origins.map((origin) => ({
+          id: origin.id,
           x: origin.x + dx,
           y: origin.y + dy,
-        });
-      });
+      })));
       options.render();
       return { dx, dy };
     }
 
     function resize(action, pointer) {
-      if (!options.getGroup(action.groupId)) return null;
+      if (!preview.isCurrent(action)) return null;
       const scale = Math.max(0.0001, action.startScale || options.getScale());
       const dx = (pointer.clientX - action.startClientX) / scale;
       const dy = (pointer.clientY - action.startClientY) / scale;
@@ -140,32 +146,33 @@
       }
 
       const frame = { x, y, width, height };
-      options.applyGroupFrame(action.groupId, frame);
+      preview.setGroupFrame(action, frame);
       options.render();
       return frame;
     }
 
-    function restore(action) {
-      const originFrame = action.originFrame || action.origin;
-      if (originFrame) options.applyGroupFrame(action.groupId, originFrame);
-      (action.origins || []).forEach((origin) => options.applyNodePosition(origin.id, origin));
-    }
-
     function finish(action, finishOptions = {}) {
+      if (finishedActions.has(action)) return;
+      finishedActions.add(action);
       if (finishOptions.cancelled) {
-        restore(action);
-        options.render();
-        return;
+        const current = preview.isCurrent(action);
+        preview.cancel(action);
+        if (finishOptions.render !== false) options.render();
+        return { ok: current, changed: false };
       }
+      const result = preview.commit(action);
+      if (!result.ok) { if (finishOptions.render !== false) options.render(); return result; }
+      options.onGeometryCommit?.(action);
       if (action.moved) {
         options.pushUndoAction({
           type: "move",
           positions: action.origins || [],
           groups: action.groups,
         });
-        options.onCommit?.();
       }
-      options.render();
+      if (result.changed) options.onCommit?.();
+      if (finishOptions.render !== false) options.render();
+      return result;
     }
 
     return Object.freeze({ beginDrag, beginResize, promoteDrag, move, resize, finish });

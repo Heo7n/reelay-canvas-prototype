@@ -11,6 +11,7 @@ const [interactionSource, controllerSource] = await Promise.all([
 const context = vm.createContext({});
 new vm.Script(interactionSource).runInContext(context);
 new vm.Script(controllerSource).runInContext(context);
+new vm.Script(await readFile(new URL("../src/legacy-canvas/canvas-geometry-gesture-session.js", import.meta.url), "utf8")).runInContext(context);
 
 function createHarness({ canMutate = true, spaceDown = false, selectedNodeIds = ["a", "b"] } = {}) {
   const nodes = [
@@ -20,8 +21,14 @@ function createHarness({ canMutate = true, spaceDown = false, selectedNodeIds = 
   const selectedIds = new Set(selectedNodeIds);
   const calls = [];
   let action = null;
+  const canvas = { id: "canvas", nodes, groups: [] };
+  const preview = context.REELAY_CANVAS_GEOMETRY_GESTURE.createSession({
+    getContext: () => ({ projectId: "project", canvas, canMutate }),
+    cloneNode: (node) => ({ ...node, id: `${node.id}-copy` }),
+  });
   const controller = context.REELAY_CANVAS_NODE_POINTER_CONTROLLER.createCanvasNodePointerController({
     interaction: context.REELAY_CANVAS_NODE_INTERACTION,
+    preview,
     isSpaceDown: () => spaceDown,
     beginPan: () => calls.push("pan"),
     getNode: (nodeId) => nodes.find((node) => node.id === nodeId),
@@ -37,12 +44,11 @@ function createHarness({ canMutate = true, spaceDown = false, selectedNodeIds = 
       calls.push("selection");
     },
     setMediaToolbarNodeId: (nodeId) => calls.push(`toolbar:${nodeId || "none"}`),
-    promoteNodes: (items) => calls.push(`promote:${items.map((item) => item.id).join(",")}`),
     setAction: (nextAction) => { action = nextAction; },
     capturePointer: (pointerId) => calls.push(`capture:${pointerId}`),
     render: () => calls.push("render"),
   });
-  return { controller, nodes, calls, getAction: () => action };
+  return { controller, nodes, preview, calls, getAction: () => action };
 }
 
 function pointerEvent(overrides = {}) {
@@ -130,12 +136,14 @@ test("node body pointer prepares a stable drag candidate with active node promot
   assert.equal(harness.controller.handlePointerDown(pointerEvent({ target, altKey: true }), "a"), "drag-candidate");
   assert.deepEqual(harness.calls, [
     "selection",
-    "promote:b,a",
     "capture:7",
     "render",
   ]);
   assert.equal(harness.nodes[0].expanded, false);
-  assert.deepEqual({ ...harness.getAction(), groups: undefined }, {
+  assert.ok(harness.preview.getNodeZ(harness.nodes[0]) > harness.preview.getNodeZ(harness.nodes[1]));
+  assert.ok(harness.nodes.every((node) => !Object.hasOwn(node, "z")));
+  assert.equal(harness.preview.isCurrent(harness.getAction()), true);
+  assert.deepEqual({ ...harness.getAction(), groups: undefined, gesture: undefined }, {
     type: "drag-candidate",
     pointerId: 7,
     ids: ["a", "b"],
@@ -145,6 +153,7 @@ test("node body pointer prepares a stable drag candidate with active node promot
     startClientY: 140,
     origins: harness.getAction().origins,
     groups: undefined,
+    gesture: undefined,
     revealMediaToolbar: false,
     revealGeneratorPanel: false,
   });

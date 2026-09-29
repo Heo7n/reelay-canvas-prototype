@@ -18,6 +18,8 @@
 
   function createCanvasNodePointerController(options) {
     const interaction = options.interaction;
+    const preview = options.preview;
+    if (!preview?.capture) throw new TypeError("Node pointers require a geometry preview owner.");
 
     function handlePointerDown(event, nodeId, pointerOptions = {}) {
       if (event.button === 1 || (event.button === 0 && options.isSpaceDown())) {
@@ -65,11 +67,6 @@
         options.render();
         return "selected";
       }
-      const activeNode = selectedNodes.find((item) => item.id === nodeId);
-      const nodesToPromote = selectedNodes.filter((item) => item.id !== nodeId);
-      if (activeNode) nodesToPromote.push(activeNode);
-      options.promoteNodes(nodesToPromote);
-
       const dragCandidate = {
         type: "drag-candidate",
         pointerId: event.pointerId,
@@ -86,6 +83,7 @@
       if (pointerOptions.interactionSource) {
         dragCandidate.interactionSource = pointerOptions.interactionSource;
       }
+      if (!preview.capture(dragCandidate)) return "missing-node";
       options.setAction(dragCandidate);
       options.capturePointer(event.pointerId);
       options.render();

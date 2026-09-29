@@ -3,65 +3,46 @@
 
   function createCanvasNodeDragController(options) {
     const interaction = options.interaction;
+    const preview = options.preview;
+    if (!preview?.promoteNodes || !preview?.commit) throw new TypeError("Node dragging requires a geometry preview owner.");
     const finishedActions = new WeakSet();
 
     function move(action, pointer) {
+      if (!preview.isCurrent(action)) return null;
       const drag = interaction.getDraggedPositions(action, pointer, options.getScale());
       action.moved = drag.moved;
-      drag.positions.forEach(options.applyNodePosition);
+      if (!preview.setNodePositions(action, drag.positions)) return null;
       options.renderMovement();
       return drag;
     }
 
     function promote(action, pointer) {
-      const sourceNodes = action.ids.map(options.getNode).filter(Boolean);
-      if (!sourceNodes.length) {
+      const promoted = preview.promoteNodes(action);
+      if (!promoted) {
         options.setAction(null);
         return null;
       }
-
-      let draggedNodes = sourceNodes;
-      let origins = action.origins;
-      const activeIndex = Math.max(0, sourceNodes.findIndex((node) => node.id === action.activeId));
-      let activeId = action.activeId;
-
-      if (action.altKey) {
-        const copies = sourceNodes.map((source) => ({ source, clone: options.cloneNode(source) }))
-          .filter(({ clone }) => clone);
-        if (!copies.length) {
-          options.setAction(null);
-          return null;
-        }
-        draggedNodes = copies.map(({ clone }) => clone);
-        options.addNodes(draggedNodes);
-        origins = draggedNodes.map((node) => ({ id: node.id, x: node.x, y: node.y }));
-        activeId = (copies.find(({ source }) => source.id === action.activeId) || copies[0]).clone.id;
-        options.selectNodes(
-          draggedNodes.map((node) => node.id),
-          activeId,
-        );
-        options.render();
-      }
-
-      options.promoteNodes(draggedNodes);
+      const { nodes: draggedNodes, origins, activeId, sourceIds, sourceActiveId, isDuplicate } = promoted;
       const dragAction = {
         type: "drag-nodes",
+        gesture: action.gesture,
         pointerId: action.pointerId,
         ids: draggedNodes.map((node) => node.id),
         activeId,
-        sourceIds: sourceNodes.map((node) => node.id),
-        sourceActiveId: sourceNodes[activeIndex]?.id || null,
+        sourceIds,
+        sourceActiveId,
         startClientX: action.startClientX,
         startClientY: action.startClientY,
         origins,
         groups: action.groups,
-        isDuplicate: action.altKey,
+        isDuplicate,
         interactionSource: action.interactionSource,
         revealMediaToolbar: action.revealMediaToolbar,
         revealGeneratorPanel: action.revealGeneratorPanel,
       };
       options.setAction(dragAction);
       options.setDragging(true);
+      if (isDuplicate) { options.selectNodes(dragAction.ids, activeId); options.render(); }
       move(dragAction, pointer);
       return dragAction;
     }
@@ -70,12 +51,15 @@
       if (finishedActions.has(action)) return;
       finishedActions.add(action);
       if (finishOptions.cancelled) {
-        if (action.isDuplicate) options.removeDuplicatedNodes(action.ids.slice(), action);
-        else (action.origins || []).forEach(options.applyNodePosition);
+        const current = preview.isCurrent(action);
+        preview.cancel(action);
+        if (current && action.isDuplicate) options.restoreSelection?.(action);
         if (finishOptions.render !== false) options.render();
-        return;
+        return { ok: current, changed: false };
       }
-      options.updateGroupMembership(action.ids);
+      const result = preview.commit(action);
+      if (!result.ok) { if (finishOptions.render !== false) options.render(); return result; }
+      options.onGeometryCommit?.(action);
       if (action.isDuplicate) {
         options.pushUndoAction({ type: "create", nodeIds: action.ids.slice() });
       } else if (action.moved) {
@@ -85,8 +69,9 @@
           groups: action.groups,
         });
       }
-      if (action.isDuplicate || action.moved) options.onCommit?.();
+      if (result.changed) options.onCommit?.();
       if (finishOptions.render !== false) options.render();
+      return result;
     }
 
     return Object.freeze({ move, promote, finish });

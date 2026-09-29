@@ -11,6 +11,7 @@ const inspirationModules = await Promise.all(["src/config/inspiration-catalog.js
   .map((path) => readFile(new URL(path, root), "utf8")));
 const fileName = await readFile(new URL("src/legacy-canvas/canvas-file-name.js", root), "utf8");
 const themeController = await readFile(new URL("src/legacy-canvas/canvas-theme-controller.js", root), "utf8");
+const geometryGesture = await readFile(new URL("src/legacy-canvas/canvas-geometry-gesture-session.js", root), "utf8");
 const saveMediaModules = await Promise.all(["canvas-media-library-coordinator", "canvas-save-media-dialog", "canvas-save-media-controller", "canvas-library-upload-controller", "canvas-library-delete-controller", "canvas-library-navigation", "canvas-library-reference-picker", "canvas-library-search-session", "canvas-library-tags-controller", "canvas-library-directory-controller"]
   .map((name) => readFile(new URL(`src/legacy-canvas/${name}.js`, root), "utf8")));
 const [promptDocument, promptController, promptEditor] = await Promise.all([
@@ -160,6 +161,7 @@ test("a hosted canvas enforces read-only access, preserves viewport controls, an
   window.eval(nodeEditorLayout);
   window.eval(nodePromptView);
   window.eval(nodeLayoutTransition);
+  window.eval(geometryGesture);
   window.eval(nodePointerController);
   window.eval(nodeDragController);
   window.eval(groupInteractionController);

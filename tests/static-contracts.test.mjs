@@ -560,6 +560,7 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
     "function requestHostNavigation(target)",
   );
   const hydrateCanvasDocumentSnapshot = Function(
+    "cancelCanvasPointerInteraction",
     "canvasContentCommands",
     "canvasNodeTasks",
     "canvasDocumentCodec",
@@ -575,6 +576,7 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
     "clearAssetLibrarySelection",
     `${hydrateSource}; return hydrateCanvasDocumentSnapshot;`,
   )(
+    () => undefined,
     { normalizeGroupMembership: () => undefined },
     { cancelScope: () => 0 },
     { restoreSnapshot: () => restored },
@@ -1337,7 +1339,7 @@ test("aspect changes preserve node identity and isolate the prompt workspace fro
   );
   assert.match(
     appSource,
-    /function syncNodeVisualLayout[\s\S]*?const base = canvasArrange\.getNodePosition\(node\) \|\| node;[\s\S]*?element\.style\.top = `\$\{base\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY\(\$\{\(y - base\.y\)/,
+    /function syncNodeVisualLayout[\s\S]*?const base = canvasGeometryGesture\.getNodePosition\(node\) \|\| canvasArrange\.getNodePosition\(node\) \|\| node;[\s\S]*?element\.style\.top = `\$\{base\.y\}px`[\s\S]*?mediaFrame\.style\.height[\s\S]*?mediaFrame\.style\.transform = `translateY\(\$\{\(y - base\.y\)/,
   );
   assert.match(appSource, /promptPanel\.style\.top = `\$\{canonicalLayout\.mediaHeight \+ canonicalLayout\.panelGap\}px`/);
   assert.match(appCss, /\.prompt-panel\s*\{[\s\S]*?position:\s*absolute[\s\S]*?left:\s*50%[\s\S]*?translate:\s*-50% 0/);

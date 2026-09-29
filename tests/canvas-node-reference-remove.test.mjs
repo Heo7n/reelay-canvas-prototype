@@ -23,7 +23,7 @@ function harness() {
   const state = { nodes: canvas.nodes, get undoStack() { return canvas.undoStack; } };
   const context = vm.createContext({ state, requireCanvasMutation: () => writable,
     pushUndoAction: (action) => canvas.undoStack.push(action),
-    render() {}, setSelection() {}, hydrateAssetMetadata() {}, showActionToast() {},
+    render() {}, setSelection() {}, hydrateAssetMetadata() {}, showActionToast() {}, cancelCanvasPointerInteraction() {},
     scheduleCanvasDocumentSave() { saves += 1; },
     canvasNodeLayoutTransition: { finishAll() {} }, promptEditors: { clearHistory() {} } });
   for (const name of ["removeAssetsFromGeneratorNode", "undoLastAction", "commitGenerationUndoBoundary"]) {

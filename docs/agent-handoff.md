@@ -7,6 +7,7 @@
 - 实际工作区：`C:/Users/Ho/.codex/worktrees/cc38/0707-experiment`，分支 `codex/experiment-20260910`。开始时重新检查 Git；不要使用任务环境提供的其他旧 worktree。
 - 本轮治理起点为 `8afd67d`；`origin/main` 最近本机已知为 `f32034c`（PR #29），实验分支尚未经 PR 集成。后续源提交与脏文件以实际 Git 为准。
 - 已实现审计后的有限收敛：普通节点、对话和正片共用生成服务；绘制不再隐式保存；登录失效保护当前快照并支持同页恢复；版本冲突可另存全部内部画布副本，放弃修改必须确认。没有扩展为云数据迁移或旧工作区清理。
+- 接续治理修复了拖动中途位置 / Alt 副本进入自动保存，以及未结束手势跨画布写入同 ID 节点的问题。节点移动、组移动 / 缩放和 Alt 复制改为独立预览 owner，松手提交，取消丢弃；保存协调器继续只读取 CanvasRecord，后台生成不被手势阻塞。没有扩大为全部节点结构命令迁移。
 - CI 配置覆盖 `main`、当前评审分支 push、PR 与手动触发。[当前评审分支运行](https://github.com/Heo7n/reelay-canvas-prototype/actions/workflows/ci.yml?query=branch%3Acodex%2Fexperiment-20260910)是远端证据入口；`check:release-ci` 只接受精确源 SHA 的 push / manual 三项成功，PR merge 检查不能替代该源码树证据。
 
 ## 当前本机评审
@@ -28,14 +29,14 @@
 
 历史证据仍保留在本机忽略目录：`.reelay-data/hover-version-release-check.log`、`.reelay-data/inline-version-release-build.log`、`.reelay-data/inline-version-public-verification.json`、`.reelay-data/inline-version-production-inspect.log`。通用新核验命令见[发布步骤](vercel-supabase-preview.md#4-发布步骤)，不再依赖历史临时验证脚本。本轮治理未同步公网。
 
-本轮本地完整检查与两种构建证据在 `.reelay-data/governance-check-final.log`、`governance-account-build.log`、`governance-experience-build.log`；涵盖 legacy、shell、server、交付与启动工具测试，以及 lint、类型、文档、CSS / HTML 和 E2E 类型检查。独立临时 PostgreSQL 的 94 项集成测试通过，临时容器已清理。新增浏览器验收覆盖真实 401 同页续登与 409 保存副本；实际运行结果查看上述 CI 入口，不将本地类型检查当成浏览器通过。
+最新手势治理的本地完整检查与两种构建证据在 `.reelay-data/gesture-check.log`、`gesture-account-build.log`、`gesture-experience-build.log`；1741 项 legacy、478 项 shell、328 项 server 以及交付 / 启动工具检查通过。新增集成回归覆盖拖动中保存确认、生成完成、401 / 409 恢复、跨画布与取消生命周期；另补齐过期取消按钮的真实任务传参及事件异常断言。新增两条隔离浏览器回归验证持住拖动时自动保存、Esc 取消后刷新回读；远端实际结果查看上述 CI 入口，不将本地 E2E 类型检查当成浏览器通过。上一轮独立临时 PostgreSQL 的 94 项集成测试通过，临时容器已清理；本轮没有修改数据库。
 
 远端验收已暴露并修复旧迁移断言、测试数据隔离、过期 UI 定位器、正片参数被误判外部点击、主体编辑返回丢失搜索，以及演示初始化首轮返回陈旧标签数据的问题；没有跳过失败或放宽错误校验。浏览器每项测试使用独立内存服务，数据库测试只在隔离环境执行，不接触当前评审数据。
 
 ## 接续边界与下一入口
 
 - 生成记录、节点任务、提示词优化仍是模拟，没有真实供应商执行或持久 CreditLedger；刷新测试积分保持 `3000 / 0`。可见结果与正片关系以产品规范为准，演示进度、媒体与时限不能直接当供应商协议。
-- React 壳与 legacy iframe 是渐进迁移结构；按真实功能边界提取，不以大文件或 JS / TS 混用为理由重写整个应用。高频移动与部分结构写入尚未全部迁入统一内容命令。
+- React 壳与 legacy iframe 是渐进迁移结构；按真实功能边界提取，不以大文件或 JS / TS 混用为理由重写整个应用。高频移动已分离预览和提交，仍复用现有受控移动 / 创建撤销；部分结构写入尚未迁入统一内容命令。下一候选切片是本地文件导入：核对上传等待后的实际 owner / 权限及一次撤销，避免切画布后晚到回调串写；尚未在本轮修改。
 - 当前本机数据、保留源数据库、旧 ObjectStore 与云端内容均需保留；位置和备份边界见[本地开发](local-development.md#数据归属与保留)。本机样本备份演练已做，真实云库与原媒体配套备份 / 隔离恢复仍未验收。
 - 保存恢复副本在成功保存前只保留当前页面内存，不提供浏览器崩溃 / 刷新后的永久恢复。真实供应商、持久任务与积分账本仍待独立切片。
 - 下一次发布必须以 `check:release-ci` 绑定明确 source SHA 与实际目标；本地受限页面的视觉验收仍不能由 CI 隔离业务流程代替。

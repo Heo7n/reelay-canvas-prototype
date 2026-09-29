@@ -10,7 +10,7 @@ const [interactionSource, controllerSource] = await Promise.all([
 const context = vm.createContext({});
 new vm.Script(interactionSource).runInContext(context);
 new vm.Script(controllerSource).runInContext(context);
-for (const file of ["canvas-command-executor.js", "canvas-content-commands.js"]) {
+for (const file of ["canvas-command-executor.js", "canvas-content-commands.js", "canvas-geometry-gesture-session.js"]) {
   new vm.Script(await readFile(new URL(`../src/legacy-canvas/${file}`, import.meta.url), "utf8")).runInContext(context);
 }
 
@@ -23,34 +23,29 @@ function createHarness(overrides = {}) {
   const undoActions = [];
   let activeAction = null;
   let cloneCount = 0;
+  const canvas = { id: "canvas", nodes, groups: [], connections: [], undoStack: [] };
+  const preview = context.REELAY_CANVAS_GEOMETRY_GESTURE.createSession({
+    getContext: () => ({ projectId: "project", canvas, canMutate: true }),
+    cloneNode: overrides.cloneNode || ((node) => ({ ...node, id: `${node.id}-copy-${++cloneCount}` })),
+  });
   const controller = context.REELAY_CANVAS_NODE_DRAG_CONTROLLER.createCanvasNodeDragController({
     interaction: context.REELAY_CANVAS_NODE_INTERACTION,
+    preview,
     getScale: () => 2,
-    getNode: (nodeId) => nodes.find((node) => node.id === nodeId),
-    cloneNode: (node) => ({ ...node, id: `${node.id}-copy-${++cloneCount}` }),
-    addNodes: (items) => nodes.push(...items),
-    removeDuplicatedNodes: (ids, action) => {
-      for (let index = nodes.length - 1; index >= 0; index -= 1) {
-        if (ids.includes(nodes[index].id)) nodes.splice(index, 1);
-      }
-      calls.push(`remove:${ids.join(",")}`);
+    restoreSelection: (action) => {
       calls.push(`select:${action.sourceIds.join(",")}:${action.sourceActiveId}`);
     },
     selectNodes: (ids, activeId) => calls.push(`select:${ids.join(",")}:${activeId}`),
-    promoteNodes: (items) => calls.push(`promote:${items.map((item) => item.id).join(",")}`),
     setAction: (action) => { activeAction = action; },
     setDragging: (dragging) => calls.push(`dragging:${dragging}`),
-    applyNodePosition: (position) => {
-      const node = nodes.find((item) => item.id === position.id);
-      Object.assign(node, { x: position.x, y: position.y });
-    },
     renderMovement: () => calls.push("movement"),
-    updateGroupMembership: (ids) => calls.push(`groups:${ids.join(",")}`),
+    onGeometryCommit: (action) => calls.push(`groups:${action.ids.join(",")}`),
+    onCommit: () => calls.push("save"),
     pushUndoAction: (action) => undoActions.push(action),
     render: () => calls.push("render"),
     ...overrides,
   });
-  return { controller, nodes, calls, undoActions, getAction: () => activeAction };
+  return { controller, canvas, preview, get nodes() { return canvas.nodes; }, calls, undoActions, getAction: () => activeAction };
 }
 
 function candidate(overrides = {}) {
@@ -83,11 +78,15 @@ test("promoting a drag candidate preserves offsets and begins immediate movement
   assert.equal(action.revealGeneratorPanel, true);
   assert.equal(action.interactionSource, "selection-frame");
   assert.equal(harness.getAction(), action);
-  assert.deepEqual(harness.nodes.slice(0, 2).map(({ id, x, y }) => ({ id, x, y })), [
+  assert.deepEqual(harness.nodes.map(({ id, x, y }) => ({ id, x, y })), [
+    { id: "a", x: 10, y: 20 },
+    { id: "b", x: 70, y: 90 },
+  ]);
+  assert.deepEqual(harness.nodes.map((node) => ({ id: node.id, ...harness.preview.getNodePosition(node) })), [
     { id: "a", x: 20, y: 25 },
     { id: "b", x: 80, y: 95 },
   ]);
-  assert.deepEqual(harness.calls, ["promote:a,b", "dragging:true", "movement"]);
+  assert.deepEqual(harness.calls, ["dragging:true", "movement"]);
 });
 
 test("Alt promotion duplicates nodes and drags only the copies", () => {
@@ -98,14 +97,14 @@ test("Alt promotion duplicates nodes and drags only the copies", () => {
   assert.equal(action.activeId, "a-copy-1");
   assert.deepEqual(action.sourceIds, ["a", "b"]);
   assert.equal(action.sourceActiveId, "a");
-  assert.equal(harness.nodes.length, 4);
+  assert.equal(harness.nodes.length, 2);
+  assert.equal(harness.preview.getViewNodes().length, 4);
   assert.deepEqual(harness.nodes.slice(0, 2).map(({ x, y }) => ({ x, y })), [{ x: 10, y: 20 }, { x: 70, y: 90 }]);
-  assert.deepEqual(harness.nodes.slice(2).map(({ x, y }) => ({ x, y })), [{ x: 20, y: 25 }, { x: 80, y: 95 }]);
+  assert.deepEqual(Array.from(harness.preview.getViewNodes().slice(2), (node) => ({ ...harness.preview.getNodePosition(node) })), [{ x: 20, y: 25 }, { x: 80, y: 95 }]);
   assert.deepEqual(harness.calls, [
+    "dragging:true",
     "select:a-copy-1,b-copy-2:a-copy-1",
     "render",
-    "promote:a-copy-1,b-copy-2",
-    "dragging:true",
     "movement",
   ]);
 });
@@ -114,7 +113,7 @@ test("Alt promotion maps the active node to its corresponding copy", () => {
   const harness = createHarness();
   const action = harness.controller.promote(candidate({ activeId: "b", altKey: true }), { clientX: 120, clientY: 110 });
   assert.equal(action.activeId, "b-copy-2");
-  assert.equal(harness.calls[0], "select:a-copy-1,b-copy-2:b-copy-2");
+  assert.ok(harness.calls.includes("select:a-copy-1,b-copy-2:b-copy-2"));
 });
 
 test("Alt promotion with only rejected copies clears the candidate without creating a drag", () => {
@@ -122,7 +121,6 @@ test("Alt promotion with only rejected copies clears the candidate without creat
   const h = createHarness({
     cloneNode: () => null,
     setAction: (action) => actions.push(action),
-    addNodes: () => assert.fail("rejected copies cannot be inserted"),
   });
   assert.equal(h.controller.promote(candidate({ altKey: true }), { clientX: 120, clientY: 110 }), null);
   assert.deepEqual(actions, [null]);
@@ -140,7 +138,8 @@ test("mixed Alt copying skips rejected nodes and preserves original selection fo
     assert.equal(action.activeId, "b-copy");
     assert.deepEqual(action.sourceIds, ["a", "b"]);
     assert.equal(action.sourceActiveId, activeId);
-    assert.deepEqual(h.nodes.map(({ id, x, y }) => ({ id, x, y })), [
+    assert.equal(h.nodes.length, 2);
+    assert.deepEqual(Array.from(h.preview.getViewNodes(), (node) => ({ id: node.id, x: node.x, y: node.y, ...h.preview.getNodePosition(node) })), [
       { id: "a", x: 10, y: 20 }, { id: "b", x: 70, y: 90 }, { id: "b-copy", x: 80, y: 95 },
     ]);
     h.controller.finish(action, { cancelled: true });
@@ -155,19 +154,22 @@ test("a pending node remains movable without Alt duplication", () => {
   h.nodes[0].pendingGeneration = { taskId: "pending-task" };
   const action = h.controller.promote(candidate(), { clientX: 120, clientY: 110 });
   assert.equal(action.isDuplicate, false);
-  assert.equal(h.nodes[0].x, 20);
-  assert.equal(h.nodes[0].y, 25);
+  assert.equal(h.nodes[0].x, 10);
+  assert.equal(h.nodes[0].y, 20);
+  assert.deepEqual({ ...h.preview.getNodePosition(h.nodes[0]) }, { x: 20, y: 25 });
   assert.equal(h.nodes[0].pendingGeneration.taskId, "pending-task");
 });
 
 test("finishing records one move for originals or one create for duplicated nodes", () => {
   const original = createHarness();
-  const originalAction = { ...candidate(), type: "drag-nodes", moved: true, isDuplicate: false };
+  const originalAction = original.controller.promote(candidate(), { clientX: 120, clientY: 110 });
+  original.calls.length = 0;
   original.controller.finish(originalAction);
-  assert.deepEqual(original.calls, ["groups:a,b", "render"]);
+  assert.deepEqual(original.calls, ["groups:a,b", "save", "render"]);
+  assert.deepEqual(original.nodes.map(({ x, y }) => ({ x, y })), [{ x: 20, y: 25 }, { x: 80, y: 95 }]);
   assert.deepEqual(JSON.parse(JSON.stringify(original.undoActions)), [{
     type: "move",
-    positions: originalAction.origins,
+    positions: JSON.parse(JSON.stringify(originalAction.origins)),
     groups: originalAction.groups,
   }]);
 
@@ -179,18 +181,10 @@ test("finishing records one move for originals or one create for duplicated node
   assert.equal(duplicate.calls.filter((call) => call.startsWith("groups:")).length, 1);
 });
 
-test("cancelling a shared drag restores every origin without membership or undo work", () => {
+test("cancelling a shared drag discards presentation without membership or undo work", () => {
   const harness = createHarness();
-  harness.nodes[0].x = 44;
-  harness.nodes[0].y = 55;
-  harness.nodes[1].x = 104;
-  harness.nodes[1].y = 125;
-  const action = {
-    ...candidate({ interactionSource: "selection-frame" }),
-    type: "drag-nodes",
-    moved: true,
-    isDuplicate: false,
-  };
+  const action = harness.controller.promote(candidate({ interactionSource: "selection-frame" }), { clientX: 168, clientY: 170 });
+  harness.calls.length = 0;
 
   harness.controller.finish(action, { cancelled: true });
 
@@ -212,7 +206,8 @@ test("cancelling Alt drag removes only its copies and restores source selection 
   assert.deepEqual(h.nodes, originals);
   assert.equal(h.nodes[0], originals[0]);
   assert.equal(h.nodes[1], originals[1]);
-  assert.deepEqual(h.calls, ["remove:a-copy-1,b-copy-2", "select:a,b:b", "render"]);
+  assert.deepEqual(h.calls, ["select:a,b:b", "render"]);
+  assert.equal(h.preview.getViewNodes().length, 2);
   assert.equal(h.undoActions.length, 0);
 });
 
@@ -240,12 +235,12 @@ test("group creation followed by Alt duplication keeps both entries undoable in 
       delete clone.groupId;
       return clone;
     },
-    updateGroupMembership: (ids) => {
+    onGeometryCommit: ({ ids }) => {
       assert.equal(executeGroups(canvas.groups.map((group) => ({ ...group, nodeIds: [...group.nodeIds, ...ids] })), false).ok, true);
     },
     pushUndoAction: (action) => canvas.undoStack.push(action),
   });
-  canvas = { id: "canvas", nodes: h.nodes, groups: [], connections: [], undoStack: [] };
+  canvas = h.canvas;
   executor = context.REELAY_CANVAS_COMMAND_EXECUTOR.createCanvasCommandExecutor({
     getCanvas: () => canvas, projectRecord: policy.projectRecord, validateTransition: policy.validateTransition,
   });
@@ -267,7 +262,7 @@ test("group creation followed by Alt duplication keeps both entries undoable in 
   assert.equal(canvas.undoStack[0], initialGrouping);
   assert.equal(executor.undoLast(canvas.id).ok, true);
   assert.equal(canvas.undoStack.length, 0);
-  assert.deepEqual(canvas.nodes.map((node) => node.id), ["a", "b"]);
+  assert.deepEqual(Array.from(canvas.nodes, (node) => node.id), ["a", "b"]);
   assert.deepEqual(JSON.parse(JSON.stringify(canvas.groups)), []);
   assert.ok(canvas.nodes.every((node) => !node.groupId));
 });
