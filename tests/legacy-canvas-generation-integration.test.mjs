@@ -395,6 +395,9 @@ test("deleting a conversation placeholder cannot resurrect it on undo or task co
 function harness(t, { hosted = false, publicHistory = false, entryOnly = false } = {}) {
   const dom = new JSDOM(html, { url: "http://reelay.test/index.html", runScripts: "outside-only", pretendToBeVisual: true });
   const { window } = dom;
+  const runtimeErrors = [];
+  window.addEventListener("error", (event) => runtimeErrors.push(event.error?.message || event.message));
+  t.after(() => assert.deepEqual(runtimeErrors, [], "the real entry must not hide event-handler errors"));
   const postedMessages = [];
   const hostWindow = { postMessage(message) { postedMessages.push(message); } };
   if (hosted) Object.defineProperty(window, "parent", { configurable: true, value: hostWindow });

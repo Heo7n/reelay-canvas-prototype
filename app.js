@@ -5648,9 +5648,11 @@ function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
   generationStatus?.querySelector("[data-cancel-generation]")?.addEventListener("click", (event) => {
     event.preventDefault(); event.stopPropagation();
     if (!requireCanvasMutation() || !getActiveCanvas()?.nodes.includes(node)) return;
+    const task = generationTasks.get(node.pendingGeneration?.taskId || node.generationTaskId);
+    if (!task) return;
     const canceled = node.pendingGeneration ? agentGeneration?.cancelTask(node.pendingGeneration.taskId)
       : canvasNodeTasks.cancel(node.generationTaskId);
-    if (!canceled) { syncNodeGenerationStatus({}, node); showActionToast("已进入生成阶段，当前无法取消"); }
+    if (!canceled) { syncNodeGenerationStatus(task, node); showActionToast("已进入生成阶段，当前无法取消"); }
   });
   bindMediaTitleEvents(el, node);
   bindMediaToolbarEvents(el, node);
