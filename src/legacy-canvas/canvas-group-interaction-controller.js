@@ -163,6 +163,7 @@
           positions: action.origins || [],
           groups: action.groups,
         });
+        options.onCommit?.();
       }
       options.render();
     }

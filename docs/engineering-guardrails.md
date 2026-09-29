@@ -46,13 +46,13 @@ Phase 0B 的 runtime、Workspace 路由和 legacy canvas 迁移边界记录在 `
 - 登录标识与联系邮箱 / 手机号是不同字段。可选联系资料不得被当作已验证身份，也不得因为填写就自动开启用量报表订阅。
 - 路由画布按 `projectId + canvasId` 保存 CanvasDocument，并用 revision 防止多窗口静默覆盖；尚无文档的画布加载只能建立内存同步基线，不能因纯浏览创建空记录，首次真实修改才写入 revision 1；持久化文档不得混入账号、积分、撤销栈、运行任务或素材 Blob。这是数据边界，不是禁止画布代码包含相关 UI / 模拟功能。
 - iframe 保存状态只能由无 DOM 的持久化协调器独占；宿主与 iframe 必须同时校验 origin、source、协议版本、iframe instance 与 route scope。重复 ready、陈旧 requestId 和旧 scope 的异步保存完成不得重新 hydrate、推进 revision 或写入当前画布。同 route 出现新 iframe instance 时，必须隔离新旧 epoch 的 dirty / saving / navigation 计数，并等待旧同 scope 保存结算后再 hydrate 最新 revision；旧保存失败需要先重新读取服务端权威文档。
-- 每个内部 CanvasRecord 是节点、组、连接、视口、层级和撤销栈的唯一 runtime 权威；根 `state` 只能通过 runtime store 门面访问活动画布，`render()` 和画布切换不得用复制字段维持第二份工作集。增删、复制内部画布和后台写回即使不渲染当前画布，也必须显式触发文档保存。
+- 每个内部 CanvasRecord 是节点、组、连接、视口、层级和撤销栈的唯一 runtime 权威；根 `state` 只能通过 runtime store 门面访问活动画布，`render()` 和画布切换不得用复制字段维持第二份工作集。`render()` / `applyTransform()` 只投影视图，不调度保存；内容提交、视口变更和完成的手势显式调度保存，纯选择、菜单与取消的手势不标脏。增删、复制内部画布和后台写回即使不渲染当前画布，也必须显式触发文档保存。
 - CanvasCommand 必须先在 touched collection 的副本上完成 before conflict、归一化和 transition validation，再同步提交；字段提交只修改声明的字段，保留 live node / group 和未修改对象的身份。失败不得写内容、撤销或保存 effect，effect 失败也不得把已经提交的内容伪报为命令失败。节点命令仅接受 `canvas-content-commands.js` 的字段白名单；组只在创建 / 删除时使用 canonical record，更新使用字段事务。不能用整节点快照把 `mode / mediaKind`、任务态、素材对象或临时 UI 状态带进撤销。点击置顶的层级变化不作为局部布局撤销的冲突条件。
 - 组的 `nodeIds` 与节点 `groupId` 必须在同一内容事务中成立；兼容修复只在 hydrate 边界执行，render / bounds 读取不得修复成员或回写组框。高频 pointer preview 仍由手势 session 持有，取消恢复起始状态，完成一次手势只记录一次撤销。字段历史的对象身份检查只可在受控删除撤销恢复后显式衔接，不能在任意同 ID 替换或 hydrate 时重绑定。
 - 当前只开发桌面端；保留必要的窄屏防御规则，但不新增移动端页面、手势或独立状态分支。
-- 节点生成的运行记录与 timer 由 `canvas-node-task-runner.js` 持有，输入使用独立快照。启动前验证活动画布内的实际节点对象；完成或取消同时验证项目、画布、节点、任务记录与节点对象身份，旧回调不得写入同 ID 的替代节点或清除新任务。普通切画布保留后台生成；删除节点（含撤销创建）、删除画布、hydrate、宿主上下文替换与访问失效必须取消对应任务。节点 / 画布复制和删除撤销均不恢复忙碌态。
+- 普通节点、对话与正片共用组装层创建的一个 `generation-task-service.js`；任务状态、输入快照、结果、取消和模拟扣费 / 退款只由该服务拥有，executor、样片策略与时限显式注入。`canvas-node-task-runner.js` 只持有任务到实际节点的绑定，不持有第二套 timer 或结算；组生成每个接受的任务分别扣费，不能先扣整组再绕过服务。启动前验证活动画布内的实际节点对象；运行信号、完成、失败或取消均验证项目、画布、节点与对象身份，旧回调不得写同 ID 替代节点、清除新任务或因已失效 owner 的晚到失败虚构退款。普通切画布保留后台生成；删除节点（含撤销创建）、删除画布、hydrate、宿主上下文替换与访问失效必须失效对应任务。节点 / 画布复制和删除撤销均不恢复忙碌态。
 - 提示词优化的建议与 timer 归 `prompt-optimization-service.js`，由专属 controller / view 连接 UI，不进入节点生成 runner，完成也不自动写输入。手动填入由 adapter 提交：节点是一条可撤销字段变更，会话只更新所属草稿。节点对象 / 会话草稿轮次隔离结果、晚到回调与撤销，详细保留规则见 [提示词优化说明](prompt-optimization-development.md)。
-- 对话生成任务归 `generation-task-service.js`，结果放置通过画布内容适配执行；不能把“当前打开的画布”当作发起任务的归属。新异步流程先明确 owner、输入快照、取消 / 失效条件及唯一结算位置，timer 清理不能替代完成时的所有权验证。
+- 对话与正片结果放置通过画布适配执行，在任务被接受、executor 启动前绑定目标；不能把“当前打开的画布”当作任务归属。关闭对话面板只关闭 UI，后台任务继续；页面卸载由组装层依次释放投影 adapter 和共享服务。单独释放 adapter 只失效其未完成投影，不销毁其它入口任务、不伪造退款。新异步流程先明确 owner、输入快照、取消 / 失效条件及唯一结算位置，timer 清理不能替代完成时的所有权验证。
 - 生成节点的图片 / 视频类型在创建时确定且不可变，CanvasDocument 与任务快照统一用 `mediaKind` 表达；UI、模型过滤、参数归一化、任务、复制和撤销必须保持同一类型。迁移期 legacy runtime 暂用内部 `mode` 适配该类型，不能形成另一套独立可变的类型状态；旧文档的 `mode / lockedMode` 由版本化读取器兼容，新文档不写这些旧字段。后续正式 Node 迁移完成后再移除 runtime 适配，不把当前护栏误读为已经完成字段迁移。
 - 撤销历史不会跨画布或跨项目恢复内容。
 - 项目资产不会泄漏到新项目；工作区资产通过显式引用复用。元数据与原文件分别归 AssetStore / ObjectStore，Git 同步不是数据同步；保留数据位置和环境操作见 [本地开发](local-development.md)，不通过重新 seed 掩盖素材缺失。

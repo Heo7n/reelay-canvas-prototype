@@ -20,7 +20,7 @@ function fixture(overrides = {}, makeService = createService) {
   const refunds = [];
   const refundNotices = [];
   const events = [];
-  const service = makeService({
+  const serviceOptions = {
     makeId: () => `task-${++nextTask}`,
     now: () => time,
     setTimer(callback, delay) {
@@ -42,7 +42,12 @@ function fixture(overrides = {}, makeService = createService) {
     },
     makeResult: (task) => ({ id: `result-${task.id}`, type: task.input.mediaType, url: "/assets/example.mp4", name: "示例结果" }),
     onRefund: (task) => refundNotices.push(task.refunded),
+    draftPolicy: sandbox.REELAY_DRAFT_VIDEO,
+    cancelWindowMs: 5000, previewDurationMs: 7500,
     ...overrides,
+  };
+  const service = makeService({ ...serviceOptions,
+    executor: overrides.executor || sandbox.REELAY_SIMULATED_GENERATION_EXECUTOR.createExecutor(serviceOptions),
   });
   service.subscribe((task, event) => events.push({ id: task.id, type: event.type, status: task.status, progress: task.progress, canCancel: task.canCancel, refunded: task.refunded }));
   function advance(milliseconds) {
@@ -74,6 +79,30 @@ function input(overrides = {}) {
     ...overrides,
   };
 }
+
+test("owner invalidation wins over a late failure without applying a supplier refund", () => {
+  const signals = [];
+  const f = fixture({ executor: { start: (callbacks) => signals.push(callbacks), stop() {}, dispose() {} } });
+  let current = true;
+  const task = f.service.submit(input({ isCurrent: () => current }));
+  current = false;
+  signals[0].onFail("late failure");
+  assert.equal(task.status, "canceled");
+  assert.equal(task.cancellationReason, "owner-replaced");
+  assert.equal(task.refunded, 0); assert.equal(f.refunds.length, 0);
+  assert.equal(f.service.fail(task), false); assert.equal(f.service.complete(task), false);
+  assert.equal(f.balance(), 2976);
+});
+
+test("acceptance binds a task before execution and a rejected projection refunds once", () => {
+  let observed;
+  const f = fixture({ executor: { start({ onComplete }) { assert.ok(observed); onComplete(); }, stop() {}, dispose() {} } });
+  const task = f.service.submit(input({ onAccepted(value) { observed = value; } }));
+  assert.equal(task, observed); assert.equal(task.status, "succeeded");
+  const rejected = f.service.submit(input({ onAccepted() { return false; } }));
+  assert.equal(rejected.status, "failed"); assert.equal(rejected.refunded, 24);
+  assert.equal(f.refunds.length, 1);
+});
 
 test("submit freezes inputs and scope while task identity remains stable across state changes", () => {
   const f = fixture();
@@ -153,11 +182,9 @@ test("all task readers observe one monotonic simulation percentage that reaches 
 
 test("progress ignores invalid, duplicate and stale signals and clamps active percentages below completion", () => {
   const signals = [];
-  const isolated = vm.createContext({ REELAY_PROTOTYPE_CONFIG: sandbox.REELAY_PROTOTYPE_CONFIG, REELAY_SIMULATED_GENERATION_EXECUTOR: {
-    createExecutor: () => ({ start: (callbacks) => signals.push(callbacks), stop() {}, dispose() {} }),
-  } });
+  const isolated = vm.createContext({});
   vm.runInContext(fs.readFileSync(new URL("../src/application/generation-task-service.js", import.meta.url), "utf8"), isolated);
-  const f = fixture({}, isolated.REELAY_GENERATION_TASKS.createService);
+  const f = fixture({ executor: { start: (callbacks) => signals.push(callbacks), stop() {}, dispose() {} } }, isolated.REELAY_GENERATION_TASKS.createService);
   const task = f.service.submit(input());
   for (const value of [NaN, Infinity, "40", undefined, -5]) signals[0].onProgress(value);
   assert.equal(task.progress, 0);

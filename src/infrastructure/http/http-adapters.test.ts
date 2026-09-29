@@ -341,6 +341,7 @@ describe("HttpCanvasDocumentRepository", () => {
     await expect(repository.getCanvasDocument("project/one", "main canvas")).resolves.toEqual(documentDto);
     await expect(repository.save({
       projectId: documentDto.projectId,
+      expectedActorId: "original-actor",
       canvasId: documentDto.id,
       schemaVersion: documentDto.schemaVersion,
       content: documentDto.content,
@@ -357,6 +358,7 @@ describe("HttpCanvasDocumentRepository", () => {
     ]);
     expect(transport.requests[2]?.init.method).toBe("PUT");
     expect(JSON.parse(String(transport.requests[2]?.init.body))).toEqual({
+      expectedActorId: "original-actor",
       schemaVersion: 1,
       content: documentDto.content,
       expectedRevision: 3,

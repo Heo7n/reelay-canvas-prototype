@@ -95,6 +95,8 @@ export function createAppRouteObjects(services: ApplicationServices, experience 
                   return (
                     <LegacyCanvasRoute
                       canvasDocumentRepository={services.canvasDocumentRepository}
+                      sessionGateway={services.sessionGateway}
+                      projectRepository={services.projectRepository}
                       entityRepository={services.entityRepository}
                       mediaAssetRepository={services.mediaAssetRepository}
                       transientMediaRepository={services.transientMediaRepository}

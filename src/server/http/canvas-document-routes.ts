@@ -101,6 +101,15 @@ export async function registerCanvasDocumentRoutes(
         });
       }
 
+      // A different tab can replace the session between reauthentication and
+      // saving. This is a precondition only; authorization always uses the
+      // actor bound to this request, never the identity supplied in the body.
+      if (body.data.expectedActorId && body.data.expectedActorId !== actor.id) {
+        return reply.code(401).send({
+          error: { code: "session_actor_changed", message: "登录账号已变化，请使用原账号恢复保存。" },
+        });
+      }
+
       const { projectId, canvasId } = params.data;
       const project = await capabilities.getProjectById(actor.id, projectId);
       if (!project) {

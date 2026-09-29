@@ -497,6 +497,36 @@ describe("organization project access API", () => {
     );
   });
 
+  it("rejects a canvas save after another tab changes the authenticated actor", async () => {
+    const creatorCookie = await login(app, "creator@reelay.test");
+    const editorCookie = await login(app, "linjing@reelay.test");
+    const creatorSession = await app.inject({ method: "GET", url: "/api/session", headers: { cookie: creatorCookie } });
+    const editorSession = await app.inject({ method: "GET", url: "/api/session", headers: { cookie: editorCookie } });
+    const creatorId = creatorSession.json().actor.id as string;
+    const editorId = editorSession.json().actor.id as string;
+    const url = "/api/projects/project-scifi-trailer/canvases/actor-bound/document";
+    const save = vi.spyOn(store, "saveCanvasDocument");
+    const payload = { schemaVersion: 1, expectedRevision: 0, expectedActorId: creatorId, content: canvasContent(["unsaved"]) };
+
+    // Both actors can edit this project: project permission alone would not
+    // prevent silently attributing the first actor's draft to the second.
+    const changedActor = await app.inject({ method: "PUT", url, headers: { cookie: editorCookie }, payload });
+    expect(changedActor.statusCode).toBe(401);
+    expect(changedActor.json().error.code).toBe("session_actor_changed");
+    expect(save).not.toHaveBeenCalled();
+    const unchanged = await app.inject({ method: "GET", url, headers: { cookie: creatorCookie } });
+    expect(unchanged.json()).toEqual({ document: null });
+
+    const recovered = await app.inject({ method: "PUT", url, headers: { cookie: creatorCookie }, payload });
+    expect(recovered.statusCode).toBe(201);
+    expect(recovered.json().document.revision).toBe(1);
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ actorId: creatorId }));
+    const separateEdit = await app.inject({ method: "PUT", url, headers: { cookie: editorCookie },
+      payload: { ...payload, expectedRevision: 1, expectedActorId: editorId, content: canvasContent(["own-edit"]) } });
+    expect(separateEdit.statusCode).toBe(200);
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ actorId: editorId }));
+  });
+
   it("uses project roles for every canvas document read and write", async () => {
     const adminCookie = await login(app, "creator@reelay.test");
     const editCookie = await login(app, "linjing@reelay.test");

@@ -1,8 +1,8 @@
 (function registerAgentGeneration(root) {
   "use strict";
 
-  function createController({ document, container, chatContainer, getScope, isGenerationMode, isEditable,
-    captureInput, clearDraft, restoreDraft, hasDraft, charge, refund, makeResult, capturePlacementTarget,
+  function createController({ document, container, chatContainer, service, getScope, isGenerationMode, isEditable,
+    captureInput, clearDraft, restoreDraft, hasDraft, capturePlacementTarget,
     placeResult, locateResult, showMessage, escapeHtml, assetPreview, renderPrompt, sanitizeUrl,
     placeAnchoredPopover, refreshIcons, getDemoPresets = () => [], preparePreviewInput = () => null,
     createPreviewHistory = null, selectionTrigger = null, beforeSelection = () => {},
@@ -18,13 +18,7 @@
     let selectionView;
     let removing = false;
     const recordGroups = root.REELAY_GENERATION_RECORD_GROUPS;
-    const service = root.REELAY_GENERATION_TASKS.createService({
-      makeId: () => window.crypto.randomUUID(), now: () => Date.now(),
-      setTimer: (fn, delay) => window.setTimeout(fn, delay), clearTimer: (id) => window.clearTimeout(id),
-      charge, refund, makeResult,
-      onRefund: (task) => showMessage(task.sourceSurface === "canvas" && task.status === "failed"
-        ? `正片生成失败，已返还 ${task.refunded} 积分` : `已返还 ${task.refunded} 积分`),
-    });
+    if (!service) throw new TypeError("Generation UI requires the application task service.");
     const finalView = createFinalInput && root.REELAY_DRAFT_VIDEO_CONTROLLER?.createController({
       document, getScope, isEditable, createFinalInput, showMessage, placeAnchoredPopover,
       onSubmit: (input, context) => submitFinalSnapshot(input, context),
@@ -86,9 +80,8 @@
     function submitSnapshot(input, scope) {
       const target = capturePlacementTarget(scope, input);
       if (!target) { showMessage("当前画布不可编辑，本次生成未提交"); return null; }
-      const task = service.submit({ input, scope });
+      const task = service.submit({ input, scope, onAccepted: (accepted) => beginPlacement(accepted, target) });
       if (!task) showMessage("积分不足，本次生成未提交");
-      else beginPlacement(task, target);
       return task;
     }
 
@@ -106,9 +99,8 @@
       sending = true;
       try {
         const task = service.submitFinal({ source: sourceAsset, scope, sourceSurface, cost: input.cost,
-          outputFormat: input.parameters?.outputFormat || "mp4" });
+          outputFormat: input.parameters?.outputFormat || "mp4", onAccepted: (accepted) => beginPlacement(accepted, target) });
         if (!task) { showMessage("本次生成未提交，请检查积分或样片有效期"); return null; }
-        beginPlacement(task, target);
         if (sourceSurface === "conversation") render();
         showMessage(sourceSurface === "canvas" ? "正片已提交，正在画布中生成" : "正片已提交，可在生成记录中查看进度");
         return task;
@@ -291,14 +283,14 @@
     function close() { selectionView?.close(); recordView.close(); finalView?.close(); }
     function dispose() {
       if (disposed) return;
-      disposed = true; close(); unsubscribe(); service.dispose(); selectionView?.dispose(); recordView.dispose(); finalView?.dispose();
-      for (const task of placementTargets.keys()) discardResult(task);
+      disposed = true; close();
+      for (const task of [...placementTargets.keys()]) service.invalidate(task, "projection-disposed");
+      unsubscribe(); selectionView?.dispose(); recordView.dispose(); finalView?.dispose();
       placementTargets.clear();
       for (const [target, name, fn, capture] of listeners) target.removeEventListener(name, fn, capture);
     }
-    function pageHide(event) { if (event.persisted) close(); else dispose(); }
     const listeners = [
-      [window, "reelay:generation-connect", connect, false], [window, "pagehide", pageHide, false],
+      [window, "reelay:generation-connect", connect, false],
     ];
     for (const [target, name, fn, capture] of listeners) target.addEventListener(name, fn, capture);
     connect();

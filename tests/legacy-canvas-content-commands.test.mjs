@@ -6,6 +6,7 @@ import vm from "node:vm";
 const context = vm.createContext({});
 context.window = context;
 vm.runInContext(await readFile(new URL("../src/config/prototype-config.js", import.meta.url), "utf8"), context);
+vm.runInContext(await readFile(new URL("../src/application/generation-task-service.js", import.meta.url), "utf8"), context);
 for (const file of ["canvas-prompt-document.js", "canvas-command-executor.js", "canvas-content-commands.js", "canvas-node-task-runner.js"]) {
   vm.runInContext(await readFile(new URL(`../src/legacy-canvas/${file}`, import.meta.url), "utf8"), context);
 }
@@ -92,22 +93,26 @@ test("generation started before a patch still completes on patched and untouched
     const h = harness([node("a"), node("b")]);
     let complete;
     const completed = [];
+    const service = context.REELAY_GENERATION_TASKS.createService({
+      makeId: () => "task-1", charge: () => true, refund: () => true,
+      makeResult: () => ({ id: "result", type: "image" }), cancelWindowMs: 5000, previewDurationMs: 7500,
+      executor: { start: ({ onComplete }) => { complete = onComplete; }, stop() {}, dispose() {} },
+    });
     const runner = context.REELAY_CANVAS_NODE_TASK_RUNNER.createCanvasNodeTaskRunner({
-      makeTaskId: () => "task-1",
-      setTimer: (callback) => { complete = callback; return 1; },
-      clearTimer: () => {},
+      service,
       resolveTarget: (scope) => h.canvas.nodes.find((item) => item.id === scope.nodeId),
       onStart: (_task, target) => { target.generating = true; },
       onComplete: (_task, target) => { target.generating = false; completed.push(target); },
       onCancel: () => {},
     });
     const target = h.canvas.nodes.find((item) => item.id === targetId);
-    runner.start({ kind: "generation", scope: { projectId: "project", canvasId: h.canvas.id, nodeId: targetId }, delayMs: 900 });
+    runner.start({ scope: { projectId: "project", canvasId: h.canvas.id, nodeId: targetId }, input: { mediaType: "image", cost: 0 } });
     assert.equal(h.execute([patch("nodes", h.canvas.nodes[0], { name: "edited during generation" })]).ok, true);
     complete();
     assert.deepEqual(completed, [target]);
     assert.equal(target.generating, false);
     runner.dispose();
+    service.dispose();
   }
 });
 

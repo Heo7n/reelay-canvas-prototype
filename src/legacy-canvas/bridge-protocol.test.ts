@@ -13,6 +13,7 @@ import {
   hostProjectAssetsMessageSchema,
   hostSaveErrorMessageSchema,
   hostSaveResultMessageSchema,
+  hostRecoveryMessageSchema,
   parseCanvasMessage,
 } from "./bridge-protocol";
 
@@ -25,6 +26,19 @@ const document = {
 };
 
 describe("legacy canvas bridge", () => {
+  it("requires explicit scope and an iframe instance for recovery snapshots and acknowledgements", () => {
+    const snapshot = { source: "reelay-legacy-canvas", type: "canvas:recovery-snapshot", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", projectId: "project", canvasId: "canvas", expectedRevision: 2, schemaVersion: 1, content: {} };
+    expect(parseCanvasMessage(snapshot)).toEqual(snapshot);
+    expect(parseCanvasMessage({ ...snapshot, actorId: "forged" })).toBeNull();
+    expect(parseCanvasMessage({ ...snapshot, expectedRevision: -1 })).toBeNull();
+    expect(parseCanvasMessage({ ...snapshot, instanceId: "" })).toBeNull();
+    const response = { source: "reelay-shell", type: "host:recovery", protocolVersion: 1, instanceId: "instance",
+      requestId: "request", projectId: "project", canvasId: "canvas", action: "resume", document: null, writable: true };
+    expect(hostRecoveryMessageSchema.parse(response)).toEqual(response);
+    expect(hostRecoveryMessageSchema.safeParse({ ...response, action: "overwrite" }).success).toBe(false);
+    expect(hostRecoveryMessageSchema.safeParse({ ...response, instanceId: undefined }).success).toBe(false);
+  });
   it("validates tag deletion confirmation without allowing canvas-owned workspace authority", () => {
     const command = { source: "reelay-legacy-canvas", type: "canvas:media-library-command", protocolVersion: 1,
       instanceId: "instance", requestId: "delete-tag", command: "delete-tag", space: "personal", tagId: "custom", expectedUsageCount: 2 };

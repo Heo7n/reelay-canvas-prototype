@@ -5,7 +5,7 @@
   const LEGACY_SOURCE = "reelay-legacy-canvas";
   const HOST_SOURCE = "reelay-shell";
   const ACCESS_MODES = new Set(["standalone", "loading", "editable", "readonly", "blocked"]);
-  const SAVE_ERROR_CODES = new Set(["conflict", "forbidden", "missing", "network"]);
+  const SAVE_ERROR_CODES = new Set(["conflict", "forbidden", "missing", "network", "authentication"]);
 
   function createCanvasPersistenceCoordinator(options = {}) {
     const instanceId = typeof options.instanceId === "string" ? options.instanceId.trim() : "";
@@ -59,6 +59,7 @@
       dirty: false,
       accessMode: isHosted() ? "loading" : "standalone",
       documentLoaded: false,
+      recoveryRequestId: null,
     };
 
     function setAccessMode(mode) {
@@ -107,6 +108,7 @@
       state.lastSavedSnapshot = "";
       state.dirty = false;
       state.documentLoaded = false;
+      state.recoveryRequestId = null;
       setAccessMode("loading");
     }
 
@@ -232,10 +234,18 @@
 
       state.inFlight = null;
       state.pendingAfterFlight = false;
-      if (message.code === "conflict") {
+      if (message.code === "conflict" || message.code === "authentication") {
+        // Capture edits made after the failed request, before locking cancels
+        // transient work. Recovery never uses the older in-flight snapshot.
+        const content = JSON.parse(serialize());
+        clearScheduledSave();
+        state.recoveryRequestId = message.requestId;
         state.blocked = true;
         setAccessMode("blocked");
-        onNotice("conflict");
+        onNotice(message.code);
+        send("canvas:recovery-snapshot", { requestId: message.requestId,
+          projectId: state.projectId, canvasId: state.canvasId,
+          expectedRevision: state.revision, schemaVersion: 1, content });
         return true;
       }
       if (message.code === "forbidden") {
@@ -252,6 +262,41 @@
       }
       onNotice("network");
       schedule(3000);
+      return true;
+    }
+
+    function recover(message) {
+      if (!state.recoveryRequestId || message.requestId !== state.recoveryRequestId
+        || message.instanceId !== instanceId || message.projectId !== state.projectId
+        || message.canvasId !== state.canvasId || !["resume", "replace"].includes(message.action)
+        || typeof message.writable !== "boolean"
+        || (message.document && !matchesDocumentScope(message.document))) return false;
+      let applied = false;
+      if (message.action === "resume") {
+        if (message.writable && (message.document?.revision || 0) === state.revision) {
+          state.blocked = false; state.writable = true;
+          state.recoveryRequestId = null;
+          setAccessMode("editable");
+          schedule(0);
+          applied = true;
+        }
+      } else if (message.document) {
+        state.hydrating = true;
+        try { applied = hydrate(message.document.content) === true; }
+        catch { applied = false; }
+        finally { state.hydrating = false; }
+        if (applied) {
+          state.revision = message.document.revision;
+          state.lastSavedSnapshot = serialize();
+          state.blocked = false; state.writable = message.writable;
+          state.recoveryRequestId = null;
+          setDirty(false);
+          setAccessMode(state.writable ? "editable" : "readonly");
+          onDocumentReady({ document: message.document, writable: state.writable });
+        }
+      }
+      send("canvas:recovery-applied", { requestId: message.requestId,
+        projectId: state.projectId, canvasId: state.canvasId, applied });
       return true;
     }
 
@@ -288,6 +333,7 @@
       if (message.type === "host:save-error" && message.protocolVersion === PROTOCOL_VERSION) {
         return acceptSaveError(message);
       }
+      if (message.type === "host:recovery" && message.protocolVersion === PROTOCOL_VERSION) return recover(message);
       return false;
     }
 

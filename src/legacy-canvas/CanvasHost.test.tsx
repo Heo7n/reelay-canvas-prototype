@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render as renderTestingLibrary, screen, waitFor } from "@testing-library/react";
 import { StrictMode, useState, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationError } from "../application/shared/ApplicationError";
 import type { CanvasDocument } from "../domain/canvas/canvas-document";
 import type { MediaLibraryCatalog } from "../domain/asset/media-library";
@@ -12,6 +12,12 @@ import { buildMediaUploadPolicy } from "../domain/asset/media-upload-policy";
 import { CanvasHost } from "./CanvasHost";
 
 afterEach(cleanup);
+beforeEach(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true,
+    value: function (this: HTMLDialogElement) { this.open = true; this.querySelector<HTMLElement>("[autofocus], button:not([disabled])")?.focus(); } });
+  Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true,
+    value: function (this: HTMLDialogElement) { this.open = false; } });
+});
 
 const document = {
   id: "main",
@@ -2192,6 +2198,7 @@ describe("CanvasHost", () => {
   });
 
   it.each([
+    ["authentication_required", "authentication"],
     ["conflict", "conflict"],
     ["forbidden", "forbidden"],
   ] as const)("maps application %s saves to a %s bridge error", async (applicationCode, code) => {
@@ -2220,6 +2227,43 @@ describe("CanvasHost", () => {
       },
       window.location.origin,
     ));
+  });
+
+  it("recovers authentication inside the existing iframe with captured edits and a reopenable paused banner", async () => {
+    const actor = { id: "original-actor", account: editableContext.actor.account, displayName: "Hoo", workspaceIds: [editableContext.workspaceId] };
+    const sessionGateway = { getCurrent: vi.fn(async () => ({ actor })), signInWithPassword: vi.fn(async () => ({ actor })), signOut: vi.fn() };
+    const projectRepository = { getById: vi.fn(async () => ({ id: "project-1", workspaceId: "organization-1", name: "项目", currentUserRole: "edit" as const,
+      accessKind: "private" as const, updatedAt: "2026-09-01T00:00:00Z", coverAssetId: null })), listByWorkspace: vi.fn(), create: vi.fn(), update: vi.fn(), moveToTrash: vi.fn() };
+    const save = vi.fn(async () => { throw new ApplicationError("authentication_required", "登录已失效"); });
+    render(<CanvasHost actorId={actor.id} recoveryServices={{ sessionGateway, projectRepository }}
+      repository={{ getCanvasDocument: vi.fn(async () => document), save }} context={editableContext} />);
+    const frame = await screen.findByTitle("Reelay 项目画布") as HTMLIFrameElement;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => dispatchCanvasMessage(frame, saveMessage("expired-save")));
+    const dialog = await screen.findByRole("dialog", { name: "恢复画布保存" });
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ expectedActorId: "original-actor" }));
+    expect(screen.getByRole("button", { name: "登录并恢复保存" })).toBeDisabled();
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:recovery-snapshot", protocolVersion: 1,
+      requestId: "expired-save", instanceId: canvasInstanceId, projectId: "project-1", canvasId: "main", expectedRevision: 2, schemaVersion: 1,
+      content: { kind: "reelay-legacy-canvas", version: 1, canvases: [{ id: "canvas", nodes: [{ id: "node", kind: "generator", prompt: "本地最新修改" }] }] } }));
+    fireEvent.click(screen.getByRole("button", { name: "稍后处理" }));
+    expect(dialog).not.toHaveAttribute("open"); expect(screen.getByText("保存已暂停，未保存修改仍在此页面")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "恢复保存" }));
+    expect(dialog).toHaveAttribute("open");
+    fireEvent.click(screen.getByRole("button", { name: "加载最新版本" }));
+    expect(screen.getByRole("button", { name: "保留当前修改" })).toHaveFocus();
+    expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ type: "host:recovery" }), window.location.origin);
+    fireEvent.click(screen.getByRole("button", { name: "保留当前修改" }));
+    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "password" } });
+    fireEvent.submit(screen.getByRole("button", { name: "登录并恢复保存" }).closest("form")!);
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "host:recovery", action: "resume", requestId: "expired-save" }), window.location.origin));
+    expect(sessionGateway.signInWithPassword).toHaveBeenCalledWith({ account: actor.account, password: "password" });
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(screen.getByTitle("Reelay 项目画布")).toBe(frame);
+    act(() => dispatchCanvasMessage(frame, { source: "reelay-legacy-canvas", type: "canvas:recovery-applied", protocolVersion: 1,
+      instanceId: canvasInstanceId, requestId: "expired-save", projectId: "project-1", canvasId: "main", applied: true }));
+    expect(screen.queryByRole("dialog", { name: "恢复画布保存" })).not.toBeInTheDocument();
+    expect(frame.closest("section")).toHaveAttribute("data-persistence-status", "dirty");
   });
 
   it("stops the iframe after a deleted project rejects an in-flight save", async () => {

@@ -10,6 +10,8 @@ import type { CanvasDocument } from "../domain/canvas/canvas-document";
 import type { MediaLibraryCatalog } from "../domain/asset/media-library";
 import type { MediaUploadPolicy } from "../domain/asset/media-upload-policy";
 import { useCanvasNavigation } from "./useCanvasNavigation";
+import { useCanvasSaveRecovery, type CanvasRecoveryServices } from "./useCanvasSaveRecovery";
+import { CanvasSaveRecoveryDialog } from "./CanvasSaveRecoveryDialog";
 import {
   hostDocumentMessageSchema,
   hostAssetCommandErrorMessageSchema,
@@ -34,6 +36,8 @@ import {
 } from "./bridge-protocol";
 
 interface CanvasHostProps {
+  actorId?: string;
+  recoveryServices?: CanvasRecoveryServices;
   context: LegacyCanvasContext;
   entityRepository?: EntityRepository;
   onCreateProject?: () => void;
@@ -80,7 +84,7 @@ function bridgeWorkspaceEntity(entity: WorkspaceEntity) {
   };
 }
 
-export function CanvasHost({ context, entityRepository, mediaAssetRepository, transientMediaRepository, onCreateProject, onLogout, onOpenAccountSettings, onThemeChange, onLaunchPromptConsumed, repository }: CanvasHostProps) {
+export function CanvasHost({ context, actorId, recoveryServices, entityRepository, mediaAssetRepository, transientMediaRepository, onCreateProject, onLogout, onOpenAccountSettings, onThemeChange, onLaunchPromptConsumed, repository }: CanvasHostProps) {
   const location = useLocation();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const initializedReadyGenerationRef = useRef(0);
@@ -133,7 +137,9 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
       : !progressiveAssetLoading || entityPersistenceAvailable),
     entity: entityPersistenceAvailable,
   };
-  const safeContext = useMemo(() => legacyCanvasContextSchema.parse(context), [context]);
+  const [recoveredWritable, setRecoveredWritable] = useState<boolean | null>(null);
+  const safeContext = useMemo(() => legacyCanvasContextSchema.parse({ ...context,
+    writable: context.writable && recoveredWritable !== false }), [context, recoveredWritable]);
   const projectAuthorizationKey = JSON.stringify((safeContext.projects ?? []).map((project) => project.id));
   const authorizedProjectIds = useMemo(
     () => new Set(JSON.parse(projectAuthorizationKey) as string[]),
@@ -172,6 +178,20 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     onTimeout: onNavigationTimeout,
     onCreateProject,
     onLogout,
+  });
+
+  const onRecovered = useCallback((document: CanvasDocument | null, writable: boolean, resumed: boolean) => {
+    authoritativeDocumentNeedsRefreshRef.current = false;
+    dirtyRef.current = resumed;
+    savingRef.current = 0;
+    setRecoveredWritable(writable);
+    setDocumentState({ status: "ready", document });
+    setPersistenceStatus(resumed ? "dirty" : "saved");
+    cancelPendingNavigation();
+  }, [cancelPendingNavigation]);
+  const { state: recoveryState, begin: beginRecovery, accept: acceptRecovery,
+    reset: resetRecovery, run: runRecovery } = useCanvasSaveRecovery({
+    context: safeContext, actorId, services: recoveryServices, repository, post: postToCanvas, onRecovered,
   });
 
   const sendInit = useCallback((instanceId: string): void => {
@@ -267,6 +287,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
 
   useEffect(() => {
     let active = true;
+    setRecoveredWritable(null);
     initializedReadyGenerationRef.current = 0;
     activeCanvasInstanceIdRef.current = null;
     seenCanvasInstanceIdsRef.current.clear();
@@ -514,7 +535,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
     let active = true;
     const sendSaveError = (
       requestId: string,
-      code: "conflict" | "forbidden" | "missing" | "network",
+      code: "conflict" | "forbidden" | "missing" | "network" | "authentication",
     ): void => {
       postToCanvas(hostSaveErrorMessageSchema.parse({
         source: "reelay-shell",
@@ -583,6 +604,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
       }
       if (message.type === "canvas:ready") {
         if (seenCanvasInstanceIdsRef.current.has(message.instanceId)) return;
+        resetRecovery();
         seenCanvasInstanceIdsRef.current.add(message.instanceId);
         activeCanvasInstanceIdRef.current = message.instanceId;
         setProgressiveAssetLoading(progressiveCanvasInstanceIdsRef.current.has(message.instanceId));
@@ -600,6 +622,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
         return;
       }
       if (message.instanceId !== activeCanvasInstanceIdRef.current) return;
+      if (acceptRecovery(message)) return;
       if (message.type === "canvas:media-library-command") {
         const library = mediaAssetRepository?.library;
         if (!safeContext.capabilities?.assetPersistence || !library) {
@@ -1099,6 +1122,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
       const sourceFrame = event.source;
       const sourceInstanceId = message.instanceId;
       void repository.save({
+        ...(actorId ? { expectedActorId: actorId } : {}),
         projectId: safeContext.projectId,
         canvasId: safeContext.canvasId,
         schemaVersion: message.schemaVersion,
@@ -1156,7 +1180,13 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           savingRef.current = Math.max(0, savingRef.current - 1);
           setPersistenceStatus("error");
           cancelPendingNavigation();
+          if (isApplicationError(error, "authentication_required")) {
+            beginRecovery("authentication", message.requestId, message.instanceId);
+            sendSaveError(message.requestId, "authentication");
+            return;
+          }
           if (isApplicationError(error, "conflict")) {
+            beginRecovery("conflict", message.requestId, message.instanceId);
             sendSaveError(message.requestId, "conflict");
             return;
           }
@@ -1178,7 +1208,7 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
       active = false;
       window.removeEventListener("message", handleMessage);
     };
-  }, [authorizedProjectIds, cancelPendingNavigation, entityRepository, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, onThemeChange, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.capabilities?.transientMediaUpload, safeContext.projectId, safeContext.workspaceId, safeContext.workspace.role, safeContext.writable, transientMediaRepository]);
+  }, [acceptRecovery, actorId, beginRecovery, resetRecovery, authorizedProjectIds, cancelPendingNavigation, entityRepository, finishPendingNavigation, mediaAssetRepository, onCreateProject, onOpenAccountSettings, onThemeChange, postToCanvas, queueNavigation, refreshAuthoritativeDocument, repository, safeContext.canvasId, safeContext.capabilities?.projectSwitcher, safeContext.capabilities?.transientMediaUpload, safeContext.projectId, safeContext.workspaceId, safeContext.workspace.role, safeContext.writable, transientMediaRepository]);
 
   return (
     <section
@@ -1214,6 +1244,8 @@ export function CanvasHost({ context, entityRepository, mediaAssetRepository, tr
           )}
         </div>
       ) : null}
+      <CanvasSaveRecoveryDialog account={safeContext.actor.account}
+        recovery={{ state: recoveryState, begin: beginRecovery, accept: acceptRecovery, reset: resetRecovery, run: runRecovery }} />
     </section>
   );
 }

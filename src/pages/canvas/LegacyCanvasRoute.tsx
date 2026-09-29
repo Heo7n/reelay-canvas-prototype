@@ -3,6 +3,8 @@ import { Navigate, useParams, useSubmit } from "react-router-dom";
 import type { CanvasDocumentRepository } from "../../application/canvases/CanvasDocumentRepository";
 import type { EntityRepository } from "../../application/assets/EntityRepository";
 import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
+import type { SessionGateway } from "../../application/session/SessionGateway";
+import type { ProjectRepository } from "../../application/projects/ProjectRepository";
 import { routePaths } from "../../app/routes";
 import { useWorkspaceRouteData } from "../../app/useWorkspaceRouteData";
 import { CanvasHost } from "../../legacy-canvas/CanvasHost";
@@ -16,13 +18,15 @@ import type { TransientMediaRepository } from "../../application/assets/Transien
 import { takeProjectLaunchIntent } from "../home/launch-intent";
 
 interface LegacyCanvasRouteProps {
+  sessionGateway?: SessionGateway;
+  projectRepository?: ProjectRepository;
   transientMediaRepository?: TransientMediaRepository;
   canvasDocumentRepository: CanvasDocumentRepository;
   entityRepository: EntityRepository;
   mediaAssetRepository: MediaAssetRepository;
 }
 
-export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, mediaAssetRepository, transientMediaRepository }: LegacyCanvasRouteProps) {
+export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, mediaAssetRepository, transientMediaRepository, sessionGateway, projectRepository }: LegacyCanvasRouteProps) {
   const { theme, setTheme } = useTheme();
   const launchScopeRef = useRef<string | undefined>(undefined);
   const [launchIntent, setLaunchIntent] = useState<{ scope: string; prompt: string } | null>(null);
@@ -70,6 +74,8 @@ export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, 
   return (
     <>
       <CanvasHost
+        actorId={actor.id}
+        recoveryServices={sessionGateway && projectRepository ? { sessionGateway, projectRepository } : undefined}
         repository={canvasDocumentRepository}
         entityRepository={entityRepository}
         mediaAssetRepository={mediaAssetRepository}

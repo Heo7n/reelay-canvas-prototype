@@ -42,13 +42,14 @@ export class HttpCanvasDocumentRepository implements CanvasDocumentRepository {
   }
 
   async save(input: SaveCanvasDocumentInput): Promise<CanvasDocument> {
-    const { projectId, canvasId, schemaVersion, content, expectedRevision } = input;
+    const { projectId, canvasId, schemaVersion, content, expectedRevision, expectedActorId } = input;
     const response = await this.http.read(
       documentPath(projectId, canvasId),
       CanvasDocumentResponseDtoSchema,
       {
         method: "PUT",
         body: JSON.stringify({
+          ...(expectedActorId ? { expectedActorId } : {}),
           schemaVersion,
           content,
           expectedRevision,

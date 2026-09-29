@@ -12,14 +12,14 @@ const sources = await Promise.all([
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const catalog = await readFile(new URL("../data/model-catalog.js", import.meta.url), "utf8");
 
-function fixture(t, { agent = false, parameters = {} } = {}) {
+function fixture(t, { agent = false, parameters = {}, synchronous = false } = {}) {
   const dom = new JSDOM('<!doctype html><body><button id="anchor">生成成片</button><div id="records"></div><div id="chat"></div></body>', { runScripts: "outside-only" });
   const { window } = dom; const { document } = window;
   installCanvasIcons(window);
   let time = 100000; let timerId = 0; let counter = 0;
   let scope = { projectId: "project", canvasId: "canvas", conversationId: "chat" };
   let editable = true; let generationMode = true; let balance = 3000; let cleared = 0;
-  const timers = new Map(); const submissions = []; const messages = []; const placements = []; const targets = []; const restored = [];
+  const timers = new Map(); const submissions = []; const messages = []; const placements = []; const targets = []; const restored = []; const discarded = [];
   window.Date.now = () => time;
   window.setTimeout = (callback, delay) => { const id = ++timerId; timers.set(id, { at: time + delay, callback }); return id; };
   window.clearTimeout = (id) => timers.delete(id);
@@ -41,19 +41,32 @@ function fixture(t, { agent = false, parameters = {} } = {}) {
   }
   let actions;
   let controller;
+  let taskService;
   if (agent) {
     window.REELAY_GENERATION_RECORD_VIEW = { createController(options) {
       actions = options.onAction;
       return { render() {}, close() {}, dispose() {}, observeTask() {} };
     } };
+    const service = window.REELAY_GENERATION_TASKS.createService({
+      makeId: () => window.crypto.randomUUID(), now: () => time,
+      executor: synchronous ? { start({ onComplete }) { onComplete(); return true; }, stop() {}, dispose() {} }
+        : window.REELAY_SIMULATED_GENERATION_EXECUTOR.createExecutor({ now: () => time }),
+      draftPolicy: policy, cancelWindowMs: 5000, previewDurationMs: 7500,
+      charge: (cost) => { if (balance < cost) return false; balance -= cost; return true; },
+      refund: (cost) => { balance += cost; return true; },
+      makeResult: () => ({ id: `result-${++counter}`, type: "video", url: "/generated.mp4" }),
+      onRefund: (task) => messages.push(`已返还 ${task.refunded} 积分`),
+    });
+    taskService = service;
     controller = window.REELAY_AGENT_GENERATION.createController({
+      service,
       document, container: document.querySelector("#records"), chatContainer: document.querySelector("#chat"),
       getScope: () => scope, isGenerationMode: () => generationMode, isEditable: () => editable,
       captureInput: () => input, clearDraft: () => { cleared++; }, restoreDraft: (value) => { restored.push(value); return true; },
-      hasDraft: () => false, charge: (cost) => { if (balance < cost) return false; balance -= cost; return true; },
-      refund: (cost) => { balance += cost; return true; }, makeResult: () => ({ id: `result-${++counter}`, type: "video", url: "/generated.mp4" }),
+      hasDraft: () => false,
       capturePlacementTarget: (value, submitted) => { const target = { scope: { ...value }, input: submitted }; targets.push(target); return target; },
       placeResult: (task, target) => { placements.push({ task, target }); return { nodeId: `node-${task.id}`, canvasId: target.scope.canvasId }; },
+      discardResult: (task) => discarded.push(task),
       locateResult: () => true, showMessage: (message) => messages.push(message), createFinalInput,
     });
   } else {
@@ -62,7 +75,7 @@ function fixture(t, { agent = false, parameters = {} } = {}) {
       onSubmit: (...args) => { submissions.push(args); return { id: "final-task" }; }, showMessage: (message) => messages.push(message),
     });
   }
-  t.after(() => { controller.dispose(); window.close(); });
+  t.after(() => { controller.dispose(); taskService?.dispose(); window.close(); });
   const anchor = document.querySelector("#anchor");
   anchor.getBoundingClientRect = () => ({ left: 100, top: 400, right: 200, bottom: 432, width: 100, height: 32 });
   function open() {
@@ -74,13 +87,45 @@ function fixture(t, { agent = false, parameters = {} } = {}) {
     time += amount;
     for (const [id, timer] of [...timers]) if (timer.at <= time) { timers.delete(id); timer.callback(); }
   }
-  return { window, document, controller, sourceAsset, input, submissions, messages, placements, targets, restored, timers, open, submit, advance, anchor,
+  return { window, document, controller, sourceAsset, input, submissions, messages, placements, targets, restored, discarded, timers, open, submit, advance, anchor,
     get scope() { return scope; }, setScope(value) { scope = value; }, setEditable(value) { editable = value; },
     setMode(value) { generationMode = value; }, get balance() { return balance; }, get cleared() { return cleared; },
     action: (...args) => actions(...args), query: (selector) => document.querySelector(selector),
     position() { for (const [id, callback] of [...frames]) { frames.delete(id); callback(); } },
   };
 }
+
+test("ordinary and final submissions bind their canvas target before synchronous executor completion", (t) => {
+  const f = fixture(t, { agent: true, synchronous: true });
+  const ordinary = f.controller.submit();
+  assert.equal(ordinary.status, "succeeded");
+  assert.equal(ordinary.addedNodeId, `node-${ordinary.id}`);
+  f.open(); f.submit();
+  const final = f.controller.service.list().find((task) => task.input.generationStage === "final");
+  assert.equal(final.status, "succeeded");
+  assert.equal(final.addedNodeId, `node-${final.id}`);
+  assert.equal(f.placements.length, 2);
+});
+
+test("closing UI retains delivery while adapter disposal invalidates only its owned placements without refund", (t) => {
+  const f = fixture(t, { agent: true });
+  const task = f.controller.submit();
+  f.controller.close(); f.advance(7500);
+  assert.equal(task.status, "succeeded");
+  assert.equal(f.placements.length, 1);
+  const pending = f.controller.submit();
+  const independent = f.controller.service.submit({ sourceSurface: "canvas", scope: { projectId: "project", canvasId: "canvas", nodeId: "native" }, input: f.input });
+  const chargedBalance = f.balance;
+  f.controller.dispose();
+  assert.equal(pending.status, "canceled");
+  assert.equal(pending.cancellationReason, "projection-disposed");
+  assert.equal(pending.refunded, 0);
+  assert.equal(f.discarded.includes(pending), true);
+  assert.equal(f.balance, chargedBalance);
+  f.advance(7500);
+  assert.equal(independent.status, "succeeded");
+  assert.equal(f.placements.length, 1);
+});
 
 test("compact sample popover fixes 1080P, chooses a model format and submits the original input", (t) => {
   const f = fixture(t); const before = plain(f.sourceAsset);

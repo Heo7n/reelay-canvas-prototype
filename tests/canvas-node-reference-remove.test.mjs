@@ -19,21 +19,24 @@ function harness() {
     referenceOrder: ["asset:c", "connection:upstream", "asset:b", "asset:a"] };
   const canvas = { nodes: [node], undoStack: [] };
   let writable = true;
+  let saves = 0;
   const state = { nodes: canvas.nodes, get undoStack() { return canvas.undoStack; } };
   const context = vm.createContext({ state, requireCanvasMutation: () => writable,
     pushUndoAction: (action) => canvas.undoStack.push(action),
     render() {}, setSelection() {}, hydrateAssetMetadata() {}, showActionToast() {},
+    scheduleCanvasDocumentSave() { saves += 1; },
     canvasNodeLayoutTransition: { finishAll() {} }, promptEditors: { clearHistory() {} } });
   for (const name of ["removeAssetsFromGeneratorNode", "undoLastAction", "commitGenerationUndoBoundary"]) {
     vm.runInContext(functionSource(name), context);
   }
-  return { context, canvas, node, a, b, c, setWritable(value) { writable = value; } };
+  return { context, canvas, node, a, b, c, get saves() { return saves; }, setWritable(value) { writable = value; } };
 }
 
 test("reference removal restores positions without replacing surviving assets or reference order", () => {
   const h = harness();
   const order = h.node.referenceOrder;
   assert.equal(h.context.removeAssetsFromGeneratorNode(h.node, ["a", "b", "missing"]), 2);
+  assert.equal(h.saves, 1);
   assert.deepEqual(h.node.assets.map((asset) => asset.id), ["c"]);
   assert.equal(h.node.activeAssetId, "c");
   assert.equal(h.node.referenceOrder, order);
@@ -41,6 +44,7 @@ test("reference removal restores positions without replacing surviving assets or
   const added = { id: "later", duration: 7 };
   h.node.assets.push(added);
   h.context.undoLastAction();
+  assert.equal(h.saves, 2);
   assert.deepEqual(h.node.assets.map((asset) => asset.id), ["a", "b", "c", "later"]);
   assert.equal(h.node.assets[2], h.c);
   assert.equal(h.node.assets[2].duration, 17);
@@ -72,6 +76,7 @@ test("invalid, readonly, and generating nodes cannot remove references or create
   assert.equal(h.context.removeAssetsFromGeneratorNode({ ...h.node }, ["b"]), 0);
   assert.equal(h.context.removeAssetsFromGeneratorNode(h.node, ["missing"]), 0);
   assert.equal(h.canvas.undoStack.length, 0);
+  assert.equal(h.saves, 0);
   assert.equal(h.node.assets.length, 3);
 });
 

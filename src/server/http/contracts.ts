@@ -37,6 +37,7 @@ export const SaveCanvasDocumentBodySchema = z
   .object({
     schemaVersion: z.number().int().positive().max(2_147_483_647),
     expectedRevision: z.number().int().nonnegative().max(2_147_483_647),
+    expectedActorId: z.string().trim().min(1).max(160).optional(),
     content: z.json(),
   })
   .strict();

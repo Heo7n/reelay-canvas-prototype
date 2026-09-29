@@ -163,9 +163,16 @@ export const hostSaveErrorMessageSchema = z
     type: z.literal("host:save-error"),
     protocolVersion: z.literal(1),
     requestId: z.string().min(1),
-    code: z.enum(["conflict", "forbidden", "missing", "network"]),
+    code: z.enum(["conflict", "forbidden", "missing", "network", "authentication"]),
   })
   .strict();
+
+export const hostRecoveryMessageSchema = z.object({
+  source: z.literal("reelay-shell"), type: z.literal("host:recovery"), protocolVersion: z.literal(1),
+  instanceId: canvasInstanceIdSchema, requestId: bridgeRequestIdSchema,
+  projectId: bridgeIdentifierSchema, canvasId: bridgeIdentifierSchema,
+  action: z.enum(["resume", "replace"]), document: bridgeCanvasDocumentSchema.nullable(), writable: z.boolean(),
+}).strict();
 
 export const hostProjectAssetsMessageSchema = z.object({
   source: z.literal("reelay-shell"),
@@ -405,6 +412,18 @@ export const canvasMessageSchema = z.discriminatedUnion("type", [
     schemaVersion: z.number().int().min(1),
     expectedRevision: z.number().int().min(0),
     content: z.unknown(),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"), type: z.literal("canvas:recovery-snapshot"), protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema, requestId: bridgeRequestIdSchema,
+    projectId: bridgeIdentifierSchema, canvasId: bridgeIdentifierSchema,
+    expectedRevision: z.number().int().nonnegative(), schemaVersion: z.literal(1), content: z.unknown(),
+  }).strict(),
+  z.object({
+    source: z.literal("reelay-legacy-canvas"), type: z.literal("canvas:recovery-applied"), protocolVersion: z.literal(1),
+    instanceId: canvasInstanceIdSchema, requestId: bridgeRequestIdSchema,
+    projectId: bridgeIdentifierSchema, canvasId: bridgeIdentifierSchema,
+    applied: z.boolean(),
   }).strict(),
   z.object({
     source: z.literal("reelay-legacy-canvas"),

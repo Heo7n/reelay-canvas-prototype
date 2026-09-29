@@ -362,7 +362,8 @@ test("deleting a conversation placeholder cannot resurrect it on undo or task co
 function harness(t, { hosted = false, publicHistory = false, entryOnly = false } = {}) {
   const dom = new JSDOM(html, { url: "http://reelay.test/index.html", runScripts: "outside-only", pretendToBeVisual: true });
   const { window } = dom;
-  const hostWindow = { postMessage() {} };
+  const postedMessages = [];
+  const hostWindow = { postMessage(message) { postedMessages.push(message); } };
   if (hosted) Object.defineProperty(window, "parent", { configurable: true, value: hostWindow });
   const timers = new Map();
   const mediaElements = [];
@@ -405,12 +406,14 @@ function harness(t, { hosted = false, publicHistory = false, entryOnly = false }
     // Most task tests use an empty history fixture; publicHistory exercises the complete shipped entry.
     if (!publicHistory && path === "./src/config/generation-history-presets.js") continue;
     window.eval(source + (path === "./app.js"
-      ? "\nwindow.generationIntegration = { state, agentGeneration, agentModels, agentParameters, agentReferences, agentHistory, canvasRuntimeStore, promptEditors };"
+      ? "\nwindow.generationIntegration = { state, agentGeneration, generationTasks, canvasNodeTasks, canvasNodeDragController, canvasGroupInteractionController, canvasPersistence, agentModels, agentParameters, agentReferences, agentHistory, canvasRuntimeStore, promptEditors };"
       : ""));
   }
   const exposed = window.generationIntegration;
   t.after(() => {
     exposed.agentGeneration.dispose();
+    exposed.canvasNodeTasks.dispose();
+    exposed.generationTasks.dispose();
     exposed.promptEditors.destroy();
     window.close();
   });
@@ -455,7 +458,7 @@ function harness(t, { hosted = false, publicHistory = false, entryOnly = false }
   const dispatchHost = (data) => window.dispatchEvent(new window.MessageEvent("message", {
     data, source: hostWindow, origin: window.location.origin,
   }));
-  return { window, document: window.document, ...exposed, service, first, second, timers, mediaElements, advance, record, editor, draft, send, click, dispatchHost };
+  return { window, document: window.document, ...exposed, service, first, second, timers, mediaElements, advance, record, editor, draft, send, click, dispatchHost, postedMessages };
 }
 
 function withReferences(h) {
@@ -471,6 +474,115 @@ function withReferences(h) {
   h.draft(document);
   return { entries: plain(entries), document: plain(document), references: plain(h.agentReferences.getAssets()) };
 }
+
+function hostedEditableHarness(t) {
+  const h = harness(t, { hosted: true });
+  const content = plain(h.window.createCanvasDocumentSnapshot());
+  const context = { protocolVersion: 1, projectId: h.state.projectId, projectName: "保存检查", workspaceId: "workspace",
+    canvasId: "route-canvas", writable: true, theme: "light" };
+  let revision = 1;
+  h.dispatchHost({ source: "reelay-shell", type: "host:init", context });
+  h.dispatchHost({ source: "reelay-shell", type: "host:document", protocolVersion: 1, writable: true,
+    document: { id: context.canvasId, projectId: context.projectId, schemaVersion: 1, revision, content } });
+  h.postedMessages.length = 0;
+  const save = () => {
+    h.advance(800);
+    const message = h.postedMessages.findLast((item) => item.type === "canvas:save");
+    assert.ok(message, "an explicit content commit must reach the host");
+    h.dispatchHost({ source: "reelay-shell", type: "host:save-result", protocolVersion: 1, requestId: message.requestId,
+      document: { id: context.canvasId, projectId: context.projectId, schemaVersion: 1, revision: ++revision, content: message.content } });
+    h.postedMessages.length = 0;
+    assert.equal(h.canvasPersistence.getState().dirty, false);
+    return message.content;
+  };
+  return { ...h, save, active: () => h.window.getActiveCanvas() };
+}
+
+test("view rendering, panel toggles and media toolbar dismissal never dirty a clean hosted document", (t) => {
+  const h = hostedEditableHarness(t);
+  const node = h.window.addNodeAt(200, 180, "image", { useLastPreset: false });
+  h.save();
+  h.window.handleAction(node, "param-panel");
+  h.window.handleAction(node, "model-panel");
+  h.window.handleAction(node, "advanced-settings-toggle");
+  h.state.mediaToolbarNodeId = node.id;
+  h.document.body.dispatchEvent(new h.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  h.window.clearSelection(); h.window.render(); h.window.applyTransform();
+  h.advance(1000);
+  assert.equal(h.canvasPersistence.getState().dirty, false);
+  assert.equal(h.postedMessages.some((message) => message.type === "canvas:save" || (message.type === "canvas:dirty" && message.dirty)), false);
+});
+
+test("node creation, references, deletion and undo save explicitly without rendering side effects", (t) => {
+  const h = hostedEditableHarness(t);
+  const node = h.window.addNodeAt(200, 180, "image", { useLastPreset: false });
+  assert.equal(h.save().canvases[0].nodes[0].id, node.id);
+  h.window.addAssetsToGeneratorNode(node, [{ id: "reference", type: "image", url: "/reference.png", width: 100, height: 100 }]);
+  assert.equal(h.save().canvases[0].nodes[0].assets.length, 1);
+  h.window.removeAssetsFromGeneratorNode(node, [node.assets[0].id]);
+  assert.equal(h.save().canvases[0].nodes[0].assets.length, 0);
+  h.window.setSelection([node.id], node.id); h.window.deleteSelectedNodes(true);
+  assert.equal(h.save().canvases[0].nodes.length, 0);
+  h.window.undoLastAction();
+  assert.equal(h.save().canvases[0].nodes[0].id, node.id);
+});
+
+test("node and group gesture commits save while canceled previews leave a clean document", (t) => {
+  const h = hostedEditableHarness(t);
+  const node = h.window.addNodeAt(200, 180, "image", { useLastPreset: false }); h.save();
+  const drag = () => ({ type: "drag-nodes", ids: [node.id], origins: [{ id: node.id, x: node.x, y: node.y }],
+    startClientX: 0, startClientY: 0, groups: [], isDuplicate: false });
+  const canceled = drag(); h.canvasNodeDragController.move(canceled, { clientX: 50, clientY: 40 });
+  h.canvasNodeDragController.finish(canceled, { cancelled: true });
+  assert.equal(h.canvasPersistence.getState().dirty, false);
+  const committed = drag(); h.canvasNodeDragController.move(committed, { clientX: 50, clientY: 40 });
+  h.canvasNodeDragController.finish(committed);
+  assert.equal(h.save().canvases[0].nodes[0].x, node.x);
+  const second = h.window.addNodeAt(500, 180, "image", { useLastPreset: false }); h.save();
+  h.window.setSelection([node.id, second.id], node.id); h.window.groupSelectedNodes(); h.save();
+  const group = h.active().groups[0];
+  const begin = h.canvasGroupInteractionController.beginDrag(group, { pointerId: 1, clientX: 0, clientY: 0 }, h.document.body);
+  const action = h.canvasGroupInteractionController.promoteDrag(begin, { clientX: 35, clientY: 25 });
+  h.canvasGroupInteractionController.finish(action);
+  const saved = h.save();
+  assert.equal(saved.canvases[0].nodes[0].x, node.x); assert.equal(saved.canvases[0].groups[0].x, group.x);
+});
+
+test("a background node generation saves to its original canvas after the shared task completes", (t) => {
+  const h = hostedEditableHarness(t);
+  const node = h.window.addNodeAt(200, 180, "image", { useLastPreset: false });
+  node.prompt = "晨光下的树林"; h.save();
+  const canvasId = h.state.activeCanvasId;
+  assert.equal(h.window.startSimulatedGeneration(node), true);
+  h.window.switchCanvas(h.active().id === h.state.canvases[0].id ? h.state.canvases[1].id : h.state.canvases[0].id); h.save();
+  h.advance(7500);
+  const content = h.save();
+  assert.ok(content.canvases.find((canvas) => canvas.id === canvasId).nodes[0].generatedAsset);
+  assert.equal(h.service.list()[0].status, "succeeded");
+});
+
+test("group submission debits each accepted task and cancel refunds each task once", (t) => {
+  const h = harness(t);
+  const nodes = [0, 1].map((index) => {
+    const node = h.window.addNodeAt(200 + index * 200, 180, "image", { useLastPreset: false });
+    node.prompt = `树林 ${index}`; return node;
+  });
+  h.window.setSelection(nodes.map((node) => node.id), nodes[0].id); h.window.groupSelectedNodes();
+  const group = h.first.groups[0];
+  h.window.requestRunGroup(group); h.document.querySelector(".confirm-ok").click();
+  const tasks = h.service.list(); assert.equal(tasks.length, 2);
+  assert.ok(tasks.every((task) => task.charged > 0 && task.scope.nodeId));
+  assert.equal(h.state.account.credits, 3000 - tasks.reduce((total, task) => total + task.charged, 0));
+  for (const task of tasks) {
+    assert.equal(h.canvasNodeTasks.cancel(task.id), true); assert.equal(h.service.cancel(task), false);
+  }
+  assert.equal(h.state.account.credits, 3000); assert.equal(h.state.account.consumedCredits, 0);
+  h.window.requestRunGroup(group);
+  h.state.account.credits = tasks[0].input.cost;
+  h.document.querySelector(".confirm-ok").click();
+  assert.equal(h.service.list().length, 3, "only the still-affordable task is accepted after the confirmation wait");
+  assert.equal(h.state.account.credits, 0);
+});
 
 async function enablePreviewHistory(h) {
   for (const path of ["src/config/generation-demo-presets.js", "src/config/generation-history-presets.js"]) {
@@ -1590,7 +1702,8 @@ test("sample badge hover stays silent in readonly canvas and leave cancels an ea
   assert.deepEqual(messages, [], "passive pointer movement never shows a mutation denial toast");
   badge.click();
   assert.equal(messages.length, 1, "explicit activation still explains the edit restriction");
-  assert.equal(h.service.list().length, 0);
+  assert.equal(h.service.list().length, 1, "the existing node sample is now owned by the shared service; hover submits nothing");
+  assert.equal(h.service.list()[0].input.generationStage, undefined);
 });
 
 

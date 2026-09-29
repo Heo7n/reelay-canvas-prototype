@@ -85,6 +85,7 @@
           groups: action.groups,
         });
       }
+      if (action.isDuplicate || action.moved) options.onCommit?.();
       if (finishOptions.render !== false) options.render();
     }
 

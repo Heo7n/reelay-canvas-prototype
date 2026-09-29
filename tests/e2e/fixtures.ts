@@ -14,20 +14,31 @@ const sampleMedia = new Map([
 ]);
 
 type BrowserTestServer = Awaited<ReturnType<typeof startBrowserTestServer>>;
+type ExpectedHttpError = { pathname: string; status: number; remaining: number };
 
-export const test = base.extend<{ runtimeGuard: void }, { browserTestServer: BrowserTestServer }>({
+export const test = base.extend<{ runtimeGuard: void; expectedHttpErrors: ExpectedHttpError[] }, { browserTestServer: BrowserTestServer }>({
+  expectedHttpErrors: async ({}, use) => { await use([]); },
   browserTestServer: [async ({}, use) => {
     const server = await startBrowserTestServer();
     try { await use(server); } finally { await server.close(); }
   }, { scope: "worker" }],
   baseURL: async ({ browserTestServer }, use) => { await use(browserTestServer.origin); },
-  runtimeGuard: [async ({ page, context, baseURL, browserTestServer }, use) => {
+  runtimeGuard: [async ({ page, context, baseURL, browserTestServer, expectedHttpErrors }, use) => {
     const { origin } = browserTestServer;
     expect(baseURL, "E2E must use the isolated in-memory HTTP server").toBe(origin);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => {
-      if (message.type() === "error") errors.push(message.text());
+      if (message.type() !== "error") return;
+      // Recovery tests deliberately cause a single failed save through the real
+      // HTTP boundary. Permit only that browser resource diagnostic, never an
+      // application exception or another endpoint's error.
+      const location = message.location().url;
+      const expected = expectedHttpErrors.find((item) => item.remaining > 0
+        && location === `${origin}${item.pathname}`
+        && message.text().startsWith(`Failed to load resource: the server responded with a status of ${item.status} `));
+      if (expected) expected.remaining -= 1;
+      else errors.push(message.text());
     });
     await context.route(/^https?:\/\//, async (route) => {
       const url = new URL(route.request().url());

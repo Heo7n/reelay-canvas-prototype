@@ -512,17 +512,36 @@ const canvasNodeLayoutTransition = canvasNodeLayoutTransitionFactory.createNodeL
 });
 const canvasNodeTaskRunnerFactory = window.REELAY_CANVAS_NODE_TASK_RUNNER;
 if (!canvasNodeTaskRunnerFactory) throw new Error("Canvas node task runner is unavailable.");
+const generationTasks = window.REELAY_GENERATION_TASKS.createService({
+  makeId: () => crypto.randomUUID(), now: () => Date.now(),
+  executor: window.REELAY_SIMULATED_GENERATION_EXECUTOR.createExecutor({
+    now: () => Date.now(), setTimer: (callback, delay) => window.setTimeout(callback, delay),
+    clearTimer: (id) => window.clearTimeout(id),
+  }),
+  draftPolicy: window.REELAY_DRAFT_VIDEO,
+  cancelWindowMs: prototypeConfig.generationCancelWindowMs,
+  previewDurationMs: prototypeConfig.generationDurationMs,
+  charge(amount) { if (!hasEnoughCredits(amount)) return false; chargeCredits(amount); return true; },
+  refund(amount) {
+    state.account.credits += amount;
+    state.account.consumedCredits = Math.max(0, state.account.consumedCredits - amount);
+    syncCreditDisplay(); return true;
+  },
+  makeResult(task) {
+    if (task.scope.nodeId) return createGeneratedAsset({ id: task.scope.nodeId, ...task.input.parameters });
+    return { ...selectSimulationMedia(task.input.mediaType, task.input.sourceDraftAsset), id: crypto.randomUUID(),
+      displayName: task.input.mediaType === "image" ? "模拟生成图片" : "模拟生成视频",
+      source: "generation", generationTaskId: task.id };
+  },
+  onRefund: (task) => showActionToast(task.input.generationStage === "final" && task.status === "failed"
+    ? `正片生成失败，已返还 ${task.refunded} 积分` : `已返还 ${task.refunded} 积分`),
+});
 const canvasNodeTasks = canvasNodeTaskRunnerFactory.createCanvasNodeTaskRunner({
-  makeTaskId: () => crypto.randomUUID(),
-  setTimer: (callback, delay) => window.setTimeout(callback, delay),
-  clearTimer: (timerId) => window.clearTimeout(timerId),
-  now: () => Date.now(),
+  service: generationTasks,
   onProgress: syncNodeGenerationStatus,
   resolveTarget: resolveCanvasNodeTaskTarget,
   onStart: applyCanvasNodeTaskStart,
-  onComplete(task, node) {
-    if (task.kind === "generation") completeSimulatedGeneration(task, node);
-  },
+  onComplete: completeSimulatedGeneration,
   onCancel: applyCanvasNodeTaskCancellation,
 });
 let canvasAccessNoticeTimer = 0;
@@ -586,7 +605,8 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   onNotice(notice) {
     const messages = {
       "unsupported-document": "此画布数据版本暂不支持，已停止自动保存",
-      conflict: "画布已在其他窗口更新，请重新进入项目后继续",
+      conflict: "画布已有新版本，当前修改已保留，请选择恢复方式",
+      authentication: "登录已失效，自动保存已暂停，请使用原账号继续",
       forbidden: "当前项目为只读，可浏览但不能修改",
       missing: "项目已删除或无法访问，当前画布已停止保存",
       network: "画布暂时保存失败，正在等待重试",
@@ -1037,7 +1057,7 @@ function syncCanvasAccessUi() {
   const labels = {
     loading: "正在加载项目画布",
     readonly: "只读 · 可浏览和下载，不能编辑",
-    blocked: "画布已锁定 · 请重新加载后继续",
+    blocked: "画布暂时锁定，请先处理保存恢复提示",
   };
   const label = labels[mode];
   canvasAccessStatus.hidden = !label;
@@ -1090,7 +1110,7 @@ function requireCanvasMutation({ notify = true } = {}) {
   const messages = {
     loading: "项目画布仍在加载，暂时不能编辑",
     readonly: "当前为只读项目，可浏览但不能修改",
-    blocked: "画布当前不可编辑，请重新加载后继续",
+    blocked: "画布暂时锁定，请先处理保存恢复提示",
   };
   showActionToast(messages[canvasPersistence.getAccessMode()] || "当前画布不可编辑");
   canvasAccessNoticeTimer = window.setTimeout(() => {
@@ -1601,7 +1621,6 @@ function applyTransform() {
   renderGroupResizeOverlay();
   renderSelectionToolbar();
   renderMinimap();
-  scheduleCanvasDocumentSave();
   canvasToolbarMenus.sync();
   promptOptimization?.refresh();
   agentGeneration?.repositionFinal();
@@ -1908,6 +1927,7 @@ function setCanvasZoom(nextScale, anchorClientX, anchorClientY) {
   state.scale = clamp(nextScale, canvasScaleLimits.min, canvasScaleLimits.max);
   state.tx = clientX - rect.left - before.x * state.scale;
   state.ty = clientY - rect.top - before.y * state.scale;
+  scheduleCanvasDocumentSave();
   applyTransform();
   showZoomValueTip();
 }
@@ -1941,6 +1961,7 @@ function applyFitBounds(bounds, options = {}) {
   state.scale = nextScale;
   state.tx = frame.leftInset + frame.padding + (frame.availableWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale;
   state.ty = frame.padding + (frame.availableHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale;
+  scheduleCanvasDocumentSave();
   applyTransform();
 }
 
@@ -2020,6 +2041,7 @@ function fitCanvasToContent() {
     state.scale = 1;
     state.tx = 0;
     state.ty = 0;
+    scheduleCanvasDocumentSave();
     applyTransform();
     return;
   }
@@ -2036,6 +2058,7 @@ function centerCanvasOnWorld(worldX, worldY) {
   const rect = shell.getBoundingClientRect();
   state.tx = rect.width / 2 - worldX * state.scale;
   state.ty = rect.height / 2 - worldY * state.scale;
+  scheduleCanvasDocumentSave();
   applyTransform();
 }
 
@@ -2951,7 +2974,10 @@ function presetFrom(node) {
 
 function rememberPreset(node) {
   if (node?.kind !== "generator") return;
-  state.lastPreset = presetFrom(node);
+  const nextPreset = presetFrom(node);
+  if (JSON.stringify(nextPreset) === JSON.stringify(state.lastPreset)) return;
+  state.lastPreset = nextPreset;
+  scheduleCanvasDocumentSave();
 }
 
 function applyPreset(node, preset) {
@@ -3028,6 +3054,7 @@ function bringNodesToFront(nodes) {
   for (const node of nodes) {
     node.z = nextZ();
   }
+  if (nodes.length) scheduleCanvasDocumentSave();
 }
 
 function collapseInactiveNodes(activeId) {
@@ -4621,6 +4648,7 @@ function removeAssetsFromGeneratorNode(node, assetIds) {
   pushUndoAction({ type: "node-assets-remove", nodeId: node.id, removed,
     previousActiveAssetId, nextActiveAssetId: node.activeAssetId });
   node.panel = null;
+  scheduleCanvasDocumentSave();
   render();
   return removed.length;
 }
@@ -4772,6 +4800,7 @@ function hydrateAssetMetadata(asset, nodeId) {
   readAssetMetadata(asset).then((metadata) => {
     if (!Object.keys(metadata).length) return;
     Object.assign(asset, metadata);
+    scheduleCanvasDocumentSave();
     if (!nodeId || state.nodes.some((node) => node.id === nodeId)) render();
   });
 }
@@ -4843,13 +4872,12 @@ function createGeneratedAsset(parameterSnapshot) {
 }
 
 function getNodeGenerationStatus(node) {
-  const task = node.pendingGeneration
-    ? agentGeneration?.service.get(node.pendingGeneration.taskId) : canvasNodeTasks.get(node.generationTaskId);
+  const task = generationTasks.get(node.pendingGeneration?.taskId || node.generationTaskId);
   return { progress: task?.progress || 0, canCancel: Boolean(task?.canCancel) && isCanvasMutationAllowed() };
 }
 
 function syncNodeGenerationStatus(task, node) {
-  if (task.canvasId && task.canvasId !== state.activeCanvasId) return;
+  if (task.scope.canvasId !== state.activeCanvasId) return;
   const element = nodeLayer.querySelector(`[data-id="${node.id}"]`);
   window.REELAY_GENERATION_STATUS.update(element, getNodeGenerationStatus(node));
 }
@@ -5062,7 +5090,6 @@ const libraryReferencePicker = window.REELAY_CANVAS_LIBRARY_REFERENCE_PICKER.cre
 
 function render() {
   renderCanvasView();
-  scheduleCanvasDocumentSave();
 }
 
 function renderCanvasView() {
@@ -5733,6 +5760,7 @@ function enhanceEditableMedia(node) {
     asset.enhanced = true;
   }
   node.mediaMenuOpen = false;
+  scheduleCanvasDocumentSave();
   render();
   showActionToast(asset.type === "audio" ? "已应用音质增强模拟" : "已应用 HD 增强模拟");
 }
@@ -5970,34 +5998,23 @@ function resolveCanvasNodeTaskTarget({ projectId, canvasId, nodeId }) {
 }
 
 function applyCanvasNodeTaskStart(task, node) {
-  if (task.kind === "generation") {
-    if (task.inputs.charge) chargeCredits(task.inputs.cost);
-    node.generating = true;
-    node.generationTaskId = task.id;
-    node.preview = false;
-    node.generatedAsset = null;
-    node.expanded = false;
-    canvasCommandExecutor.discardFieldHistory(task.canvasId, "nodes", node.id, ["name"]);
-    node.name = "";
-  }
+  node.generating = true;
+  node.generationTaskId = task.id;
+  node.preview = false;
+  node.generatedAsset = null;
+  node.expanded = false;
+  canvasCommandExecutor.discardFieldHistory(task.scope.canvasId, "nodes", node.id, ["name"]);
+  node.name = "";
   node.panel = null;
+  scheduleCanvasDocumentSave();
   render();
 }
 
 function applyCanvasNodeTaskCancellation(task, node, reason) {
-  if (task.kind === "generation") {
-    if (node.generationTaskId !== task.id) return;
-    node.generating = false;
-    delete node.generationTaskId;
-    if (reason === "user-canceled") {
-      if (task.inputs.charge) {
-        state.account.credits += task.inputs.cost;
-        state.account.consumedCredits = Math.max(0, state.account.consumedCredits - task.inputs.cost);
-        syncCreditDisplay();
-      }
-      if (task.canvasId === state.activeCanvasId) render();
-    }
-  }
+  if (node.generationTaskId !== task.id) return;
+  node.generating = false;
+  delete node.generationTaskId;
+  if (["user-canceled", "failed"].includes(reason) && task.scope.canvasId === state.activeCanvasId) render();
 }
 
 function pushCanvasUndoAction(canvas, action) {
@@ -6097,9 +6114,9 @@ function commitGenerationUndoBoundary(canvas, nodeId) {
 }
 
 function completeSimulatedGeneration(task, node) {
-  const canvas = canvasRuntimeStore.getCanvas(task.canvasId);
-  if (!canvas || resolveCanvasNodeTaskTarget(task) !== node || node.kind !== "generator" || node.generationTaskId !== task.id) return;
-  const { parameterSnapshot } = task.inputs;
+  const canvas = canvasRuntimeStore.getCanvas(task.scope.canvasId);
+  if (!canvas || resolveCanvasNodeTaskTarget(task.scope) !== node || node.kind !== "generator" || node.generationTaskId !== task.id) return;
+  const parameterSnapshot = task.input.parameters;
   node.generating = false;
   delete node.generationTaskId;
   const outputMode = normalizeGeneratorMode(parameterSnapshot.mediaKind);
@@ -6117,7 +6134,7 @@ function completeSimulatedGeneration(task, node) {
     scheduleCanvasDocumentSave();
     return;
   }
-  const generatedAsset = createGeneratedAsset({ id: node.id, ...parameterSnapshot });
+  const generatedAsset = { ...task.result };
   if (generatedAsset.type !== outputMode) {
     if (canvas.id === state.activeCanvasId) {
       showActionToast("生成结果类型与节点类型不一致，本次结果未写入");
@@ -6126,11 +6143,7 @@ function completeSimulatedGeneration(task, node) {
     scheduleCanvasDocumentSave();
     return;
   }
-  if (task.inputs.draftInput) {
-    generatedAsset.generation = window.REELAY_DRAFT_VIDEO.createDraftProvenance({
-      input: task.inputs.draftInput, taskId: task.id, createdAt: task.inputs.createdAt,
-      scope: { projectId: task.projectId, canvasId: task.canvasId }, resultId: generatedAsset.id,
-    });
+  if (generatedAsset.generation?.stage === "draft") {
     generatedAsset.displayName = "视频样片";
   }
   node.preview = true;
@@ -6160,11 +6173,10 @@ function syncPromptOptimizationButton(button, node) {
   });
 }
 
-function startSimulatedGeneration(node, options = {}) {
+function startSimulatedGeneration(node) {
   if (!requireCanvasMutation()) return false;
   const canvas = getActiveCanvas();
   if (!canvas || node?.kind !== "generator" || !canvas.nodes.includes(node)) return false;
-  const { charge = true } = options;
   if (node.generating) return false;
   normalizeNodeParameters(node);
   if (!getNodePromptText(node).trim()) {
@@ -6198,7 +6210,7 @@ function startSimulatedGeneration(node, options = {}) {
     });
     return false;
   }
-  if (charge && !hasEnoughCredits(cost)) {
+  if (!hasEnoughCredits(cost)) {
     showConfirmDialog({
       title: "积分不足",
       body: `当前可用积分为 ${formatCredit(state.account.credits)}，本次生成预计需要 ${formatCredit(cost)} 积分。`,
@@ -6210,19 +6222,17 @@ function startSimulatedGeneration(node, options = {}) {
 
   const parameterSnapshot = createGenerationParameterSnapshot(node);
   const model = getModel(node);
-  const draftInput = model?.executionMode === "draft" ? {
-    mediaType: "video", modelId: model.id, modelName: model.name, cost,
+  const input = {
+    mediaType: parameterSnapshot.mediaKind, modelId: model.id, modelName: model.name, cost,
     prompt: parameterSnapshot.prompt, promptDocument: parameterSnapshot.promptDocument,
     parameters: parameterSnapshot,
     references: parameterSnapshot.referenceSnapshot.media.map((entry) => entry.asset),
     referenceSnapshot: parameterSnapshot.referenceSnapshot.media,
     parameterSummary: Object.values(getParamLabelParts(node)).join(""),
-  } : null;
+  };
   return Boolean(canvasNodeTasks.start({
-    kind: "generation",
     scope: { projectId: state.projectId, canvasId: canvas.id, nodeId: node.id },
-    inputs: { parameterSnapshot, cost, charge, draftInput, createdAt: Date.now() },
-    delayMs: prototypeConfig.generationDurationMs,
+    input,
   }));
 }
 
@@ -6643,6 +6653,7 @@ function handleAction(node, action, value) {
       removeAssetsFromGeneratorNode(node, [value]);
       return;
     case "focus-asset":
+      if (node.activeAssetId !== value) scheduleCanvasDocumentSave();
       node.activeAssetId = value;
       node.expanded = true;
       node.panel = null;
@@ -7576,6 +7587,7 @@ function deleteSelectedNodes(confirmed = false) {
   });
   clearSelection();
   state.activeGroupId = null;
+  scheduleCanvasDocumentSave();
   render();
 }
 
@@ -7739,6 +7751,7 @@ function undoLastAction() {
     }
   }
 
+  scheduleCanvasDocumentSave();
   render();
 }
 
@@ -8104,7 +8117,7 @@ const agentResultPlacement = window.REELAY_AGENT_RESULT_PLACEMENT.createControll
 });
 
 agentGeneration = window.REELAY_AGENT_GENERATION.createController({
-  document, container: document.querySelector("#agentGenerationRecords"), chatContainer: agentMessages,
+  document, container: document.querySelector("#agentGenerationRecords"), chatContainer: agentMessages, service: generationTasks,
   selectionTrigger: document.querySelector("#agentRecordSelectBtn"),
   beforeSelection: closeAgentPopovers,
   confirmRemoveRecords: ({ count }) => new Promise((resolve) => showConfirmDialog({
@@ -8137,17 +8150,6 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
     mountAgentPrompt(conversation); syncAgentModelButton(); syncAgentPromptOptimizationControl(); focusAgentPrompt();
     return true;
   },
-  charge(amount) { if (!hasEnoughCredits(amount)) return false; chargeCredits(amount); return true; },
-  refund(amount) {
-    state.account.credits += amount;
-    state.account.consumedCredits = Math.max(0, state.account.consumedCredits - amount);
-    syncCreditDisplay(); return true;
-  },
-  makeResult: (task) => ({
-    ...selectSimulationMedia(task.input.mediaType, task.input.sourceDraftAsset), id: crypto.randomUUID(),
-    displayName: task.input.mediaType === "image" ? "模拟生成图片" : "模拟生成视频",
-    source: "generation", generationTaskId: task.id,
-  }),
   createFinalInput(asset, { outputFormat, scope, sourceNodeId }) {
     const eligibility = window.REELAY_DRAFT_VIDEO.getFinalEligibility(asset, { projectId: scope.projectId });
     if (!eligibility.eligible) return null;
@@ -9201,14 +9203,10 @@ function requestRunGroup(group) {
     body: `即将运行「${group.name || "新建组"}」内的 ${generators.length} 个生成节点。\n预计消耗 ${formatCredit(totalCredits)} 积分。`,
     confirmText: "运行",
     onConfirm: () => {
-      let actualCredits = 0;
-      generators.forEach((node, index) => {
+      generators.forEach((node) => {
         if (node.generating) return;
-        if (startSimulatedGeneration(node, { charge: false })) {
-          actualCredits += generationCosts[index];
-        }
+        startSimulatedGeneration(node);
       });
-      if (actualCredits > 0) chargeCredits(actualCredits);
       setActiveGroup(group.id);
       render();
     },
@@ -9435,6 +9433,7 @@ const canvasNodeDragController = canvasNodeDragControllerFactory.createCanvasNod
   },
   updateGroupMembership: updateDraggedNodeGroupMembership,
   pushUndoAction,
+  onCommit: scheduleCanvasDocumentSave,
   render,
 });
 
@@ -9461,6 +9460,7 @@ const canvasGroupInteractionController = canvasGroupInteractionControllerFactory
   minWidth: groupFrameRules.minWidth,
   minHeight: groupFrameRules.minHeight,
   pushUndoAction,
+  onCommit: scheduleCanvasDocumentSave,
   render,
 });
 
@@ -9488,6 +9488,7 @@ const canvasPointerInteractionController = canvasPointerInteractionControllerFac
   applyViewport: ({ tx, ty }) => {
     state.tx = tx;
     state.ty = ty;
+    scheduleCanvasDocumentSave();
     applyTransform();
   },
   getShellRect: () => shell.getBoundingClientRect(),
@@ -9879,6 +9880,7 @@ shell.addEventListener(
     const verticalDelta = event.shiftKey && Math.abs(event.deltaX) < 1 ? 0 : event.deltaY;
     state.tx -= horizontalDelta;
     state.ty -= verticalDelta;
+    scheduleCanvasDocumentSave();
     applyTransform();
   },
   { passive: false },
@@ -12021,6 +12023,7 @@ window.addEventListener("beforeunload", flushCanvasDocumentSave);
 window.addEventListener("pagehide", (event) => {
   canvasInspiration.close({ restoreFocus: false });
   canvasArrange.close();
+  agentGeneration.close();
   promptOptimization?.close();
   canvasTheme.clearFeedback();
   if (!event.persisted) {
@@ -12033,7 +12036,9 @@ window.addEventListener("pagehide", (event) => {
     canvasTheme.dispose();
     assetLibraryItemMenu.dispose();
     canvasToolbarMenus.dispose();
+    agentGeneration.dispose();
     canvasNodeTasks.dispose();
+    generationTasks.dispose();
     promptOptimization?.dispose();
     agentComposerResize?.dispose();
   }

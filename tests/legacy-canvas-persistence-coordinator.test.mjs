@@ -234,6 +234,55 @@ test("a network error preserves dirty state and retries once after three seconds
   assert.deepEqual(harness.notices, ["network"]);
 });
 
+test("authentication failure captures newer edits and pauses until the same revision is resumed", () => {
+  const harness = createHarness();
+  harness.initialize();
+  harness.setSnapshot({ kind: "reelay-legacy-canvas", version: 1, value: "sent" });
+  harness.coordinator.schedule(0); harness.runNextTimer();
+  const requestId = saveMessages(harness)[0].requestId;
+  harness.setSnapshot({ kind: "reelay-legacy-canvas", version: 1, value: "edited while saving" });
+  harness.coordinator.schedule(0);
+  harness.hostMessage({ type: "host:save-error", protocolVersion: 1, requestId, code: "authentication" });
+  const snapshot = harness.sent.find((message) => message.type === "canvas:recovery-snapshot");
+  assert.equal(snapshot.content.value, "edited while saving");
+  assert.equal(harness.coordinator.canMutate(), false);
+  assert.equal(harness.coordinator.getState().dirty, true);
+  assert.equal(harness.timers.size, 0);
+  assert.equal(harness.coordinator.schedule(0), false);
+  const recovery = { type: "host:recovery", protocolVersion: 1, requestId, instanceId: "canvas-instance-1",
+    projectId: "project-1", canvasId: "main", action: "resume", document: null, writable: true };
+  assert.equal(harness.hostMessage({ ...recovery, instanceId: "old-frame" }), false);
+  assert.equal(harness.hostMessage({ ...recovery, projectId: "other-project" }), false);
+  harness.hostMessage({ ...recovery, document: saveResult(requestId, 1).document });
+  assert.equal(harness.coordinator.canMutate(), false);
+  assert.equal(harness.timers.size, 0);
+  harness.hostMessage(recovery);
+  assert.equal(harness.coordinator.canMutate(), true);
+  harness.runNextTimer();
+  assert.equal(saveMessages(harness).at(-1).content.value, "edited while saving");
+  assert.equal(saveMessages(harness).at(-1).expectedRevision, 0);
+});
+
+test("conflict replacement requires recovery identity and acknowledges the saved copy baseline", () => {
+  const harness = createHarness(); harness.initialize();
+  harness.setSnapshot({ kind: "reelay-legacy-canvas", version: 1, value: "local" });
+  harness.coordinator.schedule(0); harness.runNextTimer();
+  const requestId = saveMessages(harness)[0].requestId;
+  harness.hostMessage({ type: "host:save-error", protocolVersion: 1, requestId, code: "conflict" });
+  const document = { ...saveResult(requestId, 7).document, content: { value: "server + recovery copies" } };
+  const recovery = { type: "host:recovery", protocolVersion: 1, requestId, instanceId: "canvas-instance-1",
+    projectId: "project-1", canvasId: "main", action: "replace", document, writable: false };
+  assert.equal(harness.hostMessage({ ...recovery, requestId: "obsolete" }), false);
+  harness.hostMessage(recovery);
+  assert.equal(harness.hydratedContent.value, "server + recovery copies");
+  assert.equal(harness.coordinator.getAccessMode(), "readonly");
+  assert.equal(harness.coordinator.getState().revision, 7);
+  assert.equal(harness.coordinator.getState().dirty, false);
+  assert.equal(harness.sent.at(-1).type, "canvas:recovery-applied");
+  assert.equal(harness.sent.at(-1).applied, true);
+  assert.equal(harness.hostMessage(recovery), false);
+});
+
 test("host messages require the exact origin, source window, source tag, protocol, and scope", () => {
   const harness = createHarness();
   const init = {

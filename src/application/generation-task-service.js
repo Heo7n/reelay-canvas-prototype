@@ -26,11 +26,16 @@
     for (const name of ["makeId", "charge", "refund", "makeResult"]) {
       if (typeof options[name] !== "function") throw new TypeError(`${name} must be a function.`);
     }
-    if (!root.REELAY_SIMULATED_GENERATION_EXECUTOR) throw new Error("The simulated generation executor must be loaded first.");
     const now = options.now || (() => Date.now());
-    const executor = root.REELAY_SIMULATED_GENERATION_EXECUTOR.createExecutor({
-      now, setTimer: options.setTimer, clearTimer: options.clearTimer,
-    });
+    const executor = options.executor;
+    if (!["start", "stop", "dispose"].every((name) => typeof executor?.[name] === "function")) {
+      throw new TypeError("Generation tasks require an injected executor.");
+    }
+    const draftPolicy = options.draftPolicy;
+    const { cancelWindowMs, previewDurationMs } = options;
+    if (![cancelWindowMs, previewDurationMs].every((value) => Number.isFinite(value) && value >= 0)) {
+      throw new TypeError("Generation timing must be explicit and non-negative.");
+    }
     const records = new Map();
     const submissions = new Map();
     const subscribers = new Set();
@@ -49,7 +54,19 @@
 
     function canCancel(taskOrId) {
       const record = resolve(taskOrId);
-      return Boolean(isActive(record) && now() < record.cancelUntil);
+      return Boolean(isActive(record) && ownerIsCurrent(record) && now() < record.cancelUntil);
+    }
+
+    function ownerIsCurrent(record) {
+      try { return !record.isCurrent || record.isCurrent(); }
+      catch { return false; }
+    }
+
+    function canExecute(record) {
+      if (!isActive(record)) return false;
+      if (ownerIsCurrent(record)) return true;
+      invalidate(record.task, "owner-replaced");
+      return false;
     }
 
     function notify(record, type) {
@@ -68,16 +85,17 @@
       } catch { /* Failed settlement must never be shown as refunded. */ }
     }
 
-    function finish(record, status, { error = null, result = null } = {}) {
+    function finish(record, status, { error = null, result = null, refund = true, cancellationReason = null } = {}) {
       if (!isActive(record)) return false;
       // Commit the terminal state before invoking collaborators; late/reentrant callbacks lose.
       record.status = status;
       record.finishedAt = now();
       record.error = error;
       record.result = result;
+      record.cancellationReason = cancellationReason;
       if (status === "succeeded") record.progress = 100;
       executor.stop(record.task.id);
-      if (status === "failed" || status === "canceled") refundOnce(record);
+      if (refund && (status === "failed" || status === "canceled")) refundOnce(record);
       notify(record, status);
       if (record.refunded > 0 && typeof options.onRefund === "function") {
         try { options.onRefund(record.task); } catch { /* Toast failures cannot repeat a refund. */ }
@@ -86,13 +104,15 @@
     }
 
     function fail(taskOrId, reason = defaultFailure) {
+      const record = resolve(taskOrId);
+      if (!canExecute(record)) return false;
       const message = typeof reason === "string" && reason.trim() ? reason.trim() : defaultFailure;
-      return finish(resolve(taskOrId), "failed", { error: message });
+      return finish(record, "failed", { error: message });
     }
 
     function complete(taskOrId, result) {
       const record = resolve(taskOrId);
-      if (!isActive(record)) return false;
+      if (!canExecute(record)) return false;
       try {
         let output = result === undefined ? options.makeResult(record.task) : result;
         if (!output || typeof output !== "object" || Array.isArray(output)) {
@@ -101,7 +121,6 @@
         if (output.type !== record.task.input.mediaType) {
           throw new TypeError("生成结果类型与本次任务不一致，请重新生成。");
         }
-        const draftPolicy = root.REELAY_DRAFT_VIDEO;
         const task = record.task;
         if (task.input.generationStage === "final") {
           // A simulated finish keeps the original clip and its true decoded size;
@@ -125,8 +144,11 @@
       }
     }
 
-    function submit({ scope, input, idempotencyKey, sourceSurface = "conversation" } = {}) {
+    function submit({ scope, input, idempotencyKey, sourceSurface = "conversation", isCurrent, onAccepted } = {}) {
       if (disposed) return null;
+      if (isCurrent !== undefined && typeof isCurrent !== "function") throw new TypeError("Task ownership must be a predicate.");
+      if (onAccepted !== undefined && typeof onAccepted !== "function") throw new TypeError("Task acceptance must be a function.");
+      if (isCurrent && !isCurrent()) return null;
       if (!["conversation", "canvas"].includes(sourceSurface)) throw new TypeError("Unknown generation source surface.");
       const requiredFields = sourceSurface === "canvas" ? ["projectId", "canvasId"] : scopeFields;
       if (!requiredFields.every((key) => typeof scope?.[key] === "string" && scope[key].trim())
@@ -146,10 +168,10 @@
         throw new TypeError("Generation task mediaType must be image, video or audio.");
       }
       if (input.generationStage === "final") {
-        if (!root.REELAY_DRAFT_VIDEO) throw new Error("The draft video policy must be loaded first.");
+        if (!draftPolicy) throw new Error("Draft generation requires an injected policy.");
         // Reconstruct from provenance for every attempt, including direct repeat
         // submissions: current editor parameters never change the original clip.
-        input = root.REELAY_DRAFT_VIDEO.buildFinalInput(input.sourceDraftAsset, {
+        input = draftPolicy.buildFinalInput(input.sourceDraftAsset, {
           projectId: scope.projectId, now: now(), cost: input.cost, outputFormat: input.parameters?.outputFormat,
         });
         const pending = [...records.values()].find((record) => !record.removed && activeStatuses.has(record.status)
@@ -163,14 +185,14 @@
       if (typeof id !== "string" || !id || records.has(id)) throw new TypeError("Generation task ids must be unique.");
       const createdAt = now();
       const record = {
-        task: null, submitting: true, removed: false,
+        task: null, submitting: true, removed: false, isCurrent,
         status: "queued", progress: 0, createdAt, startedAt: null, finishedAt: null,
-        cancelUntil: createdAt + root.REELAY_PROTOTYPE_CONFIG.generationCancelWindowMs, error: null, result: null,
+        cancelUntil: createdAt + cancelWindowMs, error: null, result: null, cancellationReason: null,
         charged: 0, refunded: 0, refundAttempted: false,
         addedNodeId: null, addedCanvasId: null,
       };
       const task = { id, sourceSurface, input: frozenInput, scope: frozenScope };
-      for (const field of ["status", "progress", "createdAt", "startedAt", "finishedAt", "cancelUntil", "error", "result", "charged", "refunded", "addedNodeId", "addedCanvasId"]) {
+      for (const field of ["status", "progress", "createdAt", "startedAt", "finishedAt", "cancelUntil", "error", "result", "charged", "refunded", "addedNodeId", "addedCanvasId", "cancellationReason"]) {
         Object.defineProperty(task, field, { enumerable: true, get: () => record[field] });
       }
       Object.defineProperty(task, "canCancel", { enumerable: true, get: () => canCancel(task) });
@@ -193,23 +215,28 @@
       const scenario = nextScenario;
       nextScenario = Object.freeze({ outcome: "success" });
       try {
+        if (onAccepted?.(task) === false) {
+          fail(task, "生成任务未能启动，请重试。");
+          return task;
+        }
+        if (!canExecute(record)) return task;
         executor.start({
           id, createdAt, cancelUntil: record.cancelUntil, scenario,
           onRunning() {
-            if (!isActive(record) || record.status !== "queued") return;
+            if (!canExecute(record) || record.status !== "queued") return;
             record.status = "running";
             record.startedAt = now();
             notify(record, "running");
           },
           onProgress(value) {
-            if (!isActive(record) || !Number.isFinite(value)) return;
+            if (!canExecute(record) || !Number.isFinite(value)) return;
             const progress = Math.min(99, Math.max(0, Math.floor(value)));
             if (progress <= record.progress) return;
             record.progress = progress;
             notify(record, "progress");
           },
           onCancelWindowClosed() {
-            if (isActive(record)) notify(record, "cancel-window-closed");
+            if (canExecute(record)) notify(record, "cancel-window-closed");
           },
           onComplete: () => complete(task),
           onFail: (reason) => fail(task, reason),
@@ -222,11 +249,11 @@
       return task;
     }
 
-    function submitFinal({ source, scope, cost, outputFormat = "mp4", idempotencyKey, sourceSurface = "conversation" } = {}) {
+    function submitFinal({ source, scope, cost, outputFormat = "mp4", idempotencyKey, sourceSurface = "conversation", isCurrent, onAccepted } = {}) {
       if (disposed) return null;
-      if (!root.REELAY_DRAFT_VIDEO) throw new Error("The draft video policy must be loaded first.");
-      const input = root.REELAY_DRAFT_VIDEO.buildFinalInput(source, { projectId: scope?.projectId, now: now(), cost, outputFormat });
-      return submit({ input, scope, idempotencyKey, sourceSurface });
+      if (!draftPolicy) throw new Error("Draft generation requires an injected policy.");
+      const input = draftPolicy.buildFinalInput(source, { projectId: scope?.projectId, now: now(), cost, outputFormat });
+      return submit({ input, scope, idempotencyKey, sourceSurface, isCurrent, onAccepted });
     }
 
     function get(taskOrId) {
@@ -248,8 +275,8 @@
         const id = entry.id ?? options.makeId();
         if (typeof id !== "string" || !id || records.has(id) || ids.has(id)) return [];
         ids.add(id);
-        const createdAt = Number.isFinite(entry.createdAt) ? entry.createdAt : now() - root.REELAY_PROTOTYPE_CONFIG.generationDurationMs;
-        const finishedAt = Math.max(createdAt, Number.isFinite(entry.finishedAt) ? entry.finishedAt : createdAt + root.REELAY_PROTOTYPE_CONFIG.generationDurationMs);
+        const createdAt = Number.isFinite(entry.createdAt) ? entry.createdAt : now() - previewDurationMs;
+        const finishedAt = Math.max(createdAt, Number.isFinite(entry.finishedAt) ? entry.finishedAt : createdAt + previewDurationMs);
         const frozenInput = snapshot(entry.input);
         const task = Object.freeze({ id, sourceSurface: "conversation", isPreview: true, scope: frozenScope, input: frozenInput,
           status: entry.status, progress: entry.status === "succeeded" ? 100 : 0, createdAt, startedAt: createdAt, finishedAt, cancelUntil: createdAt,
@@ -279,7 +306,12 @@
     }
 
     function cancel(taskOrId) {
-      return canCancel(taskOrId) ? finish(resolve(taskOrId), "canceled") : false;
+      return canCancel(taskOrId) ? finish(resolve(taskOrId), "canceled", { cancellationReason: "user-canceled" }) : false;
+    }
+
+    function invalidate(taskOrId, reason = "owner-replaced") {
+      // System cleanup stops execution without inventing a supplier refund.
+      return finish(resolve(taskOrId), "canceled", { refund: false, cancellationReason: reason });
     }
 
     function remove(taskOrId) {
@@ -331,7 +363,7 @@
       subscribers.clear();
     }
 
-    return Object.freeze({ submit, submitFinal, get, list, subscribe, canCancel, cancel, remove, markAdded, clearAdded, dispose, setNextScenario, complete, fail, importPreviewRecords });
+    return Object.freeze({ submit, submitFinal, get, list, subscribe, canCancel, cancel, invalidate, remove, markAdded, clearAdded, dispose, setNextScenario, complete, fail, importPreviewRecords });
   }
 
   root.REELAY_GENERATION_TASKS = Object.freeze({ createService });

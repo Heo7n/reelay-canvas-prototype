@@ -1,0 +1,18 @@
+.dialog { width: min(460px, calc(100vw - 48px)); padding: 0; border: 1px solid var(--color-canvas-border); border-radius: 16px; color: var(--color-canvas-text); background: var(--color-canvas-surface); box-shadow: 0 20px 60px rgb(0 0 0 / 18%); }
+.dialog::backdrop { background: rgb(0 0 0 / 24%); }
+.content { padding: 28px; }
+.content h2 { margin: 0 0 12px; font-size: 20px; font-weight: 600; }
+.content p { margin: 0 0 20px; color: var(--color-canvas-text-muted); line-height: 1.7; font-size: 14px; }
+.form { display: grid; gap: 10px; }
+.form label { font-size: 13px; }
+.form input { min-width: 0; border: 1px solid var(--color-canvas-border); border-radius: 8px; padding: 10px 12px; background: var(--color-canvas-background); color: var(--color-canvas-text); }
+.content button { border: 1px solid var(--color-canvas-border); border-radius: 8px; padding: 10px 14px; background: var(--color-canvas-surface); color: var(--color-canvas-text); cursor: pointer; font-size: 14px; }
+.content button.primary { background: var(--color-canvas-action-background); color: var(--color-canvas-action-text); }
+.content button:disabled { opacity: .5; cursor: default; }
+.content button:focus-visible, .form input:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 3px; }
+.actions { display: flex; gap: 10px; justify-content: flex-end; }
+.content .error { color: var(--color-canvas-text); padding: 10px 12px; border-left: 2px solid currentColor; background: var(--color-canvas-background); }
+.content button.secondary { display: block; margin: 16px auto 0; border: none; color: var(--color-canvas-text-muted); }
+.banner { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 16px; padding: 12px 16px; border: 1px solid var(--color-canvas-border); border-radius: 12px; background: var(--color-canvas-surface); color: var(--color-canvas-text); box-shadow: 0 6px 24px rgb(0 0 0 / 12%); font-size: 14px; white-space: nowrap; }
+.banner button { color: var(--color-canvas-action-text); background: var(--color-canvas-action-background); border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.banner button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 3px; }

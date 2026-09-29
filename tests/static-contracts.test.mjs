@@ -821,7 +821,7 @@ test("task type summaries, provider snapshots, and generation guards share one c
 
   const startGenerationSource = sourceBetween(
     appSource,
-    "function startSimulatedGeneration(node, options = {})",
+    "function startSimulatedGeneration(node)",
     "function modelPanel(node)",
   );
   const issueCheckIndex = startGenerationSource.indexOf("const taskTypeIssue = getPromptReferenceIssue(node.prompt, getNodeReferenceEntries(node)) || getOmniReferenceTaskTypeIssue(node)");
@@ -895,8 +895,8 @@ test("node task lifecycle has one scoped owner while content commits remain in t
   assert.match(html, /canvas-node-task-runner\.js/);
   assert.match(appSource, /createCanvasNodeTaskRunner\(\{[\s\S]*?resolveTarget: resolveCanvasNodeTaskTarget/);
   assert.doesNotMatch(appSource, /state\.(?:generationTasks|promptOptimizationTasks)|function cancel(?:Generation|PromptOptimization)Task/);
-  assert.match(appSource, /function startSimulatedGeneration\(node, options = \{\}\)[\s\S]*?!canvas\.nodes\.includes\(node\)[\s\S]*?normalizeNodeParameters\(node\)/);
-  assert.match(appSource, /function completeSimulatedGeneration\(task, node\)[\s\S]*?resolveCanvasNodeTaskTarget\(task\) !== node[\s\S]*?commitGenerationUndoBoundary\(canvas, node\.id\)[\s\S]*?scheduleCanvasDocumentSave\(\)/);
+  // Node identity, frozen input and settlement behavior are exercised through
+  // the shared service in legacy-canvas-generation-integration.test.mjs.
 });
 
 test("model data, config and document codec load before the application", () => {

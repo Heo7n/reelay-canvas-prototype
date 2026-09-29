@@ -83,6 +83,8 @@ Workspace 必须进入 URL，不能只依赖全局 `activeWorkspace`：
 
 画布内容迁移采用渐进式 CanvasCommand：命令核心无 DOM，只处理 CanvasRecord 的显式集合变更、before conflict、归一化、transition validation 和逆命令；UI selection、短暂高亮、render 与保存属于提交后 effect。连接的单条创建、批量创建和删除已接入；节点离散参数 / 生成媒体命名、建组 / 解组 / 成员结算和已有局部布局继续通过字段级契约迁移，兼容现有 legacy undo 栈。字段提交保留运行时对象身份，组成员关系在同一事务中验证；全节点 record 不允许进入命令。高频 pointer preview 和旧移动撤销仍在 session/adapter，节点结构与素材引用命令尚未统一，不能把整个 `app.js` 换一种封装后称为完成。
 
+渲染与持久化调度已分离：`render()` 和 `applyTransform()` 不触发保存，内容命令、尚未迁移的显式内容写入、视口变更与手势完成各自在提交边界保存。节点、对话、正片生成共用一个应用层任务服务；组装层注入模拟 executor、策略和结算能力，节点 runner 与对话 controller 只适配目标和 UI。应用服务不再从全局创建基础设施 executor；基础设施注册和 legacy 全局模块装配仍在迁移范围内。本轮不接入真实供应商或持久积分账本，也不代表所有内容写入已成为 CanvasCommand。
+
 ## 建议目录
 
 ```text

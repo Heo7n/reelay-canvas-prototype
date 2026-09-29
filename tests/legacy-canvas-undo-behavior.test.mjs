@@ -2313,6 +2313,8 @@ test("Entity canvas consumption creates separate media nodes and undoes the comp
 
 test("generation charges once, completes in its background canvas and preserves its parameter snapshot", (t) => {
   const h = createHarness(t);
+  let now = 10000;
+  h.window.Date.now = () => now;
   const node = h.node("shared-id", { model: "seedance-2", aspect: "16:9" });
   const first = h.canvas("one", [node]);
   const second = h.canvas("two", [h.node("shared-id")]);
@@ -2321,7 +2323,9 @@ test("generation charges once, completes in its background canvas and preserves 
   assert.equal(h.window.startSimulatedGeneration(node), true);
   const task = h.scheduledTask();
   const callback = h.timers.get(task.timeoutId);
+  const generation = h.window.canvasTest.agentGeneration.service.get(node.generationTaskId);
   assert.equal(task.delay, 7500);
+  assert.equal(generation.cancelUntil - generation.createdAt, 5000);
   assert.equal(h.state.account.credits, 3000 - cost);
   assert.equal(h.state.account.consumedCredits, cost);
   assert.equal(h.window.startSimulatedGeneration(node), false);
@@ -2333,6 +2337,7 @@ test("generation charges once, completes in its background canvas and preserves 
   let saves = 0;
   h.window.render = () => { renders += 1; };
   h.window.scheduleCanvasDocumentSave = () => { saves += 1; };
+  now = generation.createdAt + 7500;
   h.fireTimer(task.timeoutId);
   const result = node.generatedAsset;
   callback();
@@ -2341,6 +2346,7 @@ test("generation charges once, completes in its background canvas and preserves 
   assert.equal(result.type, "video");
   assert.equal(result.aspectRatio, 16 / 9);
   assert.equal(node.generatedAsset, result);
+  assert.equal(generation.finishedAt - generation.createdAt, 7500);
   assert.equal(h.state.account.consumedCredits, cost);
   assert.deepEqual(plain(second), other);
   assert.equal(renders, 0);

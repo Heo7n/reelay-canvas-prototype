@@ -2,6 +2,7 @@ import type { CanvasDocument, CanvasId } from "../../domain/canvas/canvas-docume
 import type { ProjectId } from "../../domain/project/project";
 
 export interface SaveCanvasDocumentInput {
+  expectedActorId?: string;
   projectId: ProjectId;
   canvasId: CanvasId;
   schemaVersion: number;
