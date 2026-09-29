@@ -27,7 +27,7 @@ test('优化建议需手动填入，撤销后保留原文、引用与当前草�
     .getByRole('button', { name: 'Seedance 2.5', exact: true }).click();
   await expect(model).toHaveAccessibleName('当前模型：Seedance 2.5');
 
-  await canvas.getByRole('button', { name: '添加附件', exact: true }).click();
+  await canvas.locator('#agentComposer').getByRole('button', { name: '添加参考素材', exact: true }).click();
   const chooser = page.waitForEvent('filechooser');
   await canvas.getByRole('menuitem', { name: '本地上传', exact: true }).click();
   await (await chooser).setFiles([

@@ -5,21 +5,12 @@ import { test, expect, openCanvas, canvasFrameSelector } from "./fixtures";
 type DocumentResponse = { document: { revision: number; content: LegacyCanvasDocumentV1 } };
 
 async function createSavedGenerator(page: Page) {
-  await openCanvas(page);
-  const workspace = new URL(page.url()).pathname.match(/\/w\/([^/]+)\/projects\//)?.[1];
-  if (!workspace) throw new Error("Expected an authenticated workspace route.");
-  // The HTTP test server is worker-scoped. Use a fresh private project so a
-  // preceding test's saved nodes cannot occupy this test's creation location.
-  const created = await page.request.post(`/api/workspaces/${workspace}/projects`, {
-    data: { name: `保存恢复验收 ${Date.now()}`, accessKind: "private" },
-  });
-  expect(created.status()).toBe(201);
-  const projectId = (await created.json() as { project: { id: string } }).project.id;
+  // Each test gets a fresh server and seed project, including the matching
+  // asset permissions; no earlier test can leave nodes at this location.
+  const canvas = await openCanvas(page);
+  const projectId = new URL(page.url()).pathname.match(/\/projects\/([^/]+)\/canvases\//)?.[1];
+  if (!projectId) throw new Error("Expected an authenticated project route.");
   const documentPath = `/api/projects/${encodeURIComponent(projectId)}/canvases/main/document`;
-  await page.goto(`/app/w/${workspace}/projects/${encodeURIComponent(projectId)}/canvases/main`);
-  const canvas = page.frameLocator(canvasFrameSelector);
-  await expect(page.locator(".legacy-canvas-host")).toHaveAttribute("data-persistence-status", "saved");
-  await expect(canvas.locator(".app-shell")).toHaveAttribute("data-canvas-access", "editable");
   const baseline = `恢复前已保存 ${Date.now()}`;
   await canvas.locator("#canvasShell").dblclick({ position: { x: 280, y: 200 } });
   await canvas.getByRole("menuitem", { name: "图片 添加图片生成节点" }).click();

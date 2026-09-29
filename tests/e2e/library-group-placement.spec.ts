@@ -9,7 +9,7 @@ async function responseBody<T>(response: APIResponse): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-test("subjects have a central area, retain member placement and restore nested material browsing", async ({ page }) => {
+test("subjects retain member placement and restore search, filters and nested material browsing after editing", async ({ page }) => {
   test.setTimeout(90_000);
   await openCanvas(page);
   const path = new URL(page.url()).pathname;
@@ -182,12 +182,16 @@ test("subjects have a central area, retain member placement and restore nested m
   await canvas.locator(`[data-library-folder-open="${folders[2].id}"]`).click();
   await canvas.locator('[data-library-search-toggle]').click();
   await expect(canvas.locator('#assetLibrarySearchInput')).toHaveValue('角色');
-  await subject.hover();
-  await subject.locator('[data-library-menu-toggle]').click();
-  await subject.locator('[data-library-menu-item="view-media"]').click();
-  await expect(canvas.locator('[data-library-clear-entity-filter]')).toHaveText('搜索结果');
-  await canvas.locator('[data-library-clear-entity-filter]').click();
+  // Normal browsing opens the subject editor. Member browsing belongs only to
+  // reference selection; closing this editor must preserve the search context.
+  await subject.getByRole('button', { name: `打开主体 ${subjectName}`, exact: true }).click();
+  await expect(editor).toBeVisible();
+  await expect(editor.locator(`[data-entity-editor-media="${asset.id}"]`)).toBeVisible();
+  await editor.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(editor).toBeHidden();
   await expect(canvas.locator('#assetLibrarySearchInput')).toHaveValue('角色');
+  await expect(subject).toBeVisible();
+  await expect(media).toBeVisible();
   await canvas.locator('[data-library-selection-toggle]').click();
   await canvas.locator('[data-library-select-all]').click();
   await canvas.locator('[data-library-select-kind="entity"]').click();
@@ -211,18 +215,21 @@ test("subjects have a central area, retain member placement and restore nested m
   await canvas.locator('[data-library-filter-untagged]').click();
   await canvas.locator('[data-library-filter-apply]').click();
   await expect(subject).toBeVisible();
-  await subject.hover();
-  await subject.locator('[data-library-menu-toggle]').click();
-  await subject.locator('[data-library-menu-item="view-media"]').click();
-  await expect(canvas.locator(`[data-library-media="${asset.id}"]`)).toBeVisible();
-  await canvas.locator('[data-library-clear-entity-filter]').click();
+  await subject.getByRole('button', { name: `打开主体 ${subjectName}`, exact: true }).click();
+  await expect(editor).toBeVisible();
+  await expect(editor.locator(`[data-entity-editor-media="${asset.id}"]`)).toBeVisible();
+  await editor.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(editor).toBeHidden();
   await expect(subject).toBeVisible();
   await canvas.locator('[data-library-filter-toggle]').click();
   await expect(canvas.locator('[data-library-filter-untagged]')).toHaveAttribute('aria-pressed', 'true');
   await canvas.locator('[data-library-filter-cancel]').click();
   await subject.hover();
   await subject.locator('[data-library-menu-toggle]').click();
-  await expect(subject.locator('[data-library-menu-item="move"]')).toHaveCount(0);
+  const subjectMenu = canvas.getByRole('menu', { name: '主体操作', exact: true });
+  await expect(subjectMenu).toBeVisible();
+  await expect(subjectMenu.getByRole('menuitem', { name: '编辑主体', exact: true })).toBeVisible();
+  await expect(subjectMenu.getByRole('menuitem', { name: '移动', exact: true })).toHaveCount(0);
   await canvas.locator('#assetLibraryDirectoryButton').click();
   await expect(canvas.locator("#assetLibraryDirectoryName")).toHaveText(sourceFolder.name);
   await expect(canvas.locator('#assetLibrarySearchInput')).toHaveValue('');

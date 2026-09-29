@@ -76,6 +76,39 @@ test("sample badge keeps its media-relative dimensions through canvas zoom", (t)
   assert.equal(h.document.querySelector(`[data-id="${node.id}"] .node-draft-badge`), badge);
 });
 
+for (const interaction of ["click", "hover"]) test(`a ${interaction}-opened node final popover retains its media toolbar and anchor while choosing formats`, async (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  const task = h.send("湖面的薄雾中，一艘小船缓缓前行");
+  h.service.complete(task);
+  const node = h.first.nodes[0];
+  h.window.setSelection([node.id], node.id);
+  h.state.mediaToolbarNodeId = node.id;
+  h.window.render();
+  const anchor = h.document.querySelector(`[data-id="${node.id}"] [data-node-draft-final]`);
+  anchor.getBoundingClientRect = () => ({ left: 200, top: 120, right: 280, bottom: 150, width: 80, height: 30 });
+  if (interaction === "click") anchor.click();
+  else { anchor.dispatchEvent(new h.window.Event("pointerenter")); h.advance(150); }
+  const panel = h.document.querySelector('[role="dialog"][aria-label="正片生成参数"]');
+  assert.ok(panel);
+  const mov = panel.querySelector('input[value="mov"]');
+  const label = mov.nextElementSibling;
+  label.dispatchEvent(new h.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  await Promise.resolve();
+  assert.equal(panel.isConnected, true, "the node-owned media action stays inside the media interaction boundary");
+  assert.equal(anchor.isConnected, true, "the outside-toolbar listener must not rerender its live anchor");
+  assert.equal(h.state.mediaToolbarNodeId, node.id);
+  label.click();
+  assert.equal(mov.checked, true);
+  anchor.dispatchEvent(new h.window.Event("pointerleave")); h.advance(300);
+  assert.equal(panel.isConnected, true, "choosing a format pins a hovered media action");
+  panel.querySelector(".draft-video-submit").click();
+  const final = h.service.list().find((entry) => entry.input.generationStage === "final");
+  assert.equal(final.input.parameters.outputFormat, "mov");
+  assert.equal(h.first.nodes.length, 2);
+  assert.equal(h.document.querySelector('[role="dialog"][aria-label="正片生成参数"]'), null);
+});
+
 test("node sample keeps frozen inputs and survives creating a separately charged final result", (t) => {
   const h = harness(t);
   const node = h.window.defaultGeneratorNode(40, 50, "video");

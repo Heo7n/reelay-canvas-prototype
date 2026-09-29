@@ -16,12 +16,12 @@ const sampleMedia = new Map([
 type BrowserTestServer = Awaited<ReturnType<typeof startBrowserTestServer>>;
 type ExpectedHttpError = { pathname: string; status: number; remaining: number };
 
-export const test = base.extend<{ runtimeGuard: void; expectedHttpErrors: ExpectedHttpError[] }, { browserTestServer: BrowserTestServer }>({
+export const test = base.extend<{ runtimeGuard: void; expectedHttpErrors: ExpectedHttpError[]; browserTestServer: BrowserTestServer }>({
   expectedHttpErrors: async ({}, use) => { await use([]); },
   browserTestServer: [async ({}, use) => {
     const server = await startBrowserTestServer();
     try { await use(server); } finally { await server.close(); }
-  }, { scope: "worker" }],
+  }, { scope: "test" }],
   baseURL: async ({ browserTestServer }, use) => { await use(browserTestServer.origin); },
   runtimeGuard: [async ({ page, context, baseURL, browserTestServer, expectedHttpErrors }, use) => {
     const { origin } = browserTestServer;

@@ -284,6 +284,23 @@ test("outside interactions and repeated activation dismiss without stealing focu
   assert.equal(f.submissions.length, 0);
 });
 
+test("only the owning node treats the detached final popover as an internal media interaction", (t) => {
+  const f = fixture(t);
+  f.controller.open({ sourceAsset: f.sourceAsset, anchor: f.anchor, sourceNodeId: "sample-node" });
+  const panel = f.query(".draft-video-popover");
+  for (const target of [panel, panel.querySelector("form"), panel.querySelector(".draft-video-time-card"), panel.querySelector('input[value="mov"]')]) {
+    assert.equal(f.controller.containsNodeInteraction("sample-node", target), true);
+    assert.equal(f.controller.containsNodeInteraction("other-node", target), false);
+    assert.equal(f.controller.containsNodeInteraction(null, target), false);
+  }
+  assert.equal(f.controller.containsNodeInteraction("sample-node", f.document.body), false);
+  f.controller.close();
+  assert.equal(f.controller.containsNodeInteraction("sample-node", panel), false);
+  f.open();
+  assert.equal(f.controller.containsNodeInteraction("sample-node", f.query(".draft-video-popover")), false,
+    "conversation confirmations cannot keep an unrelated canvas toolbar open");
+});
+
 test("popover keyboard input cannot invoke canvas delete, undo or space-pan shortcuts", (t) => {
   const f = fixture(t); f.open();
   const escapedKeys = [];

@@ -11910,6 +11910,8 @@ document.addEventListener("focusin", (event) => {
 // Dismiss from the original hit target, before canvas pointer capture retargets click.
 document.addEventListener("pointerdown", (event) => {
   if (canvasSaveMedia.isOpen()) return;
+  // The node-owned popover lives in the top layer, outside the media DOM subtree.
+  if (agentGeneration.containsNodeInteraction(state.mediaToolbarNodeId, event.target)) return;
   if (event.button === 0 && !event.target?.closest(".media-edit-toolbar, .media-frame")) {
     if (closeMediaToolbarState()) render();
   }

@@ -233,6 +233,9 @@
       }
     }
     function contain(event) { event.stopPropagation(); }
+    function containsNodeInteraction(nodeId, target) {
+      return Boolean(nodeId && active?.sourceNodeId === nodeId && panel.contains(target));
+    }
     const listeners = [
       [form, "submit", submit], [form, "change", refresh],
       [panel, "pointerdown", contain], [panel, "pointerdown", pin], [panel, "click", contain],
@@ -243,7 +246,7 @@
       [view, "resize", schedulePosition],
     ];
     for (const [target, name, listener, capture] of listeners) target.addEventListener(name, listener, capture);
-    return Object.freeze({ open, hover, leave, refresh, close, reposition: schedulePosition, dispose() {
+    return Object.freeze({ open, hover, leave, refresh, close, containsNodeInteraction, reposition: schedulePosition, dispose() {
       if (disposed) return;
       close({ restoreFocus: false }); disposed = true;
       for (const [target, name, listener, capture] of listeners) target.removeEventListener(name, listener, capture);

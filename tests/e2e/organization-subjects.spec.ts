@@ -93,8 +93,12 @@ test("organization subjects persist with their own media and tags, stay separate
   await canvas.getByRole("tab", { name: "组织", exact: true }).click();
   await canvas.locator("#assetLibrarySubjectsBtn").click();
   await expect(subject.locator(".asset-library-card-name")).toHaveText(name);
-  await subject.locator("[data-library-menu-toggle]").click();
-  await canvas.locator('[data-library-menu-item="edit"]').click();
+  await subject.hover();
+  const subjectActions = subject.getByRole("button", { name: "更多操作", exact: true });
+  await subjectActions.click();
+  await expect(subjectActions).toHaveAttribute("aria-expanded", "true");
+  await canvas.getByRole("menu", { name: "主体操作", exact: true })
+    .getByRole("menuitem", { name: "编辑主体", exact: true }).click();
   await expect(editor.locator("[data-entity-editor-description]")).toHaveValue("团队统一使用的视觉设定");
   await expect(editor.locator("[data-entity-editor-tags-toggle]")).toContainText(tagName);
   await editor.locator(`[data-entity-editor-preview-name="${asset.id}"]`).dblclick();

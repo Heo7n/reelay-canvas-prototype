@@ -295,6 +295,7 @@
     for (const [target, name, fn, capture] of listeners) target.addEventListener(name, fn, capture);
     connect();
     return Object.freeze({ submit, requestFinal, cancelTask, render, close, dispose, service,
+      containsNodeInteraction: (nodeId, target) => Boolean(finalView?.containsNodeInteraction(nodeId, target)),
       repositionFinal: () => finalView?.reposition(),
       hasRecords: (conversationId) => Boolean(conversationId) && service.list({ projectId: getScope()?.projectId, conversationId }).length > 0,
       hasPending: (conversationId) => Boolean(conversationId) && service.list({ projectId: getScope()?.projectId, conversationId })
