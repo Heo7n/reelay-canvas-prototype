@@ -18,6 +18,161 @@ const sources = await Promise.all(paths.map(async (path) => ({ path, source: pat
 const promptEditorSource = await buildPromptEditor(fileURLToPath(root));
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+function quotedTaskCredits(h, task) {
+  const input = task.input;
+  const model = h.window.REELAY_MODEL_CATALOG.find((entry) => entry.id === input.modelId);
+  const quote = h.window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({
+    model, references: input.references,
+    parameters: { ...input.parameters, aspect: input.parameters.aspect === "adaptive" ? "16:9" : input.parameters.aspect },
+    outputDuration: input.parameters.outputDuration,
+  });
+  assert.equal(quote.status, "exact", "the accepted simulation has a resolved catalog quote");
+  return quote.credits;
+}
+
+function assertQuoteText(element, quote) {
+  assert.ok(element, "the live composer exposes its credit estimate");
+  const numbers = element.textContent.match(/\d[\d,]*/g)?.map((value) => Number(value.replaceAll(",", "")));
+  assert.deepEqual(numbers, quote.status === "exact" ? [quote.credits] : [quote.minCredits, quote.maxCredits]);
+  assert.match(element.textContent, /≈/, "preflight credits remain visibly approximate");
+}
+
+test("credit estimate node updates with model, duration, quality and reference additions and undo", async (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  Object.assign(node, { model: "seedance-2-5", duration: "10s", quality: "480p", aspect: "16:9", prompt: "森林薄雾", expanded: true });
+  h.first.nodes.push(node); h.window.setSelection([node.id], node.id); h.window.render();
+  const amount = () => h.document.querySelector(`[data-id="${node.id}"] .generate-button .credit-mark`);
+  const check = () => {
+    const quote = h.window.getGenerationCreditEstimate(node);
+    assert.equal(quote.status, "exact"); assertQuoteText(amount(), quote); return quote.credits;
+  };
+  assert.equal(check(), 111, "854 × 480 × 24 × 10 / 1024 tokens at 70 yuan/million and 16.5 credits/yuan rounds up once");
+  h.window.handleAction(node, "duration", "12s");
+  const longer = check(); assert.ok(longer > 111);
+  h.window.handleAction(node, "quality", "720p");
+  assert.ok(check() > longer);
+  h.window.handleAction(node, "model", "seedance-2-fast");
+  const withoutReference = check();
+  h.window.addAssetsToGeneratorNode(node, [{ id: "priced-reference", type: "video", url: "/priced-reference.mp4", duration: 20, width: 1280, height: 720 }]);
+  const withReference = check(); assert.notEqual(withReference, withoutReference);
+  h.window.undoLastAction();
+  assert.equal(node.assets.length, 0); assert.equal(check(), withoutReference);
+  h.window.addAssetsToGeneratorNode(node, [{ id: "unknown-reference", type: "video", url: "/unknown-reference.mp4" }]);
+  assert.equal(amount().textContent.trim(), "计算中");
+  assert.equal(h.window.getCost(node), null);
+  assert.equal(h.window.startSimulatedGeneration(node), false);
+  assert.equal(h.service.list().length, 0); assert.equal(h.state.account.credits, 3000);
+  const probe = h.mediaElements.find((element) => !element.isConnected && element.src.endsWith("/unknown-reference.mp4"));
+  assert.ok(probe);
+  Object.defineProperties(probe, {
+    duration: { configurable: true, value: 14 }, videoWidth: { configurable: true, value: 1920 }, videoHeight: { configurable: true, value: 1080 },
+  });
+  probe.dispatchEvent(new h.window.Event("loadedmetadata"));
+  await Promise.resolve();
+  assert.equal(node.assets[0].duration, 14); check();
+});
+
+test("credit estimate follows an uncommitted duration slider and restores after pointer cancellation", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  Object.assign(node, { model: "seedance-2-5", duration: "10s", quality: "480p", aspect: "16:9", prompt: "沿海岸线前进", expanded: true });
+  h.first.nodes.push(node); h.window.setSelection([node.id], node.id);
+  h.window.handleAction(node, "param-panel");
+  const range = h.document.querySelector(`[data-id="${node.id}"] [data-duration-range]`);
+  const amount = h.document.querySelector(`[data-id="${node.id}"] [data-node-credit-estimate]`);
+  const history = h.state.undoStack.length;
+  range.value = "15";
+  range.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(node.duration, "10s");
+  assert.equal(h.state.undoStack.length, history);
+  assertQuoteText(amount, h.window.getGenerationCreditEstimate({ ...node, duration: "15s" }));
+  range.dispatchEvent(new h.window.Event("pointercancel", { bubbles: true }));
+  assertQuoteText(amount, h.window.getGenerationCreditEstimate(node));
+  assert.equal(node.duration, "10s");
+  assert.equal(h.state.account.credits, 3000);
+});
+
+test("credit estimate conversation waits for reference metadata and refreshes before freezing its charge", (t) => {
+  const h = harness(t);
+  const amount = h.document.querySelector("#agentCreditValue");
+  assertQuoteText(amount, h.window.getGenerationCreditEstimate(h.window.getAgentGenerationParameters()));
+  h.agentReferences.addAssets([{ id: "metadata-reference", type: "video", url: "/metadata-reference.mp4" }]);
+  assert.equal(amount.textContent, "计算中");
+  h.draft("镜头沿山脊缓慢前进");
+  assert.equal(h.window.sendAgentMessage(), null);
+  assert.equal(h.state.account.credits, 3000); assert.equal(h.service.list().length, 0);
+  const media = h.mediaElements.find((element) => !element.isConnected && element.src.endsWith("/metadata-reference.mp4"));
+  assert.ok(media, "the real reference metadata probe is pending");
+  Object.defineProperty(media, "duration", { configurable: true, value: 12 });
+  media.dispatchEvent(new h.window.Event("loadedmetadata"));
+  const quote = h.window.getGenerationCreditEstimate(h.window.getAgentGenerationParameters());
+  assert.equal(quote.status, "exact"); assert.equal(quote.credits, 147);
+  assertQuoteText(amount, quote);
+  const task = h.send(null);
+  assert.equal(task.input.cost, quote.credits); assert.equal(task.charged, quote.credits);
+  assert.equal(h.state.account.credits, 3000 - quote.credits);
+  h.agentModels.setGenerationModel("seedance-2-fast");
+  h.agentReferences.addAssets([{ id: "other-reference", type: "video", url: "/other-reference.mp4", duration: 25 }]);
+  assert.notEqual(h.window.getGenerationCreditEstimate(h.window.getAgentGenerationParameters()).credits, quote.credits);
+  h.click(task, "cancel");
+  assert.equal(task.refunded, quote.credits); assert.equal(h.state.account.credits, 3000);
+  assert.equal(h.service.cancel(task), false); assert.equal(task.refunded, quote.credits);
+  h.document.querySelector("#agentReferenceShelf [data-reference-remove]").click();
+  assertQuoteText(amount, h.window.getGenerationCreditEstimate(h.window.getAgentGenerationParameters()));
+});
+
+test("credit estimate Auto exposes a range on node and conversation but accepts one resolved simulation charge", (t) => {
+  const h = harness(t);
+  const reference = { id: "auto-reference", type: "video", url: "/auto-reference.mp4", duration: 12, width: 1280, height: 720 };
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  Object.assign(node, { model: "seedance-2-5", prompt: "向后延长山间日出", omniReferenceTaskType: "extend", duration: "auto", expanded: true, assets: [reference] });
+  h.first.nodes.push(node); h.window.setSelection([node.id], node.id); h.window.render();
+  const quote = h.window.getGenerationCreditEstimate(node);
+  assert.equal(quote.status, "range"); assert.ok(quote.minCredits < quote.maxCredits);
+  assertQuoteText(h.document.querySelector(`[data-id="${node.id}"] .generate-button .credit-mark`), quote);
+  h.agentReferences.addAssets([reference]);
+  h.agentParameters.restore(h.agentModels.getModel(), { ...node, id: undefined });
+  h.window.syncAgentModelButton();
+  const conversationQuote = h.window.getGenerationCreditEstimate(h.window.getAgentGenerationParameters());
+  assert.deepEqual([conversationQuote.minCredits, conversationQuote.maxCredits], [quote.minCredits, quote.maxCredits]);
+  assertQuoteText(h.document.querySelector("#agentCreditValue"), conversationQuote);
+  const task = h.send("向后延长山间日出");
+  assert.equal(task.input.parameters.outputDuration, 10, "the simulation resolves Auto independently of the preflight range");
+  assert.equal(task.input.cost, quotedTaskCredits(h, task));
+  assert.ok(task.charged >= quote.minCredits && task.charged <= quote.maxCredits);
+  assert.equal(h.state.account.credits, 3000 - task.charged);
+});
+
+test("credit estimate final uses original reference seconds and frozen requested duration instead of the demo clip length", (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  h.agentReferences.addAssets([{ id: "original-reference", type: "video", url: "/original-reference.mp4", duration: 12 }]);
+  const sample = h.send("延续海边镜头"); h.service.complete(sample);
+  assert.equal(sample.input.parameters.outputDuration, 10);
+  assert.equal(sample.result.duration, 8, "the sample media fixture has a deliberately different duration");
+  h.agentReferences.addAssets([{ id: "later-reference", type: "video", url: "/later-reference.mp4", duration: 28 }]);
+  const quote = h.window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({
+    model: h.window.REELAY_MODEL_CATALOG.find((model) => model.id === "seedance-2-5"),
+    parameters: { ...sample.input.parameters, quality: "1080p" }, references: sample.input.references, outputDuration: 10,
+  });
+  assert.equal(quote.status, "exact");
+  const anchor = h.document.querySelector("#canvasHomeBtn");
+  anchor.getBoundingClientRect = () => ({ left: 20, top: 20, right: 52, bottom: 52, width: 32, height: 32 });
+  assert.equal(h.agentGeneration.requestFinal(sample.result, { anchor }), true);
+  const panel = h.document.querySelector(".draft-video-popover");
+  assertQuoteText(panel.querySelector("[data-draft-cost]"), quote);
+  const balance = h.state.account.credits;
+  panel.querySelector("form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  const final = h.service.list().at(-1);
+  assert.equal(final.input.generationStage, "final");
+  assert.equal(final.input.cost, quote.credits); assert.equal(final.charged, quote.credits);
+  assert.equal(final.input.references[0].duration, 12);
+  assert.equal(h.state.account.credits, balance - quote.credits);
+  assert.equal(h.service.cancel(final), true); assert.equal(final.refunded, quote.credits);
+  assert.equal(h.state.account.credits, balance);
+});
+
 test("node sample media badge follows shared expiry and project eligibility before accepting clicks", (t) => {
   const h = harness(t);
   const node = h.window.defaultGeneratorNode(40, 50, "video");
@@ -832,17 +987,17 @@ test("hosted preview waits through host:init and hydrates examples only when the
   assert.equal(h.document.querySelectorAll(".generation-record").length, 0);
 });
 
-test("generation send freezes prompt/reference inputs, charges 24 and creates one record without role messages", (t) => {
+test("generation send freezes prompt/reference inputs, charges its catalog quote and creates one record without role messages", (t) => {
   const h = harness(t);
   const saved = withReferences(h);
   const conversation = h.window.getConversation();
   const messages = plain(conversation.messages);
   const beforeCanvas = plain(h.window.createCanvasDocumentSnapshot());
   const task = h.send(null);
-  assert.equal(task.input.cost, 24);
-  assert.equal(task.charged, 24);
-  assert.equal(h.state.account.credits, 2976);
-  assert.equal(h.state.account.consumedCredits, 24);
+  assert.equal(task.input.cost, quotedTaskCredits(h, task));
+  assert.equal(task.charged, quotedTaskCredits(h, task));
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
+  assert.equal(h.state.account.consumedCredits, quotedTaskCredits(h, task));
   assert.deepEqual(plain(conversation.messages), messages);
   assert.equal(h.service.list().length, 1);
   assert.ok(h.record(task));
@@ -873,12 +1028,12 @@ test("record cancellation refunds once and stale completion cannot overwrite its
   h.click(task, "cancel");
   assert.equal(task.status, "canceled");
   assert.equal(h.first.nodes.length, 0, "successful cancellation removes the pending canvas node");
-  assert.equal(task.refunded, 24);
+  assert.equal(task.refunded, quotedTaskCredits(h, task));
   assert.equal(h.state.account.credits, 3000);
   assert.equal(h.state.account.consumedCredits, 0);
   assert.match(h.record(task).textContent, /已取消/);
   assert.match(h.record(task).textContent, /积分已返还/);
-  assert.match(h.document.querySelector(".action-toast")?.textContent || "", /已返还 24 积分/);
+  assert.match(h.document.querySelector(".action-toast")?.textContent || "", new RegExp(`已返还 ${quotedTaskCredits(h, task)} 积分`));
   assert.equal(h.service.cancel(task.id), false);
   completion();
   assert.equal(task.status, "canceled");
@@ -938,7 +1093,7 @@ test("node and conversation keep shared progress, close cancellation at five sec
   assert.equal(h.service.cancel(task), false);
   assert.equal(task.status, "running");
   assert.equal(h.first.nodes[0], pending);
-  assert.equal(h.state.account.credits, 2976);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
   assert.equal(progress(node), progress(record));
   h.advance(2499);
   assert.equal(task.status, "running");
@@ -954,7 +1109,7 @@ test("node and conversation keep shared progress, close cancellation at five sec
   assert.equal(pending.generating, undefined);
   assert.equal(h.document.querySelector(`[data-id="${pending.id}"] .generation-status`), null);
   assert.equal(h.record(task).dataset.status, "succeeded");
-  assert.equal(h.state.account.credits, 2976);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
 });
 
 test("cancel from the canvas status row terminates its conversation task and refunds exactly once", (t) => {
@@ -1078,7 +1233,7 @@ test("failure keeps reason and refund visible; retry creates a new record preser
   assert.equal(h.first.nodes[0].pendingGeneration.taskId, retry.id);
   assert.deepEqual(plain(retry.input), plain(task.input));
   assert.equal(h.document.querySelectorAll(".generation-record").length, 2);
-  assert.equal(h.state.account.credits, 2976);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
 });
 
 test("edit restores original model, parameters and stable @ bindings and protects a nonempty draft", (t) => {
@@ -1131,7 +1286,7 @@ for (const elapsed of [0, 5000]) {
     assert.equal(task.status, status);
     assert.equal(task.refunded, 0);
     assert.equal(h.service.list().length, 1);
-    assert.equal(h.state.account.credits, 2976);
+    assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
     h.draft("改写恢复的提示词");
     h.agentReferences.restoreAssets([], h.agentReferences.captureScope(), { replace: true });
     assert.deepEqual(plain(task.input), input, "editing the recovered draft must not mutate the sent snapshot");
@@ -1139,8 +1294,8 @@ for (const elapsed of [0, 5000]) {
     assert.equal(task.status, "succeeded", "the original generation retains its original completion schedule");
     assert.ok(task.addedNodeId);
     assert.equal(h.editor().getText(), "改写恢复的提示词");
-    assert.equal(h.state.account.credits, 2976);
-    assert.equal(h.state.account.consumedCredits, 24);
+    assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
+    assert.equal(h.state.account.consumedCredits, quotedTaskCredits(h, task));
   });
 }
 
@@ -1192,12 +1347,12 @@ test("submission reserves a result node without changing selection or viewport a
   assert.deepEqual(plain(h.first.nodes[0]), original);
   assert.equal(task.status, "succeeded");
   assert.equal(task.refunded, 0);
-  assert.equal(h.state.account.credits, 2976);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
   assert.deepEqual(plain(task.input), inputSnapshot);
   h.agentGeneration.render();
   h.advance(7500);
   assert.equal(h.first.nodes.length, 1, "undo must not cause result delivery to run again");
-  assert.equal(h.state.account.credits, 2976);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
 });
 
 test("pending conversation deletion is blocked through the actual history delete action", (t) => {
@@ -1209,7 +1364,7 @@ test("pending conversation deletion is blocked through the actual history delete
   deleteButton.click();
   assert.ok(h.agentHistory.getConversation(id));
   assert.equal(task.status, "queued");
-  assert.equal(h.state.account.credits, 2976);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
   assert.match(h.document.querySelector(".action-toast")?.textContent || "", /仍有生成任务/);
   assert.equal(h.document.querySelector("dialog[open]"), null);
 });
@@ -1342,7 +1497,7 @@ test("locate result switches to its original canvas, selects the delivered node 
   assert.equal(h.first.nodes.length, 1);
   assert.equal(h.second.nodes.length, 0);
   assert.deepEqual([h.second.tx, h.second.ty, h.second.scale], otherViewport);
-  assert.equal(h.state.account.credits, 2976);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
 });
 
 test("locate never recreates an undone result or follows a replacement canvas with the same id", (t) => {
@@ -1366,7 +1521,7 @@ test("locate never recreates an undone result or follows a replacement canvas wi
   h.click(secondTask, "locate");
   assert.equal(h.state.activeCanvasId, h.second.id);
   assert.equal(replacement.nodes.length, 1);
-  assert.equal(h.state.account.credits, 2952);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task) - quotedTaskCredits(h, secondTask));
 });
 
 test("stale locate activation from another project cannot change canvas or selection", (t) => {
@@ -1430,8 +1585,8 @@ test("immediate repeated send cannot debit a second time after the composer was 
   h.document.querySelector(".agent-send").click();
   assert.equal(h.service.list().length, 1);
   assert.equal(h.service.list()[0], task);
-  assert.equal(h.state.account.credits, 2976);
-  assert.equal(h.state.account.consumedCredits, 24);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
+  assert.equal(h.state.account.consumedCredits, quotedTaskCredits(h, task));
 });
 
 test("feedback copies TaskId and confirms only a successful clipboard write", async (t) => {
@@ -1466,8 +1621,8 @@ test("terminal record deletion retains its added canvas result and does not refu
   assert.equal(h.record(task), null);
   assert.equal(h.service.get(task.id), null);
   assert.ok(h.first.nodes.find((node) => node.id === nodeId));
-  assert.equal(h.state.account.credits, 2976);
-  assert.equal(h.state.account.consumedCredits, 24);
+  assert.equal(h.state.account.credits, 3000 - quotedTaskCredits(h, task));
+  assert.equal(h.state.account.consumedCredits, quotedTaskCredits(h, task));
 });
 
 test("batch record deletion confirms the terminal selection and preserves draft, canvas and billing", async (t) => {
@@ -1692,6 +1847,14 @@ test("development presets fill mixed-media and twelve-reference drafts without s
   assert.equal(resolved.document.content.filter((part) => part.type === "reference").length, 9);
   assert.equal(new Set(resolved.document.content.filter((part) => part.type === "reference").map((part) => part.key)).size, 9);
   assert.ok([...resolved.text.matchAll(/\p{Script=Han}/gu)].length >= 300);
+  const unresolvedVideo = h.agentReferences.getAssets().find((asset) => asset.type === "video" && !asset.duration);
+  assert.ok(unresolvedVideo, "the library preset relies on browser video metadata");
+  assert.equal(h.document.querySelector("#agentCreditValue").textContent, "计算中");
+  assert.equal(h.window.captureAgentGenerationInput(), null);
+  const probe = h.mediaElements.find((element) => !element.isConnected && element.src === new URL(unresolvedVideo.url, h.window.location.href).href);
+  assert.ok(probe);
+  Object.defineProperty(probe, "duration", { configurable: true, value: 8 });
+  probe.dispatchEvent(new h.window.Event("loadedmetadata"));
   assert.ok(h.window.captureAgentGenerationInput(), "a filled preset must pass the actual send validation");
   const previous = { prompt: plain(h.editor().getDocument()), references: plain(h.agentReferences.getAssets()) };
   assert.equal(capabilities.hasDraft(), true);

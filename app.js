@@ -2430,7 +2430,65 @@ function normalizeNodeParameters(node) {
   return node;
 }
 
+function getGenerationCreditEstimate(node, { resolveSimulation = false, references } = {}) {
+  const model = getModel(node);
+  if (model?.pricing?.kind !== "video-tokens") {
+    const credits = getLegacyGenerationCost(node);
+    return { status: Number.isFinite(credits) ? "exact" : "pending", credits,
+      minCredits: credits, maxCredits: credits, reasons: credits === null ? ["missing-pricing"] : [] };
+  }
+  const assets = references || getNodeReferenceEntries(node).map((entry) => entry.asset);
+  const constraint = getOmniReferenceTaskTypeConstraint(node);
+  const outputDuration = resolveSimulation || constraint?.duration === -1
+    ? getGenerationOutputDurationSeconds(node, assets.filter((asset) => asset?.type === "video")) : undefined;
+  if (constraint?.duration === -1 && outputDuration == null) {
+    return { status: "pending", credits: null, minCredits: null, maxCredits: null,
+      reasons: [assets.some((asset) => asset?.type === "video") ? "missing-reference-duration" : "missing-output-duration"] };
+  }
+  const quality = model.pricing.qualities[node.quality];
+  const outputDimensions = resolveSimulation && node.aspect === "adaptive"
+    ? quality?.dimensions[model.defaults?.aspect] || quality?.dimensions["16:9"] : undefined;
+  return window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({ model, parameters: node,
+    references: assets, ...(outputDuration != null ? { outputDuration } : {}),
+    ...(outputDimensions ? { outputDimensions } : {}) });
+}
+
 function getCost(node) {
+  const estimate = getGenerationCreditEstimate(node, { resolveSimulation: true });
+  // Auto preserves the existing simulated 10s / 16:9 resolution. Preview
+  // exposes uncertainty; acceptance freezes a quote from the same rules.
+  return estimate.status === "exact" ? estimate.credits : estimate.status === "range" ? estimate.maxCredits : null;
+}
+
+function getCreditEstimateLabel(estimate) {
+  if (estimate.status === "exact") return `≈ ${formatCredit(estimate.credits)}`;
+  if (estimate.status === "range") return `≈ ${formatCredit(estimate.minCredits)}–${formatCredit(estimate.maxCredits)}`;
+  return estimate.reasons.includes("missing-reference-duration") ? "计算中" : "待估算";
+}
+
+function getCreditEstimateDescription(estimate) {
+  const amount = estimate.status === "exact" ? `${formatCredit(estimate.credits)} 积分`
+    : estimate.status === "range" ? `${formatCredit(estimate.minCredits)}–${formatCredit(estimate.maxCredits)} 积分` : "待估算";
+  const reason = estimate.reasons.includes("missing-reference-duration") ? "正在读取参考视频时长"
+    : estimate.reasons.includes("fractional-output-minimum") ? "小数输出时长按相邻最低用量档位估算"
+      : estimate.status === "range" ? "时长或比例未确定，按已支持规格估算范围"
+      : estimate.status === "pending" ? "当前计价所需参数尚未确定" : "随模型、参数和参考视频总时长更新";
+  return `预估消耗 ${amount}；${reason}；发送时重新核算`;
+}
+
+function syncNodeCreditEstimate(node, element, duration = node.duration) {
+  const parameters = { ...node, duration };
+  const estimate = getGenerationCreditEstimate(parameters);
+  const button = element.querySelector('[data-action="generate"]');
+  const amount = button?.querySelector("[data-node-credit-estimate]");
+  if (!amount) return;
+  amount.textContent = getCreditEstimateLabel(estimate);
+  amount.parentElement.title = getCreditEstimateDescription(estimate);
+  button.setAttribute("aria-label", `生成；${getCreditEstimateDescription(estimate)}`);
+  button.dataset.tooltip = getGenerationAvailability(parameters).tooltip;
+}
+
+function getLegacyGenerationCost(node) {
   if (node.kind !== "generator") return 0;
   const model = getModel(node);
   const capabilities = model?.capabilities || {};
@@ -2463,11 +2521,13 @@ function getCost(node) {
 function getGenerationAvailability(node) {
   const taskTypeIssue = getPromptReferenceIssue(node.prompt, getNodeReferenceEntries(node)) || getOmniReferenceTaskTypeIssue(node);
   const cost = getCost(node);
+  const creditEstimate = getGenerationCreditEstimate(node);
   const hasValidPrice = Number.isFinite(cost) && cost > 0;
   const hasPrompt = Boolean(getNodePromptText(node).trim());
   const canGenerate = hasPrompt && !node.generating && hasValidPrice && !taskTypeIssue;
   return {
     cost,
+    creditEstimate,
     hasValidPrice,
     taskTypeIssue,
     canGenerate,
@@ -2476,7 +2536,7 @@ function getGenerationAvailability(node) {
       : taskTypeIssue
         ? taskTypeIssue
         : !hasValidPrice
-        ? "当前模型暂不可计价"
+        ? creditEstimate.reasons.includes("missing-reference-duration") ? "正在读取参考视频时长" : "当前模型暂不可计价"
         : hasPrompt
             ? "生成中"
             : "请输入提示词",
@@ -5565,8 +5625,8 @@ function createGeneratorNodeElement(node, existingElement = null) {
           <button class="control-chip composer-tool-button advanced-settings-chip ${node.advancedSettingsExpanded ? "active" : ""}" data-action="advanced-settings-toggle" type="button" title="高级设置" aria-label="高级设置" aria-expanded="${node.advancedSettingsExpanded}" aria-controls="advanced-settings-${escapeHtml(node.id)}" ${generationInputsDisabled}>
             ${window.REELAY_ICONS.markup("sliders-horizontal", { class: "advanced-settings-icon" })}
           </button>
-          <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${generationAvailability.tooltip}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
-            <span class="credit-mark"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span>${node.credits}</span></span>
+          <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${escapeHtml(generationAvailability.tooltip)}" aria-label="生成；${escapeHtml(getCreditEstimateDescription(generationAvailability.creditEstimate))}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
+            <span class="credit-mark" title="${escapeHtml(getCreditEstimateDescription(generationAvailability.creditEstimate))}"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span data-node-credit-estimate>${escapeHtml(getCreditEstimateLabel(generationAvailability.creditEstimate))}</span></span>
             <span class="send-arrow">${window.REELAY_ICONS.markup("arrow-up", { class: "send-arrow-icon" })}</span>
           </button>
         </div>
@@ -5599,7 +5659,13 @@ function createGeneratorNodeElement(node, existingElement = null) {
   const durationNumber = el.querySelector("[data-duration-number]");
   const durationControls = window.REELAY_DURATION_CONTROLS;
   durationRange?.addEventListener("input", (event) => {
-    durationControls.sync(durationRange, durationControls.read(durationRange, event.currentTarget));
+    const duration = durationControls.read(durationRange, event.currentTarget);
+    durationControls.sync(durationRange, duration);
+    syncNodeCreditEstimate(node, el, duration);
+  });
+  durationRange?.addEventListener("pointercancel", () => {
+    durationControls.sync(durationRange, node.duration);
+    syncNodeCreditEstimate(node, el);
   });
   durationRange?.addEventListener("change", (event) => {
     const duration = durationControls.read(durationRange, event.currentTarget);
@@ -5608,7 +5674,9 @@ function createGeneratorNodeElement(node, existingElement = null) {
   });
   durationNumber?.addEventListener("input", (event) => {
     if (!durationRange || event.currentTarget.value === "") return;
-    durationControls.sync(durationRange, durationControls.read(durationRange, event.currentTarget), { preserveNumber: true });
+    const duration = durationControls.read(durationRange, event.currentTarget);
+    durationControls.sync(durationRange, duration, { preserveNumber: true });
+    syncNodeCreditEstimate(node, el, duration);
   });
   durationNumber?.addEventListener("change", (event) => {
     if (!durationRange) return;
@@ -8177,7 +8245,11 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
     const eligibility = window.REELAY_DRAFT_VIDEO.getFinalEligibility(asset, { projectId: scope.projectId });
     if (!eligibility.eligible) return null;
     const seconds = Number(asset.generation.input.parameters.outputDuration);
-    const cost = Number(videoQualityCost["1080p"]) * Math.ceil(seconds / 4);
+    const original = asset.generation.input;
+    const sourceModel = models.find((entry) => entry.id === original.modelId);
+    const parameters = { ...original.parameters, kind: "generator", model: sourceModel.baseModelId,
+      mode: "video", quality: "1080p", duration: `${seconds}s`, count: 1, assets: original.references || [] };
+    const cost = getCost(parameters);
     if (!Number.isFinite(cost) || cost <= 0) return null;
     const input = window.REELAY_DRAFT_VIDEO.buildFinalInput(asset, { projectId: scope.projectId, outputFormat, cost });
     return input ? { ...input, sourceNodeId } : null;
@@ -8200,11 +8272,11 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
     const parameters = normalizeNodeParameters({ ...input.parameters, kind: "generator", model: model.id, mode: model.type });
     const references = input.references || [];
     const resolved = promptDocument.resolve(input.promptDocument || input.prompt, references.map((asset) => ({ key: `asset:${asset.id}`, asset })));
-    const cost = getCost(parameters);
+    const cost = getCost({ ...parameters, assets: references });
     if (!resolved.valid || !Number.isFinite(cost) || cost <= 0) return null;
     const { beforeAspect, aspect, afterAspect } = getParamLabelParts(parameters);
     return { prompt: resolved.text, promptDocument: resolved.document, references, referenceSnapshot: resolved.media,
-      parameters: { ...parameters, outputDuration: getGenerationOutputDurationSeconds(parameters) }, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
+      parameters: { ...parameters, outputDuration: getGenerationOutputDurationSeconds(parameters, references.filter((asset) => asset.type === "video")) }, modelId: model.id, modelName: model.name, mediaType: model.type, cost,
       parameterSummary: `${beforeAspect}${aspect}${afterAspect}` };
   },
   sanitizeUrl: sanitizeRuntimeMediaUrl, placeAnchoredPopover: canvasPopoverPlacement.placeAnchoredPopover, refreshIcons,
@@ -8465,11 +8537,11 @@ function syncAgentModelButton() {
   const parameters = agentParameters.sync(model);
   if (agentInput) agentInput.dataset.placeholder = generatorModelPolicy.getPromptPlaceholder(models, parameters);
   mountAgentPrompt();
-  const cost = parameters ? getCost(getAgentGenerationParameters()) : null;
-  const costLabel = Number.isFinite(cost) && cost > 0 ? formatCredit(cost) : null;
-  if (agentCreditValue) agentCreditValue.textContent = costLabel ?? "—";
+  const creditEstimate = parameters ? getGenerationCreditEstimate(getAgentGenerationParameters()) : null;
+  const costLabel = creditEstimate ? getCreditEstimateLabel(creditEstimate) : "—";
+  if (agentCreditValue) agentCreditValue.textContent = costLabel;
   if (agentSendButton) {
-    const label = costLabel ? `发送；本次预计消耗 ${costLabel} 积分` : "发送；本次消耗待估算";
+    const label = creditEstimate ? `发送；${getCreditEstimateDescription(creditEstimate)}` : "发送；本次消耗待估算";
     agentSendButton.title = label;
     agentSendButton.setAttribute("aria-label", label);
   }

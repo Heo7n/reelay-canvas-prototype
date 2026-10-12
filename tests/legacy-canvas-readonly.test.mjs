@@ -34,6 +34,7 @@ const audioPlayer = await readFile(new URL("src/legacy-canvas/canvas-audio-playe
 const agentComposerView = await readFile(new URL("src/legacy-canvas/canvas-agent-composer-view.js", root), "utf8");
 const agentReferences = await readFile(new URL("src/legacy-canvas/canvas-agent-references.js", root), "utf8");
 const generationModules = await Promise.all([
+  "src/application/generation-credit-estimate.js",
   "src/legacy-canvas/canvas-draft-video-badge.js",
   "src/legacy-canvas/canvas-agent-launcher-motion.js",
   "src/application/prompt-optimization-preferences.js",

@@ -146,8 +146,9 @@
       const reason = !eligibility.eligible ? eligibility.reason : !input ? "当前无法生成正片，请稍后重试" : "";
       error.textContent = reason; error.hidden = !reason;
       submitButton.disabled = submitting || !input;
-      panel.querySelector("[data-draft-cost]").textContent = input ? String(input.cost) : "—";
-      submitButton.setAttribute("aria-label", input ? "生成正片，消耗 " + input.cost + " 积分" : "生成正片");
+      panel.querySelector("[data-draft-cost]").textContent = input ? "≈ " + new Intl.NumberFormat("zh-CN").format(input.cost) : "—";
+      submitButton.setAttribute("aria-label", input ? "生成正片，预估消耗 " + input.cost + " 积分" : "生成正片");
+      submitButton.title = input ? "预估积分沿用原参考视频与输出时长，样片视频不计入输入时长" : "";
       timeCard.innerHTML = renderTimingMarkup(active.sourceAsset);
       view.clearTimeout(expiryTimer); expiryTimer = 0;
       if (eligibility.eligible && eligibility.expiresAt > now()) {

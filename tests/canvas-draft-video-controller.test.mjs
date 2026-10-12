@@ -131,7 +131,7 @@ test("compact sample popover fixes 1080P, chooses a model format and submits the
   const f = fixture(t); const before = plain(f.sourceAsset);
   assert.equal(f.open(), true);
   assert.equal(f.query('[data-draft-resolution]').textContent, "1080P");
-  assert.equal(f.query('[data-draft-cost]').textContent, "36");
+  assert.equal(f.query('[data-draft-cost]').textContent, "≈ 36");
   assert.equal(f.query('textarea,select,input:not([type="radio"])'), null, "only output format is editable");
   assert.deepEqual([...f.document.querySelectorAll('input[type="radio"]')].map((input) => input.value), ["mp4", "mov"]);
   assert.equal(f.query('[data-draft-prompt]'), null, "original inputs are not repeated in the parameters popover");

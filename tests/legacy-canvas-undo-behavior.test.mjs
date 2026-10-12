@@ -3551,29 +3551,42 @@ test("Agent send estimate follows the generation model and parameters and recove
   const amount = document.querySelector("#agentCreditValue");
   const send = document.querySelector(".agent-send");
   const assertEstimate = (cost) => {
-    assert.equal(amount.textContent, cost === null ? "—" : String(cost));
-    const label = cost === null ? "发送；本次消耗待估算" : `发送；本次预计消耗 ${cost} 积分`;
-    assert.equal(send.getAttribute("aria-label"), label);
-    assert.equal(send.title, label);
+    if (cost === null) assert.equal(amount.textContent, "—");
+    else assert.equal(Number(amount.textContent.replace(/[^\d]/g, "")), cost);
+    assert.equal(send.getAttribute("aria-label"), send.title);
+    assert.match(send.title, cost === null ? /待估算/ : new RegExp(`${cost} 积分`));
+  };
+  const assertCatalogEstimate = () => {
+    const parameters = h.window.getAgentGenerationParameters();
+    const quote = h.window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({
+      model: h.window.getAgentComposerModel(), parameters, references: parameters.assets,
+    });
+    if (quote.status === "exact") assertEstimate(quote.credits);
+    else {
+      assert.equal(quote.status, "range");
+      assert.deepEqual(amount.textContent.match(/\d[\d,]*/g)?.map((value) => Number(value.replaceAll(",", ""))), [quote.minCredits, quote.maxCredits]);
+      assert.equal(send.getAttribute("aria-label"), send.title);
+      assert.match(send.title, /时长或比例未确定/);
+    }
   };
 
   assert.equal(h.window.getAgentComposerModel().id, "seedance-2");
-  assertEstimate(12);
+  assertCatalogEstimate();
   controls.open();
   const duration = controls.menu.querySelector("[data-duration-range]");
   duration.value = "8";
   duration.dispatchEvent(new h.window.Event("input", { bubbles: true }));
-  assertEstimate(24);
+  assertCatalogEstimate();
   controls.click("quality", "1080p");
-  assertEstimate(36);
+  assertCatalogEstimate();
 
   controls.model("seedance-2-5");
-  assertEstimate(24);
+  assertCatalogEstimate();
   controls.open();
   controls.click("omni-reference-task-type", "edit");
-  assertEstimate(null);
+  assert.match(amount.textContent, /计算中|待估算/);
   controls.click("omni-reference-task-type", "auto");
-  assertEstimate(24);
+  assertCatalogEstimate();
 
   controls.model("gpt-image-2");
   assertEstimate(5);
@@ -3587,7 +3600,7 @@ test("Agent send estimate follows the generation model and parameters and recove
   controls.mode("generation");
   assertEstimate(17);
   controls.model("seedance-2");
-  assertEstimate(36);
+  assertCatalogEstimate();
 });
 
 test("canvas credit widget compacts large balances without overstating them and retains exact accessible values", (t) => {
@@ -4052,7 +4065,7 @@ test("a sent draft's late optimization cannot populate the next composer draft",
   assert.equal(controller.open(owner), false);
 });
 
-test("Agent video edit cost uses draft video duration and removal restores an unknown estimate", (t) => {
+test("Agent video edit cost uses reference duration and removal restores a pending estimate", (t) => {
   const h = createHarness(t);
   h.window.setAgentOpen(true);
   const controls = agentParameterControls(h);
@@ -4062,20 +4075,25 @@ test("Agent video edit cost uses draft video duration and removal restores an un
   controls.model("seedance-2-5");
   controls.open();
   controls.click("omni-reference-task-type", "edit");
-  assert.equal(amount.textContent, "—");
+  assert.match(amount.textContent, /计算中|待估算/);
   references.addAssets([{ id: "reference-video", type: "video", name: "long.mp4",
     url: "blob:http://reelay.test/long", duration: 20 }]);
-  assert.equal(amount.textContent, "40", "480P edit estimates five four-second billing units from the 20-second input");
-  assert.match(document.querySelector(".agent-send").getAttribute("aria-label"), /40 积分/);
+  const quote = h.window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({
+    model: h.window.getAgentComposerModel(), parameters: h.window.getAgentGenerationParameters(),
+    references: references.getAssets(), outputDuration: 20,
+  });
+  assert.equal(quote.status, "range", "adaptive aspect retains its catalog dimension bounds");
+  const assertRange = () => assert.deepEqual(amount.textContent.match(/\d+/g)?.map(Number), [quote.minCredits, quote.maxCredits]);
+  assertRange();
   controls.mode("agent");
   assert.equal(amount.textContent, "—");
   controls.mode("generation");
-  assert.equal(amount.textContent, "40");
+  assertRange();
   document.querySelector("#agentReferenceShelf [data-reference-remove]").click();
-  assert.equal(amount.textContent, "—");
+  assert.match(amount.textContent, /计算中|待估算/);
   controls.model("gpt-image-2");
   controls.model("seedance-2-5");
-  assert.equal(amount.textContent, "—", "model preferences do not retain removed reference assets");
+  assert.match(amount.textContent, /计算中|待估算/, "model preferences do not retain removed reference assets");
   assert.equal(h.state.account.credits, 3000);
   assert.equal(h.state.account.consumedCredits, 0);
 });

@@ -66,6 +66,12 @@ Reelay 的“自动校验素材”按用户确认的产品规则表达为：用�
 
 这些是当前交互原型的产品能力契约，不代表已经接入供应商 API。真实接入时必须由后端能力接口校准输入方式、输出分辨率、时长、参考素材数量、原生音频、地区、价格、服务状态和下线日期。
 
+## 积分预估配置
+
+Seedance 2.5、2.0、Fast 的 `pricing` 在 `data/model-catalog.js` 维护，2026-10-12 核对[官方单价](https://docs.volcengine.com/docs/ark/model-pricing?lang=zh)、[实际输出尺寸](https://docs.volcengine.com/docs/ark/video-generation-tutorial?lang=zh)与[最低 token 用量表](https://bytedance.larkoffice.com/wiki/FXaYwxzJ5i5Zdik32ipcWzt7nxd?table=tblheIYDXXwYM43b&view=vew2CR2JYM#CategoryScheduledTask)。只配置当前已开放规格，没有增加 4K 能力。样片继承 2.5 的 480P 规则，正片按原输入视频时长与目标 1080P 独立估算，样片视频不作为新增输入。
+
+估算用量为 `(参考视频总秒数 + 输出秒数) × 宽 × 高 × 24 / 1024`；含视频输入时取与最低用量的较大值。最低表按输出整数秒保存等价计费秒数，乘实际面积后 `Math.round` 可重建所核对的官方整数 token 表；不能把一个规格的 `67,200` 当作通用下限。成本使用模型 / 分辨率 / 有无视频输入对应的单价，保留中间精度，最终积分 `ceil(成本 × 16.5)`。因此可与官方计算器两位小数的显示成本换算相差少量尾数。报价是预估，实际供应商用量和结算仍需在真实接入时校准。
+
 ## 持久化兼容
 
 - `seedance-2`、`seedance-2-fast`、`kling-video-3`、`gpt-image-2`、`seedream-5-lite` 和 `nano-banana-pro` 保留既有稳定 ID。

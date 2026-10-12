@@ -1,6 +1,15 @@
 import { test, expect, openCanvas } from "./fixtures";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import type { LegacyCanvasDocumentV1 } from "../../src/contracts/canvas-document-v1";
+
+async function exactCredits(value: Locator) {
+  await expect(value).toHaveText(/^≈ ([\d,]+)$/);
+  const match = /^≈ ([\d,]+)$/.exec(await value.innerText());
+  if (!match) throw new Error("Expected one exact credit estimate, not a range or pending quote.");
+  const credits = Number(match[1].replaceAll(",", ""));
+  expect(credits).toBeGreaterThan(0);
+  return credits;
+}
 
 async function pauseGenerationClock(page: Page) {
   // Installing alone keeps time advancing during locator actions. Deadline
@@ -17,7 +26,7 @@ test("sidebar generation immediately adds a pending node, fills it on completion
   const prompt = `晨光中的玻璃香水瓶 ${Date.now()}`;
   await canvas.locator('#agentInput [contenteditable="true"]').fill(prompt);
   const before = await canvas.locator(".canvas-node").count();
-  const cost = Number(await canvas.locator("#agentCreditValue").innerText());
+  const cost = await exactCredits(canvas.locator("#agentCreditValue"));
   expect(cost).toBeGreaterThan(0);
   await canvas.locator(".agent-send").click();
   const record = canvas.locator("#agentGenerationRecords .generation-record").filter({ hasText: prompt });
@@ -57,7 +66,7 @@ test("canceling queued sidebar generation removes its pending node and refunds o
   const prompt = `取消生成边界 ${Date.now()}`;
   await canvas.locator('#agentInput [contenteditable="true"]').fill(prompt);
   const before = await canvas.locator(".canvas-node").count();
-  const cost = Number(await canvas.locator("#agentCreditValue").innerText());
+  const cost = await exactCredits(canvas.locator("#agentCreditValue"));
   expect(cost).toBeGreaterThan(0);
   await canvas.locator(".agent-send").click();
   const record = canvas.locator("#agentGenerationRecords .generation-record").filter({ hasText: prompt });
@@ -124,7 +133,7 @@ test("a saved sample survives refresh and its node can generate a separately cha
   await canvas.locator("#agentModelBtn").click();
   await canvas.getByRole("button", { name: "Seedance 2.5（样片模式）", exact: true }).click();
   await canvas.locator('#agentInput [contenteditable="true"]').fill(prompt);
-  const draftCost = Number(await canvas.locator("#agentCreditValue").innerText());
+  const draftCost = await exactCredits(canvas.locator("#agentCreditValue"));
   expect(draftCost).toBeGreaterThan(0);
   const sampleSave = page.waitForResponse(async (response) => {
     if (response.request().method() !== "PUT" || !documentPath.test(response.url()) || !response.ok()) return false;
@@ -178,12 +187,12 @@ test("a saved sample survives refresh and its node can generate a separately cha
   await expect(dialog.getByRole("radio", { name: "MP4", exact: true })).toBeChecked();
   await dialog.getByText("MOV", { exact: true }).click();
   await expect(dialog.getByRole("radio", { name: "MOV", exact: true })).toBeChecked();
-  const finalCost = Number(await dialog.locator("[data-draft-cost]").innerText());
+  const finalCost = await exactCredits(dialog.locator("[data-draft-cost]"));
   expect(finalCost).toBeGreaterThan(draftCost);
   const finalSave = page.waitForResponse(async (response) => response.request().method() === "PUT"
     && documentPath.test(response.url()) && response.ok()
     && JSON.stringify(await response.json()).includes(`"sourceDraftTaskId":"${sourceAsset.generation!.taskId}"`));
-  await dialog.getByRole("button", { name: /^生成正片，消耗/ }).click();
+  await dialog.getByRole("button", { name: `生成正片，预估消耗 ${finalCost} 积分`, exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(canvas.locator("#railCreditValue")).toHaveText(String(3000 - finalCost));
   const finalRecord = canvas.locator("#agentGenerationRecords .generation-record").filter({ has: canvas.locator(".generation-record-final-source") });

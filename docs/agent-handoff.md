@@ -1,6 +1,6 @@
 # Reelay 当前交接
 
-核对日期：2026-09-29。本页只保存当前基线、环境、未完成项与最近验证；已实现功能见[产品规范](current-product-spec.md)，操作规则见[开发工作流](development-workflow.md)，历史从 Git / PR 查，不追加逐轮状态。
+核对日期：2026-10-12。本页只保存当前基线、环境、未完成项与最近验证；已实现功能见[产品规范](current-product-spec.md)，操作规则见[开发工作流](development-workflow.md)，历史从 Git / PR 查，不追加逐轮状态。
 
 ## 当前代码与工作
 
@@ -8,12 +8,13 @@
 - 本轮治理起点为 `8afd67d`；`origin/main` 最近本机已知为 `f32034c`（PR #29），实验分支尚未经 PR 集成。后续源提交与脏文件以实际 Git 为准。
 - 已实现审计后的有限收敛：普通节点、对话和正片共用生成服务；绘制不再隐式保存；登录失效保护当前快照并支持同页恢复；版本冲突可另存全部内部画布副本，放弃修改必须确认。没有扩展为云数据迁移或旧工作区清理。
 - 接续治理修复了拖动中途位置 / Alt 副本进入自动保存，以及未结束手势跨画布写入同 ID 节点的问题。节点移动、组移动 / 缩放和 Alt 复制改为独立预览 owner，松手提交，取消丢弃；保存协调器继续只读取 CanvasRecord，后台生成不被手势阻塞。没有扩大为全部节点结构命令迁移。
+- 当前功能切片为发送旁的实时积分预估：Seedance 2.5 / 2.0 / Fast（含样片、正片）按官方尺寸、单价和最低用量计算，配置归模型目录；用户确认成本 × 16.5，最终向上取整整数。节点、对话和正片共用报价规则，Auto 显示范围，未知视频时长显示计算中，节点滑杆预览更新报价但不写内容 / 撤销。受理前重新估算并冻结模拟扣费，没有接入供应商实际 usage 或持久账本。
 - CI 配置覆盖 `main`、当前评审分支 push、PR 与手动触发。[当前评审分支运行](https://github.com/Heo7n/reelay-canvas-prototype/actions/workflows/ci.yml?query=branch%3Acodex%2Fexperiment-20260910)是远端证据入口；`check:release-ci` 只接受精确源 SHA 的 push / manual 三项成功，PR merge 检查不能替代该源码树证据。
 
 ## 当前本机评审
 
 - 用户正在使用 `http://localhost:5182/index.html`；完整项目入口为 `/app`，API 为 5183，同属上述工作区。当前数据为既有本机 `reelay_library_preview_20260915` 与 `.reelay-data/library-preview/objects`，不是共享云库。
-- 恢复命令、唯一端口 / 容器 / 数据位置表见[当前评审环境](local-development.md#当前评审环境)。本机忽略的 `.env.local-preview` 已从既有 launcher 安全转存。2026-09-29 已用入库 launcher 仅重启 5183，载入新 API 契约；5183 与 5182 代理的 `/api/health` 均为 200 / PostgreSQL。前端、数据库、原媒体与用户项目保留，未迁移或 seed。
+- 恢复命令、唯一端口 / 容器 / 数据位置表见[当前评审环境](local-development.md#当前评审环境)。2026-10-12 发现 5182 / 5183 均未运行、Docker daemon 未启动；仅使用既有 `.env.local-preview` 与入库 launcher 恢复 5182 前端，`/index.html` 和新报价脚本返回 200。完整账号入口的 API 尚未恢复；本轮没有启动数据库、迁移或 seed，也未修改原项目与媒体。
 - 仓库迁移已至 `0019`；这只是源码可提供的最高迁移，不代表 Reelay_Dev / Reelay_Test 已应用。本机实验迁移不能自动用于共享库；操作前核实目标 ledger 和兼容范围。
 - 自动浏览器曾对当前 localhost 返回 `URL protocol not allowed`，根因尚未确定；没有证据说明是用户主动限制。后续没有绕过拒绝，最近版本栏 / 新结果反馈未实际浏览器视觉或 E2E 复核。HTTP 和 JSDOM 不替代该验收。
 
@@ -29,14 +30,14 @@
 
 历史证据仍保留在本机忽略目录：`.reelay-data/hover-version-release-check.log`、`.reelay-data/inline-version-release-build.log`、`.reelay-data/inline-version-public-verification.json`、`.reelay-data/inline-version-production-inspect.log`。通用新核验命令见[发布步骤](vercel-supabase-preview.md#4-发布步骤)，不再依赖历史临时验证脚本。本轮治理未同步公网。
 
-最新手势治理的本地完整检查与两种构建证据在 `.reelay-data/gesture-check.log`、`gesture-account-build.log`、`gesture-experience-build.log`；1741 项 legacy、478 项 shell、328 项 server 以及交付 / 启动工具检查通过。新增集成回归覆盖拖动中保存确认、生成完成、401 / 409 恢复、跨画布与取消生命周期；另补齐过期取消按钮的真实任务传参及事件异常断言。新增两条隔离浏览器回归验证持住拖动时自动保存、Esc 取消后刷新回读；远端实际结果查看上述 CI 入口，不将本地 E2E 类型检查当成浏览器通过。上一轮独立临时 PostgreSQL 的 94 项集成测试通过，临时容器已清理；本轮没有修改数据库。
+最新积分预估切片的本地完整检查与两种构建证据在 `.reelay-data/credit-estimate-check.log`、`credit-estimate-account-build.log`、`credit-estimate-experience-build.log`；1765 项 legacy、478 项 shell、328 项 server 以及交付 / 启动工具检查通过。新增纯计算与真实入口回归覆盖模型 / 比例 / 分辨率 / 时长、最低用量、小数参考、元数据等待、Auto 范围、滑杆预览取消、正片冻结参考与扣费退款。另新增两条隔离浏览器回归核对按钮报价、浅深单行布局、提交 / 取消；远端实际结果查看上述 CI 入口，不将本地 E2E 类型检查当成浏览器通过。既有手势 / 保存恢复检查继续保留，本轮没有修改数据库。
 
 远端验收已暴露并修复旧迁移断言、测试数据隔离、过期 UI 定位器、正片参数被误判外部点击、主体编辑返回丢失搜索，以及演示初始化首轮返回陈旧标签数据的问题；没有跳过失败或放宽错误校验。浏览器每项测试使用独立内存服务，数据库测试只在隔离环境执行，不接触当前评审数据。
 
 ## 接续边界与下一入口
 
 - 生成记录、节点任务、提示词优化仍是模拟，没有真实供应商执行或持久 CreditLedger；刷新测试积分保持 `3000 / 0`。可见结果与正片关系以产品规范为准，演示进度、媒体与时限不能直接当供应商协议。
-- React 壳与 legacy iframe 是渐进迁移结构；按真实功能边界提取，不以大文件或 JS / TS 混用为理由重写整个应用。高频移动已分离预览和提交，仍复用现有受控移动 / 创建撤销；部分结构写入尚未迁入统一内容命令。下一候选切片是本地文件导入：核对上传等待后的实际 owner / 权限及一次撤销，避免切画布后晚到回调串写；尚未在本轮修改。
+- React 壳与 legacy iframe 是渐进迁移结构；按真实功能边界提取，不以大文件或 JS / TS 混用为理由重写整个应用。高频移动已分离预览和提交，仍复用现有受控移动 / 创建撤销；部分结构写入尚未迁入统一内容命令。工程治理已收口，后续按具体产品目标或已复现问题安排，不自动继续文件导入和结构迁移。
 - 当前本机数据、保留源数据库、旧 ObjectStore 与云端内容均需保留；位置和备份边界见[本地开发](local-development.md#数据归属与保留)。本机样本备份演练已做，真实云库与原媒体配套备份 / 隔离恢复仍未验收。
 - 保存恢复副本在成功保存前只保留当前页面内存，不提供浏览器崩溃 / 刷新后的永久恢复。真实供应商、持久任务与积分账本仍待独立切片。
 - 下一次发布必须以 `check:release-ci` 绑定明确 source SHA 与实际目标；本地受限页面的视觉验收仍不能由 CI 隔离业务流程代替。

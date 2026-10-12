@@ -3836,6 +3836,7 @@ html:not([data-theme="light"]) .model-brand-monochrome img {
   font-weight: 500;
   line-height: 1;
   letter-spacing: -0.015em;
+  white-space: nowrap;
 }
 
 .credit-mark .credit-semantic-icon {

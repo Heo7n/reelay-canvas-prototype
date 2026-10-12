@@ -225,6 +225,54 @@
     },
   ];
 
+  // Official prices, dimensions and minimum-token views checked on 2026-10-12.
+  // https://docs.volcengine.com/docs/ark/model-pricing?lang=zh
+  // https://docs.volcengine.com/docs/ark/video-generation-tutorial?lang=zh
+  // The minimum table is compacted into equivalent billable seconds, not a
+  // table of final prices. Its token values round to the nearest integer.
+  const minimumBillableSecondsByOutputSeconds = {
+    4: 7, 5: 9, 6: 10, 7: 12, 8: 14, 9: 15, 10: 17, 11: 19, 12: 20,
+    13: 22, 14: 24, 15: 25, 16: 27, 17: 29, 18: 30, 19: 32, 20: 34,
+    21: 35, 22: 37, 23: 39, 24: 40, 25: 42, 26: 44, 27: 45, 28: 47,
+    29: 49, 30: 50,
+  };
+  const dimensionMap = (sizes) => Object.fromEntries(
+    ["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"].map((aspect, index) =>
+      [aspect, { width: sizes[index][0], height: sizes[index][1] }]),
+  );
+  const dimensions720 = dimensionMap([[1280, 720], [1112, 834], [960, 960], [834, 1112], [720, 1280], [1470, 630]]);
+  const dimensions1080 = dimensionMap([[1920, 1080], [1664, 1248], [1440, 1440], [1248, 1664], [1080, 1920], [2206, 946]]);
+  const dimensions480_25 = dimensionMap([[854, 480], [752, 560], [640, 640], [560, 752], [480, 854], [992, 432]]);
+  const dimensions480_20 = dimensionMap([[864, 496], [752, 560], [640, 640], [560, 752], [496, 864], [992, 432]]);
+  const priceQuality = (dimensions, withoutVideo, withVideo) => ({
+    dimensions, yuanPerMillionTokens: { withoutVideo, withVideo },
+  });
+  const seedancePricing = {
+    "seedance-2-5": {
+      "480p": priceQuality(dimensions480_25, 70, 42),
+      "720p": priceQuality(dimensions720, 70, 42),
+      "1080p": priceQuality(dimensions1080, 77, 46),
+    },
+    "seedance-2": {
+      "480p": priceQuality(dimensions480_20, 46, 28),
+      "720p": priceQuality(dimensions720, 46, 28),
+      "1080p": priceQuality(dimensions1080, 51, 31),
+    },
+    "seedance-2-fast": {
+      "480p": priceQuality(dimensions480_20, 37, 22),
+      "720p": priceQuality(dimensions720, 37, 22),
+    },
+  };
+  canvasModels.forEach((model) => {
+    const qualities = seedancePricing[model.id];
+    if (!qualities) return;
+    model.pricing = {
+      kind: "video-tokens", verifiedAt: "2026-10-12", framesPerSecond: 24,
+      pixelsPerToken: 1024, creditsPerYuan: 16.5,
+      minimumBillableSecondsByOutputSeconds, qualities,
+    };
+  });
+
   // A separate product choice uses the same provider model and task constraints.
   // Only successful draft tasks can later request a 1080p final within seven days.
   const seedance25Index = canvasModels.findIndex((model) => model.id === "seedance-2-5");
