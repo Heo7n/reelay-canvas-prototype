@@ -44,7 +44,7 @@ beforeEach(async () => {
 afterAll(async () => {
   await pool?.end();
   if (!adminPool) return;
-  await adminPool.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND pid<>pg_backend_pid()", [databaseName]);
+  // Do not interrupt connections still completing the pool's graceful close.
   await adminPool.query(`DROP DATABASE IF EXISTS "${databaseName}"`);
   await adminPool.end();
 });

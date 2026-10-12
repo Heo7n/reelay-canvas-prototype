@@ -30,7 +30,7 @@
 
 历史证据仍保留在本机忽略目录：`.reelay-data/hover-version-release-check.log`、`.reelay-data/inline-version-release-build.log`、`.reelay-data/inline-version-public-verification.json`、`.reelay-data/inline-version-production-inspect.log`。通用新核验命令见[发布步骤](vercel-supabase-preview.md#4-发布步骤)，不再依赖历史临时验证脚本。本轮治理未同步公网。
 
-最新积分预估切片的本地完整检查与两种构建证据在 `.reelay-data/credit-estimate-check.log`、`credit-estimate-account-build.log`、`credit-estimate-experience-build.log`；1765 项 legacy、478 项 shell、328 项 server 以及交付 / 启动工具检查通过。新增纯计算与真实入口回归覆盖模型 / 比例 / 分辨率 / 时长、最低用量、小数参考、元数据等待、Auto 范围、滑杆预览取消、正片冻结参考与扣费退款。另新增两条隔离浏览器回归核对按钮报价、浅深单行布局、提交 / 取消；远端实际结果查看上述 CI 入口，不将本地 E2E 类型检查当成浏览器通过。既有手势 / 保存恢复检查继续保留，本轮没有修改数据库。
+最新积分预估切片的本地完整检查与两种构建证据在 `.reelay-data/credit-estimate-check.log`、`credit-estimate-account-build.log`、`credit-estimate-experience-build.log`；1765 项 legacy、478 项 shell、328 项 server 以及交付 / 启动工具检查通过。新增回归覆盖官方计费配置、参考元数据、Auto 范围、滑杆预览、正片冻结参考与扣费退款。[功能提交的远端运行](https://github.com/Heo7n/reelay-canvas-prototype/actions/runs/38206908541)中 quality 和 27 项隔离浏览器测试通过，包括按钮报价、浅深单行布局、提交 / 取消。PostgreSQL 的 94 项断言通过，但 storage 测试关闭连接池后再强制终止后端，触发清理竞态；已删除该强制终止，使用普通 DROP，保留真实泄漏时的失败。修复后的完整状态以当前源 SHA 的上述 CI 入口为准。本轮没有修改数据库结构或本机数据。
 
 远端验收已暴露并修复旧迁移断言、测试数据隔离、过期 UI 定位器、正片参数被误判外部点击、主体编辑返回丢失搜索，以及演示初始化首轮返回陈旧标签数据的问题；没有跳过失败或放宽错误校验。浏览器每项测试使用独立内存服务，数据库测试只在隔离环境执行，不接触当前评审数据。
 
