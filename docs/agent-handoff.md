@@ -14,6 +14,8 @@
 
 ## 当前本机评审
 
+- 2026-10-15 同步结果：真实生成等有效改动提交 `869cb35`，深色配色提交 `e2dc7f6`，均已推送实验分支；主线仍为 `f32034c`，未合并或部署公网。同步时 5182 / 5183 原服务已停止，已从既有配置与原数据库 / ObjectStore 恢复：API PID 32140（launcher 28852）、前端 PID 13856（launcher 38204）。新日志为 `canvas-video-api-20261015.*.log` 与 `frontend-20261015.*.log`；预览 CSS 200 且含新配色，代理 health 200 / PostgreSQL 正常。旧成功 Probe Range 仍为 206；平台连接为 disconnected，使用真实生成前需在页面重新登录，不自动恢复凭据或提交任务。下方 2026-10-14 PID 与连接记录仅为当时验证事实。
+
 - 2026-10-15 提交前完整 `npm run check`、两种构建、10 项隔离浏览器回归与 103 项独立 PostgreSQL 测试通过；浅深主题各默认 / hover / selected 六张截图核对，几何一致、控制台零错误。证据在 `.reelay-data/commit-sync-20261015/`。生成连接页已纠正旧“画布与对话仍模拟”说明；known prepared / busy 状态缺口仍按下文记录，不因此声称修复。本轮未重启实际生成 API、发送付费任务或部署公网。
 
 - 用户正在使用 `http://localhost:5182/index.html`；完整项目入口为 `/app`，API 为 5183，同属上述工作区。当前数据为既有本机 `reelay_library_preview_20260915` 与 `.reelay-data/library-preview/objects`，不是共享云库。
