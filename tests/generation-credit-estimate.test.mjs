@@ -140,6 +140,59 @@ test("every video duration must be loaded before quoting", () => {
   }
 });
 
+function seedanceTask(taskType, overrides = {}) {
+  const item = context.REELAY_MODEL_CATALOG.find((entry) => entry.id === "seedance-2-5");
+  return { model: item, parameters: { quality: "720p", aspect: "adaptive", duration: "10s", omniReferenceTaskType: taskType, ...overrides } };
+}
+
+test("video editing inherits one target's portrait frame and fractional duration as a single quote", () => {
+  const input = seedanceTask("edit", { duration: "auto" });
+  const quote = estimate({ ...input, references: [{ type: "video", duration: 7.5, width: 720, height: 1280 }] });
+  assert.equal(quote.status, "exact");
+  assert.equal(quote.credits, 225);
+  assert.deepEqual(plain(quote.tokens), { min: 324000, max: 324000 });
+  assert.deepEqual(plain(quote.reasons), []);
+  assert.equal(input.parameters.duration, "auto");
+  assert.equal(input.parameters.aspect, "adaptive");
+});
+
+test("specified extension inherits the frame but smart extension keeps an unknown duration range", () => {
+  const references = [{ type: "video", duration: 12, width: 1280, height: 720 }];
+  const fixed = estimate({ ...seedanceTask("extend"), references });
+  assert.equal(fixed.status, "exact");
+  assert.equal(fixed.credits, 330);
+  const automatic = estimate({ ...seedanceTask("extend", { duration: "auto" }), references });
+  assert.equal(automatic.status, "range");
+  assert.ok(automatic.minCredits < automatic.maxCredits);
+  assert.deepEqual(plain(automatic.reasons), ["automatic-output-duration"]);
+});
+
+test("multiple edit targets preserve paired output specs and bill all input video seconds", () => {
+  const references = [{ id: "short", type: "video", duration: 5, width: 1280, height: 720 },
+    { id: "long", type: "video", duration: 20, width: 1280, height: 720 }];
+  const quote = estimate({ ...seedanceTask("edit"), references });
+  assert.equal(quote.status, "range");
+  assert.deepEqual([quote.minCredits, quote.maxCredits], [450, 674]);
+  assert.deepEqual(plain(quote.reasons), ["ambiguous-target-video"]);
+  assert.deepEqual(plain(estimate({ ...seedanceTask("edit"), references: [...references].reverse() })), plain(quote));
+});
+
+test("inherited nonstandard frames use a disclosed nominal-area estimate, not fabricated dimensions", () => {
+  for (const [width, height] of [[1200, 960], [1400, 1000]]) {
+    const quote = estimate({ ...seedanceTask("edit"), references: [{ type: "video", duration: 7.5, width, height }] });
+    assert.equal(quote.status, "exact");
+    assert.equal(quote.credits, 225);
+    assert.deepEqual(plain(quote.reasons), ["estimated-output-pixel-area"]);
+  }
+});
+
+test("inherited output frames wait for video metadata and cannot quote a missing target", () => {
+  const input = seedanceTask("edit");
+  assert.deepEqual(plain(estimate(input).reasons), ["missing-target-video"]);
+  assert.deepEqual(plain(estimate({ ...input, references: [{ type: "video", duration: 5 }] }).reasons), ["missing-reference-dimensions"]);
+  assert.deepEqual(plain(estimate({ ...input, references: [{ type: "video", width: 1280, height: 720 }] }).reasons), ["missing-reference-duration"]);
+});
+
 test("missing minimum rules block video quotes but do not block text or image quotes", () => {
   const item = model();
   delete item.pricing.minimumBillableSecondsByOutputSeconds;

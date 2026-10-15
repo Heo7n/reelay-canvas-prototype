@@ -60,6 +60,22 @@ html[data-theme="light"] {
   white-space: nowrap;
 }
 
+.generation-status.is-real {
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  text-align: center;
+}
+
+.generation-status-description {
+  max-width: 32ch;
+  color: var(--generation-status-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .generation-status-separator {
   color: var(--generation-status-muted);
 }

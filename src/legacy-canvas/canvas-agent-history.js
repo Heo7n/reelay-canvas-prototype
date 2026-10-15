@@ -2,7 +2,7 @@
   "use strict";
 
   function createController({ list, seed, escapeHtml, refreshIcons, onSelect, onRename, requestDelete,
-    onBeforeSelect = () => {}, onDelete = () => {}, hasDraft = () => false }) {
+    onBeforeSelect = () => {}, onDelete = () => {}, hasDraft = () => false, makeId }) {
     const conversations = structuredClone(seed);
     let activeId = conversations[0]?.id;
     let editingId = null;
@@ -10,7 +10,7 @@
 
     function newConversation() {
       let id;
-      do { id = `local-chat-${++sequence}`; } while (conversations.some((item) => item.id === id));
+      do { id = makeId ? makeId() : `local-chat-${++sequence}`; } while (conversations.some((item) => item.id === id));
       const conversation = { id, title: "新对话", messages: [] };
       conversations.unshift(conversation);
       return conversation;
@@ -149,7 +149,13 @@
       if (editingId && event.target.matches(".history-rename-input")) finishRename(true);
     });
 
-    return { render, select, startNew, close, handleEscape, getConversation, getActiveId: () => activeId };
+    function ensureConversation(id, title) {
+      if (getConversation(id)) return getConversation(id);
+      const conversation = { id, title: (title || "真实视频生成").slice(0, 30), messages: [] };
+      conversations.push(conversation); render();
+      return conversation;
+    }
+    return { render, select, startNew, close, handleEscape, getConversation, ensureConversation, getActiveId: () => activeId };
   }
 
   root.REELAY_AGENT_HISTORY = Object.freeze({ createController });

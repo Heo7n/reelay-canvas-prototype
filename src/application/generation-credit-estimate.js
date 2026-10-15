@@ -45,6 +45,28 @@
     return dimensions.length && dimensions.every(validDimensions) ? dimensions : null;
   }
 
+  function inheritedPixels(model, quality, reference) {
+    const ratio = reference.width / reference.height;
+    for (const [aspect, dimensions] of Object.entries(quality.dimensions || {})) {
+      if (!validDimensions(dimensions)) continue;
+      const [width, height] = aspect.split(":").map(Number);
+      // Match a canonical aspect or a catalog-sized source, allowing only
+      // one source pixel of rounding. Never snap an arbitrary frame to 16:9.
+      const sourceRatios = Object.values(model.pricing.qualities)
+        .map((entry) => entry.dimensions?.[aspect]).filter(validDimensions)
+        .map((entry) => entry.width / entry.height);
+      if (positive(width) && positive(height)) sourceRatios.push(width / height);
+      if (sourceRatios.some((value) => Math.abs(reference.width - value * reference.height) <= 1
+        && Math.abs(ratio / value - 1) <= 0.002)) {
+        return { pixels: dimensions.width * dimensions.height, estimated: false };
+      }
+    }
+    // Keep the inherited aspect; only the nominal pixel area is approximated.
+    // We do not fabricate or persist a provider width/height for this case.
+    return positive(quality.estimatedAdaptivePixelArea)
+      ? { pixels: quality.estimatedAdaptivePixelArea, estimated: true } : null;
+  }
+
   // Fractional output durations do not have a published minimum-token row.
   // Neighbouring rows bound the quote; they must never be interpolated as exact.
   function getMinimumSeconds(pricing, duration) {
@@ -72,36 +94,69 @@
     const qualityKey = String(parameters.quality ?? model.defaults?.quality ?? "").toLowerCase();
     const quality = pricing.qualities?.[qualityKey];
     if (!quality) return pending("missing-quality-pricing");
-    const dimensions = getDimensions(model, parameters, quality, outputDimensions);
-    if (!dimensions) return pending("missing-output-dimensions");
-    const duration = getDuration(model, parameters, outputDuration);
-    if (!duration) return pending("missing-output-duration");
     const count = parameters.count ?? 1;
     if (!Number.isSafeInteger(count) || count < 1) return pending("invalid-count");
 
     let referenceSeconds = 0;
     let hasVideo = false;
+    const videos = [];
     for (const reference of references) {
       if (reference?.type !== "video") continue;
       hasVideo = true;
       const durationSeconds = seconds(reference.duration);
       if (durationSeconds === null) return pending("missing-reference-duration");
       referenceSeconds += durationSeconds;
+      videos.push({ ...reference, duration: durationSeconds });
     }
     const rate = quality.yuanPerMillionTokens?.[hasVideo ? "withVideo" : "withoutVideo"];
     if (!positive(rate)) return pending("missing-unit-price");
-    const minimum = hasVideo ? getMinimumSeconds(pricing, duration) : null;
-    if (hasVideo && !minimum) return pending("missing-minimum-token-rule");
 
-    const tokenBounds = dimensions.map(({ width, height }) => {
-      const tokensPerSecond = width * height * pricing.framesPerSecond / pricing.pixelsPerToken;
+    const taskType = parameters.omniReferenceTaskType ?? model.defaults?.omniReferenceTaskType;
+    const constraint = model.capabilities?.omniReferenceTaskType?.constraints?.[taskType];
+    const followsVideo = constraint?.referenceVideoRequired && constraint.aspect === "adaptive";
+    const inheritedDuration = followsVideo && constraint.duration === -1 && outputDuration == null;
+    const reasons = [];
+    let specifications;
+    if (followsVideo) {
+      if (!videos.length) return pending("missing-target-video");
+      if (videos.some((reference) => !validDimensions(reference))) return pending("missing-reference-dimensions");
+      const duration = inheritedDuration ? null : getDuration(model, parameters, outputDuration);
+      if (!inheritedDuration && !duration) return pending("missing-output-duration");
+      if (duration?.automatic) reasons.push("automatic-output-duration");
+      if (videos.length > 1) reasons.push("ambiguous-target-video");
+      specifications = videos.map((reference) => {
+        const dimensions = outputDimensions === undefined
+          ? inheritedPixels(model, quality, reference)
+          : validDimensions(outputDimensions) ? { pixels: outputDimensions.width * outputDimensions.height, estimated: false } : null;
+        if (!dimensions) return null;
+        if (dimensions.estimated && !reasons.includes("estimated-output-pixel-area")) reasons.push("estimated-output-pixel-area");
+        return { pixels: dimensions.pixels, duration: duration || { min: reference.duration, max: reference.duration, automatic: false } };
+      });
+    } else {
+      const dimensions = getDimensions(model, parameters, quality, outputDimensions);
+      if (!dimensions) return pending("missing-output-dimensions");
+      const duration = getDuration(model, parameters, outputDuration);
+      if (!duration) return pending("missing-output-duration");
+      if (duration.automatic) reasons.push("automatic-output-duration");
+      if (outputDimensions === undefined && (parameters.aspect ?? model.defaults?.aspect) === "adaptive") reasons.push("adaptive-output-dimensions");
+      specifications = dimensions.map(({ width, height }) => ({ pixels: width * height, duration }));
+    }
+    if (specifications.some((entry) => !entry)) return pending("missing-output-dimensions");
+
+    const tokenBounds = specifications.map(({ pixels, duration }) => {
+      const minimum = hasVideo ? getMinimumSeconds(pricing, duration) : null;
+      if (hasVideo && !minimum) return null;
+      const tokensPerSecond = pixels * pricing.framesPerSecond / pricing.pixelsPerToken;
       const rawMin = (referenceSeconds + duration.min) * tokensPerSecond;
       const rawMax = (referenceSeconds + duration.max) * tokensPerSecond;
-      return {
+      const bounds = {
         min: Math.max(rawMin, minimum ? Math.round(minimum.min * tokensPerSecond) : 0) * count,
         max: Math.max(rawMax, minimum ? Math.round(minimum.max * tokensPerSecond) : 0) * count,
       };
+      if (minimum?.fractional && bounds.min !== bounds.max && !reasons.includes("fractional-output-minimum")) reasons.push("fractional-output-minimum");
+      return bounds;
     });
+    if (tokenBounds.some((entry) => !entry)) return pending("missing-minimum-token-rule");
     const tokens = { min: Math.min(...tokenBounds.map((value) => value.min)), max: Math.max(...tokenBounds.map((value) => value.max)) };
     const yuan = { min: tokens.min / 1000000 * rate, max: tokens.max / 1000000 * rate };
     // Provider display rounding is not a billing step. Only the final credit total rounds up.
@@ -109,11 +164,8 @@
     const maxCredits = Math.ceil(yuan.max * pricing.creditsPerYuan);
     if (![tokens.min, tokens.max, yuan.min, yuan.max].every(Number.isFinite)
       || !Number.isSafeInteger(minCredits) || !Number.isSafeInteger(maxCredits)) return pending("invalid-estimate");
-    const reasons = [];
-    if (duration.automatic) reasons.push("automatic-output-duration");
-    if (outputDimensions === undefined && (parameters.aspect ?? model.defaults?.aspect) === "adaptive") reasons.push("adaptive-output-dimensions");
-    if (minimum?.fractional) reasons.push("fractional-output-minimum");
-    const status = reasons.length ? "range" : "exact";
+    // 'exact' means a single preflight quote, never an actual usage settlement.
+    const status = reasons.some((reason) => reason !== "estimated-output-pixel-area") ? "range" : "exact";
     return { status, credits: status === "exact" ? minCredits : null, minCredits, maxCredits, tokens, yuan, reasons };
   }
 

@@ -1,4 +1,6 @@
 import { InMemoryAssetStore } from "./infrastructure/InMemoryAssetStore";
+import { randomUUID } from "node:crypto";
+import { REAL_GENERATION_CALL_SOURCE, REAL_GENERATION_PROBE_SPEC } from "../contracts/real-generation";
 import { InMemoryEntityStore } from "./infrastructure/InMemoryEntityStore";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
@@ -11,6 +13,12 @@ import { registerCanvasDocumentRoutes } from "./http/canvas-document-routes";
 import { registerAssetRoutes } from "./http/asset-routes";
 import { registerMediaStorageRoutes } from "./http/media-storage-routes";
 import { registerEntityRoutes } from "./http/entity-routes";
+import { registerRealGenerationRoutes } from "./http/real-generation-routes";
+import { RealGenerationProbeService } from "./application/RealGenerationProbeService";
+import { ReelayPlatformClient } from "./infrastructure/ReelayPlatformClient";
+import type { CanvasVideoGenerationStore } from "./application/CanvasVideoGenerationStore";
+import { CanvasVideoGenerationService } from "./application/CanvasVideoGenerationService";
+import { registerCanvasVideoGenerationRoutes } from "./http/canvas-video-generation-routes";
 import type { CollaborationStore } from "./application/CollaborationStore";
 import type { EntityStore } from "./application/EntityStore";
 import type { ObjectStore } from "./application/ObjectStore";
@@ -23,6 +31,9 @@ export interface BuildServerOptions {
   logger?: boolean;
   maxAssetUploadBytes?: number;
   objectStore?: ObjectStore;
+  realGeneration?: { enabled: boolean; fetcher?: typeof fetch };
+  canvasVideoStore?: CanvasVideoGenerationStore;
+  savedGenerationProbes?: Parameters<RealGenerationProbeService["seedSavedProbe"]>[0][];
   secureCookies?: boolean;
   staticRoot?: string;
   store: CollaborationStore;
@@ -49,6 +60,15 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   await registerAccountRoutes(app, store);
   await registerWorkspaceProjectRoutes(app, store);
   await registerCanvasDocumentRoutes(app, store);
+  // Explicit local opt-in cannot enable paid generation in any hosted build.
+  const realGenerationAvailable = options.realGeneration?.enabled === true && !!options.objectStore
+    && process.env.NODE_ENV !== "production" && !process.env.VERCEL;
+  const generationPlatform = realGenerationAvailable ? new ReelayPlatformClient(options.realGeneration?.fetcher) : null;
+  const generationConnections = generationPlatform ? new RealGenerationProbeService(generationPlatform, options.objectStore!, { channel: REAL_GENERATION_CALL_SOURCE, specification: REAL_GENERATION_PROBE_SPEC, makeId: randomUUID, accountGuard: options.canvasVideoStore }) : null;
+  for (const probe of options.savedGenerationProbes ?? []) generationConnections?.seedSavedProbe(probe);
+  registerRealGenerationRoutes(app, { sessions: store, service: generationConnections });
+  registerCanvasVideoGenerationRoutes(app, { sessions: store, projects: store, service: options.canvasVideoStore && options.objectStore
+    ? new CanvasVideoGenerationService({ tasks: options.canvasVideoStore, projects: store, connections: generationConnections, platform: generationPlatform, objects: options.objectStore, makeId: randomUUID, processId: randomUUID() }) : null });
   if (options.assetStore && options.objectStore) {
     registerMediaStorageRoutes(app, { assetStore: options.assetStore, objectStore: options.objectStore, sessions: store });
     await registerAssetRoutes(app, {

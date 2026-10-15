@@ -10,9 +10,13 @@ import type { WorkspaceContextGateway } from "../application/workspaces/Workspac
 import { createHttpServices } from "../infrastructure/http/createHttpServices";
 import { createExperienceServices } from "../infrastructure/experience/createExperienceServices";
 import type { TransientMediaRepository } from "../application/assets/TransientMediaRepository";
+import type { RealGenerationGateway } from "../application/generation/RealGenerationGateway";
+import type { CanvasVideoGateway } from "../application/generation/CanvasVideoGateway";
 import { isExperienceRuntime } from "./runtime-mode";
 
 export interface ApplicationServices {
+  canvasVideoGateway?: CanvasVideoGateway;
+  realGenerationGateway?: RealGenerationGateway;
   transientMediaRepository?: TransientMediaRepository;
   accountRepository: AccountRepository;
   canvasDocumentRepository: CanvasDocumentRepository;

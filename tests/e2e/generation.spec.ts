@@ -3,8 +3,8 @@ import type { Locator, Page } from "@playwright/test";
 import type { LegacyCanvasDocumentV1 } from "../../src/contracts/canvas-document-v1";
 
 async function exactCredits(value: Locator) {
-  await expect(value).toHaveText(/^≈ ([\d,]+)$/);
-  const match = /^≈ ([\d,]+)$/.exec(await value.innerText());
+  await expect(value).toHaveText(/^([\d,]+)$/);
+  const match = /^([\d,]+)$/.exec(await value.innerText());
   if (!match) throw new Error("Expected one exact credit estimate, not a range or pending quote.");
   const credits = Number(match[1].replaceAll(",", ""));
   expect(credits).toBeGreaterThan(0);

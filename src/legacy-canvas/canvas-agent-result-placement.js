@@ -133,7 +133,7 @@
       pending.set(task, null);
       if (!entry) return false;
       // Cleanup touches only the exact transient object owned by this task.
-      removePendingNode?.(entry.target.canvas, entry.node);
+      if (task.channel !== "real" || !entry.node.realGenerationTaskId) removePendingNode?.(entry.target.canvas, entry.node);
       return true;
     }
 
@@ -178,7 +178,8 @@
       return focusNode(target.canvas, node) !== false;
     }
 
-    return Object.freeze({ capture, begin, update, discard, place, locate });
+    return Object.freeze({ capture, begin, update, discard, place, locate,
+      getPendingNode: (task) => pending.get(task)?.node || null });
   }
 
   root.REELAY_AGENT_RESULT_PLACEMENT = Object.freeze({ createController });

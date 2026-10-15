@@ -12,6 +12,9 @@ import type { MediaUploadPolicy } from "../domain/asset/media-upload-policy";
 import { useCanvasNavigation } from "./useCanvasNavigation";
 import { useCanvasSaveRecovery, type CanvasRecoveryServices } from "./useCanvasSaveRecovery";
 import { CanvasSaveRecoveryDialog } from "./CanvasSaveRecoveryDialog";
+import type { CanvasVideoGateway } from "../application/generation/CanvasVideoGateway";
+import { CanvasVideoProjectDialog } from "./CanvasVideoProjectDialog";
+import { useCanvasVideoBridge } from "./useCanvasVideoBridge";
 import {
   hostDocumentMessageSchema,
   hostAssetCommandErrorMessageSchema,
@@ -36,6 +39,7 @@ import {
 } from "./bridge-protocol";
 
 interface CanvasHostProps {
+  canvasVideoGateway?: CanvasVideoGateway;
   actorId?: string;
   recoveryServices?: CanvasRecoveryServices;
   context: LegacyCanvasContext;
@@ -84,7 +88,7 @@ function bridgeWorkspaceEntity(entity: WorkspaceEntity) {
   };
 }
 
-export function CanvasHost({ context, actorId, recoveryServices, entityRepository, mediaAssetRepository, transientMediaRepository, onCreateProject, onLogout, onOpenAccountSettings, onThemeChange, onLaunchPromptConsumed, repository }: CanvasHostProps) {
+export function CanvasHost({ context, actorId, recoveryServices, entityRepository, mediaAssetRepository, transientMediaRepository, canvasVideoGateway, onCreateProject, onLogout, onOpenAccountSettings, onThemeChange, onLaunchPromptConsumed, repository }: CanvasHostProps) {
   const location = useLocation();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const initializedReadyGenerationRef = useRef(0);
@@ -161,6 +165,9 @@ export function CanvasHost({ context, actorId, recoveryServices, entityRepositor
     frameRef.current?.contentWindow?.postMessage(message, window.location.origin);
   }, []);
 
+  const videoProjectSelection = useCanvasVideoBridge({ gateway: canvasVideoGateway, context: safeContext, actorId,
+    frameRef, activeInstanceRef: activeCanvasInstanceIdRef, readyGeneration, post: postToCanvas });
+
   const requestFlush = useCallback((): void => {
     postToCanvas(hostFlushMessageSchema.parse({
       source: "reelay-shell",
@@ -206,6 +213,7 @@ export function CanvasHost({ context, actorId, recoveryServices, entityRepositor
         ...safeContext,
         capabilities: {
           accountSections: safeContext.capabilities?.accountSections === true,
+          ...(canvasVideoGateway && actorId ? { realVideoGeneration: true } : {}),
           projectSwitcher: safeContext.capabilities?.projectSwitcher,
           ...(safeContext.capabilities?.transientMediaUpload === undefined ? {} : {
             transientMediaUpload: Boolean(safeContext.capabilities.transientMediaUpload && transientMediaRepository),
@@ -254,7 +262,7 @@ export function CanvasHost({ context, actorId, recoveryServices, entityRepositor
     setPersistenceStatus(savingRef.current > 0
       ? "saving"
       : (dirtyRef.current ? "dirty" : "saved"));
-  }, [assetPersistenceAvailable, documentState, entityPersistenceAvailable, libraryCatalog, onLaunchPromptConsumed, postToCanvas, progressiveAssetLoading, projectAssets, safeContext, transientMediaRepository, workspaceAssets, workspaceCatalogLoaded, workspaceEntities, workspaceSnapshotAvailable]);
+  }, [actorId, assetPersistenceAvailable, canvasVideoGateway, documentState, entityPersistenceAvailable, libraryCatalog, onLaunchPromptConsumed, postToCanvas, progressiveAssetLoading, projectAssets, safeContext, transientMediaRepository, workspaceAssets, workspaceCatalogLoaded, workspaceEntities, workspaceSnapshotAvailable]);
 
   const refreshAuthoritativeDocument = useCallback((): void => {
     if (authoritativeRefreshInFlightRef.current) return;
@@ -433,7 +441,7 @@ export function CanvasHost({ context, actorId, recoveryServices, entityRepositor
       active = false;
       cancelPendingNavigation();
     };
-  }, [cancelPendingNavigation, entityRepository, loadAttempt, mediaAssetRepository, repository, safeContext.canvasId, safeContext.capabilities?.assetPersistence, safeContext.capabilities?.entityPersistence, safeContext.projectId, safeContext.workspaceId]);
+  }, [actorId, cancelPendingNavigation, entityRepository, loadAttempt, mediaAssetRepository, repository, safeContext.canvasId, safeContext.capabilities?.assetPersistence, safeContext.capabilities?.entityPersistence, safeContext.projectId, safeContext.workspaceId]);
 
   const retryDocumentLoad = useCallback((): void => {
     setDocumentState({ status: "loading" });
@@ -1219,7 +1227,7 @@ export function CanvasHost({ context, actorId, recoveryServices, entityRepositor
       {documentState.status !== "error" || documentState.reason !== "unavailable" ? (
         <iframe
           ref={frameRef}
-          key={frameSource}
+          key={JSON.stringify([actorId ?? null, frameSource])}
           className="legacy-canvas-frame"
           src={frameSource}
           title="Reelay 项目画布"
@@ -1246,6 +1254,7 @@ export function CanvasHost({ context, actorId, recoveryServices, entityRepositor
       ) : null}
       <CanvasSaveRecoveryDialog account={safeContext.actor.account}
         recovery={{ state: recoveryState, begin: beginRecovery, accept: acceptRecovery, reset: resetRecovery, run: runRecovery }} />
+      <CanvasVideoProjectDialog selection={videoProjectSelection} />
     </section>
   );
 }

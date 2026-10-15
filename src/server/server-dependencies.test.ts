@@ -51,6 +51,13 @@ describe("server dependency composition", () => {
     expect(capturePool.mock.lastCall?.[0].connectionString).toBe(DEFAULT_LOCAL_DATABASE_URL);
   });
 
+  it("allows explicit paid probes only with loopback configuration and suppresses hosted opt-in", () => {
+    expect(createServerDependencies({ REELAY_REAL_GENERATION_ENABLED: "1", REELAY_SERVER_HOST: "127.0.0.1" }).realGeneration?.enabled).toBe(true);
+    expect(() => createServerDependencies({ REELAY_REAL_GENERATION_ENABLED: "1", REELAY_SERVER_HOST: "0.0.0.0" })).toThrow("loopback-only");
+    expect(createServerDependencies({ REELAY_REAL_GENERATION_ENABLED: "1", VERCEL: "1" }).realGeneration?.enabled).toBe(false);
+    expect(createServerDependencies({ REELAY_STORAGE: "memory", REELAY_REAL_GENERATION_ENABLED: "1" }).realGeneration).toBeUndefined();
+  });
+
   it("uses the validated environment for both PostgreSQL and Supabase storage", () => {
     vi.stubEnv("DATABASE_URL", "postgresql://wrong:password@127.0.0.1:5432/wrong");
     const databaseUrl = "postgresql://postgres.abcdefghijklmnopqrst:test@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres";

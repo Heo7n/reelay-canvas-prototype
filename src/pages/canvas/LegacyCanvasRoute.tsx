@@ -16,8 +16,10 @@ import { resolveProjectCoverUrl } from "../../shared/projects/project-cover";
 import { useTheme } from "../../shared/theme/theme";
 import type { TransientMediaRepository } from "../../application/assets/TransientMediaRepository";
 import { takeProjectLaunchIntent } from "../home/launch-intent";
+import type { CanvasVideoGateway } from "../../application/generation/CanvasVideoGateway";
 
 interface LegacyCanvasRouteProps {
+  canvasVideoGateway?: CanvasVideoGateway;
   sessionGateway?: SessionGateway;
   projectRepository?: ProjectRepository;
   transientMediaRepository?: TransientMediaRepository;
@@ -26,7 +28,7 @@ interface LegacyCanvasRouteProps {
   mediaAssetRepository: MediaAssetRepository;
 }
 
-export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, mediaAssetRepository, transientMediaRepository, sessionGateway, projectRepository }: LegacyCanvasRouteProps) {
+export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, mediaAssetRepository, transientMediaRepository, canvasVideoGateway, sessionGateway, projectRepository }: LegacyCanvasRouteProps) {
   const { theme, setTheme } = useTheme();
   const launchScopeRef = useRef<string | undefined>(undefined);
   const [launchIntent, setLaunchIntent] = useState<{ scope: string; prompt: string } | null>(null);
@@ -74,6 +76,7 @@ export function LegacyCanvasRoute({ canvasDocumentRepository, entityRepository, 
   return (
     <>
       <CanvasHost
+        canvasVideoGateway={canvasVideoGateway}
         actorId={actor.id}
         recoveryServices={sessionGateway && projectRepository ? { sessionGateway, projectRepository } : undefined}
         repository={canvasDocumentRepository}

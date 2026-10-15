@@ -100,6 +100,7 @@ export function createAppRouteObjects(services: ApplicationServices, experience 
                       entityRepository={services.entityRepository}
                       mediaAssetRepository={services.mediaAssetRepository}
                       transientMediaRepository={services.transientMediaRepository}
+                      canvasVideoGateway={services.canvasVideoGateway}
                     />
                   );
                 }

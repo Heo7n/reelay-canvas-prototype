@@ -44,6 +44,15 @@ test("invalid local targets fail without leaking credentials or initializing dir
   assert.throws(() => createLocalPreviewPlan("frontend", { ...configuration, REELAY_PREVIEW_FRONTEND_PORT: "5183" }, options), /distinct/);
 });
 
+test("real generation is opt-in for the local backend and is never exposed by frontend environment", () => {
+  const inherited = { ...options, baseEnvironment: { REELAY_REAL_GENERATION_ENABLED: "1" } };
+  assert.equal(createLocalPreviewPlan("server", configuration, inherited).env.REELAY_REAL_GENERATION_ENABLED, "0");
+  const enabled = { ...configuration, REELAY_REAL_GENERATION_ENABLED: "1" };
+  assert.equal(createLocalPreviewPlan("server", enabled, options).env.REELAY_REAL_GENERATION_ENABLED, "1");
+  assert.equal(createLocalPreviewPlan("frontend", enabled, inherited).env.REELAY_REAL_GENERATION_ENABLED, undefined);
+  assert.throws(() => createLocalPreviewPlan("server", { ...configuration, REELAY_REAL_GENERATION_ENABLED: "true" }, options), /must be 0 or 1/);
+});
+
 function ciFixture({ runs, jobs } = {}) {
   return { repository: "example/reelay", sha, readJSON: async (endpoint) => endpoint.includes("/attempts/")
     ? { jobs: jobs || ["quality", "browser", "postgres"].map((name) => ({ name, status: "completed", conclusion: "success", html_url: `https://example.test/${name}` })) }

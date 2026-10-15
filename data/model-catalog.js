@@ -60,6 +60,22 @@
       provider: "ByteDance",
       brand: "seedance",
       name: "Seedance 2.5",
+      integrations: {
+        reelay: {
+          model: "jimeng/seedance-2.5",
+          channel: "web",
+          video: {
+            resolutions: ["480P", "720P", "1080P"],
+            aspectRatios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
+            durationRange: { min: 4, max: 30, step: 1 },
+            generateAudio: true,
+            maxCount: 1,
+            referencesRequirePlatformAsset: true,
+            optionalFieldsPlacement: "extra",
+            verification: "documented",
+          },
+        },
+      },
       optimizationInstructions: "保留用户原意、原语言及图片、视频、音频引用。根据当前已选任务说明生成、编辑或延长的意图，明确动作顺序与镜头衔接；编辑时保留未要求修改的内容，延长时明确方向。遵循当前模式的时长与比例限制，不擅自切换模式或参数。",
       desc: "30 秒音画叙事，精细参考与音视频编辑",
       icon: "S25",
@@ -135,6 +151,22 @@
       provider: "ByteDance",
       brand: "seedance",
       name: "Seedance 2.0",
+      integrations: {
+        reelay: {
+          model: "jimeng/seedance-2.0",
+          channel: "web",
+          video: {
+            resolutions: ["480P", "720P", "1080P"],
+            aspectRatios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
+            durationRange: { min: 4, max: 15, step: 1 },
+            generateAudio: true,
+            maxCount: 1,
+            referencesRequirePlatformAsset: true,
+            optionalFieldsPlacement: "video",
+            verification: "documented",
+          },
+        },
+      },
       optimizationInstructions: "保留用户原意、原语言及多模态素材引用。围绕主体动作、镜头顺序与音画关系整理视频描述，保持事件和角色一致。遵循已选时长、比例与质量，不额外添加事件，不擅自修改参数。",
       desc: "全模态音画生成，精准表演与运镜控制",
       icon: "S20",
@@ -167,6 +199,23 @@
       provider: "ByteDance",
       brand: "seedance",
       name: "Seedance 2.0 Fast",
+      integrations: {
+        reelay: {
+          model: "jimeng/seedance-2.0-fast",
+          channel: "web",
+          video: {
+            resolutions: ["480P", "720P"],
+            aspectRatios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
+            durationRange: { min: 4, max: 15, step: 1 },
+            generateAudio: true,
+            maxCount: 1,
+            referencesRequirePlatformAsset: true,
+            optionalFieldsPlacement: "video",
+            verification: "documented",
+          },
+          probe: { resolution: "480P", aspectRatio: "16:9", duration: 5, generateAudio: true },
+        },
+      },
       optimizationInstructions: "保留用户原意、原语言及多模态素材引用。用清楚、紧凑的表达描述主体动作、镜头运动和音画关系，保持动作连续。遵循已选时长、比例与质量，不擅自补充角色或修改参数。",
       desc: "多模态参考与灵活运镜，快速生成同步音画",
       icon: "S2F",
@@ -246,6 +295,9 @@
   const dimensions480_20 = dimensionMap([[864, 496], [752, 560], [640, 640], [560, 752], [496, 864], [992, 432]]);
   const priceQuality = (dimensions, withoutVideo, withVideo) => ({
     dimensions, yuanPerMillionTokens: { withoutVideo, withVideo },
+    // Preflight approximation for an inherited nonstandard aspect. This is
+    // a nominal pixel area, not a provider promise about actual output size.
+    estimatedAdaptivePixelArea: dimensions["16:9"].width * dimensions["16:9"].height,
   });
   const seedancePricing = {
     "seedance-2-5": {
@@ -286,6 +338,7 @@
     composerVariant: "（样片）",
     desc: "先生成 480P 样片，选定后生成 1080P 成片",
     executionMode: "draft",
+    integrations: {},
     capabilities: {
       ...seedance25.capabilities,
       qualities: ["480p"],

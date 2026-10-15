@@ -223,6 +223,7 @@ html[data-theme="light"] .generation-record-list {
   background: var(--record-operation-bg); color: var(--record-operation-ink); font-weight: 400; white-space: nowrap;
 }
 .generation-record-parameter { display: inline-flex; align-items: center; white-space: nowrap; }
+.generation-record-channel { flex: 0 0 auto; margin-inline: 4px; color: var(--record-secondary); font-size: 11px; white-space: nowrap; }
 .generation-record-parameter::before { content: ""; width: 1px; height: 11px; margin-inline: 3px; background: var(--record-hairline); }
 .generation-record-details-trigger {
   display: inline-flex; align-items: center; gap: 5px; padding: 0; margin-left: 6px;

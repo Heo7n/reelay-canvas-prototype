@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MediaUploadPolicySchema } from "../domain/asset/media-upload-policy";
 import { DeleteLibraryTagInputSchema, DeleteLibraryItemSchema, LibraryFolderSchema, LibraryTagSchema, MediaLibraryCatalogSchema, UpdateLibraryTagsInputSchema, isValidLibraryTagUpdate } from "../domain/asset/media-library";
+import { CanvasVideoGenerationContextSchema, CanvasVideoTaskSchema, CanvasVideoTaskProjectionSchema } from "../contracts/canvas-video-generation";
 
 export const bridgeCanvasDocumentSchema = z
   .object({
@@ -20,6 +21,7 @@ const legacyCanvasCapabilitiesSchema = z
     entityPersistence: z.boolean().optional(),
     transientMediaUpload: z.boolean().optional(),
     progressiveAssetLoading: z.boolean().optional(),
+    realVideoGeneration: z.boolean().optional(),
   })
   .strict();
 
@@ -60,6 +62,59 @@ const canvasInstanceIdSchema = z.string().min(1).max(200);
 const bridgeRequestIdSchema = z.string().min(1).max(200);
 const bridgeIdentifierSchema = z.string().min(1).max(200);
 const mediaKindSchema = z.enum(["image", "video", "audio"]);
+
+const videoCommandFields = {
+  source: z.literal("reelay-legacy-canvas"), type: z.literal("canvas:video-generation-command"), protocolVersion: z.literal(1),
+  instanceId: canvasInstanceIdSchema, requestId: bridgeRequestIdSchema,
+};
+
+export const canvasVideoGenerationCommandSchema = z.discriminatedUnion("operation", [
+  z.object({ ...videoCommandFields, operation: z.literal("context") }).strict(),
+  z.object({ ...videoCommandFields, operation: z.literal("submit"), requestKey: z.string().uuid(),
+    canvasRecordId: bridgeIdentifierSchema, nodeId: bridgeIdentifierSchema,
+    conversationId: z.string().uuid().nullable().optional(), sourceSurface: z.enum(["canvas", "conversation"]),
+    prompt: z.string().trim().min(1).max(4000), parameters: z.unknown(), references: z.array(z.unknown()).max(100),
+  }).strict(),
+  z.object({ ...videoCommandFields, operation: z.literal("get"), taskId: z.string().uuid() }).strict(),
+  z.object({ ...videoCommandFields, operation: z.literal("projection"), taskId: z.string().uuid() }).strict(),
+  z.object({ ...videoCommandFields, operation: z.literal("list") }).strict(),
+  z.object({ ...videoCommandFields, operation: z.literal("retry-save"), taskId: z.string().uuid() }).strict(),
+]);
+
+export const canvasVideoGenerationBoundSchema = z.object({
+  source: z.literal("reelay-legacy-canvas"), type: z.literal("canvas:video-generation-bound"), protocolVersion: z.literal(1),
+  instanceId: canvasInstanceIdSchema, requestId: bridgeRequestIdSchema, taskId: z.string().uuid(), bound: z.boolean(),
+}).strict();
+
+const hostVideoFields = {
+  source: z.literal("reelay-shell"), protocolVersion: z.literal(1), instanceId: canvasInstanceIdSchema,
+};
+export const hostVideoGenerationContextSchema = z.object({
+  ...hostVideoFields, type: z.literal("host:video-generation-context"), context: CanvasVideoGenerationContextSchema,
+}).strict();
+export const hostVideoGenerationBindSchema = z.object({
+  ...hostVideoFields, type: z.literal("host:video-generation-bind"), requestId: bridgeRequestIdSchema, task: CanvasVideoTaskSchema,
+}).strict();
+const hostVideoResultFields = { ...hostVideoFields, type: z.literal("host:video-generation-result"), requestId: bridgeRequestIdSchema };
+export const hostVideoGenerationResultSchema = z.discriminatedUnion("operation", [
+  z.object({ ...hostVideoResultFields, operation: z.literal("context"), result: CanvasVideoGenerationContextSchema }).strict(),
+  z.object({ ...hostVideoResultFields, operation: z.literal("submit"), result: z.union([CanvasVideoGenerationContextSchema, CanvasVideoTaskSchema]) }).strict(),
+  z.object({ ...hostVideoResultFields, operation: z.literal("get"), result: CanvasVideoTaskSchema }).strict(),
+  z.object({ ...hostVideoResultFields, operation: z.literal("projection"), result: CanvasVideoTaskProjectionSchema }).strict(),
+  z.object({ ...hostVideoResultFields, operation: z.literal("list"), result: z.object({ tasks: z.array(CanvasVideoTaskSchema) }).strict() }).strict(),
+  z.object({ ...hostVideoResultFields, operation: z.literal("retry-save"), result: CanvasVideoTaskSchema }).strict(),
+]);
+export const hostVideoGenerationErrorSchema = z.object({
+  ...hostVideoFields, type: z.literal("host:video-generation-error"), requestId: bridgeRequestIdSchema,
+  operation: z.enum(["context", "submit", "get", "projection", "list", "retry-save"]),
+  code: z.string().min(1).max(200), message: z.string().min(1).max(500),
+  submissionState: z.enum(["not-submitted", "unknown"]).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.submissionState !== undefined && value.operation !== "submit") {
+    context.addIssue({ code: "custom", path: ["submissionState"], message: "Submission state only belongs to submit responses." });
+  }
+});
+export type CanvasVideoGenerationCommand = z.infer<typeof canvasVideoGenerationCommandSchema>;
 
 export const hostMediaUploadPolicyMessageSchema = z.object({
   source: z.literal("reelay-shell"),
@@ -334,6 +389,8 @@ export const hostMediaLibraryResultMessageSchema = z.discriminatedUnion("command
 ]);
 
 export const canvasMessageSchema = z.discriminatedUnion("type", [
+  canvasVideoGenerationCommandSchema,
+  canvasVideoGenerationBoundSchema,
   canvasMediaLibraryCommandSchema,
   z.object({
     source: z.literal("reelay-legacy-canvas"),

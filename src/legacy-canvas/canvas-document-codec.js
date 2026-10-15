@@ -85,8 +85,11 @@
 
   function serializeNode(candidate) {
     if (!candidate || typeof candidate !== "object") return null;
-    // In-flight final placeholders belong to the page task, not the saved document.
-    if (candidate.pendingGeneration) return null;
+    // Simulated placeholders are transient; real tasks have a durable server identity.
+    const realGenerationTaskId = typeof candidate.realGenerationTaskId === "string"
+      && /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(candidate.realGenerationTaskId)
+      ? candidate.realGenerationTaskId : null;
+    if (candidate.pendingGeneration && !realGenerationTaskId) return null;
     const id = requiredId(candidate.id);
     if (!id || (candidate.kind !== "generator" && candidate.kind !== "asset")) return null;
 
@@ -99,6 +102,7 @@
     };
     const groupId = optionalId(candidate.groupId);
     if (groupId) node.groupId = groupId;
+    if (realGenerationTaskId) node.realGenerationTaskId = realGenerationTaskId;
 
     const assets = Array.isArray(candidate.assets)
       ? candidate.assets.map(serializeAsset).filter(Boolean)

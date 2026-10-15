@@ -767,3 +767,296 @@ for (const firstSurface of ["canvas", "conversation"]) {
     assert.equal(draft.status, "succeeded");
   });
 }
+
+function realFixture(overrides = {}) {
+  const signals = [];
+  const stopped = [];
+  let disposed = 0;
+  const realExecutor = {
+    start: (callbacks) => { signals.push(callbacks); },
+    stop: (id) => { stopped.push(id); },
+    dispose: () => { disposed += 1; },
+  };
+  const f = fixture({ resolveExecution: async () => "real", realExecutor, ...overrides });
+  return { ...f, signals, stopped, realDisposed: () => disposed };
+}
+
+const resolveAsyncRouting = () => new Promise((resolve) => setImmediate(resolve));
+const actualVideo = { id: "saved-video", type: "video", url: "/api/canvas-video-generation/tasks/task-1/video", name: "真实视频" };
+
+test("asynchronous routing binds the frozen placeholder before selecting or charging a channel", async () => {
+  let resolveChannel;
+  let accepted;
+  const f = realFixture({ resolveExecution(task) {
+    assert.equal(task, accepted);
+    return new Promise((resolve) => { resolveChannel = resolve; });
+  } });
+  const request = input({ nodeId: "bound-node", onAccepted(task) { accepted = task; } });
+  const task = f.service.submit(request);
+  request.input.prompt = "later";
+  request.scope.canvasId = "other";
+  assert.equal(task, accepted);
+  assert.equal(task.channel, "checking");
+  assert.equal(task.canCancel, false);
+  assert.equal(f.debits.length, 0);
+  assert.equal(f.signals.length, 0);
+  assert.equal(f.timers.size, 0);
+  resolveChannel("real");
+  await resolveAsyncRouting();
+  assert.equal(task.channel, "real");
+  assert.equal(f.signals.length, 1);
+  const signal = f.signals[0];
+  assert.equal(signal.task, task);
+  assert.equal(signal.input, task.input);
+  assert.equal(signal.scope, task.scope);
+  assert.equal(signal.nodeId, "bound-node");
+  assert.equal(signal.sourceSurface, "conversation");
+  assert.equal(signal.input.prompt, "以图片1为参考生成视频");
+  assert.equal(signal.scope.canvasId, "canvas-1");
+  assert.equal(task.charged, 0);
+  assert.equal(f.balance(), 3000);
+});
+
+test("routing selection preserves synchronous image and standalone simulation behavior", () => {
+  let resolutions = 0;
+  const f = realFixture({
+    shouldResolveExecution: (input) => input.mediaType === "video" && input.useConnectedHost === true,
+    resolveExecution: async () => { resolutions += 1; return "real"; },
+  });
+  for (const mediaType of ["image", "video"]) {
+    const request = input();
+    request.input.mediaType = mediaType;
+    request.input.useConnectedHost = false;
+    const task = f.service.submit(request);
+    assert.equal(task.channel, "simulation");
+    assert.equal(task.charged, 24);
+    assert.equal(task.canCancel, true);
+  }
+  assert.equal(resolutions, 0);
+  assert.equal(f.debits.length, 2);
+  assert.ok(f.timers.size > 0);
+  assert.equal(f.signals.length, 0);
+});
+
+test("disconnected routing charges simulation only after confirmation and preserves its full execution window", async () => {
+  let resolveChannel;
+  const f = realFixture({ resolveExecution: () => new Promise((resolve) => { resolveChannel = resolve; }) });
+  const request = input();
+  const task = f.service.submit(request);
+  request.input.cost = 1000;
+  f.advance(10000);
+  assert.equal(f.debits.length, 0);
+  assert.equal(f.timers.size, 0);
+  resolveChannel("simulation");
+  await resolveAsyncRouting();
+  assert.equal(task.channel, "simulation");
+  assert.equal(task.charged, 24);
+  assert.equal(task.canCancel, true);
+  assert.equal(task.status, "queued");
+  assert.equal(f.signals.length, 0);
+  f.advance(7499);
+  assert.equal(task.status, "running");
+  f.advance(1);
+  assert.equal(task.status, "succeeded");
+  assert.equal(f.debits.length, 1);
+});
+
+test("routing failures and invalid channel values never fall back to simulated generation", async () => {
+  for (const resolveExecution of [async () => { throw new Error("未接入此模型"); }, async () => "unknown"]) {
+    const f = realFixture({ resolveExecution });
+    const task = f.service.submit(input());
+    await resolveAsyncRouting();
+    assert.equal(task.status, "failed");
+    assert.equal(f.debits.length, 0);
+    assert.equal(f.refunds.length, 0);
+    assert.equal(f.signals.length, 0);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test("routing acceptance rejection and duplicate submissions cannot trigger remote execution or simulated debit", async () => {
+  let resolutions = 0;
+  const f = realFixture({ resolveExecution: async () => { resolutions += 1; return "real"; } });
+  const rejected = f.service.submit(input({ onAccepted: () => false }));
+  assert.equal(rejected.status, "failed");
+  const request = input({ idempotencyKey: "stable-send" });
+  const first = f.service.submit(request);
+  assert.equal(f.service.submit(request), first);
+  await resolveAsyncRouting();
+  assert.equal(resolutions, 1);
+  assert.equal(f.signals.length, 1);
+  assert.equal(f.debits.length, 0);
+  assert.equal(f.refunds.length, 0);
+});
+
+test("insufficient simulated credits after channel resolution fail the accepted placeholder without starting either executor", async () => {
+  const f = realFixture({ balance: 1, resolveExecution: async () => "simulation" });
+  const task = f.service.submit(input());
+  await resolveAsyncRouting();
+  assert.equal(task.status, "failed");
+  assert.equal(task.charged, 0);
+  assert.equal(task.refunded, 0);
+  assert.equal(f.balance(), 1);
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.signals.length, 0);
+});
+
+test("channel resolution notifies its final cancelable simulation state and honors immediate subscriber cancellation", async () => {
+  const f = realFixture({ resolveExecution: async () => "simulation" });
+  f.service.subscribe((task, event) => {
+    if (event.type !== "execution-resolved") return;
+    assert.equal(task.channel, "simulation");
+    assert.equal(task.charged, 24);
+    assert.equal(task.canCancel, true);
+    assert.equal(f.service.cancel(task), true);
+  });
+  const task = f.service.submit(input());
+  await resolveAsyncRouting();
+  assert.equal(task.status, "canceled");
+  assert.equal(f.debits.length, 1);
+  assert.equal(f.refunds.length, 1);
+  assert.equal(f.timers.size, 0);
+});
+
+test("ownership loss or disposal before channel confirmation prevents every execution and debit", async () => {
+  for (const action of ["owner", "invalidate", "dispose"]) {
+    let resolveChannel;
+    let current = true;
+    const f = realFixture({ resolveExecution: () => new Promise((resolve) => { resolveChannel = resolve; }) });
+    const task = f.service.submit(input({ isCurrent: () => current }));
+    if (action === "owner") current = false;
+    else if (action === "invalidate") f.service.invalidate(task);
+    else f.service.dispose();
+    resolveChannel("real");
+    await resolveAsyncRouting();
+    assert.equal(f.signals.length, 0);
+    assert.equal(f.debits.length, 0);
+    assert.equal(f.refunds.length, 0);
+    assert.equal(task.status, action === "dispose" ? "queued" : "canceled");
+  }
+});
+
+test("real execution tracks backend uncertainty without simulated progress, cancellation, charge or refunds", async () => {
+  const f = realFixture();
+  const task = f.service.submit(input());
+  await resolveAsyncRouting();
+  for (const status of ["submitting", "waiting", "saving", "save_failed", "unconfirmed"]) {
+    f.signals[0].onUpdate({ id: task.id, status, message: `platform ${status}` });
+    assert.equal(task.status, "running");
+    assert.equal(task.executionStatus, status);
+    assert.equal(task.message, `platform ${status}`);
+    assert.equal(task.progress, 0);
+    assert.equal(task.canCancel, false);
+    assert.equal(f.service.cancel(task), false);
+  }
+  f.advance(60000);
+  assert.equal(task.progress, 0);
+  assert.equal(f.timers.size, 0);
+  f.signals[0].onFail("平台已明确失败");
+  assert.equal(task.status, "failed");
+  assert.equal(task.executionStatus, "failed");
+  assert.equal(task.refunded, 0);
+  assert.equal(f.refunds.length, 0);
+  assert.equal(f.debits.length, 0);
+});
+
+test("detaching a real UI owner preserves server execution and its actual result without draft provenance", async () => {
+  let current = true;
+  const f = realFixture({ makeResult() { throw new Error("simulation must not create a real result"); } });
+  const request = input({ isCurrent: () => current });
+  request.input.modelId = "seedance-2-5-draft";
+  const task = f.service.submit(request);
+  await resolveAsyncRouting();
+  current = false;
+  assert.equal(f.service.invalidate(task), true);
+  assert.equal(task.status, "queued");
+  assert.equal(f.stopped.length, 0);
+  f.signals[0].onUpdate({ status: "saving" });
+  f.signals[0].onComplete(actualVideo);
+  assert.equal(task.status, "succeeded");
+  assert.equal(task.result.url, actualVideo.url);
+  assert.equal(task.result.generation, undefined);
+  assert.ok(Object.isFrozen(task.result));
+  assert.equal(f.stopped.length, 1);
+  assert.equal(f.debits.length, 0);
+  assert.equal(f.refunds.length, 0);
+});
+
+test("real executor startup uncertainty stays recoverable instead of permitting a duplicate retry", async () => {
+  for (const start of [() => { throw new Error("unknown acceptance"); }, async () => { throw new Error("unknown acceptance"); }]) {
+    const f = realFixture({ realExecutor: { start, stop() {}, dispose() {} } });
+    const task = f.service.submit(input({ idempotencyKey: "same-key" }));
+    await resolveAsyncRouting();
+    assert.equal(task.status, "running");
+    assert.equal(task.executionStatus, "unconfirmed");
+    assert.equal(f.service.submit(input({ idempotencyKey: "same-key" })), task);
+    assert.equal(f.debits.length, 0);
+    assert.equal(f.service.updateRealTask(task, { status: "succeeded", result: actualVideo }), true);
+    assert.equal(task.status, "succeeded");
+  }
+});
+
+test("real task imports restore one stable projection through uncertain saving and later success without resubmission", () => {
+  const f = realFixture();
+  const request = input();
+  const entry = { id: "persisted-real", scope: request.scope, input: request.input, sourceSurface: "conversation", isOwner: true,
+    status: "save_failed", message: "保存失败，可重试保存", createdAt: "2026-10-13T01:00:00.000Z", nodeId: "target-node" };
+  const task = f.service.importRealTask(entry);
+  assert.equal(task.channel, "real");
+  assert.equal(task.status, "running");
+  assert.equal(task.executionStatus, "save_failed");
+  assert.equal(task.nodeId, "target-node");
+  assert.equal(task.createdAt, Date.parse(entry.createdAt));
+  assert.equal(f.service.importRealTask({ ...entry, status: "saving", message: "保存中" }), task);
+  assert.equal(task.executionStatus, "saving");
+  const finishedAt = "2026-10-13T01:00:45.000Z";
+  assert.equal(f.service.importRealTask({ ...entry, status: "succeeded", result: actualVideo, finishedAt }), task);
+  assert.equal(task.status, "succeeded");
+  assert.equal(task.finishedAt, Date.parse(finishedAt));
+  assert.equal(f.service.list().length, 1);
+  assert.equal(f.events.filter((event) => event.type === "succeeded").length, 1);
+  assert.equal(f.service.importRealTask({ ...entry, status: "waiting" }), task);
+  assert.equal(task.status, "succeeded");
+  assert.equal(f.signals.length, 0);
+  assert.equal(f.debits.length, 0);
+  assert.equal(f.refunds.length, 0);
+  assert.equal(f.timers.size, 0);
+  request.input.prompt = "later";
+  assert.equal(task.input.prompt, "以图片1为参考生成视频");
+});
+
+test("real imports keep shared ownership and reject foreign scope, unsupported terminals and simulation collisions", () => {
+  const f = realFixture();
+  const request = input();
+  const entry = { id: "shared", scope: { projectId: "project-1", canvasId: "canvas-1" }, input: request.input,
+    sourceSurface: "canvas", status: "waiting", isOwner: false };
+  const task = f.service.importRealTask(entry);
+  assert.equal(task.isOwner, false);
+  assert.equal(task.canCancel, false);
+  assert.equal(task.scope.conversationId, null);
+  assert.equal(f.service.importRealTask({ ...entry, scope: { ...entry.scope, canvasId: "other" } }), null);
+  assert.equal(f.service.importRealTask({ ...entry, status: "succeeded" }), null);
+  assert.equal(f.service.importRealTask({ ...entry, status: "canceled" }), null);
+  assert.equal(f.service.updateRealTask(task, { id: "different", status: "failed" }), false);
+  assert.equal(task.status, "running");
+  const simulated = fixture();
+  const ordinary = simulated.service.submit(request);
+  assert.equal(simulated.service.importRealTask({ ...entry, id: ordinary.id }), null);
+});
+
+test("disposing a real executor detaches client polling and rejects late result projection without canceling or refunding", async () => {
+  const f = realFixture();
+  const task = f.service.submit(input());
+  await resolveAsyncRouting();
+  f.signals[0].onUpdate({ status: "waiting" });
+  f.service.dispose();
+  f.service.dispose();
+  f.signals[0].onComplete(actualVideo);
+  f.signals[0].onFail("late failure");
+  assert.equal(f.realDisposed(), 1);
+  assert.equal(task.status, "running");
+  assert.equal(task.executionStatus, "waiting");
+  assert.equal(task.result, null);
+  assert.equal(f.stopped.length, 0);
+  assert.equal(f.refunds.length, 0);
+});

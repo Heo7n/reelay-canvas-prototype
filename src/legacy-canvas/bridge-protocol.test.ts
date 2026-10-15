@@ -14,6 +14,8 @@ import {
   hostSaveErrorMessageSchema,
   hostSaveResultMessageSchema,
   hostRecoveryMessageSchema,
+  hostVideoGenerationBindSchema,
+  hostVideoGenerationErrorSchema,
   parseCanvasMessage,
 } from "./bridge-protocol";
 
@@ -26,6 +28,30 @@ const document = {
 };
 
 describe("legacy canvas bridge", () => {
+  it("requires video command identity without accepting iframe-owned route authority", () => {
+    const command = { source: "reelay-legacy-canvas", type: "canvas:video-generation-command", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", operation: "submit", requestKey: "38975aa7-a00d-4ed4-8412-850343a15a27",
+      canvasRecordId: "old-canvas-id", nodeId: "old-node-id", sourceSurface: "canvas", conversationId: null,
+      prompt: "日出", parameters: {}, references: [] };
+    expect(parseCanvasMessage(command)).toEqual(command);
+    for (const fields of [{ projectId: "forged" }, { canvasDocumentId: "forged" }, { actorId: "forged" }, { expectedActorId: "forged" },
+      { requestKey: "not-uuid" }, { instanceId: "" }, { requestId: "" }, { protocolVersion: 2 },
+      { source: "other" }, { nodeId: "" }, { conversationId: "private-not-uuid" }]) {
+      expect(parseCanvasMessage({ ...command, ...fields })).toBeNull();
+    }
+    const ack = { source: "reelay-legacy-canvas", type: "canvas:video-generation-bound", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", taskId: "497d08f7-d572-4458-95b7-40fe8b79e214", bound: true };
+    expect(parseCanvasMessage(ack)).toEqual(ack);
+    expect(parseCanvasMessage({ ...ack, bound: "true" })).toBeNull();
+    expect(parseCanvasMessage({ ...ack, canvasId: "forged" })).toBeNull();
+    expect(hostVideoGenerationBindSchema.safeParse({ source: "reelay-shell", type: "host:video-generation-bind", protocolVersion: 1, instanceId: "instance", requestId: "request", task: {} }).success).toBe(false);
+    expect(hostVideoGenerationErrorSchema.safeParse({ source: "reelay-shell", type: "host:video-generation-error", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", operation: "submit", code: "task_not_bound", message: "尚未保存" }).success).toBe(true);
+    const error = { source: "reelay-shell", type: "host:video-generation-error", protocolVersion: 1,
+      instanceId: "instance", requestId: "request", operation: "submit", code: "request_failed", message: "响应丢失", submissionState: "unknown" };
+    expect(hostVideoGenerationErrorSchema.safeParse(error).success).toBe(true);
+    expect(hostVideoGenerationErrorSchema.safeParse({ ...error, operation: "context" }).success).toBe(false);
+  });
   it("requires explicit scope and an iframe instance for recovery snapshots and acknowledgements", () => {
     const snapshot = { source: "reelay-legacy-canvas", type: "canvas:recovery-snapshot", protocolVersion: 1,
       instanceId: "instance", requestId: "request", projectId: "project", canvasId: "canvas", expectedRevision: 2, schemaVersion: 1, content: {} };

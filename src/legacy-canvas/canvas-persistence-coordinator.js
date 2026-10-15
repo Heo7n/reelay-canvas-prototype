@@ -42,6 +42,16 @@
       ? options.onDocumentReady
       : () => undefined;
     const onNotice = typeof options.onNotice === "function" ? options.onNotice : () => undefined;
+    const saveWaiters = new Set();
+
+    function settleWaiters(error) {
+      for (const waiter of [...saveWaiters]) {
+        saveWaiters.delete(waiter);
+        clearTimer(waiter.timer);
+        if (error) waiter.reject(new Error(error));
+        else waiter.resolve(true);
+      }
+    }
 
     const state = {
       initialized: false,
@@ -94,6 +104,7 @@
     }
 
     function resetForContext(context) {
+      settleWaiters("画布已切换，未启动真实生成。");
       clearScheduledSave();
       state.initialized = false;
       state.hydrating = false;
@@ -166,6 +177,7 @@
       if (serialized === state.lastSavedSnapshot) {
         state.pendingAfterFlight = false;
         setDirty(false);
+        settleWaiters();
         return false;
       }
 
@@ -184,6 +196,22 @@
         content: JSON.parse(serialized),
       });
       return true;
+    }
+
+    // A paid request may only start after its stable task reference is acknowledged.
+    function flushAndWait() {
+      if (!state.initialized || !state.writable || state.blocked || state.hydrating) {
+        return Promise.reject(new Error("当前画布无法保存，未启动真实生成。"));
+      }
+      return new Promise((resolve, reject) => {
+        const waiter = { resolve, reject, timer: 0 };
+        saveWaiters.add(waiter);
+        waiter.timer = setTimer(() => {
+          saveWaiters.delete(waiter);
+          reject(new Error("画布保存未确认，未启动真实生成。"));
+        }, 25000);
+        flush();
+      });
     }
 
     function schedule(delay = 800) {
@@ -219,6 +247,7 @@
         schedule(0);
       } else {
         setDirty(false);
+        settleWaiters();
       }
       return true;
     }
@@ -234,6 +263,7 @@
 
       state.inFlight = null;
       state.pendingAfterFlight = false;
+      settleWaiters("画布保存失败，未启动真实生成。");
       if (message.code === "conflict" || message.code === "authentication") {
         // Capture edits made after the failed request, before locking cancels
         // transient work. Recovery never uses the older in-flight snapshot.
@@ -345,6 +375,7 @@
     }
 
     function dispose() {
+      settleWaiters("页面已关闭，未启动真实生成。");
       clearScheduledSave();
       state.inFlight = null;
       state.pendingAfterFlight = false;
@@ -354,6 +385,7 @@
       canMutate: () => state.accessMode === "standalone" || state.accessMode === "editable",
       dispose,
       flush,
+      flushAndWait,
       getAccessMode: () => state.accessMode,
       getState,
       handleHostMessage,

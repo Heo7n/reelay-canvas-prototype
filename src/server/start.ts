@@ -7,6 +7,10 @@ async function start(): Promise<void> {
   const isProduction = process.env.NODE_ENV === "production";
   const port = Number.parseInt(process.env.PORT ?? process.env.REELAY_SERVER_PORT ?? "5175", 10);
   const host = process.env.REELAY_SERVER_HOST ?? (isProduction ? "0.0.0.0" : "127.0.0.1");
+  if (process.env.REELAY_REAL_GENERATION_ENABLED === "1" && !isProduction && !process.env.VERCEL
+    && !["127.0.0.1", "localhost", "::1"].includes(host)) {
+    throw new Error("Real generation probes require a loopback-only server binding.");
+  }
   const configuredStaticRoot = process.env.REELAY_STATIC_ROOT?.trim();
   const staticRoot = configuredStaticRoot || (isProduction ? path.resolve("dist/shell") : undefined);
   const dependencies = createServerDependencies();

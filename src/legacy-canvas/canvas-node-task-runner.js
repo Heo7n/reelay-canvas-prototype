@@ -28,7 +28,7 @@
         if (!isCurrent) return;
         if (event.type === "succeeded") onComplete(task, record.target);
         else onCancel(task, record.target, task.cancellationReason || "failed");
-      } else if (isCurrent && ["running", "progress", "cancel-window-closed"].includes(event.type)) {
+      } else if (isCurrent && ["running", "progress", "cancel-window-closed", "real-updated", "execution-resolved"].includes(event.type)) {
         onProgress(task, record.target);
       }
     });
@@ -63,7 +63,10 @@
       for (const { task } of [...records.values()]) {
         if (["projectId", "canvasId", "nodeId"].some((field) => scope[field] !== undefined && scope[field] !== task.scope[field])) continue;
         if (nodeIds && !nodeIds.has(task.scope.nodeId)) continue;
-        if (service.invalidate(task, reason)) count += 1;
+        if (service.invalidate(task, reason)) {
+          count += 1;
+          if (task.channel === "real") release(records.get(task.id));
+        }
       }
       return count;
     }

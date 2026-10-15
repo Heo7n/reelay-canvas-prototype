@@ -7,7 +7,8 @@
     placeAnchoredPopover, refreshIcons, getDemoPresets = () => [], preparePreviewInput = () => null,
     createPreviewHistory = null, selectionTrigger = null, beforeSelection = () => {},
     confirmRemoveRecords = async () => false, createFinalInput = null,
-    beginResult = () => null, updateResult = () => {}, discardResult = () => {} }) {
+    beginResult = () => null, updateResult = () => {}, discardResult = () => {}, retrySave = () => {},
+    canInitializePreview = () => true, resumeGeneration = () => {} }) {
     const window = document.defaultView;
     let disposed = false;
     let sending = false;
@@ -56,7 +57,7 @@
     }
 
     function initializePreviewHistory() {
-      if (!previewInitializer || previewHandled || disposed || !isGenerationMode() || !isEditable()) return;
+      if (!previewInitializer || previewHandled || disposed || !isGenerationMode() || !isEditable() || !canInitializePreview()) return;
       const scope = getScope();
       if (!scope?.projectId || !scope.canvasId || !scope.conversationId) return;
       // Only the first eligible conversation may receive examples; user-created conversations remain blank.
@@ -150,10 +151,19 @@
       }
       if (name === "cancel") {
         if (!service.cancel(task)) { render(); showMessage("已进入生成阶段，当前无法取消"); }
+      } else if (name === "retry-save") {
+        if (task.channel === "real" && task.isOwner !== false && task.executionStatus === "save_failed") {
+          try { await retrySave(task); } catch (error) { showMessage(error.message); }
+        }
+      } else if (name === "resume-generation") {
+        if (task.channel === "real" && task.isOwner !== false && task.executionStatus === "prepared") {
+          try { await resumeGeneration(task); } catch (error) { showMessage(error.message); }
+        }
       } else if (name === "remove") {
         if (removeRecord(task)) { render(); showMessage("已删除此条生成记录"); }
       } else if (name === "again") {
         if (!isEditable()) return;
+        if (task.channel === "real" && ["unconfirmed", "save_failed"].includes(task.executionStatus)) return;
         // A repeated click from the same activation must not produce two attempts.
         if (event?.detail > 1 || sending) return;
         if (task.input.generationStage === "final") {
@@ -182,7 +192,7 @@
     const unsubscribe = service.subscribe((task, event) => {
       recordView?.observeTask(task, event);
       // Both surfaces project the same task into its captured canvas.
-      if (["running", "progress", "cancel-window-closed"].includes(event.type)) updateResult(task);
+      if (["running", "progress", "cancel-window-closed", "execution-resolved", "real-updated"].includes(event.type)) updateResult(task);
       if (["succeeded", "failed", "canceled", "removed"].includes(event.type)) {
         const target = placementTargets.get(task);
         placementTargets.delete(task);

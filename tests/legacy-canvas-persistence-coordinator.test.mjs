@@ -121,6 +121,32 @@ function saveResult(requestId, revision) {
   };
 }
 
+test("paid task binding waits for acknowledged current content, including edits during save", async () => {
+  const h = createHarness(); h.initialize(); h.setSnapshot({ value: 1 });
+  let saved = false;
+  const waiting = h.coordinator.flushAndWait().then(() => { saved = true; });
+  await Promise.resolve(); assert.equal(saved, false);
+  h.setSnapshot({ value: 2 });
+  h.hostMessage(saveResult(saveMessages(h)[0].requestId, 1));
+  await Promise.resolve(); assert.equal(saved, false);
+  // A follow-up save is required; the first acknowledgment did not contain new edits.
+  for (const [id, timer] of h.timers) if (timer.delay === 0) { h.timers.delete(id); timer.callback(); }
+  h.hostMessage(saveResult(saveMessages(h)[1].requestId, 2));
+  await waiting; assert.equal(saved, true); assert.equal(h.timers.size, 0);
+});
+
+test("paid task binding rejects failed saving and scope replacement", async () => {
+  for (const reason of ["network", "conflict", "authentication", "forbidden", "scope", "dispose"]) {
+    const h = createHarness(); h.initialize(); h.setSnapshot({ value: 1 });
+    const waiting = h.coordinator.flushAndWait();
+    const rejected = assert.rejects(waiting, /未启动真实生成/);
+    if (reason === "scope") h.initialize();
+    else if (reason === "dispose") h.coordinator.dispose();
+    else h.hostMessage({ type: "host:save-error", protocolVersion: 1, requestId: saveMessages(h)[0].requestId, code: reason });
+    await rejected;
+  }
+});
+
 test("an empty hosted document establishes a baseline without creating revision one", () => {
   const harness = createHarness();
   harness.initialize();

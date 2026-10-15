@@ -39,6 +39,10 @@ npm run dev:preview -- frontend
 
 前端 HMR 不更新常驻 API；后端变化需要在完成当前操作后单独重启。后台运行使用 `Start-Process -WindowStyle Hidden` 并指定工作区与日志。恢复后检查 5183 及 5182 的 `/api/health`，再核对原项目、素材与控制台；health 成功不等于数据归属正确。源码 URL 不加手工 `?v=`，正式产物用内容哈希。
 
+本机普通真实生成联调默认关闭。需要测试时只在忽略的 `.env.local-preview` 设置 `REELAY_REAL_GENERATION_ENABLED=1`，再启动 / 重启本机 API；启动器不向前端传递此设置或平台凭据。它要求 loopback 监听，生产 / Vercel 强制不可用。账号在页面“账号设置 → 生成连接”输入，密码不存配置；启用设置本身不登录、不发送付费请求。平台连接仅保留到服务进程结束；普通画布任务与结果已在本机 PostgreSQL / ObjectStore 持久化，读取旧结果无需平台登录，断流或服务中断的未知执行不自动重发。固定首测 Probe 仍属于进程内记录；重启前先核对既有任务。当前 API 升级已通过忽略目录 `.reelay-data/launch-upgraded-canvas-generation-api.mjs` 回载已保存 Probe DTO / 文件 metadata，不回载凭据或执行请求。常规启动仍走标准入口；若需保留这条旧首测界面，使用该已校验本机目标的启动器。更多行为见[产品规范 §2.3](current-product-spec.md#23-本机普通真实生成联调)。
+
+本机评审库于 2026-10-13 应用 `0020_canvas_video_generation.sql`，新增个人官网项目关联、持久视频任务与真实账号执行锁。迁移前备份位于 `.reelay-data/library-preview/before-canvas-video-0020.dump`；只修改当前本机库，未迁移共享环境或更换原对象目录。
+
 ## 首次安装与换电脑
 
 1. 安装 Git、Node.js `24.x`，clone 并检出实际交接分支，运行 `npm ci`。不复制 `node_modules`，不以网盘同步 `.git`。

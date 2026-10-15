@@ -8,8 +8,12 @@ import { HttpProjectRepository } from "./HttpProjectRepository";
 import { HttpSessionGateway } from "./HttpSessionGateway";
 import { HttpWorkspaceContextGateway } from "./HttpWorkspaceContextGateway";
 import { HttpWorkspaceRepository } from "./HttpWorkspaceRepository";
+import { HttpRealGenerationGateway } from "./HttpRealGenerationGateway";
+import { HttpCanvasVideoGateway } from "./HttpCanvasVideoGateway";
 
 export interface HttpServices {
+  canvasVideoGateway: HttpCanvasVideoGateway;
+  realGenerationGateway: HttpRealGenerationGateway;
   accountRepository: HttpAccountRepository;
   canvasDocumentRepository: HttpCanvasDocumentRepository;
   entityRepository: HttpEntityRepository;
@@ -24,6 +28,8 @@ export interface HttpServices {
 export function createHttpServices(options: HttpAdapterOptions = {}): HttpServices {
   const http = new HttpApiClient(options);
   return {
+    canvasVideoGateway: new HttpCanvasVideoGateway(http),
+    realGenerationGateway: new HttpRealGenerationGateway(http),
     accountRepository: new HttpAccountRepository(http),
     canvasDocumentRepository: new HttpCanvasDocumentRepository(http),
     entityRepository: new HttpEntityRepository(http),

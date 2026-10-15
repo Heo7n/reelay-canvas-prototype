@@ -22,6 +22,19 @@ const connections = context.REELAY_CANVAS_CONNECTIONS;
 const sortedKeys = (value) => Object.keys(value).sort();
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test("only durable real placeholders survive refresh without runtime or private prompt metadata", () => {
+  const taskId = "01a0bcb3-0242-7dd0-b00f-10e1edc78080";
+  const snapshot = codec.createSnapshot({ activeCanvasId: "c", canvases: [{ id: "c", nodes: [
+    { id: "real", kind: "asset", mode: "video", assets: [], realGenerationTaskId: taskId, pendingGeneration: { taskId }, generating: true },
+    { id: "fake", kind: "asset", mode: "video", assets: [], pendingGeneration: { taskId: "fake" } },
+  ] }] });
+  assert.equal(snapshot.canvases[0].nodes.length, 1);
+  assert.equal(snapshot.canvases[0].nodes[0].realGenerationTaskId, taskId);
+  assert.equal(snapshot.canvases[0].nodes[0].pendingGeneration, undefined);
+  assert.equal(snapshot.canvases[0].nodes[0].generating, undefined);
+  assert.equal(codec.restoreSnapshot(snapshot).canvases[0].nodes[0].realGenerationTaskId, taskId);
+});
+
 test("the canvas document codec persists only explicit content fields and restores runtime defaults", () => {
   const state = {
     activeCanvasId: "canvas-1",

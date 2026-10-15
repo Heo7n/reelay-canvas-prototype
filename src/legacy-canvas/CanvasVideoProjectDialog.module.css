@@ -1,0 +1,16 @@
+.dialog { width: min(460px, calc(100vw - 48px)); padding: 0; max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--color-canvas-border); border-radius: 16px; color: var(--color-canvas-text); background: var(--color-canvas-surface); box-shadow: 0 20px 60px rgb(0 0 0 / 18%); }
+.dialog::backdrop { background: rgb(0 0 0 / 24%); }
+.content { position: relative; padding: 28px; }
+.content h2 { margin: 0 36px 12px 0; font-size: 20px; font-weight: 600; }
+.content p { margin: 0 0 20px; color: var(--color-canvas-text-muted); line-height: 1.7; font-size: 14px; overflow-wrap: anywhere; }
+.close { position: absolute; top: 20px; right: 20px; }
+.content label { display: block; margin-bottom: 8px; font-size: 13px; }
+.content select { width: 100%; min-width: 0; border: 1px solid var(--color-canvas-border); border-radius: 8px; padding: 10px 12px; background: var(--color-canvas-background); color: var(--color-canvas-text); font: inherit; }
+.content button:not(.close) { border: 1px solid var(--color-canvas-border); border-radius: 8px; padding: 10px 14px; background: var(--color-canvas-surface); color: var(--color-canvas-text); cursor: pointer; font-size: 14px; }
+.content button.primary { background: var(--color-canvas-action-background); color: var(--color-canvas-action-text); }
+.content button:disabled, .content select:disabled { opacity: .5; cursor: default; }
+.content button:focus-visible, .content select:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 3px; }
+.actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.content .note, .content .status { margin-top: 14px; font-size: 13px; }
+.error { margin-top: 12px; font-size: 13px; line-height: 1.6; }
+.error button { margin-left: 8px; }

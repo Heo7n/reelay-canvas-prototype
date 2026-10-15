@@ -66,11 +66,19 @@ Reelay 的“自动校验素材”按用户确认的产品规则表达为：用�
 
 这些是当前交互原型的产品能力契约，不代表已经接入供应商 API。真实接入时必须由后端能力接口校准输入方式、输出分辨率、时长、参考素材数量、原生音频、地区、价格、服务状态和下线日期。
 
+2026-10-13 图片通道只读核对：用户外部接口文档 §6 与缓存官网公开配置均列 `jimeng/seedream-5.0`，官网另列 `openai/gpt-image-2`；官网展示 Seedream `2K/3K`、两者 max_n=1。这只证明官网 UI 配置，不证明接口上限，遗漏的字段不等于平台拒绝。两模型尚未接入真实生成或实测出图；官网 Web 与 Agent 不是同一提交契约。原型 Seedream 5.0 Lite 的名称和参数须单独核对身份，不能直接套入通道。
+
+[GPT Image 2 原生 API](https://developers.openai.com/api/reference/resources/images/methods/generate)已确认支持自定义像素 size 与独立 quality；不把官网固定比例菜单写成模型限制。目录后续应分别维护模型原生约束、各通道映射 / 已核验能力和产品开放策略；未知透传字段保留“待核验”，不冒充拒绝或已实现。尺寸交互按精确像素预设 + 自定义宽高设计，不把通用 4K 机械套到方形 / 其它比例，也不静默修改输入。[尺寸指南](https://developers.openai.com/cookbook/examples/multimodal/image-gen-models-prompting-guide)与 API 引用的 3840 边界表述有差异，实际通道仍需确认。方案见[普通真实接入规划](product-expansion-plan.md#83-普通真实生成本机首期接入方案)。
+
 ## 积分预估配置
+
+本机普通真实生成首测的独立映射保存在 Fast 的 `integrations.reelay`：平台 model ID 为 `jimeng/seedance-2.0-fast`，`probe` 固定 `480P / 16:9 / 5 秒 / 含音频`。它只供账号设置的受控联调，不替换节点默认参数、不把样片识别为普通 480P，也不宣称其他目录模型的真实接口已经验证。费用未核验时不沿用下方演示积分扣费，行为见[产品规范 §2.3](current-product-spec.md#23-本机普通真实生成联调)。
 
 Seedance 2.5、2.0、Fast 的 `pricing` 在 `data/model-catalog.js` 维护，2026-10-12 核对[官方单价](https://docs.volcengine.com/docs/ark/model-pricing?lang=zh)、[实际输出尺寸](https://docs.volcengine.com/docs/ark/video-generation-tutorial?lang=zh)与[最低 token 用量表](https://bytedance.larkoffice.com/wiki/FXaYwxzJ5i5Zdik32ipcWzt7nxd?table=tblheIYDXXwYM43b&view=vew2CR2JYM#CategoryScheduledTask)。只配置当前已开放规格，没有增加 4K 能力。样片继承 2.5 的 480P 规则，正片按原输入视频时长与目标 1080P 独立估算，样片视频不作为新增输入。
 
 估算用量为 `(参考视频总秒数 + 输出秒数) × 宽 × 高 × 24 / 1024`；含视频输入时取与最低用量的较大值。最低表按输出整数秒保存等价计费秒数，乘实际面积后 `Math.round` 可重建所核对的官方整数 token 表；不能把一个规格的 `67,200` 当作通用下限。成本使用模型 / 分辨率 / 有无视频输入对应的单价，保留中间精度，最终积分 `ceil(成本 × 16.5)`。因此可与官方计算器两位小数的显示成本换算相差少量尾数。报价是预估，实际供应商用量和结算仍需在真实接入时校准。
+
+2.5 的编辑 / 延长按[官方继承规则](https://docs.volcengine.com/docs/ark/seedance-2-5?lang=zh)解析输出规格。唯一参考视频的编辑继承其画幅、完整小数时长，指定时长的延长继承画幅，显示单个预估数字；智能延长仍显示时长范围。多视频不能按第一段、最长时长或普通文字中的“视频1”猜目标，此轮未增加语义解析或目标选择控件，按每个可能目标的画幅与编辑时长配对估算范围，输入时长始终累加全部参考视频。元数据缺失时等待，不回落默认比例。标准画幅映射官方尺寸；非标准 5:4 / 7:5 等没有已核验的精确输出像素映射，采用目录 `estimatedAdaptivePixelArea` 的该分辨率标称面积作单值近似，在提示中持续标明，不伪造输出宽高或改成 16:9。报价中的 `exact` 仅表示单个预估值，不等于供应商精确结算。小数时长相邻最低档均被公式用量覆盖时不再无条件显示范围；真实最低档仍有费用差异时保留区间。
 
 ## 持久化兼容
 

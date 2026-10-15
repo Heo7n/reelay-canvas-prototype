@@ -21,9 +21,10 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 function quotedTaskCredits(h, task) {
   const input = task.input;
   const model = h.window.REELAY_MODEL_CATALOG.find((entry) => entry.id === input.modelId);
+  const constraint = model.capabilities?.omniReferenceTaskType?.constraints?.[input.parameters.omniReferenceTaskType];
   const quote = h.window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({
     model, references: input.references,
-    parameters: { ...input.parameters, aspect: input.parameters.aspect === "adaptive" ? "16:9" : input.parameters.aspect },
+    parameters: { ...input.parameters, aspect: input.parameters.aspect === "adaptive" && !constraint?.referenceVideoRequired ? "16:9" : input.parameters.aspect },
     outputDuration: input.parameters.outputDuration,
   });
   assert.equal(quote.status, "exact", "the accepted simulation has a resolved catalog quote");
@@ -34,7 +35,7 @@ function assertQuoteText(element, quote) {
   assert.ok(element, "the live composer exposes its credit estimate");
   const numbers = element.textContent.match(/\d[\d,]*/g)?.map((value) => Number(value.replaceAll(",", "")));
   assert.deepEqual(numbers, quote.status === "exact" ? [quote.credits] : [quote.minCredits, quote.maxCredits]);
-  assert.match(element.textContent, /≈/, "preflight credits remain visibly approximate");
+  assert.doesNotMatch(element.textContent, /≈/, "compact quotes omit the approximate symbol");
 }
 
 test("credit estimate node updates with model, duration, quality and reference additions and undo", async (t) => {
@@ -171,6 +172,98 @@ test("credit estimate final uses original reference seconds and frozen requested
   assert.equal(h.state.account.credits, balance - quote.credits);
   assert.equal(h.service.cancel(final), true); assert.equal(final.refunded, quote.credits);
   assert.equal(h.state.account.credits, balance);
+});
+
+test("node edit quotes a single portrait target and freezes its fractional duration for charge and refund", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  Object.assign(node, { model: "seedance-2-5", omniReferenceTaskType: "edit", quality: "720p", prompt: "删除背景中的行人", expanded: true,
+    assets: [{ id: "portrait-edit", type: "video", url: "/portrait-edit.mp4", duration: 7.5, width: 720, height: 1280 }] });
+  h.first.nodes.push(node); h.window.setSelection([node.id], node.id); h.window.render();
+  const amount = h.document.querySelector(`[data-id="${node.id}"] [data-node-credit-estimate]`);
+  assert.equal(amount.textContent, "225");
+  assert.equal(h.window.startSimulatedGeneration(node), true);
+  const task = h.service.list().at(-1);
+  assert.equal(task.input.parameters.outputDuration, 7.5);
+  assert.equal(task.input.parameters.providerParameters.duration, -1);
+  assert.equal(task.input.parameters.aspect, "adaptive");
+  assert.equal(task.charged, 225);
+  assert.equal(h.service.cancel(task), true);
+  assert.equal(h.state.account.credits, 3000);
+});
+
+test("inherited frame metadata waits and becomes a scalar quote on node and conversation", (t) => {
+  const h = harness(t);
+  const node = h.window.defaultGeneratorNode(40, 50, "video");
+  Object.assign(node, { model: "seedance-2-5", omniReferenceTaskType: "extend", duration: "10s", quality: "720p", prompt: "向后延长镜头", expanded: true,
+    assets: [{ id: "frame-metadata", type: "video", url: "/frame-metadata.mp4", duration: 12 }] });
+  h.first.nodes.push(node); h.window.setSelection([node.id], node.id); h.window.render();
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"] [data-node-credit-estimate]`).textContent, "计算中");
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"] [data-action="generate"]`).dataset.tooltip, "正在读取参考视频宽高");
+  Object.assign(node.assets[0], { width: 1280, height: 720 }); h.window.render();
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"] [data-node-credit-estimate]`).textContent, "330");
+  h.agentReferences.addAssets(node.assets);
+  h.agentParameters.restore(h.agentModels.getModel(), node);
+  assert.equal(h.document.querySelector("#agentCreditValue").textContent, "330");
+  const task = h.send("向后延长镜头");
+  assert.equal(task.charged, 330);
+  assert.equal(task.input.parameters.outputDuration, 10);
+  assert.equal(h.service.cancel(task), true);
+  assert.equal(h.state.account.credits, 3000);
+});
+
+test("multiple edit references show a range without freezing the longest video as the target", (t) => {
+  const h = harness(t);
+  h.agentReferences.addAssets([{ id: "short", type: "video", url: "/short.mp4", duration: 5, width: 1280, height: 720 },
+    { id: "long", type: "video", url: "/long.mp4", duration: 20, width: 1280, height: 720 }]);
+  h.agentParameters.restore(h.agentModels.getModel(), { ...h.agentParameters.getCurrent(), omniReferenceTaskType: "edit", quality: "720p" });
+  assert.equal(h.document.querySelector("#agentCreditValue").textContent, "450–674");
+  assert.match(h.document.querySelector(".agent-send").title, /尚未确定编辑或延长对象/);
+  const task = h.send("修改背景");
+  assert.equal(task.input.parameters.outputDuration, null);
+  assert.equal(task.input.references.length, 2);
+  assert.equal(task.charged, 674, "the mock reserves the displayed upper quote instead of claiming a known target");
+  assert.equal(h.service.cancel(task), true);
+  assert.equal(h.state.account.credits, 3000);
+});
+
+test("nonstandard edited samples quote their frozen reference frame and duration for final generation", (t) => {
+  const h = harness(t);
+  h.agentModels.setGenerationModel("seedance-2-5-draft");
+  h.agentReferences.addAssets([{ id: "five-four", type: "video", url: "/five-four.mp4", duration: 7.5, width: 1200, height: 960 }]);
+  h.agentParameters.restore(h.agentModels.getModel(), { ...h.agentParameters.getCurrent(), omniReferenceTaskType: "edit" });
+  assert.equal(h.document.querySelector("#agentCreditValue").textContent, "100");
+  assert.match(h.document.querySelector(".agent-send").title, /非标准画幅.*标称像素面积/);
+  const sample = h.send("删除画面中的路人"); h.service.complete(sample);
+  assert.equal(sample.result.generation.input.parameters.outputDuration, 7.5);
+  assert.equal(sample.result.generation.input.references[0].width, 1200);
+  h.agentReferences.addAssets([{ id: "later", type: "video", url: "/later.mp4", duration: 20, width: 720, height: 1280 }]);
+  const anchor = h.document.querySelector("#canvasHomeBtn");
+  anchor.getBoundingClientRect = () => ({ left: 20, top: 20, right: 52, bottom: 52, width: 32, height: 32 });
+  assert.equal(h.agentGeneration.requestFinal(sample.result, { anchor }), true);
+  const panel = h.document.querySelector(".draft-video-popover");
+  assert.equal(panel.querySelector("[data-draft-cost]").textContent, "554");
+  panel.querySelector("form").dispatchEvent(new h.window.Event("submit", { bubbles: true, cancelable: true }));
+  const final = h.service.list().at(-1);
+  assert.equal(final.charged, 554);
+  assert.equal(final.input.parameters.outputDuration, 7.5);
+  assert.equal(final.input.references.length, 1);
+  assert.equal(h.service.cancel(final), true);
+  assert.equal(h.state.account.credits, 2900);
+});
+
+test("editing a history draft recalculates duration instead of reusing the old accepted output duration", (t) => {
+  const h = harness(t);
+  const original = h.send("湖面薄雾"); h.service.complete(original);
+  assert.equal(original.input.parameters.outputDuration, 10);
+  h.click(original, "edit");
+  h.agentParameters.setOpen(true);
+  const duration = h.document.querySelector("#agentParamMenu [data-duration-number]");
+  duration.value = "20"; duration.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(h.document.querySelector("#agentCreditValue").textContent, "222");
+  const repeated = h.send(null);
+  assert.equal(repeated.charged, 222);
+  assert.equal(repeated.input.parameters.outputDuration, 20);
 });
 
 test("node sample media badge follows shared expiry and project eligibility before accepting clicks", (t) => {
@@ -665,6 +758,120 @@ function withReferences(h) {
   h.draft(document);
   return { entries: plain(entries), document: plain(document), references: plain(h.agentReferences.getAssets()) };
 }
+
+async function videoBridgeTicks() { for (let i = 0; i < 12; i++) await Promise.resolve(); }
+
+async function enableRealVideoHost(h) {
+  const instanceId = h.postedMessages.find((m) => m.type === "canvas:ready").instanceId;
+  const content = plain(h.window.createCanvasDocumentSnapshot());
+  h.dispatchHost({ source: "reelay-shell", type: "host:init", context: {
+    protocolVersion: 1, workspaceId: "w", projectId: h.state.projectId, projectName: "真实联调", canvasId: "main",
+    writable: true, theme: "light", capabilities: { realVideoGeneration: true } } });
+  h.dispatchHost({ source: "reelay-shell", type: "host:document", protocolVersion: 1, writable: true,
+    document: { id: "main", projectId: h.state.projectId, schemaVersion: 1, revision: 1, content } });
+  const reply = (request, result) => h.dispatchHost({ source: "reelay-shell", type: "host:video-generation-result",
+    protocolVersion: 1, instanceId, requestId: request.requestId, operation: request.operation, result });
+  reply(h.postedMessages.findLast((m) => m.operation === "context"), { kind: "simulation", reason: "disconnected", taskHistoryAvailable: true });
+  await videoBridgeTicks();
+  reply(h.postedMessages.findLast((m) => m.operation === "list"), { tasks: [] });
+  return { instanceId, reply, command: (op) => h.postedMessages.findLast((m) => m.operation === op),
+    context: { kind: "real", platformUser: { id: "platform-owner", displayName: "测试账号" }, binding: { projectId: h.state.projectId, platformProjectId: "remote", platformProjectName: "官网项目" } } };
+}
+
+test("connected node submit saves its task identity before activation and places actual video in the original canvas", async (t) => {
+  const h = harness(t, { hosted: true }); const host = await enableRealVideoHost(h);
+  const canvas = h.window.getActiveCanvas();
+  const node = h.window.defaultGeneratorNode(10, 10, "video");
+  Object.assign(node, { model: "seedance-2-fast", prompt: "慢慢飞过山脉", quality: "480p", aspect: "16:9", duration: "5s", expanded: true });
+  canvas.nodes.push(node); h.window.render();
+  assert.equal(h.window.startSimulatedGeneration(node), true);
+  const task = h.service.list()[0]; assert.equal(task.channel, "checking"); assert.equal(node.generating, true);
+  host.reply(host.command("context"), host.context); await videoBridgeTicks();
+  const submit = host.command("submit"); assert.ok(submit); assert.equal(task.channel, "real");
+  const dto = { id: task.id, projectId: task.scope.projectId, canvasDocumentId: "main", canvasRecordId: canvas.id,
+    nodeId: node.id, conversationId: null, sourceSurface: "canvas", prompt: task.input.prompt, parameters: { ...submit.parameters, resolution: "480P" },
+    status: "prepared", message: "任务已准备，尚未开始生成。", result: null };
+  h.dispatchHost({ source: "reelay-shell", type: "host:video-generation-bind", protocolVersion: 1, instanceId: host.instanceId, requestId: submit.requestId, task: dto });
+  await videoBridgeTicks();
+  const save = h.postedMessages.findLast((m) => m.type === "canvas:save");
+  assert.equal(save.content.canvases.find((c) => c.id === canvas.id).nodes.find((n) => n.id === node.id).realGenerationTaskId, task.id);
+  assert.equal(h.postedMessages.some((m) => m.type === "canvas:video-generation-bound" && m.bound), false);
+  h.dispatchHost({ source: "reelay-shell", type: "host:save-result", protocolVersion: 1, requestId: save.requestId,
+    document: { id: "main", projectId: task.scope.projectId, schemaVersion: 1, revision: 2, content: save.content } });
+  await videoBridgeTicks(); assert.equal(h.postedMessages.findLast((m) => m.type === "canvas:video-generation-bound").bound, true);
+  host.reply(submit, { ...dto, status: "waiting", message: "等待平台生成。" }); await videoBridgeTicks();
+  const element = h.document.querySelector(`[data-id="${node.id}"]`);
+  assert.equal(element.querySelector("[data-generation-progress]"), null); assert.equal(task.canCancel, false);
+  assert.equal(task.charged, 0); assert.equal(h.state.account.credits, 3000);
+  h.window.switchCanvas(h.state.canvases.find((c) => c.id !== canvas.id).id); h.advance(2000); await videoBridgeTicks();
+  const url = `/api/projects/${task.scope.projectId}/generation-results/${task.id}/video`;
+  host.reply(host.command("get"), { ...dto, status: "succeeded", message: "视频已保存。", result: { id: task.id, url } });
+  await videoBridgeTicks();
+  assert.equal(task.status, "succeeded"); assert.equal(node.generatedAsset.url, url);
+  assert.equal(node.generatedAsset.source, "real-generation"); assert.equal(node.generating, false);
+  assert.equal(h.service.list({ conversationId: h.agentHistory.getActiveId() }).length, 0);
+  assert.equal(h.window.getActiveCanvas().nodes.length, 0);
+});
+
+test("explicitly disconnected hosted video generation remains simulated and its cancel control works after checking", async (t) => {
+  const h = harness(t, { hosted: true }); const host = await enableRealVideoHost(h);
+  const task = h.send("模拟一个山谷航拍");
+  assert.equal(task.channel, "checking"); assert.equal(task.charged, 0);
+  host.reply(host.command("context"), { kind: "simulation", reason: "disconnected" }); await videoBridgeTicks();
+  assert.equal(task.channel, "simulation"); assert.equal(task.charged, task.input.cost);
+  assert.equal(host.command("submit"), undefined);
+  const node = h.window.getActiveCanvas().nodes[0];
+  h.document.querySelector(`[data-id="${node.id}"] [data-cancel-generation]`).click();
+  assert.equal(task.status, "canceled"); assert.equal(h.window.getActiveCanvas().nodes.length, 0);
+  assert.equal(h.state.account.credits, 3000);
+});
+
+test("connected conversation immediately owns one video placeholder, persists only its reference and fills the same node", async (t) => {
+  const h = harness(t, { hosted: true }); const host = await enableRealVideoHost(h);
+  const canvas = h.window.getActiveCanvas();
+  const task = h.send("无人机越过一片金色森林，远处山谷浮着薄雾，镜头匀速推进。");
+  assert.equal(canvas.nodes.length, 1); const node = canvas.nodes[0];
+  assert.equal(node.pendingGeneration.taskId, task.id); assert.equal(task.charged, 0);
+  host.reply(host.command("context"), host.context); await videoBridgeTicks();
+  const submit = host.command("submit"); assert.equal(submit.sourceSurface, "conversation");
+  const dto = { id: task.id, projectId: task.scope.projectId, canvasDocumentId: "main", canvasRecordId: canvas.id, nodeId: node.id,
+    conversationId: task.scope.conversationId, sourceSurface: "conversation", prompt: task.input.prompt, parameters: { ...submit.parameters, resolution: "480P" },
+    status: "prepared", message: "任务已准备，尚未开始生成。", result: null };
+  h.dispatchHost({ source: "reelay-shell", type: "host:video-generation-bind", protocolVersion: 1, instanceId: host.instanceId, requestId: submit.requestId, task: dto });
+  await videoBridgeTicks(); const save = h.postedMessages.findLast((m) => m.type === "canvas:save");
+  const savedNode = save.content.canvases.find((c) => c.id === canvas.id).nodes.find((n) => n.id === node.id);
+  assert.equal(savedNode.mode, "video"); assert.equal(savedNode.realGenerationTaskId, task.id);
+  assert.equal(JSON.stringify(savedNode).includes(task.input.prompt), false, "private chat prompt stays outside shared canvas output");
+  h.dispatchHost({ source: "reelay-shell", type: "host:save-result", protocolVersion: 1, requestId: save.requestId,
+    document: { id: "main", projectId: task.scope.projectId, schemaVersion: 1, revision: 2, content: save.content } });
+  await videoBridgeTicks();
+  const url = `/api/projects/${task.scope.projectId}/generation-results/${task.id}/video`;
+  host.reply(submit, { ...dto, status: "succeeded", message: "已保存", result: { id: task.id, url } }); await videoBridgeTicks();
+  assert.equal(canvas.nodes.length, 1); assert.equal(canvas.nodes[0], node);
+  assert.equal(node.assets[0].id, task.id); assert.equal(node.assets[0].url, url);
+  assert.equal(task.addedNodeId, node.id); assert.equal(task.status, "succeeded");
+  assert.equal(h.record(task).querySelector(".generation-record-channel").textContent, "真实");
+  assert.equal(h.state.account.credits, 3000); assert.equal(h.state.account.consumedCredits, 0);
+});
+
+test("a rejected real node submission leaves an actionable editor and visible error instead of silently resetting", async (t) => {
+  const h = harness(t, { hosted: true }); const host = await enableRealVideoHost(h);
+  const canvas = h.window.getActiveCanvas(); const node = h.window.defaultGeneratorNode(10, 10, "video");
+  Object.assign(node, { model: "seedance-2-fast", prompt: "霓虹街道", quality: "480p", aspect: "16:9", duration: "4s", expanded: true });
+  canvas.nodes.push(node); h.window.render();
+  h.window.startSimulatedGeneration(node); const task = h.service.list()[0];
+  host.reply(host.command("context"), host.context); await videoBridgeTicks();
+  const submit = host.command("submit");
+  h.dispatchHost({ source: "reelay-shell", type: "host:video-generation-error", protocolVersion: 1,
+    instanceId: host.instanceId, requestId: submit.requestId, operation: "submit", submissionState: "not-submitted", code: "request_conflict", message: "提交标识与原请求不一致。" });
+  await videoBridgeTicks();
+  assert.equal(task.status, "failed"); assert.equal(node.generating, false);
+  const element = h.document.querySelector(`[data-id="${node.id}"]`);
+  assert.match(element.querySelector(".generation-status").textContent, /生成失败.*提交标识/);
+  node.expanded = true; h.window.render();
+  assert.equal(h.document.querySelector(`[data-id="${node.id}"] [data-action="generate"]`).getAttribute("aria-disabled"), "false");
+  assert.equal(h.state.account.credits, 3000); assert.equal(h.postedMessages.some((message) => message.operation === "retry-save"), false);
+});
 
 function hostedEditableHarness(t) {
   const h = harness(t, { hosted: true });

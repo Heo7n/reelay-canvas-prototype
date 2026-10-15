@@ -516,12 +516,36 @@ const canvasNodeLayoutTransition = canvasNodeLayoutTransitionFactory.createNodeL
 });
 const canvasNodeTaskRunnerFactory = window.REELAY_CANVAS_NODE_TASK_RUNNER;
 if (!canvasNodeTaskRunnerFactory) throw new Error("Canvas node task runner is unavailable.");
+const canvasInstanceId = crypto.randomUUID();
+const canvasVideoGeneration = window.REELAY_CANVAS_VIDEO_GENERATION.createController({
+  instanceId: canvasInstanceId, makeId: () => crypto.randomUUID(),
+  isHosted: () => window.parent !== window,
+  getExpectedOrigin: () => window.location.origin, getExpectedSource: () => window.parent,
+  getCapabilities: () => state.hostCapabilities, getProjectId: () => state.projectId,
+  getPersistence: () => canvasPersistence, getTaskService: () => generationTasks,
+  getCanvasRecords: () => canvasRuntimeStore.listCanvases(),
+  getNodeForTask: getRealTaskNode, projectTask: projectRealVideoTask,
+  restoreConversation: (id, title) => agentHistory.ensureConversation(id, title),
+  onRestored(tasks) {
+    const current = agentHistory.getConversation();
+    if (current.messages.length || promptDocument.toText(current.draftPrompt).trim() || agentGeneration.hasRecords(current.id)) return;
+    const latest = [...tasks].filter((task) => task.sourceSurface === "conversation" && task.conversationId)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+    if (latest) agentHistory.select(latest.conversationId, { closeMenu: false });
+  },
+  setTimer: (callback, delay) => window.setTimeout(callback, delay), clearTimer: (id) => window.clearTimeout(id),
+  onContextChange: () => { render(); agentGeneration?.render(); syncAgentPromptOptimizationControl(); },
+  onHistoryReady: () => agentGeneration?.render(),
+});
 const generationTasks = window.REELAY_GENERATION_TASKS.createService({
   makeId: () => crypto.randomUUID(), now: () => Date.now(),
   executor: window.REELAY_SIMULATED_GENERATION_EXECUTOR.createExecutor({
     now: () => Date.now(), setTimer: (callback, delay) => window.setTimeout(callback, delay),
     clearTimer: (id) => window.clearTimeout(id),
   }),
+  resolveExecution: canvasVideoGeneration.resolveExecution,
+  shouldResolveExecution: (input) => input.mediaType === "video" && state.hostCapabilities.realVideoGeneration === true,
+  realExecutor: canvasVideoGeneration.executor,
   draftPolicy: window.REELAY_DRAFT_VIDEO,
   cancelWindowMs: prototypeConfig.generationCancelWindowMs,
   previewDurationMs: prototypeConfig.generationDurationMs,
@@ -552,7 +576,6 @@ let canvasAccessNoticeTimer = 0;
 let hostLaunchPrompt = "";
 let hostLaunchPromptReceived = false;
 let hostLaunchScope = "";
-const canvasInstanceId = crypto.randomUUID();
 const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersistenceCoordinator({
   instanceId: canvasInstanceId,
   serialize: serializeCanvasDocumentSnapshot,
@@ -566,6 +589,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
   getExpectedSource: () => window.parent,
   onAccessChange: applyCanvasAccessMode,
   onContext(context) {
+    canvasVideoGeneration.reset();
     cancelCanvasPointerInteraction();
     if (context.theme === "light" || context.theme === "dark") applyTheme(context.theme, { notifyHost: false });
     canvasNodeTasks.cancelScope({}, "context-replaced");
@@ -578,6 +602,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
     state.hostCapabilities.entityPersistence = context.capabilities?.entityPersistence === true;
     state.hostCapabilities.transientMediaUpload = context.capabilities?.transientMediaUpload === true;
     state.hostCapabilities.progressiveAssetLoading = context.capabilities?.progressiveAssetLoading === true;
+    state.hostCapabilities.realVideoGeneration = context.capabilities?.realVideoGeneration === true;
     state.hostCapabilities.workspaceCatalog = state.hostCapabilities.progressiveAssetLoading ? "loading" : "unavailable";
     state.hostCapabilities.mediaLibrary = undefined;
     const launchScope = JSON.stringify([context.workspaceId, context.projectId, context.canvasId]);
@@ -606,6 +631,7 @@ const canvasPersistence = canvasPersistenceCoordinatorFactory.createCanvasPersis
       showActionToast("当前项目为只读，可浏览但不能修改");
     }
     agentGeneration?.render();
+    void canvasVideoGeneration.restore();
   },
   onNotice(notice) {
     const messages = {
@@ -1532,6 +1558,7 @@ function scheduleCanvasDocumentSave(delay = 800) {
 
 function handleHostBridgeMessage(event) {
   return canvasPersistence.handleHostMessage(event)
+    || canvasVideoGeneration.handleHostMessage(event)
     || canvasMediaAssets.handleHostMessage(event)
     || canvasEntityAssets.handleHostMessage(event)
     || canvasMediaLibrary.handleHostMessage(event);
@@ -2345,16 +2372,16 @@ function getOmniReferenceTaskTypeIssue(node) {
 
 function getGenerationOutputDurationSeconds(node, referenceVideos) {
   const taskConstraint = getOmniReferenceTaskTypeConstraint(node);
-  // Auto extension has no known output duration before execution. The prototype
-  // uses the model default for its simulated output and estimated cost only;
-  // the provider request keeps -1 instead of silently forcing this estimate.
+  // Only one reference identifies an edit target without interpreting intent.
+  // Multiple candidates retain an unknown duration instead of picking the longest.
+  // Smart extension uses the model default for simulation; its request keeps -1.
   if (taskConstraint?.duration !== -1) return getNormalizedDurationSeconds(node);
   const resolvedReferences = Array.isArray(referenceVideos)
     ? referenceVideos
     : getReferenceVideoAssets(node);
   const durations = resolvedReferences.map((asset) => Number(asset.duration));
   if (!durations.length || durations.some((duration) => !Number.isFinite(duration) || duration <= 0)) return null;
-  return Math.max(...durations);
+  return durations.length === 1 ? durations[0] : null;
 }
 
 function normalizeNodeParameters(node) {
@@ -2430,7 +2457,7 @@ function normalizeNodeParameters(node) {
   return node;
 }
 
-function getGenerationCreditEstimate(node, { resolveSimulation = false, references } = {}) {
+function getGenerationCreditEstimate(node, { resolveSimulation = false, references, outputDuration: frozenOutputDuration } = {}) {
   const model = getModel(node);
   if (model?.pricing?.kind !== "video-tokens") {
     const credits = getLegacyGenerationCost(node);
@@ -2439,41 +2466,45 @@ function getGenerationCreditEstimate(node, { resolveSimulation = false, referenc
   }
   const assets = references || getNodeReferenceEntries(node).map((entry) => entry.asset);
   const constraint = getOmniReferenceTaskTypeConstraint(node);
-  const outputDuration = resolveSimulation || constraint?.duration === -1
-    ? getGenerationOutputDurationSeconds(node, assets.filter((asset) => asset?.type === "video")) : undefined;
-  if (constraint?.duration === -1 && outputDuration == null) {
-    return { status: "pending", credits: null, minCredits: null, maxCredits: null,
-      reasons: [assets.some((asset) => asset?.type === "video") ? "missing-reference-duration" : "missing-output-duration"] };
-  }
+  const outputDuration = Number.isFinite(frozenOutputDuration) && frozenOutputDuration > 0 ? frozenOutputDuration
+    : resolveSimulation && constraint?.duration !== -1 ? getGenerationOutputDurationSeconds(node) : undefined;
   const quality = model.pricing.qualities[node.quality];
-  const outputDimensions = resolveSimulation && node.aspect === "adaptive"
+  const outputDimensions = resolveSimulation && node.aspect === "adaptive" && !constraint?.referenceVideoRequired
     ? quality?.dimensions[model.defaults?.aspect] || quality?.dimensions["16:9"] : undefined;
   return window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({ model, parameters: node,
     references: assets, ...(outputDuration != null ? { outputDuration } : {}),
     ...(outputDimensions ? { outputDimensions } : {}) });
 }
 
-function getCost(node) {
-  const estimate = getGenerationCreditEstimate(node, { resolveSimulation: true });
-  // Auto preserves the existing simulated 10s / 16:9 resolution. Preview
-  // exposes uncertainty; acceptance freezes a quote from the same rules.
+function getCost(node, options = {}) {
+  const estimate = getGenerationCreditEstimate(node, { ...options, resolveSimulation: true });
+  // Smart extension retains the existing simulated 10s duration. Inherited
+  // frames use reference metadata; an unresolved target reserves the upper quote.
   return estimate.status === "exact" ? estimate.credits : estimate.status === "range" ? estimate.maxCredits : null;
 }
 
 function getCreditEstimateLabel(estimate) {
-  if (estimate.status === "exact") return `≈ ${formatCredit(estimate.credits)}`;
-  if (estimate.status === "range") return `≈ ${formatCredit(estimate.minCredits)}–${formatCredit(estimate.maxCredits)}`;
-  return estimate.reasons.includes("missing-reference-duration") ? "计算中" : "待估算";
+  if (estimate.status === "exact") return formatCredit(estimate.credits);
+  if (estimate.status === "range") return estimate.minCredits === estimate.maxCredits ? formatCredit(estimate.minCredits)
+    : `${formatCredit(estimate.minCredits)}–${formatCredit(estimate.maxCredits)}`;
+  return estimate.reasons.some((reason) => ["missing-reference-duration", "missing-reference-dimensions"].includes(reason)) ? "计算中" : "待估算";
 }
 
 function getCreditEstimateDescription(estimate) {
   const amount = estimate.status === "exact" ? `${formatCredit(estimate.credits)} 积分`
+    : estimate.status === "range" && estimate.minCredits === estimate.maxCredits ? `${formatCredit(estimate.minCredits)} 积分`
     : estimate.status === "range" ? `${formatCredit(estimate.minCredits)}–${formatCredit(estimate.maxCredits)} 积分` : "待估算";
   const reason = estimate.reasons.includes("missing-reference-duration") ? "正在读取参考视频时长"
+    : estimate.reasons.includes("missing-reference-dimensions") ? "正在读取参考视频宽高"
+    : estimate.reasons.includes("missing-target-video") ? "请添加要编辑或延长的参考视频"
+    : estimate.reasons.includes("ambiguous-target-video") ? "多段参考视频尚未确定编辑或延长对象，按可能的输出规格估算"
+    : estimate.reasons.includes("automatic-output-duration") ? "智能输出时长尚未确定，按支持的时长范围估算"
     : estimate.reasons.includes("fractional-output-minimum") ? "小数输出时长按相邻最低用量档位估算"
       : estimate.status === "range" ? "时长或比例未确定，按已支持规格估算范围"
       : estimate.status === "pending" ? "当前计价所需参数尚未确定" : "随模型、参数和参考视频总时长更新";
-  return `预估消耗 ${amount}；${reason}；发送时重新核算`;
+  const approximation = estimate.reasons.includes("estimated-output-pixel-area")
+    ? "；非标准画幅按所选分辨率的标称像素面积估算，实际用量生成后确认" : "";
+  return `预估消耗 ${amount}；${reason}${approximation}；发送时重新核算`;
 }
 
 function syncNodeCreditEstimate(node, element, duration = node.duration) {
@@ -2482,9 +2513,11 @@ function syncNodeCreditEstimate(node, element, duration = node.duration) {
   const button = element.querySelector('[data-action="generate"]');
   const amount = button?.querySelector("[data-node-credit-estimate]");
   if (!amount) return;
-  amount.textContent = getCreditEstimateLabel(estimate);
-  amount.parentElement.title = getCreditEstimateDescription(estimate);
-  button.setAttribute("aria-label", `生成；${getCreditEstimateDescription(estimate)}`);
+  const real = getVideoGenerationChannel(parameters) === "real";
+  const description = real ? "真实生成，费用由连接的平台账号承担；实际费用待平台确认" : getCreditEstimateDescription(estimate);
+  amount.textContent = real ? "真实 · 费用待确认" : getCreditEstimateLabel(estimate);
+  amount.parentElement.title = description;
+  button.setAttribute("aria-label", `生成；${description}`);
   button.dataset.tooltip = getGenerationAvailability(parameters).tooltip;
 }
 
@@ -2528,19 +2561,27 @@ function getGenerationAvailability(node) {
   return {
     cost,
     creditEstimate,
+    real: getVideoGenerationChannel(node) === "real",
     hasValidPrice,
     taskTypeIssue,
     canGenerate,
     tooltip: canGenerate
-      ? "生成"
+      ? getVideoGenerationChannel(node) === "real" ? "提交真实生成，实际费用待平台确认" : "生成"
       : taskTypeIssue
         ? taskTypeIssue
         : !hasValidPrice
-        ? creditEstimate.reasons.includes("missing-reference-duration") ? "正在读取参考视频时长" : "当前模型暂不可计价"
+        ? creditEstimate.reasons.includes("missing-reference-duration") ? "正在读取参考视频时长"
+          : creditEstimate.reasons.includes("missing-reference-dimensions") ? "正在读取参考视频宽高" : "当前模型暂不可计价"
         : hasPrompt
             ? "生成中"
             : "请输入提示词",
   };
+}
+
+function getVideoGenerationChannel(parameters) {
+  if (getNodeGenerationMode(parameters) !== "video" || !state.hostCapabilities.realVideoGeneration) return "simulation";
+  const context = canvasVideoGeneration.getContext();
+  return context?.kind === "simulation" ? "simulation" : context?.kind === "real" ? "real" : "checking";
 }
 
 function getParamLabelParts(node) {
@@ -3086,6 +3127,8 @@ function cloneNode(source) {
   };
   delete clone.groupId;
   delete clone.generationTaskId;
+  delete clone.realGenerationTaskId;
+  delete clone.realGenerationFailure;
   return clone;
 }
 
@@ -4943,8 +4986,46 @@ function createGeneratedAsset(parameterSnapshot) {
 }
 
 function getNodeGenerationStatus(node) {
-  const task = generationTasks.get(node.pendingGeneration?.taskId || node.generationTaskId);
-  return { progress: task?.progress || 0, canCancel: Boolean(task?.canCancel) && isCanvasMutationAllowed() };
+  const task = generationTasks.get(node.pendingGeneration?.taskId || node.generationTaskId || node.realGenerationTaskId);
+  return { progress: task?.progress || 0, canCancel: Boolean(task?.canCancel) && isCanvasMutationAllowed(),
+    channel: task?.channel, executionStatus: task?.status === "failed" ? "failed" : task?.executionStatus,
+    message: task?.status === "failed" ? task.error : task?.message, error: task?.error, isOwner: task?.isOwner };
+}
+
+function getRealTaskNode(task) {
+  if (task.scope.projectId !== state.projectId) return null;
+  const canvas = canvasRuntimeStore.getCanvas(task.scope.canvasId);
+  if (!canvas) return null;
+  const node = task.scope.nodeId ? canvas.nodes.find((item) => item.id === task.scope.nodeId)
+    : agentResultPlacement.getPendingNode(task) || canvas.nodes.find((item) => item.realGenerationTaskId === task.id);
+  return node && canvas.nodes.includes(node)
+    && (task.sourceSurface === "conversation" || node.generationTaskId === task.id || node.realGenerationTaskId === task.id) ? node : null;
+}
+
+function projectRealVideoTask(task) {
+  if (task.channel !== "real") return;
+  const node = getRealTaskNode(task);
+  if (!node || node.realGenerationTaskId !== task.id) return;
+  const canvas = canvasRuntimeStore.getCanvas(task.scope.canvasId);
+  if (task.status === "succeeded") {
+    if (node.kind === "generator" && node.generatedAsset?.id !== task.result?.id) {
+      node.generationTaskId = task.id;
+      completeSimulatedGeneration(task, node);
+    } else if (node.kind === "asset" && !node.assets.some((asset) => asset.id === task.result?.id)) {
+      node.assets = [{ ...task.result }]; node.activeAssetId = task.result.id;
+      delete node.pendingGeneration; delete node.generating;
+      scheduleCanvasDocumentSave(0);
+      if (canvas === getActiveCanvas()) render();
+    }
+    generationTasks.markAdded(task, { nodeId: node.id, canvasId: canvas.id });
+  } else {
+    node.generating = task.status !== "failed";
+    node.generationTaskId = task.id;
+    node.realGenerationFailure = task.status === "failed";
+    if (node.kind === "asset" && !node.assets.length) node.pendingGeneration = { taskId: task.id,
+      aspectRatio: aspectStringToRatio(task.input.parameters.aspect), status: task.status };
+    if (canvas === getActiveCanvas()) render();
+  }
 }
 
 function syncNodeGenerationStatus(task, node) {
@@ -4954,7 +5035,7 @@ function syncNodeGenerationStatus(task, node) {
 }
 
 function generatorMediaContent(node, displayWidth) {
-  if (node.generating) {
+  if (node.generating || node.realGenerationFailure) {
     return `<div class="media-content generating-preview">${window.REELAY_GENERATION_STATUS.render(getNodeGenerationStatus(node))}</div>`;
   }
 
@@ -5626,7 +5707,7 @@ function createGeneratorNodeElement(node, existingElement = null) {
             ${window.REELAY_ICONS.markup("sliders-horizontal", { class: "advanced-settings-icon" })}
           </button>
           <button class="generate-button ${generationAvailability.canGenerate ? "" : "disabled"}" data-action="generate" data-canvas-mutation data-tooltip="${escapeHtml(generationAvailability.tooltip)}" aria-label="生成；${escapeHtml(getCreditEstimateDescription(generationAvailability.creditEstimate))}" aria-disabled="${generationAvailability.canGenerate ? "false" : "true"}" type="button">
-            <span class="credit-mark" title="${escapeHtml(getCreditEstimateDescription(generationAvailability.creditEstimate))}"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span data-node-credit-estimate>${escapeHtml(getCreditEstimateLabel(generationAvailability.creditEstimate))}</span></span>
+            <span class="credit-mark" title="${escapeHtml(generationAvailability.real ? "真实生成，费用由连接的平台账号承担；实际费用待平台确认" : getCreditEstimateDescription(generationAvailability.creditEstimate))}"><img class="credit-semantic-icon" src="./assets/icons/credit-prism.svg" alt="" aria-hidden="true" /><span data-node-credit-estimate>${generationAvailability.real ? "真实 · 费用待确认" : escapeHtml(getCreditEstimateLabel(generationAvailability.creditEstimate))}</span></span>
             <span class="send-arrow">${window.REELAY_ICONS.markup("arrow-up", { class: "send-arrow-icon" })}</span>
           </button>
         </div>
@@ -5714,6 +5795,20 @@ function createGeneratorNodeElement(node, existingElement = null) {
 
 function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
   if (bindRoot) {
+    el.addEventListener("click", (event) => {
+      const action = event.target.closest(".generation-status [data-generation-action]")?.dataset.generationAction;
+      if (!action) return;
+      event.preventDefault(); event.stopPropagation();
+      if (!requireCanvasMutation() || !getActiveCanvas()?.nodes.includes(node)) return;
+      const task = generationTasks.get(node.pendingGeneration?.taskId || node.generationTaskId || node.realGenerationTaskId);
+      if (!task) return;
+      if (action === "cancel") {
+        if (!generationTasks.cancel(task)) { syncNodeGenerationStatus(task, node); showActionToast("当前任务无法取消"); }
+      } else if (action === "retry-save" || action === "resume-generation") {
+        Promise.resolve().then(() => action === "retry-save" ? canvasVideoGeneration.retrySave(task) : canvasVideoGeneration.resume(task))
+          .catch((error) => showActionToast(error.message));
+      }
+    });
     el.addEventListener("pointerdown", (event) => handleNodePointerDown(event, node.id));
     el.addEventListener("dragstart", (event) => event.preventDefault());
   }
@@ -5727,15 +5822,6 @@ function bindNodeEvents(el, node, { bindRoot = true, bindMedia = true } = {}) {
   });
   generationStatus?.addEventListener("keydown", (event) => event.stopPropagation());
   generationStatus?.addEventListener("keyup", (event) => event.stopPropagation());
-  generationStatus?.querySelector("[data-cancel-generation]")?.addEventListener("click", (event) => {
-    event.preventDefault(); event.stopPropagation();
-    if (!requireCanvasMutation() || !getActiveCanvas()?.nodes.includes(node)) return;
-    const task = generationTasks.get(node.pendingGeneration?.taskId || node.generationTaskId);
-    if (!task) return;
-    const canceled = node.pendingGeneration ? agentGeneration?.cancelTask(node.pendingGeneration.taskId)
-      : canvasNodeTasks.cancel(node.generationTaskId);
-    if (!canceled) { syncNodeGenerationStatus(task, node); showActionToast("已进入生成阶段，当前无法取消"); }
-  });
   bindMediaTitleEvents(el, node);
   bindMediaToolbarEvents(el, node);
   window.REELAY_DRAFT_VIDEO_BADGE.bind(el, (anchor, options) => {
@@ -6087,6 +6173,8 @@ function resolveCanvasNodeTaskTarget({ projectId, canvasId, nodeId }) {
 }
 
 function applyCanvasNodeTaskStart(task, node) {
+  delete node.realGenerationFailure;
+  delete node.realGenerationTaskId;
   node.generating = true;
   node.generationTaskId = task.id;
   node.preview = false;
@@ -6102,7 +6190,12 @@ function applyCanvasNodeTaskStart(task, node) {
 function applyCanvasNodeTaskCancellation(task, node, reason) {
   if (node.generationTaskId !== task.id) return;
   node.generating = false;
-  delete node.generationTaskId;
+  if (reason === "failed" && ["real", "checking"].includes(task.channel)) {
+    // A rejected submission remains visible on its original node. Retrying
+    // replaces this projection; it never hides an error as an untouched editor.
+    node.realGenerationFailure = true;
+    if (task.scope.canvasId === state.activeCanvasId) showActionToast(task.error || "真实生成未提交，请检查任务参数。");
+  } else delete node.generationTaskId;
   if (["user-canceled", "failed"].includes(reason) && task.scope.canvasId === state.activeCanvasId) render();
 }
 
@@ -6299,7 +6392,7 @@ function startSimulatedGeneration(node) {
     });
     return false;
   }
-  if (!hasEnoughCredits(cost)) {
+  if (getVideoGenerationChannel(node) === "simulation" && !hasEnoughCredits(cost)) {
     showConfirmDialog({
       title: "积分不足",
       body: `当前可用积分为 ${formatCredit(state.account.credits)}，本次生成预计需要 ${formatCredit(cost)} 积分。`,
@@ -6767,6 +6860,15 @@ function handleAction(node, action, value) {
       if (!getNodePromptText(node).trim() || node.generating) return;
       startSimulatedGeneration(node);
       break;
+    case "retry-save":
+    case "resume-generation": {
+      const task = generationTasks.get(node.realGenerationTaskId);
+      if (task?.channel === "real") {
+        const operation = action === "retry-save" ? canvasVideoGeneration.retrySave(task) : canvasVideoGeneration.resume(task);
+        Promise.resolve(operation).catch((error) => showActionToast(error.message));
+      }
+      break;
+    }
     case "prompt-optimization":
       if (getNodeGenerationMode(node) !== "video") return;
       startPromptOptimization(node);
@@ -8008,7 +8110,8 @@ function renderAgentMessages(conversation = getConversation()) {
 
 const agentHistory = window.REELAY_AGENT_HISTORY.createController({
   list: agentHistoryList,
-  seed: seedAgentConversations,
+  seed: seedAgentConversations.map((conversation) => ({ ...conversation, id: crypto.randomUUID() })),
+  makeId: () => crypto.randomUUID(),
   escapeHtml,
   refreshIcons,
   hasDraft: (conversation) => Boolean(agentGeneration?.hasRecords(conversation.id) || promptDocument.toText(conversation.draftPrompt).trim() || agentReferences.hasDraft(conversation)
@@ -8169,9 +8272,9 @@ const agentResultPlacement = window.REELAY_AGENT_RESULT_PLACEMENT.createControll
   },
   completePendingNode(canvas, node, result) {
     if (!canvas.nodes.includes(node) || !node.pendingGeneration) return false;
-    const asset = cloneAsset(result, "generation");
+    const asset = node.realGenerationTaskId ? { ...result } : cloneAsset(result, "generation");
     node.assets = [asset]; node.activeAssetId = asset.id;
-    delete node.pendingGeneration; delete node.generating;
+    delete node.pendingGeneration; delete node.generating; delete node.generationTaskId;
     pushCanvasUndoAction(canvas, { type: "create", nodeIds: [node.id] });
     scheduleCanvasDocumentSave(0);
     if (canvas === getActiveCanvas()) {
@@ -8244,12 +8347,13 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
   createFinalInput(asset, { outputFormat, scope, sourceNodeId }) {
     const eligibility = window.REELAY_DRAFT_VIDEO.getFinalEligibility(asset, { projectId: scope.projectId });
     if (!eligibility.eligible) return null;
-    const seconds = Number(asset.generation.input.parameters.outputDuration);
     const original = asset.generation.input;
+    const seconds = original.parameters.outputDuration;
     const sourceModel = models.find((entry) => entry.id === original.modelId);
     const parameters = { ...original.parameters, kind: "generator", model: sourceModel.baseModelId,
-      mode: "video", quality: "1080p", duration: `${seconds}s`, count: 1, assets: original.references || [] };
-    const cost = getCost(parameters);
+      mode: "video", quality: "1080p", count: 1, assets: original.references || [] };
+    if (Number.isFinite(seconds) && seconds > 0) parameters.duration = `${seconds}s`;
+    const cost = getCost(parameters, { outputDuration: seconds });
     if (!Number.isFinite(cost) || cost <= 0) return null;
     const input = window.REELAY_DRAFT_VIDEO.buildFinalInput(asset, { projectId: scope.projectId, outputFormat, cost });
     return input ? { ...input, sourceNodeId } : null;
@@ -8263,6 +8367,10 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
   showMessage: showActionToast, escapeHtml, assetPreview: agentReferenceThumbnail,
   renderPrompt: (input) => agentComposerView.renderPrompt({ ...input, content: input.prompt }),
   getDemoPresets: () => window.REELAY_GENERATION_DEMO_PRESETS?.create({ models, media: assetLibrarySeed.media }) || [],
+  retrySave: canvasVideoGeneration.retrySave,
+  resumeGeneration: canvasVideoGeneration.resume,
+  canInitializePreview: () => !state.hostCapabilities.realVideoGeneration
+    || (canvasVideoGeneration.isHistoryReady() && canvasVideoGeneration.getContext()?.kind === "simulation"),
   createPreviewHistory: window.REELAY_GENERATION_HISTORY_PRESETS && ((context) =>
     window.REELAY_GENERATION_HISTORY_PRESETS.create({ ...context,
       media: assetLibrarySeed.media, simulationAssets, simulationVideos: window.REELAY_PROTOTYPE_CONFIG.simulationVideos, now: Date.now() })),
@@ -8285,6 +8393,10 @@ agentGeneration = window.REELAY_AGENT_GENERATION.createController({
 agentComposerResize = window.REELAY_CANVAS_AGENT_COMPOSER_RESIZE.createController({
   document, panel: agentPanel, composer: agentComposer, stage: agentComposer.querySelector(".agent-composer-stage"),
   onResizeStart: () => { closeAgentPopovers(); agentGeneration.close(); },
+});
+generationTasks.subscribe((task, event) => {
+  if (task.channel !== "real") return;
+  if (["real-updated", "succeeded", "failed"].includes(event.type)) projectRealVideoTask(task);
 });
 
 function captureAgentGenerationInput() {
@@ -8538,10 +8650,12 @@ function syncAgentModelButton() {
   if (agentInput) agentInput.dataset.placeholder = generatorModelPolicy.getPromptPlaceholder(models, parameters);
   mountAgentPrompt();
   const creditEstimate = parameters ? getGenerationCreditEstimate(getAgentGenerationParameters()) : null;
-  const costLabel = creditEstimate ? getCreditEstimateLabel(creditEstimate) : "—";
+  const real = parameters && getVideoGenerationChannel(parameters) === "real";
+  const costLabel = real ? "真实 · 费用待确认" : creditEstimate ? getCreditEstimateLabel(creditEstimate) : "—";
   if (agentCreditValue) agentCreditValue.textContent = costLabel;
   if (agentSendButton) {
-    const label = creditEstimate ? `发送；${getCreditEstimateDescription(creditEstimate)}` : "发送；本次消耗待估算";
+    const label = real ? "发送真实生成，费用由当前连接的平台账号承担；实际费用待平台确认"
+      : creditEstimate ? `发送；${getCreditEstimateDescription(creditEstimate)}` : "发送；本次消耗待估算";
     agentSendButton.title = label;
     agentSendButton.setAttribute("aria-label", label);
   }
@@ -9227,6 +9341,10 @@ function ungroup(groupId) {
 
 function requestRunGroup(group) {
   if (!requireCanvasMutation()) return;
+  if (getGroupNodes(group).some((node) => node.kind === "generator" && getVideoGenerationChannel(node) !== "simulation")) {
+    showActionToast("真实视频暂不支持整组批量提交，请逐个发送并查看平台任务状态。");
+    return;
+  }
   const groupGenerators = getGroupNodes(group).filter((node) => node.kind === "generator");
   if (!groupGenerators.length) {
     showConfirmDialog({

@@ -11,8 +11,11 @@ import type { CanvasDocumentRepository } from "../../application/canvases/Canvas
 import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
 import { LegacyCanvasRoute } from "./LegacyCanvasRoute";
 import { takeProjectLaunchIntent } from "../home/launch-intent";
+import type { CanvasVideoGateway } from "../../application/generation/CanvasVideoGateway";
+import { createHttpServices } from "../../infrastructure/http/createHttpServices";
 
 const hostContexts = vi.hoisted(() => [] as Array<{ projectId?: string; canvasId?: string; launchPrompt?: string; theme?: string }>);
+const hostGenerationGateways = vi.hoisted(() => [] as Array<{ canvasVideoGateway?: unknown }>);
 vi.mock("../home/launch-intent", () => ({ takeProjectLaunchIntent: vi.fn(() => "") }));
 
 vi.mock("../../app/useWorkspaceRouteData", () => ({
@@ -50,7 +53,8 @@ vi.mock("../../app/useWorkspaceRouteData", () => ({
 }));
 
 vi.mock("../../legacy-canvas/CanvasHost", () => ({
-  CanvasHost: ({ context, onCreateProject, onOpenAccountSettings, onLaunchPromptConsumed, onThemeChange }: {
+  CanvasHost: ({ context, canvasVideoGateway, onCreateProject, onOpenAccountSettings, onLaunchPromptConsumed, onThemeChange }: {
+    canvasVideoGateway?: unknown;
     context: {
       projectId?: string;
       canvasId?: string;
@@ -70,6 +74,7 @@ vi.mock("../../legacy-canvas/CanvasHost", () => ({
     onThemeChange: (theme: "light" | "dark") => void;
   }) => {
     hostContexts.push(context);
+    hostGenerationGateways.push({ canvasVideoGateway });
     return (
     <div>
       <output data-testid="account-sections-capability">
@@ -113,13 +118,15 @@ afterEach(() => {
   delete document.documentElement.dataset.theme;
   document.documentElement.style.removeProperty("color-scheme");
   hostContexts.length = 0;
+  hostGenerationGateways.length = 0;
   vi.mocked(takeProjectLaunchIntent).mockReset().mockReturnValue("");
 });
 
-function renderCanvasRoute(experience = true, projectId = "project-1") {
+function renderCanvasRoute(experience = true, projectId = "project-1", gateways: { canvasVideoGateway?: CanvasVideoGateway } = {}) {
   const router = createMemoryRouter([{
     path: "/w/:workspaceId/projects/:projectId/canvases/:canvasId",
     element: <LegacyCanvasRoute
+      {...gateways}
       canvasDocumentRepository={{ getCanvasDocument: vi.fn(), save: vi.fn() }}
       mediaAssetRepository={{} as MediaAssetRepository}
       entityRepository={{} as EntityRepository}
@@ -131,6 +138,18 @@ function renderCanvasRoute(experience = true, projectId = "project-1") {
 }
 
 describe("LegacyCanvasRoute", () => {
+  it("only passes the real video ports when the account application provides them", () => {
+    const fetch = vi.fn(async () => new Response("{}"));
+    const services = createHttpServices({ fetch });
+    renderCanvasRoute(false, "project-1", { canvasVideoGateway: services.canvasVideoGateway });
+    expect(hostGenerationGateways.at(-1)).toEqual({ canvasVideoGateway: services.canvasVideoGateway });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the experience canvas without a real video or paid execution port", () => {
+    renderCanvasRoute();
+    expect(hostGenerationGateways.at(-1)).toEqual({ canvasVideoGateway: undefined });
+  });
   it.each(["light", "dark"] as const)("keeps the shell and account dialog on the canvas-selected %s theme", (theme) => {
     window.localStorage.setItem("reelay-theme-mode", theme === "light" ? "dark" : "light");
     renderCanvasRoute();

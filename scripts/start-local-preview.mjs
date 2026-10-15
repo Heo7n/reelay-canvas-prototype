@@ -6,7 +6,7 @@ import { parseArgs, parseEnv } from "node:util";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const environmentKey = /^(?:NODE_ENV|PORT|DATABASE_URL|MIGRATION_DATABASE_URL|REELAY_.*|SUPABASE_.*|VERCEL.*|ALLOW_DEMO_.*|PG.*)$/i;
-const allowedKeys = new Set(["REELAY_PREVIEW_FRONTEND_PORT", "REELAY_PREVIEW_API_PORT", "REELAY_PREVIEW_DB_CONTAINER", "DATABASE_URL", "REELAY_OBJECT_STORE_ROOT"]);
+const allowedKeys = new Set(["REELAY_PREVIEW_FRONTEND_PORT", "REELAY_PREVIEW_API_PORT", "REELAY_PREVIEW_DB_CONTAINER", "DATABASE_URL", "REELAY_OBJECT_STORE_ROOT", "REELAY_REAL_GENERATION_ENABLED"]);
 
 function port(value, name) {
   if (!/^\d+$/.test(value || "") || Number(value) < 1024 || Number(value) > 65535) throw new Error(`${name} must be a port between 1024 and 65535.`);
@@ -16,6 +16,8 @@ function port(value, name) {
 export function createLocalPreviewPlan(mode, configuration, { baseEnvironment = {}, root = projectRoot, resolveBinding, isDirectory = (target) => statSync(target).isDirectory() } = {}) {
   if (!["frontend", "server"].includes(mode)) throw new Error("Choose frontend or server.");
   for (const key of Object.keys(configuration)) if (!allowedKeys.has(key)) throw new Error(`Unsupported preview setting: ${key}`);
+  const realGeneration = configuration.REELAY_REAL_GENERATION_ENABLED ?? "0";
+  if (!["0", "1"].includes(realGeneration)) throw new Error("REELAY_REAL_GENERATION_ENABLED must be 0 or 1.");
   const frontendPort = port(configuration.REELAY_PREVIEW_FRONTEND_PORT, "Frontend port");
   const apiPort = port(configuration.REELAY_PREVIEW_API_PORT, "API port");
   if (frontendPort === apiPort) throw new Error("Frontend and API need distinct ports.");
@@ -46,7 +48,7 @@ export function createLocalPreviewPlan(mode, configuration, { baseEnvironment = 
   if (!exists) throw new Error("The configured object directory must already exist; this launcher never initializes data.");
   return {
     mode, port: apiPort,
-    env: { ...env, NODE_ENV: "development", PORT: apiPort, REELAY_SERVER_HOST: "127.0.0.1", REELAY_STORAGE: "postgresql", REELAY_OBJECT_STORAGE: "filesystem", DATABASE_URL: database.href, REELAY_OBJECT_STORE_ROOT: objectRoot },
+    env: { ...env, NODE_ENV: "development", PORT: apiPort, REELAY_SERVER_HOST: "127.0.0.1", REELAY_STORAGE: "postgresql", REELAY_OBJECT_STORAGE: "filesystem", DATABASE_URL: database.href, REELAY_OBJECT_STORE_ROOT: objectRoot, REELAY_REAL_GENERATION_ENABLED: realGeneration },
     args: ["--import", "tsx", "src/server/start.ts"],
   };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { HardDrive, UserRound } from "lucide-react";
+import { HardDrive, Link2, UserRound } from "lucide-react";
 
 import type { SessionActor } from "../../domain/identity/session";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -10,11 +10,13 @@ import { captureFocusReturn } from "../../shared/ui/focus-return";
 import { AccountProfileSection } from "./AccountProfileSection";
 import { PersonalUsageSection } from "./PersonalUsageSection";
 import { AccountStorageSection } from "./AccountStorageSection";
+import { RealGenerationConnectionSection } from "./RealGenerationConnectionSection";
+import type { RealGenerationGateway } from "../../application/generation/RealGenerationGateway";
 import type { MediaAssetRepository } from "../../application/assets/MediaAssetRepository";
 import { applicationServices } from "../../app/services";
 import styles from "./AccountSettingsDialog.module.css";
 
-export type AccountSection = "profile" | "credits" | "storage";
+export type AccountSection = "profile" | "credits" | "storage" | "generation";
 
 interface AccountSettingsDialogProps {
   actor: SessionActor;
@@ -24,12 +26,14 @@ interface AccountSettingsDialogProps {
   returnFocusRef?: RefObject<HTMLElement | null>;
   workspace: Workspace;
   mediaAssetRepository?: MediaAssetRepository;
+  realGenerationGateway?: RealGenerationGateway;
 }
 
 const sectionItems = [
   { id: "profile", label: "个人主页", icon: UserRound },
   { id: "credits", label: "我的积分", icon: CreditIcon },
   { id: "storage", label: "存储空间", icon: HardDrive },
+  { id: "generation", label: "生成连接", icon: Link2 },
 ] as const;
 
 export function AccountSettingsDialog({
@@ -40,9 +44,11 @@ export function AccountSettingsDialog({
   returnFocusRef,
   workspace,
   mediaAssetRepository = applicationServices.mediaAssetRepository,
+  realGenerationGateway = applicationServices.realGenerationGateway,
 }: AccountSettingsDialogProps) {
   const [activeSection, setActiveSection] = useState<AccountSection>(initialSection);
-  const visibleSection = activeSection === "storage" && !mediaAssetRepository.getStorageUsage ? "profile" : activeSection;
+  const visibleSection = (activeSection === "storage" && !mediaAssetRepository.getStorageUsage)
+    || (activeSection === "generation" && !realGenerationGateway) ? "profile" : activeSection;
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -85,7 +91,7 @@ export function AccountSettingsDialog({
           }
           if (event.key !== "Tab") return;
           const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+            'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, a[href], [tabindex]:not([tabindex="-1"])',
           );
           if (!focusable?.length) return;
           const first = focusable[0];
@@ -104,6 +110,7 @@ export function AccountSettingsDialog({
           <nav aria-label="账号设置分栏">
             {sectionItems.map((item) => {
               if (item.id === "storage" && !mediaAssetRepository.getStorageUsage) return null;
+              if (item.id === "generation" && !realGenerationGateway) return null;
               const Icon = item.icon;
               return (
                 <button
@@ -126,6 +133,7 @@ export function AccountSettingsDialog({
           {visibleSection === "profile" ? <AccountProfileSection actor={actor} workspace={workspace} /> : null}
           {visibleSection === "credits" ? <PersonalUsageSection actor={actor} /> : null}
           {visibleSection === "storage" ? <AccountStorageSection actorId={actor.id} workspaceId={workspace.id} organization={workspace.kind === "organization"} repository={mediaAssetRepository} /> : null}
+          {visibleSection === "generation" && realGenerationGateway ? <RealGenerationConnectionSection key={actor.id} gateway={realGenerationGateway} /> : null}
         </div>
       </div>
     </div>,

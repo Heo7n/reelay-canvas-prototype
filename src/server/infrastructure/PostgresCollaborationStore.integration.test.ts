@@ -102,6 +102,7 @@ beforeAll(async () => {
       "0017_entity_library_tags.sql",
       "0018_entity_library_directories.sql",
       "0019_organization_entities.sql",
+      "0020_canvas_video_generation.sql",
     ]);
     await expect(runMigrations(setupPool)).resolves.toEqual([]);
     await seedDemoDatabase(setupPool);

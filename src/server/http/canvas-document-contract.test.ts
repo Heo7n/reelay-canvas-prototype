@@ -29,6 +29,20 @@ const codec = context.REELAY_CANVAS_DOCUMENT_CODEC as LegacyCodec;
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
 describe("CanvasDocument v1 cross-runtime contract", () => {
+  it("preserves durable real task references through browser, HTTP and repeated canonicalization", () => {
+    const taskId = "38ef21a5-0a30-4645-85b4-578d9d376a9e";
+    const input = { kind: "reelay-legacy-canvas", version: 1, activeCanvasId: "canvas", canvases: [{ id: "canvas", nodes: [
+      { id: "generator", kind: "generator", mediaKind: "video", realGenerationTaskId: taskId },
+      { id: "placed", kind: "asset", mode: "video", assets: [], realGenerationTaskId: taskId, pendingGeneration: { taskId } },
+      { id: "malformed", kind: "asset", mode: "video", assets: [], realGenerationTaskId: "not-a-task-uuid" },
+    ] }] };
+    const browser = plain(codec.createSnapshot(input));
+    const server = canonicalizeLegacyCanvasDocumentV1(browser);
+    expect(server).toEqual(browser);
+    expect(server?.canvases[0].nodes.map((node) => node.realGenerationTaskId)).toEqual([taskId, taskId, undefined]);
+    expect(canonicalizeLegacyCanvasDocumentV1(server)).toEqual(server);
+    expect(plain(codec.createSnapshot(server))).toEqual(browser);
+  });
   it.each(["draft", "final"] as const)("preserves %s provenance identically through browser and HTTP canonicalization", (stage) => {
     const generation = { version: 1, stage, simulated: true, taskId: "task", resultId: "result", createdAt: 1000,
       projectId: "project", canvasId: "canvas", ...(stage === "draft" ? { expiresAt: 604801000 }

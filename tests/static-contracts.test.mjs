@@ -436,7 +436,7 @@ test("Seedance task type normalization migrates legacy workflows and enforces as
   const normalizeSource = sourceBetween(
     appSource,
     "function normalizeNodeParameters(node)",
-    "function getCost(node)",
+    "function getCost(",
   );
   const normalizeNodeParameters = Function(
     "generatorModelPolicy",

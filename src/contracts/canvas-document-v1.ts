@@ -79,6 +79,7 @@ export interface LegacyCanvasNodeV1 {
   y: number;
   z: number;
   groupId?: string;
+  realGenerationTaskId?: string;
   mode?: MediaKind;
   mediaKind?: GeneratorMediaKind;
   model?: string;
@@ -268,6 +269,10 @@ function serializeNode(value: unknown): LegacyCanvasNodeV1 | null {
   };
   const groupId = requiredId(candidate.groupId);
   if (groupId) node.groupId = groupId;
+  if (typeof candidate.realGenerationTaskId === "string"
+    && /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(candidate.realGenerationTaskId)) {
+    node.realGenerationTaskId = candidate.realGenerationTaskId;
+  }
   if (candidate.kind === "asset") {
     node.mode = MEDIA_TYPES.has(candidate.mode as MediaKind) ? candidate.mode as MediaKind : assets[0]?.type ?? "image";
     return node;

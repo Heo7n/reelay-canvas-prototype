@@ -4077,18 +4077,18 @@ test("Agent video edit cost uses reference duration and removal restores a pendi
   controls.click("omni-reference-task-type", "edit");
   assert.match(amount.textContent, /计算中|待估算/);
   references.addAssets([{ id: "reference-video", type: "video", name: "long.mp4",
-    url: "blob:http://reelay.test/long", duration: 20 }]);
+    url: "blob:http://reelay.test/long", duration: 20, width: 1280, height: 720 }]);
   const quote = h.window.REELAY_GENERATION_CREDIT_ESTIMATE.estimate({
     model: h.window.getAgentComposerModel(), parameters: h.window.getAgentGenerationParameters(),
     references: references.getAssets(), outputDuration: 20,
   });
-  assert.equal(quote.status, "range", "adaptive aspect retains its catalog dimension bounds");
-  const assertRange = () => assert.deepEqual(amount.textContent.match(/\d+/g)?.map(Number), [quote.minCredits, quote.maxCredits]);
-  assertRange();
+  assert.equal(quote.status, "exact", "an edit inherits the unique reference video's frame and duration");
+  const assertQuote = () => assert.equal(Number(amount.textContent.replaceAll(",", "")), quote.credits);
+  assertQuote();
   controls.mode("agent");
   assert.equal(amount.textContent, "—");
   controls.mode("generation");
-  assertRange();
+  assertQuote();
   document.querySelector("#agentReferenceShelf [data-reference-remove]").click();
   assert.match(amount.textContent, /计算中|待估算/);
   controls.model("gpt-image-2");

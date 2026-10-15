@@ -144,6 +144,8 @@
     }
     function inScope(task) { return task && keyOf(task.scope) === scopeKey && keyOf(getScope()) === scopeKey; }
     function busy(task) { return task.status === "queued" || task.status === "running"; }
+    function statusValues(task) { return { progress: task.progress, canCancel: cancellable(task), channel: task.channel,
+      executionStatus: task.executionStatus, message: task.message, error: task.error, isOwner: task.isOwner }; }
     function cancellable(task) {
       return busy(task) && (canCancel ? canCancel(task) : now() < Number(task.cancelUntil || 0));
     }
@@ -267,7 +269,7 @@
           <span class="generation-record-counts">${counts.map(({ type, count }) => `<span title="${count} 个${TYPES[type]}">${icon(ICONS[type])}<span>${count}</span></span>`).join("")}</span>
         </button>` : ""}
         <div class="generation-record-copy"><div class="generation-record-prompt" data-record-popover="prompt" tabindex="0" role="button" aria-label="查看完整提示词" aria-expanded="false">${promptMarkup(task.input)}</div>
-        <div class="generation-record-parameters">${modelMarkup(task)}${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div>
+        <div class="generation-record-parameters">${modelMarkup(task)}<span class="generation-record-channel"></span>${parameterItems(task.input).map((item) => `<span class="generation-record-parameter">${escape(item)}</span>`).join("")}${details}</div>
       </div></div>`}</div>
       <div class="generation-record-media-layout"><div class="generation-record-output" tabindex="-1" aria-label="生成结果"></div>
       <div class="generation-record-versions" role="group" aria-label="生成版本" hidden>
@@ -321,6 +323,8 @@
     function updateCard(card, task) {
       const article = card.element;
       article.dataset.status = task.status;
+      const channelLabel = article.querySelector(".generation-record-channel");
+      if (channelLabel) channelLabel.textContent = task.channel === "real" ? "真实" : task.channel === "checking" ? "检查连接" : "模拟";
       const stage = stageOf(task);
       const edit = article.querySelector('[data-generation-action="edit"]');
       edit.hidden = stage === "final";
@@ -343,7 +347,7 @@
           releaseMedia(output); output.replaceChildren();
           delete output.dataset.resultUrl; delete output.dataset.resultType;
           if (busy(task)) {
-            output.innerHTML = `<div class="generation-record-wait">${global.REELAY_GENERATION_STATUS.render({ progress: task.progress, canCancel: cancellable(task) })}</div>`;
+            output.innerHTML = `<div class="generation-record-wait">${global.REELAY_GENERATION_STATUS.render(statusValues(task))}</div>`;
             const aspect = String(task.input.parameters?.aspect || "16:9").split(":").map(Number);
             setMediaAspect(output.firstElementChild, aspect[0] / aspect[1]);
           } else if (task.status === "succeeded") {
@@ -375,7 +379,7 @@
       article.querySelector(".generation-record-terminal-actions").hidden = busy(task);
       const cancel = article.querySelector('[data-cancel-generation]');
       const cancelFocused = cancel && document.activeElement === cancel;
-      if (busy(task)) global.REELAY_GENERATION_STATUS.update(output, { progress: task.progress, canCancel: cancellable(task) });
+      if (busy(task)) global.REELAY_GENERATION_STATUS.update(output, statusValues(task));
       if (cancel?.disabled && cancelFocused) {
         if (!edit.hidden) edit.focus({ preventScroll: true });
         else article.querySelector('[data-record-popover="details"]').focus({ preventScroll: true });
@@ -870,7 +874,7 @@
       const copyFocused = focused?.matches('[data-generation-action="feedback"]');
       const closeFocused = focused?.matches("[data-record-close]");
       const historyFocused = focused?.dataset.recordHistoryTask;
-      popover.innerHTML = `<div class="generation-record-popover-title">任务详情<button type="button" data-record-close aria-label="关闭任务详情">${icon("x")}</button></div><dl><dt>发送时间</dt><dd>${escape(formatTime(task.createdAt, true))}</dd>${finishedAt != null ? `<dt>${task.status === "canceled" ? "取消时间" : "完成时间"}</dt><dd>${escape(formatTime(finishedAt, true))}</dd><dt>耗时</dt><dd>${Math.max(0, Math.round((finishedAt - task.createdAt) / 1000))} 秒</dd>` : ""}<dt>本次消耗</dt><dd>${escape(task.input.cost ?? 0)} 积分${task.refunded ? " · 已返还" : ""}</dd><dt>TaskId</dt><dd class="generation-record-task-id"><code>${escape(task.id)}</code><button type="button" data-generation-action="feedback" aria-label="复制 TaskId" title="复制任务编号">${icon("copy")}</button></dd></dl>`;
+      popover.innerHTML = `<div class="generation-record-popover-title">任务详情<button type="button" data-record-close aria-label="关闭任务详情">${icon("x")}</button></div><dl><dt>发送时间</dt><dd>${escape(formatTime(task.createdAt, true))}</dd>${finishedAt != null ? `<dt>${task.status === "canceled" ? "取消时间" : "完成时间"}</dt><dd>${escape(formatTime(finishedAt, true))}</dd><dt>耗时</dt><dd>${Math.max(0, Math.round((finishedAt - task.createdAt) / 1000))} 秒</dd>` : ""}<dt>本次消耗</dt><dd>${task.channel === "real" ? "平台费用待确认" : `${escape(task.input.cost ?? 0)} 积分${task.refunded ? " · 已返还" : ""}`}</dd><dt>TaskId</dt><dd class="generation-record-task-id"><code>${escape(task.id)}</code><button type="button" data-generation-action="feedback" aria-label="复制 TaskId" title="复制任务编号">${icon("copy")}</button></dd></dl>`;
       if (attempts.length) {
         popover.insertAdjacentHTML("beforeend", `<div class="generation-record-task-history"><strong>生成历史</strong><ol>${attempts.map((item) => `<li class="generation-record-task-attempt"><button type="button" data-record-history-task="${escape(item.id)}" aria-pressed="${item.id === task.id}">${item.id === group.root.id ? "样片" : "正片"} · ${escape(String(item.input.parameters?.outputFormat || "MP4").toUpperCase())} · ${{queued:"生成中",running:"生成中",succeeded:"已完成",failed:"失败",canceled:"已取消"}[item.status] || escape(item.status)}</button><span>${escape(item.input.cost ?? 0)} 积分${item.refunded ? " · 已返还" : ""}</span></li>`).join("")}</ol></div>`);
       }
