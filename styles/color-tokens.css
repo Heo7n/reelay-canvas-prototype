@@ -16,7 +16,7 @@
 
 html[data-theme="dark"] {
   --ui-focus-ring: #a6b8d0;
-  --color-canvas-background: #171819;
+  --color-canvas-background: #121212;
   --color-canvas-surface: #202123;
   --color-canvas-surface-raised: #28292b;
   --color-canvas-text: #f4f4f5;
